@@ -8,19 +8,27 @@
 
 ## Status
 
-**Phase 0 — Foundations: complete.** Phase 1 (the Core: identity, ledger, token) is next and unstarted.
+<!-- tracker:start -->
 
-| Phase | Scope                                                          | State       |
-| ----- | -------------------------------------------------------------- | ----------- |
-| **0** | Foundations, design system, doctrine gates                     | ✅ complete |
-| 1     | THE CORE — svc-identity, svc-ledger, svc-token                 | ⬜ next     |
-| 2     | svc-matching, svc-trade, terminal                              | ⬜          |
-| 3     | svc-pay, svc-p2p (adapter architecture)                        | ⬜          |
-| 3P    | Protocol P0 — contract suite, smart accounts, sovereign escrow | ⬜          |
-| 4     | svc-blueprint                                                  | ⬜          |
-| 4P    | Protocol P1 — INTACHAIN mainnet                                | ⬜          |
-| 5     | Remaining surfaces + sovereign card                            | ⬜          |
-| 5P    | Protocol P2–P3 — Rust core, validator opening                  | ⬜          |
+`████░░░░░░░░░░░░░░░░` **19%** — 20 of 103 features shipped
+
+Phases: **0** 10/11 · **1** 10/12 · **2** 0/16 · **3** 0/15 · **3P** 0/7 · **4** 0/5 · **4P** 0/3 · **5** 0/32 · **5P** 0/2
+
+**🟢 20 ready to claim** — nothing blocks these:
+
+- `infra.i18n` — 100+ languages — keyed from day one (§9)
+- `identity.webauthn` — WebAuthn registration + assertion (§9)
+- `token.governance` — Proposals + IFC-weighted voting (§4.3)
+- `matching.engine` — Orderbook + matching engine, journal, replay
+- `web.shell` — apps/web scaffold on the design system
+- `pay.gateway` — Branded gateway, hosted checkout, payment links
+- `p2p.offers` — Offers, maker/taker, 100+ fiat currencies
+- `protocol.smart-accounts` — Passkey smart accounts, session keys (§17.4)
+- …and 12 more
+
+Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
+
+<!-- tracker:end -->
 
 ---
 
@@ -38,7 +46,7 @@ pnpm gate                   # the §14 Definition of Done gate
 | Service    | URL                                | Credentials               |
 | ---------- | ---------------------------------- | ------------------------- |
 | Postgres   | `localhost:5433`                   | `intafaced` / `intafaced` |
-| Redis      | `localhost:6379`                   | —                         |
+| Redis      | `localhost:6380`                   | —                         |
 | NATS       | `localhost:4222` (monitor `:8222`) | —                         |
 | Grafana    | http://localhost:3001              | `intafaced` / `intafaced` |
 | Prometheus | http://localhost:9090              | —                         |
@@ -46,7 +54,17 @@ pnpm gate                   # the §14 Definition of Done gate
 
 ---
 
-## What Phase 0 built
+## What's built
+
+**Phase 1 — THE CORE is complete.** `svc-ledger`, `svc-identity`, `svc-token` are on `main`, and Doctrine §0.2 no longer blocks Phase 2.
+
+### The three Core services
+
+**`svc-ledger`** — double-entry, hash-chained, reconciling. The invariants hold in three places: shared validation, the transaction, and database CHECK constraints, so a bug in the service still cannot create money. It runs the same conformance suite as the in-memory reference (§4.4).
+
+**`svc-identity`** — accounts, argon2id, TOTP verified against the RFC's own published vectors, refresh rotation with reuse detection, and the XP graph. One rank, read by every module through a machine-readable perk table.
+
+**`svc-token`** — emission curve, staking ladder, real-yield distribution from actual platform fees, buyback & burn. Holds no balances: the stake principal lives in the ledger, and a test asserts the two answers agree.
 
 ### `packages/config`
 
@@ -69,7 +87,7 @@ Doctrine §0.6, made mechanical.
 - **`recipes/`** — every money path in the OS as a pure function. `deposit`, `tradeFill` (the six-entry atomic fill), `escrowLock/Release/Refund`, `stake`, `feeCharge` with the IFC discount branch, `rewardPay`, `collateralLock`, `liquidate`.
 - **`memory-ledger.ts`** — the executable specification svc-ledger must match: idempotency, hash-chained journal, replay reconciliation.
 
-61 tests, including the fill arithmetic and the hash chain's tamper detection.
+84 tests, including the fill arithmetic, the hash chain's tamper detection, and the shared conformance suite both ledger implementations must pass.
 
 ### `packages/events`
 
@@ -128,24 +146,25 @@ Doctrine §0.3: **Identity, Balance, Token.** Every cross-module link runs throu
 
 ```
 apps/          web · admin · ws-gateway            (Phase 2+)
-               terminal-desktop                    (licensed — see docs/)
-services/      svc-* — one per module              (Phase 1+)
+services/      svc-ledger · svc-identity · svc-token   ✅ the Core
+               svc-matching · svc-trade · svc-pay · …  (Phase 2+)
 packages/      config · events · contracts · db · auth · ledger-client · ui
-               exchange-contract                   (CCXT-shaped public API)
-tooling/       agent-protocol · ci · infra
-docs/          TERMINAL_INTEGRATION.md
+               exchange-contract   CCXT-shaped API we serve
+               venue-adapter       cross-venue routing
+tooling/       agent-protocol · ci · infra · tracker
+docs/          TRACKER.md · TERMINAL.md · ONBOARDING.md
 ```
 
 ---
 
-## Pro terminal
+## Pro terminal — ours, and cross-venue
 
-`packages/exchange-contract` publishes a **CCXT-compatible exchange API** — the unified
-interface every trading bot, algo framework, and third-party terminal already speaks.
-Serving this shape makes INTAFACED a first-class venue for software written before we
-existed, and it is the seam the licensed desktop pro terminal connects through without a
-line of its source being modified.
+We build our own terminal (Next.js, one design system, one language). The symmetry that makes it work:
 
-Money crosses that boundary as a decimal string, never a float — CCXT's own structures use
-JS numbers, and the ledger reconciles to 18 decimal places. Full rationale and the
-integration architecture: [`docs/TERMINAL_INTEGRATION.md`](docs/TERMINAL_INTEGRATION.md).
+**CCXT out** — `packages/exchange-contract` publishes a CCXT-compatible API, the interface every trading bot and third-party terminal already speaks. Serving that shape makes INTAFACED a venue for software written before we existed.
+
+**CCXT in** — `packages/venue-adapter` consumes external venues through the same standard, behind the §5.2 `LiquiditySource` interface. The internal book implements that interface too, so the router cannot favour us structurally; it ranks on price, and wins ties by a bounded, tested 5 bps preference.
+
+Money crosses both boundaries as a decimal string, never a float — CCXT's own structures use JS numbers and the ledger reconciles to 18 places.
+
+Architecture: [`docs/TERMINAL.md`](docs/TERMINAL.md). Why we didn't licence an existing one: [`docs/TERMINAL_INTEGRATION.md`](docs/TERMINAL_INTEGRATION.md).

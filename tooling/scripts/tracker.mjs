@@ -57,7 +57,47 @@ const ids = FEATURES.map((f) => f.id);
 const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
 for (const id of new Set(duplicates)) problems.push(`duplicate feature id: ${id}`);
 
+/**
+ * Cycle detection.
+ *
+ * A dependency cycle makes `blocked` unresolvable — every feature in the loop
+ * waits on another member forever, and the tracker would show a whole branch of
+ * work as permanently unstartable with no explanation of why. Cheap to check,
+ * invisible if you do not.
+ */
+{
+  const state = new Map();
+  const walk = (id, path) => {
+    if (state.get(id) === 'done') return;
+    if (state.get(id) === 'visiting') {
+      problems.push(`dependency cycle: ${[...path, id].join(' → ')}`);
+      return;
+    }
+    state.set(id, 'visiting');
+    for (const dep of byId.get(id)?.dependsOn ?? []) walk(dep, [...path, id]);
+    state.set(id, 'done');
+  };
+  for (const feature of FEATURES) walk(feature.id, []);
+}
+
 // ── Resolve status ──────────────────────────────────────────────────────────
+
+/**
+ * Everything a feature transitively unblocks.
+ *
+ * This is the number that should drive what gets built next — a feature that
+ * unblocks 26 others is worth more than one that unblocks none, regardless of
+ * which looks more exciting.
+ */
+function unblocks(id, seen = new Set()) {
+  for (const f of FEATURES) {
+    if (f.dependsOn.includes(id) && !seen.has(f.id)) {
+      seen.add(f.id);
+      unblocks(f.id, seen);
+    }
+  }
+  return seen;
+}
 
 /** Declared status, except that unmet dependencies force `blocked`. */
 function resolve(feature) {
@@ -128,6 +168,27 @@ function render() {
   }
   lines.push('');
 
+  // ── Leverage ──────────────────────────────────────────────────────────────
+  const leverage = resolved
+    .filter((f) => f.resolved !== 'done' && f.resolved !== 'socket')
+    .map((f) => ({ ...f, unblocks: unblocks(f.id).size }))
+    .filter((f) => f.unblocks > 0)
+    .sort((a, b) => b.unblocks - a.unblocks)
+    .slice(0, 8);
+
+  if (leverage.length > 0) {
+    lines.push('## Highest leverage');
+    lines.push('');
+    lines.push('What each unshipped feature would unblock, transitively. **This is what should drive build order** — a feature that frees 26 others is worth more than one that frees none, whatever else is louder.');
+    lines.push('');
+    lines.push('| Unblocks | Feature | Status | id |');
+    lines.push('|---:|---|---|---|');
+    for (const f of leverage) {
+      lines.push(`| **${f.unblocks}** | ${f.title} | ${ICON[f.resolved]} ${f.resolved} | \`${f.id}\` |`);
+    }
+    lines.push('');
+  }
+
   const wip = resolved.filter((f) => f.resolved === 'wip');
   if (wip.length > 0) {
     lines.push('## 🔨 In progress');
@@ -181,6 +242,71 @@ function render() {
   return lines.join('\n');
 }
 
+/**
+ * The block injected into README.md.
+ *
+ * Deliberately SHORT. The README's job is "what is this, how do I run it" —
+ * a new developer needs that in the first screen. Pasting 103 rows above the
+ * setup instructions would bury the one thing they actually came for. So the
+ * README carries the score and what is claimable; docs/TRACKER.md carries the
+ * detail.
+ */
+function renderReadmeBlock() {
+  const counts = summary();
+  const shippable = resolved.filter((f) => f.resolved !== 'socket').length;
+  const percent = Math.round((counts.done / shippable) * 100);
+  const filled = Math.round(percent / 5);
+
+  const ready = resolved.filter((f) => f.resolved === 'ready');
+  const wip = resolved.filter((f) => f.resolved === 'wip');
+
+  const lines = [];
+  lines.push(`\`${'█'.repeat(filled)}${'░'.repeat(20 - filled)}\` **${percent}%** — ${counts.done} of ${shippable} features shipped`);
+  lines.push('');
+
+  const phaseBits = PHASE_ORDER.map((p) => {
+    const inPhase = resolved.filter((f) => f.phase === p && f.resolved !== 'socket');
+    if (inPhase.length === 0) return null;
+    const done = inPhase.filter((f) => f.resolved === 'done').length;
+    return done === inPhase.length ? `**${p}** ✅` : `**${p}** ${done}/${inPhase.length}`;
+  }).filter(Boolean);
+
+  lines.push(`Phases: ${phaseBits.join(' · ')}`);
+  lines.push('');
+
+  if (wip.length > 0) {
+    lines.push('**In progress:** ' + wip.map((f) => `${f.title} (${f.owner})`).join(' · '));
+    lines.push('');
+  }
+
+  lines.push(`**🟢 ${ready.length} ready to claim** — nothing blocks these:`);
+  lines.push('');
+  for (const f of ready.slice(0, 8)) {
+    lines.push(`- \`${f.id}\` — ${f.title}`);
+  }
+  if (ready.length > 8) lines.push(`- …and ${ready.length - 8} more`);
+  lines.push('');
+  lines.push('Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`');
+
+  return lines.join('\n');
+}
+
+const README = join(ROOT, 'README.md');
+const START = '<!-- tracker:start -->';
+const END = '<!-- tracker:end -->';
+
+/** Returns the updated README, or null when the markers are absent. */
+function injectReadme() {
+  if (!existsSync(README)) return null;
+  const current = readFileSync(README, 'utf8');
+  const start = current.indexOf(START);
+  const end = current.indexOf(END);
+  if (start === -1 || end === -1 || end < start) return null;
+
+  const updated = current.slice(0, start + START.length) + '\n\n' + renderReadmeBlock() + '\n\n' + current.slice(end);
+  return updated === current ? current : updated;
+}
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 
 if (problems.length > 0) {
@@ -198,12 +324,23 @@ const content = render();
  * exit code. Let Node finish naturally instead — CI reads these codes.
  */
 if (checkMode) {
+  const stale = [];
+
   const existing = existsSync(OUTPUT) ? readFileSync(OUTPUT, 'utf8') : '';
-  if (existing.trim() !== content.trim()) {
-    console.error('\n✖ docs/TRACKER.md is stale. Run `pnpm tracker` and commit the result.\n');
+  if (existing.trim() !== content.trim()) stale.push('docs/TRACKER.md');
+
+  const readme = injectReadme();
+  if (readme === null) {
+    stale.push('README.md (tracker markers missing — add <!-- tracker:start --> / <!-- tracker:end -->)');
+  } else if (readme !== readFileSync(README, 'utf8')) {
+    stale.push('README.md');
+  }
+
+  if (stale.length > 0) {
+    console.error(`\n✖ stale: ${stale.join(', ')}\n  Run \`pnpm tracker\` and commit the result.\n`);
     process.exitCode = 1;
   } else {
-    console.log('✓ tracker up to date');
+    console.log('✓ tracker up to date (docs/TRACKER.md + README.md)');
   }
 } else if (arg) {
   // Filters — for humans at a terminal, not for the file.
@@ -224,6 +361,13 @@ if (checkMode) {
   }
 } else {
   writeFileSync(OUTPUT, content + '\n', 'utf8');
+
+  const readme = injectReadme();
+  if (readme === null) {
+    console.warn('\n⚠ README.md has no tracker markers — add <!-- tracker:start --> and <!-- tracker:end -->');
+  } else {
+    writeFileSync(README, readme, 'utf8');
+  }
 
   const counts = summary();
   const shippable = FEATURES.filter((f) => f.status !== 'socket').length;
