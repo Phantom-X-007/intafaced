@@ -1,40 +1,29 @@
-# Autonomous run status — brokerage graph
+# Autonomous run status — brokerage Wave-1
 
-**Program:** docs/GRAPH-ENGINEERING-PROGRAM-2026-07-27.md  
-**Ownership:** docs/DENON-VS-GRAPH-SPLIT-2026-07-27.md  
-**Status:** `running`  
-**Frozen at:** 2026-07-27 (Nitro AFK execute — graph-owned rest)  
-**Main at freeze:** b213445  
-**Policy:** auto-open green PRs · **no auto-merge money/core/holds**  
-**Max parallel:** 3  
+**Wave:** 1 — Foundation  
+**Status:** `running` (not empty until all rows terminal + graph CI healthy)  
+**Program:** GRAPH-ENGINEERING-PROGRAM-2026-07-27.md  
+**Ownership:** DENON-VS-GRAPH-SPLIT-2026-07-27.md  
+**Policy:** auto-open green PRs · auto-merge money/core/holds = NO  
+**True AFK:** continue until freeze empty; status file only memory; no false “you can leave.”
 
-## Graph-owned freeze
+## Freeze set
+W1-D · W1-T · W1-C · W1-R · W1-H · W1-S
 
-| id | title | status | pr_url | notes |
+## Claims (live)
+
+| id | owner | status | pr | CI / notes |
 | --- | --- | --- | --- | --- |
-| W1-T | Tracker truth | pr_open | https://github.com/Phantom-X-007/intafaced/pull/45 | verify: tracker script green |
-| W1-C | Core mount identity+ledger+token | pr_open | https://github.com/Phantom-X-007/intafaced/pull/46 | typecheck+unit tests; money-adjacent — Denon merge |
-| W1-R | Trade plane mount | pr_open | https://github.com/Phantom-X-007/intafaced/pull/47 | after #46 best; money-adjacent |
-| W2-WS | ws.gateway | pending | | after foundation merges |
-| W2-CV | trade.convert | pending | | after mounts + Denon holds before real money |
-| W2-TM | web.terminal | pending | | after WS preferred |
-
-## Denon-owned (blocked for graph)
-
-| id | status |
-| --- | --- |
-| W1-D mount boundary stamp | denon |
-| W1-H purpose-keyed holds | denon |
-| W1-S soft-launch ledger harden | denon |
+| W1-D | Denon | **done** | #48 merged | mount boundary + principal signing on main |
+| W1-H | Denon | **done** | #49 merged | purpose-keyed holds on main |
+| W1-T | Graph | pr_open | #45 | fixing CI (tracker + rebase main) |
+| W1-C | Graph | pr_open | #46 | fixing CI (prettier + edge principal + rebase) |
+| W1-R | Graph | pr_open | #47 | fixing CI (edge principal + rebase) |
+| W1-S | Denon | **blocked** | — | soft-launch harden (P1-10/11/14) not started; graph does not implement |
 
 ## Log
+- 2026-07-27 — #48 #49 on main (Denon). Graph rebasing #45-47, fixing CI, aligning edge principal.
+- Waiting healthy green CI on #45-47 then Wave-1 graph rows terminal; W1-S remains Denon blocked.
 
-- 2026-07-27 — Execute started. Hybrid default.
-- 2026-07-27 — #45 tracker truth PR opened.
-- 2026-07-27 — #46 Core mount PR opened.
-- 2026-07-27 — #47 trade mount PR opened.
-- 2026-07-27 — Session pause after foundation PRs; Wave-2 next when foundation merges / resume.
-
-## “Finished” for Nitro AFK return
-
-Graph foundation (W1-T/C/R) **PRs open** = first milestone. Full program finished when graph freeze rows are `done` (merged) and Wave-2+ claimed work is terminal **or** blocked with reason. Denon spine is **not** graph finished criterion but **required before real deploy**.
+## Continue
+`continue graph until Wave-1 freeze empty`
