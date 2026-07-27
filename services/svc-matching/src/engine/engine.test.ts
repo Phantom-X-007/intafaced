@@ -1,0 +1,476 @@
+import { describe, expect, it } from 'vitest';
+import { MemoryEventBus } from '@intafaced/events';
+import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
+import { MatchingEngine, type SnapshotSink } from './engine.js';
+import {
+  MemoryJournal,
+  replay,
+  replayFrom,
+  serializeBooks,
+  type EngineJournal,
+  type EngineSnapshot,
+  type JournalCommand,
+  type JournalRecord,
+} from './journal.js';
+import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
+
+/**
+ * The engine: journal-first ordering, the event contract, and §5.4's
+ * determinism requirement.
+ *
+ * Order ids are UUIDs here because the event catalog says so — the engine
+ * validates every payload against `packages/events` on publish, so a test that
+ * used readable ids would be testing a bus that production does not have.
+ */
+
+const MARKET = 'BTC/USDT';
+const OTHER_MARKET = 'ETH/USDT';
+
+let uuidCounter = 0;
+function uuid(): string {
+  uuidCounter += 1;
+  return `00000000-0000-4000-8000-${String(uuidCounter).padStart(12, '0')}`;
+}
+
+interface OrderSpec {
+  id?: string;
+  account?: string;
+  type?: EngineOrderType;
+  side: OrderSide;
+  qty: string;
+  price?: string;
+  stopPrice?: string;
+  tif?: TimeInForce;
+}
+
+function order(spec: OrderSpec): EngineOrder {
+  return {
+    orderId: spec.id ?? uuid(),
+    accountId: spec.account ?? 'acct-default',
+    type: spec.type ?? (spec.price === undefined ? 'market' : 'limit'),
+    side: spec.side,
+    qty: parseAmount(spec.qty),
+    price: spec.price === undefined ? null : parseAmount(spec.price),
+    stopPrice: spec.stopPrice === undefined ? null : parseAmount(spec.stopPrice),
+    tif: spec.tif ?? 'GTC',
+  };
+}
+
+/** A clock that advances one second per read — deterministic, so replays compare. */
+function fixedClock(): () => Date {
+  let tick = 0;
+  return () => {
+    tick += 1;
+    return new Date(Date.UTC(2026, 0, 1) + tick * 1000);
+  };
+}
+
+function build(overrides: Partial<ConstructorParameters<typeof MatchingEngine>[0]> = {}) {
+  const journal = new MemoryJournal();
+  const bus = new MemoryEventBus('svc-matching');
+  const engine = new MatchingEngine({ journal, bus, clock: fixedClock(), snapshotEvery: 0, ...overrides });
+  return { journal, bus, engine };
+}
+
+// ── Journal-first ordering (§5.1 recovery guarantee) ────────────────────────
+
+describe('the journal comes first', () => {
+  it('records the input before the book moves', async () => {
+    const { journal, engine } = build();
+
+    await engine.submit(MARKET, order({ id: 'aaaaaaaa-0000-4000-8000-000000000001', side: 'buy', qty: '1', price: '100' }));
+
+    const records = journal.read();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.kind).toBe('submit');
+    expect(records[0]!.marketId).toBe(MARKET);
+  });
+
+  it('leaves the book untouched when the journal write fails', async () => {
+    class ExplodingJournal implements EngineJournal {
+      readonly length = 0;
+      append(_command: JournalCommand): JournalRecord {
+        throw new Error('disk full');
+      }
+      read(): readonly JournalRecord[] {
+        return [];
+      }
+      close(): void {}
+    }
+
+    const bus = new MemoryEventBus('svc-matching');
+    const engine = new MatchingEngine({ journal: new ExplodingJournal(), bus, clock: fixedClock(), snapshotEvery: 0 });
+
+    await expect(engine.submit(MARKET, order({ side: 'buy', qty: '1', price: '100' }))).rejects.toThrow('disk full');
+
+    // An input the journal never took must not exist in the book either —
+    // otherwise a replay would rebuild a book missing an order that filled.
+    expect(engine.book(MARKET).currentSequence).toBe(0);
+    expect(bus.published).toHaveLength(0);
+  });
+
+  it('journals cancels too, so replay sees the same input stream', async () => {
+    const { journal, engine } = build();
+    const id = uuid();
+
+    await engine.submit(MARKET, order({ id, side: 'buy', qty: '1', price: '100' }));
+    await engine.cancel(MARKET, id);
+
+    expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'cancel']);
+  });
+
+  it('does not journal an input the kill-switch refused', async () => {
+    const { journal, bus, engine } = build({ enabled: false });
+
+    const result = await engine.submit(MARKET, order({ side: 'buy', qty: '1', price: '100' }));
+
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('engine_disabled');
+    expect(journal.length).toBe(0);
+    expect(bus.published).toHaveLength(0);
+  });
+
+  it('resumes accepting once the operator flips the switch back', async () => {
+    const { engine } = build({ enabled: false });
+    engine.setEnabled(true);
+
+    const result = await engine.submit(MARKET, order({ side: 'buy', qty: '1', price: '100' }));
+    expect(result.accepted).toBe(true);
+  });
+});
+
+// ── Events (§10 — the bus is a contract) ────────────────────────────────────
+
+describe('events', () => {
+  it('publishes orderAccepted for an order that rests', async () => {
+    const { bus, engine } = build();
+    const id = uuid();
+
+    const result = await engine.submit(MARKET, order({ id, side: 'buy', qty: '1', price: '100' }));
+
+    const accepted = bus.emitted('orderAccepted');
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]!.payload).toEqual({ orderId: id, marketId: MARKET, sequence: result.sequence });
+    expect(accepted[0]!.subject).toBe('intafaced.matching.order.accepted');
+  });
+
+  it('publishes orderFilled with decimal-string amounts and the engine sequence', async () => {
+    const { bus, engine } = build();
+    const maker = uuid();
+    const taker = uuid();
+
+    await engine.submit(MARKET, order({ id: maker, account: 'mm', side: 'sell', qty: '2', price: '100.25' }));
+    const result = await engine.submit(MARKET, order({ id: taker, account: 'tk', side: 'buy', qty: '1.5', price: '100.25' }));
+
+    const filled = bus.emitted('orderFilled');
+    expect(filled).toHaveLength(1);
+    expect(filled[0]!.payload).toMatchObject({
+      marketId: MARKET,
+      makerOrderId: maker,
+      takerOrderId: taker,
+      price: '100.25',
+      qty: '1.5',
+      sequence: result.fills[0]!.sequence,
+    });
+  });
+
+  it('publishes orderCancelled for an IOC remainder', async () => {
+    const { bus, engine } = build();
+    await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '1', price: '100' }));
+
+    const id = uuid();
+    await engine.submit(MARKET, order({ id, account: 'tk', side: 'buy', qty: '3', price: '100', tif: 'IOC' }));
+
+    const cancelled = bus.emitted('orderCancelled');
+    expect(cancelled).toHaveLength(1);
+    expect(cancelled[0]!.payload).toMatchObject({ orderId: id, marketId: MARKET, remainingQty: '2' });
+  });
+
+  it('publishes orderCancelled for an order pulled by self-trade prevention', async () => {
+    const { bus, engine } = build();
+    const own = uuid();
+
+    await engine.submit(MARKET, order({ id: own, account: 'same', side: 'buy', qty: '1', price: '100' }));
+    await engine.submit(MARKET, order({ account: 'same', side: 'sell', qty: '1', price: '100', tif: 'IOC' }));
+
+    const cancelled = bus.emitted('orderCancelled').map((e) => e.payload.orderId);
+    expect(cancelled).toContain(own);
+  });
+
+  it('publishes nothing at all for a rejected order', async () => {
+    const { bus, engine } = build();
+    await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '1', price: '100' }));
+    bus.reset();
+
+    const result = await engine.submit(MARKET, order({ account: 'tk', side: 'buy', qty: '9', price: '100', tif: 'FOK' }));
+
+    expect(result.accepted).toBe(false);
+    expect(bus.published).toHaveLength(0);
+  });
+
+  it('emits in engine-sequence order, so a consumer replaying the subject sees the book order', async () => {
+    const { bus, engine } = build();
+    await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '1', price: '100' }));
+    await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '1', price: '101' }));
+    bus.reset();
+
+    await engine.submit(MARKET, order({ account: 'tk', side: 'buy', qty: '5', tif: 'IOC' }));
+
+    const sequences = bus.published.map((e) => (e.payload as { sequence: number }).sequence);
+    expect(sequences).toEqual([...sequences].sort((a, b) => a - b));
+    expect(new Set(sequences).size).toBe(sequences.length);
+  });
+
+  it('uses the engine sequence as the fill idempotency key — a redelivery finds the original', async () => {
+    const { bus, engine } = build();
+    await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '1', price: '100' }));
+    const result = await engine.submit(MARKET, order({ account: 'tk', side: 'buy', qty: '1', price: '100' }));
+
+    const filled = bus.emitted('orderFilled')[0]!;
+    expect(filled.idempotencyKey).toBe(`matching.order.filled:${MARKET}:${result.fills[0]!.sequence}`);
+  });
+
+  it('never puts a JS number where an amount belongs', async () => {
+    const { bus, engine } = build();
+    await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '2', price: '100.125' }));
+    await engine.submit(MARKET, order({ account: 'tk', side: 'buy', qty: '5', price: '100.125', tif: 'IOC' }));
+
+    const decimal = /^-?\d+(\.\d{1,18})?$/;
+    const amountFields = ['price', 'qty', 'remainingQty'];
+    for (const envelope of bus.published) {
+      for (const field of amountFields) {
+        const value = (envelope.payload as Record<string, unknown>)[field];
+        if (value === undefined) continue;
+        expect(typeof value, `${envelope.subject}.${field}`).toBe('string');
+        expect(value as string).toMatch(decimal);
+      }
+    }
+  });
+
+  it('keeps markets independent', async () => {
+    const { engine } = build();
+    await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '1', price: '100' }));
+    const result = await engine.submit(OTHER_MARKET, order({ account: 'tk', side: 'buy', qty: '1', price: '100' }));
+
+    expect(result.fills).toHaveLength(0);
+    expect(engine.markets).toEqual([MARKET, OTHER_MARKET].sort());
+  });
+});
+
+// ── Recovery and snapshots (§5.1) ───────────────────────────────────────────
+
+describe('recovery', () => {
+  it('rebuilds the books from the journal alone, and emits nothing doing it', async () => {
+    const { journal, engine } = build();
+
+    await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '5', price: '100' }));
+    await engine.submit(MARKET, order({ account: 'mm', side: 'buy', qty: '3', price: '99' }));
+    await engine.submit(OTHER_MARKET, order({ account: 'mm', side: 'sell', qty: '2', price: '2000' }));
+    const cancelMe = uuid();
+    await engine.submit(MARKET, order({ id: cancelMe, account: 'mm', side: 'buy', qty: '1', price: '98' }));
+    await engine.cancel(MARKET, cancelMe);
+    await engine.submit(MARKET, order({ account: 'tk', side: 'buy', qty: '2', price: '100' }));
+
+    const live = engine.serialize();
+
+    const recoveryBus = new MemoryEventBus('svc-matching');
+    const recovered = new MatchingEngine({ journal, bus: recoveryBus, clock: fixedClock(), snapshotEvery: 0 });
+    const report = recovered.recover();
+
+    expect(report.records).toBe(journal.length);
+    expect(report.markets).toBe(2);
+    expect(recovered.serialize()).toBe(live);
+    // Re-emitting would hand svc-trade a second tradeFill for a settled trade.
+    expect(recoveryBus.published).toHaveLength(0);
+  });
+
+  it('writes a snapshot every N journal records and no more often', async () => {
+    const writes: EngineSnapshot[] = [];
+    const sink: SnapshotSink = { write: (s) => void writes.push(s) };
+    const { engine } = build({ snapshotEvery: 3, snapshotSink: sink });
+
+    for (let i = 0; i < 7; i++) await engine.submit(MARKET, order({ account: 'mm', side: 'buy', qty: '1', price: '100' }));
+
+    expect(writes).toHaveLength(2);
+    expect(writes.map((w) => w.journalSeq)).toEqual([3, 6]);
+  });
+
+  it('replays forward from a snapshot to the same state as a full replay', async () => {
+    const { journal, engine } = build();
+
+    for (let i = 0; i < 12; i++) {
+      await engine.submit(
+        MARKET,
+        order({ account: `acct-${i % 3}`, side: i % 2 === 0 ? 'buy' : 'sell', qty: '1', price: i % 2 === 0 ? '99' : '101' }),
+      );
+    }
+    const snapshot = engine.snapshot();
+    for (let i = 0; i < 8; i++) {
+      await engine.submit(
+        MARKET,
+        order({ account: 'late', side: i % 2 === 0 ? 'sell' : 'buy', qty: '2', price: i % 2 === 0 ? '99' : '101' }),
+      );
+    }
+
+    const full = serializeBooks(replay(journal.read()));
+    const incremental = serializeBooks(replayFrom(snapshot, journal.read()));
+
+    expect(incremental).toBe(full);
+    expect(incremental).toBe(engine.serialize());
+  });
+});
+
+// ── §5.4 DETERMINISM ────────────────────────────────────────────────────────
+
+/**
+ * Deterministic PRNG. `Math.random()` in a determinism test would be a joke at
+ * its own expense — the sequence has to be reproducible from a seed so a
+ * failing run can be replayed by a human.
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const PRICES = ['95', '96', '97', '97.5', '98', '99', '99.5', '100', '100.5', '101', '102', '103', '105'] as const;
+const QTYS = ['0.5', '1', '1.5', '2', '3', '5', '0.000000000000000001'] as const;
+const MARKETS = [MARKET, OTHER_MARKET] as const;
+const ACCOUNTS = ['acct-0', 'acct-1', 'acct-2', 'acct-3', 'acct-4', 'acct-5'] as const;
+
+interface Workload {
+  journal: MemoryJournal;
+  liveState: string;
+  fills: number;
+  accepted: number;
+  rejected: number;
+}
+
+/** ~1000 mixed operations across two markets, driven through the real engine. */
+async function runWorkload(seed: number, operations = 1000): Promise<Workload> {
+  const rand = mulberry32(seed);
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)] as T;
+
+  const journal = new MemoryJournal();
+  const bus = new MemoryEventBus('svc-matching');
+  const engine = new MatchingEngine({ journal, bus, clock: fixedClock(), snapshotEvery: 0 });
+
+  const submitted: Array<{ marketId: string; orderId: string }> = [];
+  let fills = 0;
+  let accepted = 0;
+  let rejected = 0;
+  let n = 0;
+
+  for (let i = 0; i < operations; i++) {
+    const marketId = pick(MARKETS);
+
+    if (rand() < 0.12 && submitted.length > 0) {
+      const target = submitted[Math.floor(rand() * submitted.length)] as { marketId: string; orderId: string };
+      await engine.cancel(target.marketId, target.orderId);
+      continue;
+    }
+
+    const roll = rand();
+    const type: EngineOrderType = roll < 0.62 ? 'limit' : roll < 0.8 ? 'market' : roll < 0.92 ? 'stop' : 'stop_limit';
+    const side: OrderSide = rand() < 0.5 ? 'buy' : 'sell';
+    const needsPrice = type === 'limit' || type === 'stop_limit';
+    const tif: TimeInForce = needsPrice
+      ? pick(['GTC', 'GTC', 'GTC', 'GTC', 'IOC', 'FOK', 'PO'] as const)
+      : pick(['IOC', 'FOK', 'GTC'] as const);
+
+    n += 1;
+    const orderId = `00000000-0000-4000-9000-${String(n).padStart(12, '0')}`;
+    const result = await engine.submit(marketId, {
+      orderId,
+      accountId: pick(ACCOUNTS),
+      type,
+      side,
+      qty: parseAmount(pick(QTYS)),
+      price: needsPrice ? parseAmount(pick(PRICES)) : null,
+      stopPrice: type === 'stop' || type === 'stop_limit' ? parseAmount(pick(PRICES)) : null,
+      tif,
+    });
+
+    submitted.push({ marketId, orderId });
+    fills += result.fills.length;
+    for (const t of result.triggered) fills += t.fills.length;
+    if (result.accepted) accepted += 1;
+    else rejected += 1;
+  }
+
+  return { journal, liveState: engine.serialize(), fills, accepted, rejected };
+}
+
+describe('§5.4 determinism — replay the journal twice, get byte-identical state', () => {
+  it('produces identical state on two independent replays of ~1000 mixed operations', async () => {
+    const workload = await runWorkload(0xc0ffee);
+    const records = workload.journal.read();
+
+    expect(records.length).toBeGreaterThan(900);
+
+    const first = serializeBooks(replay(records));
+    const second = serializeBooks(replay(records));
+
+    // Byte-identical, not deep-equal: two different Map iteration orders would
+    // pass a deep-equal and still stream different depth to every client.
+    expect(first).toBe(second);
+    expect(first.length).toBeGreaterThan(200);
+  });
+
+  it('replay reconstructs exactly the state the live engine reached', async () => {
+    const workload = await runWorkload(0xc0ffee);
+
+    expect(serializeBooks(replay(workload.journal.read()))).toBe(workload.liveState);
+  });
+
+  it('the workload is worth asserting on — it fills, rests, and rejects', async () => {
+    const workload = await runWorkload(0xc0ffee);
+
+    // Guards against the whole suite passing on two identically empty books.
+    expect(workload.fills).toBeGreaterThan(100);
+    expect(workload.accepted).toBeGreaterThan(500);
+    expect(workload.rejected).toBeGreaterThan(0);
+    expect(workload.liveState).toContain('"orders"');
+  });
+
+  it('is reproducible across processes-worth of engines: same journal, same books', async () => {
+    const a = await runWorkload(0x5eed);
+    const b = await runWorkload(0x5eed);
+
+    // Same seed → same inputs → same journal → same books, all the way down.
+    expect(JSON.stringify(b.journal.read())).toBe(JSON.stringify(a.journal.read()));
+    expect(b.liveState).toBe(a.liveState);
+  });
+
+  it('a different seed produces a different book — the test can actually fail', async () => {
+    const a = await runWorkload(0xc0ffee);
+    const b = await runWorkload(0x1234);
+
+    expect(b.liveState).not.toBe(a.liveState);
+  });
+
+  it('carries no floating-point value into the replayed state', async () => {
+    const workload = await runWorkload(0xc0ffee);
+    const state = serializeBooks(replay(workload.journal.read()));
+
+    expect(state).not.toMatch(/:\s*-?\d+\.\d/);
+    expect(state).not.toMatch(/[eE][+-]\d/);
+    // And every quantity that did survive is still a well-formed decimal string.
+    for (const match of state.matchAll(/"(?:price|remaining|qty|stopPrice|lastTradePrice)":"([^"]+)"/g)) {
+      expect(match[1]!).toMatch(/^-?\d+(\.\d{1,18})?$/);
+    }
+  });
+
+  it('the journal itself is a decimal-string document', async () => {
+    const workload = await runWorkload(0xc0ffee);
+    const encoded = JSON.stringify(workload.journal.read());
+
+    expect(encoded).not.toMatch(/"(?:qty|price|stopPrice)":\s*-?\d/);
+    expect(formatAmount(parseAmount('0.000000000000000001'))).toBe('0.000000000000000001');
+  });
+});
