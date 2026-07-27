@@ -29,6 +29,7 @@
     "gate": "node tooling/ci/dod-gate.mjs",
     "scan:brand": "node tooling/ci/brand-scan.mjs",
     "scan:custody": "node tooling/ci/custody-scan.mjs",
+    "scan:i18n": "node tooling/ci/i18n-scan.mjs",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:check": "node tooling/ci/migration-check.mjs",
