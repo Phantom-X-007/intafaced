@@ -208,6 +208,136 @@ export const orderCancelled = defineEvent(
   'Order left the book — svc-trade releases the ledger hold.',
 );
 
+// ── p2p (§6.2) ───────────────────────────────────────────────────────────────
+
+export const p2pOfferCreated = defineEvent(
+  'p2p',
+  'offer',
+  'created',
+  1,
+  z.object({
+    offerId: z.string().uuid(),
+    makerId: userIdSchema,
+    side: z.enum(['buy', 'sell']),
+    asset: assetIdSchema,
+    fiatCurrency: z.string().length(3),
+    priceType: z.enum(['fixed', 'float']),
+    price: amountSchema,
+    minAmount: amountSchema,
+    maxAmount: amountSchema,
+  }),
+  'A P2P offer is live and takeable.',
+);
+
+export const p2pEscrowLocked = defineEvent(
+  'p2p',
+  'escrow',
+  'locked',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    offerId: z.string().uuid(),
+    sellerId: userIdSchema,
+    buyerId: userIdSchema,
+    asset: assetIdSchema,
+    amount: amountSchema,
+    fiatCurrency: z.string().length(3),
+    fiatAmount: amountSchema,
+    /** When the buyer must have paid by. Escrow never waits indefinitely. */
+    paymentDeadline: z.string().datetime({ offset: true }),
+  }),
+  'Seller crypto is in escrow. The clock on this trade is now running.',
+);
+
+export const p2pEscrowReleased = defineEvent(
+  'p2p',
+  'escrow',
+  'released',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    sellerId: userIdSchema,
+    buyerId: userIdSchema,
+    asset: assetIdSchema,
+    amount: amountSchema,
+    fee: amountSchema,
+    resolvedBy: z.enum(['seller', 'moderator']),
+    /** Seconds from escrow to release — feeds the maker's reputation. */
+    releaseSeconds: z.number().int().nonnegative(),
+  }),
+  'Escrow released to the buyer — the trade completed.',
+);
+
+export const p2pEscrowRefunded = defineEvent(
+  'p2p',
+  'escrow',
+  'refunded',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    sellerId: userIdSchema,
+    buyerId: userIdSchema,
+    asset: assetIdSchema,
+    amount: amountSchema,
+    resolvedBy: z.enum(['buyer', 'seller', 'moderator', 'timeout']),
+    reason: z.string(),
+  }),
+  'Escrow returned to the seller — cancelled, timed out, or resolved in their favour.',
+);
+
+export const p2pTradeDisputed = defineEvent(
+  'p2p',
+  'trade',
+  'disputed',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    disputeId: z.string().uuid(),
+    openedBy: userIdSchema,
+    reason: z.string(),
+    moderatorDeadline: z.string().datetime({ offset: true }),
+  }),
+  'A trade is contested. Escrow stays locked until a moderator rules or the backstop fires.',
+);
+
+export const p2pDisputeResolved = defineEvent(
+  'p2p',
+  'dispute',
+  'resolved',
+  1,
+  z.object({
+    disputeId: z.string().uuid(),
+    tradeId: z.string().uuid(),
+    /**
+     * NOT a user id. The dispute backstop rules as a named system principal
+     * (`system:p2p-backstop`) precisely so an automatic resolution is never
+     * anonymous in the audit trail. Constraining this to a UUID would make the
+     * backstop unable to publish — and since the decision commits before the
+     * ledger post, a failed publish rolls the whole resolution back and leaves
+     * escrow locked. Which is exactly what happened when this was `userIdSchema`.
+     */
+    moderatorId: z.string().min(1),
+    resolution: z.enum(['release', 'refund']),
+    /** True when the backstop timer ruled rather than a human. */
+    automatic: z.boolean(),
+    notes: z.string().optional(),
+  }),
+  'A moderator ruled. The decision is recorded before the ledger post, so the trail always explains the movement.',
+);
+
+export const p2pTradeExpired = defineEvent(
+  'p2p',
+  'trade',
+  'expired',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    from: z.string(),
+    outcome: z.enum(['released', 'refunded', 'voided', 'disputed']),
+  }),
+  'A deadline passed and the timeout path acted. Every live state has a clock, and every clock acts.',
+);
+
 // ── The registry ─────────────────────────────────────────────────────────────
 
 export const EVENT_CATALOG = {
@@ -222,6 +352,13 @@ export const EVENT_CATALOG = {
   orderAccepted,
   orderFilled,
   orderCancelled,
+  p2pOfferCreated,
+  p2pEscrowLocked,
+  p2pEscrowReleased,
+  p2pEscrowRefunded,
+  p2pTradeDisputed,
+  p2pDisputeResolved,
+  p2pTradeExpired,
 } as const;
 
 export type EventCatalog = typeof EVENT_CATALOG;
