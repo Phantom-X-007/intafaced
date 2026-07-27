@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`█████░░░░░░░░░░░░░░░` **23%** — 24 of 103 features shipped
+`███████░░░░░░░░░░░░░` **36%** — 37 of 103 features shipped
 
-Phases: **0** ✅ · **1** 10/12 · **2** 3/16 · **3** 0/15 · **3P** 0/7 · **4** 0/5 · **4P** 0/3 · **5** 0/32 · **5P** 0/2
+Phases: **0** ✅ · **1** 10/12 · **2** 5/16 · **3** 6/15 · **3P** 1/7 · **4** 1/5 · **4P** 0/3 · **5** 3/32 · **5P** 0/2
 
-**🟢 29 ready to claim** — nothing blocks these:
+**🟢 45 ready to claim** — nothing blocks these:
 
 - `identity.webauthn` — WebAuthn registration + assertion (§9)
 - `token.governance` — Proposals + IFC-weighted voting (§4.3)
@@ -22,9 +22,9 @@ Phases: **0** ✅ · **1** 10/12 · **2** 3/16 · **3** 0/15 · **3P** 0/7 · **
 - `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
 - `trade.otc` — OTC RFQ desk, staked-tier gate
 - `trade.copy` — Copy trading, audited leaders, profit share
+- `trade.forex` — Fiat pairs on the same engine
 - `trade.algo` — TWAP / VWAP / POV execution
-- `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
-- …and 21 more
+- …and 37 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
