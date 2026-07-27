@@ -6,4 +6,5 @@
  */
 export * from './trpc.js';
 export * from './identity.js';
+export * from './blueprint.js';
 export * from './example-router.js';

@@ -37,6 +37,12 @@ export const SCOPES = [
   'token:read',
   'token:stake',
 
+  // Blueprint — `:write` is what runs an onboarding session or erases a
+  // Blueprint. Reading someone else's is governed by `blueprints.visibility`
+  // on top of this scope, never by the scope alone.
+  'blueprint:read',
+  'blueprint:write',
+
   // Bank
   'bank:read',
   'bank:write',
@@ -87,6 +93,7 @@ const IMPLIED: Partial<Record<Scope, readonly Scope[]>> = {
   'pay:payout': ['pay:read'],
   'p2p:write': ['p2p:read'],
   'token:stake': ['token:read'],
+  'blueprint:write': ['blueprint:read'],
   'bank:write': ['bank:read'],
   'bank:card': ['bank:read'],
   'launch:write': ['launch:read'],
@@ -121,8 +128,16 @@ export function hasAllScopes(granted: readonly string[], required: readonly Scop
  * Withdrawal and treasury movement require an interactive session with 2FA
  * (§9 Security: withdrawal allow-lists + delay tiers). A leaked key must not be
  * able to move value off the platform on its own.
+ *
+ * The membership test is "does this move value OFF the platform", not "does it
+ * feel dangerous". `pay:payout` was missing: it sends a merchant's settled
+ * balance out through a rail, which is the same class of action as
+ * `trade:withdraw` and had none of the same protection. Found by the agent
+ * building svc-pay, which noticed the asymmetry while writing authorisation
+ * tests and — correctly — flagged it rather than changing a shared package
+ * unilaterally.
  */
-export const INTERACTIVE_ONLY_SCOPES: readonly Scope[] = ['trade:withdraw', 'admin:treasury', 'bank:card'];
+export const INTERACTIVE_ONLY_SCOPES: readonly Scope[] = ['trade:withdraw', 'admin:treasury', 'bank:card', 'pay:payout'];
 
 export function assertKeyScopesAllowed(scopes: readonly string[]): void {
   const forbidden = scopes.filter((s) => (INTERACTIVE_ONLY_SCOPES as readonly string[]).includes(s));

@@ -161,8 +161,18 @@ export function createIdentityRouter(auth: AuthService, rank: RankService, optio
       /**
        * Service-to-service. Modules award XP by calling this rather than by
        * writing rank_state — svc-identity is the only writer (§4.1).
+       *
+       * SCOPED, not public. This was `publicProcedure` with only a comment
+       * saying "service-to-service", which is a comment, not a control: the
+       * moment the router is mounted, anyone could award themselves XP, and XP
+       * drives rank, which drives fee discounts, P2P limits and launchpad
+       * allocation. `identity:write` is a scope no user session carries for
+       * another account, and `requireOwnership` is deliberately NOT applied
+       * because the caller is a service acting on a user's behalf.
+       *
+       * Found by partner audit.
        */
-      awardXp: publicProcedure
+      awardXp: scopedProcedure('identity:write')
         .input(
           z.object({
             userId: z.string().uuid(),

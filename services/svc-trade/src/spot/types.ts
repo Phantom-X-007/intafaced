@@ -1,0 +1,114 @@
+import type { Amount } from '@intafaced/ledger-client';
+
+/**
+ * The domain, in memory.
+ *
+ * Every money-shaped field is an `Amount` — the scaled bigint from
+ * `@intafaced/ledger-client`. Rows come out of Postgres as decimal strings and
+ * are parsed at exactly one place (`rows.ts`); nothing below this line ever
+ * sees a `number` holding value, because 0.1 + 0.2 is not 0.3 and the ledger
+ * reconciles to 18 decimal places.
+ *
+ * `bps` fields ARE numbers. A basis point is a count, not a quantity of value,
+ * and `mulBps` requires an integer.
+ */
+
+export type MarketKind = 'spot' | 'futures' | 'options';
+export type MarketStatus = 'pending' | 'active' | 'halted' | 'delisted';
+export type OrderSide = 'buy' | 'sell';
+export type OrderType = 'market' | 'limit';
+export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'PO';
+export type OrderStatus = 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected' | 'expired';
+export type Liquidity = 'maker' | 'taker';
+
+export interface Market {
+  readonly id: string;
+  readonly symbol: string;
+  readonly baseAsset: string;
+  readonly quoteAsset: string;
+  readonly kind: MarketKind;
+  readonly tickSize: Amount;
+  readonly lotSize: Amount;
+  readonly minQty: Amount;
+  readonly maxQty: Amount | null;
+  readonly minNotional: Amount;
+  readonly status: MarketStatus;
+  readonly makerBps: number;
+  readonly takerBps: number;
+  readonly listedAt: Date | null;
+}
+
+export interface OrderRecord {
+  readonly id: string;
+  readonly userId: string;
+  readonly subAccountId: string | null;
+  readonly marketId: string;
+  readonly clientOrderId: string | null;
+  readonly side: OrderSide;
+  readonly type: OrderType;
+  readonly price: Amount | null;
+  readonly qty: Amount;
+  readonly filledQty: Amount;
+  readonly status: OrderStatus;
+  readonly tif: TimeInForce;
+  readonly holdAsset: string;
+  readonly holdAmount: Amount;
+  readonly feeDiscountBps: number;
+  readonly protectionPrice: Amount | null;
+  readonly engineSequence: number | null;
+  readonly rejectCode: string | null;
+  readonly createdAt: Date;
+}
+
+export interface FillRecord {
+  readonly id: string;
+  readonly orderId: string;
+  readonly counterOrderId: string;
+  readonly marketId: string;
+  readonly userId: string;
+  readonly side: OrderSide;
+  readonly liquidity: Liquidity;
+  readonly price: Amount;
+  readonly qty: Amount;
+  readonly quoteAmount: Amount;
+  readonly feeAsset: string;
+  readonly feeAmount: Amount;
+  readonly feeBps: number;
+  readonly sequence: number;
+  readonly ts: Date;
+}
+
+/**
+ * Every way this service refuses.
+ *
+ * A closed union rather than free text because an SLO dashboard groups by it
+ * and a client branches on it: `trade.market_halted` is an operator action
+ * working as intended, `trade.hold_uncovered` is an alarm, and collapsing the
+ * two into "order failed" makes both unactionable.
+ */
+export type TradeErrorCode =
+  | 'trade.market_not_found'
+  | 'trade.market_not_tradable'
+  | 'trade.market_kind_unsupported'
+  | 'trade.order_type_unsupported'
+  | 'trade.invalid_qty'
+  | 'trade.invalid_price'
+  | 'trade.below_min_notional'
+  | 'trade.no_reference_price'
+  | 'trade.spot_disabled'
+  | 'trade.order_not_found'
+  | 'trade.order_not_open'
+  | 'trade.not_owner'
+  | 'trade.perks_unavailable'
+  | 'trade.dust_fill'
+  | 'trade.hold_uncovered';
+
+export class TradeError extends Error {
+  constructor(
+    message: string,
+    readonly code: TradeErrorCode,
+  ) {
+    super(message);
+    this.name = 'TradeError';
+  }
+}

@@ -10,21 +10,21 @@
 
 <!-- tracker:start -->
 
-`████░░░░░░░░░░░░░░░░` **22%** — 23 of 103 features shipped
+`█████░░░░░░░░░░░░░░░` **23%** — 24 of 103 features shipped
 
-Phases: **0** ✅ · **1** 10/12 · **2** 2/16 · **3** 0/15 · **3P** 0/7 · **4** 0/5 · **4P** 0/3 · **5** 0/32 · **5P** 0/2
+Phases: **0** ✅ · **1** 10/12 · **2** 3/16 · **3** 0/15 · **3P** 0/7 · **4** 0/5 · **4P** 0/3 · **5** 0/32 · **5P** 0/2
 
-**🟢 20 ready to claim** — nothing blocks these:
+**🟢 29 ready to claim** — nothing blocks these:
 
 - `identity.webauthn` — WebAuthn registration + assertion (§9)
 - `token.governance` — Proposals + IFC-weighted voting (§4.3)
-- `trade.spot` — Spot markets, order lifecycle, fees
-- `web.shell` — apps/web scaffold on the design system
-- `ws.gateway` — WebSocket fan-out: depth, trades, orders, positions
-- `pay.gateway` — Branded gateway, hosted checkout, payment links
-- `p2p.offers` — Offers, maker/taker, 100+ fiat currencies
-- `protocol.smart-accounts` — Passkey smart accounts, session keys (§17.4)
-- …and 12 more
+- `trade.convert` — One-tap Convert — the retail on-ramp
+- `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
+- `trade.otc` — OTC RFQ desk, staked-tier gate
+- `trade.copy` — Copy trading, audited leaders, profit share
+- `trade.algo` — TWAP / VWAP / POV execution
+- `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
+- …and 21 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

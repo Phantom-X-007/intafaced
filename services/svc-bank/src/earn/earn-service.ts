@@ -1,0 +1,544 @@
+import type { Sql } from 'postgres';
+import { transaction } from '@intafaced/db';
+import {
+  InsufficientFundsError,
+  LedgerError,
+  earnPoolReserve,
+  formatAmount,
+  parseAmount,
+  recipes,
+  userStake,
+  type Amount,
+  type LedgerClient,
+} from '@intafaced/ledger-client';
+import { BankError } from '../errors.js';
+import { accrualDate, planAccrual } from './interest.js';
+import { withMoneySpan } from '../tracing.js';
+
+/**
+ * EARN — flexible and fixed pools as `stake`-kind ledger accounts (§8.1).
+ *
+ * ── Coordination with svc-token, not duplication of it ───────────────────────
+ *
+ * §8.1: "flexible/fixed pools as stake-kind ledger accounts; native staking
+ * already lives in svc-token". Both services move value into
+ * `userStake(userId, assetId)` — the SAME ledger account for a given user and
+ * asset. That is fine while they never share an asset, and catastrophic the
+ * moment they do: svc-token's `stakeOf()` sums its own table and asserts the
+ * result equals that ledger account, and svc-bank does the same. If both wrote
+ * to `userStake(user, IFC)`, neither service's table could be reconciled
+ * against the ledger and BOTH invariants would break at once.
+ *
+ * So svc-bank refuses the native asset outright (`bank.native_asset_not_earnable`)
+ * and points the caller at svc-token. One asset, one owner. The refusal is
+ * tested, because the failure it prevents is silent.
+ *
+ * ── Where interest comes from ────────────────────────────────────────────────
+ *
+ * Out of the pool's reserve account, which must be funded first. Interest is
+ * not minted and it is not accrued as a number to be settled later: an
+ * under-funded pool fails to accrue, loudly, which is the correct behaviour on
+ * the day the yield stops being real.
+ */
+
+export interface PoolRecord {
+  id: string;
+  assetId: string;
+  kind: 'flexible' | 'fixed';
+  name: string;
+  aprBps: number;
+  termDays: number | null;
+  minDeposit: Amount;
+  status: 'open' | 'closed';
+}
+
+export interface PositionRecord {
+  id: string;
+  poolId: string;
+  userId: string;
+  assetId: string;
+  principal: Amount;
+  openedAt: Date;
+  maturesAt: Date | null;
+  status: 'active' | 'closed';
+}
+
+interface PoolRow {
+  id: string;
+  asset_id: string;
+  kind: 'flexible' | 'fixed';
+  name: string;
+  apr_bps: string;
+  term_days: number | null;
+  min_deposit: string;
+  status: 'open' | 'closed';
+}
+
+interface PositionRow {
+  id: string;
+  pool_id: string;
+  user_id: string;
+  asset_id: string;
+  principal: string;
+  opened_at: Date;
+  matures_at: Date | null;
+  status: 'active' | 'closed';
+}
+
+function toPool(row: PoolRow): PoolRecord {
+  return {
+    id: row.id,
+    assetId: row.asset_id,
+    kind: row.kind,
+    name: row.name,
+    aprBps: Number(row.apr_bps),
+    termDays: row.term_days,
+    minDeposit: parseAmount(row.min_deposit),
+    status: row.status,
+  };
+}
+
+function toPosition(row: PositionRow): PositionRecord {
+  return {
+    id: row.id,
+    poolId: row.pool_id,
+    userId: row.user_id,
+    assetId: row.asset_id,
+    principal: parseAmount(row.principal),
+    openedAt: row.opened_at,
+    maturesAt: row.matures_at,
+    status: row.status,
+  };
+}
+
+export interface EarnServiceOptions {
+  /** The asset svc-token owns. Refused here. */
+  nativeAssetId: string;
+}
+
+export interface AccrualResult {
+  poolId: string;
+  date: string;
+  paid: Amount;
+  recipients: number;
+  /** Null when nothing was owed — a real, recorded outcome, not a failure. */
+  ledgerTxId: string | null;
+  alreadyAccrued: boolean;
+}
+
+export class EarnService {
+  private readonly nativeAssetId: string;
+
+  constructor(
+    private readonly sql: Sql,
+    private readonly ledger: LedgerClient,
+    options: EarnServiceOptions = { nativeAssetId: 'IFC' },
+  ) {
+    this.nativeAssetId = options.nativeAssetId;
+  }
+
+  // ── Pools ──────────────────────────────────────────────────────────────────
+
+  async createPool(input: {
+    assetId: string;
+    kind: 'flexible' | 'fixed';
+    name: string;
+    aprBps: number;
+    termDays?: number | null;
+    minDeposit?: Amount;
+  }): Promise<PoolRecord> {
+    this.assertEarnable(input.assetId);
+
+    const rows = await this.sql<PoolRow[]>`
+      INSERT INTO bank.earn_pools (asset_id, kind, name, apr_bps, term_days, min_deposit)
+      VALUES (
+        ${input.assetId}, ${input.kind}, ${input.name}, ${input.aprBps},
+        ${input.kind === 'fixed' ? (input.termDays ?? null) : null},
+        ${formatAmount(input.minDeposit ?? 0n)}::numeric
+      )
+      RETURNING id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
+    `;
+    return toPool(rows[0]!);
+  }
+
+  async pool(poolId: string): Promise<PoolRecord> {
+    const rows = await this.sql<PoolRow[]>`
+      SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
+        FROM bank.earn_pools WHERE id = ${poolId}
+    `;
+    const row = rows[0];
+    if (!row) throw new BankError(`Pool ${poolId} not found`, 'bank.pool_not_found');
+    return toPool(row);
+  }
+
+  async listPools(assetId?: string): Promise<PoolRecord[]> {
+    const rows = assetId
+      ? await this.sql<PoolRow[]>`
+          SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
+            FROM bank.earn_pools WHERE asset_id = ${assetId} AND status = 'open' ORDER BY apr_bps DESC
+        `
+      : await this.sql<PoolRow[]>`
+          SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
+            FROM bank.earn_pools WHERE status = 'open' ORDER BY asset_id ASC, apr_bps DESC
+        `;
+    return rows.map(toPool);
+  }
+
+  /**
+   * Put yield into a pool's reserve.
+   *
+   * An operator action today; in the finished §8.1 the source is loan interest
+   * revenue, which lands in `houseFees('bank', asset)` and is swept here.
+   */
+  async fundPool(input: { poolId: string; fundingId: string; amount: Amount }): Promise<{ ledgerTxId: string }> {
+    const pool = await this.pool(input.poolId);
+    return withMoneySpan(
+      'bank.earn.fundPool',
+      { operation: 'fund-pool', poolId: pool.id, amount: formatAmount(input.amount), assetId: pool.assetId },
+      async () => {
+        const tx = await this.ledger.post(
+          recipes.earnPoolFund({
+            poolId: pool.id,
+            fundingId: input.fundingId,
+            assetId: pool.assetId,
+            amount: input.amount,
+          }),
+        );
+        return { ledgerTxId: tx.id };
+      },
+    );
+  }
+
+  /** What the pool can still afford to pay. A ledger read, never a column. */
+  async reserveBalance(poolId: string): Promise<Amount> {
+    const pool = await this.pool(poolId);
+    return (await this.ledger.balance(earnPoolReserve(pool.id, pool.assetId))).amount;
+  }
+
+  /**
+   * The pool's size, from the positions that make it up.
+   *
+   * A derived aggregate, computed on every call. The column this replaces —
+   * `total_deposited`, maintained by hand on every deposit and withdrawal — is
+   * the single most tempting thing to add to this service and the single most
+   * certain to drift.
+   */
+  async poolSize(poolId: string): Promise<Amount> {
+    const rows = await this.sql<Array<{ total: string }>>`
+      SELECT COALESCE(SUM(principal), 0) AS total FROM bank.earn_positions
+       WHERE pool_id = ${poolId} AND status = 'active'
+    `;
+    return parseAmount(rows[0]?.total ?? '0');
+  }
+
+  // ── Positions ──────────────────────────────────────────────────────────────
+
+  /**
+   * Open a position.
+   *
+   * Ledger first, then the row — the same ordering as svc-token's `stake`, for
+   * the same reason. If the ledger post fails no row is written; if the row
+   * write fails the ledger post is idempotent on `bank.earn.deposit:<positionId>`
+   * and the retry reconciles. The reverse order would let a position exist with
+   * nothing behind it: a position we would pay interest on that nobody funded.
+   */
+  async deposit(input: { poolId: string; userId: string; amount: Amount; positionId?: string; now?: Date }): Promise<PositionRecord> {
+    const positionId = input.positionId ?? crypto.randomUUID();
+    const now = input.now ?? new Date();
+
+    return withMoneySpan(
+      'bank.earn.deposit',
+      {
+        operation: 'earn-deposit',
+        poolId: input.poolId,
+        positionId,
+        userId: input.userId,
+        amount: formatAmount(input.amount),
+      },
+      async () => {
+        const pool = await this.pool(input.poolId);
+        if (pool.status !== 'open') throw new BankError(`Pool "${pool.name}" is closed`, 'bank.pool_closed');
+        this.assertEarnable(pool.assetId);
+        if (input.amount < pool.minDeposit) {
+          throw new BankError(
+            `Minimum deposit for "${pool.name}" is ${formatAmount(pool.minDeposit)} ${pool.assetId}`,
+            'bank.below_minimum',
+          );
+        }
+
+        await this.ledger.post(
+          recipes.earnDeposit({
+            positionId,
+            poolId: pool.id,
+            userId: input.userId,
+            assetId: pool.assetId,
+            amount: input.amount,
+          }),
+        );
+
+        const maturesAt =
+          pool.kind === 'fixed' && pool.termDays !== null ? new Date(now.getTime() + pool.termDays * 24 * 60 * 60 * 1000) : null;
+
+        const rows = await this.sql<PositionRow[]>`
+          INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at)
+          VALUES (${positionId}, ${pool.id}, ${input.userId}, ${pool.assetId},
+                  ${formatAmount(input.amount)}::numeric, ${now}, ${maturesAt})
+          ON CONFLICT (id) DO NOTHING
+          RETURNING id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
+        `;
+
+        const inserted = rows[0];
+        if (inserted) return toPosition(inserted);
+        return this.position(positionId);
+      },
+    );
+  }
+
+  async position(positionId: string): Promise<PositionRecord> {
+    const rows = await this.sql<PositionRow[]>`
+      SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
+        FROM bank.earn_positions WHERE id = ${positionId}
+    `;
+    const row = rows[0];
+    if (!row) throw new BankError(`Position ${positionId} not found`, 'bank.position_not_found');
+    return toPosition(row);
+  }
+
+  async positionsOf(userId: string): Promise<PositionRecord[]> {
+    const rows = await this.sql<PositionRow[]>`
+      SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
+        FROM bank.earn_positions WHERE user_id = ${userId} AND status = 'active' ORDER BY opened_at DESC
+    `;
+    return rows.map(toPosition);
+  }
+
+  /**
+   * The user's total open principal in an asset, from THIS SERVICE'S TABLE.
+   *
+   * Its only purpose is to be compared with `ledger.balance(userStake(user,
+   * asset))`. Two independent answers to "how much has this user got earning",
+   * which must agree — the property that makes Doctrine §0.6 checkable rather
+   * than merely stated.
+   */
+  async principalOf(userId: string, assetId: string): Promise<Amount> {
+    const rows = await this.sql<Array<{ total: string }>>`
+      SELECT COALESCE(SUM(principal), 0) AS total FROM bank.earn_positions
+       WHERE user_id = ${userId} AND asset_id = ${assetId} AND status = 'active'
+    `;
+    return parseAmount(rows[0]?.total ?? '0');
+  }
+
+  /** The same question, asked of the ledger. */
+  async stakedOf(userId: string, assetId: string): Promise<Amount> {
+    return (await this.ledger.balance(userStake(userId, assetId))).amount;
+  }
+
+  /**
+   * Close a position and return the principal.
+   *
+   * The row is locked for the duration so two concurrent withdrawals cannot both
+   * post. The ledger's idempotency key would catch the double-post anyway, but
+   * relying on the last line of defence for ordinary correctness is how the last
+   * line stops being one.
+   */
+  async withdraw(positionId: string, now: Date = new Date()): Promise<PositionRecord> {
+    return withMoneySpan('bank.earn.withdraw', { operation: 'earn-withdraw', positionId }, async () => this.withdrawInner(positionId, now));
+  }
+
+  private async withdrawInner(positionId: string, now: Date): Promise<PositionRecord> {
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const rows = await tx<PositionRow[]>`
+          SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
+            FROM bank.earn_positions WHERE id = ${positionId} FOR UPDATE
+        `;
+        const row = rows[0];
+        if (!row) throw new BankError(`Position ${positionId} not found`, 'bank.position_not_found');
+        if (row.status === 'closed') throw new BankError('Position is already closed', 'bank.position_closed');
+        if (row.matures_at && row.matures_at > now) {
+          throw new BankError(`Fixed-term position is locked until ${row.matures_at.toISOString()}`, 'bank.position_locked');
+        }
+
+        const principal = parseAmount(row.principal);
+
+        await this.ledger.post(
+          recipes.earnWithdraw({
+            positionId,
+            poolId: row.pool_id,
+            userId: row.user_id,
+            assetId: row.asset_id,
+            amount: principal,
+          }),
+        );
+
+        await tx`UPDATE bank.earn_positions SET status = 'closed', closed_at = now() WHERE id = ${positionId}`;
+
+        return { ...toPosition(row), status: 'closed' as const };
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  // ── Daily accrual (§8.1: "interest accrual daily recipe") ──────────────────
+
+  /**
+   * Pay one day of interest for one pool.
+   *
+   * Idempotent per (pool, day), twice over:
+   *
+   *   1. `unique(pool_id, accrual_date)` on `bank.interest_accruals`, claimed
+   *      before anything is posted.
+   *   2. The ledger key `bank.interest:<poolId>:<date>`.
+   *
+   * Both derive from the same (pool, day) pair, so a cron that fires twice at
+   * midnight, or a catch-up run overlapping the live schedule, pays once.
+   *
+   * If this crashes exactly here — after the ledger post, before the database
+   * commit — the claim rolls back while the payment stands. The next run
+   * re-claims, re-posts (idempotent, returns the same transaction) and writes
+   * the record against it. Nobody's funds are stranded: the interest is in the
+   * users' available balances the whole time.
+   *
+   * If the reserve cannot cover the day, NOTHING moves and the claim rolls back
+   * so the day can be re-run once the pool is funded. That is the loud failure
+   * §8.1 needs: a pool that cannot pay its advertised rate is an operator
+   * problem today, not a shortfall discovered at maturity.
+   */
+  async accrue(input: { poolId: string; at?: Date; daysPerYear?: number }): Promise<AccrualResult> {
+    const at = input.at ?? new Date();
+    const date = accrualDate(at);
+
+    return withMoneySpan('bank.earn.accrue', { operation: 'interest-accrual', poolId: input.poolId, date }, async (span) => {
+      const result = await this.accrueInner(input.poolId, date, at, input.daysPerYear);
+      span.setAttribute('intafaced.recipients', result.recipients);
+      span.setAttribute('intafaced.paid', formatAmount(result.paid));
+      span.setAttribute('intafaced.already_accrued', result.alreadyAccrued);
+      return result;
+    });
+  }
+
+  private async accrueInner(poolId: string, date: string, at: Date, daysPerYear?: number): Promise<AccrualResult> {
+    const pool = await this.pool(poolId);
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        // Claim the day. A second run blocks here, then finds zero rows.
+        const claimed = await tx<Array<{ id: string }>>`
+          INSERT INTO bank.interest_accruals (pool_id, accrual_date, rate_bps, paid_amount, recipients)
+          VALUES (${pool.id}, ${date}, ${pool.aprBps}, 0, 0)
+          ON CONFLICT (pool_id, accrual_date) DO NOTHING
+          RETURNING id
+        `;
+
+        if (claimed.length === 0) {
+          const existing = await tx<Array<{ paid_amount: string; recipients: number; ledger_tx_id: string | null }>>`
+            SELECT paid_amount, recipients, ledger_tx_id FROM bank.interest_accruals
+             WHERE pool_id = ${pool.id} AND accrual_date = ${date}
+          `;
+          const row = existing[0]!;
+          return {
+            poolId: pool.id,
+            date,
+            paid: parseAmount(row.paid_amount),
+            recipients: row.recipients,
+            ledgerTxId: row.ledger_tx_id,
+            alreadyAccrued: true,
+          };
+        }
+
+        const accrualId = claimed[0]!.id;
+
+        // Positions opened later than the accrual day earn nothing for it — a
+        // deposit made this afternoon has not been in the pool for a day.
+        const positions = await tx<Array<{ id: string; user_id: string; principal: string }>>`
+          SELECT id, user_id, principal FROM bank.earn_positions
+           WHERE pool_id = ${pool.id} AND status = 'active' AND opened_at <= ${at}
+           ORDER BY id ASC
+        `;
+
+        const plan = planAccrual(
+          positions.map((p) => ({ positionId: p.id, userId: p.user_id, principal: parseAmount(p.principal) })),
+          pool.aprBps,
+          daysPerYear,
+        );
+
+        if (plan.payouts.length === 0) {
+          // A real outcome, recorded: an empty pool, or every position too small
+          // to earn a unit today. Writing the row keeps the day from being
+          // reconsidered forever.
+          return { poolId: pool.id, date, paid: 0n, recipients: 0, ledgerTxId: null, alreadyAccrued: false };
+        }
+
+        let posted;
+        try {
+          posted = await this.ledger.post(recipes.earnInterest({ poolId: pool.id, date, assetId: pool.assetId, payouts: plan.payouts }));
+        } catch (err) {
+          if (err instanceof InsufficientFundsError || (err instanceof LedgerError && err.code === 'ledger.insufficient_funds')) {
+            // Rethrown as a bank code so the operator alert says what is wrong
+            // ("this pool cannot pay its rate") rather than what the ledger saw.
+            // The throw rolls the claim back — deliberately, so the day is
+            // re-runnable the moment the reserve is topped up.
+            throw new BankError(
+              `Pool "${pool.name}" cannot cover ${formatAmount(plan.total)} ${pool.assetId} of interest for ${date}`,
+              'bank.pool_underfunded',
+            );
+          }
+          throw err;
+        }
+
+        await tx`
+          UPDATE bank.interest_accruals
+             SET paid_amount = ${formatAmount(plan.total)}::numeric,
+                 recipients = ${plan.payouts.length},
+                 ledger_tx_id = ${posted.id}
+           WHERE id = ${accrualId}
+        `;
+
+        return {
+          poolId: pool.id,
+          date,
+          paid: plan.total,
+          recipients: plan.payouts.length,
+          ledgerTxId: posted.id,
+          alreadyAccrued: false,
+        };
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  /** Every open pool accrues for the day. The job's entry point. */
+  async accrueAll(at: Date = new Date(), daysPerYear?: number): Promise<AccrualResult[]> {
+    const pools = await this.listPools();
+    const results: AccrualResult[] = [];
+    for (const pool of pools) {
+      results.push(await this.accrue({ poolId: pool.id, at, ...(daysPerYear === undefined ? {} : { daysPerYear }) }));
+    }
+    return results;
+  }
+
+  /**
+   * Lifetime interest a pool has paid — summed from the per-day records.
+   *
+   * Not a stored total. Summing the daily rows and reading how much has left the
+   * pool's reserve in the ledger are two independent answers to the same
+   * question, and they must agree.
+   */
+  async interestPaid(poolId: string): Promise<Amount> {
+    const rows = await this.sql<Array<{ total: string }>>`
+      SELECT COALESCE(SUM(paid_amount), 0) AS total FROM bank.interest_accruals WHERE pool_id = ${poolId}
+    `;
+    return parseAmount(rows[0]?.total ?? '0');
+  }
+
+  private assertEarnable(assetId: string): void {
+    if (assetId === this.nativeAssetId) {
+      throw new BankError(
+        `${assetId} is staked through svc-token, not through bank earn pools (§8.1) — both would write to the same ledger stake account`,
+        'bank.native_asset_not_earnable',
+      );
+    }
+  }
+}
