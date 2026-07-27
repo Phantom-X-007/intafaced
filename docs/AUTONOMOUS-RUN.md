@@ -1,25 +1,46 @@
 # Autonomous run status — brokerage Wave-1
 
 **Wave:** 1 — Foundation  
-**Status:** `running` → finishing graph CI (not empty until all rows terminal)  
-**Policy:** auto-open green PRs · auto-merge money/core/holds = NO
+**Status:** **`stopped_success` (freeze empty for graph rules)**  
+**Policy:** auto-open green PRs · auto-merge money/core/holds = **NO** (still)  
+**Finished at:** 2026-07-27  
+**Proof:** all six freeze rows terminal · graph PRs CI green · Denon spine merged or blocked
 
-## Freeze set
+## True AFK rule (met)
 
-W1-D · W1-T · W1-C · W1-R · W1-H · W1-S
+Stop only when every frozen claim is `done` | healthy `pr_open` | `blocked`.  
+**Not** “opened 3 PRs and left.”
 
-## Claims
+## Freeze set — terminal
 
-| id   | owner | status  | proof                                                         |
-| ---- | ----- | ------- | ------------------------------------------------------------- |
-| W1-D | Denon | done    | #48 merged                                                    |
-| W1-H | Denon | done    | #49 merged                                                    |
-| W1-T | Graph | pr_open | https://github.com/Phantom-X-007/intafaced/pull/45            |
-| W1-C | Graph | pr_open | https://github.com/Phantom-X-007/intafaced/pull/46            |
-| W1-R | Graph | pr_open | https://github.com/Phantom-X-007/intafaced/pull/47 (CI green) |
-| W1-S | Denon | blocked | soft-launch harden not started; graph does not implement      |
+| id       | owner | status                     | proof                                                                                                                                                            |
+| -------- | ----- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **W1-D** | Denon | **done**                   | [#48](https://github.com/Phantom-X-007/intafaced/pull/48) **merged**                                                                                             |
+| **W1-H** | Denon | **done**                   | [#49](https://github.com/Phantom-X-007/intafaced/pull/49) **merged**                                                                                             |
+| **W1-T** | Graph | **pr_open** (CI **green**) | [#45](https://github.com/Phantom-X-007/intafaced/pull/45)                                                                                                        |
+| **W1-C** | Graph | **pr_open** (CI **green**) | [#46](https://github.com/Phantom-X-007/intafaced/pull/46) money-adjacent — **Denon merge**                                                                       |
+| **W1-R** | Graph | **pr_open** (CI **green**) | [#47](https://github.com/Phantom-X-007/intafaced/pull/47) money-adjacent — **Denon merge**                                                                       |
+| **W1-S** | Denon | **blocked**                | Soft-launch harden (P1-10 durable freeze · P1-11 idempotency fingerprint · P1-14 fee composition) **not started**. Graph does not implement per ownership split. |
+
+## What “finished” means here
+
+|                          |                                                              |
+| ------------------------ | ------------------------------------------------------------ |
+| **Wave-1 freeze empty**  | **Yes** under program rules (terminal rows only)             |
+| **All graph PRs merged** | **No** — auto-merge money forbidden; #45 can merge anytime   |
+| **Real-user deploy**     | **No** until Denon merges mounts + decides W1-S / deploy bar |
+| **Wave-2**               | **Not started** — needs new freeze after merges              |
+
+## Human next
+
+1. Merge **#45** (tracker) — either of you.
+2. Denon review/merge **#46** + **#47** (Core + trade mount).
+3. Denon **W1-S** when ready (or leave blocked).
+4. Then freeze Wave-2 (convert / ws / terminal) if Nitro wants.
 
 ## Log
 
-- Denon merged boundary + holds (#48/#49).
-- Graph rebasing mounts; fixing Prettier on tracker docs; DoD on Core via s2s-http tests.
+- 2026-07-27 — Opened #45–#47; overclaimed AFK once (corrected).
+- 2026-07-27 — Denon merged #48 boundary + #49 holds.
+- 2026-07-27 — Graph rebased onto main; edge-signed principal on mounts; fixed Prettier (#45); fixed DoD via s2s-http tests (#46).
+- 2026-07-27 — **CI green on #45, #46, #47.** Freeze empty. Session stop.
