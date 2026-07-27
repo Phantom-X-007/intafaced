@@ -3,36 +3,33 @@
 # GitHub auto-requests a review from the owner when a PR touches these paths.
 # With two of us this mostly means "you both get pinged" — which is the point:
 # the money paths and the doctrine gates should never merge without a second
-# pair of eyes having actually loaded the diff.
+# pair of eyes having actually loaded the diff. GitHub never requests review
+# from the PR author, so in practice each line means "the other one reviews".
 #
-# NOTE: a handle that does not exist, or a user without repo access, makes the
-# whole line silently do nothing. GitHub does not warn you. Verify with:
+# NOTE: a handle that does not exist, or a user without WRITE access, makes the
+# whole line silently do nothing. GitHub does not warn you, and a pending
+# invitation does not count — @ZenYoda3's lines below start working the moment
+# they accept, not before. Verify with:
 #   gh api /repos/Phantom-X-007/intafaced/codeowners/errors
 #
 # Requiring code-owner approval to merge needs GitHub Pro on a private repo
 # (CONTRIBUTING.md §1). Until then this file requests reviews; it does not
 # enforce them.
 
-*                                    @Phantom-X-007
+*                                    @Phantom-X-007 @ZenYoda3
 
 # ── The Core. Nothing here merges casually. ──────────────────────────────────
-/packages/ledger-client/             @Phantom-X-007
-/services/svc-ledger/                @Phantom-X-007
-/services/svc-identity/              @Phantom-X-007
-/services/svc-token/                 @Phantom-X-007
+/packages/ledger-client/             @Phantom-X-007 @ZenYoda3
+/services/svc-ledger/                @Phantom-X-007 @ZenYoda3
+/services/svc-identity/              @Phantom-X-007 @ZenYoda3
+/services/svc-token/                 @Phantom-X-007 @ZenYoda3
 
 # ── The rules themselves. Changing these changes what "done" means. ──────────
-/INTAFACED_DEFINITIVE_BUILD.md       @Phantom-X-007
-/tooling/agent-protocol/             @Phantom-X-007
-/tooling/ci/                         @Phantom-X-007
-/.github/                            @Phantom-X-007
-/CONTRIBUTING.md                     @Phantom-X-007
+/INTAFACED_DEFINITIVE_BUILD.md       @Phantom-X-007 @ZenYoda3
+/tooling/agent-protocol/             @Phantom-X-007 @ZenYoda3
+/tooling/ci/                         @Phantom-X-007 @ZenYoda3
+/.github/                            @Phantom-X-007 @ZenYoda3
+/CONTRIBUTING.md                     @Phantom-X-007 @ZenYoda3
 
 # ── Jurisdiction and custody. Legal surface, not just code. ──────────────────
-/packages/config/src/jurisdiction.ts @Phantom-X-007
-
-# ── Second developer ─────────────────────────────────────────────────────────
-# Add their handle to the lines above once they accept the collaborator invite.
-# Both handles on a line = both get requested, which is what we want on money
-# paths. Example:
-#   /packages/ledger-client/          @Phantom-X-007 @their-handle
+/packages/config/src/jurisdiction.ts @Phantom-X-007 @ZenYoda3
