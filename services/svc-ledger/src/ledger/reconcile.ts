@@ -39,8 +39,8 @@ export async function reconcileBalances(sql: Sql): Promise<ReconcileResult> {
            COALESCE(SUM(
              CASE WHEN e.direction = 'debit' THEN e.amount ELSE -e.amount END
            ), 0)                                       AS replayed
-      FROM ledger.accounts a
-      LEFT JOIN ledger.ledger_entries e ON e.account_id = a.id
+      FROM accounts a
+      LEFT JOIN ledger_entries e ON e.account_id = a.id
      GROUP BY a.id, a.asset_id, a.balance
   `;
 
@@ -74,7 +74,7 @@ export async function verifyChain(sql: Sql, batchSize = 1000): Promise<ChainResu
       Array<{ id: string; seq: string; module: string; reason: string; posted_at: Date; hash: string; previous_hash: string | null }>
     >`
       SELECT id, seq, module, reason, posted_at, hash, previous_hash
-        FROM ledger.ledger_tx WHERE seq > ${afterSeq} ORDER BY seq ASC LIMIT ${batchSize}
+        FROM ledger_tx WHERE seq > ${afterSeq} ORDER BY seq ASC LIMIT ${batchSize}
     `;
     if (txs.length === 0) break;
 
@@ -83,7 +83,7 @@ export async function verifyChain(sql: Sql, batchSize = 1000): Promise<ChainResu
         Array<{ account_id: string; asset_id: string; direction: 'debit' | 'credit'; amount: string; balance_after: string }>
       >`
         SELECT account_id, asset_id, direction, amount, balance_after
-          FROM ledger.ledger_entries WHERE tx_id = ${tx.id} ORDER BY id ASC
+          FROM ledger_entries WHERE tx_id = ${tx.id} ORDER BY id ASC
       `;
 
       const expected = hashTx(
@@ -121,7 +121,7 @@ export async function verifyChain(sql: Sql, batchSize = 1000): Promise<ChainResu
 /** Every asset must sum to exactly zero across every account. */
 export async function totalsByAsset(sql: Sql): Promise<Record<string, string>> {
   const rows = await sql<Array<{ asset_id: string; total: string }>>`
-    SELECT asset_id, COALESCE(SUM(balance), 0) AS total FROM ledger.accounts GROUP BY asset_id
+    SELECT asset_id, COALESCE(SUM(balance), 0) AS total FROM accounts GROUP BY asset_id
   `;
   return Object.fromEntries(rows.map((r) => [r.asset_id, formatAmount(parseAmount(r.total))]));
 }
@@ -129,8 +129,8 @@ export async function totalsByAsset(sql: Sql): Promise<Record<string, string>> {
 /** Hourly anchor so a future replay does not have to start from genesis. */
 export async function writeSnapshots(sql: Sql, asOf: Date = new Date()): Promise<number> {
   const result = await sql`
-    INSERT INTO ledger.balance_snapshots (account_id, as_of, balance)
-    SELECT id, ${asOf}, balance FROM ledger.accounts
+    INSERT INTO balance_snapshots (account_id, as_of, balance)
+    SELECT id, ${asOf}, balance FROM accounts
   `;
   return result.count;
 }

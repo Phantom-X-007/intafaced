@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { drizzleConfig, MIGRATION_CONVENTION } from './migrate.js';
 import { isSerializationFailure } from './connection.js';
+import { rewriteSchemaSql } from './testing.js';
 
 describe('drizzleConfig', () => {
   it('confines a service to its own Postgres schema', () => {
@@ -27,6 +28,25 @@ describe('drizzleConfig', () => {
 
   it('declares the reversible-migration convention CI checks for', () => {
     expect(MIGRATION_CONVENTION.downSuffix).toBe('.down.sql');
+  });
+});
+
+describe('rewriteSchemaSql', () => {
+  it('rewrites quoted and bare schema qualifiers for isolated test schemas', () => {
+    const src = `
+      CREATE TABLE "ledger"."accounts" (...);
+      SELECT * FROM ledger.accounts WHERE kind = 'hold'::ledger.account_kind;
+    `;
+    const out = rewriteSchemaSql(src, 'ledger', 'test_ledger_1_2');
+    expect(out).toContain('"test_ledger_1_2"."accounts"');
+    expect(out).toContain('FROM test_ledger_1_2.accounts');
+    expect(out).toContain("'hold'::test_ledger_1_2.account_kind");
+    expect(out).not.toContain('"ledger"');
+    expect(out).not.toMatch(/\bledger\./);
+  });
+
+  it('refuses unsafe identifiers', () => {
+    expect(() => rewriteSchemaSql('x', 'ledger;drop', 'y')).toThrow(/Unsafe/);
   });
 });
 

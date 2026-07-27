@@ -21,8 +21,8 @@ const sql = postgres(env.DATABASE_URL, {
 });
 
 // Prove the book is reachable and initialised before serving anything.
-const [tip] = await sql<Array<{ seq: string }>>`SELECT seq FROM ledger.chain_tip WHERE id = true`;
-if (!tip) throw new Error('ledger.chain_tip is missing — run migrations before starting svc-ledger');
+const [tip] = await sql<Array<{ seq: string }>>`SELECT seq FROM chain_tip WHERE id = true`;
+if (!tip) throw new Error('chain_tip is missing — run migrations before starting svc-ledger');
 
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
