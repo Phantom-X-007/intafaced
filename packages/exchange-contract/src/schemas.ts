@@ -1,0 +1,352 @@
+import { z } from 'zod';
+
+/**
+ * CCXT-SHAPED PUBLIC EXCHANGE API.
+ *
+ * The unified interface every trading bot, algo framework, and third-party
+ * terminal already speaks. By publishing this shape, INTAFACED becomes a
+ * first-class venue for software that was written before we existed.
+ *
+ * Why it is shaped like this, precisely:
+ *   - CCXT's unified structures are a de-facto standard across ~100 venues.
+ *     Matching them means integrators write zero adapter code.
+ *   - The pro desktop terminal (docs/TERMINAL_INTEGRATION.md) drives its whole
+ *     trading layer through CCXT. Serving this shape connects it with no
+ *     modification to its source at all.
+ *
+ * Two deliberate divergences from stock CCXT, both non-negotiable here:
+ *
+ *   1. MONEY IS A DECIMAL STRING. CCXT hands back JS floats. We do not — the
+ *      ledger reconciles to 18 decimal places and a float cannot carry that.
+ *      Numeric fields that CCXT types as `number` are strings in our payloads;
+ *      the `intafaced` CCXT class casts at the boundary, where the loss is
+ *      visible and contained rather than silent and structural.
+ *
+ *   2. Timestamps are ms-since-epoch integers (CCXT convention) AND an ISO
+ *      `datetime` string, because CCXT consumers use both.
+ */
+
+/** Decimal string. The only representation of value that crosses this boundary. */
+export const decimal = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'amounts are decimal strings with at most 18 decimal places');
+
+export const timestampMs = z.number().int().nonnegative();
+export const isoDatetime = z.string().datetime({ offset: true });
+
+// ── Markets ──────────────────────────────────────────────────────────────────
+
+export const marketTypeSchema = z.enum(['spot', 'swap', 'future', 'option']);
+
+/**
+ * CCXT market. `symbol` is the unified form — 'BTC/USDT', 'BTC/USDT:USDT' for
+ * a linear perp. `id` is our internal market id.
+ */
+export const marketSchema = z.object({
+  id: z.string(),
+  symbol: z.string(),
+  base: z.string(),
+  quote: z.string(),
+  /** Settlement asset for derivatives; null on spot. */
+  settle: z.string().nullable(),
+  baseId: z.string(),
+  quoteId: z.string(),
+  type: marketTypeSchema,
+  spot: z.boolean(),
+  swap: z.boolean(),
+  future: z.boolean(),
+  option: z.boolean(),
+  contract: z.boolean(),
+  linear: z.boolean().nullable(),
+  inverse: z.boolean().nullable(),
+  active: z.boolean(),
+  /** Taker/maker as a decimal rate (0.001 = 10 bps), per CCXT convention. */
+  taker: decimal,
+  maker: decimal,
+  contractSize: decimal.nullable(),
+  expiry: timestampMs.nullable(),
+  expiryDatetime: isoDatetime.nullable(),
+  strike: decimal.nullable(),
+  optionType: z.enum(['call', 'put']).nullable(),
+  precision: z.object({
+    amount: z.number().int(),
+    price: z.number().int(),
+  }),
+  limits: z.object({
+    amount: z.object({ min: decimal.nullable(), max: decimal.nullable() }),
+    price: z.object({ min: decimal.nullable(), max: decimal.nullable() }),
+    cost: z.object({ min: decimal.nullable(), max: decimal.nullable() }),
+    leverage: z.object({ min: decimal.nullable(), max: decimal.nullable() }),
+  }),
+});
+export type Market = z.infer<typeof marketSchema>;
+
+// ── Ticker ───────────────────────────────────────────────────────────────────
+
+export const tickerSchema = z.object({
+  symbol: z.string(),
+  timestamp: timestampMs,
+  datetime: isoDatetime,
+  high: decimal.nullable(),
+  low: decimal.nullable(),
+  bid: decimal.nullable(),
+  bidVolume: decimal.nullable(),
+  ask: decimal.nullable(),
+  askVolume: decimal.nullable(),
+  vwap: decimal.nullable(),
+  open: decimal.nullable(),
+  close: decimal.nullable(),
+  last: decimal.nullable(),
+  previousClose: decimal.nullable(),
+  change: decimal.nullable(),
+  percentage: decimal.nullable(),
+  average: decimal.nullable(),
+  baseVolume: decimal.nullable(),
+  quoteVolume: decimal.nullable(),
+});
+export type Ticker = z.infer<typeof tickerSchema>;
+
+// ── Order book ───────────────────────────────────────────────────────────────
+
+/** [price, amount] — CCXT's level shape. */
+export const orderBookLevelSchema = z.tuple([decimal, decimal]);
+
+export const orderBookSchema = z.object({
+  symbol: z.string(),
+  /** Descending by price. */
+  bids: z.array(orderBookLevelSchema),
+  /** Ascending by price. */
+  asks: z.array(orderBookLevelSchema),
+  timestamp: timestampMs,
+  datetime: isoDatetime,
+  /** Engine sequence — lets a consumer detect a gap and resynchronise. */
+  nonce: z.number().int().nonnegative(),
+});
+export type OrderBook = z.infer<typeof orderBookSchema>;
+
+// ── OHLCV ────────────────────────────────────────────────────────────────────
+
+/** [timestamp, open, high, low, close, volume] */
+export const ohlcvSchema = z.tuple([timestampMs, decimal, decimal, decimal, decimal, decimal]);
+export type OHLCV = z.infer<typeof ohlcvSchema>;
+
+export const TIMEFRAMES = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d', '3d', '1w', '1M'] as const;
+export const timeframeSchema = z.enum(TIMEFRAMES);
+export type Timeframe = (typeof TIMEFRAMES)[number];
+
+/** Timeframe → milliseconds. Used for candle bucketing and range validation. */
+export const TIMEFRAME_MS: Readonly<Record<Timeframe, number>> = {
+  '1m': 60_000,
+  '3m': 180_000,
+  '5m': 300_000,
+  '15m': 900_000,
+  '30m': 1_800_000,
+  '1h': 3_600_000,
+  '2h': 7_200_000,
+  '4h': 14_400_000,
+  '6h': 21_600_000,
+  '12h': 43_200_000,
+  '1d': 86_400_000,
+  '3d': 259_200_000,
+  '1w': 604_800_000,
+  '1M': 2_592_000_000,
+};
+
+// ── Trades ───────────────────────────────────────────────────────────────────
+
+export const tradeSchema = z.object({
+  id: z.string(),
+  order: z.string().nullable(),
+  timestamp: timestampMs,
+  datetime: isoDatetime,
+  symbol: z.string(),
+  type: z.string().nullable(),
+  side: z.enum(['buy', 'sell']),
+  takerOrMaker: z.enum(['taker', 'maker']).nullable(),
+  price: decimal,
+  amount: decimal,
+  cost: decimal,
+  fee: z.object({ cost: decimal, currency: z.string(), rate: decimal.nullable() }).nullable(),
+});
+export type Trade = z.infer<typeof tradeSchema>;
+
+// ── Orders ───────────────────────────────────────────────────────────────────
+
+export const orderTypeSchema = z.enum(['market', 'limit', 'stop', 'stop_limit', 'take_profit']);
+export const orderSideSchema = z.enum(['buy', 'sell']);
+export const timeInForceSchema = z.enum(['GTC', 'IOC', 'FOK', 'PO']);
+export const orderStatusSchema = z.enum(['open', 'closed', 'canceled', 'expired', 'rejected']);
+
+export const orderSchema = z.object({
+  id: z.string(),
+  clientOrderId: z.string().nullable(),
+  timestamp: timestampMs,
+  datetime: isoDatetime,
+  lastTradeTimestamp: timestampMs.nullable(),
+  symbol: z.string(),
+  type: orderTypeSchema,
+  side: orderSideSchema,
+  timeInForce: timeInForceSchema.nullable(),
+  postOnly: z.boolean(),
+  reduceOnly: z.boolean(),
+  price: decimal.nullable(),
+  stopPrice: decimal.nullable(),
+  average: decimal.nullable(),
+  amount: decimal,
+  filled: decimal,
+  remaining: decimal,
+  cost: decimal,
+  status: orderStatusSchema,
+  fee: z.object({ cost: decimal, currency: z.string() }).nullable(),
+  trades: z.array(tradeSchema),
+});
+export type Order = z.infer<typeof orderSchema>;
+
+export const createOrderRequestSchema = z
+  .object({
+    symbol: z.string(),
+    type: orderTypeSchema,
+    side: orderSideSchema,
+    amount: decimal,
+    price: decimal.optional(),
+    stopPrice: decimal.optional(),
+    timeInForce: timeInForceSchema.optional(),
+    postOnly: z.boolean().optional(),
+    reduceOnly: z.boolean().optional(),
+    /**
+     * Caller-supplied idempotency key. Strongly recommended: a resubmitted
+     * order with the same key returns the original rather than opening a second
+     * position. Bots retry; the book must not double.
+     */
+    clientOrderId: z.string().min(1).max(64).optional(),
+    /** Sub-account to trade from (§4.1 sub_accounts). */
+    subAccountId: z.string().uuid().optional(),
+  })
+  .superRefine((order, ctx) => {
+    // A limit order without a price is the single most common integration bug.
+    // Reject it at the boundary rather than guessing what the caller meant.
+    const needsPrice = order.type === 'limit' || order.type === 'stop_limit';
+    if (needsPrice && order.price === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['price'], message: `a ${order.type} order requires a price` });
+    }
+    if (order.type === 'market' && order.price !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['price'], message: 'a market order must not carry a price' });
+    }
+    const needsStop = order.type === 'stop' || order.type === 'stop_limit' || order.type === 'take_profit';
+    if (needsStop && order.stopPrice === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['stopPrice'], message: `a ${order.type} order requires a stopPrice` });
+    }
+    if (order.postOnly && order.timeInForce && order.timeInForce !== 'GTC' && order.timeInForce !== 'PO') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['postOnly'],
+        message: 'postOnly cannot be combined with an immediate time-in-force',
+      });
+    }
+  });
+export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
+
+// ── Balances ─────────────────────────────────────────────────────────────────
+
+/**
+ * CCXT balance shape. Maps directly onto ledger account kinds (§4.2):
+ *   free  → `available`
+ *   used  → hold + escrow + stake + collateral
+ *   total → free + used
+ *
+ * There is no separate balance store behind this — it is a projection of the
+ * ledger, which is the only place a balance exists (Doctrine §0.6).
+ */
+export const balanceEntrySchema = z.object({
+  free: decimal,
+  used: decimal,
+  total: decimal,
+});
+
+export const balancesSchema = z.object({
+  timestamp: timestampMs,
+  datetime: isoDatetime,
+  /** Keyed by asset code: { USDT: { free, used, total } } */
+  balances: z.record(z.string(), balanceEntrySchema),
+});
+export type Balances = z.infer<typeof balancesSchema>;
+
+// ── Positions (derivatives) ──────────────────────────────────────────────────
+
+export const positionSchema = z.object({
+  id: z.string().nullable(),
+  symbol: z.string(),
+  timestamp: timestampMs,
+  datetime: isoDatetime,
+  side: z.enum(['long', 'short']),
+  contracts: decimal,
+  contractSize: decimal.nullable(),
+  entryPrice: decimal,
+  markPrice: decimal.nullable(),
+  notional: decimal,
+  leverage: decimal.nullable(),
+  collateral: decimal.nullable(),
+  initialMargin: decimal.nullable(),
+  maintenanceMargin: decimal.nullable(),
+  unrealizedPnl: decimal.nullable(),
+  realizedPnl: decimal.nullable(),
+  liquidationPrice: decimal.nullable(),
+  marginMode: z.enum(['cross', 'isolated']).nullable(),
+  percentage: decimal.nullable(),
+});
+export type Position = z.infer<typeof positionSchema>;
+
+export const fundingRateSchema = z.object({
+  symbol: z.string(),
+  markPrice: decimal.nullable(),
+  indexPrice: decimal.nullable(),
+  fundingRate: decimal,
+  fundingTimestamp: timestampMs,
+  fundingDatetime: isoDatetime,
+  nextFundingTimestamp: timestampMs.nullable(),
+});
+export type FundingRate = z.infer<typeof fundingRateSchema>;
+
+export const tradingFeeSchema = z.object({
+  symbol: z.string(),
+  maker: decimal,
+  taker: decimal,
+  /** Effective rate after rank perks and IFC discount (§4.1, §4.3). */
+  percentage: z.boolean(),
+});
+export type TradingFee = z.infer<typeof tradingFeeSchema>;
+
+// ── Errors ───────────────────────────────────────────────────────────────────
+
+/**
+ * CCXT's error taxonomy. Integrators branch on these names, so the mapping is
+ * part of the contract — an exchange that returns the wrong error class breaks
+ * every bot's retry logic.
+ */
+export const EXCHANGE_ERROR_CODES = [
+  'BadRequest',
+  'BadSymbol',
+  'InsufficientFunds',
+  'InvalidOrder',
+  'OrderNotFound',
+  'OrderImmediatelyFillable',
+  'OrderNotFillable',
+  'DuplicateOrderId',
+  'AuthenticationError',
+  'PermissionDenied',
+  'AccountSuspended',
+  'RateLimitExceeded',
+  'ExchangeNotAvailable',
+  'OnMaintenance',
+  'ExchangeError',
+] as const;
+
+export type ExchangeErrorCode = (typeof EXCHANGE_ERROR_CODES)[number];
+
+export const exchangeErrorSchema = z.object({
+  code: z.enum(EXCHANGE_ERROR_CODES),
+  message: z.string(),
+  /** Our own finer-grained code, e.g. 'ledger.insufficient_funds'. */
+  intafacedCode: z.string().optional(),
+  /** Present on RateLimitExceeded — seconds until the caller may retry. */
+  retryAfter: z.number().int().positive().optional(),
+});
+export type ExchangeError = z.infer<typeof exchangeErrorSchema>;

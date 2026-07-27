@@ -1,0 +1,7 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Just do it
+    url: https://github.com/intafaced/intafaced/blob/main/CONTRIBUTING.md#4--issues-only-when-useful
+    about: >-
+      Under a day and needs no discussion? Skip the issue. Claim it in Telegram,
+      open the branch, open the PR. The PR is the record.

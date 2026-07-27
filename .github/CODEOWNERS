@@ -1,0 +1,26 @@
+# CODEOWNERS
+#
+# GitHub requests a review from the owner automatically when a PR touches these
+# paths. With two of us this mostly means "you both get pinged", which is the
+# point — the money paths and the doctrine gates should never merge without a
+# second pair of eyes having actually loaded the diff.
+#
+# Replace the placeholders with real GitHub handles before this does anything.
+
+*                                   @intafaced
+
+# ── The Core. Nothing here merges casually. ──────────────────────────────────
+/packages/ledger-client/            @intafaced
+/services/svc-ledger/               @intafaced
+/services/svc-identity/             @intafaced
+/services/svc-token/                @intafaced
+
+# ── The rules themselves. Changing these changes what "done" means. ──────────
+/INTAFACED_DEFINITIVE_BUILD.md      @intafaced
+/tooling/agent-protocol/            @intafaced
+/tooling/ci/                        @intafaced
+/.github/workflows/                 @intafaced
+/CONTRIBUTING.md                    @intafaced
+
+# ── Jurisdiction and custody. Legal surface, not just code. ──────────────────
+/packages/config/src/jurisdiction.ts @intafaced

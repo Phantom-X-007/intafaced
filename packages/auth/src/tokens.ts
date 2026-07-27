@@ -1,0 +1,139 @@
+import { createHash } from 'node:crypto';
+import { SignJWT, jwtVerify, errors as joseErrors, type JWTPayload } from 'jose';
+import { z } from 'zod';
+import { type Scope } from './scopes.js';
+
+/**
+ * Token issuing and verification (§1 Auth: "Own service — JWT (short) +
+ * rotating refresh").
+ *
+ * Access tokens are short-lived, signed HS256, and carry the caller's scopes so
+ * every service can authorise locally without a round trip to svc-identity.
+ * Refresh tokens are opaque, stored hashed, and rotate on every use — the
+ * rotation is what makes theft detectable.
+ */
+
+export const accessClaimsSchema = z.object({
+  sub: z.string().uuid(),
+  scopes: z.array(z.string()),
+  /** Present when the caller is a sub-account (§4.1 sub_accounts). */
+  sub_account: z.string().uuid().optional(),
+  /** Present when an API key issued this token, so a leak can be traced to a key. */
+  kid: z.string().optional(),
+  /** Verification tier at issue time; jurisdiction checks read it. */
+  tier: z.enum(['none', 'basic', 'full', 'institutional']).default('none'),
+  /** True once the session has passed 2FA. Gates INTERACTIVE_ONLY_SCOPES. */
+  mfa: z.boolean().default(false),
+  sid: z.string().uuid(),
+});
+
+export type AccessClaims = z.infer<typeof accessClaimsSchema>;
+
+export interface TokenConfig {
+  secret: string;
+  issuer: string;
+  audience: string;
+  accessTtlSeconds: number;
+}
+
+export interface Principal extends AccessClaims {
+  readonly userId: string;
+  readonly expiresAt: Date;
+}
+
+export class AuthError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'token.expired' | 'token.invalid' | 'token.malformed' | 'scope.denied' | 'mfa.required',
+  ) {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
+function key(secret: string): Uint8Array {
+  if (secret.length < 32) throw new AuthError('Signing secret must be at least 32 characters', 'token.invalid');
+  return new TextEncoder().encode(secret);
+}
+
+export interface IssueAccessInput {
+  userId: string;
+  sessionId: string;
+  scopes: readonly Scope[] | readonly string[];
+  tier?: AccessClaims['tier'];
+  mfa?: boolean;
+  subAccountId?: string;
+  apiKeyId?: string;
+}
+
+export async function issueAccessToken(input: IssueAccessInput, config: TokenConfig): Promise<{ token: string; expiresAt: Date }> {
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + config.accessTtlSeconds;
+
+  const token = await new SignJWT({
+    scopes: [...input.scopes],
+    tier: input.tier ?? 'none',
+    mfa: input.mfa ?? false,
+    sid: input.sessionId,
+    ...(input.subAccountId ? { sub_account: input.subAccountId } : {}),
+    ...(input.apiKeyId ? { kid: input.apiKeyId } : {}),
+  } satisfies JWTPayload)
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setSubject(input.userId)
+    .setIssuer(config.issuer)
+    .setAudience(config.audience)
+    .setIssuedAt(now)
+    .setExpirationTime(exp)
+    .setJti(crypto.randomUUID())
+    .sign(key(config.secret));
+
+  return { token, expiresAt: new Date(exp * 1000) };
+}
+
+export async function verifyAccessToken(token: string, config: TokenConfig): Promise<Principal> {
+  let payload: JWTPayload;
+  try {
+    const result = await jwtVerify(token, key(config.secret), {
+      issuer: config.issuer,
+      audience: config.audience,
+      algorithms: ['HS256'],
+    });
+    payload = result.payload;
+  } catch (err) {
+    if (err instanceof joseErrors.JWTExpired) throw new AuthError('Access token expired', 'token.expired');
+    if (err instanceof joseErrors.JWTClaimValidationFailed) throw new AuthError('Token claims rejected', 'token.invalid');
+    throw new AuthError('Access token could not be verified', 'token.invalid');
+  }
+
+  const claims = accessClaimsSchema.safeParse(payload);
+  if (!claims.success) throw new AuthError('Access token payload is malformed', 'token.malformed');
+
+  return {
+    ...claims.data,
+    userId: claims.data.sub,
+    expiresAt: new Date((payload.exp ?? 0) * 1000),
+  };
+}
+
+// ── Refresh tokens ───────────────────────────────────────────────────────────
+
+/**
+ * Refresh tokens are opaque random strings. Only their hash is stored, so a
+ * database read never yields a usable credential.
+ */
+export function generateRefreshToken(): { token: string; hash: string } {
+  const bytes = new Uint8Array(48);
+  crypto.getRandomValues(bytes);
+  const token = base64url(bytes);
+  return { token, hash: hashRefreshToken(token) };
+}
+
+export function hashRefreshToken(token: string): string {
+  // sha256 is correct here because the input is already 48 bytes of entropy —
+  // this is a lookup key, not a password. Passwords use argon2id (§9).
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function base64url(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('base64url');
+}

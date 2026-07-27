@@ -1,0 +1,409 @@
+import { describe, expect, it, beforeEach } from 'vitest';
+import { formatAmount, parseAmount as amt } from '../money.js';
+import { houseFees, railBoundary, userAvailable, userEscrow, userHold, userStake } from '../accounts.js';
+import { InsufficientFundsError, InvalidEntryError, type LedgerTx } from '../types.js';
+import { recipes } from '../recipes/index.js';
+import type { LedgerClient } from '../client.js';
+
+/**
+ * THE LEDGER CONFORMANCE SUITE.
+ *
+ * §4.4 exit criteria. Every implementation of `LedgerClient` runs this file
+ * unmodified — the in-memory reference and svc-ledger's Postgres engine alike.
+ * If the two disagree about anything in here, one of them is wrong, and the
+ * suite says which behaviour is correct.
+ *
+ * Optional capabilities (journal, reconcile, verifyChain, totalsByAsset) are
+ * skipped when a harness does not provide them, so a partial implementation can
+ * still prove the parts it does support.
+ */
+
+export interface LedgerHarness {
+  readonly ledger: LedgerClient;
+  /** Return the book to empty between tests. */
+  reset(): Promise<void>;
+  /** Commit order. Enables the hash-chain and reconciliation sections. */
+  journal?(): Promise<LedgerTx[]>;
+  reconcile?(): Promise<{ ok: boolean }>;
+  verifyChain?(): Promise<{ ok: boolean }>;
+  totalsByAsset?(): Promise<Record<string, string>>;
+  /** Called once when the suite finishes. */
+  teardown?(): Promise<void>;
+}
+
+const USER_A = '11111111-1111-4111-8111-111111111111';
+const USER_B = '22222222-2222-4222-8222-222222222222';
+
+export function runLedgerConformance(name: string, createHarness: () => Promise<LedgerHarness>): void {
+  describe(`ledger conformance — ${name}`, () => {
+    let harness: LedgerHarness;
+    let ledger: LedgerClient;
+
+    beforeEach(async () => {
+      harness ??= await createHarness();
+      await harness.reset();
+      ledger = harness.ledger;
+    });
+
+    const fund = (userId: string, assetId: string, amount: string) =>
+      ledger.post(
+        recipes.deposit({
+          userId,
+          assetId,
+          amount: amt(amount),
+          rail: 'test',
+          railRef: `${userId}:${assetId}:${amount}`,
+        }),
+      );
+
+    const balanceOf = async (userId: string, assetId: string, kind: 'available' | 'hold' | 'escrow' | 'stake' = 'available') => {
+      const ref =
+        kind === 'available'
+          ? userAvailable(userId, assetId)
+          : kind === 'hold'
+            ? userHold(userId, assetId)
+            : kind === 'escrow'
+              ? userEscrow(userId, assetId)
+              : userStake(userId, assetId);
+      return formatAmount((await ledger.balance(ref)).amount);
+    };
+
+    // ── INVARIANT 1 · sum to zero ─────────────────────────────────────────────
+
+    describe('sum-to-zero per asset', () => {
+      it('refuses an unbalanced transaction', async () => {
+        await expect(
+          ledger.post({
+            idempotencyKey: 'unbalanced-test-1',
+            module: 'test',
+            reason: 'test',
+            entries: [
+              { account: userAvailable(USER_A, 'USDT'), direction: 'debit', amount: amt('100') },
+              { account: railBoundary('test', 'USDT'), direction: 'credit', amount: amt('99') },
+            ],
+          }),
+        ).rejects.toThrow();
+      });
+
+      it('refuses a single-entry transaction', async () => {
+        await expect(
+          ledger.post({
+            idempotencyKey: 'single-entry-test',
+            module: 'test',
+            reason: 'test',
+            entries: [{ account: userAvailable(USER_A, 'USDT'), direction: 'debit', amount: amt('1') }],
+          }),
+        ).rejects.toThrow(InvalidEntryError);
+      });
+
+      it('refuses to net one asset against another', async () => {
+        await expect(
+          ledger.post({
+            idempotencyKey: 'cross-asset-net-test',
+            module: 'test',
+            reason: 'test',
+            entries: [
+              { account: userAvailable(USER_A, 'USDT'), direction: 'debit', amount: amt('100') },
+              { account: userAvailable(USER_B, 'BTC'), direction: 'credit', amount: amt('100') },
+            ],
+          }),
+        ).rejects.toThrow();
+      });
+    });
+
+    // ── INVARIANT 2 · available never negative ────────────────────────────────
+
+    describe('available never goes negative', () => {
+      it('refuses to overdraw', async () => {
+        await fund(USER_A, 'USDT', '100');
+        await expect(
+          ledger.post(
+            recipes.withdrawHold({
+              userId: USER_A,
+              assetId: 'USDT',
+              amount: amt('100.000000000000000001'),
+              rail: 'test',
+              withdrawalId: 'overdraw-1',
+            }),
+          ),
+        ).rejects.toThrow(InsufficientFundsError);
+        expect(await balanceOf(USER_A, 'USDT')).toBe('100');
+      });
+
+      it('allows spending to exactly zero', async () => {
+        await fund(USER_A, 'USDT', '100');
+        await ledger.post(
+          recipes.withdrawHold({ userId: USER_A, assetId: 'USDT', amount: amt('100'), rail: 'test', withdrawalId: 'exact-1' }),
+        );
+        expect(await balanceOf(USER_A, 'USDT')).toBe('0');
+        expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('100');
+      });
+
+      it('leaves the book untouched when a post is rejected', async () => {
+        await fund(USER_A, 'USDT', '10');
+        await expect(
+          ledger.post(
+            recipes.withdrawHold({ userId: USER_A, assetId: 'USDT', amount: amt('999'), rail: 'test', withdrawalId: 'reject-1' }),
+          ),
+        ).rejects.toThrow(InsufficientFundsError);
+        expect(await balanceOf(USER_A, 'USDT')).toBe('10');
+      });
+
+      it('lets only the treasury boundary run negative', async () => {
+        await fund(USER_A, 'USDT', '100');
+        const boundary = await ledger.balance(railBoundary('test', 'USDT'));
+        expect(formatAmount(boundary.amount)).toBe('-100');
+      });
+    });
+
+    // ── INVARIANT 3 · locks are funded ────────────────────────────────────────
+
+    describe('locks are funded from the owner’s own available balance', () => {
+      it('refuses collateral conjured from elsewhere', async () => {
+        await fund(USER_A, 'BTC', '1');
+        await expect(
+          ledger.post({
+            idempotencyKey: 'unfunded-lock-test',
+            module: 'test',
+            reason: 'test',
+            entries: [
+              { account: houseFees('bank', 'BTC'), direction: 'credit', amount: amt('1') },
+              { account: userHold(USER_A, 'BTC'), direction: 'debit', amount: amt('1') },
+            ],
+          }),
+        ).rejects.toThrow(InvalidEntryError);
+      });
+    });
+
+    // ── INVARIANT 4 · idempotency ─────────────────────────────────────────────
+
+    describe('idempotency', () => {
+      it('returns the original transaction and does not double the money', async () => {
+        const request = recipes.deposit({
+          userId: USER_A,
+          assetId: 'USDT',
+          amount: amt('50'),
+          rail: 'crypto-native',
+          railRef: '0xidem',
+        });
+
+        const first = await ledger.post(request);
+        const second = await ledger.post(request);
+
+        expect(second.id).toBe(first.id);
+        expect(await balanceOf(USER_A, 'USDT')).toBe('50');
+      });
+
+      it('survives a burst of concurrent retries of the same post', async () => {
+        const request = recipes.deposit({
+          userId: USER_A,
+          assetId: 'USDT',
+          amount: amt('50'),
+          rail: 'crypto-native',
+          railRef: '0xburst',
+        });
+
+        const results = await Promise.all(Array.from({ length: 25 }, () => ledger.post(request)));
+
+        expect(new Set(results.map((r) => r.id)).size).toBe(1);
+        expect(await balanceOf(USER_A, 'USDT')).toBe('50');
+      });
+
+      it('requires a meaningful idempotency key', async () => {
+        await expect(
+          ledger.post({
+            idempotencyKey: 'short',
+            module: 'test',
+            reason: 'test',
+            entries: [
+              { account: userAvailable(USER_A, 'USDT'), direction: 'debit', amount: amt('1') },
+              { account: railBoundary('test', 'USDT'), direction: 'credit', amount: amt('1') },
+            ],
+          }),
+        ).rejects.toThrow(InvalidEntryError);
+      });
+
+      it('finds a posted transaction by its key', async () => {
+        const tx = await fund(USER_A, 'USDT', '25');
+        const found = await ledger.getTxByKey(tx.idempotencyKey);
+        expect(found?.id).toBe(tx.id);
+      });
+    });
+
+    // ── Money paths ───────────────────────────────────────────────────────────
+
+    describe('recipes', () => {
+      it('trade fill: six entries, fees to house, books closed', async () => {
+        await fund(USER_A, 'USDT', '1000');
+        await fund(USER_B, 'BTC', '2');
+        await ledger.post(recipes.orderHold({ orderId: 'taker-1', userId: USER_A, assetId: 'USDT', amount: amt('900') }));
+        await ledger.post(recipes.orderHold({ orderId: 'maker-1', userId: USER_B, assetId: 'BTC', amount: amt('1') }));
+
+        const tx = await ledger.post(
+          recipes.tradeFill({
+            fillId: 'conformance-f1',
+            makerId: USER_B,
+            takerId: USER_A,
+            baseAsset: 'BTC',
+            quoteAsset: 'USDT',
+            qty: amt('1'),
+            quoteAmount: amt('900'),
+            takerSide: 'buy',
+            makerFeeBps: 10,
+            takerFeeBps: 20,
+          }),
+        );
+
+        expect(tx.entries).toHaveLength(6);
+        expect(await balanceOf(USER_B, 'USDT')).toBe('899.1');
+        expect(await balanceOf(USER_A, 'BTC')).toBe('0.998');
+        expect(formatAmount((await ledger.balance(houseFees('trade', 'USDT'))).amount)).toBe('0.9');
+        expect(formatAmount((await ledger.balance(houseFees('trade', 'BTC'))).amount)).toBe('0.002');
+        expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('0');
+        expect(await balanceOf(USER_B, 'BTC', 'hold')).toBe('0');
+      });
+
+      it('p2p escrow: lock → release strands nothing', async () => {
+        await fund(USER_A, 'USDT', '500');
+        await ledger.post(recipes.escrowLock({ tradeId: 'c-t1', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('500') }));
+        expect(await balanceOf(USER_A, 'USDT', 'escrow')).toBe('500');
+
+        await ledger.post(
+          recipes.escrowRelease({
+            tradeId: 'c-t1',
+            sellerId: USER_A,
+            buyerId: USER_B,
+            assetId: 'USDT',
+            amount: amt('500'),
+            feeBps: 20,
+          }),
+        );
+
+        expect(await balanceOf(USER_A, 'USDT', 'escrow')).toBe('0');
+        expect(await balanceOf(USER_B, 'USDT')).toBe('499');
+        expect(formatAmount((await ledger.balance(houseFees('p2p', 'USDT'))).amount)).toBe('1');
+      });
+
+      it('withdrawal: hold → settle removes value only once', async () => {
+        await fund(USER_A, 'BTC', '1');
+        const w = { userId: USER_A, assetId: 'BTC', amount: amt('0.5'), rail: 'crypto-native', withdrawalId: 'c-wd-1' };
+
+        await ledger.post(recipes.withdrawHold(w));
+        await ledger.post(recipes.withdrawSettle(w));
+        await ledger.post(recipes.withdrawSettle(w)); // retry
+
+        expect(await balanceOf(USER_A, 'BTC')).toBe('0.5');
+        expect(await balanceOf(USER_A, 'BTC', 'hold')).toBe('0');
+      });
+
+      it('fee charge: the IFC discount branch charges less', async () => {
+        await fund(USER_A, 'IFC', '1000');
+        await ledger.post(
+          recipes.feeCharge({
+            chargeId: 'c-c1',
+            userId: USER_A,
+            module: 'trade',
+            mode: 'token',
+            tokenAssetId: 'IFC',
+            grossTokenAmount: amt('100'),
+            discountBps: 2500,
+          }),
+        );
+        expect(await balanceOf(USER_A, 'IFC')).toBe('925');
+        expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('75');
+      });
+
+      it('staking round-trips exactly', async () => {
+        await fund(USER_A, 'IFC', '10000');
+        await ledger.post(recipes.stake({ stakeId: 'c-s1', userId: USER_A, assetId: 'IFC', amount: amt('4000'), tier: 'm12' }));
+        expect(await balanceOf(USER_A, 'IFC', 'stake')).toBe('4000');
+        await ledger.post(recipes.unstake({ stakeId: 'c-s1', userId: USER_A, assetId: 'IFC', amount: amt('4000'), tier: 'm12' }));
+        expect(await balanceOf(USER_A, 'IFC')).toBe('10000');
+      });
+    });
+
+    // ── Balance projection ────────────────────────────────────────────────────
+
+    describe('balances', () => {
+      it('lists every balance an owner holds', async () => {
+        await fund(USER_A, 'USDT', '100');
+        await fund(USER_A, 'BTC', '1');
+        await ledger.post(recipes.orderHold({ orderId: 'c-o1', userId: USER_A, assetId: 'USDT', amount: amt('40') }));
+
+        const balances = await ledger.balances('user', USER_A);
+        const view = Object.fromEntries(balances.map((b) => [`${b.account.assetId}:${b.account.kind}`, formatAmount(b.amount)]));
+
+        expect(view['USDT:available']).toBe('60');
+        expect(view['USDT:hold']).toBe('40');
+        expect(view['BTC:available']).toBe('1');
+      });
+
+      it('reports zero for an account that has never been touched', async () => {
+        expect(await balanceOf(USER_B, 'DOGE')).toBe('0');
+      });
+    });
+
+    // ── Optional capabilities ─────────────────────────────────────────────────
+
+    describe('journal and hash chain', () => {
+      it('chains every transaction to its predecessor', async () => {
+        if (!harness.journal || !harness.verifyChain) return;
+
+        await fund(USER_A, 'USDT', '100');
+        await fund(USER_B, 'USDT', '200');
+
+        const journal = await harness.journal();
+        expect(journal[0]?.previousHash).toBeNull();
+        expect(journal[1]?.previousHash).toBe(journal[0]?.hash);
+        expect(await harness.verifyChain()).toMatchObject({ ok: true });
+      });
+    });
+
+    describe('reconciliation', () => {
+      it('agrees with a full replay after a mixed run', async () => {
+        if (!harness.reconcile) return;
+
+        await fund(USER_A, 'USDT', '10000');
+        for (let i = 0; i < 25; i++) {
+          await ledger.post(recipes.orderHold({ orderId: `c-r${i}`, userId: USER_A, assetId: 'USDT', amount: amt('10') }));
+          await ledger.post(recipes.orderHoldRelease({ orderId: `c-r${i}`, userId: USER_A, assetId: 'USDT', amount: amt('10') }));
+        }
+
+        expect(await harness.reconcile()).toMatchObject({ ok: true });
+        expect(await balanceOf(USER_A, 'USDT')).toBe('10000');
+      });
+
+      it('closes the books — every asset nets to zero', async () => {
+        if (!harness.totalsByAsset) return;
+
+        await fund(USER_A, 'USDT', '1000');
+        await fund(USER_B, 'BTC', '2');
+        await ledger.post(recipes.orderHold({ orderId: 'c-h1', userId: USER_A, assetId: 'USDT', amount: amt('250') }));
+
+        const totals = await harness.totalsByAsset();
+        expect(totals.USDT).toBe('0');
+        expect(totals.BTC).toBe('0');
+      });
+    });
+
+    // ── Concurrency ───────────────────────────────────────────────────────────
+
+    describe('concurrency', () => {
+      it('never lets parallel spending exceed the balance', async () => {
+        await fund(USER_A, 'USDT', '100');
+
+        const attempts = Array.from({ length: 20 }, (_, i) =>
+          ledger
+            .post(recipes.orderHold({ orderId: `c-race-${i}`, userId: USER_A, assetId: 'USDT', amount: amt('10') }))
+            .then(() => 'ok' as const)
+            .catch(() => 'rejected' as const),
+        );
+        const results = await Promise.all(attempts);
+
+        expect(results.filter((r) => r === 'ok')).toHaveLength(10);
+        expect(await balanceOf(USER_A, 'USDT')).toBe('0');
+        expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('100');
+      });
+    });
+  });
+}

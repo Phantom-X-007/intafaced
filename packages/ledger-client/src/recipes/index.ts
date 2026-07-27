@@ -1,0 +1,506 @@
+import { mulBps, sub, type Amount } from '../money.js';
+import type { AccountRef, EntryInput, PostRequest } from '../types.js';
+import { InvalidEntryError } from '../types.js';
+import {
+  burnAccount,
+  houseFees,
+  mintBoundary,
+  railBoundary,
+  rewardsEngine,
+  userAvailable,
+  userCollateral,
+  userEscrow,
+  userHold,
+  userStake,
+} from '../accounts.js';
+
+/**
+ * LEDGER RECIPES (§4.2).
+ *
+ * A recipe is a pure function: business intent in, a `PostRequest` out. It does
+ * no I/O and holds no state, which means every money path in the OS can be
+ * unit-tested without a database, and the same recipe produces byte-identical
+ * entries in a test, in dev, and in production.
+ *
+ * Services call `ledger.post(recipes.tradeFill({...}))`. They never assemble
+ * entries by hand — an inline entry list is a code-review rejection.
+ */
+
+const debit = (account: AccountRef, amount: Amount): EntryInput => ({ account, direction: 'debit', amount });
+const credit = (account: AccountRef, amount: Amount): EntryInput => ({ account, direction: 'credit', amount });
+
+function requirePositive(name: string, value: Amount): void {
+  if (value <= 0n) throw new InvalidEntryError(`${name} must be positive`);
+}
+
+// ── Deposits & withdrawals ───────────────────────────────────────────────────
+
+export interface DepositInput {
+  userId: string;
+  assetId: string;
+  amount: Amount;
+  /** The rail the value arrived on — 'crypto-native', 'card-sandbox', … */
+  rail: string;
+  /** Rail's own reference (tx hash, PSP id) — this is what makes it idempotent. */
+  railRef: string;
+}
+
+/** Value enters the book from the outside world. */
+export function deposit(input: DepositInput): PostRequest {
+  requirePositive('deposit amount', input.amount);
+  return {
+    idempotencyKey: `deposit:${input.rail}:${input.railRef}`,
+    module: 'ledger',
+    reason: 'deposit.credited',
+    meta: { rail: input.rail, railRef: input.railRef },
+    entries: [
+      credit(railBoundary(input.rail, input.assetId), input.amount),
+      debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export interface WithdrawInput {
+  userId: string;
+  assetId: string;
+  amount: Amount;
+  rail: string;
+  withdrawalId: string;
+}
+
+/** Step 1: funds leave `available` and sit in `hold` while the rail works. */
+export function withdrawHold(input: WithdrawInput): PostRequest {
+  requirePositive('withdrawal amount', input.amount);
+  return {
+    idempotencyKey: `withdraw.hold:${input.withdrawalId}`,
+    module: 'ledger',
+    reason: 'withdraw.held',
+    meta: { rail: input.rail, withdrawalId: input.withdrawalId },
+    entries: [credit(userAvailable(input.userId, input.assetId), input.amount), debit(userHold(input.userId, input.assetId), input.amount)],
+  };
+}
+
+/** Step 2a: the rail confirmed. Value leaves the book. */
+export function withdrawSettle(input: WithdrawInput): PostRequest {
+  requirePositive('withdrawal amount', input.amount);
+  return {
+    idempotencyKey: `withdraw.settle:${input.withdrawalId}`,
+    module: 'ledger',
+    reason: 'withdraw.settled',
+    meta: { rail: input.rail, withdrawalId: input.withdrawalId },
+    entries: [credit(userHold(input.userId, input.assetId), input.amount), debit(railBoundary(input.rail, input.assetId), input.amount)],
+  };
+}
+
+/** Step 2b: the rail failed. The reversal path is defined, not improvised. */
+export function withdrawReverse(input: WithdrawInput): PostRequest {
+  requirePositive('withdrawal amount', input.amount);
+  return {
+    idempotencyKey: `withdraw.reverse:${input.withdrawalId}`,
+    module: 'ledger',
+    reason: 'withdraw.reversed',
+    meta: { rail: input.rail, withdrawalId: input.withdrawalId },
+    entries: [credit(userHold(input.userId, input.assetId), input.amount), debit(userAvailable(input.userId, input.assetId), input.amount)],
+  };
+}
+
+// ── Trading ──────────────────────────────────────────────────────────────────
+
+export interface TradeFillInput {
+  fillId: string;
+  makerId: string;
+  takerId: string;
+  baseAsset: string;
+  quoteAsset: string;
+  /** Base quantity traded. */
+  qty: Amount;
+  /** Total quote value of the fill (price × qty, already rounded by the engine). */
+  quoteAmount: Amount;
+  takerSide: 'buy' | 'sell';
+  makerFeeBps: number;
+  takerFeeBps: number;
+}
+
+/**
+ * The six-entry atomic fill (§5.2).
+ *
+ * Each side's fee is taken from what that side receives, so a fill never
+ * requires a party to hold a balance in an asset they were not trading.
+ * Funds come out of `hold` — svc-trade placed them there when the order was
+ * accepted, and the engine only ever matches orders that are already funded.
+ */
+export function tradeFill(input: TradeFillInput): PostRequest {
+  requirePositive('fill qty', input.qty);
+  requirePositive('fill quote amount', input.quoteAmount);
+
+  const takerBuys = input.takerSide === 'buy';
+
+  // Who pays which asset, and therefore whose hold is drawn down.
+  const takerPaysAsset = takerBuys ? input.quoteAsset : input.baseAsset;
+  const takerPaysAmount = takerBuys ? input.quoteAmount : input.qty;
+  const makerPaysAsset = takerBuys ? input.baseAsset : input.quoteAsset;
+  const makerPaysAmount = takerBuys ? input.qty : input.quoteAmount;
+
+  // Each side receives what the other paid, minus its own fee.
+  const takerFee = mulBps(makerPaysAmount, input.takerFeeBps);
+  const makerFee = mulBps(takerPaysAmount, input.makerFeeBps);
+
+  const takerReceives = sub(makerPaysAmount, takerFee);
+  const makerReceives = sub(takerPaysAmount, makerFee);
+
+  if (takerReceives < 0n || makerReceives < 0n) {
+    throw new InvalidEntryError('Fee exceeds fill value — check fee bps configuration');
+  }
+
+  const entries: EntryInput[] = [
+    // Asset the taker paid: out of taker hold, into maker available + house fees.
+    credit(userHold(input.takerId, takerPaysAsset), takerPaysAmount),
+    debit(userAvailable(input.makerId, takerPaysAsset), makerReceives),
+    ...(makerFee > 0n ? [debit(houseFees('trade', takerPaysAsset), makerFee)] : []),
+
+    // Asset the maker paid: out of maker hold, into taker available + house fees.
+    credit(userHold(input.makerId, makerPaysAsset), makerPaysAmount),
+    debit(userAvailable(input.takerId, makerPaysAsset), takerReceives),
+    ...(takerFee > 0n ? [debit(houseFees('trade', makerPaysAsset), takerFee)] : []),
+  ];
+
+  return {
+    idempotencyKey: `trade.fill:${input.fillId}`,
+    module: 'trade',
+    reason: 'trade.fill',
+    meta: {
+      fillId: input.fillId,
+      takerSide: input.takerSide,
+      makerFeeBps: input.makerFeeBps,
+      takerFeeBps: input.takerFeeBps,
+    },
+    entries,
+  };
+}
+
+export interface OrderHoldInput {
+  orderId: string;
+  userId: string;
+  assetId: string;
+  amount: Amount;
+}
+
+/** Funds reserved when an order is accepted. */
+export function orderHold(input: OrderHoldInput): PostRequest {
+  requirePositive('order hold amount', input.amount);
+  return {
+    idempotencyKey: `order.hold:${input.orderId}`,
+    module: 'trade',
+    reason: 'order.hold',
+    meta: { orderId: input.orderId },
+    entries: [credit(userAvailable(input.userId, input.assetId), input.amount), debit(userHold(input.userId, input.assetId), input.amount)],
+  };
+}
+
+/** Unfilled remainder returned on cancel or expiry. */
+export function orderHoldRelease(input: OrderHoldInput & { sequence?: number }): PostRequest {
+  requirePositive('order release amount', input.amount);
+  return {
+    idempotencyKey: `order.release:${input.orderId}:${input.sequence ?? 0}`,
+    module: 'trade',
+    reason: 'order.hold.released',
+    meta: { orderId: input.orderId },
+    entries: [credit(userHold(input.userId, input.assetId), input.amount), debit(userAvailable(input.userId, input.assetId), input.amount)],
+  };
+}
+
+// ── P2P escrow (§6.2) ────────────────────────────────────────────────────────
+
+export interface EscrowInput {
+  tradeId: string;
+  sellerId: string;
+  buyerId: string;
+  assetId: string;
+  amount: Amount;
+}
+
+/** Seller's crypto moves into escrow the moment the taker accepts. */
+export function escrowLock(input: EscrowInput): PostRequest {
+  requirePositive('escrow amount', input.amount);
+  return {
+    idempotencyKey: `p2p.escrow.lock:${input.tradeId}`,
+    module: 'p2p',
+    reason: 'p2p.escrow.lock',
+    meta: { tradeId: input.tradeId },
+    entries: [
+      credit(userAvailable(input.sellerId, input.assetId), input.amount),
+      debit(userEscrow(input.sellerId, input.assetId), input.amount),
+    ],
+  };
+}
+
+/** Seller confirms fiat received — escrow releases to the buyer. */
+export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostRequest {
+  requirePositive('escrow amount', input.amount);
+  const fee = mulBps(input.amount, input.feeBps ?? 0);
+  const toBuyer = sub(input.amount, fee);
+
+  return {
+    idempotencyKey: `p2p.escrow.release:${input.tradeId}`,
+    module: 'p2p',
+    reason: 'p2p.escrow.release',
+    meta: { tradeId: input.tradeId, feeBps: input.feeBps ?? 0 },
+    entries: [
+      credit(userEscrow(input.sellerId, input.assetId), input.amount),
+      debit(userAvailable(input.buyerId, input.assetId), toBuyer),
+      ...(fee > 0n ? [debit(houseFees('p2p', input.assetId), fee)] : []),
+    ],
+  };
+}
+
+/** Cancelled or resolved in the seller's favour — escrow returns untouched. */
+export function escrowRefund(input: EscrowInput & { resolution?: string }): PostRequest {
+  requirePositive('escrow amount', input.amount);
+  return {
+    idempotencyKey: `p2p.escrow.refund:${input.tradeId}`,
+    module: 'p2p',
+    reason: 'p2p.escrow.refund',
+    meta: { tradeId: input.tradeId, resolution: input.resolution ?? 'cancelled' },
+    entries: [
+      credit(userEscrow(input.sellerId, input.assetId), input.amount),
+      debit(userAvailable(input.sellerId, input.assetId), input.amount),
+    ],
+  };
+}
+
+// ── Token: staking, emissions, burn (§4.3) ───────────────────────────────────
+
+export interface StakeInput {
+  stakeId: string;
+  userId: string;
+  assetId: string;
+  amount: Amount;
+  tier: 'flex' | 'm3' | 'm12';
+}
+
+export function stake(input: StakeInput): PostRequest {
+  requirePositive('stake amount', input.amount);
+  return {
+    idempotencyKey: `token.stake:${input.stakeId}`,
+    module: 'token',
+    reason: 'token.stake',
+    meta: { stakeId: input.stakeId, tier: input.tier },
+    entries: [
+      credit(userAvailable(input.userId, input.assetId), input.amount),
+      debit(userStake(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export function unstake(input: StakeInput): PostRequest {
+  requirePositive('unstake amount', input.amount);
+  return {
+    idempotencyKey: `token.unstake:${input.stakeId}`,
+    module: 'token',
+    reason: 'token.unstake',
+    meta: { stakeId: input.stakeId, tier: input.tier },
+    entries: [
+      credit(userStake(input.userId, input.assetId), input.amount),
+      debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export interface MintInput {
+  epoch: number;
+  assetId: string;
+  amount: Amount;
+  /** Where newly minted supply lands — a pool payout account or the rewards engine. */
+  destination: AccountRef;
+}
+
+/** svc-token is the only minter (§4.3). New supply enters at the mint boundary. */
+export function mintEmission(input: MintInput): PostRequest {
+  requirePositive('emission amount', input.amount);
+  return {
+    idempotencyKey: `token.emission:${input.epoch}`,
+    module: 'token',
+    reason: 'token.emission',
+    meta: { epoch: input.epoch },
+    entries: [credit(mintBoundary(input.assetId), input.amount), debit(input.destination, input.amount)],
+  };
+}
+
+export interface BurnInput {
+  runId: string;
+  assetId: string;
+  amount: Amount;
+  from: AccountRef;
+}
+
+/** Tokens debited to the burn account never move again. */
+export function burn(input: BurnInput): PostRequest {
+  requirePositive('burn amount', input.amount);
+  return {
+    idempotencyKey: `token.burn:${input.runId}`,
+    module: 'token',
+    reason: 'token.burn',
+    meta: { runId: input.runId },
+    entries: [credit(input.from, input.amount), debit(burnAccount(input.assetId), input.amount)],
+  };
+}
+
+// ── Fees & rewards ───────────────────────────────────────────────────────────
+
+export type FeeChargeInput = {
+  chargeId: string;
+  userId: string;
+  module: string;
+  reason?: string;
+} & (
+  | { mode: 'asset'; assetId: string; amount: Amount }
+  | {
+      /**
+       * §4.3 fee-discount branch: the payer settles the fee in IFC and the
+       * published decay schedule takes a cut off the gross. The caller supplies
+       * the converted token amount — the recipe does not price anything.
+       */
+      mode: 'token';
+      tokenAssetId: string;
+      grossTokenAmount: Amount;
+      discountBps: number;
+    }
+);
+
+export function feeCharge(input: FeeChargeInput): PostRequest {
+  if (input.mode === 'asset') {
+    requirePositive('fee amount', input.amount);
+    return {
+      idempotencyKey: `fee:${input.module}:${input.chargeId}`,
+      module: input.module,
+      reason: input.reason ?? 'fee.charged',
+      meta: { mode: 'asset' },
+      entries: [
+        credit(userAvailable(input.userId, input.assetId), input.amount),
+        debit(houseFees(input.module, input.assetId), input.amount),
+      ],
+    };
+  }
+
+  requirePositive('fee amount', input.grossTokenAmount);
+  if (input.discountBps < 0 || input.discountBps >= 10_000) {
+    throw new InvalidEntryError(`Fee discount must be between 0 and 9999 bps, got ${input.discountBps}`);
+  }
+
+  // Discount rounds in the payer's favour: they never pay a rounding unit more
+  // than the published schedule promises.
+  const discount = mulBps(input.grossTokenAmount, input.discountBps, 'ceil');
+  const net = sub(input.grossTokenAmount, discount);
+  requirePositive('discounted fee amount', net);
+
+  return {
+    idempotencyKey: `fee:${input.module}:${input.chargeId}`,
+    module: input.module,
+    reason: input.reason ?? 'fee.charged',
+    meta: { mode: 'token', discountBps: input.discountBps, gross: input.grossTokenAmount.toString() },
+    entries: [credit(userAvailable(input.userId, input.tokenAssetId), net), debit(houseFees(input.module, input.tokenAssetId), net)],
+  };
+}
+
+export interface RewardPayInput {
+  rewardId: string;
+  userId: string;
+  assetId: string;
+  amount: Amount;
+  reason: string;
+}
+
+/** Real-yield distribution, cashback, tournament prizes — all from one pot. */
+export function rewardPay(input: RewardPayInput): PostRequest {
+  requirePositive('reward amount', input.amount);
+  return {
+    idempotencyKey: `reward:${input.rewardId}`,
+    module: 'token',
+    reason: input.reason,
+    meta: { rewardId: input.rewardId },
+    entries: [credit(rewardsEngine(input.assetId), input.amount), debit(userAvailable(input.userId, input.assetId), input.amount)],
+  };
+}
+
+// ── Lending (§8.1) ───────────────────────────────────────────────────────────
+
+export interface CollateralInput {
+  loanId: string;
+  userId: string;
+  assetId: string;
+  amount: Amount;
+}
+
+export function collateralLock(input: CollateralInput): PostRequest {
+  requirePositive('collateral amount', input.amount);
+  return {
+    idempotencyKey: `bank.collateral.lock:${input.loanId}`,
+    module: 'bank',
+    reason: 'loan.collateral.locked',
+    meta: { loanId: input.loanId },
+    entries: [
+      credit(userAvailable(input.userId, input.assetId), input.amount),
+      debit(userCollateral(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export function collateralRelease(input: CollateralInput): PostRequest {
+  requirePositive('collateral amount', input.amount);
+  return {
+    idempotencyKey: `bank.collateral.release:${input.loanId}`,
+    module: 'bank',
+    reason: 'loan.collateral.released',
+    meta: { loanId: input.loanId },
+    entries: [
+      credit(userCollateral(input.userId, input.assetId), input.amount),
+      debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export interface LiquidationInput extends CollateralInput {
+  /** Collateral seized to cover the debt. */
+  seized: Amount;
+  /** Any surplus returned to the borrower. */
+  returned: Amount;
+}
+
+export function liquidate(input: LiquidationInput): PostRequest {
+  requirePositive('seized amount', input.seized);
+  return {
+    idempotencyKey: `bank.liquidate:${input.loanId}`,
+    module: 'bank',
+    reason: 'loan.liquidated',
+    meta: { loanId: input.loanId },
+    entries: [
+      credit(userCollateral(input.userId, input.assetId), input.seized + input.returned),
+      debit(houseFees('bank', input.assetId), input.seized),
+      ...(input.returned > 0n ? [debit(userAvailable(input.userId, input.assetId), input.returned)] : []),
+    ],
+  };
+}
+
+export const recipes = {
+  deposit,
+  withdrawHold,
+  withdrawSettle,
+  withdrawReverse,
+  tradeFill,
+  orderHold,
+  orderHoldRelease,
+  escrowLock,
+  escrowRelease,
+  escrowRefund,
+  stake,
+  unstake,
+  mintEmission,
+  burn,
+  feeCharge,
+  rewardPay,
+  collateralLock,
+  collateralRelease,
+  liquidate,
+} as const;
+
+export type RecipeName = keyof typeof recipes;

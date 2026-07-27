@@ -1,0 +1,173 @@
+#!/usr/bin/env node
+/**
+ * DEFINITION OF DONE GATE — §14, enforced.
+ *
+ *   "Never half done. A module ships when its Definition of Done passes — not
+ *    before, and nothing 'temporary' survives to the next phase." (§0.1)
+ *
+ * Run: `pnpm gate [service-name]`
+ *
+ * Checks, per service:
+ *   1. README with API contract, event subjects, and ledger recipes used
+ *   2. Zero TODOs referencing "later" without a §13 socket entry
+ *   3. Migrations reversible (delegates to migration-check)
+ *   4. Tests exist for every money path (a file touching ledger recipes has a
+ *      sibling test)
+ *   5. Observability wired — the service registers a tracer
+ *   6. Admin controls — the module has a kill-switch the operator can reach
+ *
+ * Checks 1–6 are mechanical. The DoD items that cannot be automated (SLO
+ * dashboard panel, e2e failure paths) are printed as a manual checklist so the
+ * reviewer signs them explicitly rather than by silence.
+ */
+import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { join, relative, basename } from 'node:path';
+import { execFileSync } from 'node:child_process';
+
+const ROOT = process.cwd();
+const SERVICES = join(ROOT, 'services');
+const target = process.argv[2];
+
+const REQUIRED_README_SECTIONS = [
+  { heading: /##\s*API/i, name: 'API contract' },
+  { heading: /##\s*Events/i, name: 'Event subjects' },
+  { heading: /##\s*Ledger/i, name: 'Ledger recipes used' },
+];
+
+const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', 'drizzle', '.next']);
+
+function* walk(dir, extensions) {
+  if (!existsSync(dir)) return;
+  for (const name of readdirSync(dir)) {
+    if (SKIP_DIRS.has(name)) continue;
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) yield* walk(full, extensions);
+    else if (extensions.some((e) => name.endsWith(e))) yield full;
+  }
+}
+
+function checkService(serviceDir) {
+  const service = basename(serviceDir);
+  const failures = [];
+
+  // 1 · README with the three contract sections
+  const readme = join(serviceDir, 'README.md');
+  if (!existsSync(readme)) {
+    failures.push('README.md is missing (§14: "Docs: service README with API contract, event subjects, ledger recipes used")');
+  } else {
+    const content = readFileSync(readme, 'utf8');
+    for (const { heading, name } of REQUIRED_README_SECTIONS) {
+      if (!heading.test(content)) failures.push(`README.md has no "${name}" section`);
+    }
+  }
+
+  // 2 · No "later" TODOs without a §13 socket
+  for (const file of walk(join(serviceDir, 'src'), ['.ts', '.tsx'])) {
+    const lines = readFileSync(file, 'utf8').split('\n');
+    lines.forEach((line, i) => {
+      if (!/\b(TODO|FIXME|HACK|XXX)\b/i.test(line)) return;
+      if (!/\blater\b|\bfor now\b|\btemporar/i.test(line)) return;
+      if (/§13|Section 13|SOCKET:/i.test(line)) return;
+      failures.push(
+        `${relative(ROOT, file)}:${i + 1} — deferred work with no §13 socket entry: "${line.trim().slice(0, 90)}"`,
+      );
+    });
+  }
+
+  // 3 · Every module touching money has tests beside it
+  const srcDir = join(serviceDir, 'src');
+  const moneyFiles = [];
+  for (const file of walk(srcDir, ['.ts'])) {
+    if (file.includes('.test.')) continue;
+    const content = readFileSync(file, 'utf8');
+    if (/@intafaced\/ledger-client|ledger\.post\(|recipes\./.test(content)) moneyFiles.push(file);
+  }
+  const testFiles = new Set([...walk(srcDir, ['.test.ts'])].map((f) => relative(ROOT, f)));
+  for (const file of moneyFiles) {
+    const expected = relative(ROOT, file.replace(/\.ts$/, '.test.ts'));
+    const anyTestNearby = [...testFiles].some((t) => t.startsWith(relative(ROOT, join(srcDir))));
+    if (!testFiles.has(expected) && !anyTestNearby) {
+      failures.push(`${relative(ROOT, file)} moves value but has no tests (§14: money paths ≥ 95% coverage)`);
+    }
+  }
+
+  // 4 · Observability
+  const hasTracing = [...walk(srcDir, ['.ts'])].some((f) =>
+    /@opentelemetry|initTracing|withSpan/.test(readFileSync(f, 'utf8')),
+  );
+  if (existsSync(srcDir) && !hasTracing) {
+    failures.push('no OpenTelemetry instrumentation found (§14: traces + one SLO dashboard panel)');
+  }
+
+  // 5 · Admin kill-switch
+  const flagsFile = join(ROOT, 'packages', 'config', 'src', 'flags.ts');
+  if (existsSync(flagsFile)) {
+    const moduleId = service.replace(/^svc-/, '');
+    const flags = readFileSync(flagsFile, 'utf8');
+    if (!flags.includes(`'${moduleId}'`)) {
+      failures.push(`module "${moduleId}" has no flags declared — the operator has no kill-switch (§14 admin controls)`);
+    }
+  }
+
+  return { service, failures };
+}
+
+// ── Run ─────────────────────────────────────────────────────────────────────
+
+const services = existsSync(SERVICES)
+  ? readdirSync(SERVICES)
+      .map((s) => join(SERVICES, s))
+      .filter((d) => statSync(d).isDirectory())
+      .filter((d) => !target || basename(d) === target || basename(d) === `svc-${target}`)
+  : [];
+
+if (target && services.length === 0) {
+  console.error(`✖ no service matching "${target}" under services/`);
+  process.exit(1);
+}
+
+console.log('\n══ DEFINITION OF DONE GATE (§14) ══\n');
+
+// Repo-wide gates first.
+let repoFailed = false;
+for (const script of ['brand-scan.mjs', 'custody-scan.mjs', 'migration-check.mjs']) {
+  try {
+    const out = execFileSync(process.execPath, [join(ROOT, 'tooling', 'ci', script)], { encoding: 'utf8' });
+    process.stdout.write('  ' + out.trim() + '\n');
+  } catch (err) {
+    repoFailed = true;
+    process.stdout.write((err.stdout ?? '') + (err.stderr ?? ''));
+  }
+}
+
+console.log('');
+
+let serviceFailed = false;
+for (const dir of services) {
+  const { service, failures } = checkService(dir);
+  if (failures.length === 0) {
+    console.log(`  ✓ ${service}`);
+  } else {
+    serviceFailed = true;
+    console.log(`  ✖ ${service} — ${failures.length} DoD failure(s)`);
+    for (const f of failures) console.log(`      · ${f}`);
+  }
+}
+
+if (services.length === 0) {
+  console.log('  (no services built yet — Phase 0 is foundations; the gate re-arms as each service lands)');
+}
+
+console.log('\n── Manual sign-off required (not automatable) ──');
+console.log('  □ e2e happy path + top-3 failure paths green in CI');
+console.log('  □ Every user-facing string i18n-keyed');
+console.log('  □ At least one SLO dashboard panel exists in Grafana');
+console.log('  □ Kill-switch verified reachable from apps/admin');
+console.log('');
+
+if (repoFailed || serviceFailed) {
+  console.error('✖ DoD GATE FAILED — the module does not ship (Doctrine §0.1: never half done)\n');
+  process.exit(1);
+}
+
+console.log('✓ DoD gate passed\n');

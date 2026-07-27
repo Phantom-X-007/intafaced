@@ -1,0 +1,284 @@
+/**
+ * INTAFACED design tokens as CSS custom properties.
+ * Generated from src/tokens.ts — tokens.test.ts fails if the two drift.
+ */
+
+:root {
+  --if-black: #000000;
+  --if-phosphor: #00ff41;
+  --if-phosphor-dim: #00b32d;
+  --if-phosphor-glow: rgba(0, 255, 65, 0.35);
+
+  --if-glass: rgba(255, 255, 255, 0.03);
+  --if-glass-raised: rgba(255, 255, 255, 0.06);
+  --if-glass-border: rgba(0, 255, 65, 0.15);
+  --if-glass-border-strong: rgba(0, 255, 65, 0.35);
+
+  --if-text: #e8ffe8;
+  --if-text-muted: rgba(232, 255, 232, 0.55);
+  --if-text-faint: rgba(232, 255, 232, 0.32);
+
+  --if-long: #00ff41;
+  --if-short: #ff3b5c;
+  --if-warn: #ffb300;
+  --if-info: #39c0ed;
+
+  --if-font-display: 'Orbitron', 'Rajdhani', system-ui, sans-serif;
+  --if-font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --if-font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
+  --if-radius-md: 4px;
+  --if-radius-lg: 8px;
+
+  --if-blur-glass: blur(12px);
+  --if-shadow-glow: 0 0 12px rgba(0, 255, 65, 0.35);
+  --if-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --if-motion-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html,
+body {
+  background: var(--if-black);
+  color: var(--if-text);
+  font-family: var(--if-font-body);
+  /* The OS is a console. There is no light mode. */
+  color-scheme: dark;
+}
+
+/* Numerics never jitter as they tick. */
+.if-numeric {
+  font-family: var(--if-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.if-display {
+  font-family: var(--if-font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Panel ────────────────────────────────────────────────────────────────── */
+
+.if-panel {
+  position: relative;
+  background: var(--if-glass);
+  border: 1px solid var(--if-glass-border);
+  border-radius: var(--if-radius-lg);
+  backdrop-filter: var(--if-blur-glass);
+  -webkit-backdrop-filter: var(--if-blur-glass);
+  box-shadow: var(--if-shadow-panel);
+}
+
+.if-panel[data-live='true'] {
+  border-color: var(--if-glass-border-strong);
+  box-shadow: var(--if-shadow-panel), var(--if-shadow-glow);
+}
+
+.if-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--if-glass-border);
+}
+
+.if-panel__title {
+  font-family: var(--if-font-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--if-phosphor);
+}
+
+.if-panel__body {
+  padding: 16px;
+}
+
+/* ── Ticker ───────────────────────────────────────────────────────────────── */
+
+.if-ticker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--if-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.if-ticker__symbol {
+  font-family: var(--if-font-display);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--if-text-muted);
+}
+
+.if-ticker__price {
+  font-size: 16px;
+  color: var(--if-text);
+  transition: color var(--if-motion-base);
+}
+
+.if-ticker__change[data-direction='up'] {
+  color: var(--if-long);
+}
+
+.if-ticker__change[data-direction='down'] {
+  color: var(--if-short);
+}
+
+.if-ticker__change[data-direction='flat'] {
+  color: var(--if-text-faint);
+}
+
+/* ── RankBadge ────────────────────────────────────────────────────────────── */
+
+.if-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--if-glass-border);
+  border-radius: 999px;
+  background: var(--if-glass-raised);
+  font-family: var(--if-font-display);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--if-phosphor);
+}
+
+.if-rank[data-tier='elite'] {
+  border-color: var(--if-glass-border-strong);
+  box-shadow: var(--if-shadow-glow);
+}
+
+.if-rank__number {
+  font-family: var(--if-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--if-text);
+}
+
+/* ── StatBlock ────────────────────────────────────────────────────────────── */
+
+.if-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.if-stat__label {
+  font-family: var(--if-font-display);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--if-text-faint);
+}
+
+.if-stat__value {
+  font-family: var(--if-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  line-height: 1.1;
+  color: var(--if-text);
+  overflow-wrap: anywhere;
+}
+
+.if-stat__delta[data-direction='up'] {
+  color: var(--if-long);
+}
+
+.if-stat__delta[data-direction='down'] {
+  color: var(--if-short);
+}
+
+.if-stat__delta {
+  font-family: var(--if-font-mono);
+  font-size: 12px;
+  color: var(--if-text-muted);
+}
+
+/* ── LobbyCard ────────────────────────────────────────────────────────────── */
+
+.if-lobby {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--if-glass);
+  border: 1px solid var(--if-glass-border);
+  border-radius: var(--if-radius-lg);
+  backdrop-filter: var(--if-blur-glass);
+  -webkit-backdrop-filter: var(--if-blur-glass);
+  transition:
+    border-color var(--if-motion-base),
+    transform var(--if-motion-base);
+}
+
+.if-lobby:hover {
+  border-color: var(--if-glass-border-strong);
+  transform: translateY(-1px);
+}
+
+.if-lobby[data-live='true'] .if-lobby__status {
+  color: var(--if-phosphor);
+}
+
+.if-lobby__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--if-font-display);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--if-text-faint);
+}
+
+.if-lobby__pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.if-lobby[data-live='true'] .if-lobby__pulse {
+  animation: if-pulse 2s ease-in-out infinite;
+}
+
+.if-lobby__title {
+  font-family: var(--if-font-display);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--if-text);
+}
+
+.if-lobby__meta {
+  display: flex;
+  gap: 16px;
+  font-family: var(--if-font-mono);
+  font-size: 11px;
+  color: var(--if-text-muted);
+}
+
+@keyframes if-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .if-lobby,
+  .if-ticker__price {
+    transition: none;
+  }
+  .if-lobby[data-live='true'] .if-lobby__pulse {
+    animation: none;
+  }
+}

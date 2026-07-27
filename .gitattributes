@@ -1,0 +1,25 @@
+# Normalise line endings so a Windows dev and a Linux CI runner never disagree
+# about whether a file changed.
+* text=auto eol=lf
+
+# Windows-only files keep CRLF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary — never diff, never normalise.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.pdf  binary
+
+# Generated. Collapsed in PR diffs so review stays on the code that was written.
+pnpm-lock.yaml       linguist-generated=true -diff
+*.tsbuildinfo        linguist-generated=true -diff
+
+# SQL migrations are code and must be reviewed line by line.
+*.sql text eol=lf
