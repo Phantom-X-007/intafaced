@@ -51,7 +51,7 @@ Phase 3+ Pay/P2P/…   ████░░░░░░ code on main; same — not
 - **On main today:** shared packages + **Phase 1–2 services** (identity, ledger, token, matching, trade, pay, p2p, bank, blueprint, agents, protocol) + apps web/admin. Tests/gates when the machine is set up.
 - **Not a running product:** service **routers are not mounted** — logic and tests exist; there is no live API/product surface yet (**P0-1**).
 - **Do not rebuild** matching, trade, pay, p2p, bank, blueprint, agents, protocol, web, admin, or i18n from scratch — they are on main.
-- **Next product gates:** mount routers (P0-1) → purpose-keyed holds before deploy (P0-3, needs your decision) → Phase 2 feature slices via tracker.
+- **Next product gates:** mount routers (P0-1) → purpose-keyed holds before deploy (P0-3, **decision A approved**) → Phase 2 feature slices via tracker.
 
 Live floor: [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md) · older plan (may lag): [`PHASE2-NITRO-PLAN-2026-07-27.md`](PHASE2-NITRO-PLAN-2026-07-27.md).
 
@@ -93,7 +93,7 @@ Collab deep dive: [`COLLAB-AUDIT-2026-07-27.md`](COLLAB-AUDIT-2026-07-27.md) · 
 ## Do you need a “big audit” before coding?
 
 **No.** Orientation + collab audit + health check already ran (2026-07-27); service PRs are on main.  
-Next useful product work is **P0-1 mount routers**, then **P0-3 holds** (your decision card), then **claim tracker-ready Phase 2 slices** — not another full-repo archaeology pass.
+Next useful product work is **P0-1 mount routers**, then **P0-3 holds** (shape approved — decision A), then **claim tracker-ready Phase 2 slices** — not another full-repo archaeology pass.
 
 Re-audit only if: `main` goes red, law version changes, or tracker and reality violently disagree.
 
