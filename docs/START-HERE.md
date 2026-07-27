@@ -53,7 +53,7 @@ Phase 3+ Pay/P2P/…   ████░░░░░░ code on main; same — not
 - **Do not rebuild** matching, trade, pay, p2p, bank, blueprint, agents, protocol, web, admin, or i18n from scratch — they are on main.
 - **Next product gates:** mount routers (P0-1) → purpose-keyed holds before deploy (P0-3, needs your decision) → Phase 2 feature slices via tracker.
 
-Live floor: [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md) · graph chat start: [`GRAPH-RUN-FLOOR.md`](GRAPH-RUN-FLOOR.md) · older plan (may lag): [`PHASE2-NITRO-PLAN-2026-07-27.md`](PHASE2-NITRO-PLAN-2026-07-27.md).
+Live floor: [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md) · older plan (may lag): [`PHASE2-NITRO-PLAN-2026-07-27.md`](PHASE2-NITRO-PLAN-2026-07-27.md).
 
 ---
 
