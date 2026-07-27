@@ -1,6 +1,7 @@
 import { mulBps, sub, type Amount } from '../money.js';
 import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
+import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
 import {
   burnAccount,
   houseFees,
@@ -510,6 +511,8 @@ export function liquidate(input: LiquidationInput): PostRequest {
   };
 }
 
+export * from './bank.js';
+
 export const recipes = {
   deposit,
   withdrawHold,
@@ -531,6 +534,12 @@ export const recipes = {
   collateralLock,
   collateralRelease,
   liquidate,
+  // §8.1 svc-bank — see ./bank.ts. Flagged shared-package change.
+  bankTransfer,
+  earnDeposit,
+  earnWithdraw,
+  earnPoolFund,
+  earnInterest,
 } as const;
 
 export type RecipeName = keyof typeof recipes;
