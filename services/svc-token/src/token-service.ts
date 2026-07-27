@@ -233,8 +233,8 @@ export class TokenService {
     const total = input.sources.reduce((acc, s) => acc + (s.amount > 0n ? s.amount : 0n), 0n);
     if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
 
-    const stakes = await this.sql<Array<{ user_id: string; amount: string; tier: StakeTier }>>`
-      SELECT user_id, amount, tier FROM token.stakes WHERE status = 'active' ORDER BY id ASC
+    const stakes = await this.sql<Array<{ user_id: string; amount: string; tier: StakeTier; multiplier_bps: string }>>`
+      SELECT user_id, amount, tier, multiplier_bps FROM token.stakes WHERE status = 'active' ORDER BY id ASC
     `;
 
     if (stakes.length === 0) {
@@ -245,33 +245,58 @@ export class TokenService {
 
     const shares = distributeYield(
       total,
-      stakes.map((s) => ({ userId: s.user_id, amount: parseAmount(s.amount), tier: s.tier })),
+      stakes.map((s) => ({
+        userId: s.user_id,
+        amount: parseAmount(s.amount),
+        tier: s.tier,
+        // The multiplier SNAPSHOTTED when the stake opened, not today's table.
+        // A staker locked for 12 months bought that multiplier; re-tuning the
+        // ladder afterwards must not retroactively change what they earn.
+        multiplierBps: Number(s.multiplier_bps),
+      })),
     );
+
+    /**
+     * Sum shares per user before posting.
+     *
+     * `distributeYield` returns one share PER STAKE, and a user can hold several
+     * (a flex stake and an m12 stake, say). The reward key is per (window, user),
+     * so posting each share separately meant the second one hit the ledger's
+     * idempotency check and became a silent no-op — the user was underpaid and
+     * the remainder sat in the rewards engine.
+     *
+     * Summing first keeps one payout per user per window, which is also the
+     * invariant the key already assumed. Found by partner audit.
+     */
+    const perUser = new Map<string, Amount>();
+    for (const share of shares) {
+      perUser.set(share.userId, (perUser.get(share.userId) ?? 0n) + share.share);
+    }
 
     let distributed = 0n;
     let recipients = 0;
     let skipped = 0;
 
-    for (const share of shares) {
+    for (const [userId, amount] of perUser) {
       // A share can round to zero for a dust-sized stake. Posting a zero-amount
       // entry is rejected by the ledger by design, so skip rather than fail the
       // whole run for one staker who earned nothing this window.
-      if (share.share <= 0n) {
+      if (amount <= 0n) {
         skipped++;
         continue;
       }
 
       await this.ledger.post(
         recipes.rewardPay({
-          rewardId: `yield:${input.windowId}:${share.userId}`,
-          userId: share.userId,
+          rewardId: `yield:${input.windowId}:${userId}`,
+          userId,
           assetId: this.assetId,
-          amount: share.share,
+          amount,
           reason: 'token.yield.distributed',
         }),
       );
 
-      distributed += share.share;
+      distributed += amount;
       recipients++;
     }
 

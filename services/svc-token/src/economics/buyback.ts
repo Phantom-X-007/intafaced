@@ -17,6 +17,19 @@
 import { type Amount, ZERO, mulBps, proRata, sub, sum } from '@intafaced/ledger-client';
 import { type StakeTier, stakeWeight } from './staking.js';
 
+/**
+ * Weight at an explicit multiplier, for stakes whose multiplier was snapshotted
+ * at open time. Floors, exactly like `stakeWeight`, so the two agree when the
+ * snapshot happens to equal the current tier value.
+ */
+function weightAt(amount: Amount, multiplierBps: number): Amount {
+  if (amount < ZERO) throw new RangeError('Stake amount must not be negative');
+  if (!Number.isInteger(multiplierBps) || multiplierBps < 0) {
+    throw new RangeError(`multiplierBps must be a non-negative integer, got ${multiplierBps}`);
+  }
+  return mulBps(amount, multiplierBps, 'floor');
+}
+
 export interface BuybackParams {
   /** Share of the window's platform revenue spent buying IFC. */
   readonly buybackBps: number;
@@ -79,6 +92,16 @@ export interface StakeSnapshot {
   readonly userId: string;
   readonly amount: Amount;
   readonly tier: StakeTier;
+  /**
+   * The multiplier recorded when this stake opened, in bps.
+   *
+   * Optional, falling back to the tier's current multiplier — but pass it
+   * whenever you have it. A staker who locked for twelve months bought *that*
+   * multiplier; re-tuning the ladder afterwards must not retroactively change
+   * what they earn. `token.stakes.multiplier_bps` exists for exactly this and
+   * was being written but never read.
+   */
+  readonly multiplierBps?: number;
 }
 
 export interface YieldShare {
@@ -105,7 +128,9 @@ export function distributeYield(totalYield: Amount, stakes: ReadonlyArray<StakeS
   if (totalYield < ZERO) throw new RangeError('Yield must not be negative — a loss is not distributed to stakers');
   if (stakes.length === 0) return [];
 
-  const weights = stakes.map((stake) => stakeWeight(stake.amount, stake.tier));
+  const weights = stakes.map((stake) =>
+    stake.multiplierBps === undefined ? stakeWeight(stake.amount, stake.tier) : weightAt(stake.amount, stake.multiplierBps),
+  );
   if (sum(weights) <= ZERO) return [];
 
   const shares = proRata(totalYield, weights);

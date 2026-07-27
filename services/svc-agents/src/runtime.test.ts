@@ -1,0 +1,797 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import postgres from 'postgres';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { MemoryEventBus } from '@intafaced/events';
+import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
+import { ModelGateway } from './gateway/gateway.js';
+import { parseRoutingTable, type RoutingTable } from './gateway/routing.js';
+import { UsageMeter, chargeKeyFor } from './metering/meter.js';
+import { usageCost, windowCost } from './metering/pricing.js';
+import { MockModelProvider, mockUsage } from './providers/mock.js';
+import type { CompletionRequest } from './providers/provider.js';
+import { ProviderError, AgentError } from './errors.js';
+import { AgentRuntime, RefusedError } from './runtime.js';
+import { hashAction } from './fleet/audit.js';
+
+/**
+ * svc-agents — the fleet runtime end to end.
+ *
+ * The ledger is `MemoryLedger`, the reference implementation the conformance
+ * suite proves equivalent to svc-ledger's Postgres engine (§4.4). The provider
+ * is the deterministic mock, so a test can compute the expected bill
+ * independently rather than asserting against whatever the code produced.
+ *
+ * Postgres is real, because every property worth testing here — append-only,
+ * the window seal, the unique request id — lives in the database, and a fake
+ * would test the fake.
+ */
+
+const URL = process.env.TEST_DATABASE_URL_AGENTS ?? 'postgres://svc_agents:svc_agents@localhost:5433/intafaced';
+const here = dirname(fileURLToPath(import.meta.url));
+const migration = readFileSync(join(here, '..', 'drizzle', '0000_agents_init.sql'), 'utf8');
+
+const USER_A = '11111111-1111-4111-8111-111111111111';
+const USER_B = '22222222-2222-4222-8222-222222222222';
+
+/**
+ * The test routing table.
+ *
+ * Model values are ALIASES, exactly as they are in the shipped default: the
+ * adapter maps them to whatever a deployment has contracted for. Prices are
+ * chosen to be exact at these token counts so an assertion reads as arithmetic
+ * rather than as a magic constant.
+ */
+const TABLE: RoutingTable = parseRoutingTable({
+  routes: [
+    {
+      task: 'plan',
+      providerId: 'primary',
+      model: 'reasoning-lg',
+      maxOutputTokens: 256,
+      price: { inputPerMillion: '3', outputPerMillion: '15' },
+    },
+    {
+      task: 'quick',
+      providerId: 'primary',
+      model: 'fast-sm',
+      maxOutputTokens: 64,
+      price: { inputPerMillion: '0.25', outputPerMillion: '1.25' },
+    },
+    {
+      task: 'vectors',
+      providerId: 'primary',
+      model: 'embed-sm',
+      maxOutputTokens: 1,
+      price: { inputPerMillion: '0.1', outputPerMillion: '0' },
+      capability: 'embed',
+    },
+    {
+      task: 'orphan',
+      providerId: 'nowhere',
+      model: 'reasoning-lg',
+      maxOutputTokens: 16,
+      price: { inputPerMillion: '1', outputPerMillion: '1' },
+    },
+  ],
+});
+
+const PROBE = {
+  agentId: 'probe',
+  version: 1,
+  tools: [
+    { name: 'trade.quote', module: 'trade', mode: 'read' },
+    { name: 'trade.order', module: 'trade', mode: 'write', maxCallsPerSession: 1, requiresApproval: true },
+  ],
+  limits: {
+    maxActionsPerSession: 20,
+    maxOutputTokensPerCall: 256,
+    maxSpendPerSession: null,
+    allowedModules: ['trade'],
+    allowedTasks: ['plan', 'quick', 'orphan'],
+  },
+};
+
+/** Same agent, with a spend ceiling low enough that one call cannot fit under it. */
+const THRIFTY = {
+  ...PROBE,
+  agentId: 'thrifty',
+  limits: { ...PROBE.limits, maxSpendPerSession: '0.000000000000000001' },
+};
+
+async function reachable(): Promise<boolean> {
+  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
+  try {
+    await probe`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await probe.end({ timeout: 2 });
+  }
+}
+
+const available = await reachable();
+
+if (!available) {
+  describe.skip('svc-agents (Postgres unavailable — start docker compose)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  const sql = postgres(URL, {
+    max: 8,
+    connection: { search_path: 'agents,public', application_name: 'svc-agents-test' },
+    onnotice: () => undefined,
+  });
+
+  await sql.unsafe(migration);
+
+  let ledger: MemoryLedger;
+  let bus: MemoryEventBus;
+  let provider: MockModelProvider;
+  let gateway: ModelGateway;
+  let meter: UsageMeter;
+  let runtime: AgentRuntime;
+
+  const MESSAGES = [{ role: 'user' as const, content: 'Where do I stake?' }];
+
+  /** The exact usage the mock will report for a task, computed independently. */
+  function expectedUsage(task: string, messages = MESSAGES, maxOutputTokens?: number) {
+    const route = TABLE.routes.find((r) => r.task === task)!;
+    const request = {
+      model: route.model,
+      messages,
+      maxOutputTokens: maxOutputTokens === undefined ? route.maxOutputTokens : Math.min(maxOutputTokens, route.maxOutputTokens),
+    } as CompletionRequest;
+    return { route, usage: mockUsage(request) };
+  }
+
+  async function fund(userId: string, amount: string) {
+    await ledger.post(
+      recipes.deposit({ userId, assetId: 'IFC', amount: amt(amount), rail: 'test', railRef: `${userId}:${amount}:${Math.random()}` }),
+    );
+  }
+
+  const balanceOf = async (userId: string) => formatAmount((await ledger.balance(userAvailable(userId, 'IFC'))).amount);
+  const houseOf = async () => formatAmount((await ledger.balance(houseFees('agents', 'IFC'))).amount);
+
+  beforeEach(async () => {
+    await sql`
+      TRUNCATE agents.usage_records, agents.usage_windows, agents.agent_actions, agents.agent_sessions, agents.agent_definitions
+      RESTART IDENTITY CASCADE
+    `;
+
+    ledger = new MemoryLedger();
+    bus = new MemoryEventBus('svc-agents');
+    provider = new MockModelProvider({ id: 'primary' });
+    gateway = new ModelGateway([provider], TABLE);
+    meter = new UsageMeter(sql, ledger, { assetId: 'IFC', windowMinutes: 60 });
+    runtime = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC' });
+
+    await runtime.registerAgent(PROBE);
+    await runtime.registerAgent(THRIFTY);
+    await fund(USER_A, '1000');
+    await fund(USER_B, '1000');
+  });
+
+  afterAll(async () => {
+    await sql.end({ timeout: 5 });
+  });
+
+  const open = (userId = USER_A, agentId = 'probe') => runtime.openSession({ userId, agentId });
+
+  // ── Routing ───────────────────────────────────────────────────────────────
+
+  describe('per-task model routing (§8.2)', () => {
+    it('serves each task on the model its route configures', async () => {
+      const session = await open();
+
+      const plan = await runtime.think({ sessionId: session.id, requestId: 'r-plan', task: 'plan', messages: MESSAGES });
+      const quick = await runtime.think({ sessionId: session.id, requestId: 'r-quick', task: 'quick', messages: MESSAGES });
+
+      expect(plan.route.model).toBe('reasoning-lg');
+      expect(quick.route.model).toBe('fast-sm');
+
+      // The provider echoes the model it was asked for, so this asserts the
+      // routing decision actually reached the adapter rather than being
+      // recorded and then ignored.
+      expect(plan.text).toContain('reasoning-lg');
+      expect(quick.text).toContain('fast-sm');
+
+      // And the audit row records the ALIAS, not a vendor's model id.
+      expect(plan.action.model).toBe('reasoning-lg');
+    });
+
+    it('applies the route’s output ceiling, and lets a caller ask for less but not more', async () => {
+      const session = await open();
+
+      const capped = await runtime.think({
+        sessionId: session.id,
+        requestId: 'r-capped',
+        task: 'quick',
+        messages: MESSAGES,
+        maxOutputTokens: 4096,
+      });
+      // 'quick' is configured at 64; asking for 4096 is clamped, not honoured.
+      expect(capped.usage.outputTokens).toBeLessThanOrEqual(64);
+      expect(capped.usage).toEqual(expectedUsage('quick').usage);
+
+      const tighter = await runtime.think({
+        sessionId: session.id,
+        requestId: 'r-tight',
+        task: 'quick',
+        messages: MESSAGES,
+        maxOutputTokens: 8,
+      });
+      expect(tighter.usage.outputTokens).toBeLessThanOrEqual(8);
+    });
+
+    it('is data, not code — swapping the table re-routes without touching a caller', async () => {
+      const session = await open();
+      const before = await runtime.think({ sessionId: session.id, requestId: 'r-1', task: 'plan', messages: MESSAGES });
+      expect(before.route.model).toBe('reasoning-lg');
+
+      gateway.setRoutingTable(
+        parseRoutingTable({
+          routes: [
+            {
+              task: 'plan',
+              providerId: 'primary',
+              model: 'fast-sm',
+              maxOutputTokens: 32,
+              price: { inputPerMillion: '0.25', outputPerMillion: '1.25' },
+            },
+          ],
+        }),
+      );
+
+      const after = await runtime.think({ sessionId: session.id, requestId: 'r-2', task: 'plan', messages: MESSAGES });
+      expect(after.route.model).toBe('fast-sm');
+      expect(after.text).toContain('fast-sm');
+    });
+
+    it('refuses an unrouted task, and logs the attempt rather than swallowing it', async () => {
+      const session = await open();
+
+      await expect(
+        runtime.think({ sessionId: session.id, requestId: 'r-nope', task: 'does.not.exist', messages: MESSAGES }),
+      ).rejects.toMatchObject({ code: 'agents.route_not_found' });
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log.at(-1)).toMatchObject({ kind: 'completion', status: 'failed', task: 'does.not.exist' });
+    });
+
+    it('refuses a route whose provider is not registered', async () => {
+      const session = await open();
+      await expect(
+        runtime.think({ sessionId: session.id, requestId: 'r-orphan', task: 'orphan', messages: MESSAGES }),
+      ).rejects.toMatchObject({ code: 'agents.route_not_found' });
+    });
+  });
+
+  // ── Metering ──────────────────────────────────────────────────────────────
+
+  describe('metering (§8.2 — token/cost per user, billed via ledger)', () => {
+    it('charges exactly the priced cost of the window, and the books close', async () => {
+      const session = await open();
+      const { route, usage } = expectedUsage('plan');
+
+      const result = await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      expect(result.usage).toEqual(usage);
+      expect(result.metered).toBe(true);
+
+      const expected = windowCost([
+        { inputTokens: BigInt(usage.inputTokens), outputTokens: BigInt(usage.outputTokens), price: route.price },
+      ]);
+      expect(expected).toBeGreaterThan(0n);
+
+      const settlement = await runtime.settleWindow(session.id, result.windowId!);
+
+      expect(settlement.amount).toBe(expected);
+      expect(settlement.chargeKey).toBe(chargeKeyFor(session.id, result.windowId!));
+      expect(await houseOf()).toBe(formatAmount(expected));
+      expect(await balanceOf(USER_A)).toBe(formatAmount(amt('1000') - expected));
+
+      // §0.6: value moved between accounts, none was created.
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('sums token counts across calls and rounds once, not once per call', async () => {
+      const session = await open();
+      const a = await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      const b = await runtime.think({
+        sessionId: session.id,
+        requestId: 'r-b',
+        task: 'plan',
+        messages: [{ role: 'user', content: 'And how do I unstake?' }],
+      });
+
+      const price = a.route.price;
+      const expected = windowCost([
+        {
+          inputTokens: BigInt(a.usage.inputTokens + b.usage.inputTokens),
+          outputTokens: BigInt(a.usage.outputTokens + b.usage.outputTokens),
+          price,
+        },
+      ]);
+
+      const settlement = await runtime.settleWindow(session.id, a.windowId!);
+      expect(settlement.amount).toBe(expected);
+      // Never more than the per-call sum: rounding once cannot cost more.
+      expect(settlement.amount).toBeLessThanOrEqual(usageCost(a.usage, price) + usageCost(b.usage, price));
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+
+    it('bills a retried completion exactly once', async () => {
+      const session = await open();
+
+      const first = await runtime.think({ sessionId: session.id, requestId: 'retry-me', task: 'plan', messages: MESSAGES });
+      const second = await runtime.think({ sessionId: session.id, requestId: 'retry-me', task: 'plan', messages: MESSAGES });
+
+      // The engine really was called twice — the caller did not get its answer
+      // the first time — but only the first call added to the bill.
+      expect(provider.callCount).toBe(2);
+      expect(first.metered).toBe(true);
+      expect(second.metered).toBe(false);
+      expect(second.cost).toBe(0n);
+
+      const rows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(rows).toHaveLength(1);
+
+      const settlement = await runtime.settleWindow(session.id, first.windowId!);
+      expect(settlement.amount).toBe(usageCost(first.usage, first.route.price));
+      expect(await houseOf()).toBe(formatAmount(settlement.amount));
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+
+    it('settles a window exactly once, however many times settlement is run', async () => {
+      const session = await open();
+      const call = await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+
+      const first = await runtime.settleWindow(session.id, call.windowId!);
+      const second = await runtime.settleWindow(session.id, call.windowId!);
+      const third = await runtime.settleWindow(session.id, call.windowId!);
+
+      expect(first.settled).toBe(true);
+      expect(second.settled).toBe(false);
+      expect(third.settled).toBe(false);
+      expect(second.amount).toBe(first.amount);
+
+      expect(await houseOf()).toBe(formatAmount(first.amount));
+      expect(ledger.journal()).toHaveLength(3); // two deposits + one fee charge
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('posts under the business idempotency key §8.2 specifies', async () => {
+      const session = await open();
+      const call = await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      const settlement = await runtime.settleWindow(session.id, call.windowId!);
+
+      const key = `agent.usage:${session.id}:${call.windowId}`;
+      expect(settlement.chargeKey).toBe(key);
+
+      // The ledger's own key namespaces it under the module, and re-posting it
+      // returns the original transaction rather than a second charge.
+      const existing = await ledger.getTxByKey(`fee:agents:${key}`);
+      expect(existing).not.toBeNull();
+      expect(existing!.id).toBe(settlement.chargeTxId);
+    });
+
+    it('seals the window: usage cannot land in a period that has been billed', async () => {
+      const session = await open();
+      const call = await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      await runtime.settleWindow(session.id, call.windowId!);
+
+      // Same window (the clock has not moved an hour), already settled.
+      await expect(runtime.think({ sessionId: session.id, requestId: 'r-late', task: 'plan', messages: MESSAGES })).rejects.toMatchObject({
+        code: 'agents.window_sealed',
+      });
+
+      // The house was not paid twice, and the attempt is in the log.
+      expect(await houseOf()).toBe(formatAmount((await runtime.settleWindow(session.id, call.windowId!)).amount));
+      const log = await runtime.sessionLog(session.id);
+      expect(log.some((a) => a.status === 'failed')).toBe(true);
+    });
+
+    it('charges nothing for a session on the included allowance', async () => {
+      const session = await runtime.openSession({ userId: USER_A, agentId: 'probe', metered: false });
+      const result = await runtime.think({ sessionId: session.id, requestId: 'r-free', task: 'plan', messages: MESSAGES });
+
+      expect(result.metered).toBe(false);
+      expect(result.windowId).toBeNull();
+      expect(await runtime.settleSession(session.id)).toEqual([]);
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+    });
+
+    it('records usage even when billing is switched off, so the cost is still knowable', async () => {
+      const unbilled = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const session = await unbilled.openSession({ userId: USER_A, agentId: 'probe' });
+      const result = await unbilled.think({ sessionId: session.id, requestId: 'r-off', task: 'plan', messages: MESSAGES });
+
+      // Nothing was metered into a billing window…
+      expect(result.metered).toBe(false);
+      expect(await balanceOf(USER_A)).toBe('1000');
+      // …but the action, its token counts and its model are all on the record.
+      const log = await unbilled.sessionLog(session.id);
+      const completion = log.find((a) => a.kind === 'completion')!;
+      expect(completion.inputTokens).toBe(BigInt(result.usage.inputTokens));
+      expect(completion.outputTokens).toBe(BigInt(result.usage.outputTokens));
+    });
+
+    it('keeps each user’s meter to themselves', async () => {
+      const a = await open(USER_A);
+      const b = await open(USER_B);
+
+      const callA = await runtime.think({ sessionId: a.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      await runtime.think({ sessionId: b.id, requestId: 'r-b', task: 'plan', messages: MESSAGES });
+
+      await runtime.settleWindow(a.id, callA.windowId!);
+
+      expect(await balanceOf(USER_B)).toBe('1000');
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+  });
+
+  // ── Guardrails ────────────────────────────────────────────────────────────
+
+  describe('guardrails — refused before execution, and logged as refused', () => {
+    it('never reaches a tool that is not in the declared toolset', async () => {
+      const session = await open();
+      let ran = false;
+
+      await expect(
+        runtime.act({
+          sessionId: session.id,
+          tool: 'bank.withdraw',
+          execute: async () => {
+            ran = true;
+            return 'moved the money';
+          },
+        }),
+      ).rejects.toBeInstanceOf(RefusedError);
+
+      // THE point of a guardrail: the tool did not run.
+      expect(ran).toBe(false);
+
+      const log = await runtime.sessionLog(session.id);
+      const refusal = log.at(-1)!;
+      expect(refusal).toMatchObject({
+        kind: 'tool_call',
+        status: 'refused',
+        tool: 'bank.withdraw',
+        refusalCode: 'agents.tool_not_declared',
+      });
+      // And it is explained — a refusal nobody can account for afterwards is
+      // worse than an action that did not happen.
+      expect(refusal.userMessageKey).toBe('agents.refused.tool_not_declared');
+      expect(refusal.userMessageParams).toMatchObject({ tool: 'bank.withdraw' });
+    });
+
+    it('runs a declared tool and logs it', async () => {
+      const session = await open();
+      const result = await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => ({ price: '42' }) });
+
+      expect(result.result).toEqual({ price: '42' });
+      expect(result.action).toMatchObject({ kind: 'tool_call', status: 'executed', tool: 'trade.quote' });
+    });
+
+    it('holds a tool that needs approval, then runs it once the user confirms', async () => {
+      const session = await open();
+
+      await expect(runtime.act({ sessionId: session.id, tool: 'trade.order', execute: async () => 'placed' })).rejects.toMatchObject({
+        refusal: { code: 'agents.approval_required' },
+      });
+
+      const approved = await runtime.act({
+        sessionId: session.id,
+        tool: 'trade.order',
+        approved: true,
+        execute: async () => 'placed',
+      });
+      expect(approved.result).toBe('placed');
+
+      // And the per-session budget of one is now spent.
+      await expect(
+        runtime.act({ sessionId: session.id, tool: 'trade.order', approved: true, execute: async () => 'placed again' }),
+      ).rejects.toMatchObject({ refusal: { code: 'agents.tool_call_limit' } });
+    });
+
+    it('refuses an engine call the agent is not permitted to make, and bills nothing', async () => {
+      const session = await open();
+
+      await expect(
+        runtime.think({ sessionId: session.id, requestId: 'r-vec', task: 'vectors', messages: MESSAGES }),
+      ).rejects.toBeInstanceOf(RefusedError);
+
+      expect(provider.callCount).toBe(0);
+      expect(await balanceOf(USER_A)).toBe('1000');
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log.at(-1)).toMatchObject({ kind: 'completion', status: 'refused', task: 'vectors' });
+    });
+
+    it('refuses a call that could cross the session spend ceiling, before spending anything', async () => {
+      const session = await open(USER_A, 'thrifty');
+
+      await expect(runtime.think({ sessionId: session.id, requestId: 'r-spend', task: 'plan', messages: MESSAGES })).rejects.toMatchObject({
+        refusal: { code: 'agents.spend_limit' },
+      });
+
+      expect(provider.callCount).toBe(0);
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+
+    it('binds the guardrail at session open — widening it later does not reach a running session', async () => {
+      const session = await open();
+
+      // The agent gains a tool while the session is in flight.
+      await runtime.registerAgent({
+        ...PROBE,
+        version: 2,
+        tools: [...PROBE.tools, { name: 'trade.close', module: 'trade', mode: 'write' }],
+      });
+
+      await expect(runtime.act({ sessionId: session.id, tool: 'trade.close', execute: async () => 'closed' })).rejects.toMatchObject({
+        refusal: { code: 'agents.tool_not_declared' },
+      });
+
+      // A NEW session picks the widened guardrail up.
+      const next = await open();
+      expect(next.guardrailVersion).toBe(2);
+      await expect(runtime.act({ sessionId: next.id, tool: 'trade.close', execute: async () => 'closed' })).resolves.toBeTruthy();
+    });
+
+    it('refuses everything on a closed session', async () => {
+      const session = await open();
+      await runtime.closeSession(session.id);
+
+      await expect(runtime.think({ sessionId: session.id, requestId: 'r-late', task: 'plan', messages: MESSAGES })).rejects.toMatchObject({
+        code: 'agents.session_closed',
+      });
+    });
+
+    it('logs a tool that threw as failed, not as refused', async () => {
+      const session = await open();
+
+      await expect(
+        runtime.act({
+          sessionId: session.id,
+          tool: 'trade.quote',
+          execute: async () => {
+            throw new Error('venue unreachable');
+          },
+        }),
+      ).rejects.toThrow('venue unreachable');
+
+      const log = await runtime.sessionLog(session.id);
+      // 'failed' is a different investigation from 'refused': one is the
+      // platform working, the other is something breaking.
+      expect(log.at(-1)).toMatchObject({ kind: 'tool_call', status: 'failed', refusalCode: null });
+    });
+  });
+
+  // ── The audit table ───────────────────────────────────────────────────────
+
+  describe('agent_actions — the Agentic Law (§8.2)', () => {
+    it('records every action, including the ones that were refused', async () => {
+      const session = await open();
+      await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'bank.withdraw', execute: async () => 'ok' }).catch(() => undefined);
+      await runtime.closeSession(session.id);
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log.map((a) => `${a.kind}:${a.status}`)).toEqual([
+        'session_open:executed',
+        'completion:executed',
+        'tool_call:executed',
+        'tool_call:refused',
+        'session_close:executed',
+      ]);
+
+      // Dense sequence: a gap would mean an action went unrecorded.
+      expect(log.map((a) => a.sequence)).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('is append-only — an UPDATE is rejected by the database', async () => {
+      const session = await open();
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      await expect(sql`UPDATE agents.agent_actions SET status = 'executed' WHERE session_id = ${session.id}`).rejects.toThrow(
+        /append-only/,
+      );
+    });
+
+    it('is append-only — a DELETE is rejected by the database', async () => {
+      const session = await open();
+      await runtime.act({ sessionId: session.id, tool: 'bank.withdraw', execute: async () => 'ok' }).catch(() => undefined);
+
+      // The row a bad actor would most want gone.
+      await expect(sql`DELETE FROM agents.agent_actions WHERE session_id = ${session.id} AND status = 'refused'`).rejects.toThrow(
+        /append-only/,
+      );
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log.some((a) => a.status === 'refused')).toBe(true);
+    });
+
+    it('cannot be edited even to correct it — the correction is another row', async () => {
+      const session = await open();
+      await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+
+      await expect(sql`UPDATE agents.agent_actions SET cost = 0 WHERE session_id = ${session.id}`).rejects.toThrow(/append-only/);
+    });
+
+    it('chains each session’s actions, so a rewrite around the service is detectable', async () => {
+      const session = await open();
+      await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      expect(await runtime.audit.verifyChain(session.id)).toEqual({ ok: true });
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log[0]!.prevHash).toBeNull();
+      expect(log[1]!.prevHash).toBe(log[0]!.hash);
+      expect(log[2]!.prevHash).toBe(log[1]!.hash);
+    });
+
+    it('detects a row whose contents no longer match its hash', async () => {
+      const session = await open();
+      const log = await runtime.sessionLog(session.id);
+      const row = log[0]!;
+
+      // The database will not let us tamper, so the detection is asserted
+      // against the hash function directly: changing any field changes the hash,
+      // which is what makes `verifyChain` meaningful rather than decorative.
+      const honest = hashAction({ ...row, userMessageParams: row.userMessageParams }, row.prevHash);
+      const tampered = hashAction({ ...row, status: 'refused', userMessageParams: row.userMessageParams }, row.prevHash);
+
+      expect(honest).toBe(row.hash);
+      expect(tampered).not.toBe(row.hash);
+    });
+
+    it('stores digests of the prompt and the answer, never their text', async () => {
+      const session = await open();
+      const secret = 'my recovery phrase is aardvark banana cinnamon';
+      const result = await runtime.think({
+        sessionId: session.id,
+        requestId: 'r-secret',
+        task: 'plan',
+        messages: [{ role: 'user', content: secret }],
+      });
+
+      const raw = await sql<Array<Record<string, unknown>>>`
+        SELECT * FROM agents.agent_actions WHERE id = ${result.action.id}
+      `;
+      expect(JSON.stringify(raw[0])).not.toContain('aardvark');
+      expect(result.action.inputDigest).toMatch(/^[0-9a-f]{64}$/);
+      expect(result.action.outputDigest).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('gives a user their own log, and only their own', async () => {
+      const a = await open(USER_A);
+      const b = await open(USER_B);
+      await runtime.think({ sessionId: a.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      await runtime.think({ sessionId: b.id, requestId: 'r-b', task: 'plan', messages: MESSAGES });
+
+      const log = await runtime.userLog(USER_A);
+      expect(log.length).toBeGreaterThan(0);
+      expect(log.every((entry) => entry.userId === USER_A)).toBe(true);
+    });
+
+    it('keys every log line for i18n rather than shipping prose', async () => {
+      const session = await open();
+      await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: session.id, tool: 'bank.withdraw', execute: async () => 'ok' }).catch(() => undefined);
+
+      for (const action of await runtime.sessionLog(session.id)) {
+        expect(action.userMessageKey).toMatch(/^agents\./);
+      }
+    });
+  });
+
+  // ── Degradation ───────────────────────────────────────────────────────────
+
+  describe('provider failure degrades cleanly', () => {
+    it('bills nothing when the engine is down, and says so in the log', async () => {
+      const session = await open();
+      provider.breakWith(new ProviderError('upstream is down', 'primary', true, 503));
+
+      await expect(runtime.think({ sessionId: session.id, requestId: 'r-down', task: 'plan', messages: MESSAGES })).rejects.toBeInstanceOf(
+        AgentError,
+      );
+
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+
+      const rows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(rows).toHaveLength(0);
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log.at(-1)).toMatchObject({ kind: 'completion', status: 'failed' });
+      expect(log.at(-1)!.userMessageKey).toBe('agents.error.engine_unavailable');
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+
+    it('bills once when a transient failure is retried under the same request id', async () => {
+      const session = await open();
+      const flaky = new MockModelProvider({ id: 'primary', failFirst: 1 });
+      const flakyRuntime = new AgentRuntime(sql, new ModelGateway([flaky], TABLE), meter, bus, { feeAssetId: 'IFC' });
+
+      await expect(
+        flakyRuntime.think({ sessionId: session.id, requestId: 'same-request', task: 'plan', messages: MESSAGES }),
+      ).rejects.toBeInstanceOf(AgentError);
+
+      const ok = await flakyRuntime.think({ sessionId: session.id, requestId: 'same-request', task: 'plan', messages: MESSAGES });
+      const settlement = await flakyRuntime.settleWindow(session.id, ok.windowId!);
+
+      expect(settlement.amount).toBe(usageCost(ok.usage, ok.route.price));
+      expect(await houseOf()).toBe(formatAmount(settlement.amount));
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('does not route to a provider that is already known to be unhealthy', async () => {
+      const session = await open();
+      provider.breakWith(new ProviderError('upstream is down', 'primary', true, 503));
+
+      await expect(runtime.think({ sessionId: session.id, requestId: 'r-x', task: 'plan', messages: MESSAGES })).rejects.toMatchObject({
+        code: 'agents.provider_unavailable',
+      });
+
+      // Refused on health, so the request never left the process.
+      expect(provider.callCount).toBe(0);
+    });
+
+    it('recovers without leaving a partial charge behind', async () => {
+      const session = await open();
+      provider.breakWith(new ProviderError('upstream is down', 'primary', true, 503));
+      await runtime.think({ sessionId: session.id, requestId: 'r-1', task: 'plan', messages: MESSAGES }).catch(() => undefined);
+
+      provider.repair();
+      const ok = await runtime.think({ sessionId: session.id, requestId: 'r-2', task: 'plan', messages: MESSAGES });
+      const settlement = await runtime.settleWindow(session.id, ok.windowId!);
+
+      expect(settlement.amount).toBe(usageCost(ok.usage, ok.route.price));
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+  });
+
+  // ── Events ────────────────────────────────────────────────────────────────
+
+  describe('events (§10)', () => {
+    it('publishes a completed action, a rejected action, and a settled window', async () => {
+      const session = await open();
+      const call = await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: session.id, tool: 'bank.withdraw', execute: async () => 'ok' }).catch(() => undefined);
+      await runtime.settleWindow(session.id, call.windowId!);
+
+      expect(bus.emitted('agentActionCompleted').length).toBeGreaterThan(0);
+      expect(bus.emitted('agentActionRejected')[0]?.payload).toMatchObject({
+        refusalCode: 'agents.tool_not_declared',
+        tool: 'bank.withdraw',
+      });
+      expect(bus.emitted('agentUsageSettled')[0]?.payload).toMatchObject({ assetId: 'IFC', windowId: call.windowId! });
+    });
+
+    it('carries no prompt, no answer and no vendor model id on the wire', async () => {
+      const session = await open();
+      await runtime.think({
+        sessionId: session.id,
+        requestId: 'r-a',
+        task: 'plan',
+        messages: [{ role: 'user', content: 'aardvark banana cinnamon' }],
+      });
+
+      const serialised = JSON.stringify(bus.published);
+      expect(serialised).not.toContain('aardvark');
+      // The routing task travels; the model does not.
+      expect(serialised).toContain('plan');
+      expect(serialised).not.toContain('reasoning-lg');
+    });
+  });
+}

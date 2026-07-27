@@ -1,9 +1,11 @@
 import { mulBps, sub, type Amount } from '../money.js';
 import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
+import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
 import {
   burnAccount,
   houseFees,
+  merchantClearing,
   mintBoundary,
   railBoundary,
   rewardsEngine,
@@ -268,6 +270,159 @@ export function escrowRefund(input: EscrowInput & { resolution?: string }): Post
   };
 }
 
+// ── Payments (§6.1) ──────────────────────────────────────────────────────────
+//
+// Three recipes cover the whole gateway money path, and they are deliberately
+// staged rather than collapsed into one:
+//
+//   capture     rail → merchant clearing        (value enters the book)
+//   settlement  clearing → merchant + house fee (the merchant can now spend it)
+//   refund      clearing or merchant → rail     (value leaves the book)
+//
+// The clearing stop in the middle is what makes "captured but not settled"
+// a balance you can read rather than an incident you have to reconstruct.
+
+export interface PaymentCaptureInput {
+  paymentId: string;
+  merchantId: string;
+  assetId: string;
+  amount: Amount;
+  /** The rail the value arrived on — 'crypto-native', 'card-sandbox', … */
+  rail: string;
+  /** The rail's own reference for the capture, for reconciliation against it. */
+  railRef: string;
+}
+
+/**
+ * A payment was captured at the rail. Value enters the book.
+ *
+ * Keyed on the payment, not on the rail reference: the business fact is "this
+ * payment was captured", and it happens exactly once however many times a PSP
+ * redelivers the webhook that announces it.
+ */
+export function paymentCapture(input: PaymentCaptureInput): PostRequest {
+  requirePositive('capture amount', input.amount);
+  return {
+    idempotencyKey: `payment.capture:${input.paymentId}`,
+    module: 'pay',
+    reason: 'payment.captured',
+    meta: { paymentId: input.paymentId, merchantId: input.merchantId, rail: input.rail, railRef: input.railRef },
+    entries: [
+      credit(railBoundary(input.rail, input.assetId), input.amount),
+      debit(merchantClearing(input.merchantId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export interface MerchantSettlementInput {
+  merchantId: string;
+  /** The merchant's own user account — the balance they trade and spend from. */
+  merchantUserId: string;
+  /** Settlement window label, e.g. '2026-07-27'. Part of the business key. */
+  window: string;
+  assetId: string;
+  /** Captured, non-refunded value in the window. */
+  gross: Amount;
+  /** Platform fee for the window. May be zero. */
+  fee: Amount;
+}
+
+/**
+ * Settlement (§6.1): "merchant net posts to their ledger account — the same
+ * balance graph they trade and spend from".
+ *
+ * The asset is part of the idempotency key as well as the merchant and window.
+ * A merchant settling USDT and BTC for the same day is two settlements; without
+ * the asset in the key the second would find the first's transaction, return it,
+ * and silently strand a whole currency's takings in clearing.
+ */
+export function merchantSettlement(input: MerchantSettlementInput): PostRequest {
+  requirePositive('settlement gross', input.gross);
+  if (input.fee < 0n) throw new InvalidEntryError('Settlement fee cannot be negative');
+
+  const net = sub(input.gross, input.fee);
+  // A fee that swallows the entire settlement is a pricing bug, and posting it
+  // would leave the merchant a zero-value transaction as their only record of
+  // a window they actually earned in.
+  requirePositive('settlement net', net);
+
+  return {
+    idempotencyKey: `settlement:${input.merchantId}:${input.window}:${input.assetId}`,
+    module: 'pay',
+    reason: 'pay.settled',
+    meta: { merchantId: input.merchantId, window: input.window, assetId: input.assetId },
+    entries: [
+      credit(merchantClearing(input.merchantId, input.assetId), input.gross),
+      debit(userAvailable(input.merchantUserId, input.assetId), net),
+      ...(input.fee > 0n ? [debit(houseFees('pay', input.assetId), input.fee)] : []),
+    ],
+  };
+}
+
+export interface PaymentRefundInput {
+  /** Business key for THIS refund — a payment may be refunded in parts. */
+  refundId: string;
+  paymentId: string;
+  merchantId: string;
+  merchantUserId: string;
+  assetId: string;
+  amount: Amount;
+  rail: string;
+  /**
+   * Where the money comes back from.
+   *
+   * Before settlement the merchant has not been paid yet, so the value is still
+   * in clearing. After settlement it is in their available balance and the
+   * refund draws on it — which is exactly why a post-settlement refund can fail
+   * with insufficient funds, and must be allowed to fail rather than be forced
+   * through by taking the value from somewhere that is not the merchant's.
+   */
+  source: 'clearing' | 'settled';
+}
+
+/** Value leaves the book, back out through the rail it came in on. */
+export function paymentRefund(input: PaymentRefundInput): PostRequest {
+  requirePositive('refund amount', input.amount);
+
+  const from =
+    input.source === 'clearing' ? merchantClearing(input.merchantId, input.assetId) : userAvailable(input.merchantUserId, input.assetId);
+
+  return {
+    idempotencyKey: `payment.refund:${input.refundId}`,
+    module: 'pay',
+    reason: 'payment.refunded',
+    meta: { paymentId: input.paymentId, refundId: input.refundId, source: input.source, rail: input.rail },
+    entries: [credit(from, input.amount), debit(railBoundary(input.rail, input.assetId), input.amount)],
+  };
+}
+
+/**
+ * The refund did not go out after all — the rail refused it.
+ *
+ * Same shape as `withdrawReverse`: the reversal path on an outbound movement is
+ * DEFINED, not improvised. svc-pay debits the merchant before asking the rail
+ * to send anything, so a rail that says no leaves value sitting at the boundary
+ * that belongs back with the merchant, and this puts it there.
+ *
+ * A separate transaction rather than an edit, because a ledger reverses; it
+ * does not amend. Both postings stay in the journal and the trail reads
+ * "we tried, it failed, we put it back".
+ */
+export function paymentRefundReverse(input: PaymentRefundInput): PostRequest {
+  requirePositive('refund reversal amount', input.amount);
+
+  const to =
+    input.source === 'clearing' ? merchantClearing(input.merchantId, input.assetId) : userAvailable(input.merchantUserId, input.assetId);
+
+  return {
+    idempotencyKey: `payment.refund.reverse:${input.refundId}`,
+    module: 'pay',
+    reason: 'payment.refund.reversed',
+    meta: { paymentId: input.paymentId, refundId: input.refundId, source: input.source, rail: input.rail },
+    entries: [credit(railBoundary(input.rail, input.assetId), input.amount), debit(to, input.amount)],
+  };
+}
+
 // ── Token: staking, emissions, burn (§4.3) ───────────────────────────────────
 
 export interface StakeInput {
@@ -510,6 +665,8 @@ export function liquidate(input: LiquidationInput): PostRequest {
   };
 }
 
+export * from './bank.js';
+
 export const recipes = {
   deposit,
   withdrawHold,
@@ -521,6 +678,10 @@ export const recipes = {
   escrowLock,
   escrowRelease,
   escrowRefund,
+  paymentCapture,
+  merchantSettlement,
+  paymentRefund,
+  paymentRefundReverse,
   stake,
   unstake,
   mintEmission,
@@ -531,6 +692,12 @@ export const recipes = {
   collateralLock,
   collateralRelease,
   liquidate,
+  // §8.1 svc-bank — see ./bank.ts. Flagged shared-package change.
+  bankTransfer,
+  earnDeposit,
+  earnWithdraw,
+  earnPoolFund,
+  earnInterest,
 } as const;
 
 export type RecipeName = keyof typeof recipes;

@@ -1,0 +1,508 @@
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import type { CryptoChainPort } from './chain-port.js';
+import {
+  railFailure,
+  type PaymentIntent,
+  type RailAdapter,
+  type RailCapability,
+  type RailEvent,
+  type RailHealth,
+  type RailResult,
+  type RailWebhookRequest,
+  type SettlementInstruction,
+} from './rail-adapter.js';
+import { signPayload, verifySignature } from './webhook-signature.js';
+
+/**
+ * crypto-native — §6.1's real v1 adapter, and §13's "crypto-native is real from
+ * day one".
+ *
+ * It accepts on-chain assets and settles them into the ledger. There is no
+ * partner in the flow of funds, which is why this rail works on day one while
+ * every card rail waits on a sponsor.
+ *
+ * ON A CHAIN, "AUTHORIZE" AND "CAPTURE" ARE NOT WHAT THEY ARE ON A CARD.
+ *
+ * A card authorization is a promise the issuer can be held to; capture is when
+ * the money actually moves. A chain has no such split — there is no hold, and
+ * nothing to complete. A transfer either has not landed, or it has landed and
+ * is irreversible once it is deep enough.
+ *
+ * So this adapter maps them honestly rather than pretending:
+ *
+ *   authorize → "a transfer to this payment's acceptance address has reached
+ *                `minConfirmations`". Under the threshold the answer is
+ *                `pending`, because a shallow transaction can still be
+ *                reorganised away, and treating it as authorized is precisely
+ *                how a merchant ships goods against a payment that unwinds.
+ *   capture   → an accounting act. The value is already ours; capture is the
+ *                moment the core is told to book it. It re-checks finality
+ *                rather than trusting a decision made minutes ago.
+ *
+ * If this crashes between the two, nothing is stranded: the funds are on-chain
+ * at an address we control, `capture` is derived from chain state rather than
+ * from adapter memory, and the ledger post it triggers is keyed on the payment.
+ * Re-running produces the same answer.
+ */
+
+export interface CryptoNativeOptions {
+  readonly chain: CryptoChainPort;
+  /** Webhook signing secret for the chain watcher's deliveries. */
+  readonly secret: string;
+  /**
+   * Confirmations before a transfer counts as final.
+   *
+   * This is the reorg risk budget. Too low and a deep reorg takes back money
+   * already settled to a merchant, out of a clearing account that has since
+   * been emptied.
+   */
+  readonly minConfirmations?: number;
+  readonly now?: () => Date;
+  readonly toleranceSeconds?: number;
+}
+
+export class CryptoNativeAdapter implements RailAdapter {
+  readonly id = 'crypto-native';
+  readonly capabilities: readonly RailCapability[] = ['authorize', 'capture', 'refund', 'payout', 'webhook'];
+
+  private readonly chain: CryptoChainPort;
+  private readonly minConfirmations: number;
+  private readonly now: () => Date;
+  private readonly toleranceSeconds: number;
+
+  /**
+   * Refunded totals per acceptance address.
+   *
+   * Bookkeeping, not custody: the core's `payment_events` is the authority on
+   * how much of a payment has been refunded. This exists so the adapter refuses
+   * an over-refund on its own account too — a rail that will broadcast whatever
+   * it is told is one bug away from sending a merchant's whole balance back to
+   * one buyer.
+   */
+  private readonly refunded = new Map<string, Amount>();
+  private refundSequence = 0;
+  private lastContact: Date;
+  private up = true;
+
+  constructor(private readonly options: CryptoNativeOptions) {
+    this.chain = options.chain;
+    this.minConfirmations = options.minConfirmations ?? 6;
+    this.now = options.now ?? (() => new Date());
+    this.toleranceSeconds = options.toleranceSeconds ?? 300;
+    this.lastContact = this.now();
+  }
+
+  health(): RailHealth {
+    return {
+      healthy: this.up,
+      latencyMs: 40,
+      lastUpdate: this.lastContact,
+      reason: this.up ? undefined : 'chain watcher unreachable',
+    };
+  }
+
+  setHealthy(up: boolean): void {
+    this.up = up;
+  }
+
+  reset(): void {
+    this.refunded.clear();
+    this.refundSequence = 0;
+    this.up = true;
+    this.lastContact = this.now();
+  }
+
+  // ── The interface ──────────────────────────────────────────────────────────
+
+  async authorize(p: PaymentIntent): Promise<RailResult> {
+    this.lastContact = this.now();
+
+    if (p.amount <= 0n) {
+      return railFailure({
+        railRef: '',
+        amount: p.amount,
+        assetId: p.assetId,
+        failureCode: 'authorize.invalid_amount',
+        failureReason: 'Authorization amount must be positive',
+        at: this.now(),
+      });
+    }
+
+    // The acceptance address IS the rail reference for this payment. It is
+    // derived from the payment id, so it is stable across retries and across
+    // process restarts — a second authorize never hands the buyer a second
+    // address to pay into, which would split one payment across two.
+    let address: string;
+    let transfer: Awaited<ReturnType<CryptoChainPort['inboundTransfer']>>;
+    try {
+      address = await this.chain.acceptanceAddress(p.paymentId, p.assetId);
+      transfer = await this.chain.inboundTransfer(address);
+    } catch (err) {
+      // A chain provider having a bad minute is not an exception in a payments
+      // core. Nothing has moved and nothing is stranded — the buyer's funds, if
+      // they sent any, are at an address derived from the payment id, so the
+      // retry finds them.
+      return railFailure({
+        railRef: '',
+        amount: p.amount,
+        assetId: p.assetId,
+        failureCode: 'chain.unavailable',
+        failureReason: err instanceof Error ? err.message : String(err),
+        at: this.now(),
+      });
+    }
+
+    if (!transfer) {
+      return {
+        ok: true,
+        railRef: address,
+        status: 'pending',
+        amount: p.amount,
+        assetId: p.assetId,
+        at: this.now(),
+        raw: { address, awaiting: formatAmount(p.amount) },
+      };
+    }
+
+    if (transfer.assetId !== p.assetId) {
+      // The payer sent the wrong token to the right address. Payers do this.
+      // The payment fails, but the funds are not gone: they are at `address`,
+      // in `transfer.assetId`, refundable to `transfer.from` — all of which is
+      // in `raw` precisely so support can act on it without a chain explorer.
+      return railFailure({
+        railRef: address,
+        amount: transfer.amount,
+        assetId: transfer.assetId,
+        failureCode: 'chain.wrong_asset',
+        failureReason: `Expected ${p.assetId}, received ${transfer.assetId}`,
+        at: this.now(),
+        raw: { address, txHash: transfer.txHash, from: transfer.from, receivedAsset: transfer.assetId },
+      });
+    }
+
+    if (transfer.confirmations < this.minConfirmations) {
+      // Seen but not final. Pending, not authorized: a shallow transfer can
+      // still be reorganised away, and a merchant who ships against it has
+      // shipped against nothing.
+      return {
+        ok: true,
+        railRef: address,
+        status: 'pending',
+        amount: transfer.amount,
+        assetId: p.assetId,
+        at: this.now(),
+        raw: { address, txHash: transfer.txHash, confirmations: transfer.confirmations, required: this.minConfirmations },
+      };
+    }
+
+    if (transfer.amount < p.amount) {
+      // Underpayment is a real event, not an error: the buyer sent something,
+      // and it is now sitting at an address we control. Failing the payment is
+      // right — but the funds are not lost, they are at `address`, recorded in
+      // `raw`, and refundable to `transfer.from`.
+      return railFailure({
+        railRef: address,
+        amount: transfer.amount,
+        assetId: p.assetId,
+        failureCode: 'chain.underpaid',
+        failureReason: `Received ${formatAmount(transfer.amount)}, expected ${formatAmount(p.amount)}`,
+        at: this.now(),
+        raw: { address, txHash: transfer.txHash, from: transfer.from },
+      });
+    }
+
+    return {
+      ok: true,
+      railRef: address,
+      status: 'authorized',
+      // What the chain actually delivered, which may be MORE than asked. The
+      // core books what arrived; inventing a smaller number here would leave
+      // the difference stranded at an address nothing points at.
+      amount: transfer.amount,
+      assetId: p.assetId,
+      at: this.now(),
+      raw: { address, txHash: transfer.txHash, from: transfer.from, confirmations: transfer.confirmations },
+    };
+  }
+
+  async capture(ref: string): Promise<RailResult> {
+    this.lastContact = this.now();
+
+    // Derived from chain state, never from adapter memory — that is what makes
+    // this safe to re-run after a crash at any point.
+    let transfer: Awaited<ReturnType<CryptoChainPort['inboundTransfer']>>;
+    try {
+      transfer = await this.findTransfer(ref);
+    } catch (err) {
+      return railFailure({
+        railRef: ref,
+        amount: 0n,
+        assetId: '',
+        failureCode: 'chain.unavailable',
+        failureReason: err instanceof Error ? err.message : String(err),
+        at: this.now(),
+      });
+    }
+
+    if (!transfer) {
+      return railFailure({
+        railRef: ref,
+        amount: 0n,
+        assetId: '',
+        failureCode: 'rail.unknown_reference',
+        failureReason: `No confirmed transfer at ${ref}`,
+        at: this.now(),
+      });
+    }
+
+    if (transfer.confirmations < this.minConfirmations) {
+      return railFailure({
+        railRef: ref,
+        amount: transfer.amount,
+        assetId: transfer.assetId,
+        failureCode: 'chain.insufficient_confirmations',
+        failureReason: `${transfer.confirmations} confirmations, ${this.minConfirmations} required`,
+        at: this.now(),
+      });
+    }
+
+    return {
+      ok: true,
+      railRef: ref,
+      status: 'captured',
+      amount: transfer.amount,
+      assetId: transfer.assetId,
+      at: this.now(),
+      raw: { txHash: transfer.txHash, confirmations: transfer.confirmations },
+    };
+  }
+
+  async refund(ref: string, amount: Amount): Promise<RailResult> {
+    this.lastContact = this.now();
+
+    let transfer: Awaited<ReturnType<CryptoChainPort['inboundTransfer']>>;
+    try {
+      transfer = await this.findTransfer(ref);
+    } catch (err) {
+      return railFailure({
+        railRef: ref,
+        amount,
+        assetId: '',
+        failureCode: 'chain.unavailable',
+        failureReason: err instanceof Error ? err.message : String(err),
+        at: this.now(),
+      });
+    }
+
+    if (!transfer) {
+      return railFailure({
+        railRef: ref,
+        amount,
+        assetId: '',
+        failureCode: 'rail.unknown_reference',
+        failureReason: `No confirmed transfer at ${ref}`,
+        at: this.now(),
+      });
+    }
+
+    if (amount <= 0n) {
+      return railFailure({
+        railRef: ref,
+        amount,
+        assetId: transfer.assetId,
+        failureCode: 'refund.invalid_amount',
+        failureReason: 'Refund amount must be positive',
+        at: this.now(),
+      });
+    }
+
+    const already = this.refunded.get(ref) ?? 0n;
+    const refundable = transfer.amount - already;
+    if (amount > refundable) {
+      return railFailure({
+        railRef: ref,
+        amount,
+        assetId: transfer.assetId,
+        failureCode: 'refund.exceeds_captured',
+        failureReason: `Refundable balance is ${formatAmount(refundable)}, requested ${formatAmount(amount)}`,
+        at: this.now(),
+      });
+    }
+
+    // An on-chain refund is a new transfer back to the payer, and it is
+    // irreversible the moment it is broadcast. The sequence makes the
+    // idempotency key unique per refund — two identical partial refunds of one
+    // payment are two real refunds, not a retry of one.
+    const idempotencyKey = `pay.refund:${ref}:${++this.refundSequence}`;
+
+    try {
+      const { txHash } = await this.chain.send({
+        to: transfer.from,
+        assetId: transfer.assetId,
+        amount,
+        idempotencyKey,
+      });
+
+      this.refunded.set(ref, already + amount);
+
+      return {
+        ok: true,
+        railRef: ref,
+        status: 'refunded',
+        amount,
+        assetId: transfer.assetId,
+        at: this.now(),
+        raw: { txHash, to: transfer.from, refundedTotal: formatAmount(already + amount) },
+      };
+    } catch (err) {
+      // Nothing is stranded: the broadcast did not happen, the refunded total
+      // was not advanced, and the value is still in the merchant's clearing
+      // account where the core left it. The caller retries or gives up.
+      this.refundSequence--;
+      return railFailure({
+        railRef: ref,
+        amount,
+        assetId: transfer.assetId,
+        failureCode: 'chain.broadcast_failed',
+        failureReason: err instanceof Error ? err.message : String(err),
+        at: this.now(),
+      });
+    }
+  }
+
+  async payout(s: SettlementInstruction): Promise<RailResult> {
+    this.lastContact = this.now();
+
+    if (s.amount <= 0n) {
+      return railFailure({
+        railRef: '',
+        amount: s.amount,
+        assetId: s.assetId,
+        failureCode: 'payout.invalid_amount',
+        failureReason: 'Payout amount must be positive',
+        at: this.now(),
+      });
+    }
+
+    if (!s.destination.ref) {
+      return railFailure({
+        railRef: '',
+        amount: s.amount,
+        assetId: s.assetId,
+        failureCode: 'payout.no_destination',
+        failureReason: 'Settlement instruction carries no destination address',
+        at: this.now(),
+      });
+    }
+
+    try {
+      // Keyed on the settlement, so a retried payout returns the original
+      // broadcast. There is no undo on a chain.
+      const { txHash } = await this.chain.send({
+        to: s.destination.ref,
+        assetId: s.assetId,
+        amount: s.amount,
+        idempotencyKey: `pay.payout:${s.settlementId}`,
+      });
+
+      return {
+        ok: true,
+        railRef: txHash,
+        status: 'paid_out',
+        amount: s.amount,
+        assetId: s.assetId,
+        at: this.now(),
+        raw: { txHash, to: s.destination.ref, window: s.window },
+      };
+    } catch (err) {
+      return railFailure({
+        railRef: '',
+        amount: s.amount,
+        assetId: s.assetId,
+        failureCode: 'chain.broadcast_failed',
+        failureReason: err instanceof Error ? err.message : String(err),
+        at: this.now(),
+      });
+    }
+  }
+
+  verifyWebhook(req: RailWebhookRequest): RailEvent | null {
+    const ok = verifySignature({
+      body: req.body,
+      signature: req.headers['x-chain-signature'],
+      timestamp: req.headers['x-chain-timestamp'],
+      secret: this.options.secret,
+      toleranceSeconds: this.toleranceSeconds,
+      now: this.now(),
+    });
+    if (!ok) return null;
+
+    let body: unknown;
+    try {
+      body = JSON.parse(req.body);
+    } catch {
+      return null;
+    }
+
+    if (typeof body !== 'object' || body === null) return null;
+    const b = body as Record<string, unknown>;
+
+    const eventId = typeof b.id === 'string' ? b.id : null;
+    const railRef = typeof b.ref === 'string' ? b.ref : null;
+    const type = typeof b.type === 'string' ? b.type : null;
+    if (!eventId || !railRef || !type) return null;
+    if (!['authorized', 'captured', 'refunded', 'failed', 'payout.completed'].includes(type)) return null;
+
+    let amount: Amount | undefined;
+    if (typeof b.amount === 'string') {
+      try {
+        amount = parseAmount(b.amount);
+      } catch {
+        return null;
+      }
+    } else if (b.amount !== undefined) {
+      // A JSON number where money should be. Rejected outright rather than
+      // coerced — the whole reason money is a string on the wire.
+      return null;
+    }
+
+    const occurredAt = typeof b.occurredAt === 'string' ? new Date(b.occurredAt) : new Date();
+    if (Number.isNaN(occurredAt.getTime())) return null;
+
+    return {
+      railId: this.id,
+      eventId,
+      type: type as RailEvent['type'],
+      railRef,
+      amount,
+      assetId: typeof b.assetId === 'string' ? b.assetId : undefined,
+      occurredAt,
+      failureCode: typeof b.failureCode === 'string' ? b.failureCode : undefined,
+    };
+  }
+
+  /** Sign a watcher delivery — used by the conformance harness and by dev tooling. */
+  signWebhook(payload: Record<string, unknown>, at: Date = this.now()): RailWebhookRequest {
+    const body = JSON.stringify(payload);
+    const timestamp = Math.floor(at.getTime() / 1000).toString();
+    return {
+      headers: {
+        'x-chain-signature': signPayload(this.options.secret, timestamp, body),
+        'x-chain-timestamp': timestamp,
+      },
+      body,
+    };
+  }
+
+  // ── internals ──────────────────────────────────────────────────────────────
+
+  /**
+   * A rail reference for this adapter is an acceptance address. The chain says
+   * what landed there — including which asset — so nothing here has to infer
+   * the asset from the shape of a string.
+   */
+  private async findTransfer(address: string) {
+    if (!address) return null;
+    return this.chain.inboundTransfer(address);
+  }
+}

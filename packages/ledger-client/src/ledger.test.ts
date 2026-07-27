@@ -22,7 +22,7 @@ runLedgerConformance('MemoryLedger', async () => ({
 }));
 import { formatAmount, parseAmount as amt, sum } from './money.js';
 import { assertBalanced, assertPairedLocks } from './client.js';
-import { houseFees, userAvailable, userEscrow, userHold, userStake, railBoundary } from './accounts.js';
+import { houseFees, merchantClearing, userAvailable, userEscrow, userHold, userStake, railBoundary } from './accounts.js';
 import { InsufficientFundsError, InvalidEntryError, UnbalancedTransactionError } from './types.js';
 import { recipes } from './recipes/index.js';
 
@@ -445,6 +445,220 @@ describe('recipes — the money paths', () => {
 
     expect(await balanceOf(USER_A, 'IFC')).toBe('250');
     expect(ledger.totalsByAsset().IFC).toBe('0');
+  });
+
+  // ── Payments (§6.1) ────────────────────────────────────────────────────────
+
+  it('payment capture: value enters the book and waits in merchant clearing', async () => {
+    const tx = await ledger.post(
+      recipes.paymentCapture({
+        paymentId: 'pay-1',
+        merchantId: 'm-1',
+        assetId: 'USDT',
+        amount: amt('100'),
+        rail: 'card-sandbox',
+        railRef: 'ch_1',
+      }),
+    );
+
+    expect(tx.entries).toHaveLength(2);
+    expect(formatAmount((await ledger.balance(merchantClearing('m-1', 'USDT'))).amount)).toBe('100');
+    // The rail boundary is negative by exactly what we now owe the merchant.
+    expect(formatAmount((await ledger.balance(railBoundary('card-sandbox', 'USDT'))).amount)).toBe('-100');
+    expect(ledger.totalsByAsset().USDT).toBe('0');
+  });
+
+  it('payment capture is keyed on the payment — a redelivered webhook cannot double it', async () => {
+    const request = recipes.paymentCapture({
+      paymentId: 'pay-dup',
+      merchantId: 'm-1',
+      assetId: 'USDT',
+      amount: amt('100'),
+      rail: 'card-sandbox',
+      railRef: 'ch_dup',
+    });
+
+    const first = await ledger.post(request);
+    const second = await ledger.post(request);
+
+    expect(second.id).toBe(first.id);
+    expect(formatAmount((await ledger.balance(merchantClearing('m-1', 'USDT'))).amount)).toBe('100');
+  });
+
+  it('settlement: net to the merchant, fee to the house, clearing emptied', async () => {
+    await ledger.post(
+      recipes.paymentCapture({
+        paymentId: 'pay-2',
+        merchantId: 'm-2',
+        assetId: 'USDT',
+        amount: amt('1000'),
+        rail: 'crypto-native',
+        railRef: '0xabc',
+      }),
+    );
+
+    await ledger.post(
+      recipes.merchantSettlement({
+        merchantId: 'm-2',
+        merchantUserId: USER_B,
+        window: '2026-07-27',
+        assetId: 'USDT',
+        gross: amt('1000'),
+        fee: amt('25'),
+      }),
+    );
+
+    expect(await balanceOf(USER_B, 'USDT')).toBe('975');
+    expect(formatAmount((await ledger.balance(houseFees('pay', 'USDT'))).amount)).toBe('25');
+    expect(formatAmount((await ledger.balance(merchantClearing('m-2', 'USDT'))).amount)).toBe('0');
+    expect(ledger.totalsByAsset().USDT).toBe('0');
+  });
+
+  it('settlement refuses a fee that swallows the whole window', () => {
+    expect(() =>
+      recipes.merchantSettlement({
+        merchantId: 'm-3',
+        merchantUserId: USER_B,
+        window: 'w',
+        assetId: 'USDT',
+        gross: amt('100'),
+        fee: amt('100'),
+      }),
+    ).toThrow(InvalidEntryError);
+  });
+
+  it('settlement keys on the asset as well as the window — two currencies, two settlements', () => {
+    const usdt = recipes.merchantSettlement({
+      merchantId: 'm-4',
+      merchantUserId: USER_B,
+      window: '2026-07-27',
+      assetId: 'USDT',
+      gross: amt('100'),
+      fee: amt('1'),
+    });
+    const btc = recipes.merchantSettlement({
+      merchantId: 'm-4',
+      merchantUserId: USER_B,
+      window: '2026-07-27',
+      assetId: 'BTC',
+      gross: amt('1'),
+      fee: amt('0'),
+    });
+
+    expect(usdt.idempotencyKey).not.toBe(btc.idempotencyKey);
+  });
+
+  it('refund before settlement comes out of clearing, not the merchant', async () => {
+    await ledger.post(
+      recipes.paymentCapture({
+        paymentId: 'pay-3',
+        merchantId: 'm-5',
+        assetId: 'USDT',
+        amount: amt('100'),
+        rail: 'card-sandbox',
+        railRef: 'ch_3',
+      }),
+    );
+
+    await ledger.post(
+      recipes.paymentRefund({
+        refundId: 'pay-3:1',
+        paymentId: 'pay-3',
+        merchantId: 'm-5',
+        merchantUserId: USER_B,
+        assetId: 'USDT',
+        amount: amt('40'),
+        rail: 'card-sandbox',
+        source: 'clearing',
+      }),
+    );
+
+    expect(formatAmount((await ledger.balance(merchantClearing('m-5', 'USDT'))).amount)).toBe('60');
+    expect(formatAmount((await ledger.balance(railBoundary('card-sandbox', 'USDT'))).amount)).toBe('-60');
+    expect(ledger.totalsByAsset().USDT).toBe('0');
+  });
+
+  it('refund after settlement draws on the merchant, and fails when they cannot cover it', async () => {
+    await ledger.post(
+      recipes.paymentCapture({
+        paymentId: 'pay-4',
+        merchantId: 'm-6',
+        assetId: 'USDT',
+        amount: amt('100'),
+        rail: 'card-sandbox',
+        railRef: 'ch_4',
+      }),
+    );
+    await ledger.post(
+      recipes.merchantSettlement({
+        merchantId: 'm-6',
+        merchantUserId: USER_A,
+        window: 'w1',
+        assetId: 'USDT',
+        gross: amt('100'),
+        fee: amt('10'),
+      }),
+    );
+
+    // The merchant holds 90 net; a full 100 refund cannot be covered, and the
+    // ledger refuses rather than inventing the missing 10 from somewhere.
+    await expect(
+      ledger.post(
+        recipes.paymentRefund({
+          refundId: 'pay-4:1',
+          paymentId: 'pay-4',
+          merchantId: 'm-6',
+          merchantUserId: USER_A,
+          assetId: 'USDT',
+          amount: amt('100'),
+          rail: 'card-sandbox',
+          source: 'settled',
+        }),
+      ),
+    ).rejects.toThrow(InsufficientFundsError);
+
+    expect(await balanceOf(USER_A, 'USDT')).toBe('90');
+    expect(ledger.totalsByAsset().USDT).toBe('0');
+  });
+
+  it('a full payment lifecycle leaves no residue anywhere', async () => {
+    await ledger.post(
+      recipes.paymentCapture({
+        paymentId: 'pay-5',
+        merchantId: 'm-7',
+        assetId: 'USDT',
+        amount: amt('250.5'),
+        rail: 'crypto-native',
+        railRef: '0xdef',
+      }),
+    );
+    await ledger.post(
+      recipes.paymentRefund({
+        refundId: 'pay-5:1',
+        paymentId: 'pay-5',
+        merchantId: 'm-7',
+        merchantUserId: USER_B,
+        assetId: 'USDT',
+        amount: amt('50.5'),
+        rail: 'crypto-native',
+        source: 'clearing',
+      }),
+    );
+    await ledger.post(
+      recipes.merchantSettlement({
+        merchantId: 'm-7',
+        merchantUserId: USER_B,
+        window: '2026-07-28',
+        assetId: 'USDT',
+        gross: amt('200'),
+        fee: amt('5'),
+      }),
+    );
+
+    expect(formatAmount((await ledger.balance(merchantClearing('m-7', 'USDT'))).amount)).toBe('0');
+    expect(await balanceOf(USER_B, 'USDT')).toBe('195');
+    expect(ledger.totalsByAsset().USDT).toBe('0');
+    expect(ledger.reconcile()).toEqual({ ok: true });
   });
 });
 
