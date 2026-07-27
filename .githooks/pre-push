@@ -1,0 +1,41 @@
+#!/bin/sh
+#
+# Refuse a direct push to main.
+#
+# This is a SAFETY NET, not enforcement — `--no-verify` bypasses it, and it only
+# exists on machines that have run `pnpm install`. Real enforcement is GitHub
+# branch protection, which needs GitHub Pro on a private repo (see CONTRIBUTING.md
+# §1). Until that is enabled, this catches the accident, which is the realistic
+# failure mode with a small team: muscle memory, not malice.
+
+protected="main"
+remote_ref_prefix="refs/heads/"
+
+while read -r local_ref _local_sha remote_ref _remote_sha; do
+  branch="${remote_ref#$remote_ref_prefix}"
+
+  if [ "$branch" = "$protected" ]; then
+    # Pushing main is legitimate when it is a fast-forward of what you just
+    # pulled — e.g. an admin sync. It is never legitimate as a way to land work.
+    cat >&2 <<'MESSAGE'
+
+  ✖ Direct push to main refused.
+
+    main is always deployable and changes reach it through a reviewed PR
+    (CONTRIBUTING.md §1). Nothing here is urgent enough to skip that.
+
+    Instead:
+      pnpm wt feat/your-change      # worktree for the branch
+      cd ../intafaced-worktrees/feat-your-change
+      git push -u origin feat/your-change
+      gh pr create --fill
+
+    If you genuinely need to push main (initial import, protection repair):
+      git push --no-verify
+
+MESSAGE
+    exit 1
+  fi
+done
+
+exit 0
