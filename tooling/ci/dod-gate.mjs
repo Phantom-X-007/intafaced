@@ -80,14 +80,41 @@ function checkService(serviceDir) {
   for (const file of walk(srcDir, ['.ts'])) {
     if (file.includes('.test.')) continue;
     const content = readFileSync(file, 'utf8');
-    if (/@intafaced\/ledger-client|ledger\.post\(|recipes\./.test(content)) moneyFiles.push(file);
+    // A file MOVES value if it posts to the ledger or builds a recipe.
+    //
+    // Merely importing `@intafaced/ledger-client` is not enough — svc-matching
+    // imports it for `Amount`/`parseAmount` and posts nothing at all, so the
+    // old test flagged its router as an untested money path. Widening a gate
+    // until it cries wolf is how a gate gets ignored.
+    if (/ledger\.post\(|recipes\.[a-zA-Z]/.test(content)) moneyFiles.push(file);
   }
-  const testFiles = new Set([...walk(srcDir, ['.test.ts'])].map((f) => relative(ROOT, f)));
+  const testFiles = [...walk(srcDir, ['.test.ts'])];
+
   for (const file of moneyFiles) {
-    const expected = relative(ROOT, file.replace(/\.ts$/, '.test.ts'));
-    const anyTestNearby = [...testFiles].some((t) => t.startsWith(relative(ROOT, join(srcDir))));
-    if (!testFiles.has(expected) && !anyTestNearby) {
-      failures.push(`${relative(ROOT, file)} moves value but has no tests (§14: money paths ≥ 95% coverage)`);
+    const sibling = file.replace(/\.ts$/, '.test.ts');
+    const moduleName = basename(file, '.ts');
+
+    // A money file is covered by its own sibling test, or by a test in the same
+    // directory that actually imports it.
+    //
+    // This previously also accepted "any .test.ts anywhere under src/", which
+    // made the check a FALSE GREEN: a single unrelated test file satisfied it
+    // for every money path in the service. A gate that passes because some
+    // other file has a test is not a gate. Found by partner audit.
+    let covered = testFiles.includes(sibling);
+
+    if (!covered) {
+      covered = testFiles.some((t) => {
+        if (join(t, '..') !== join(file, '..')) return false;
+        return new RegExp(`from\\s+'\\.\\/${moduleName}\\.js'`).test(readFileSync(t, 'utf8'));
+      });
+    }
+
+    if (!covered) {
+      failures.push(
+        `${relative(ROOT, file)} moves value but no test in its directory imports it ` +
+          `(§14: money paths ≥ 95% coverage). Add ${basename(sibling)}, or import it from a sibling test.`,
+      );
     }
   }
 
