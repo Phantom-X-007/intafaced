@@ -47,14 +47,17 @@ Paste the block below into Telegram. Everything after it is context for whoever 
 
 ## Context for you (not for the paste)
 
-### What they need from you
+### Status
 
-1. **Collaborator invite** — you must run this with their handle:
-   ```bash
-   gh repo edit Phantom-X-007/intafaced --add-collaborator <their-handle>
-   ```
-2. **CODEOWNERS** — add their handle beside yours in `.github/CODEOWNERS` once they accept. A handle that doesn't exist, or a user without repo access, makes the line silently do nothing.
-3. **`.env`** — they generate their own; nothing in `.env.example` is a real secret. `JWT_ACCESS_SECRET` must be 32+ chars or the service refuses to boot.
+- **Collaborator:** `@ZenYoda3` invited with **write** permission. ✅
+- **CODEOWNERS:** both handles on every protected path. ✅
+- **`.env`:** they generate their own — nothing in `.env.example` is a real secret. `JWT_ACCESS_SECRET` must be 32+ chars or the service refuses to boot.
+
+> CODEOWNERS lines naming `@ZenYoda3` do nothing until the invitation is **accepted** — a pending invite does not grant write access, and GitHub silently ignores the entry rather than warning. Confirm once they're in:
+>
+> ```bash
+> gh api /repos/Phantom-X-007/intafaced/codeowners/errors
+> ```
 
 ### What to watch in their first week
 
