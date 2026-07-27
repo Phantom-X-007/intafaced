@@ -1,0 +1,733 @@
+import type { Sql } from 'postgres';
+import { transaction } from '@intafaced/db';
+import type { EventBus } from '@intafaced/events';
+import { formatAmount, type Amount } from '@intafaced/ledger-client';
+import { AgentError } from './errors.js';
+import { AuditLog, type ActionKind, type AuditedAction } from './fleet/audit.js';
+import {
+  evaluateCompletion,
+  evaluateToolCall,
+  parseGuardrail,
+  serialiseGuardrail,
+  type Guardrail,
+  type Refusal,
+  type SessionState,
+} from './fleet/guardrails.js';
+import { digestOfText, type ModelGateway } from './gateway/gateway.js';
+import type { RouteDef } from './gateway/routing.js';
+import { usageCost } from './metering/pricing.js';
+import type { SettlementResult, UsageMeter } from './metering/meter.js';
+import type { TokenUsage } from './providers/provider.js';
+import { withEngineSpan } from './tracing.js';
+
+/**
+ * THE FLEET RUNTIME (§8.2).
+ *
+ * This is the thing the agents run on. It is not an agent, and there are no
+ * agents in this service — Navigator, Support and Market Scanner are separate
+ * work that lands on top of these five methods:
+ *
+ *   openSession → think → act → settle → closeSession
+ *
+ * Every one of them writes to `agent_actions` before returning, including the
+ * ones that refuse. §8.2's Agentic Law is "every action → agent_actions table +
+ * user-visible log", and the word doing the work in that sentence is *every*:
+ * an agent that only logs what succeeded produces a record in which nothing
+ * ever went wrong.
+ *
+ * ── The order of operations, and why it is this order ───────────────────────
+ *
+ *   1. Resolve the route. A task with no route is a configuration fault, and it
+ *      is logged as a failed action rather than thrown quietly — otherwise the
+ *      session's log would show a gap where a user asked for something.
+ *   2. Evaluate the guardrail. BEFORE the engine or the tool is touched. A
+ *      refusal recorded after execution is a post-mortem, not a guardrail.
+ *   3. Execute.
+ *   4. Meter and audit in ONE transaction. A usage record without its action,
+ *      or an action without its usage, is a discrepancy nobody can resolve
+ *      afterwards — so they commit together or not at all.
+ *
+ * Step 4 is also why a provider failure cannot double-charge: nothing is
+ * metered until the provider has returned usage, and a failure never reaches
+ * step 4 at all.
+ */
+
+export interface AgentRuntimeOptions {
+  /** Asset metered usage is billed in. */
+  readonly feeAssetId: string;
+  /**
+   * Operator kill-switch for billing (§14 admin controls). When off, usage is
+   * still RECORDED — turning metering off must not also turn off the ability to
+   * find out what the fleet cost while it was off.
+   */
+  readonly meteringEnabled?: boolean;
+}
+
+export interface SessionRecord {
+  readonly id: string;
+  readonly userId: string;
+  readonly agentId: string;
+  readonly guardrail: Guardrail;
+  readonly guardrailVersion: number;
+  readonly status: 'open' | 'closed';
+  readonly metered: boolean;
+  readonly openedAt: Date;
+  readonly closedAt: Date | null;
+}
+
+/**
+ * A guardrail said no.
+ *
+ * Thrown, not returned, because every caller must stop — and it carries the
+ * audit row that was written, so a caller cannot claim the refusal went
+ * unrecorded.
+ */
+export class RefusedError extends AgentError {
+  constructor(
+    readonly refusal: Refusal,
+    readonly action: AuditedAction,
+  ) {
+    super(`Refused by guardrail: ${refusal.code}`, 'agents.refused', refusal.userMessageKey, refusal.userMessageParams);
+    this.name = 'RefusedError';
+  }
+}
+
+export interface ThinkInput {
+  readonly sessionId: string;
+  /**
+   * The caller's id for this completion.
+   *
+   * THE anti-double-bill handle. A caller that retries after a timeout must
+   * reuse it; a caller that genuinely wants a second completion must not.
+   */
+  readonly requestId: string;
+  readonly task: string;
+  readonly system?: string;
+  readonly messages: readonly { role: 'user' | 'assistant'; content: string }[];
+  readonly maxOutputTokens?: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface ThinkResult {
+  readonly text: string;
+  readonly usage: TokenUsage;
+  /** Derived cost of this call. The BILL is the window's, at settlement. */
+  readonly cost: Amount;
+  /** False when this request id had already been metered — a retry. */
+  readonly metered: boolean;
+  readonly windowId: string | null;
+  readonly route: RouteDef;
+  readonly action: AuditedAction;
+}
+
+export interface ActInput {
+  readonly sessionId: string;
+  readonly tool: string;
+  /** The user's explicit confirmation, for tools that require one. */
+  readonly approved?: boolean;
+  /** The tool itself. Called only after the guardrail has allowed it. */
+  readonly execute: () => Promise<unknown>;
+}
+
+export interface ActResult {
+  readonly result: unknown;
+  readonly action: AuditedAction;
+}
+
+interface SessionRow {
+  id: string;
+  user_id: string;
+  agent_id: string;
+  guardrail: unknown;
+  guardrail_version: number;
+  status: 'open' | 'closed';
+  metered: boolean;
+  opened_at: Date;
+  closed_at: Date | null;
+}
+
+export class AgentRuntime {
+  readonly audit: AuditLog;
+  private readonly feeAssetId: string;
+  private readonly meteringEnabled: boolean;
+
+  constructor(
+    private readonly sql: Sql,
+    private readonly gateway: ModelGateway,
+    private readonly meter: UsageMeter,
+    private readonly bus: EventBus,
+    options: AgentRuntimeOptions,
+  ) {
+    this.audit = new AuditLog(sql);
+    this.feeAssetId = options.feeAssetId;
+    this.meteringEnabled = options.meteringEnabled ?? true;
+  }
+
+  // ── Agent definitions ──────────────────────────────────────────────────────
+
+  /**
+   * Declare an agent's toolset and limits.
+   *
+   * Parsed and re-serialised rather than stored as given: `parseGuardrail`
+   * rejects contradictions (a tool in a module the agent may not act in), and a
+   * contradiction in a security policy resolves however the enforcement code
+   * happens to be ordered.
+   */
+  async registerAgent(input: unknown, options: { enabled?: boolean } = {}): Promise<Guardrail> {
+    const guardrail = parseGuardrail(input);
+    const body = serialiseGuardrail(guardrail);
+
+    await this.sql`
+      INSERT INTO agents.agent_definitions (agent_id, version, guardrail, enabled)
+      VALUES (${guardrail.agentId}, ${guardrail.version}, ${this.sql.json(body as never)}, ${options.enabled ?? true})
+      ON CONFLICT (agent_id) DO UPDATE
+        SET version = EXCLUDED.version,
+            guardrail = EXCLUDED.guardrail,
+            enabled = EXCLUDED.enabled,
+            updated_at = now()
+    `;
+
+    return guardrail;
+  }
+
+  async agentDefinition(agentId: string): Promise<{ guardrail: Guardrail; enabled: boolean } | null> {
+    const rows = await this.sql<Array<{ guardrail: unknown; enabled: boolean }>>`
+      SELECT guardrail, enabled FROM agents.agent_definitions WHERE agent_id = ${agentId}
+    `;
+    const row = rows[0];
+    return row ? { guardrail: parseGuardrail(row.guardrail), enabled: row.enabled } : null;
+  }
+
+  // ── Sessions ───────────────────────────────────────────────────────────────
+
+  /**
+   * Open a session and BIND the guardrail to it.
+   *
+   * The guardrail is copied onto the session row. Widening an agent's powers
+   * mid-session must not retroactively legitimise a call already made under
+   * narrower terms — the same reason `stakes.multiplier_bps` is snapshotted in
+   * svc-token.
+   */
+  async openSession(input: { userId: string; agentId: string; metered?: boolean }): Promise<SessionRecord> {
+    const definition = await this.agentDefinition(input.agentId);
+    if (!definition) {
+      throw new AgentError(`No agent "${input.agentId}" is registered`, 'agents.agent_not_found', 'agents.error.route_not_found', {
+        task: input.agentId,
+      });
+    }
+    if (!definition.enabled) {
+      throw new AgentError(`Agent "${input.agentId}" is disabled`, 'agents.agent_not_found', 'agents.error.engine_unavailable');
+    }
+
+    const guardrail = definition.guardrail;
+    const snapshot = serialiseGuardrail(guardrail);
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const rows = await tx<SessionRow[]>`
+          INSERT INTO agents.agent_sessions (user_id, agent_id, guardrail, guardrail_version, metered)
+          VALUES (
+            ${input.userId}, ${guardrail.agentId}, ${tx.json(snapshot as never)},
+            ${guardrail.version}, ${input.metered ?? true}
+          )
+          RETURNING *
+        `;
+
+        const session = toSession(rows[0]!);
+
+        await this.audit.append(tx, {
+          sessionId: session.id,
+          userId: session.userId,
+          agentId: session.agentId,
+          kind: 'session_open',
+          status: 'executed',
+          userMessageKey: 'agents.session.opened',
+          userMessageParams: { agent: session.agentId },
+        });
+
+        return session;
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  async closeSession(sessionId: string): Promise<SessionRecord> {
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const rows = await tx<SessionRow[]>`
+          SELECT * FROM agents.agent_sessions WHERE id = ${sessionId} FOR UPDATE
+        `;
+        const row = rows[0];
+        if (!row) throw new AgentError(`No session ${sessionId}`, 'agents.session_not_found', 'agents.refused.session_closed');
+
+        if (row.status === 'closed') return toSession(row);
+
+        const updated = await tx<SessionRow[]>`
+          UPDATE agents.agent_sessions SET status = 'closed', closed_at = now() WHERE id = ${sessionId} RETURNING *
+        `;
+
+        const steps = await tx<Array<{ count: string }>>`
+          SELECT count(*)::text AS count FROM agents.agent_actions
+           WHERE session_id = ${sessionId} AND kind NOT IN ('session_open', 'session_close', 'usage_settlement')
+        `;
+
+        await this.audit.append(tx, {
+          sessionId,
+          userId: row.user_id,
+          agentId: row.agent_id,
+          kind: 'session_close',
+          status: 'executed',
+          userMessageKey: 'agents.session.closed',
+          userMessageParams: { steps: Number(steps[0]?.count ?? 0) },
+        });
+
+        return toSession(updated[0]!);
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  async session(sessionId: string): Promise<SessionRecord | null> {
+    const rows = await this.sql<SessionRow[]>`SELECT * FROM agents.agent_sessions WHERE id = ${sessionId}`;
+    return rows[0] ? toSession(rows[0]) : null;
+  }
+
+  /**
+   * What the guardrail evaluator needs to know about a session's history.
+   *
+   * Bookkeeping kinds are excluded from `actionCount`: an agent's action budget
+   * should govern what the agent decided to do, not how many times the runtime
+   * wrote a boundary marker on its behalf.
+   */
+  async stateOf(session: SessionRecord): Promise<SessionState> {
+    const [counts, tools, spend] = await Promise.all([
+      this.sql<Array<{ count: string }>>`
+        SELECT count(*)::text AS count FROM agents.agent_actions
+         WHERE session_id = ${session.id} AND kind NOT IN ('session_open', 'session_close', 'usage_settlement')
+      `,
+      this.sql<Array<{ tool: string; count: string }>>`
+        SELECT tool, count(*)::text AS count FROM agents.agent_actions
+         WHERE session_id = ${session.id} AND kind = 'tool_call' AND status = 'executed' AND tool IS NOT NULL
+         GROUP BY tool
+      `,
+      this.meter.sessionSpend(session.id),
+    ]);
+
+    const toolCalls: Record<string, number> = {};
+    for (const row of tools) toolCalls[row.tool] = Number(row.count);
+
+    return {
+      status: session.status,
+      actionCount: Number(counts[0]?.count ?? 0),
+      toolCalls,
+      spend,
+      // Approval is per-call today: the surface presents the confirmation and
+      // passes `approved` on the request. A surface that remembers a
+      // session-scoped approval supplies it here instead.
+      approvedTools: [],
+    };
+  }
+
+  // ── Think: a metered engine call ───────────────────────────────────────────
+
+  async think(input: ThinkInput): Promise<ThinkResult> {
+    const session = await this.requireSession(input.sessionId);
+
+    return withEngineSpan(
+      'agents.runtime.think',
+      {
+        operation: 'think',
+        task: input.task,
+        sessionId: session.id,
+        agentId: session.agentId,
+        userId: session.userId,
+      },
+      async () => this.thinkInner(session, input),
+    );
+  }
+
+  private async thinkInner(session: SessionRecord, input: ThinkInput): Promise<ThinkResult> {
+    // 1 · Route. A missing route is logged as a failed action rather than
+    //     thrown silently — the user asked for something and the log must say so.
+    let route: RouteDef;
+    try {
+      route = this.gateway.routeFor(input.task);
+    } catch (err) {
+      await this.appendFailure(session, { kind: 'completion', task: input.task, error: err });
+      throw err;
+    }
+
+    const maxOutputTokens =
+      input.maxOutputTokens === undefined ? route.maxOutputTokens : Math.min(input.maxOutputTokens, route.maxOutputTokens);
+
+    // 2 · Guardrail, before anything is called.
+    const state = await this.stateOf(session);
+    const decision = evaluateCompletion(
+      session.guardrail,
+      state,
+      {
+        task: input.task,
+        maxOutputTokens,
+        worstCaseCost: usageCost(
+          { inputTokens: estimateInputTokens(input.system, input.messages), outputTokens: maxOutputTokens },
+          route.price,
+        ),
+      },
+      this.feeAssetId,
+    );
+
+    if (!decision.allowed) {
+      throw await this.appendRefusal(session, decision, { kind: 'completion', task: input.task });
+    }
+
+    // 3 · Execute.
+    let completion: Awaited<ReturnType<ModelGateway['complete']>>;
+    try {
+      completion = await this.gateway.complete(input.task, {
+        ...(input.system ? { system: input.system } : {}),
+        messages: input.messages,
+        maxOutputTokens,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+    } catch (err) {
+      // Nothing was metered: usage is only recorded from a provider's own
+      // reported counts, and there are none. A failed call cannot be billed,
+      // and cannot be double-billed.
+      await this.appendFailure(session, {
+        kind: 'completion',
+        task: input.task,
+        error: err,
+        providerId: route.providerId,
+        model: route.model,
+      });
+      throw err;
+    }
+
+    const usage = completion.result.usage;
+    const cost = usageCost(usage, route.price);
+    const shouldMeter = session.metered && this.meteringEnabled;
+
+    // 4 · Meter and audit together.
+    //
+    // If this transaction fails, the engine ran and we could not record it. The
+    // user is NOT billed — the house absorbs a call it cannot account for,
+    // which is the only acceptable direction for that error. The attempt is
+    // still logged, because §8.2 admits no gaps.
+    const committed = await transaction(
+      this.sql,
+      async (tx) => {
+        let recorded = false;
+        let window: string | null = null;
+
+        if (shouldMeter) {
+          const result = await this.meter.record(tx, {
+            sessionId: session.id,
+            requestId: input.requestId,
+            task: input.task,
+            providerId: completion.result.providerId,
+            model: route.model,
+            usage,
+            price: route.price,
+          });
+          recorded = result.recorded;
+          window = result.windowId;
+        }
+
+        const row = await this.audit.append(tx, {
+          sessionId: session.id,
+          userId: session.userId,
+          agentId: session.agentId,
+          kind: 'completion',
+          status: 'executed',
+          task: input.task,
+          providerId: completion.result.providerId,
+          model: route.model,
+          inputTokens: BigInt(usage.inputTokens),
+          outputTokens: BigInt(usage.outputTokens),
+          // A retried request id is logged — the engine really was called again —
+          // but carries zero cost, because zero is what it added to the bill.
+          cost: recorded ? cost : 0n,
+          userMessageKey: 'agents.action.completed',
+          userMessageParams: { task: input.task },
+          inputDigest: digestOfText(canonicalPrompt(input.system, input.messages)),
+          outputDigest: digestOfText(completion.result.text),
+        });
+
+        return { action: row, metered: recorded, windowId: window };
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    ).catch(async (err: unknown) => {
+      await this.appendFailure(session, {
+        kind: 'completion',
+        task: input.task,
+        error: err,
+        providerId: completion.result.providerId,
+        model: route.model,
+      });
+      throw err;
+    });
+
+    const { action, metered, windowId } = committed;
+
+    await this.publishCompleted(action, usage);
+
+    return { text: completion.result.text, usage, cost: metered ? cost : 0n, metered, windowId, route, action };
+  }
+
+  // ── Act: a guarded tool call ───────────────────────────────────────────────
+
+  /**
+   * Run a tool inside the session's guardrails.
+   *
+   * The guardrail is evaluated first and the tool is only reached if it passes.
+   * `execute` is supplied by the caller because the runtime does not own the
+   * tools — §8.2's fleet calls module APIs, and this service must not grow a
+   * dependency on every module in the platform to be able to police them.
+   */
+  async act(input: ActInput): Promise<ActResult> {
+    const session = await this.requireSession(input.sessionId);
+    const state = await this.stateOf(session);
+
+    const decision = evaluateToolCall(session.guardrail, state, {
+      tool: input.tool,
+      ...(input.approved === undefined ? {} : { approved: input.approved }),
+    });
+
+    if (!decision.allowed) {
+      throw await this.appendRefusal(session, decision, { kind: 'tool_call', tool: input.tool });
+    }
+
+    let result: unknown;
+    try {
+      result = await input.execute();
+    } catch (err) {
+      await this.appendFailure(session, { kind: 'tool_call', tool: input.tool, error: err });
+      throw err;
+    }
+
+    const action = await transaction(
+      this.sql,
+      async (tx) =>
+        this.audit.append(tx, {
+          sessionId: session.id,
+          userId: session.userId,
+          agentId: session.agentId,
+          kind: 'tool_call',
+          status: 'executed',
+          tool: input.tool,
+          userMessageKey: 'agents.action.executed',
+          userMessageParams: { tool: input.tool },
+          outputDigest: digestOfText(JSON.stringify(result ?? null)),
+        }),
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+
+    await this.publishCompleted(action, { inputTokens: 0, outputTokens: 0 });
+
+    return { result, action };
+  }
+
+  // ── Settle ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Bill a usage window.
+   *
+   * The audit row is appended in the same step that records the ledger
+   * transaction id, so a settlement that was posted but not yet recorded
+   * resumes to exactly one charge and exactly one log line.
+   */
+  async settleWindow(sessionId: string, windowId: string): Promise<SettlementResult> {
+    const session = await this.requireSession(sessionId, { allowClosed: true });
+    const result = await this.meter.settle({ sessionId, userId: session.userId, windowId });
+
+    // Only a settlement that actually happened is logged. A repeat call finds
+    // the window already sealed, posts nothing, and appends nothing — one
+    // charge, one log line, however many times the sweep runs.
+    if (result.settled) {
+      await transaction(
+        this.sql,
+        async (tx) =>
+          this.audit.append(tx, {
+            sessionId,
+            userId: session.userId,
+            agentId: session.agentId,
+            kind: 'usage_settlement',
+            status: 'executed',
+            cost: result.amount,
+            userMessageKey: result.amount > 0n ? 'agents.usage.settled' : 'agents.usage.free',
+            userMessageParams: result.amount > 0n ? { amount: formatAmount(result.amount), asset: this.feeAssetId } : {},
+          }),
+        { isolation: 'read committed', maxAttempts: 5 },
+      );
+
+      if (result.amount > 0n) {
+        await this.bus.publish(
+          'agentUsageSettled',
+          {
+            sessionId,
+            userId: session.userId,
+            windowId,
+            amount: formatAmount(result.amount),
+            assetId: this.feeAssetId,
+            chargeKey: result.chargeKey,
+          },
+          { idempotencyKey: result.chargeKey },
+        );
+      }
+    }
+
+    return result;
+  }
+
+  /** Settle every open window of a session. Used when a session closes. */
+  async settleSession(sessionId: string): Promise<SettlementResult[]> {
+    const windows = await this.meter.openWindows(sessionId);
+    const results: SettlementResult[] = [];
+    for (const windowId of windows) results.push(await this.settleWindow(sessionId, windowId));
+    return results;
+  }
+
+  // ── The user-visible log (§8.2) ────────────────────────────────────────────
+
+  async userLog(userId: string, limit = 100): Promise<AuditedAction[]> {
+    return this.audit.forUser(userId, limit);
+  }
+
+  async sessionLog(sessionId: string): Promise<AuditedAction[]> {
+    return this.audit.forSession(sessionId);
+  }
+
+  // ── Internals ──────────────────────────────────────────────────────────────
+
+  private async requireSession(sessionId: string, options: { allowClosed?: boolean } = {}): Promise<SessionRecord> {
+    const session = await this.session(sessionId);
+    if (!session) {
+      throw new AgentError(`No session ${sessionId}`, 'agents.session_not_found', 'agents.refused.session_closed');
+    }
+    if (session.status === 'closed' && !options.allowClosed) {
+      throw new AgentError(`Session ${sessionId} is closed`, 'agents.session_closed', 'agents.refused.session_closed');
+    }
+    return session;
+  }
+
+  private async appendRefusal(
+    session: SessionRecord,
+    refusal: Refusal,
+    context: { kind: ActionKind; tool?: string; task?: string },
+  ): Promise<RefusedError> {
+    const action = await transaction(
+      this.sql,
+      async (tx) =>
+        this.audit.append(tx, {
+          sessionId: session.id,
+          userId: session.userId,
+          agentId: session.agentId,
+          kind: context.kind,
+          status: 'refused',
+          tool: context.tool ?? null,
+          task: context.task ?? null,
+          refusalCode: refusal.code,
+          userMessageKey: refusal.userMessageKey,
+          userMessageParams: refusal.userMessageParams,
+        }),
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+
+    await this.bus.publish(
+      'agentActionRejected',
+      {
+        sessionId: session.id,
+        userId: session.userId,
+        agentId: session.agentId,
+        sequence: action.sequence,
+        refusalCode: refusal.code,
+        tool: action.tool,
+        task: action.task,
+      },
+      { idempotencyKey: `agents.action:${session.id}:${action.sequence}` },
+    );
+
+    return new RefusedError(refusal, action);
+  }
+
+  private async appendFailure(
+    session: SessionRecord,
+    context: { kind: ActionKind; tool?: string; task?: string; providerId?: string; model?: string; error: unknown },
+  ): Promise<AuditedAction> {
+    const key = context.error instanceof AgentError ? context.error.userMessageKey : ('agents.error.engine_unavailable' as const);
+    const params = context.error instanceof AgentError ? context.error.userMessageParams : {};
+
+    return transaction(
+      this.sql,
+      async (tx) =>
+        this.audit.append(tx, {
+          sessionId: session.id,
+          userId: session.userId,
+          agentId: session.agentId,
+          kind: context.kind,
+          status: 'failed',
+          tool: context.tool ?? null,
+          task: context.task ?? null,
+          providerId: context.providerId ?? null,
+          model: context.model ?? null,
+          userMessageKey: key,
+          userMessageParams: params,
+        }),
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  private async publishCompleted(action: AuditedAction, usage: TokenUsage): Promise<void> {
+    await this.bus.publish(
+      'agentActionCompleted',
+      {
+        sessionId: action.sessionId,
+        userId: action.userId,
+        agentId: action.agentId,
+        sequence: action.sequence,
+        kind: action.kind,
+        task: action.task,
+        tool: action.tool,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+      },
+      { idempotencyKey: `agents.action:${action.sessionId}:${action.sequence}` },
+    );
+  }
+}
+
+function toSession(row: SessionRow): SessionRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    agentId: row.agent_id,
+    guardrail: parseGuardrail(row.guardrail),
+    guardrailVersion: Number(row.guardrail_version),
+    status: row.status,
+    metered: row.metered,
+    openedAt: row.opened_at,
+    closedAt: row.closed_at,
+  };
+}
+
+/**
+ * A deliberately PESSIMISTIC input-token estimate, used only for the pre-flight
+ * spend check.
+ *
+ * The real counts always come from the provider. This exists because a spend
+ * ceiling has to be checked before the tokens are spent, and the only honest
+ * way to do that is to over-estimate: an estimate that ran low would let a call
+ * cross the limit it was checked against, which is the one failure mode a
+ * ceiling exists to prevent. Three characters per token is tighter than any
+ * real tokeniser, so the guardrail errs toward refusing.
+ */
+export function estimateInputTokens(system: string | undefined, messages: readonly { content: string }[]): number {
+  const chars = (system?.length ?? 0) + messages.reduce((acc, m) => acc + m.content.length, 0);
+  return Math.ceil(chars / 3);
+}
+
+function canonicalPrompt(system: string | undefined, messages: readonly { role: string; content: string }[]): string {
+  return JSON.stringify([system ?? null, messages.map((m) => [m.role, m.content])]);
+}

@@ -208,6 +208,71 @@ export const orderCancelled = defineEvent(
   'Order left the book — svc-trade releases the ledger hold.',
 );
 
+// ── agents (§8.2) ────────────────────────────────────────────────────────────
+
+/**
+ * Note what these payloads do NOT carry: no prompt, no completion text, no
+ * model identifier. Doctrine §0.7 keeps third-party system names out of
+ * anything that ships, and §10 keeps user content out of general stores — a
+ * durable event stream is both. Consumers get the routing task, the counts and
+ * the codes; anything more detailed is a query against `agent_actions` under
+ * the caller's own authorisation.
+ */
+export const agentActionCompleted = defineEvent(
+  'agents',
+  'action',
+  'completed',
+  1,
+  z.object({
+    sessionId: z.string().uuid(),
+    userId: userIdSchema,
+    agentId: z.string(),
+    sequence: z.number().int().min(0),
+    kind: z.enum(['session_open', 'session_close', 'completion', 'embedding', 'tool_call', 'usage_settlement']),
+    /** Routing task id — configuration, never a product name. */
+    task: z.string().nullable(),
+    tool: z.string().nullable(),
+    inputTokens: z.number().int().min(0),
+    outputTokens: z.number().int().min(0),
+  }),
+  'An agent did something on a user’s behalf. The public half of the Agentic Law (§8.2).',
+);
+
+export const agentActionRejected = defineEvent(
+  'agents',
+  'action',
+  'rejected',
+  1,
+  z.object({
+    sessionId: z.string().uuid(),
+    userId: userIdSchema,
+    agentId: z.string(),
+    sequence: z.number().int().min(0),
+    /** Guardrail code, e.g. 'agents.tool_not_declared'. */
+    refusalCode: z.string(),
+    tool: z.string().nullable(),
+    task: z.string().nullable(),
+  }),
+  'A guardrail refused an action before it ran. Compliance consumes this; so does the user’s own log.',
+);
+
+export const agentUsageSettled = defineEvent(
+  'agents',
+  'usage',
+  'settled',
+  1,
+  z.object({
+    sessionId: z.string().uuid(),
+    userId: userIdSchema,
+    windowId: z.string(),
+    amount: amountSchema,
+    assetId: assetIdSchema,
+    /** The ledger idempotency key — the reconciliation handle. */
+    chargeKey: z.string(),
+  }),
+  'A metered usage window was billed through the ledger (§8.2 premium agent tiers).',
+);
+
 // ── The registry ─────────────────────────────────────────────────────────────
 
 export const EVENT_CATALOG = {
@@ -222,6 +287,9 @@ export const EVENT_CATALOG = {
   orderAccepted,
   orderFilled,
   orderCancelled,
+  agentActionCompleted,
+  agentActionRejected,
+  agentUsageSettled,
 } as const;
 
 export type EventCatalog = typeof EVENT_CATALOG;
