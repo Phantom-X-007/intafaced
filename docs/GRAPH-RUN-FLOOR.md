@@ -17,12 +17,12 @@
 
 ## Open product work (not graph research)
 
-| Item | State |
-| ---- | ----- |
-| **P0-1** mount routers | Open — gate to anything live |
-| **P0-3** purpose-keyed holds | Deferred; Nitro decision card |
-| **P0-2** trade order store SoT | Accepted ADR (practice already in #31) |
-| Phase 2 claims | e.g. convert / terminal / venue — via tracker when claimed |
+| Item                           | State                                                      |
+| ------------------------------ | ---------------------------------------------------------- |
+| **P0-1** mount routers         | Open — gate to anything live                               |
+| **P0-3** purpose-keyed holds   | Deferred; Nitro decision card                              |
+| **P0-2** trade order store SoT | Accepted ADR (practice already in #31)                     |
+| Phase 2 claims                 | e.g. convert / terminal / venue — via tracker when claimed |
 
 Decision card: [`decisions/P0-3-purpose-keyed-holds.md`](decisions/P0-3-purpose-keyed-holds.md)  
 ADR: [`adr/2026-07-27-trade-order-store-source-of-truth.md`](adr/2026-07-27-trade-order-store-source-of-truth.md)
@@ -31,11 +31,11 @@ ADR: [`adr/2026-07-27-trade-order-store-source-of-truth.md`](adr/2026-07-27-trad
 
 ## Law vs research
 
-| Kind | Where | Treat as |
-| ---- | ----- | -------- |
-| **Law** | `INTAFACED_DEFINITIVE_BUILD.md`, `AGENTS.md`, `tooling/agent-protocol/AGENT_PROTOCOL.md`, accepted ADRs | Binding |
-| **Orientation** | `docs/START-HERE.md`, this file, `docs/STATUS-2026-07-27.md` | Current floor |
-| **Research / graph engineering** | Other chat + any research drafts **outside** this floor set | Do not merge into law docs from this PR; do not claim code status from research notes |
+| Kind                             | Where                                                                                                   | Treat as                                                                              |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **Law**                          | `INTAFACED_DEFINITIVE_BUILD.md`, `AGENTS.md`, `tooling/agent-protocol/AGENT_PROTOCOL.md`, accepted ADRs | Binding                                                                               |
+| **Orientation**                  | `docs/START-HERE.md`, this file, `docs/STATUS-2026-07-27.md`                                            | Current floor                                                                         |
+| **Research / graph engineering** | Other chat + any research drafts **outside** this floor set                                             | Do not merge into law docs from this PR; do not claim code status from research notes |
 
 This floor PR does **not** expand graph research. It only clears false main-state so the other chat does not build on poison.
 
@@ -51,9 +51,9 @@ This floor PR does **not** expand graph research. It only clears false main-stat
 
 ## Parallel work already claimed
 
-| Track | Claim |
-| ----- | ----- |
-| **This floor** | STATUS + ADR P0-2 + P0-3 decision + START-HERE “where we are” + this file |
+| Track                     | Claim                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **This floor**            | STATUS + ADR P0-2 + P0-3 decision + START-HERE “where we are” + this file                                    |
 | **Ledger test isolation** | [PR #42](https://github.com/Phantom-X-007/intafaced/pull/42) — unique schema / `createTestDb` for svc-ledger |
 
 Do not open a second “refresh STATUS after merge” docs PR unless main tip or open-PR reality changes again.

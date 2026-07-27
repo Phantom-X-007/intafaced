@@ -35,11 +35,11 @@ Rough effort: about a day of focused work after design is locked.
 
 ## What you are deciding
 
-| Option | Meaning |
-| ------ | ------- |
-| **A — Approve Denon’s proposal** | Build purpose-keyed holds as described. Timing: after P0-1 mount design is known, **before any deployment**. |
-| **B — Change the proposal** | You want a different shape (e.g. separate account kinds instead of `purpose`). Say what you want in chat; engineering revises. |
-| **C — Keep deferring** | Leave as-is until after routers are mounted and you’ve seen a running surface. Accept that deploy is still blocked until this (or an equivalent) lands. |
+| Option                           | Meaning                                                                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — Approve Denon’s proposal** | Build purpose-keyed holds as described. Timing: after P0-1 mount design is known, **before any deployment**.                                            |
+| **B — Change the proposal**      | You want a different shape (e.g. separate account kinds instead of `purpose`). Say what you want in chat; engineering revises.                          |
+| **C — Keep deferring**           | Leave as-is until after routers are mounted and you’ve seen a running surface. Accept that deploy is still blocked until this (or an equivalent) lands. |
 
 ---
 
@@ -57,9 +57,9 @@ Risk if you skip forever: first real money paths can cross-consume holds. Risk i
 
 ## Your decision (check one)
 
-- [ ] **A** — Approve Denon’s proposal; build after P0-1 design is known, before deploy  
-- [ ] **B** — Change the proposal (comment below or in chat)  
-- [ ] **C** — Keep deferring until after mount; no hold work yet  
+- [ ] **A** — Approve Denon’s proposal; build after P0-1 design is known, before deploy
+- [ ] **B** — Change the proposal (comment below or in chat)
+- [ ] **C** — Keep deferring until after mount; no hold work yet
 
 **Date decided:** _______________  
 **Notes:**

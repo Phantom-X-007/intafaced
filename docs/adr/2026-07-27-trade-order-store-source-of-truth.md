@@ -1,10 +1,10 @@
 # ADR: Trade order store is source of truth for fills
 
-| Field | Value |
-| ----- | ----- |
-| **Status** | Accepted |
-| **Date** | 2026-07-27 |
-| **Closes** | P0-2 (`order.filled` → `tradeFill` shape gap) |
+| Field       | Value                                                              |
+| ----------- | ------------------------------------------------------------------ |
+| **Status**  | Accepted                                                           |
+| **Date**    | 2026-07-27                                                         |
+| **Closes**  | P0-2 (`order.filled` → `tradeFill` shape gap)                      |
 | **Related** | svc-matching events · svc-trade · `packages/ledger-client` recipes |
 
 ---
