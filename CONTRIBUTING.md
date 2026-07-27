@@ -21,7 +21,26 @@ main ─────●──────●──────●─────
 - `main` is **always deployable**. If `main` is red, that is the only thing anyone works on.
 - Every change is a **short-lived branch → PR → merge**. No exceptions, including for "tiny" changes.
 - **No long-lived branches.** A branch older than ~2 days is a merge conflict waiting to happen. Split the work instead.
-- **No direct pushes to `main`.** Branch protection enforces this; it is not a matter of discipline.
+- **No direct pushes to `main`.**
+
+### How "no direct pushes" is actually enforced
+
+Honestly: **partially**, and you should know exactly where the gap is.
+
+GitHub's branch protection and rulesets both require a paid plan on a private repository. We are on Free, so `main` has no server-side protection. What we have instead:
+
+| Layer                              | Enforces                                | Bypassable          |
+| ---------------------------------- | --------------------------------------- | ------------------- |
+| `.githooks/pre-push`               | blocks `git push` to `main`             | yes — `--no-verify` |
+| Squash-only + auto-delete branches | clean history                           | no (server-side)    |
+| CI on every PR                     | build, typecheck, tests, doctrine gates | no (server-side)    |
+| Us reviewing each other            | everything that matters                 | —                   |
+
+The hook is installed automatically by `pnpm install` (`core.hooksPath`), and it applies in worktrees too. It catches the realistic failure — muscle memory, a stray `git push` in the wrong terminal — which between two people who have agreed to this workflow is essentially the whole risk.
+
+What it does **not** do is make merging conditional on CI passing. CI still _runs_ on every PR and still _reports_; nobody is stopped from clicking merge on a red one. So: **don't.** Check the checks.
+
+> If we later want this enforced properly, GitHub Pro is $4/month and turns on branch protection, required status checks, and required approvals. Worth it the day a third person joins; not worth it for two people who read each other's PRs.
 
 ### Branch names
 
@@ -121,8 +140,10 @@ Every PR runs, and all of it must be green to merge:
 Run the same thing locally before pushing — it is faster than waiting for CI:
 
 ```bash
-pnpm build && pnpm typecheck && pnpm test && pnpm gate
+pnpm verify    # build · typecheck · test · DoD gate
 ```
+
+Because merging is not _blocked_ on CI (see §1), reading the checks before you approve is a real responsibility rather than a formality. A green tick you did not look at is the same as no CI at all.
 
 **If `main` goes red, fixing it is the highest priority work in the repo.** Not "after this PR". Now.
 
