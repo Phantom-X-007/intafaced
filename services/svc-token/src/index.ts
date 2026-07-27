@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { TokenService } from './token-service.js';
@@ -12,7 +13,7 @@ import { createTokenRouter, type TokenRouter } from './router.js';
 /**
  * svc-token — the native economy (§4.3).
  *
- * Graph W1-C: mount tRPC for edge callers; keep /internal/stake for S2S hot path.
+ * Graph W1-C: mount tRPC with edge-signed principal; keep /internal/stake for S2S.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -44,6 +45,8 @@ const token = new TokenService(sql, ledger, bus, {
 export const appRouter = createTokenRouter(token);
 export type AppRouter = typeof appRouter;
 
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
@@ -58,22 +61,12 @@ await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
     router: appRouter,
-    createContext: ({ req }) => ({
-      principal: (req.headers['x-intafaced-principal']
-        ? JSON.parse(String(req.headers['x-intafaced-principal']))
-        : null) as never,
-      region: String(req.headers['x-intafaced-region'] ?? 'XX'),
-      requestId: String(req.id),
-      ...(req.headers.traceparent ? { traceparent: String(req.headers.traceparent) } : {}),
-    }),
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
   } satisfies FastifyTRPCPluginOptions<TokenRouter>['trpcOptions'],
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info(
-  { port: env.HTTP_PORT, asset: env.TOKEN_ASSET_ID, emissionsEnabled: env.EMISSIONS_ENABLED, trpc: true },
-  'svc-token ready',
-);
+app.log.info({ port: env.HTTP_PORT, asset: env.TOKEN_ASSET_ID, emissionsEnabled: env.EMISSIONS_ENABLED, trpc: true }, 'svc-token ready');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {

@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
@@ -11,8 +12,7 @@ import { createIdentityRouter, type IdentityRouter } from './router.js';
 /**
  * svc-identity — one account, one verification, one rank (§4.1).
  *
- * Graph W1-C: mount tRPC like svc-agents. Edge terminates auth and forwards
- * `x-intafaced-principal`; this process never parses a user JWT for router calls.
+ * Graph W1-C: mount tRPC; verify edge-signed principal (mount-boundary #48).
  */
 
 if (env.APP_ENV === 'prod') await assertArgon2Available();
@@ -49,6 +49,8 @@ const auth = new AuthService(sql, bus, rank, {
 export const appRouter = createIdentityRouter(auth, rank, { registrationOpen: env.REGISTRATION_OPEN });
 export type AppRouter = typeof appRouter;
 
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
@@ -56,8 +58,7 @@ app.get('/ready', async () => ({ ready: true, argon2: await argon2Available() })
 
 /**
  * Service-to-service rank perks (svc-trade reads at order accept).
- * Plain GET keeps the existing client contract and fails closed if the ladder
- * cannot be loaded — see createRankPerksClient in svc-trade.
+ * Not edge-principal: internal network only; no scopes to elevate.
  */
 app.get<{ Params: { userId: string } }>('/internal/rank/:userId/perks', async (req) => {
   return rank.perks(req.params.userId);
@@ -67,14 +68,7 @@ await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
     router: appRouter,
-    createContext: ({ req }) => ({
-      principal: (req.headers['x-intafaced-principal']
-        ? JSON.parse(String(req.headers['x-intafaced-principal']))
-        : null) as never,
-      region: String(req.headers['x-intafaced-region'] ?? 'XX'),
-      requestId: String(req.id),
-      ...(req.headers.traceparent ? { traceparent: String(req.headers.traceparent) } : {}),
-    }),
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
   } satisfies FastifyTRPCPluginOptions<IdentityRouter>['trpcOptions'],
 });
 

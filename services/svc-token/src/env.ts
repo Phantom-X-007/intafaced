@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
-const schema = serviceEnvSchema.merge(
+// Self-mounts /trpc — must authenticate the edge principal.
+const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
   z.object({
     SERVICE_NAME: z.string().default('svc-token'),
     HTTP_PORT: z.coerce.number().int().default(4003),
