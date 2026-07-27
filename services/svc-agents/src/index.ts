@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { ModelGateway } from './gateway/gateway.js';
@@ -91,6 +92,10 @@ const runtime = new AgentRuntime(sql, gateway, meter, bus, {
 
 const appRouter = createAgentsRouter({ runtime, gateway, meter, feeAssetId: env.AGENTS_FEE_ASSET_ID });
 
+// Built before the listener opens: a service that cannot authenticate the edge
+// must fail to start, not start and serve every request as anonymous.
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
@@ -107,14 +112,11 @@ await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
     router: appRouter,
-    createContext: ({ req }) => ({
-      // The edge terminates auth and forwards the resolved principal; this
-      // service never parses a token itself (§4.1 owns that).
-      principal: (req.headers['x-intafaced-principal'] ? JSON.parse(String(req.headers['x-intafaced-principal'])) : null) as never,
-      region: String(req.headers['x-intafaced-region'] ?? 'XX'),
-      requestId: String(req.id),
-      ...(req.headers.traceparent ? { traceparent: String(req.headers.traceparent) } : {}),
-    }),
+    // The edge terminates auth and forwards the resolved principal; this
+    // service never parses a token itself (§4.1 owns that). It does verify the
+    // edge's signature over that principal — see packages/contracts/src/edge.ts
+    // for why an unsigned header makes every scope check decorative.
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
   } satisfies FastifyTRPCPluginOptions<AgentsRouter>['trpcOptions'],
 });
 

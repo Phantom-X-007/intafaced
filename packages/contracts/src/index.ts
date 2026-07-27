@@ -5,6 +5,7 @@
  * A change here is reviewed on its own, before either side implements it.
  */
 export * from './trpc.js';
+export * from './edge.js';
 export * from './identity.js';
 export * from './blueprint.js';
 export * from './example-router.js';
