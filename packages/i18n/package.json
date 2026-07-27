@@ -1,5 +1,5 @@
 {
-  "name": "@intafaced/config",
+  "name": "@intafaced/i18n",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,32 +10,32 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./env": {
-      "types": "./dist/env.d.ts",
-      "default": "./dist/env.js"
+    "./catalog": {
+      "types": "./dist/catalog.d.ts",
+      "default": "./dist/catalog.js"
     },
-    "./flags": {
-      "types": "./dist/flags.d.ts",
-      "default": "./dist/flags.js"
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "default": "./dist/format.js"
     },
-    "./jurisdiction": {
-      "types": "./dist/jurisdiction.d.ts",
-      "default": "./dist/jurisdiction.js"
+    "./locales": {
+      "types": "./dist/locales.d.ts",
+      "default": "./dist/locales.js"
     },
-    "./fiat": {
-      "types": "./dist/fiat.d.ts",
-      "default": "./dist/fiat.js"
+    "./t": {
+      "types": "./dist/t.d.ts",
+      "default": "./dist/t.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
-    "zod": "^3.24.1"
+    "@intafaced/config": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

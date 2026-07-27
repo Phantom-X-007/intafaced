@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**22 of 103 shipped (21%)** · 0 in progress · 21 ready to claim · 60 blocked · 8 deliberate §13 sockets
+**23 of 103 shipped (22%)** · 0 in progress · 20 ready to claim · 60 blocked · 8 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -25,7 +25,6 @@ pnpm wt feat/<the-thing>
 
 | Feature | Module | Phase | id |
 |---|---|---|---|
-| 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | WebAuthn registration + assertion (§9) | `identity` | 1 | `identity.webauthn` |
 | Proposals + IFC-weighted voting (§4.3) | `token` | 1 | `token.governance` |
 | Spot markets, order lifecycle, fees | `trade` | 2 | `trade.spot` |
@@ -66,7 +65,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 ## Everything, by phase
 
-### Phase 0 — Foundations (10/11)
+### Phase 0 — Foundations ✅
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -80,7 +79,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Design tokens + console primitives | F |  | `infra.ui-tokens` |
 | ✅ | brand-scan, custody-scan, migration-check, DoD gate | F |  | `infra.gates` |
 | ✅ | Worktree tooling + GitHub Flow | F |  | `infra.worktrees` |
-| 🟢 | 100+ languages — keyed from day one (§9) | F |  | `infra.i18n` |
+| ✅ | 100+ languages — keyed from day one (§9) | F |  | `infra.i18n` |
 
 ### Phase 1 — THE CORE (10/12)
 

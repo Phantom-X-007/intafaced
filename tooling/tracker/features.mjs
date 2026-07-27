@@ -59,7 +59,13 @@ export const FEATURES = [
   f('infra.ui-tokens', 'Design tokens + console primitives', { module: 'core-ops', phase: '0', status: 'done', requires: ['packages/ui'] }),
   f('infra.gates', 'brand-scan, custody-scan, migration-check, DoD gate', { module: 'core-ops', phase: '0', status: 'done', requires: ['tooling/ci'] }),
   f('infra.worktrees', 'Worktree tooling + GitHub Flow', { module: 'core-ops', phase: '0', status: 'done' }),
-  f('infra.i18n', '100+ languages — keyed from day one (§9)', { module: 'core-ops', phase: '0', status: 'ready', dependsOn: ['infra.ui-tokens'] }),
+  f('infra.i18n', '100+ languages — keyed from day one (§9)', {
+    module: 'core-ops',
+    phase: '0',
+    status: 'done',
+    requires: ['packages/i18n'],
+    dependsOn: ['infra.ui-tokens'],
+  }),
 
   // ── PHASE 1 · THE CORE ───────────────────────────────────────────────────
   f('ledger.double-entry', 'Double-entry ledger, hash chain, reconciliation', { module: 'ledger', phase: '1', status: 'done', requires: ['services/svc-ledger'] }),

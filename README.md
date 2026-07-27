@@ -10,13 +10,12 @@
 
 <!-- tracker:start -->
 
-`████░░░░░░░░░░░░░░░░` **21%** — 22 of 103 features shipped
+`████░░░░░░░░░░░░░░░░` **22%** — 23 of 103 features shipped
 
-Phases: **0** 10/11 · **1** 10/12 · **2** 2/16 · **3** 0/15 · **3P** 0/7 · **4** 0/5 · **4P** 0/3 · **5** 0/32 · **5P** 0/2
+Phases: **0** ✅ · **1** 10/12 · **2** 2/16 · **3** 0/15 · **3P** 0/7 · **4** 0/5 · **4P** 0/3 · **5** 0/32 · **5P** 0/2
 
-**🟢 21 ready to claim** — nothing blocks these:
+**🟢 20 ready to claim** — nothing blocks these:
 
-- `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `identity.webauthn` — WebAuthn registration + assertion (§9)
 - `token.governance` — Proposals + IFC-weighted voting (§4.3)
 - `trade.spot` — Spot markets, order lifecycle, fees
@@ -24,7 +23,8 @@ Phases: **0** 10/11 · **1** 10/12 · **2** 2/16 · **3** 0/15 · **3P** 0/7 · 
 - `ws.gateway` — WebSocket fan-out: depth, trades, orders, positions
 - `pay.gateway` — Branded gateway, hosted checkout, payment links
 - `p2p.offers` — Offers, maker/taker, 100+ fiat currencies
-- …and 13 more
+- `protocol.smart-accounts` — Passkey smart accounts, session keys (§17.4)
+- …and 12 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
