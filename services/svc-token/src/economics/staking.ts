@@ -12,6 +12,10 @@
  * Two consumers, §4.3: other services call `token.stakeOf(userId)` to "gate launchpad
  * allocations, OTC access, premium lobbies, vendor slots" (`accessTierFor`), and the
  * `feeCharge` recipe checks the "published decay schedule" (`feeDiscountBps`).
+ *
+ * The access ladder is code; the fee-discount ladder is NOT. §4.3 puts the latter in
+ * `token_params.fee_discount_schedule` and hands parameter control to governance, so this
+ * file only seeds and validates it — see `DEFAULT_FEE_DISCOUNT_SCHEDULE`.
  */
 
 import { type Amount, ZERO, mulBps, parseAmount } from '@intafaced/ledger-client';
@@ -147,17 +151,49 @@ export interface FeeDiscountStep {
 }
 
 /**
- * §4.3: "`feeCharge` recipe checks payer's IFC balance + published decay schedule → discount
- * applied". Published means this table — the schedule is a parameter of the economy, not a
- * branch buried in the fee recipe.
+ * Which quantity the ladder is keyed on.
+ *
+ * KNOWN DIVERGENCE, deliberately not resolved here: §4.3 says the discount keys on the
+ * payer's IFC *balance*; this module and the seeded row both key on *staked* amount, which is
+ * a different number for the same user. Picking one re-prices every discount in the economy,
+ * so it is a governance decision and not a refactor. It is modelled as data so the
+ * disagreement is visible rather than implicit, and the parser refuses a basis this code does
+ * not implement instead of quietly applying a balance ladder to a stake.
  */
-export const FEE_DISCOUNT_SCHEDULE: readonly FeeDiscountStep[] = [
-  { minStake: parseAmount('0'), discountBps: 0 },
-  { minStake: parseAmount('1000'), discountBps: 500 },
-  { minStake: parseAmount('10000'), discountBps: 1_000 },
-  { minStake: parseAmount('100000'), discountBps: 2_000 },
-  { minStake: parseAmount('1000000'), discountBps: 3_500 },
-];
+export type FeeDiscountBasis = 'staked' | 'balance';
+
+/** `token_params.fee_discount_schedule` (§4.3), parsed. Same shape as the jsonb column. */
+export interface FeeDiscountSchedule {
+  readonly basis: FeeDiscountBasis;
+  readonly tiers: readonly FeeDiscountStep[];
+}
+
+/**
+ * §4.3: "`feeCharge` recipe checks payer's IFC balance + published decay schedule → discount
+ * applied". Published means `token_params.fee_discount_schedule` — a governed row
+ * (`proposal_kind = 'fee_param'`), which is the entire reason §4.3 makes it a jsonb column
+ * and not a constant. **THIS TABLE IS THE SEED FOR THAT COLUMN AND NOTHING ELSE.**
+ *
+ * It is not the authority and must not be read as one. A constant cannot be changed by
+ * governance without a redeploy, so a service that answered from here would charge a discount
+ * the database does not hold. Pass the loaded schedule to `feeDiscountBps`; the default
+ * argument is for pure unit maths and for seeding, never for the request path.
+ *
+ * These numbers are the ones in `drizzle/0000_token_init.sql`, and `economics.test.ts` fails
+ * if the two ever drift apart again. They had: every non-zero step disagreed with the seeded
+ * row, and no test could see it because the tests read their expectations back out of this
+ * array.
+ */
+export const DEFAULT_FEE_DISCOUNT_SCHEDULE: FeeDiscountSchedule = {
+  basis: 'staked',
+  tiers: [
+    { minStake: parseAmount('0'), discountBps: 0 },
+    { minStake: parseAmount('1000'), discountBps: 1_000 },
+    { minStake: parseAmount('10000'), discountBps: 2_000 },
+    { minStake: parseAmount('100000'), discountBps: 3_500 },
+    { minStake: parseAmount('1000000'), discountBps: 5_000 },
+  ],
+};
 
 /**
  * Policy ceiling on any fee discount.
@@ -170,12 +206,82 @@ export const FEE_DISCOUNT_SCHEDULE: readonly FeeDiscountStep[] = [
  */
 export const MAX_FEE_DISCOUNT_BPS = 5_000;
 
-/** Fee discount for a stake, in bps off the gross fee. Monotonically non-decreasing in stake, and always < 10000. */
-export function feeDiscountBps(stakedAmount: Amount): number {
+/**
+ * Parse `token_params.fee_discount_schedule` into money-safe values.
+ *
+ * The column is jsonb, so it is whatever governance last wrote — untrusted input on a money
+ * path, and the only place the running schedule is validated. Every rule below rejects rather
+ * than repairs: a schedule that is quietly "fixed" at load is a schedule nobody can audit
+ * against the row, which is the class of bug this function exists to end.
+ *
+ * `minStake` arrives as a decimal string and leaves as a scaled bigint via `parseAmount` —
+ * a threshold is money, and money is never a `number` (doctrine, `money.ts`). A JSON number
+ * is rejected outright because `1000000000000000000000` does not survive a JSON parse intact.
+ */
+export function parseFeeDiscountSchedule(raw: unknown): FeeDiscountSchedule {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new RangeError('fee_discount_schedule must be a JSON object of { basis, tiers }');
+  }
+
+  const { basis, tiers } = raw as { basis?: unknown; tiers?: unknown };
+
+  // Only the staked basis is implemented. See FeeDiscountBasis: §4.3 says balance, the code
+  // says stake, and loading a balance-keyed ladder into stake-keyed maths would silently
+  // hand out the wrong discount rather than fail.
+  if (basis !== 'staked') {
+    throw new RangeError(`fee_discount_schedule basis "${String(basis)}" is not implemented — only "staked" is (§4.3 divergence)`);
+  }
+  if (!Array.isArray(tiers) || tiers.length === 0) throw new RangeError('fee_discount_schedule.tiers must be a non-empty array');
+
+  const parsed: FeeDiscountStep[] = tiers.map((tier, i) => {
+    if (typeof tier !== 'object' || tier === null) throw new RangeError(`fee_discount_schedule.tiers[${i}] must be an object`);
+    const { minStake, discountBps } = tier as { minStake?: unknown; discountBps?: unknown };
+
+    if (typeof minStake !== 'string') {
+      throw new RangeError(`fee_discount_schedule.tiers[${i}].minStake must be a decimal string, not a JSON number`);
+    }
+    const threshold = parseAmount(minStake);
+    if (threshold < ZERO) throw new RangeError(`fee_discount_schedule.tiers[${i}].minStake must not be negative`);
+
+    if (typeof discountBps !== 'number' || !Number.isInteger(discountBps) || discountBps < 0) {
+      throw new RangeError(`fee_discount_schedule.tiers[${i}].discountBps must be a non-negative integer`);
+    }
+    // Rejected, not clamped. A clamp would let a row that says 9000 behave as 5000 forever
+    // while reading as 9000 to whoever audits the table.
+    if (discountBps > MAX_FEE_DISCOUNT_BPS) {
+      throw new RangeError(
+        `fee_discount_schedule.tiers[${i}].discountBps ${discountBps} exceeds the policy ceiling ${MAX_FEE_DISCOUNT_BPS}`,
+      );
+    }
+
+    return { minStake: threshold, discountBps };
+  });
+
+  // Without a zero-threshold step a user who has never staked resolves to nothing, and every
+  // caller would have to handle a null discount. Same guarantee ACCESS_TIERS makes.
+  if (!parsed.some((step) => step.minStake === ZERO)) {
+    throw new RangeError('fee_discount_schedule must contain a step with minStake "0"');
+  }
+
+  return { basis, tiers: parsed };
+}
+
+/**
+ * Fee discount for a stake, in bps off the gross fee. Monotonically non-decreasing in stake,
+ * and always < 10000.
+ *
+ * `schedule` is the row loaded from `token_params`. The default is the seed, and passing
+ * nothing on a request path means answering from code that governance cannot reach — see
+ * `DEFAULT_FEE_DISCOUNT_SCHEDULE`.
+ *
+ * Takes the maximum matching step rather than the last one, so an unsorted row cannot produce
+ * a discount that falls as stake rises.
+ */
+export function feeDiscountBps(stakedAmount: Amount, schedule: FeeDiscountSchedule = DEFAULT_FEE_DISCOUNT_SCHEDULE): number {
   if (stakedAmount < ZERO) throw new RangeError('Staked amount must not be negative');
 
   let discount = 0;
-  for (const step of FEE_DISCOUNT_SCHEDULE) {
+  for (const step of schedule.tiers) {
     if (stakedAmount >= step.minStake && step.discountBps > discount) discount = step.discountBps;
   }
   return Math.min(discount, MAX_FEE_DISCOUNT_BPS);
