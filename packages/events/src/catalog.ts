@@ -261,6 +261,74 @@ export const orderCancelled = defineEvent(
   'Order left the book — svc-trade releases the ledger hold.',
 );
 
+// ── protocol (§17.4 · Protocol Plane, non-custodial) ─────────────────────────
+//
+// Every event below is an OBSERVATION of chain state, not a record of something
+// the platform did. Note what none of them carry: no balance, no key material,
+// no amount that moved. The Protocol Plane holds nothing, so there is nothing
+// of the user's for these payloads to describe (§16.9, §22).
+
+const evmAddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address');
+const bytes32Schema = z.string().regex(/^0x[0-9a-fA-F]{64}$/, 'must be 32 bytes of hex');
+/** Wei — an integer decimal string. Never a number; 2^53 wei is 0.009 ETH. */
+const weiSchema = z.string().regex(/^\d+$/, 'wei must be a non-negative integer string');
+
+export const protocolAccountCreated = defineEvent(
+  'protocol',
+  'account',
+  'created',
+  1,
+  z.object({
+    chainId: z.number().int().positive(),
+    account: evmAddressSchema,
+    /** The user's key. The only key with power over this account. */
+    owner: evmAddressSchema,
+    userSalt: bytes32Schema,
+    txHash: bytes32Schema,
+    /** Absent for an account never linked to an INTAFACED profile — which is allowed. */
+    userId: userIdSchema.optional(),
+  }),
+  'A self-custody smart account was deployed. The platform holds no key to it (§17.4).',
+);
+
+export const protocolSessionKeyCreated = defineEvent(
+  'protocol',
+  'session_key',
+  'created',
+  1,
+  z.object({
+    chainId: z.number().int().positive(),
+    account: evmAddressSchema,
+    sessionKey: evmAddressSchema,
+    /** keccak256 of the full scope — the commitment the account stores. */
+    specHash: bytes32Schema,
+    validAfter: z.number().int().min(0),
+    validUntil: z.number().int().positive(),
+    /** A CAP on native value, in wei. Not an amount that moved. */
+    spendLimitWei: weiSchema,
+    targets: z.array(evmAddressSchema).min(1),
+    selectors: z.array(z.string().regex(/^0x[0-9a-fA-F]{8}$/)).min(1),
+    txHash: bytes32Schema,
+  }),
+  'The account owner granted a scoped, expiring session key. Never carries transfer power (§16.10).',
+);
+
+export const protocolSessionKeyCancelled = defineEvent(
+  'protocol',
+  'session_key',
+  'cancelled',
+  1,
+  z.object({
+    chainId: z.number().int().positive(),
+    account: evmAddressSchema,
+    sessionKey: evmAddressSchema,
+    /** The owner, or the session key retiring itself. Nobody else can. */
+    revokedBy: evmAddressSchema,
+    txHash: bytes32Schema,
+  }),
+  'A session key was revoked on chain. Consumers stop routing agent execution through it.',
+);
+
 // ── agents (§8.2) ────────────────────────────────────────────────────────────
 
 /**
@@ -473,6 +541,9 @@ export const EVENT_CATALOG = {
   orderAccepted,
   orderFilled,
   orderCancelled,
+  protocolAccountCreated,
+  protocolSessionKeyCreated,
+  protocolSessionKeyCancelled,
   agentActionCompleted,
   agentActionRejected,
   agentUsageSettled,

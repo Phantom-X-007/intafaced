@@ -202,6 +202,15 @@ export const FEATURES = [
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.mpc-custody', 'MPC custody for self-custody wallets', { module: 'protocol', phase: '5P', plane: 'P', status: 'socket', dependsOn: ['protocol.smart-accounts'] }),
   f('socket.ledger-sharding', 'Per-asset hash chains with cross-shard anchor', { module: 'ledger', phase: '5', status: 'socket', dependsOn: ['ledger.double-entry'] }),
+
+  // §13 sockets opened by protocol.smart-accounts. The contracts exist and are
+  // reviewed; nothing compiles or runs them yet, and nothing in contracts/ may
+  // reach a chain holding real value until the first two of these are closed.
+  f('socket.contract-toolchain', 'Foundry + contract test suite in CI', { module: 'protocol', phase: '3P', plane: 'P', status: 'socket', dependsOn: ['protocol.smart-accounts'], note: 'Solidity is written and cross-checked from TypeScript, but never executed. Blocks any mainnet deploy.' }),
+  f('socket.contract-audit', 'External audit of the account + factory suite', { module: 'protocol', phase: '3P', plane: 'P', status: 'socket', dependsOn: ['socket.contract-toolchain'] }),
+  f('socket.userop-differential-test', 'getUserOperationHash checked against a live EntryPoint', { module: 'protocol', phase: '3P', plane: 'P', status: 'socket', dependsOn: ['socket.contract-toolchain'] }),
+  f('socket.p256-verifier', 'Passkey (P-256) owner verifier contract', { module: 'protocol', phase: '3P', plane: 'P', status: 'socket', dependsOn: ['protocol.smart-accounts'], note: 'SmartAccount already routes contract owners through ERC-1271; the verifier itself is not built.' }),
+  f('socket.social-recovery', 'Guardian-based account recovery', { module: 'protocol', phase: '5P', plane: 'P', status: 'socket', dependsOn: ['protocol.smart-accounts'], note: 'Deliberately absent: a guardian is a second party who can take the account, and the platform must never be one.' }),
 ];
 
 export const PHASE_ORDER = ['0', '1', '2', '3', '3P', '4', '4P', '5', '5P'];

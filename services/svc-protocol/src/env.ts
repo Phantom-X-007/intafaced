@@ -1,0 +1,48 @@
+import { z } from 'zod';
+import { loadEnv, serviceEnvSchema } from '@intafaced/config';
+
+const evmAddress = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address');
+
+/**
+ * Environment for svc-protocol.
+ *
+ * Note what this service does NOT need, and must never acquire:
+ *   · no signing key of any kind. There is no `PRIVATE_KEY` here, because there
+ *     is no transaction this service is entitled to originate on a user's
+ *     account (§16.10)
+ *   · no ledger connection. This plane posts nothing
+ *
+ * If a future change adds a private key to this file, that change is either
+ * wrong or belongs in svc-bridge, which is custodial by design (§17.3).
+ */
+const schema = serviceEnvSchema.merge(
+  z.object({
+    SERVICE_NAME: z.string().default('svc-protocol'),
+    HTTP_PORT: z.coerce.number().int().default(4004),
+
+    /** The EVM chain the contract suite is deployed to (§17.2 P0: proven rails). */
+    PROTOCOL_CHAIN_ID: z.coerce.number().int().positive().default(31337),
+    PROTOCOL_RPC_URL: z.string().url().default('http://localhost:8545'),
+
+    /** ERC-4337 v0.7 EntryPoint singleton. A public contract; we do not own it. */
+    PROTOCOL_ENTRYPOINT_ADDRESS: evmAddress.default('0x0000000071727De22E5E9d8BAf0edAc6f37da032'),
+    PROTOCOL_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
+    PROTOCOL_IMPLEMENTATION_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
+
+    /**
+     * Public ERC-4337 bundler. Optional: without it the service still builds
+     * and verifies operations, and the user submits them. A missing bundler
+     * degrades convenience, never access — that is what permissionless means.
+     */
+    PROTOCOL_BUNDLER_URL: z.string().url().optional(),
+
+    /** Kill-switch mirror for `protocol.smartAccounts` (§14 admin controls). */
+    PROTOCOL_RELAY_ENABLED: z
+      .union([z.boolean(), z.string()])
+      .default(true)
+      .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+  }),
+);
+
+export const env = loadEnv(schema);
+export type Env = typeof env;
