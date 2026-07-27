@@ -34,6 +34,12 @@ jobs:
       - name: Migration check (§14)
         run: pnpm db:check
 
+      # A tracker that drifts from the code is worse than no tracker. This
+      # fails if docs/TRACKER.md is stale, or if a feature claims "done" while
+      # the service it lives in does not exist.
+      - name: Tracker is honest
+        run: pnpm tracker:check
+
   build:
     name: Typecheck & build
     runs-on: ubuntu-latest

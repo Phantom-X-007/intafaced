@@ -23,6 +23,8 @@
     "wt": "node tooling/scripts/worktree.mjs create",
     "wt:list": "node tooling/scripts/worktree.mjs list",
     "wt:rm": "node tooling/scripts/worktree.mjs remove",
+    "tracker": "node tooling/scripts/tracker.mjs",
+    "tracker:check": "node tooling/scripts/tracker.mjs --check",
     "verify": "turbo run build typecheck test && node tooling/ci/dod-gate.mjs",
     "gate": "node tooling/ci/dod-gate.mjs",
     "scan:brand": "node tooling/ci/brand-scan.mjs",
