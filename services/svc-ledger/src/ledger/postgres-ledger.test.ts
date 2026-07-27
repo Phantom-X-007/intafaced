@@ -114,9 +114,9 @@ if (!available) {
     it('rejects a duplicate idempotency key at the unique index', async () => {
       const key = `dupe-test-${Date.now()}`;
       await db.sql`INSERT INTO ledger_tx (idempotency_key, module, reason, hash) VALUES (${key}, 't', 't', 'a')`;
-      await expect(
-        db.sql`INSERT INTO ledger_tx (idempotency_key, module, reason, hash) VALUES (${key}, 't', 't', 'b')`,
-      ).rejects.toThrow(/ledger_tx_idempotency_idx/);
+      await expect(db.sql`INSERT INTO ledger_tx (idempotency_key, module, reason, hash) VALUES (${key}, 't', 't', 'b')`).rejects.toThrow(
+        /ledger_tx_idempotency_idx/,
+      );
     });
 
     it('preserves full 18-decimal precision through a round trip', async () => {

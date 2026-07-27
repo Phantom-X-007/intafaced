@@ -85,9 +85,7 @@ export function rewriteSchemaSql(sql: string, fromSchema: string, toSchema: stri
     throw new Error(`Unsafe schema rewrite: ${fromSchema} → ${toSchema}`);
   }
   // Quoted identifiers first, then bare schema. prefixes (not inside other words).
-  return sql
-    .replaceAll(`"${fromSchema}"`, `"${toSchema}"`)
-    .replace(new RegExp(`\\b${fromSchema}\\.`, 'g'), `${toSchema}.`);
+  return sql.replaceAll(`"${fromSchema}"`, `"${toSchema}"`).replace(new RegExp(`\\b${fromSchema}\\.`, 'g'), `${toSchema}.`);
 }
 
 /** True when a live Postgres is reachable — lets suites skip rather than fail. */
