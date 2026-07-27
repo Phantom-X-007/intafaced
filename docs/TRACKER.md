@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**23 of 103 shipped (22%)** · 0 in progress · 20 ready to claim · 60 blocked · 8 deliberate §13 sockets
+**23 of 103 shipped (22%)** · 0 in progress · 20 ready to claim · 60 blocked · 13 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -52,7 +52,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
-| **20** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
+| **25** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
 | **16** | Spot markets, order lifecycle, fees | 🟢 ready | `trade.spot` |
 | **13** | Branded gateway, hosted checkout, payment links | 🟢 ready | `pay.gateway` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
@@ -150,6 +150,10 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | Sovereign router — book vs pool best execution | P | `protocol.amm` | `protocol.router` |
 | ⛔ | Lane A merchant contracts — zero KYB (§24) | P | `protocol.smart-accounts` | `protocol.merchant` |
 | ⛔ | Chain → Postgres read models | P | `protocol.smart-accounts` | `indexer.readmodels` |
+| 🔌 | Foundry + contract test suite in CI <br/>_Solidity is written and cross-checked from TypeScript, but never executed. Blocks any mainnet deploy._ | P |  | `socket.contract-toolchain` |
+| 🔌 | External audit of the account + factory suite | P |  | `socket.contract-audit` |
+| 🔌 | getUserOperationHash checked against a live EntryPoint | P |  | `socket.userop-differential-test` |
+| 🔌 | Passkey (P-256) owner verifier contract <br/>_SmartAccount already routes contract owners through ERC-1271; the verifier itself is not built._ | P |  | `socket.p256-verifier` |
 
 ### Phase 4 — Blueprint (0/5)
 
@@ -220,6 +224,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | Validator set opening, published schedule | P | `chain.mainnet` | `chain.validators` |
 | ⛔ | Governance parameter handover | P | `chain.validators`, `token.governance` | `chain.governance` |
 | 🔌 | MPC custody for self-custody wallets | P |  | `socket.mpc-custody` |
+| 🔌 | Guardian-based account recovery <br/>_Deliberately absent: a guardian is a second party who can take the account, and the platform must never be one._ | P |  | `socket.social-recovery` |
 
 ---
 
