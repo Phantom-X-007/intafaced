@@ -149,9 +149,34 @@ export interface AccessDecision {
   readonly reason: string;
 }
 
-function ruleFor(module: ModuleId, region: RegionCode): JurisdictionRule {
+/**
+ * The effective rule for a module in a region — the per-region override if one
+ * exists, otherwise the default.
+ *
+ * Exported because any surface that wants the *rule* (status + minTier) rather
+ * than a yes/no decision would otherwise recompose
+ * `entry.modules?.[m] ?? DEFAULT_MODULE_RULES[m]` itself, duplicating this
+ * lookup outside the file that owns it. That duplicate is what drifts.
+ */
+export function ruleFor(module: ModuleId, region: RegionCode): JurisdictionRule {
   const entry = BY_REGION.get(region.toUpperCase());
   return entry?.modules?.[module] ?? DEFAULT_MODULE_RULES[module];
+}
+
+/** Is this region blocked outright, whatever the module? */
+export function isRegionBlocked(region: RegionCode): boolean {
+  return BY_REGION.get(region.toUpperCase())?.blocked === true;
+}
+
+/**
+ * Regions whose matrix entry lacks counsel sign-off.
+ *
+ * These cannot become launch markets — `assertReviewed` refuses them. Surfacing
+ * the list is what lets the admin console show the gap rather than an operator
+ * discovering it at launch.
+ */
+export function unreviewedRegions(): RegionCode[] {
+  return JURISDICTION_MATRIX.filter((e) => !e.reviewedBy || !e.reviewedAt).map((e) => e.region);
 }
 
 /**

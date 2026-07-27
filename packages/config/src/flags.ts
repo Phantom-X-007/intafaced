@@ -15,7 +15,34 @@ import type { ModuleId } from './modules.js';
 export const DROPS = ['0', 'I', 'II', 'III', 'IV', 'V'] as const;
 export type Drop = (typeof DROPS)[number];
 
-const DROP_ORDER: Readonly<Record<Drop, number>> = { '0': 0, I: 1, II: 2, III: 3, IV: 4, V: 5 };
+/**
+ * Exported, because comparing two drops is something callers legitimately need
+ * and the obvious workaround is a trap: `'0' | 'I' | 'II' | 'III' | 'IV' | 'V'`
+ * happens to sort correctly lexicographically, right up until someone adds
+ * drop 'VI' — which sorts before 'V'.
+ */
+export const DROP_ORDER: Readonly<Record<Drop, number>> = { '0': 0, I: 1, II: 2, III: 3, IV: 4, V: 5 };
+
+/** Negative when `a` comes first. Use this rather than comparing the strings. */
+export function compareDrops(a: Drop, b: Drop): number {
+  return DROP_ORDER[a] - DROP_ORDER[b];
+}
+
+/**
+ * The §11 launch-sequence names.
+ *
+ * They live here rather than only in the build doc so the admin console and the
+ * doctrine cannot drift — an operator staring at "III" needs to know that is
+ * Soft launch.
+ */
+export const DROP_NAMES: Readonly<Record<Drop, string>> = {
+  '0': 'Tease',
+  I: 'Blueprint',
+  II: 'Lobby preview',
+  III: 'Soft launch',
+  IV: 'Public drop',
+  V: 'Seasons',
+};
 
 export interface FlagDef {
   readonly key: string;
@@ -88,6 +115,15 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   def('bridge.enabled', 'bridge', null, 'Fiat ↔ Protocol plane bridge'),
   def('launch.rwa', 'launch', null, 'RWA issuance (licence-gated, §13)'),
   def('agents.premiumTiers', 'agents', null, 'Metered premium agent tiers'),
+
+  // Every module needs at least one flag, because §14's DoD requires a
+  // kill-switch and the gate checks for exactly that. `market` and `indexer`
+  // had none — meaning both services would have shipped with a Definition of
+  // Done that could never pass. Found by the admin console, which surfaced
+  // "modules with no kill-switch" as a panel.
+  def('market.listings', 'market', null, 'Vendor marketplace open for listings and purchases'),
+  def('market.vendorApplications', 'market', null, 'Accepting new vendor applications'),
+  def('indexer.ingest', 'indexer', null, 'Chain → Postgres read-model ingestion'),
 ];
 
 export const FLAG_KEYS = FLAG_REGISTRY.map((f) => f.key);
@@ -104,9 +140,13 @@ export interface FlagContext {
   readonly env?: Record<string, string | undefined>;
 }
 
+/** `waitlist.enabled` → `INTAFACED_FLAG_WAITLIST_ENABLED`. */
+export function envVarNameFor(key: string): string {
+  return `INTAFACED_FLAG_${key.replace(/[.-]/g, '_').toUpperCase()}`;
+}
+
 function envOverride(key: string, env: Record<string, string | undefined>): boolean | undefined {
-  // waitlist.enabled -> INTAFACED_FLAG_WAITLIST_ENABLED
-  const name = `INTAFACED_FLAG_${key.replace(/[.-]/g, '_').toUpperCase()}`;
+  const name = envVarNameFor(key);
   const raw = env[name];
   if (raw === undefined) return undefined;
   return ['1', 'true', 'on', 'yes'].includes(raw.toLowerCase());
@@ -145,6 +185,89 @@ export function resolveAll(ctx: FlagContext): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   for (const f of FLAG_REGISTRY) out[f.key] = isEnabled(f.key, ctx);
   return out;
+}
+
+/** Why a flag is in the state it is in. Ordered by the precedence in `isEnabled`. */
+export type FlagSource =
+  /** A module kill-switch is holding it off. Beats everything. */
+  | 'kill-switch'
+  /** An explicit override was passed in — admin console, test, per-env config. */
+  | 'override'
+  /** An INTAFACED_FLAG_* environment variable pinned it. */
+  | 'env'
+  /** The drop clock reached it. */
+  | 'drop'
+  /** Its drop has not arrived yet. */
+  | 'drop-pending'
+  /** `drop: null` — gated by build phase or licensing, never by the clock. */
+  | 'phase-gated';
+
+export interface FlagExplanation {
+  readonly key: string;
+  readonly enabled: boolean;
+  readonly source: FlagSource;
+  /** One sentence an operator can act on. */
+  readonly reason: string;
+  readonly module: ModuleId;
+  readonly drop: Drop | null;
+}
+
+/**
+ * Why is this flag on or off?
+ *
+ * `isEnabled` answers *whether*; an operator staring at a board of booleans
+ * needs *why*. Without provenance you cannot tell whether a flag is on because
+ * the drop clock reached it, because an env var pins it, or off because a
+ * module kill-switch is holding it — and an operator who cannot see that flips
+ * the wrong switch.
+ *
+ * Deliberately mirrors `isEnabled`'s precedence exactly. If the two ever
+ * disagree, `isEnabled` is authoritative and this is the bug — there is a test
+ * asserting they agree across every flag and a spread of contexts.
+ */
+export function explain(key: string, ctx: FlagContext): FlagExplanation {
+  const flag = BY_KEY.get(key);
+  if (!flag) throw new UnknownFlagError(key);
+
+  const base = { key, module: flag.module, drop: flag.drop };
+
+  if (ctx.disabledModules?.includes(flag.module)) {
+    return { ...base, enabled: false, source: 'kill-switch', reason: `module "${flag.module}" is killed by the operator` };
+  }
+
+  const explicit = ctx.overrides?.[key];
+  if (explicit !== undefined) {
+    return { ...base, enabled: explicit, source: 'override', reason: `explicitly overridden ${explicit ? 'on' : 'off'}` };
+  }
+
+  const fromEnv = envOverride(key, ctx.env ?? {});
+  if (fromEnv !== undefined) {
+    return {
+      ...base,
+      enabled: fromEnv,
+      source: 'env',
+      reason: `pinned ${fromEnv ? 'on' : 'off'} by ${envVarNameFor(key)}`,
+    };
+  }
+
+  if (flag.drop === null) {
+    return { ...base, enabled: false, source: 'phase-gated', reason: 'gated by build phase, not by the drop clock (§13)' };
+  }
+
+  const reached = DROP_ORDER[ctx.drop] >= DROP_ORDER[flag.drop];
+  return reached
+    ? { ...base, enabled: true, source: 'drop', reason: `drop ${flag.drop} (${DROP_NAMES[flag.drop]}) has been reached` }
+    : { ...base, enabled: false, source: 'drop-pending', reason: `waiting for drop ${flag.drop} (${DROP_NAMES[flag.drop]})` };
+}
+
+export function explainAll(ctx: FlagContext): FlagExplanation[] {
+  return FLAG_REGISTRY.map((f) => explain(f.key, ctx));
+}
+
+/** Modules with no flag at all — nothing for an operator to switch off (§14). */
+export function modulesWithoutKillSwitch(allModules: readonly ModuleId[]): ModuleId[] {
+  const covered = new Set(FLAG_REGISTRY.map((f) => f.module));
+  return allModules.filter((m) => !covered.has(m));
 }
 
 export function flagsForModule(module: ModuleId): FlagDef[] {
