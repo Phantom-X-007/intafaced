@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**23 of 103 shipped (22%)** · 0 in progress · 20 ready to claim · 60 blocked · 8 deliberate §13 sockets
+**24 of 103 shipped (23%)** · 0 in progress · 29 ready to claim · 50 blocked · 8 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -27,7 +27,15 @@ pnpm wt feat/<the-thing>
 |---|---|---|---|
 | WebAuthn registration + assertion (§9) | `identity` | 1 | `identity.webauthn` |
 | Proposals + IFC-weighted voting (§4.3) | `token` | 1 | `token.governance` |
-| Spot markets, order lifecycle, fees | `trade` | 2 | `trade.spot` |
+| One-tap Convert — the retail on-ramp | `trade` | 2 | `trade.convert` |
+| Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
+| OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
+| Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
+| TWAP / VWAP / POV execution | `trade` | 2 | `trade.algo` |
+| CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
+| Internal market-maker seeding books at launch | `trade` | 2 | `trade.mm-bot` |
+| External venue adapters via CCXT (cross-venue) | `trade` | 2 | `venue.aggregation` |
+| Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
 | apps/web scaffold on the design system | `core-ops` | 2 | `web.shell` |
 | WebSocket fan-out: depth, trades, orders, positions | `trade` | 2 | `ws.gateway` |
 | Branded gateway, hosted checkout, payment links | `pay` | 3 | `pay.gateway` |
@@ -37,6 +45,7 @@ pnpm wt feat/<the-thing>
 | Multi-currency account UX over the ledger | `bank` | 5 | `bank.accounts` |
 | Model-agnostic gateway, per-user metering | `agents` | 5 | `agents.gateway` |
 | Live lobbies, LiveKit SFU, capacity tiers | `academy` | 5 | `academy.lobbies` |
+| Paper-trading market flag for workbooks | `academy` | 5 | `academy.paper-trading` |
 | Vendor lifecycle — apply, vet, list, stake-gated slots | `market` | 5 | `market.vendors` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
 | Support desk, tickets, KB | `core-ops` | 5 | `ops.support` |
@@ -53,13 +62,13 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
 | **20** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
-| **16** | Spot markets, order lifecycle, fees | 🟢 ready | `trade.spot` |
 | **13** | Branded gateway, hosted checkout, payment links | 🟢 ready | `pay.gateway` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
 | **6** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
 | **6** | Live lobbies, LiveKit SFU, capacity tiers | 🟢 ready | `academy.lobbies` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **5** | Multi-currency account UX over the ledger | 🟢 ready | `bank.accounts` |
+| **5** | Model-agnostic gateway, per-user metering | 🟢 ready | `agents.gateway` |
 
 ---
 
@@ -98,24 +107,24 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Buyback & burn split | F |  | `token.buyback` |
 | 🟢 | Proposals + IFC-weighted voting (§4.3) | F |  | `token.governance` |
 
-### Phase 2 — Trade (2/16)
+### Phase 2 — Trade (3/16)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
 | ✅ | Orderbook + matching engine, journal, replay | F |  | `matching.engine` |
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
-| 🟢 | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
-| ⛔ | One-tap Convert — the retail on-ramp | F | `trade.spot` | `trade.convert` |
-| ⛔ | Perps: cross/isolated margin, funding, liquidation ladder | F | `trade.spot` | `trade.futures` |
+| ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
+| 🟢 | One-tap Convert — the retail on-ramp | F |  | `trade.convert` |
+| 🟢 | Perps: cross/isolated margin, funding, liquidation ladder | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
-| ⛔ | OTC RFQ desk, staked-tier gate | F | `trade.spot` | `trade.otc` |
-| ⛔ | Copy trading, audited leaders, profit share | B | `trade.spot` | `trade.copy` |
-| ⛔ | Fiat pairs on the same engine | F | `trade.spot`, `pay.rails` | `trade.forex` |
-| ⛔ | TWAP / VWAP / POV execution | F | `trade.spot` | `trade.algo` |
-| ⛔ | CCXT-compatible public API (bots + terminals connect) <br/>_contract already built in packages/exchange-contract_ | F | `trade.spot` | `trade.ccxt-api` |
-| ⛔ | Internal market-maker seeding books at launch | F | `trade.spot` | `trade.mm-bot` |
-| ⛔ | External venue adapters via CCXT (cross-venue) <br/>_LiquiditySource interface + router already built_ | F | `trade.spot` | `venue.aggregation` |
-| ⛔ | Pro terminal — depth, charts, hotkeys, sub-accounts | F | `trade.spot` | `web.terminal` |
+| 🟢 | OTC RFQ desk, staked-tier gate | F |  | `trade.otc` |
+| 🟢 | Copy trading, audited leaders, profit share | B |  | `trade.copy` |
+| ⛔ | Fiat pairs on the same engine | F | `pay.rails` | `trade.forex` |
+| 🟢 | TWAP / VWAP / POV execution | F |  | `trade.algo` |
+| 🟢 | CCXT-compatible public API (bots + terminals connect) <br/>_contract already built in packages/exchange-contract_ | F |  | `trade.ccxt-api` |
+| 🟢 | Internal market-maker seeding books at launch | F |  | `trade.mm-bot` |
+| 🟢 | External venue adapters via CCXT (cross-venue) <br/>_LiquiditySource interface + router already built_ | F |  | `venue.aggregation` |
+| 🟢 | Pro terminal — depth, charts, hotkeys, sub-accounts | F |  | `web.terminal` |
 | 🟢 | apps/web scaffold on the design system | F |  | `web.shell` |
 | 🟢 | WebSocket fan-out: depth, trades, orders, positions | F |  | `ws.gateway` |
 
@@ -174,7 +183,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
 | 🟢 | Multi-currency account UX over the ledger | F |  | `bank.accounts` |
-| ⛔ | Collateralised loans, LTV, margin calls, liquidation | F | `bank.accounts`, `trade.spot` | `bank.loans` |
+| ⛔ | Collateralised loans, LTV, margin calls, liquidation | F | `bank.accounts` | `bank.loans` |
 | ⛔ | Flexible + fixed yield pools | F | `bank.accounts` | `bank.earn` |
 | ⛔ | CardIssuerAdapter + card-sim, <2s auth decision | F | `bank.accounts` | `bank.cards` |
 | ⛔ | Self-custody funded card, JIT conversion (§18) | P | `bank.cards`, `protocol.smart-accounts` | `bank.sovereign-card` |
@@ -182,7 +191,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Model-agnostic gateway, per-user metering | F |  | `agents.gateway` |
 | ⛔ | Navigator — tool-calling inside user guardrails | F | `agents.gateway` | `agents.navigator` |
 | ⛔ | Support agent — KB + account-state grounded | F | `agents.gateway` | `agents.support` |
-| ⛔ | Market Scanner — ranked signals by tier | F | `agents.gateway`, `trade.spot` | `agents.scanner` |
+| ⛔ | Market Scanner — ranked signals by tier | F | `agents.gateway` | `agents.scanner` |
 | ⛔ | Merchant agent — approval-rate watch | F | `agents.gateway`, `pay.routing` | `agents.merchant` |
 | ⛔ | Copy-Intel — writes audited leader stats | F | `agents.gateway`, `trade.copy` | `agents.copy-intel` |
 | 🟢 | Live lobbies, LiveKit SFU, capacity tiers | F |  | `academy.lobbies` |
@@ -190,8 +199,8 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | DERIV//DESK library import — 20 playbooks + 3 workbooks | F | `academy.lobbies` | `academy.curriculum` |
 | ⛔ | Certifications → XP → real perks | F | `academy.curriculum` | `academy.certs` |
 | ⛔ | Residencies, IFC pay, revenue share | F | `academy.lobbies` | `academy.ambassadors` |
-| ⛔ | Seasonal ladders, IFC prize pools | F | `academy.lobbies`, `trade.spot` | `academy.tournaments` |
-| ⛔ | Paper-trading market flag for workbooks | F | `trade.spot` | `academy.paper-trading` |
+| ⛔ | Seasonal ladders, IFC prize pools | F | `academy.lobbies` | `academy.tournaments` |
+| 🟢 | Paper-trading market flag for workbooks | F |  | `academy.paper-trading` |
 | ⛔ | ERC-20 deploy from audited templates | B | `protocol.smart-accounts` | `launch.token-factory` |
 | ⛔ | One-click meme launch + instant market + LP | P | `launch.token-factory`, `protocol.amm` | `launch.meme-factory` |
 | ⛔ | Presale / fair launch, vesting, staked allocation tiers | F | `launch.token-factory` | `launch.launchpad` |
