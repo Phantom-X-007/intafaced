@@ -42,15 +42,18 @@ If two docs disagree: **law + tracker win** over memory or Telegram.
 ```
 Phase 0 Foundations ████████░░ mostly done
 Phase 1 THE CORE     ████████░░ ledger + identity + token on main
-Phase 2 Trade        ░░░░░░░░░░ engine + web not on main yet (Denon PRs)
-Phase 3+ Pay/P2P/…   ░░░░░░░░░░ later
+Phase 2 Trade+       ████████░░ services on main; routers NOT mounted
+Phase 3+ Pay/P2P/…   ████░░░░░░ code on main; same — not a live product
 ```
 
-- **On main today:** shared packages + three core services. Tests/gates green when the machine is set up.
-- **Not on main yet:** matching engine, web app, trade service — some of these sit in **open pull requests** from Denon.
-- **Your broker path:** after matching lands → **spot trade service** (orders, holds, fills) in small slices. Do **not** rebuild matching/web/admin/i18n.
+**Snapshot date:** 2026-07-27 · main tip `7f8beec` · **0 open service PRs** (Denon #31–#39 merged).
 
-Live detail: [`PHASE2-NITRO-PLAN-2026-07-27.md`](PHASE2-NITRO-PLAN-2026-07-27.md) (refresh when PRs merge).
+- **On main today:** shared packages + **Phase 1–2 services** (identity, ledger, token, matching, trade, pay, p2p, bank, blueprint, agents, protocol) + apps web/admin. Tests/gates when the machine is set up.
+- **Not a running product:** service **routers are not mounted** — logic and tests exist; there is no live API/product surface yet (**P0-1**).
+- **Do not rebuild** matching, trade, pay, p2p, bank, blueprint, agents, protocol, web, admin, or i18n from scratch — they are on main.
+- **Next product gates:** mount routers (P0-1) → purpose-keyed holds before deploy (P0-3, needs your decision) → Phase 2 feature slices via tracker.
+
+Live floor: [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md) · graph chat start: [`GRAPH-RUN-FLOOR.md`](GRAPH-RUN-FLOOR.md) · older plan (may lag): [`PHASE2-NITRO-PLAN-2026-07-27.md`](PHASE2-NITRO-PLAN-2026-07-27.md).
 
 ---
 
@@ -80,7 +83,7 @@ Live detail: [`PHASE2-NITRO-PLAN-2026-07-27.md`](PHASE2-NITRO-PLAN-2026-07-27.md
 3. **Green `pnpm verify` before “done.”**
 4. **One service / one concern per PR.**
 5. **Money only via ledger recipes; no float balances; no partner names in UI.**
-6. **Don’t rebuild Denon’s open PRs.**
+6. **Don’t rebuild services already on main** (or reopen merged Denon work).
 7. Agents run git/PR for Nitro (**operator mode** in [`AGENTS.md`](../AGENTS.md)).
 
 Collab deep dive: [`COLLAB-AUDIT-2026-07-27.md`](COLLAB-AUDIT-2026-07-27.md) · Denon paste: [`MESSAGE-DENON-WORKFLOW.md`](MESSAGE-DENON-WORKFLOW.md)
@@ -89,10 +92,10 @@ Collab deep dive: [`COLLAB-AUDIT-2026-07-27.md`](COLLAB-AUDIT-2026-07-27.md) · 
 
 ## Do you need a “big audit” before coding?
 
-**No.** Orientation + collab audit + health check already ran (2026-07-27).  
-Next useful work is **ship process rules to `main`**, **review Denon’s matching PR**, then **claim trade.spot** — not another full-repo archaeology pass.
+**No.** Orientation + collab audit + health check already ran (2026-07-27); service PRs are on main.  
+Next useful product work is **P0-1 mount routers**, then **P0-3 holds** (your decision card), then **claim tracker-ready Phase 2 slices** — not another full-repo archaeology pass.
 
-Re-audit only if: `main` goes red, law version changes, or tracker and open PRs violently disagree.
+Re-audit only if: `main` goes red, law version changes, or tracker and reality violently disagree.
 
 ---
 
