@@ -152,7 +152,7 @@ Because merging is not _blocked_ on CI (see §1), reading the checks before you 
 ## 6 · Day one
 
 ```bash
-gh repo clone <org>/intafaced && cd intafaced
+gh repo clone Phantom-X-007/intafaced && cd intafaced
 pnpm install
 cp .env.example .env
 docker compose up -d
