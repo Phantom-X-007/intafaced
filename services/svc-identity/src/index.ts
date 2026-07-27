@@ -1,18 +1,20 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
 import { RankService } from './rank/rank-service.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
-import { createIdentityRouter } from './router.js';
+import { createIdentityRouter, type IdentityRouter } from './router.js';
 
 /**
  * svc-identity — one account, one verification, one rank (§4.1).
+ *
+ * Graph W1-C: mount tRPC; verify edge-signed principal (mount-boundary #48).
  */
 
-// §9 does not permit the scrypt fallback in production. Fail at boot rather
-// than silently hashing new passwords with the weaker option.
 if (env.APP_ENV === 'prod') await assertArgon2Available();
 
 const sql = postgres(env.DATABASE_URL, {
@@ -47,13 +49,34 @@ const auth = new AuthService(sql, bus, rank, {
 export const appRouter = createIdentityRouter(auth, rank, { registrationOpen: env.REGISTRATION_OPEN });
 export type AppRouter = typeof appRouter;
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, argon2: await argon2Available() }));
 
+/**
+ * Service-to-service rank perks (svc-trade reads at order accept).
+ * Not edge-principal: internal network only; no scopes to elevate.
+ */
+app.get<{ Params: { userId: string } }>('/internal/rank/:userId/perks', async (req) => {
+  return rank.perks(req.params.userId);
+});
+
+await app.register(fastifyTRPCPlugin, {
+  prefix: '/trpc',
+  trpcOptions: {
+    router: appRouter,
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  } satisfies FastifyTRPCPluginOptions<IdentityRouter>['trpcOptions'],
+});
+
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, argon2: await argon2Available(), registrationOpen: env.REGISTRATION_OPEN }, 'svc-identity ready');
+app.log.info(
+  { port: env.HTTP_PORT, argon2: await argon2Available(), registrationOpen: env.REGISTRATION_OPEN, trpc: true },
+  'svc-identity ready',
+);
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {

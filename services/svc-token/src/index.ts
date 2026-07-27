@@ -1,17 +1,19 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { TokenService } from './token-service.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
 import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 import { createLedgerClient } from './ledger-client.js';
+import { createTokenRouter, type TokenRouter } from './router.js';
 
 /**
  * svc-token — the native economy (§4.3).
  *
- * Third and last of the Phase 1 Core services. Owns the emission schedule, the
- * staking ladder, real-yield distribution, and buyback & burn.
+ * Graph W1-C: mount tRPC with edge-signed principal; keep /internal/stake for S2S.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -32,8 +34,6 @@ const bus = await JetStreamEventBus.connect({
   ownedStreams: ['token'],
 });
 
-// Value moves through svc-ledger, never through this service's own tables
-// (Doctrine §0.6). This client is the only path.
 const ledger = createLedgerClient(env.LEDGER_URL);
 
 const token = new TokenService(sql, ledger, bus, {
@@ -42,23 +42,31 @@ const token = new TokenService(sql, ledger, bus, {
   buyback: DEFAULT_BUYBACK_PARAMS,
 });
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+export const appRouter = createTokenRouter(token);
+export type AppRouter = typeof appRouter;
+
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, emissionsEnabled: env.EMISSIONS_ENABLED }));
 
-/**
- * The hot path other services call (§4.3): "other services call
- * token.stakeOf(userId) (cached) to gate launchpad allocations, OTC access,
- * premium lobbies, vendor slots".
- */
 app.get<{ Params: { userId: string } }>('/internal/stake/:userId', async (req) => {
   const access = await token.accessOf(req.params.userId);
   return { staked: access.staked.toString(), tier: access.tier, feeDiscountBps: access.feeDiscountBps };
 });
 
+await app.register(fastifyTRPCPlugin, {
+  prefix: '/trpc',
+  trpcOptions: {
+    router: appRouter,
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  } satisfies FastifyTRPCPluginOptions<TokenRouter>['trpcOptions'],
+});
+
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, asset: env.TOKEN_ASSET_ID, emissionsEnabled: env.EMISSIONS_ENABLED }, 'svc-token ready');
+app.log.info({ port: env.HTTP_PORT, asset: env.TOKEN_ASSET_ID, emissionsEnabled: env.EMISSIONS_ENABLED, trpc: true }, 'svc-token ready');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
