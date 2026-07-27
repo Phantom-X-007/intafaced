@@ -21,7 +21,7 @@ runLedgerConformance('MemoryLedger', async () => ({
   totalsByAsset: async () => conformanceLedger.totalsByAsset(),
 }));
 import { formatAmount, parseAmount as amt, sum } from './money.js';
-import { assertBalanced, assertPairedLocks } from './client.js';
+import { assertBalanced, assertPairedLocks, assertPurposedHolds, assertValidPost } from './client.js';
 import { houseFees, merchantClearing, userAvailable, userEscrow, userHold, userStake, railBoundary } from './accounts.js';
 import { InsufficientFundsError, InvalidEntryError, UnbalancedTransactionError } from './types.js';
 import { recipes } from './recipes/index.js';
@@ -46,16 +46,29 @@ async function fund(userId: string, assetId: string, amount: string): Promise<vo
   await ledger.post(recipes.deposit({ userId, assetId, amount: amt(amount), rail: 'test', railRef: `${userId}:${assetId}:${amount}` }));
 }
 
-async function balanceOf(userId: string, assetId: string, kind: 'available' | 'hold' | 'escrow' | 'stake' = 'available') {
+async function balanceOf(userId: string, assetId: string, kind: 'available' | 'hold' | 'escrow' | 'stake' = 'available', purpose = 'test') {
   const ref =
     kind === 'available'
       ? userAvailable(userId, assetId)
       : kind === 'hold'
-        ? userHold(userId, assetId)
+        ? userHold(userId, assetId, purpose)
         : kind === 'escrow'
           ? userEscrow(userId, assetId)
           : userStake(userId, assetId);
   return formatAmount((await ledger.balance(ref)).amount);
+}
+
+/**
+ * Total held for a user in an asset, across every purpose.
+ *
+ * The question "how much of this balance is locked up" is still meaningful
+ * after P0-3 — it is just no longer one account. Anything asserting on a total
+ * has to sum, which is the honest shape of the data.
+ */
+async function heldTotal(userId: string, assetId: string) {
+  const all = await ledger.balances('user', userId);
+  const total = all.filter((b) => b.account.kind === 'hold' && b.account.assetId === assetId).reduce((acc, b) => acc + b.amount, 0n);
+  return formatAmount(total);
 }
 
 describe('INVARIANT 1 — every transaction sums to zero per asset', () => {
@@ -128,7 +141,113 @@ describe('INVARIANT 2 — available never goes negative', () => {
     await fund(USER_A, 'USDT', '100');
     await ledger.post(recipes.withdrawHold({ userId: USER_A, assetId: 'USDT', amount: amt('100'), rail: 'test', withdrawalId: 'w1' }));
     expect(await balanceOf(USER_A, 'USDT')).toBe('0');
-    expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('100');
+    expect(await heldTotal(USER_A, 'USDT')).toBe('100');
+  });
+
+  // ── P0-3 · a hold belongs to one purpose ────────────────────────────────────
+  //
+  // These are the tests the fix exists for. Every one of them PASSED before the
+  // fix in the sense that the ledger accepted the posting and the books
+  // balanced — which is exactly what made the bug dangerous. The assertion that
+  // changed is not "does it balance" but "whose money moved".
+
+  it('a withdrawal cannot settle out of an open order’s reservation', async () => {
+    await fund(USER_A, 'USDT', '100');
+
+    // 100 reserved for an open order. Available is now 0.
+    await ledger.post(recipes.orderHold({ orderId: 'o-live', userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+    expect(await balanceOf(USER_A, 'USDT')).toBe('0');
+
+    // A withdrawal for the same user and asset that was never held. Before
+    // P0-3 this found the order's hold — one account per (user, asset) — drew
+    // it down to zero, balanced perfectly, and left the order unfunded with
+    // nothing in the book recording that it had happened.
+    await expect(
+      ledger.post(recipes.withdrawSettle({ userId: USER_A, assetId: 'USDT', amount: amt('100'), rail: 'test', withdrawalId: 'w-raid' })),
+    ).rejects.toThrow(InsufficientFundsError);
+
+    // The order's reservation is untouched and still fully funded.
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:o-live')).toBe('100');
+    expect(await heldTotal(USER_A, 'USDT')).toBe('100');
+  });
+
+  it('an order fill cannot consume a withdrawal’s hold', async () => {
+    await fund(USER_A, 'USDT', '900');
+    await fund(USER_B, 'BTC', '1');
+
+    // USER_A's funds are held for a WITHDRAWAL, not for an order.
+    await ledger.post(recipes.withdrawHold({ userId: USER_A, assetId: 'USDT', amount: amt('900'), rail: 'test', withdrawalId: 'w-live' }));
+    await ledger.post(recipes.orderHold({ orderId: 'm-1', userId: USER_B, assetId: 'BTC', amount: amt('1') }));
+
+    // A fill claiming an order hold that was never placed. Previously this
+    // spent the withdrawal's money and paid the counterparty out of it.
+    await expect(
+      ledger.post(
+        recipes.tradeFill({
+          fillId: 'f-raid',
+          makerId: USER_B,
+          takerId: USER_A,
+          makerOrderId: 'm-1',
+          takerOrderId: 'never-placed',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          qty: amt('1'),
+          quoteAmount: amt('900'),
+          takerSide: 'buy',
+          makerFeeBps: 0,
+          takerFeeBps: 0,
+        }),
+      ),
+    ).rejects.toThrow(InsufficientFundsError);
+
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'withdraw:w-live')).toBe('900');
+  });
+
+  it('two orders for the same user and asset hold separately', async () => {
+    await fund(USER_A, 'USDT', '300');
+    await ledger.post(recipes.orderHold({ orderId: 'o-1', userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+    await ledger.post(recipes.orderHold({ orderId: 'o-2', userId: USER_A, assetId: 'USDT', amount: amt('200') }));
+
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:o-1')).toBe('100');
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:o-2')).toBe('200');
+    expect(await heldTotal(USER_A, 'USDT')).toBe('300');
+
+    // Cancelling one returns exactly its own reservation — not a share of a pot.
+    await ledger.post(recipes.orderHoldRelease({ orderId: 'o-1', userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+
+    expect(await balanceOf(USER_A, 'USDT')).toBe('100');
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:o-1')).toBe('0');
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:o-2')).toBe('200');
+  });
+
+  it('releasing one order cannot over-return by draining another’s hold', async () => {
+    await fund(USER_A, 'USDT', '300');
+    await ledger.post(recipes.orderHold({ orderId: 'o-1', userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+    await ledger.post(recipes.orderHold({ orderId: 'o-2', userId: USER_A, assetId: 'USDT', amount: amt('200') }));
+
+    // o-1 only ever held 100. Asking for 300 back must fail rather than reach
+    // into o-2 — the release is bounded by its own account, by construction.
+    await expect(
+      ledger.post(recipes.orderHoldRelease({ orderId: 'o-1', userId: USER_A, assetId: 'USDT', amount: amt('300') })),
+    ).rejects.toThrow(InsufficientFundsError);
+
+    expect(await heldTotal(USER_A, 'USDT')).toBe('300');
+  });
+
+  it('refuses a hold entry with no purpose at all', () => {
+    // The direct-assembly path. Recipes are the sanctioned route, not the only
+    // physically possible one, so the invariant is checked at post time.
+    expect(() =>
+      assertValidPost({
+        idempotencyKey: 'unpurposed-hold-test',
+        module: 'test',
+        reason: 'test',
+        entries: [
+          { account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('1') },
+          { account: { ownerType: 'user', ownerId: USER_A, assetId: 'USDT', kind: 'hold' }, direction: 'debit', amount: amt('1') },
+        ],
+      }),
+    ).toThrow(/no purpose/);
   });
 
   it('leaves the book untouched when a post is rejected', async () => {
@@ -153,7 +272,7 @@ describe('INVARIANT 3 — locks are funded from the owner’s own available bala
     expect(() =>
       assertPairedLocks([
         { account: userAvailable(USER_A, 'BTC'), direction: 'credit', amount: amt('1') },
-        { account: userHold(USER_A, 'BTC'), direction: 'debit', amount: amt('1') },
+        { account: userHold(USER_A, 'BTC', 'order:test'), direction: 'debit', amount: amt('1') },
       ]),
     ).not.toThrow();
   });
@@ -162,7 +281,7 @@ describe('INVARIANT 3 — locks are funded from the owner’s own available bala
     expect(() =>
       assertPairedLocks([
         { account: houseFees('bank', 'BTC'), direction: 'credit', amount: amt('1') },
-        { account: userHold(USER_A, 'BTC'), direction: 'debit', amount: amt('1') },
+        { account: userHold(USER_A, 'BTC', 'order:test'), direction: 'debit', amount: amt('1') },
       ]),
     ).toThrow(InvalidEntryError);
   });
@@ -171,7 +290,7 @@ describe('INVARIANT 3 — locks are funded from the owner’s own available bala
     expect(() =>
       assertPairedLocks([
         { account: userAvailable(USER_A, 'BTC'), direction: 'credit', amount: amt('1') },
-        { account: userHold(USER_A, 'BTC'), direction: 'debit', amount: amt('2') },
+        { account: userHold(USER_A, 'BTC', 'order:test'), direction: 'debit', amount: amt('2') },
       ]),
     ).toThrow(InvalidEntryError);
   });
@@ -180,7 +299,7 @@ describe('INVARIANT 3 — locks are funded from the owner’s own available bala
     expect(() =>
       assertPairedLocks([
         { account: userAvailable(USER_A, 'BTC'), direction: 'credit', amount: amt('1.01') },
-        { account: userHold(USER_A, 'BTC'), direction: 'debit', amount: amt('1') },
+        { account: userHold(USER_A, 'BTC', 'order:test'), direction: 'debit', amount: amt('1') },
         { account: houseFees('trade', 'BTC'), direction: 'debit', amount: amt('0.01') },
       ]),
     ).not.toThrow();
@@ -189,7 +308,7 @@ describe('INVARIANT 3 — locks are funded from the owner’s own available bala
   it('does not constrain releasing a lock', () => {
     expect(() =>
       assertPairedLocks([
-        { account: userHold(USER_A, 'BTC'), direction: 'credit', amount: amt('1') },
+        { account: userHold(USER_A, 'BTC', 'order:test'), direction: 'credit', amount: amt('1') },
         { account: userAvailable(USER_B, 'BTC'), direction: 'debit', amount: amt('1') },
       ]),
     ).not.toThrow();
@@ -296,6 +415,8 @@ describe('recipes — the money paths', () => {
         fillId: 'f1',
         makerId: USER_B,
         takerId: USER_A,
+        makerOrderId: 'maker-1',
+        takerOrderId: 'taker-1',
         baseAsset: 'BTC',
         quoteAsset: 'USDT',
         qty: amt('1'),
@@ -314,8 +435,8 @@ describe('recipes — the money paths', () => {
     expect(formatAmount((await ledger.balance(houseFees('trade', 'BTC'))).amount)).toBe('0.002');
 
     // Holds fully consumed.
-    expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('0');
-    expect(await balanceOf(USER_B, 'BTC', 'hold')).toBe('0');
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:taker-1')).toBe('0');
+    expect(await balanceOf(USER_B, 'BTC', 'hold', 'order:maker-1')).toBe('0');
 
     expect(ledger.totalsByAsset()).toEqual({ USDT: '0', BTC: '0' });
     expect(ledger.reconcile()).toEqual({ ok: true });
@@ -333,6 +454,8 @@ describe('recipes — the money paths', () => {
         fillId: 'f2',
         makerId: USER_B,
         takerId: USER_A,
+        makerOrderId: 'm2',
+        takerOrderId: 't2',
         baseAsset: 'BTC',
         quoteAsset: 'USDT',
         qty: amt('1'),
@@ -415,7 +538,7 @@ describe('recipes — the money paths', () => {
     await ledger.post(recipes.withdrawSettle(w)); // retry
 
     expect(await balanceOf(USER_A, 'BTC')).toBe('0.5');
-    expect(await balanceOf(USER_A, 'BTC', 'hold')).toBe('0');
+    expect(await heldTotal(USER_A, 'BTC')).toBe('0');
     expect(ledger.totalsByAsset().BTC).toBe('0');
   });
 
@@ -427,7 +550,7 @@ describe('recipes — the money paths', () => {
     await ledger.post(recipes.withdrawReverse(w));
 
     expect(await balanceOf(USER_A, 'BTC')).toBe('1');
-    expect(await balanceOf(USER_A, 'BTC', 'hold')).toBe('0');
+    expect(await heldTotal(USER_A, 'BTC')).toBe('0');
   });
 
   it('rewards are paid from the rewards engine, never minted at the edge', async () => {
@@ -681,7 +804,7 @@ describe('torture — volume and drift', () => {
     await Promise.all(posts);
 
     expect(await balanceOf(USER_A, 'USDT')).toBe('99500');
-    expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('500');
+    expect(await heldTotal(USER_A, 'USDT')).toBe('500');
     expect(ledger.reconcile()).toEqual({ ok: true });
     expect(ledger.verifyChain()).toEqual({ ok: true });
     expect(ledger.totalsByAsset().USDT).toBe('0');
@@ -700,7 +823,7 @@ describe('torture — volume and drift', () => {
 
     expect(results.filter((r) => r === 'ok')).toHaveLength(10);
     expect(await balanceOf(USER_A, 'USDT')).toBe('0');
-    expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('100');
+    expect(await heldTotal(USER_A, 'USDT')).toBe('100');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 

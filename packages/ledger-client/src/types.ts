@@ -24,6 +24,28 @@ export interface AccountRef {
   readonly ownerId: string;
   readonly assetId: string;
   readonly kind: AccountKind;
+  /**
+   * Sub-identity within (owner, asset, kind) — P0-3.
+   *
+   * A `hold` is not fungible with another `hold`. Value reserved for order
+   * `abc` and value held for withdrawal `xyz` are both "held for this user in
+   * this asset", and before this field they were the same account: a withdrawal
+   * could settle out of an open order's reservation and the books would balance
+   * perfectly while the order became unfunded.
+   *
+   * `order:<id>` / `withdraw:<id>` and so on. Empty for accounts where the
+   * question does not arise — an `available` balance is fungible with itself by
+   * definition, and giving it a purpose would fragment it for no reason.
+   *
+   * `hold` accounts MUST carry one; `assertPurposedHolds` refuses the post
+   * otherwise, so the commingled bucket cannot come back by omission.
+   */
+  readonly purpose?: string;
+}
+
+/** The empty-string normal form. Absent and `''` are the same account. */
+export function accountPurpose(ref: AccountRef): string {
+  return ref.purpose ?? '';
 }
 
 export interface Account extends AccountRef {
@@ -134,6 +156,8 @@ export const accountRefSchema = z.object({
   ownerId: z.string().min(1),
   assetId: z.string().min(1).max(16),
   kind: z.enum(ACCOUNT_KINDS),
+  /** Bounded because it is part of an index key, not free-form metadata. */
+  purpose: z.string().max(128).optional(),
 });
 
 export const entryInputSchema = z.object({

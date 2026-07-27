@@ -12,8 +12,30 @@ export function userAvailable(userId: string, assetId: string): AccountRef {
   return { ownerType: 'user', ownerId: userId, assetId, kind: 'available' };
 }
 
-export function userHold(userId: string, assetId: string): AccountRef {
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'hold' };
+/**
+ * A user's held balance FOR ONE PURPOSE (P0-3).
+ *
+ * The purpose is required, and that is the whole point. There was previously
+ * one `hold` account per (user, asset), so a withdrawal settle and an open
+ * order's reservation drew on the same balance — and neither could tell that it
+ * had lost to the other, because the books recorded no distinction to lose.
+ *
+ * Prefer the named constructors below. Reaching for this directly means
+ * inventing a purpose string, which is worth having to justify.
+ */
+export function userHold(userId: string, assetId: string, purpose: string): AccountRef {
+  if (!purpose) throw new Error('userHold requires a purpose (P0-3) — e.g. `order:<id>` or `withdraw:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'hold', purpose };
+}
+
+/** Value reserved for one open order. Drawn down on fill, returned on cancel or expiry. */
+export function orderHoldAccount(userId: string, assetId: string, orderId: string): AccountRef {
+  return userHold(userId, assetId, `order:${orderId}`);
+}
+
+/** Value held while one withdrawal is in flight at a rail. */
+export function withdrawalHoldAccount(userId: string, assetId: string, withdrawalId: string): AccountRef {
+  return userHold(userId, assetId, `withdraw:${withdrawalId}`);
 }
 
 export function userEscrow(userId: string, assetId: string): AccountRef {

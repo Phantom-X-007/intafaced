@@ -3,6 +3,7 @@ import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import {
   accountKey,
+  accountPurpose,
   assertValidPost,
   formatAmount,
   parseAmount,
@@ -187,6 +188,7 @@ export class PostgresLedger implements LedgerClient {
          AND owner_id   = ${ref.ownerId}
          AND asset_id   = ${ref.assetId}
          AND kind       = ${ref.kind}::account_kind
+         AND purpose    = ${accountPurpose(ref)}
     `;
 
     const row = rows[0];
@@ -197,12 +199,12 @@ export class PostgresLedger implements LedgerClient {
 
   async balances(ownerType: AccountRef['ownerType'], ownerId: string): Promise<Balance[]> {
     const rows = await this.sql<
-      Array<{ id: string; owner_type: string; owner_id: string; asset_id: string; kind: string; balance: string }>
+      Array<{ id: string; owner_type: string; owner_id: string; asset_id: string; kind: string; purpose: string; balance: string }>
     >`
-      SELECT id, owner_type, owner_id, asset_id, kind, balance
+      SELECT id, owner_type, owner_id, asset_id, kind, purpose, balance
         FROM accounts
        WHERE owner_type = ${ownerType}::owner_type AND owner_id = ${ownerId}
-       ORDER BY asset_id, kind
+       ORDER BY asset_id, kind, purpose
     `;
 
     return rows.map((r) => ({
@@ -211,6 +213,9 @@ export class PostgresLedger implements LedgerClient {
         ownerId: r.owner_id,
         assetId: r.asset_id,
         kind: r.kind as AccountRef['kind'],
+        // Round-trips the sub-identity, so a caller listing balances can tell a
+        // withdrawal hold from an order's reservation.
+        ...(r.purpose ? { purpose: r.purpose } : {}),
       },
       accountId: r.id,
       amount: parseAmount(r.balance),
@@ -241,12 +246,12 @@ export class PostgresLedger implements LedgerClient {
     // ON CONFLICT DO UPDATE (rather than DO NOTHING) so RETURNING always yields
     // a row, and so the row is locked for this transaction either way.
     const rows = await tx<Array<{ id: string; balance: string }>>`
-      INSERT INTO accounts (owner_type, owner_id, asset_id, kind)
+      INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
       VALUES (
         ${ref.ownerType}::owner_type, ${ref.ownerId},
-        ${ref.assetId}, ${ref.kind}::account_kind
+        ${ref.assetId}, ${ref.kind}::account_kind, ${accountPurpose(ref)}
       )
-      ON CONFLICT (owner_type, owner_id, asset_id, kind)
+      ON CONFLICT (owner_type, owner_id, asset_id, kind, purpose)
       DO UPDATE SET owner_id = EXCLUDED.owner_id
       RETURNING id, balance
     `;

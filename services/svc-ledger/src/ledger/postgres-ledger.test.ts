@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
@@ -24,7 +24,22 @@ import { reconcileBalances, verifyChain, totalsByAsset, runReconciliation } from
 // (docker-compose); override with TEST_DATABASE_URL when needed.
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', '..', 'drizzle', '0000_ledger_init.sql'), 'utf8');
+const drizzleDir = join(here, '..', '..', 'drizzle');
+
+/**
+ * EVERY forward migration, in order — not just the initial one.
+ *
+ * Read from disk rather than listed here. A hardcoded filename means the test
+ * schema silently drifts from the real one the first time someone adds a
+ * migration, and the failure surfaces as "column does not exist" in unrelated
+ * tests rather than as anything pointing at the cause.
+ */
+const migrations = readdirSync(drizzleDir)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
+
+if (migrations.length === 0) throw new Error(`No migrations found in ${drizzleDir}`);
 
 const available = await postgresAvailable(URL);
 
@@ -40,7 +55,7 @@ if (!available) {
   db = await createTestDb({
     service: 'ledger',
     url: URL,
-    migrations: [(schema) => rewriteSchemaSql(migration, 'ledger', schema)],
+    migrations: migrations.map((body) => (schema: string) => rewriteSchemaSql(body, 'ledger', schema)),
   });
   engine = new PostgresLedger(db.sql);
 

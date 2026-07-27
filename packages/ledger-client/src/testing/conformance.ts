@@ -56,16 +56,36 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
         }),
       );
 
-    const balanceOf = async (userId: string, assetId: string, kind: 'available' | 'hold' | 'escrow' | 'stake' = 'available') => {
+    // `purpose` is required for `hold` (P0-3) — there is no such thing as "the"
+    // hold balance any more, only the balance held for a named reason.
+    const balanceOf = async (
+      userId: string,
+      assetId: string,
+      kind: 'available' | 'hold' | 'escrow' | 'stake' = 'available',
+      purpose = 'test',
+    ) => {
       const ref =
         kind === 'available'
           ? userAvailable(userId, assetId)
           : kind === 'hold'
-            ? userHold(userId, assetId)
+            ? userHold(userId, assetId, purpose)
             : kind === 'escrow'
               ? userEscrow(userId, assetId)
               : userStake(userId, assetId);
       return formatAmount((await ledger.balance(ref)).amount);
+    };
+
+    /**
+     * Total held for a user in an asset, summed across purposes (P0-3).
+     *
+     * Part of the conformance contract: an implementation that ignores
+     * `purpose` and keeps one hold row per (user, asset) still passes the
+     * per-purpose reads, but fails here the moment two purposes coexist.
+     */
+    const heldTotal = async (userId: string, assetId: string) => {
+      const all = await ledger.balances('user', userId);
+      const total = all.filter((b) => b.account.kind === 'hold' && b.account.assetId === assetId).reduce((acc, b) => acc + b.amount, 0n);
+      return formatAmount(total);
     };
 
     // ── INVARIANT 1 · sum to zero ─────────────────────────────────────────────
@@ -136,7 +156,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
           recipes.withdrawHold({ userId: USER_A, assetId: 'USDT', amount: amt('100'), rail: 'test', withdrawalId: 'exact-1' }),
         );
         expect(await balanceOf(USER_A, 'USDT')).toBe('0');
-        expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('100');
+        expect(await heldTotal(USER_A, 'USDT')).toBe('100');
       });
 
       it('leaves the book untouched when a post is rejected', async () => {
@@ -168,7 +188,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
             reason: 'test',
             entries: [
               { account: houseFees('bank', 'BTC'), direction: 'credit', amount: amt('1') },
-              { account: userHold(USER_A, 'BTC'), direction: 'debit', amount: amt('1') },
+              { account: userHold(USER_A, 'BTC', 'order:unfunded'), direction: 'debit', amount: amt('1') },
             ],
           }),
         ).rejects.toThrow(InvalidEntryError);
@@ -244,6 +264,8 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
             fillId: 'conformance-f1',
             makerId: USER_B,
             takerId: USER_A,
+            makerOrderId: 'maker-1',
+            takerOrderId: 'taker-1',
             baseAsset: 'BTC',
             quoteAsset: 'USDT',
             qty: amt('1'),
@@ -259,8 +281,8 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
         expect(await balanceOf(USER_A, 'BTC')).toBe('0.998');
         expect(formatAmount((await ledger.balance(houseFees('trade', 'USDT'))).amount)).toBe('0.9');
         expect(formatAmount((await ledger.balance(houseFees('trade', 'BTC'))).amount)).toBe('0.002');
-        expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('0');
-        expect(await balanceOf(USER_B, 'BTC', 'hold')).toBe('0');
+        expect(await heldTotal(USER_A, 'USDT')).toBe('0');
+        expect(await heldTotal(USER_B, 'BTC')).toBe('0');
       });
 
       it('p2p escrow: lock → release strands nothing', async () => {
@@ -293,7 +315,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
         await ledger.post(recipes.withdrawSettle(w)); // retry
 
         expect(await balanceOf(USER_A, 'BTC')).toBe('0.5');
-        expect(await balanceOf(USER_A, 'BTC', 'hold')).toBe('0');
+        expect(await heldTotal(USER_A, 'BTC')).toBe('0');
       });
 
       it('fee charge: the IFC discount branch charges less', async () => {
@@ -402,7 +424,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
 
         expect(results.filter((r) => r === 'ok')).toHaveLength(10);
         expect(await balanceOf(USER_A, 'USDT')).toBe('0');
-        expect(await balanceOf(USER_A, 'USDT', 'hold')).toBe('100');
+        expect(await heldTotal(USER_A, 'USDT')).toBe('100');
       });
     });
   });
