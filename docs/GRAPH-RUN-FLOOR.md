@@ -43,7 +43,7 @@ This floor PR does **not** expand graph research. It only clears false main-stat
 
 ## Hazards
 
-- **svc-ledger tests** can `TRUNCATE` shared `ledger.*` — parallel worktrees collide. Isolation fix is **in flight / expected**; do not treat phantom insufficient-funds as product truth until isolation lands.
+- **svc-ledger tests** can `TRUNCATE` shared `ledger.*` — parallel worktrees collide. Isolation fix: **PR #42** (`fix/ledger-test-isolation`). Do not treat phantom insufficient-funds as product truth until #42 is on main.
 - **Vercel MCP** needs human browser auth if you use it.
 - **Never work in main checkout** — worktree + branch + PR.
 
@@ -54,7 +54,7 @@ This floor PR does **not** expand graph research. It only clears false main-stat
 | Track | Claim |
 | ----- | ----- |
 | **This floor** | STATUS + ADR P0-2 + P0-3 decision + START-HERE “where we are” + this file |
-| **Ledger test isolation** | Sibling PR expected — unique schema / `createTestDb` for svc-ledger; not claimed merged here |
+| **Ledger test isolation** | [PR #42](https://github.com/Phantom-X-007/intafaced/pull/42) — unique schema / `createTestDb` for svc-ledger |
 
 Do not open a second “refresh STATUS after merge” docs PR unless main tip or open-PR reality changes again.
 
