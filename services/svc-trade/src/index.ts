@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { TradeService } from './spot/trade-service.js';
@@ -13,9 +14,7 @@ import { createTradeRouter, type TradeRouter } from './router.js';
 /**
  * svc-trade — the product layer over the matching engine (§5.2).
  *
- * Graph W1-R: mount tRPC (hybrid default — trade self-mounts).
- * Money posts still require ledger S2S (W1-C) and purpose-keyed holds (Denon)
- * before any real-user deploy.
+ * Graph W1-R: mount tRPC; verify edge-signed principal (mount-boundary #48).
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -50,6 +49,8 @@ const subscriptions = await subscribeMatchingEvents(bus, trade);
 export const appRouter = createTradeRouter(trade);
 export type AppRouter = typeof appRouter;
 
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
@@ -63,14 +64,7 @@ await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
     router: appRouter,
-    createContext: ({ req }) => ({
-      principal: (req.headers['x-intafaced-principal']
-        ? JSON.parse(String(req.headers['x-intafaced-principal']))
-        : null) as never,
-      region: String(req.headers['x-intafaced-region'] ?? 'XX'),
-      requestId: String(req.id),
-      ...(req.headers.traceparent ? { traceparent: String(req.headers.traceparent) } : {}),
-    }),
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
   } satisfies FastifyTRPCPluginOptions<TradeRouter>['trpcOptions'],
 });
 
