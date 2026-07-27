@@ -24,7 +24,14 @@ const REPO = process.cwd();
 const WORKTREE_ROOT = resolve(REPO, '..', `${basename(REPO).toLowerCase().replace(/\s+/g, '-')}-worktrees`);
 
 function git(args, options = {}) {
-  return execFileSync('git', args, { encoding: 'utf8', cwd: REPO, ...options }).trim();
+  const out = execFileSync('git', args, { encoding: 'utf8', cwd: REPO, ...options });
+  // execFileSync returns null when stdout is not piped (e.g. stdio: 'inherit').
+  return typeof out === 'string' ? out.trim() : '';
+}
+
+/** True when a ref resolves. Never throws — a missing ref is an answer, not an error. */
+function refExists(ref) {
+  return spawnSync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd: REPO, stdio: 'ignore' }).status === 0;
 }
 
 /** feat/svc-identity-rank → feat-svc-identity-rank (a legal directory name). */
@@ -71,9 +78,7 @@ function create(branch) {
   console.log(`· fetching ${base}`);
   spawnSync('git', ['fetch', 'origin', base], { cwd: REPO, stdio: 'ignore' });
 
-  const startPoint = git(['rev-parse', '--verify', '--quiet', `origin/${base}`], { stdio: ['pipe', 'pipe', 'ignore'] })
-    ? `origin/${base}`
-    : base;
+  const startPoint = refExists(`origin/${base}`) ? `origin/${base}` : base;
 
   const branchExists = git(['branch', '--list', branch]) !== '';
   console.log(`· creating worktree from ${startPoint}`);
