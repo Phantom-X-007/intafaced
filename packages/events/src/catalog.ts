@@ -171,6 +171,59 @@ export const buybackExecuted = defineEvent(
   'Structural buyback & burn ran. One flywheel across both planes (§17.3).',
 );
 
+// ── blueprint (§7.1) ─────────────────────────────────────────────────────────
+//
+// Doctrine §0.7 governs these payloads as much as any UI string: nothing here
+// names the intelligence behind a profile. §10 governs their contents — no
+// payload on this bus carries profile axes, birth data, or anything else
+// derived from what a user told the session. Consumers that need the profile
+// read it through packages/contracts under the user's own authority.
+
+const crewRoleSchema = z.enum(['anchor', 'scout', 'builder', 'catalyst']);
+
+export const blueprintCreated = defineEvent(
+  'blueprint',
+  'blueprint',
+  'created',
+  1,
+  z.object({
+    blueprintId: z.string().uuid(),
+    userId: userIdSchema,
+    /** Which engine build produced it. Profiles are comparable only within a version. */
+    engineVersion: z.string().min(1),
+    visibility: z.enum(['private', 'crew', 'public']),
+  }),
+  "An Identity Blueprint exists. svc-identity sets profiles.blueprint_id on this signal — svc-blueprint never writes another service's tables (§2).",
+);
+
+export const blueprintDeleted = defineEvent(
+  'blueprint',
+  'blueprint',
+  'deleted',
+  1,
+  z.object({
+    blueprintId: z.string().uuid(),
+    userId: userIdSchema,
+    erasedAt: z.string().datetime({ offset: true }),
+  }),
+  'Hard delete (§7.2 "deletion truly cascades"). svc-identity clears profiles.blueprint_id; every consumer drops cached profile data. Idempotent on user id.',
+);
+
+export const crewMemberCreated = defineEvent(
+  'blueprint',
+  'crew_member',
+  'created',
+  1,
+  z.object({
+    crewId: z.string().uuid(),
+    userId: userIdSchema,
+    role: crewRoleSchema,
+    crewSize: z.number().int().min(1),
+    matchRunId: z.string().uuid(),
+  }),
+  'Crew placement. svc-academy routes the lobby, svc-agents opens the crew channel.',
+);
+
 // ── matching (§5.1) ──────────────────────────────────────────────────────────
 
 export const orderAccepted = defineEvent(
@@ -208,6 +261,201 @@ export const orderCancelled = defineEvent(
   'Order left the book — svc-trade releases the ledger hold.',
 );
 
+// ── agents (§8.2) ────────────────────────────────────────────────────────────
+
+/**
+ * Note what these payloads do NOT carry: no prompt, no completion text, no
+ * model identifier. Doctrine §0.7 keeps third-party system names out of
+ * anything that ships, and §10 keeps user content out of general stores — a
+ * durable event stream is both. Consumers get the routing task, the counts and
+ * the codes; anything more detailed is a query against `agent_actions` under
+ * the caller's own authorisation.
+ */
+export const agentActionCompleted = defineEvent(
+  'agents',
+  'action',
+  'completed',
+  1,
+  z.object({
+    sessionId: z.string().uuid(),
+    userId: userIdSchema,
+    agentId: z.string(),
+    sequence: z.number().int().min(0),
+    kind: z.enum(['session_open', 'session_close', 'completion', 'embedding', 'tool_call', 'usage_settlement']),
+    /** Routing task id — configuration, never a product name. */
+    task: z.string().nullable(),
+    tool: z.string().nullable(),
+    inputTokens: z.number().int().min(0),
+    outputTokens: z.number().int().min(0),
+  }),
+  'An agent did something on a user’s behalf. The public half of the Agentic Law (§8.2).',
+);
+
+export const agentActionRejected = defineEvent(
+  'agents',
+  'action',
+  'rejected',
+  1,
+  z.object({
+    sessionId: z.string().uuid(),
+    userId: userIdSchema,
+    agentId: z.string(),
+    sequence: z.number().int().min(0),
+    /** Guardrail code, e.g. 'agents.tool_not_declared'. */
+    refusalCode: z.string(),
+    tool: z.string().nullable(),
+    task: z.string().nullable(),
+  }),
+  'A guardrail refused an action before it ran. Compliance consumes this; so does the user’s own log.',
+);
+
+export const agentUsageSettled = defineEvent(
+  'agents',
+  'usage',
+  'settled',
+  1,
+  z.object({
+    sessionId: z.string().uuid(),
+    userId: userIdSchema,
+    windowId: z.string(),
+    amount: amountSchema,
+    assetId: assetIdSchema,
+    /** The ledger idempotency key — the reconciliation handle. */
+    chargeKey: z.string(),
+  }),
+  'A metered usage window was billed through the ledger (§8.2 premium agent tiers).',
+);
+
+// ── p2p (§6.2) ───────────────────────────────────────────────────────────────
+
+export const p2pOfferCreated = defineEvent(
+  'p2p',
+  'offer',
+  'created',
+  1,
+  z.object({
+    offerId: z.string().uuid(),
+    makerId: userIdSchema,
+    side: z.enum(['buy', 'sell']),
+    asset: assetIdSchema,
+    fiatCurrency: z.string().length(3),
+    priceType: z.enum(['fixed', 'float']),
+    price: amountSchema,
+    minAmount: amountSchema,
+    maxAmount: amountSchema,
+  }),
+  'A P2P offer is live and takeable.',
+);
+
+export const p2pEscrowLocked = defineEvent(
+  'p2p',
+  'escrow',
+  'locked',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    offerId: z.string().uuid(),
+    sellerId: userIdSchema,
+    buyerId: userIdSchema,
+    asset: assetIdSchema,
+    amount: amountSchema,
+    fiatCurrency: z.string().length(3),
+    fiatAmount: amountSchema,
+    /** When the buyer must have paid by. Escrow never waits indefinitely. */
+    paymentDeadline: z.string().datetime({ offset: true }),
+  }),
+  'Seller crypto is in escrow. The clock on this trade is now running.',
+);
+
+export const p2pEscrowReleased = defineEvent(
+  'p2p',
+  'escrow',
+  'released',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    sellerId: userIdSchema,
+    buyerId: userIdSchema,
+    asset: assetIdSchema,
+    amount: amountSchema,
+    fee: amountSchema,
+    resolvedBy: z.enum(['seller', 'moderator']),
+    /** Seconds from escrow to release — feeds the maker's reputation. */
+    releaseSeconds: z.number().int().nonnegative(),
+  }),
+  'Escrow released to the buyer — the trade completed.',
+);
+
+export const p2pEscrowRefunded = defineEvent(
+  'p2p',
+  'escrow',
+  'refunded',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    sellerId: userIdSchema,
+    buyerId: userIdSchema,
+    asset: assetIdSchema,
+    amount: amountSchema,
+    resolvedBy: z.enum(['buyer', 'seller', 'moderator', 'timeout']),
+    reason: z.string(),
+  }),
+  'Escrow returned to the seller — cancelled, timed out, or resolved in their favour.',
+);
+
+export const p2pTradeDisputed = defineEvent(
+  'p2p',
+  'trade',
+  'disputed',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    disputeId: z.string().uuid(),
+    openedBy: userIdSchema,
+    reason: z.string(),
+    moderatorDeadline: z.string().datetime({ offset: true }),
+  }),
+  'A trade is contested. Escrow stays locked until a moderator rules or the backstop fires.',
+);
+
+export const p2pDisputeResolved = defineEvent(
+  'p2p',
+  'dispute',
+  'resolved',
+  1,
+  z.object({
+    disputeId: z.string().uuid(),
+    tradeId: z.string().uuid(),
+    /**
+     * NOT a user id. The dispute backstop rules as a named system principal
+     * (`system:p2p-backstop`) precisely so an automatic resolution is never
+     * anonymous in the audit trail. Constraining this to a UUID would make the
+     * backstop unable to publish — and since the decision commits before the
+     * ledger post, a failed publish rolls the whole resolution back and leaves
+     * escrow locked. Which is exactly what happened when this was `userIdSchema`.
+     */
+    moderatorId: z.string().min(1),
+    resolution: z.enum(['release', 'refund']),
+    /** True when the backstop timer ruled rather than a human. */
+    automatic: z.boolean(),
+    notes: z.string().optional(),
+  }),
+  'A moderator ruled. The decision is recorded before the ledger post, so the trail always explains the movement.',
+);
+
+export const p2pTradeExpired = defineEvent(
+  'p2p',
+  'trade',
+  'expired',
+  1,
+  z.object({
+    tradeId: z.string().uuid(),
+    from: z.string(),
+    outcome: z.enum(['released', 'refunded', 'voided', 'disputed']),
+  }),
+  'A deadline passed and the timeout path acted. Every live state has a clock, and every clock acts.',
+);
+
 // ── The registry ─────────────────────────────────────────────────────────────
 
 export const EVENT_CATALOG = {
@@ -219,9 +467,22 @@ export const EVENT_CATALOG = {
   ledgerReconciliationFailed,
   stakeCreated,
   buybackExecuted,
+  blueprintCreated,
+  blueprintDeleted,
+  crewMemberCreated,
   orderAccepted,
   orderFilled,
   orderCancelled,
+  agentActionCompleted,
+  agentActionRejected,
+  agentUsageSettled,
+  p2pOfferCreated,
+  p2pEscrowLocked,
+  p2pEscrowReleased,
+  p2pEscrowRefunded,
+  p2pTradeDisputed,
+  p2pDisputeResolved,
+  p2pTradeExpired,
 } as const;
 
 export type EventCatalog = typeof EVENT_CATALOG;

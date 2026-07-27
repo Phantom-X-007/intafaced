@@ -86,6 +86,21 @@ export function merchantClearing(merchantId: string, assetId: string): AccountRe
 }
 
 /**
+ * The yield reserve behind one svc-bank earn pool (§8.1).
+ *
+ * Interest is paid OUT of this account, which means a pool can only ever pay
+ * what has actually been funded into it. The alternative — accruing interest as
+ * a number in svc-bank and settling later — is a promise with no asset behind
+ * it, and the ledger has no way to tell you it has been over-promised.
+ *
+ * A pool's outstanding yield capacity is therefore `balance(earnPoolReserve(…))`
+ * and nothing else. It is a query, not an investigation.
+ */
+export function earnPoolReserve(poolId: string, assetId: string): AccountRef {
+  return moduleAccount('bank', `earn:${poolId}`, assetId);
+}
+
+/**
  * THE BOUNDARY.
  *
  * `treasury` accounts are the seam between the book and the outside world: an

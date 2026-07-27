@@ -1,0 +1,135 @@
+import {
+  formatAmount,
+  parseAmount,
+  type AccountRef,
+  type Balance,
+  type LedgerClient,
+  type LedgerTx,
+  type PostRequest,
+} from '@intafaced/ledger-client';
+import type { HistoryRange, LedgerEntryRecord, LedgerHistory } from './analytics/ledger-history.js';
+
+/**
+ * HTTP client for svc-ledger.
+ *
+ * §2: services never touch another service's tables. Every movement svc-bank
+ * makes — a transfer between spaces, an earn deposit, a day's interest — goes
+ * over this client into svc-ledger, which owns the balance graph.
+ *
+ * It implements the same `LedgerClient` interface the in-memory reference and
+ * the Postgres engine implement, so the money paths in this service are written
+ * once and tested against the reference without a network.
+ */
+export function createLedgerClient(baseUrl: string): LedgerClient {
+  const url = baseUrl.replace(/\/$/, '');
+
+  return {
+    async post(request: PostRequest): Promise<LedgerTx> {
+      // Amounts cross the wire as decimal strings — never as JS numbers, and
+      // never as bigint (which JSON cannot represent).
+      const wire = {
+        idempotencyKey: request.idempotencyKey,
+        module: request.module,
+        reason: request.reason,
+        meta: request.meta ?? {},
+        correlationId: request.correlationId,
+        entries: request.entries.map((e) => ({
+          account: e.account,
+          direction: e.direction,
+          amount: formatAmount(e.amount),
+        })),
+      };
+
+      const result = await call<{ txId: string; hash: string; postedAt: string }>(url, '/trpc/post', wire);
+
+      return {
+        id: result.txId,
+        idempotencyKey: request.idempotencyKey,
+        module: request.module,
+        reason: request.reason,
+        meta: request.meta ?? {},
+        postedAt: new Date(result.postedAt),
+        hash: result.hash,
+        previousHash: null,
+        entries: [],
+      };
+    },
+
+    async balance(ref: AccountRef): Promise<Balance> {
+      const result = await call<{ accountId: string; amount: string }>(url, '/trpc/balance', ref);
+      return { account: ref, accountId: result.accountId, amount: parseAmount(result.amount) };
+    },
+
+    async balances(ownerType: AccountRef['ownerType'], ownerId: string): Promise<Balance[]> {
+      const result = await call<Array<{ accountId: string; assetId: string; kind: string; amount: string }>>(url, '/trpc/balances', {
+        ownerType,
+        ownerId,
+      });
+
+      return result.map((b) => ({
+        account: { ownerType, ownerId, assetId: b.assetId, kind: b.kind as AccountRef['kind'] },
+        accountId: b.accountId,
+        amount: parseAmount(b.amount),
+      }));
+    },
+
+    async getTx(): Promise<LedgerTx | null> {
+      throw new Error('getTx is not exposed over the internal ledger API — query svc-ledger directly');
+    },
+
+    async getTxByKey(): Promise<LedgerTx | null> {
+      throw new Error('getTxByKey is not exposed over the internal ledger API — query svc-ledger directly');
+    },
+  };
+}
+
+/**
+ * History adapter for spend analytics.
+ *
+ * SOCKET (§13): depends on a `ledger.history` procedure that svc-ledger does not
+ * expose yet. Declaring it is a `packages/contracts` + svc-ledger PR, which
+ * AGENT_PROTOCOL §1 requires to land BEFORE the caller — so this adapter is
+ * written against the shape and fails loudly if the endpoint is absent.
+ *
+ * It deliberately does not fall back to an empty result: a spend view that
+ * silently reports zero is worse than one that is unavailable, because the user
+ * cannot tell the difference between "you spent nothing" and "we could not ask".
+ */
+export function createLedgerHistory(baseUrl: string): LedgerHistory {
+  const url = baseUrl.replace(/\/$/, '');
+
+  return {
+    async entriesFor(account: AccountRef, range: HistoryRange): Promise<LedgerEntryRecord[]> {
+      const result = await call<
+        Array<{ txId: string; module: string; reason: string; direction: 'debit' | 'credit'; amount: string; postedAt: string }>
+      >(url, '/trpc/history', { account, from: range.from.toISOString(), to: range.to.toISOString() });
+
+      return result.map((e) => ({
+        txId: e.txId,
+        module: e.module,
+        reason: e.reason,
+        direction: e.direction,
+        amount: parseAmount(e.amount),
+        postedAt: new Date(e.postedAt),
+      }));
+    },
+  };
+}
+
+async function call<T>(base: string, path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    // Preserve the ledger's own error text: 'ledger.insufficient_funds' and
+    // 'ledger.frozen' mean very different things to a caller, and collapsing
+    // them into "request failed" would make both unactionable.
+    throw new Error(`svc-ledger ${path} failed (${response.status}): ${detail}`);
+  }
+
+  return (await response.json()) as T;
+}
