@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
 /**
  * svc-agents environment.
@@ -52,7 +52,11 @@ const bool = z
   .union([z.boolean(), z.string()])
   .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
 
-const schema = serviceEnvSchema.merge(
+// This service self-mounts /trpc, so it must be able to authenticate the edge.
+// Only mounting services merge this — a service reached solely through the
+// gateway has no edge header to verify, and demanding the secret there would
+// make it boilerplate people copy without meaning it.
+const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
   z.object({
     SERVICE_NAME: z.string().default('svc-agents'),
     HTTP_PORT: z.coerce.number().int().default(4008),

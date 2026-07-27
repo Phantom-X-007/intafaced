@@ -54,6 +54,19 @@ export const httpEnvSchema = z.object({
   HTTP_PORT: port.default(3000),
 });
 
+/**
+ * Required by any service that self-mounts `/trpc` (see the mount boundary
+ * decision, docs/decisions/mount-boundary.md).
+ *
+ * There is deliberately NO default. A service that mounts without this must
+ * fail to boot: the alternative is a service that starts fine, serves traffic,
+ * and accepts whatever principal the caller claims — which looks healthy right
+ * up until the first forged withdrawal.
+ */
+export const edgeEnvSchema = z.object({
+  EDGE_PRINCIPAL_SECRET: z.string().min(32),
+});
+
 export const authEnvSchema = z.object({
   /** Short-lived access token signing key. Rotated via vault (§9). */
   JWT_ACCESS_SECRET: z.string().min(32),
