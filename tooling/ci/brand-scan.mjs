@@ -8,10 +8,20 @@
  *    anywhere in UI, API responses, or docs shipped to users."
  *
  * This scans everything that can reach a user — components, i18n catalogues,
- * API response literals, public docs — for forbidden names. Internal service
- * code may name the engine (it has to call it), so `services/svc-blueprint/src`
- * is allowed to reference it OUTSIDE of user-facing strings; the allowlist
- * below is deliberately narrow and every entry needs a reason.
+ * API response literals, public docs — for forbidden names.
+ *
+ * The vendor name is forbidden EVERYWHERE, including inside service code. There
+ * is no "internal code may name it" exemption: `services/svc-blueprint/src` is
+ * not allowlisted and never has been. The engine is reached through
+ * `BLUEPRINT_ENGINE_URL` and a `NeuralEngineClient`, which is enough to call it
+ * without naming it.
+ *
+ * (This comment previously claimed the opposite — that svc-blueprint's source
+ * was allowed to reference the vendor. It was never true, and the ALLOWLIST
+ * below proves it. A comment that invites you to trust a permission you do not
+ * have is worse than no comment. Caught while building svc-blueprint.)
+ *
+ * The allowlist is deliberately narrow and every entry carries a reason.
  *
  * Exit 0 = clean. Exit 1 = a name would have shipped.
  */
