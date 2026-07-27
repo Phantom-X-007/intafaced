@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { FLAG_REGISTRY, isEnabled, resolveAll, UnknownFlagError } from './flags.js';
+import {
+  DROPS,
+  DROP_NAMES,
+  FLAG_REGISTRY,
+  compareDrops,
+  explain,
+  isEnabled,
+  modulesWithoutKillSwitch,
+  resolveAll,
+  UnknownFlagError,
+  type FlagContext,
+} from './flags.js';
+import { MODULE_IDS } from './modules.js';
 
 const base = { drop: '0' } as const;
 
@@ -51,6 +63,93 @@ describe('kill-switch (§14 admin controls)', () => {
         disabledModules: ['token'],
       }),
     ).toBe(false);
+  });
+});
+
+describe('explain — why a flag is in its state', () => {
+  it('attributes an on flag to the drop clock, and names the drop', () => {
+    const e = explain('blueprint.onboarding', { drop: 'I' });
+    expect(e).toMatchObject({ enabled: true, source: 'drop' });
+    expect(e.reason).toContain('Blueprint');
+  });
+
+  it('attributes a not-yet flag to a pending drop', () => {
+    expect(explain('token.tge', { drop: 'I' })).toMatchObject({ enabled: false, source: 'drop-pending' });
+  });
+
+  it('distinguishes phase-gated from merely waiting', () => {
+    // The distinction an operator needs: `chain.mainnet` will NEVER turn on by
+    // waiting, however far the drop clock advances. `token.tge` will.
+    expect(explain('chain.mainnet', { drop: 'V' })).toMatchObject({ enabled: false, source: 'phase-gated' });
+    expect(explain('token.tge', { drop: 'III' })).toMatchObject({ source: 'drop-pending' });
+  });
+
+  it('names the env var that pinned a flag', () => {
+    const e = explain('token.tge', { drop: '0', env: { INTAFACED_FLAG_TOKEN_TGE: 'on' } });
+    expect(e).toMatchObject({ enabled: true, source: 'env' });
+    expect(e.reason).toContain('INTAFACED_FLAG_TOKEN_TGE');
+  });
+
+  it('reports an explicit override', () => {
+    expect(explain('waitlist.enabled', { drop: 'V', overrides: { 'waitlist.enabled': false } })).toMatchObject({
+      enabled: false,
+      source: 'override',
+    });
+  });
+
+  it('reports the kill-switch, and it beats everything else', () => {
+    expect(
+      explain('token.tge', {
+        drop: 'V',
+        overrides: { 'token.tge': true },
+        env: { INTAFACED_FLAG_TOKEN_TGE: 'on' },
+        disabledModules: ['token'],
+      }),
+    ).toMatchObject({ enabled: false, source: 'kill-switch' });
+  });
+
+  /**
+   * The important one. `explain` mirrors `isEnabled`'s precedence by hand, so
+   * without this they could silently drift — and an operator acting on a wrong
+   * explanation is worse off than one with no explanation at all.
+   */
+  it('never disagrees with isEnabled, across every flag and a spread of contexts', () => {
+    const contexts: FlagContext[] = [
+      { drop: '0' },
+      { drop: 'III' },
+      { drop: 'V' },
+      { drop: 'V', disabledModules: ['token', 'trade'] },
+      { drop: '0', env: { INTAFACED_FLAG_TOKEN_TGE: 'on', INTAFACED_FLAG_CHAIN_MAINNET: 'off' } },
+      { drop: 'II', overrides: { 'token.tge': true, 'waitlist.enabled': false } },
+    ];
+
+    for (const ctx of contexts) {
+      for (const flag of FLAG_REGISTRY) {
+        expect(explain(flag.key, ctx).enabled, `${flag.key} @ drop ${ctx.drop}`).toBe(isEnabled(flag.key, ctx));
+      }
+    }
+  });
+});
+
+describe('§14 — every module needs a kill-switch', () => {
+  it('leaves no module without one', () => {
+    // A module with no flag is a module whose Definition of Done can never
+    // pass, because the gate checks for exactly this. `market` and `indexer`
+    // were missing — both would have been blocked on the day they landed.
+    expect(modulesWithoutKillSwitch(MODULE_IDS)).toEqual([]);
+  });
+});
+
+describe('drop ordering', () => {
+  it('compares by sequence, not lexicographically', () => {
+    expect(compareDrops('0', 'V')).toBeLessThan(0);
+    expect(compareDrops('IV', 'III')).toBeGreaterThan(0);
+    expect(compareDrops('II', 'II')).toBe(0);
+  });
+
+  it('names every drop', () => {
+    for (const drop of DROPS) expect(DROP_NAMES[drop]).toBeTruthy();
+    expect(DROP_NAMES.III).toBe('Soft launch');
   });
 });
 

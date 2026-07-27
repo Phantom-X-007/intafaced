@@ -100,12 +100,25 @@ function checkService(serviceDir) {
   }
 
   // 5 · Admin kill-switch
+  //
+  // This was `flags.includes("'<moduleId>'")` — a substring search over the
+  // whole file, which a flag KEY, a description, or an unrelated import could
+  // satisfy without any kill-switch existing. A gate that can be passed by
+  // coincidence is not a gate. It now parses the module argument of each
+  // `def(...)` call, which is the thing that actually confers the switch.
   const flagsFile = join(ROOT, 'packages', 'config', 'src', 'flags.ts');
   if (existsSync(flagsFile)) {
     const moduleId = service.replace(/^svc-/, '');
     const flags = readFileSync(flagsFile, 'utf8');
-    if (!flags.includes(`'${moduleId}'`)) {
-      failures.push(`module "${moduleId}" has no flags declared — the operator has no kill-switch (§14 admin controls)`);
+
+    // def('some.key', 'module-id', …) — the second argument names the module.
+    const declared = new Set([...flags.matchAll(/\bdef\(\s*'[^']+'\s*,\s*'([^']+)'/g)].map((m) => m[1]));
+
+    if (!declared.has(moduleId)) {
+      failures.push(
+        `module "${moduleId}" has no flag declared against it in FLAG_REGISTRY — ` +
+          `the operator has no kill-switch (§14 admin controls)`,
+      );
     }
   }
 
