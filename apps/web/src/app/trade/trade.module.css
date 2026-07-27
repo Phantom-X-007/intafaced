@@ -1,0 +1,303 @@
+.terminal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-3);
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: var(--if-space-4) var(--if-space-4) var(--if-space-8);
+}
+
+/* ── Headline rail ────────────────────────────────────────────────────────── */
+
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--if-space-6);
+  padding: var(--if-space-3) var(--if-space-4);
+  border: 1px solid var(--if-glass-border);
+  border-radius: var(--if-radius-lg);
+  background: var(--if-glass);
+  backdrop-filter: var(--if-blur-glass);
+  -webkit-backdrop-filter: var(--if-blur-glass);
+}
+
+.market {
+  display: flex;
+  align-items: center;
+  gap: var(--if-space-3);
+  padding-right: var(--if-space-6);
+  border-right: 1px solid var(--if-glass-border);
+}
+
+.kind {
+  padding: 2px var(--if-space-2);
+  border: 1px solid var(--if-glass-border);
+  border-radius: var(--if-radius-pill);
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--if-text-faint);
+}
+
+.headlineStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--if-space-8);
+}
+
+.headlineStat {
+  min-width: 96px;
+}
+
+/* ── The four regions ─────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  gap: var(--if-space-3);
+  align-items: stretch;
+}
+
+.bookColumn,
+.chartColumn,
+.ticketColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-3);
+  min-width: 0;
+}
+
+.flexPanel {
+  flex: 1;
+}
+
+.chartPanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+.chartPanel > :last-child {
+  flex: 1;
+  display: flex;
+}
+
+/* Chart mount point — the renderer replaces the contents, not the box. */
+.chartSurface {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--if-space-2);
+  min-height: 320px;
+  border: 1px dashed var(--if-glass-border);
+  border-radius: var(--if-radius-md);
+  background-image:
+    linear-gradient(to right, var(--if-glass-border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--if-glass-border) 1px, transparent 1px);
+  background-size: 48px 32px;
+}
+
+.chartLabel {
+  font-family: var(--if-font-display);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--if-phosphor);
+}
+
+.chartNote {
+  font-size: 11px;
+  color: var(--if-text-faint);
+}
+
+.timeframes {
+  display: flex;
+  gap: var(--if-space-1);
+}
+
+.timeframe {
+  padding: 2px var(--if-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--if-radius-sm);
+  font-family: var(--if-font-mono);
+  font-size: 10px;
+  color: var(--if-text-faint);
+}
+
+.timeframe[data-active='true'] {
+  border-color: var(--if-glass-border-strong);
+  background: var(--if-glass-raised);
+  color: var(--if-phosphor);
+}
+
+/* ── Order ticket ─────────────────────────────────────────────────────────── */
+
+.ticket {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-3);
+}
+
+.sideToggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--if-space-1);
+}
+
+.sideButton {
+  padding: var(--if-space-2);
+  border: 1px solid var(--if-glass-border);
+  border-radius: var(--if-radius-md);
+  background: var(--if-glass);
+  font-family: var(--if-font-display);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--if-text-muted);
+  cursor: pointer;
+  transition:
+    border-color var(--if-motion-fast),
+    color var(--if-motion-fast),
+    background var(--if-motion-fast);
+}
+
+.sideButton[data-side='long'][aria-pressed='true'] {
+  border-color: var(--if-long);
+  color: var(--if-long);
+  background: var(--if-glass-raised);
+}
+
+.sideButton[data-side='short'][aria-pressed='true'] {
+  border-color: var(--if-short);
+  color: var(--if-short);
+  background: var(--if-glass-raised);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-1);
+}
+
+.fieldLabel {
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--if-text-faint);
+}
+
+.input,
+.select {
+  width: 100%;
+  padding: var(--if-space-2);
+  border: 1px solid var(--if-glass-border);
+  border-radius: var(--if-radius-md);
+  background: var(--if-glass);
+  font-size: 13px;
+  color: var(--if-text);
+  transition: border-color var(--if-motion-fast);
+}
+
+.input:hover,
+.select:hover {
+  border-color: var(--if-glass-border-strong);
+}
+
+.select {
+  font-family: var(--if-font-body);
+}
+
+.summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--if-space-3);
+  padding: var(--if-space-1) 0;
+  border-bottom: 1px solid var(--if-glass);
+  font-size: 13px;
+  color: var(--if-text);
+}
+
+.submit {
+  padding: var(--if-space-3);
+  border: 1px solid var(--if-glass-border-strong);
+  border-radius: var(--if-radius-md);
+  background: var(--if-glass-raised);
+  font-family: var(--if-font-display);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--if-phosphor);
+  cursor: pointer;
+  transition:
+    box-shadow var(--if-motion-base),
+    opacity var(--if-motion-base);
+}
+
+.submit:hover:not(:disabled) {
+  box-shadow: var(--if-shadow-glow);
+}
+
+.submit:disabled {
+  border-color: var(--if-glass-border);
+  color: var(--if-phosphor-dim);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.pending {
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--if-text-faint);
+}
+
+.accountGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--if-space-4);
+}
+
+/* ── Reflow ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 1400px) {
+  .grid {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .ticketColumn {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .ticketColumn > * {
+    flex: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ticketColumn {
+    flex-direction: column;
+  }
+
+  .market {
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .headlineStats {
+    gap: var(--if-space-5);
+  }
+}
