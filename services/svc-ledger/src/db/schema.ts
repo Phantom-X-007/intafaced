@@ -125,4 +125,25 @@ export const chainTip = ledger.table('chain_tip', {
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
 
-export const schema = { assets, accounts, ledgerTx, ledgerEntries, balanceSnapshots, chainTip };
+/**
+ * Single-row table holding the posting freeze — the platform kill-switch.
+ *
+ * Durable rather than a field on LedgerService, because the freeze outranks the
+ * process that set it: a restart must not resume posting on a book that
+ * reconciliation halted, and a second replica must not keep writing to it.
+ *
+ * Read inside the same `FOR UPDATE` on `chain_tip` that every post already
+ * takes (see postgres-ledger.ts) — so the check costs no extra round trip and,
+ * more importantly, cannot be raced by a post already in flight.
+ */
+export const postingFreeze = ledger.table('posting_freeze', {
+  id: boolean('id').primaryKey().default(true),
+  frozen: boolean('frozen').notNull().default(false),
+  /** What a human reads at 3am to decide whether the halt can be lifted. */
+  reason: text('reason'),
+  /** Operator principal id, 'reconciliation', or 'env:LEDGER_POSTING_ENABLED'. */
+  actor: text('actor'),
+  changedAt: timestamp('changed_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+});
+
+export const schema = { assets, accounts, ledgerTx, ledgerEntries, balanceSnapshots, chainTip, postingFreeze };

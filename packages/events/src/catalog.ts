@@ -139,6 +139,38 @@ export const ledgerReconciliationFailed = defineEvent(
   'Snapshot and entry replay disagree. Pages the operator and freezes the diverging module (§4.2).',
 );
 
+/**
+ * ONE subject for both directions, deliberately.
+ *
+ * `VERBS` is a closed list and holds no honest past tense for un-freezing, so
+ * the alternative was either widening the event vocabulary or publishing a
+ * thaw on a subject named `.frozen` — a subject that lies about its payload.
+ *
+ * The better reason is the consumer's: an alerting consumer subscribed to a
+ * freeze-only subject would raise the alarm and never learn it was cleared.
+ * One subject carrying the state means nothing can subscribe to half of it.
+ */
+export const ledgerFreezeUpdated = defineEvent(
+  'ledger',
+  'freeze',
+  'updated',
+  1,
+  z.object({
+    frozen: z.boolean(),
+    /** Null only when `frozen` is false — an unexplained freeze is unactionable. */
+    reason: z.string().min(1).nullable(),
+    /**
+     * WHO. An operator's principal id, `reconciliation` for the automatic
+     * self-freeze, or `env:LEDGER_POSTING_ENABLED` for a boot-time freeze.
+     * Never anonymous: the most consequential switch in the OS must always
+     * name the thing that threw it.
+     */
+    actor: z.string().min(1),
+    changedAt: z.string().datetime({ offset: true }),
+  }),
+  'Ledger posting was frozen or thawed. Durable state, not a process signal — every replica reads the same row (§4.2).',
+);
+
 // ── token (§4.3) ─────────────────────────────────────────────────────────────
 
 export const stakeCreated = defineEvent(
@@ -533,6 +565,7 @@ export const EVENT_CATALOG = {
   kycApproved,
   ledgerTxPosted,
   ledgerReconciliationFailed,
+  ledgerFreezeUpdated,
   stakeCreated,
   buybackExecuted,
   blueprintCreated,

@@ -49,9 +49,12 @@ const balanceOutput = z.object({
 
 export function createLedgerRouter(ledger: LedgerService) {
   return router({
+    // Reads the freeze row rather than a cached field: a replica that reports
+    // itself healthy while the shared book is frozen is worse than no health
+    // check at all.
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-ledger'), postingEnabled: z.boolean() }))
-      .query(() => ({ ok: true, service: 'svc-ledger' as const, postingEnabled: ledger.status().postingEnabled })),
+      .query(async () => ({ ok: true, service: 'svc-ledger' as const, postingEnabled: (await ledger.status()).postingEnabled })),
 
     /** Service-to-service only. Amounts arrive as decimal strings. */
     post: publicProcedure
@@ -131,19 +134,26 @@ export function createLedgerRouter(ledger: LedgerService) {
         };
       }),
 
+    /**
+     * The freeze is durable, so this returns what the DATABASE now holds rather
+     * than the constant it used to. `frozenBy` is echoed back because the
+     * operator halting the platform should see their own name land on the
+     * record — and because on a book already frozen by reconciliation, the
+     * reply naming a different actor is the fastest way to find that out.
+     */
     freeze: scopedProcedure('admin:treasury')
       .input(z.object({ reason: z.string().min(1) }))
-      .output(z.object({ postingEnabled: z.boolean() }))
-      .mutation(({ input }) => {
-        ledger.freeze(input.reason);
-        return { postingEnabled: false };
+      .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const state = await ledger.freeze(input.reason, ctx.principal.userId);
+        return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
       }),
 
     unfreeze: scopedProcedure('admin:treasury')
-      .output(z.object({ postingEnabled: z.boolean() }))
-      .mutation(() => {
-        ledger.unfreeze();
-        return { postingEnabled: true };
+      .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
+      .mutation(async ({ ctx }) => {
+        const state = await ledger.unfreeze(ctx.principal.userId);
+        return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
       }),
   });
 }

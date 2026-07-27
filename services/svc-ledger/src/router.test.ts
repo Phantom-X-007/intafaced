@@ -58,9 +58,9 @@ function stubService(overrides: Partial<Record<string, unknown>> = {}) {
     balance: async () => ({ account: userAvailable(USER, 'USDT'), accountId: 'acct-1', amount: amt('100') }),
     balances: async () => [{ account: userAvailable(USER, 'USDT'), accountId: 'acct-1', amount: amt('100') }],
     reconcile: async () => ({ ok: true, balances: { ok: true, accountsChecked: 3 }, chain: { ok: true, length: 7 }, unbalancedAssets: [] }),
-    freeze: () => undefined,
-    unfreeze: () => undefined,
-    status: () => ({ postingEnabled: true, frozenReason: null }),
+    freeze: async (reason: string, actor: string) => ({ frozen: true, reason, actor, changedAt: new Date('2026-07-27T00:00:00Z') }),
+    unfreeze: async (actor: string) => ({ frozen: false, reason: null, actor, changedAt: new Date('2026-07-27T00:00:00Z') }),
+    status: async () => ({ postingEnabled: true, frozenReason: null, frozenBy: null }),
     ...overrides,
   } as unknown as LedgerService;
 }
@@ -187,12 +187,17 @@ describe('balances — authorisation', () => {
 });
 
 describe('operator controls', () => {
-  let frozenWith: string | null;
+  let frozenWith: { reason: string; actor: string } | null;
   let service: LedgerService;
 
   beforeEach(() => {
     frozenWith = null;
-    service = stubService({ freeze: (reason: string) => void (frozenWith = reason) });
+    service = stubService({
+      freeze: async (reason: string, actor: string) => {
+        frozenWith = { reason, actor };
+        return { frozen: true, reason, actor, changedAt: new Date('2026-07-27T00:00:00Z') };
+      },
+    });
   });
 
   it('requires admin:treasury to freeze', async () => {
@@ -209,10 +214,16 @@ describe('operator controls', () => {
     expect(frozenWith).toBeNull();
   });
 
-  it('freezes with the operator’s reason recorded', async () => {
+  it('freezes with the operator’s reason AND their identity recorded', async () => {
+    // Who froze it is not decoration. An operator finding the platform halted
+    // needs to know whether a human did it or reconciliation did.
     const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: 'suspected drift in USDT' })).resolves.toEqual({ postingEnabled: false });
-    expect(frozenWith).toBe('suspected drift in USDT');
+    await expect(caller.freeze({ reason: 'suspected drift in USDT' })).resolves.toEqual({
+      postingEnabled: false,
+      frozenReason: 'suspected drift in USDT',
+      frozenBy: USER,
+    });
+    expect(frozenWith).toEqual({ reason: 'suspected drift in USDT', actor: USER });
   });
 
   it('demands a non-empty reason — an unexplained freeze is unactionable', async () => {
@@ -236,7 +247,7 @@ describe('health', () => {
   });
 
   it('reflects a frozen ledger', async () => {
-    const service = stubService({ status: () => ({ postingEnabled: false, frozenReason: 'drift' }) });
+    const service = stubService({ status: async () => ({ postingEnabled: false, frozenReason: 'drift', frozenBy: 'reconciliation' }) });
     const caller = createLedgerRouter(service).createCaller(await ctx([]));
     await expect(caller.health()).resolves.toMatchObject({ postingEnabled: false });
   });
