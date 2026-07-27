@@ -21,7 +21,7 @@
  * reviewer signs them explicitly rather than by silence.
  */
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, relative, basename } from 'node:path';
+import { join, relative, basename, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = process.cwd();
@@ -90,30 +90,55 @@ function checkService(serviceDir) {
   }
   const testFiles = [...walk(srcDir, ['.test.ts'])];
 
-  for (const file of moneyFiles) {
-    const sibling = file.replace(/\.ts$/, '.test.ts');
-    const moduleName = basename(file, '.ts');
+  /** Relative import specifiers in a file, resolved to absolute .ts paths. */
+  function importsOf(sourceFile) {
+    if (!existsSync(sourceFile)) return [];
+    const source = readFileSync(sourceFile, 'utf8');
+    const dir = join(sourceFile, '..');
+    return [...source.matchAll(/from\s+'(\.[^']+)'/g)].map((m) => resolve(dir, m[1].replace(/\.js$/, '.ts')));
+  }
 
-    // A money file is covered by its own sibling test, or by a test in the same
-    // directory that actually imports it.
-    //
-    // This previously also accepted "any .test.ts anywhere under src/", which
-    // made the check a FALSE GREEN: a single unrelated test file satisfied it
-    // for every money path in the service. A gate that passes because some
-    // other file has a test is not a gate. Found by partner audit.
-    let covered = testFiles.includes(sibling);
-
-    if (!covered) {
-      covered = testFiles.some((t) => {
-        if (join(t, '..') !== join(file, '..')) return false;
-        return new RegExp(`from\\s+'\\.\\/${moduleName}\\.js'`).test(readFileSync(t, 'utf8'));
-      });
+  /**
+   * Everything reachable from the tests, following imports transitively.
+   *
+   * Transitive on purpose. A test that drives `bank-service.ts`, which delegates
+   * to `earn/earn-service.ts`, genuinely exercises the earn money paths — and
+   * requiring a direct import would be checking the shape of the call graph
+   * rather than whether the code is covered.
+   */
+  const reachable = new Set();
+  const queue = [...testFiles];
+  while (queue.length > 0) {
+    const current = queue.pop();
+    for (const imported of importsOf(current)) {
+      if (reachable.has(imported)) continue;
+      reachable.add(imported);
+      queue.push(imported);
     }
+  }
+
+  for (const file of moneyFiles) {
+    // A money file is covered when SOME test in the service actually imports it.
+    //
+    // Two failure modes to avoid, and this sits between them:
+    //
+    //   · "any .test.ts anywhere under src/" — the original, a false green. One
+    //     unrelated test satisfied the check for every money path in the
+    //     service. Found by partner audit.
+    //   · "a test in the same directory" — my first fix, too prescriptive. It
+    //     dictates layout rather than checking coverage: svc-bank keeps its
+    //     money paths in src/earn/ and src/transfers/ with one integration
+    //     suite at the service root, which is a perfectly good structure and
+    //     would have failed. Found by the agent building it.
+    //
+    // Following the import graph checks the thing we actually care about —
+    // that the file is exercised — and leaves the layout to the author.
+    const covered = reachable.has(file);
 
     if (!covered) {
       failures.push(
-        `${relative(ROOT, file)} moves value but no test in its directory imports it ` +
-          `(§14: money paths ≥ 95% coverage). Add ${basename(sibling)}, or import it from a sibling test.`,
+        `${relative(ROOT, file)} moves value but no test in this service imports it ` +
+          `(§14: money paths ≥ 95% coverage). Import it from a test, or add ${basename(file, '.ts')}.test.ts.`,
       );
     }
   }
