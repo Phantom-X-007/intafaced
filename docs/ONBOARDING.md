@@ -31,7 +31,7 @@ Paste the block below into Telegram. Everything after it is context for whoever 
 >
 > ```bash
 > pnpm wt feat/your-thing              # creates the worktree + installs
-> cd ../plug-x-inta-worktrees/feat-your-thing
+> cd ../intafaced-worktrees/feat-your-thing   # or ../sovereign-worktrees/… if the clone folder is named Sovereign
 > # work here. open your editor AND your agent in THIS directory.
 > git push -u origin feat/your-thing
 > gh pr create --fill
@@ -67,11 +67,8 @@ Paste the block below into Telegram. Everything after it is context for whoever 
 
 ### Where they can safely start
 
-Good first PRs — real work, no way to break the Core:
+Check **open PRs first** (`gh pr list`) — do not double-build Denon’s in-flight work (matching, web shell, admin, i18n, etc.).
 
-- `apps/web` scaffold (Next.js 15 + `@intafaced/ui` tokens) — nothing depends on it yet
-- External venue adapters in `packages/venue-adapter` — the `LiquiditySource` interface is done and tested, adding a CCXT-backed venue is self-contained
-- `packages/ui` primitives beyond the five that exist
-- i18n scaffolding (§9) — needed everywhere, blocks nothing
+Then use `pnpm tracker ready`. Broker-critical next claim after matching merges: **`trade.spot`**. See [`START-HERE.md`](START-HERE.md) and [`PHASE2-NITRO-PLAN-2026-07-27.md`](PHASE2-NITRO-PLAN-2026-07-27.md).
 
-Where they should **not** start: `packages/ledger-client`, `svc-ledger`, or anything in Phase 1. Not because they can't, but because the Core is the foundation everything else is being built on right now, and two people editing it in week one is how the foundation gets wobbly.
+Where they should **not** start: re-implementing open PRs, or casually editing `packages/ledger-client` / `svc-ledger` without a clear recipe need — Core money code is foundation.
