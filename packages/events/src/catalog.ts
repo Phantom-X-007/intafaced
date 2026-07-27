@@ -324,6 +324,8 @@ export const agentUsageSettled = defineEvent(
     chargeKey: z.string(),
   }),
   'A metered usage window was billed through the ledger (§8.2 premium agent tiers).',
+);
+
 // ── p2p (§6.2) ───────────────────────────────────────────────────────────────
 
 export const p2pOfferCreated = defineEvent(
