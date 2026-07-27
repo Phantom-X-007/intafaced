@@ -11,7 +11,6 @@ import {
   parseAmount as amt,
   railBoundary,
   userAvailable,
-  userHold,
 } from '@intafaced/ledger-client';
 import { PayService, PayError, type PaymentView } from './payment-service.js';
 import { RailRegistry } from './rails/registry.js';
@@ -138,6 +137,18 @@ if (!available) {
     formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
   const clearingOf = async (merchantId: string, assetId = 'USDT') =>
     formatAmount((await ledger.balance(merchantClearing(merchantId, assetId))).amount);
+  /**
+   * Everything held for a user in an asset, across every purpose (P0-3).
+   *
+   * Stronger than the single-account read it replaces: "nothing is held" now
+   * means no hold under ANY purpose, rather than none under one chosen key.
+   */
+  const heldTotalOf = async (userId: string, assetId = 'USDT') => {
+    const all = await ledger.balances('user', userId);
+    return formatAmount(
+      all.filter((b) => b.account.kind === 'hold' && b.account.assetId === assetId).reduce((acc, b) => acc + b.amount, 0n),
+    );
+  };
   const feesOf = async (assetId = 'USDT') => formatAmount((await ledger.balance(houseFees('pay', assetId))).amount);
   const boundaryOf = async (rail: string, assetId = 'USDT') => formatAmount((await ledger.balance(railBoundary(rail, assetId))).amount);
 
@@ -818,7 +829,7 @@ if (!available) {
       expect(paid.status).toBe('paid_out');
       expect(paid.payoutRef).toBeTruthy();
       expect(await availableOf(MERCHANT_USER)).toBe('0');
-      expect(formatAmount((await ledger.balance(userHold(MERCHANT_USER, 'USDT'))).amount)).toBe('0');
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
       expect(chain.totalSent('USDT')).toBe('10');
       expect(ledger.totalsByAsset().USDT).toBe('0');
       expect(ledger.reconcile()).toEqual({ ok: true });
@@ -842,7 +853,7 @@ if (!available) {
       // Held, then released. There is no state in which the merchant's money is
       // neither available, nor held, nor gone with a reference against it.
       expect(await availableOf(MERCHANT_USER)).toBe('50');
-      expect(formatAmount((await ledger.balance(userHold(MERCHANT_USER, 'USDT'))).amount)).toBe('0');
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
       expect((await pay.getSettlement(settlement.id)).status).toBe('failed');
       expect(ledger.reconcile()).toEqual({ ok: true });
 

@@ -549,6 +549,11 @@ export class TradeService {
         fillId: fillIdFor(market.id, fill.sequence),
         makerId: maker.userId,
         takerId: taker.userId,
+        // P0-3: name whose reservation each side is spending. These come from
+        // the order store — this service's source of truth for a fill (see the
+        // P0-2 ADR) — not from the engine event, which carries neither.
+        makerOrderId: maker.id,
+        takerOrderId: taker.id,
         baseAsset: market.baseAsset,
         quoteAsset: market.quoteAsset,
         qty,

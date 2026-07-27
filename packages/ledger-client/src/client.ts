@@ -2,6 +2,7 @@ import { formatAmount, isNegative, isZero, sum, type Amount } from './money.js';
 import {
   UnbalancedTransactionError,
   InvalidEntryError,
+  accountPurpose,
   type AccountRef,
   type Balance,
   type EntryInput,
@@ -56,7 +57,10 @@ export function readOnly(client: LedgerClient): ReadOnlyLedgerClient {
 // ── Invariants ───────────────────────────────────────────────────────────────
 
 export function accountKey(ref: AccountRef): string {
-  return `${ref.ownerType}:${ref.ownerId}:${ref.assetId}:${ref.kind}`;
+  // `purpose` is part of account IDENTITY, not metadata (P0-3). Omitting it here
+  // would collapse `order:a` and `withdraw:b` back into one balance in every
+  // in-memory implementation, which is the bug with extra steps.
+  return `${ref.ownerType}:${ref.ownerId}:${ref.assetId}:${ref.kind}:${accountPurpose(ref)}`;
 }
 
 /** Signed delta an entry applies to its account: debit adds, credit subtracts. */
@@ -141,12 +145,44 @@ export function assertPairedLocks(entries: readonly EntryInput[]): void {
   }
 }
 
+/**
+ * Every `hold` entry names what it is holding for (P0-3).
+ *
+ * This is the invariant that stops the commingled bucket coming back. Before
+ * it, `userHold(user, asset)` was one pot for order reservations and withdrawal
+ * holds alike, so `withdrawSettle` could draw down value an open order was
+ * relying on: both postings balance, the journal reconciles, and the order is
+ * quietly unfunded. Nothing in the books could tell you it had happened,
+ * because nothing in the books had recorded which hold was whose.
+ *
+ * Checked here rather than in each recipe so it also binds anything that
+ * assembles entries directly — the recipes are the sanctioned path, not the
+ * only physically possible one.
+ *
+ * Deliberately `hold` only. `escrow`, `stake` and `collateral` are already
+ * keyed by their own business object elsewhere, and forcing a purpose onto
+ * `available` would fragment a balance that is fungible with itself.
+ */
+export function assertPurposedHolds(entries: readonly EntryInput[]): void {
+  for (const entry of entries) {
+    if (entry.account.kind !== 'hold') continue;
+    if (entry.account.purpose && entry.account.purpose.length > 0) continue;
+
+    throw new InvalidEntryError(
+      `Hold account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} has no purpose — ` +
+        'a hold must name what it is held for (e.g. "order:<id>", "withdraw:<id>") so one purpose cannot spend ' +
+        "another's reservation (P0-3, §4.2)",
+    );
+  }
+}
+
 export function assertValidPost(request: PostRequest): void {
   if (!request.idempotencyKey || request.idempotencyKey.length < 8) {
     throw new InvalidEntryError('An idempotency key of at least 8 characters is required on every post');
   }
   assertBalanced(request.entries);
   assertPairedLocks(request.entries);
+  assertPurposedHolds(request.entries);
 }
 
 /** Total absolute value moved, per asset — used for metrics and fee reporting. */

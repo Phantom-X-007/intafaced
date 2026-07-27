@@ -13,7 +13,7 @@ import {
   parseAmount as amt,
   recipes,
   userAvailable,
-  userHold,
+  orderHoldAccount,
 } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
@@ -90,7 +90,22 @@ if (!available) {
   }
 
   const avail = async (userId: string, assetId: string) => formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
-  const held = async (userId: string, assetId: string) => formatAmount((await ledger.balance(userHold(userId, assetId))).amount);
+  /**
+   * Everything held for a user in an asset, summed across purposes (P0-3).
+   *
+   * Holds are per-order now, so "how much is held" is a sum rather than one
+   * account. Every assertion below keeps its original meaning and gains reach:
+   * a stray hold under any other purpose would now show up here.
+   */
+  const held = async (userId: string, assetId: string) => {
+    const all = await ledger.balances('user', userId);
+    return formatAmount(
+      all.filter((b) => b.account.kind === 'hold' && b.account.assetId === assetId).reduce((acc, b) => acc + b.amount, 0n),
+    );
+  };
+  /** The hold belonging to one specific order. */
+  const heldFor = async (userId: string, assetId: string, orderId: string) =>
+    formatAmount((await ledger.balance(orderHoldAccount(userId, assetId, orderId))).amount);
   const fees = async (assetId: string) => formatAmount((await ledger.balance(houseFees('trade', assetId))).amount);
 
   const postsWithReason = (reason: string) => ledger.journal().filter((tx) => tx.reason === reason);
@@ -198,7 +213,9 @@ if (!available) {
       let holdAtSubmit: string | null = null;
       matching.onSubmit = async (request) => {
         const tx = await ledger.getTxByKey(`order.hold:${request.orderId}`);
-        holdAtSubmit = tx ? formatAmount((await ledger.balance(userHold(ALICE, 'USDT'))).amount) : null;
+        // Read THIS order's own hold — the point is that this order is funded,
+        // not that the user happens to have value held for something else.
+        holdAtSubmit = tx ? await heldFor(ALICE, 'USDT', request.orderId) : null;
       };
 
       await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-order');

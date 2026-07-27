@@ -7,13 +7,14 @@ import {
   houseFees,
   merchantClearing,
   mintBoundary,
+  orderHoldAccount,
   railBoundary,
   rewardsEngine,
   userAvailable,
   userCollateral,
   userEscrow,
-  userHold,
   userStake,
+  withdrawalHoldAccount,
 } from '../accounts.js';
 
 /**
@@ -78,7 +79,10 @@ export function withdrawHold(input: WithdrawInput): PostRequest {
     module: 'ledger',
     reason: 'withdraw.held',
     meta: { rail: input.rail, withdrawalId: input.withdrawalId },
-    entries: [credit(userAvailable(input.userId, input.assetId), input.amount), debit(userHold(input.userId, input.assetId), input.amount)],
+    entries: [
+      credit(userAvailable(input.userId, input.assetId), input.amount),
+      debit(withdrawalHoldAccount(input.userId, input.assetId, input.withdrawalId), input.amount),
+    ],
   };
 }
 
@@ -90,7 +94,13 @@ export function withdrawSettle(input: WithdrawInput): PostRequest {
     module: 'ledger',
     reason: 'withdraw.settled',
     meta: { rail: input.rail, withdrawalId: input.withdrawalId },
-    entries: [credit(userHold(input.userId, input.assetId), input.amount), debit(railBoundary(input.rail, input.assetId), input.amount)],
+    // Draws on THIS withdrawal's hold. Before P0-3 this credited the user's one
+    // shared hold account, so a settle could consume value an open order had
+    // reserved — balanced books, unfunded order, no record of which.
+    entries: [
+      credit(withdrawalHoldAccount(input.userId, input.assetId, input.withdrawalId), input.amount),
+      debit(railBoundary(input.rail, input.assetId), input.amount),
+    ],
   };
 }
 
@@ -102,7 +112,10 @@ export function withdrawReverse(input: WithdrawInput): PostRequest {
     module: 'ledger',
     reason: 'withdraw.reversed',
     meta: { rail: input.rail, withdrawalId: input.withdrawalId },
-    entries: [credit(userHold(input.userId, input.assetId), input.amount), debit(userAvailable(input.userId, input.assetId), input.amount)],
+    entries: [
+      credit(withdrawalHoldAccount(input.userId, input.assetId, input.withdrawalId), input.amount),
+      debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
   };
 }
 
@@ -112,6 +125,16 @@ export interface TradeFillInput {
   fillId: string;
   makerId: string;
   takerId: string;
+  /**
+   * Which orders are being drawn down (P0-3).
+   *
+   * Required, because a fill has to say whose reservation it is spending. With
+   * one hold per (user, asset) a fill could be settled out of a hold placed by
+   * a completely different order — or by a withdrawal — and the transaction
+   * would still balance.
+   */
+  makerOrderId: string;
+  takerOrderId: string;
   baseAsset: string;
   quoteAsset: string;
   /** Base quantity traded. */
@@ -155,13 +178,13 @@ export function tradeFill(input: TradeFillInput): PostRequest {
   }
 
   const entries: EntryInput[] = [
-    // Asset the taker paid: out of taker hold, into maker available + house fees.
-    credit(userHold(input.takerId, takerPaysAsset), takerPaysAmount),
+    // Asset the taker paid: out of THIS ORDER's hold, into maker available + house fees.
+    credit(orderHoldAccount(input.takerId, takerPaysAsset, input.takerOrderId), takerPaysAmount),
     debit(userAvailable(input.makerId, takerPaysAsset), makerReceives),
     ...(makerFee > 0n ? [debit(houseFees('trade', takerPaysAsset), makerFee)] : []),
 
-    // Asset the maker paid: out of maker hold, into taker available + house fees.
-    credit(userHold(input.makerId, makerPaysAsset), makerPaysAmount),
+    // Asset the maker paid: out of THIS ORDER's hold, into taker available + house fees.
+    credit(orderHoldAccount(input.makerId, makerPaysAsset, input.makerOrderId), makerPaysAmount),
     debit(userAvailable(input.takerId, makerPaysAsset), takerReceives),
     ...(takerFee > 0n ? [debit(houseFees('trade', makerPaysAsset), takerFee)] : []),
   ];
@@ -175,6 +198,8 @@ export function tradeFill(input: TradeFillInput): PostRequest {
       takerSide: input.takerSide,
       makerFeeBps: input.makerFeeBps,
       takerFeeBps: input.takerFeeBps,
+      makerOrderId: input.makerOrderId,
+      takerOrderId: input.takerOrderId,
     },
     entries,
   };
@@ -195,7 +220,10 @@ export function orderHold(input: OrderHoldInput): PostRequest {
     module: 'trade',
     reason: 'order.hold',
     meta: { orderId: input.orderId },
-    entries: [credit(userAvailable(input.userId, input.assetId), input.amount), debit(userHold(input.userId, input.assetId), input.amount)],
+    entries: [
+      credit(userAvailable(input.userId, input.assetId), input.amount),
+      debit(orderHoldAccount(input.userId, input.assetId, input.orderId), input.amount),
+    ],
   };
 }
 
@@ -207,7 +235,10 @@ export function orderHoldRelease(input: OrderHoldInput & { sequence?: number }):
     module: 'trade',
     reason: 'order.hold.released',
     meta: { orderId: input.orderId },
-    entries: [credit(userHold(input.userId, input.assetId), input.amount), debit(userAvailable(input.userId, input.assetId), input.amount)],
+    entries: [
+      credit(orderHoldAccount(input.userId, input.assetId, input.orderId), input.amount),
+      debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
   };
 }
 
