@@ -28,7 +28,7 @@
 | L1 | Rules written (operator mode, asymmetric review) | Content exists |
 | L2 | Committed on a branch | Survives a closed chat |
 | L3 | On GitHub `main` | Denon + his agents + your other machines see it |
-| L4 | Entry chain (`CLAUDE.md` → `AGENTS.md`) points at full rules | Cold agent loads them |
+| L4 | Entry chain (project agent entry file → `AGENTS.md`) points at full rules | Cold agent loads them |
 | L5 | Rules match the agreed model (no forced mutual Approve) | Docs don’t fight the plan |
 | L6 | Mechanical guards (hook, CI, Free limits) | What is enforced vs honor |
 | L7 | Nitro path needs zero git homework | Unspoken: you can’t self-enforce |
@@ -45,7 +45,7 @@
 | L2 Committed | **No** | Branch `chore/agent-operator-flow` has `M AGENTS.md`, `M CONTRIBUTING.md`, `?? MESSAGE-DENON…` — **no commit**. |
 | L3 On `origin/main` | **No** | Remote `AGENTS.md` has **no** “operator / asymmetric / Denon / Nitro mode”. |
 | L3 PR open | **No** | No PR for `chore/agent-operator-flow`. |
-| L4 Entry chain | **Weak** | `CLAUDE.md` → “read AGENTS.md” works, but live AGENTS is the **old short** file. `CLAUDE.md` still says *ask the human* to run `pnpm wt` — fights operator mode. |
+| L4 Entry chain | **Weak** | Project agent entry → “read AGENTS.md” works, but live AGENTS is the **old short** file. Entry file still says *ask the human* to run `pnpm wt` — fights operator mode. |
 | L5 Model match | **Draft only** | Asymmetric review is in the **worktree draft** CONTRIBUTING, not on GitHub. Remote CONTRIBUTING still says mutual review. |
 | L6 Mechanical | **Partial** | CI yes. Branch protection **no** (Free). `pre-push` mode **644** (may not run). |
 | L7 Nitro auto | **Not on main** | Operator mode only in uncommitted worktree draft. |
@@ -62,7 +62,7 @@
 
 These already live on GitHub `main` and help every agent that reads the repo:
 
-- Worktree rule in `AGENTS.md` / `CLAUDE.md` (stop if main checkout)
+- Worktree rule in `AGENTS.md` / project agent entry (stop if main checkout)
 - `pnpm verify` before “done”
 - Doctrine hard stops in agent protocol
 - CI on every PR
@@ -79,7 +79,7 @@ All must be true:
 1. Operator + Denon modes committed  
 2. PR opened and **merged to `main`**  
 3. `gh api …/AGENTS.md` raw text contains `Nitro operator mode`  
-4. `CLAUDE.md` updated so agents **create worktrees / run the loop**, not “ask Nitro to run pnpm wt”  
+4. Project agent entry updated so agents **create worktrees / run the loop**, not “ask Nitro to run pnpm wt”  
 5. Denon pulled / next agent session on fresh `main`  
 6. Optional: `pre-push` executable bit fixed in same PR  
 
