@@ -51,11 +51,11 @@ SESSION DEFAULT
 
 ## Why this prompt is shaped this way
 
-| Piece | Unspoken need it covers |
-| --- | --- |
-| Operator mode | You never become the git bottleneck |
-| Asymmetric review | Speed without fake Approves |
-| Live re-verify | Stale “already true” won’t poison a chat |
-| Denon open-PR rule | No double-build of matching/web |
-| Hard bans in the prompt | Cold agents still hit the money bar |
-| “No ship without ask” | You keep control of what lands |
+| Piece                   | Unspoken need it covers                  |
+| ----------------------- | ---------------------------------------- |
+| Operator mode           | You never become the git bottleneck      |
+| Asymmetric review       | Speed without fake Approves              |
+| Live re-verify          | Stale “already true” won’t poison a chat |
+| Denon open-PR rule      | No double-build of matching/web          |
+| Hard bans in the prompt | Cold agents still hit the money bar      |
+| “No ship without ask”   | You keep control of what lands           |

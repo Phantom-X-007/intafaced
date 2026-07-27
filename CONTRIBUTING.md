@@ -95,10 +95,10 @@ We are not going to maintain a project board. PRs are where coordination happens
 
 **Review is asymmetric (on purpose).** Nitro is not a code reviewer; forcing him to Approve Denon’s PRs is theater and slows shipping.
 
-| Who opened the PR | Before merge |
-| --- | --- |
-| **Denon** | CI green + his agent’s doctrine/money self-audit. He may squash-merge without Nitro’s Approve. |
-| **Nitro** (or Nitro’s agent) | Denon (or Denon’s agent) reviews, then merges. |
+| Who opened the PR            | Before merge                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Denon**                    | CI green + his agent’s doctrine/money self-audit. He may squash-merge without Nitro’s Approve. |
+| **Nitro** (or Nitro’s agent) | Denon (or Denon’s agent) reviews, then merges.                                                 |
 
 **Optional, not blocking:** Nitro’s agent may post an audit comment on Denon’s PR. That is signal, not a gate.
 
@@ -110,7 +110,7 @@ We are not going to maintain a project board. PRs are where coordination happens
 4. Is anything "temporary"? Reject, or make it a §13 socket entry.
 5. Everything else.
 
-Approving something you have not read (when you *are* the technical reviewer) is the only real failure mode. Rubber-stamp Approves from a non-coder do not count as review.
+Approving something you have not read (when you _are_ the technical reviewer) is the only real failure mode. Rubber-stamp Approves from a non-coder do not count as review.
 
 **Merge:** squash. One commit per PR on `main`, so history reads as a list of changes rather than a list of keystrokes.
 

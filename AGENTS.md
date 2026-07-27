@@ -4,10 +4,10 @@ You are working in the INTAFACED monorepo. Read this before your first edit.
 
 ## Who is driving (read this)
 
-| Human | Role | GitHub |
-| --- | --- | --- |
-| **Nitro** (`@ZenYoda3`) | Non-technical operator. Directs work; does not run git/PR by hand. | write |
-| **Denon** (`@Phantom-X-007`) | Experienced builder. Owns technical quality of what he ships. | admin |
+| Human                        | Role                                                               | GitHub |
+| ---------------------------- | ------------------------------------------------------------------ | ------ |
+| **Nitro** (`@ZenYoda3`)      | Non-technical operator. Directs work; does not run git/PR by hand. | write  |
+| **Denon** (`@Phantom-X-007`) | Experienced builder. Owns technical quality of what he ships.      | admin  |
 
 **Review is asymmetric — on purpose (not slower theater):**
 
