@@ -1,0 +1,203 @@
+import { bigint, bigserial, boolean, index, integer, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { citext, createdAt, tstz, updatedAt } from '@intafaced/db';
+
+/**
+ * IDENTITY (§4.1).
+ *
+ * "One account, one verification, one rank — the key that opens every room."
+ *
+ * The rank graph is the important part. Every module emits XP; this service is
+ * the ONLY writer to rank_state; every module reads the perks table. That is
+ * what makes an Academy certification raise a P2P limit without either module
+ * knowing the other exists.
+ */
+export const identity = pgSchema('identity');
+
+export const userStatusEnum = identity.enum('user_status', ['active', 'frozen', 'closed']);
+export const kycTierEnum = identity.enum('kyc_tier', ['none', 'basic', 'full', 'institutional']);
+export const kycStatusEnum = identity.enum('kyc_status', ['pending', 'approved', 'rejected', 'expired']);
+
+export const users = identity.table(
+  'users',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    handle: citext('handle').notNull(),
+    email: citext('email').notNull(),
+    /** argon2id. Never a fast hash — §9. */
+    passwordHash: text('password_hash').notNull(),
+    /**
+     * TOTP shared secret, base32. Null until enrolled.
+     * PII-adjacent: never logged, never returned by any API.
+     */
+    totpSecret: text('totp_secret'),
+    totpEnrolledAt: tstz('totp_enrolled_at'),
+    /** WebAuthn credentials — array of {credentialId, publicKey, counter, ...}. */
+    webauthnCreds: jsonb('webauthn_creds').notNull().default([]),
+    status: userStatusEnum('status').notNull().default('active'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('users_handle_idx').on(t.handle), uniqueIndex('users_email_idx').on(t.email)],
+);
+
+export const profiles = identity.table('profiles', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  displayName: text('display_name'),
+  avatarUrl: text('avatar_url'),
+  /** trader | merchant | creator | student — a user can be several at once. */
+  modes: text('modes').array().notNull().default([]),
+  locale: text('locale').notNull().default('en'),
+  /** ISO-3166 alpha-2. Drives JURISDICTION_MATRIX lookups. */
+  region: text('region'),
+  /** Set by svc-blueprint in Phase 4. Null until then. */
+  blueprintId: uuid('blueprint_id'),
+  updatedAt: updatedAt(),
+});
+
+export const kycRecords = identity.table(
+  'kyc_records',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tier: kycTierEnum('tier').notNull(),
+    /**
+     * Opaque reference at the verification provider.
+     *
+     * §10 PII isolation: "KYC docs in separate encrypted store; services get
+     * status flags, never documents." This column holds a pointer, never a
+     * document, a name, or a date of birth.
+     */
+    providerRef: text('provider_ref'),
+    jurisdiction: text('jurisdiction').notNull(),
+    status: kycStatusEnum('status').notNull().default('pending'),
+    reviewedAt: tstz('reviewed_at'),
+    expiresAt: tstz('expires_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('kyc_user_idx').on(t.userId, t.status)],
+);
+
+/**
+ * The rank graph. svc-identity is the only writer.
+ *
+ * `xp` is a bigint count, not money — it never touches the ledger and is
+ * deliberately not a decimal.
+ */
+export const rankState = identity.table('rank_state', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  rank: integer('rank').notNull().default(0),
+  xp: bigint('xp', { mode: 'bigint' }).notNull().default(0n),
+  seasonXp: bigint('season_xp', { mode: 'bigint' }).notNull().default(0n),
+  updatedAt: updatedAt(),
+});
+
+export const xpEvents = identity.table(
+  'xp_events',
+  {
+    id: bigserial('id', { mode: 'bigint' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sourceModule: text('source_module').notNull(),
+    action: text('action').notNull(),
+    xpDelta: bigint('xp_delta', { mode: 'bigint' }).notNull(),
+    meta: jsonb('meta').notNull().default({}),
+    /**
+     * Dedupe key. An award is a fact about something that happened once — a
+     * certification, a completed P2P trade — so replaying the event must not
+     * pay it twice (§10: consumers idempotent).
+     */
+    idempotencyKey: text('idempotency_key').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('xp_events_idempotency_idx').on(t.idempotencyKey), index('xp_events_user_idx').on(t.userId, t.id)],
+);
+
+/**
+ * The machine-readable perk table other services query (§4.1).
+ *
+ * Deliberately data, not code: re-tuning what rank 7 is worth must never
+ * require touching svc-trade.
+ */
+export const rankThresholds = identity.table('rank_thresholds', {
+  rank: integer('rank').primaryKey(),
+  xpRequired: bigint('xp_required', { mode: 'bigint' }).notNull(),
+  title: text('title').notNull(),
+  perks: jsonb('perks').notNull(),
+});
+
+export const sessions = identity.table(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** SHA-256 of the opaque refresh token. The token itself is never stored. */
+    refreshHash: text('refresh_hash').notNull(),
+    device: text('device'),
+    ip: text('ip'),
+    /** True once this session has passed a second factor. */
+    mfa: boolean('mfa').notNull().default(false),
+    expiresAt: tstz('expires_at').notNull(),
+    revoked: boolean('revoked').notNull().default(false),
+    /**
+     * Set when a rotated token is reused — the signal that a refresh token was
+     * stolen. Reuse detection is the entire point of rotating them.
+     */
+    reuseDetectedAt: tstz('reuse_detected_at'),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('sessions_refresh_idx').on(t.refreshHash), index('sessions_user_idx').on(t.userId, t.revoked)],
+);
+
+export const apiKeys = identity.table(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** SHA-256 of the key. Shown once at creation, never retrievable. */
+    keyHash: text('key_hash').notNull(),
+    /** Leading chars, for the UI to show which key is which. */
+    keyPrefix: text('key_prefix').notNull(),
+    scopes: text('scopes').array().notNull(),
+    domainWhitelist: text('domain_whitelist').array().notNull().default([]),
+    lastUsedAt: tstz('last_used_at'),
+    expiresAt: tstz('expires_at'),
+    revoked: boolean('revoked').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('api_keys_hash_idx').on(t.keyHash), index('api_keys_user_idx').on(t.userId, t.revoked)],
+);
+
+/**
+ * Sub-accounts — strategies, teams, funds (§4.1).
+ *
+ * Ledger-visible: the ledger's `subaccount` owner type keys on this id, so a
+ * sub-account has genuinely separate balances rather than a UI filter.
+ */
+export const subAccounts = identity.table(
+  'sub_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    parentUserId: uuid('parent_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    purpose: text('purpose'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('sub_accounts_parent_idx').on(t.parentUserId)],
+);
+
+export const schema = { users, profiles, kycRecords, rankState, xpEvents, rankThresholds, sessions, apiKeys, subAccounts };

@@ -1,0 +1,561 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import postgres from 'postgres';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { MemoryEventBus } from '@intafaced/events';
+import { verifyAccessToken, hasScope } from '@intafaced/auth';
+import { checkAccess } from '@intafaced/config';
+import { AuthService, AuthError } from './auth/auth-service.js';
+import { RankService } from './rank/rank-service.js';
+import { totp } from './auth/totp.js';
+
+/**
+ * svc-identity against real Postgres.
+ *
+ * This file also carries the §4.4 Phase 1 exit criteria:
+ *   · full auth lifecycle — register → TOTP → refresh → scoped API key call
+ *   · XP event → rank recalculation → perks visible to a second service
+ *
+ * Skips cleanly when Postgres is unreachable.
+ */
+
+const URL = process.env.TEST_DATABASE_URL_IDENTITY ?? 'postgres://svc_identity:svc_identity@localhost:5433/intafaced';
+const here = dirname(fileURLToPath(import.meta.url));
+const migration = readFileSync(join(here, '..', 'drizzle', '0000_identity_init.sql'), 'utf8');
+
+const tokenConfig = {
+  secret: 'an-identity-test-signing-secret-long-enough',
+  issuer: 'intafaced',
+  audience: 'intafaced.api',
+  accessTtlSeconds: 900,
+  refreshTtlSeconds: 2_592_000,
+};
+
+async function reachable(): Promise<boolean> {
+  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
+  try {
+    await probe`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await probe.end({ timeout: 2 }).catch(() => undefined);
+  }
+}
+
+const available = await reachable();
+
+if (!available) {
+  describe.skip('svc-identity (Postgres unavailable — start docker compose)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  const sql = postgres(URL, {
+    max: 8,
+    connection: { search_path: 'identity,public', application_name: 'svc-identity-test' },
+    onnotice: () => undefined,
+  });
+
+  await sql.unsafe(migration);
+
+  const bus = new MemoryEventBus('svc-identity');
+  const rank = new RankService(sql, bus);
+  const auth = new AuthService(sql, bus, rank, tokenConfig);
+  await rank.seedTiers();
+
+  let counter = 0;
+  const unique = () => `u${process.pid}${++counter}`;
+
+  const register = () => {
+    const handle = unique();
+    return auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple', region: 'DE' });
+  };
+
+  beforeEach(async () => {
+    bus.reset();
+  });
+
+  afterAll(async () => {
+    await sql.end({ timeout: 5 });
+  });
+
+  describe('registration', () => {
+    it('creates a user, profile and rank row, and returns a session', async () => {
+      const session = await register();
+      expect(session.accessToken).toBeTruthy();
+      expect(session.refreshToken).toBeTruthy();
+
+      const principal = await verifyAccessToken(session.accessToken, tokenConfig);
+      expect(principal.userId).toBe(session.userId);
+      expect(principal.mfa).toBe(false);
+      expect(principal.tier).toBe('none');
+    });
+
+    it('awards registration XP exactly once, even if the call is repeated', async () => {
+      const session = await register();
+      const first = await rank.get(session.userId);
+      expect(first.xp).toBe(50n);
+
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'identity',
+        action: 'identity.registered',
+        xpDelta: 50,
+        idempotencyKey: `identity.registered:${session.userId}`,
+      });
+
+      expect((await rank.get(session.userId)).xp).toBe(50n);
+    });
+
+    it('refuses a duplicate handle and a duplicate email, distinctly', async () => {
+      const handle = unique();
+      await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+
+      await expect(
+        auth.register({ handle, email: `${unique()}@example.com`, password: 'correct horse battery staple' }),
+      ).rejects.toMatchObject({ code: 'auth.handle_taken' });
+
+      await expect(
+        auth.register({ handle: unique(), email: `${handle}@example.com`, password: 'correct horse battery staple' }),
+      ).rejects.toMatchObject({ code: 'auth.email_taken' });
+    });
+
+    it('treats handles case-insensitively — impersonation by casing is a real attack', async () => {
+      const handle = unique();
+      await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+
+      await expect(
+        auth.register({ handle: handle.toUpperCase(), email: `${unique()}@example.com`, password: 'correct horse battery staple' }),
+      ).rejects.toThrow(AuthError);
+    });
+
+    it('emits userCreated', async () => {
+      const session = await register();
+      const emitted = bus.emitted('userCreated');
+      expect(emitted.some((e) => e.payload.userId === session.userId)).toBe(true);
+    });
+  });
+
+  describe('login', () => {
+    it('accepts the right password', async () => {
+      const handle = unique();
+      await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      await expect(auth.login({ identifier: handle, password: 'correct horse battery staple' })).resolves.toMatchObject({
+        userId: expect.any(String),
+      });
+    });
+
+    it('logs in by email as well as handle', async () => {
+      const handle = unique();
+      await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      await expect(auth.login({ identifier: `${handle}@example.com`, password: 'correct horse battery staple' })).resolves.toBeTruthy();
+    });
+
+    it('rejects the wrong password', async () => {
+      const handle = unique();
+      await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      await expect(auth.login({ identifier: handle, password: 'wrong password entirely' })).rejects.toMatchObject({
+        code: 'auth.invalid_credentials',
+      });
+    });
+
+    it('gives an unknown user the same error as a wrong password', async () => {
+      // Anything else is an account-enumeration oracle.
+      await expect(auth.login({ identifier: 'nobody-here-at-all', password: 'whatever it is' })).rejects.toMatchObject({
+        code: 'auth.invalid_credentials',
+      });
+    });
+
+    it('refuses a frozen account', async () => {
+      const session = await register();
+      await sql`UPDATE identity.users SET status = 'frozen' WHERE id = ${session.userId}`;
+      const handleRow = await sql<Array<{ handle: string }>>`SELECT handle FROM identity.users WHERE id = ${session.userId}`;
+      await expect(auth.login({ identifier: handleRow[0]!.handle, password: 'correct horse battery staple' })).rejects.toMatchObject({
+        code: 'auth.account_frozen',
+      });
+    });
+  });
+
+  describe('TOTP enrolment', () => {
+    it('does not persist the secret until a code confirms it', async () => {
+      const session = await register();
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+
+      const before = await sql<Array<{ totp_secret: string | null }>>`
+        SELECT totp_secret FROM identity.users WHERE id = ${session.userId}
+      `;
+      expect(before[0]!.totp_secret).toBeNull();
+
+      await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
+
+      const after = await sql<Array<{ totp_secret: string | null }>>`
+        SELECT totp_secret FROM identity.users WHERE id = ${session.userId}
+      `;
+      expect(after[0]!.totp_secret).toBe(secret);
+    });
+
+    it('rejects a wrong confirmation code', async () => {
+      const session = await register();
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+      await expect(auth.confirmTotpEnrolment(session.userId, secret, '000000')).rejects.toMatchObject({ code: 'auth.mfa_invalid' });
+    });
+
+    it('then requires the code at login, and marks the session mfa', async () => {
+      const handle = unique();
+      const session = await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+      await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
+
+      await expect(auth.login({ identifier: handle, password: 'correct horse battery staple' })).rejects.toMatchObject({
+        code: 'auth.mfa_required',
+      });
+
+      await expect(auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: '000000' })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+
+      const withMfa = await auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: totp(secret) });
+      const principal = await verifyAccessToken(withMfa.accessToken, tokenConfig);
+      expect(principal.mfa).toBe(true);
+    });
+  });
+
+  describe('session refresh and rotation', () => {
+    it('issues a new refresh token and invalidates the old one', async () => {
+      const session = await register();
+      const refreshed = await auth.refresh(session.refreshToken);
+
+      expect(refreshed.refreshToken).not.toBe(session.refreshToken);
+      expect(refreshed.userId).toBe(session.userId);
+      expect(refreshed.sessionId).not.toBe(session.sessionId);
+    });
+
+    it('detects reuse of a rotated token and revokes every session', async () => {
+      const session = await register();
+      const refreshed = await auth.refresh(session.refreshToken);
+
+      // The stolen copy is presented after the legitimate holder already rotated.
+      await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({ code: 'auth.session_reused' });
+
+      // Everything burns, including the token the thief did not have.
+      await expect(auth.refresh(refreshed.refreshToken)).rejects.toThrow(AuthError);
+    });
+
+    it('rejects an unknown or expired token', async () => {
+      await expect(auth.refresh('not-a-real-token')).rejects.toMatchObject({ code: 'auth.session_invalid' });
+
+      const session = await register();
+      await sql`UPDATE identity.sessions SET expires_at = now() - interval '1 day' WHERE id = ${session.sessionId}`;
+      await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({ code: 'auth.session_invalid' });
+    });
+
+    it('logout revokes the session', async () => {
+      const session = await register();
+      await auth.logout(session.refreshToken);
+      await expect(auth.refresh(session.refreshToken)).rejects.toThrow(AuthError);
+    });
+  });
+
+  describe('API keys', () => {
+    it('returns the key once and stores only its hash', async () => {
+      const session = await register();
+      const { key, prefix } = await auth.createApiKey({ userId: session.userId, name: 'bot', scopes: ['trade:read'] });
+
+      const stored = await sql<Array<{ key_hash: string; key_prefix: string }>>`
+        SELECT key_hash, key_prefix FROM identity.api_keys WHERE user_id = ${session.userId}
+      `;
+      expect(stored[0]!.key_hash).not.toContain(key);
+      expect(stored[0]!.key_prefix).toBe(prefix);
+    });
+
+    it('verifies a valid key and rejects a wrong one', async () => {
+      const session = await register();
+      const { key } = await auth.createApiKey({ userId: session.userId, name: 'bot', scopes: ['trade:read', 'trade:write'] });
+
+      const verified = await auth.verifyApiKey(key);
+      expect(verified?.userId).toBe(session.userId);
+      expect(hasScope(verified!.scopes, 'trade:read')).toBe(true);
+
+      expect(await auth.verifyApiKey('ifc_totally_wrong')).toBeNull();
+    });
+
+    it('refuses to mint a key that could withdraw — service AND database', async () => {
+      const session = await register();
+
+      await expect(
+        auth.createApiKey({ userId: session.userId, name: 'dangerous', scopes: ['trade:read', 'trade:withdraw'] }),
+      ).rejects.toThrow(/interactive/);
+
+      // The database is the backstop if that check is ever bypassed.
+      await expect(
+        sql`
+          INSERT INTO identity.api_keys (user_id, name, key_hash, key_prefix, scopes)
+          VALUES (${session.userId}, 'x', ${'h' + Date.now()}, 'ifc_x', ARRAY['trade:withdraw'])
+        `,
+      ).rejects.toThrow(/api_keys_no_withdraw_ck/);
+    });
+
+    it('stops accepting a revoked or expired key', async () => {
+      const session = await register();
+      const { key, id } = await auth.createApiKey({ userId: session.userId, name: 'bot', scopes: ['trade:read'] });
+      expect(await auth.verifyApiKey(key)).not.toBeNull();
+
+      await auth.revokeApiKey(session.userId, id);
+      expect(await auth.verifyApiKey(key)).toBeNull();
+
+      const other = await auth.createApiKey({
+        userId: session.userId,
+        name: 'expiring',
+        scopes: ['trade:read'],
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      expect(await auth.verifyApiKey(other.key)).toBeNull();
+    });
+
+    it('will not let one user revoke another user’s key', async () => {
+      const owner = await register();
+      const attacker = await register();
+      const { id } = await auth.createApiKey({ userId: owner.userId, name: 'mine', scopes: ['trade:read'] });
+
+      expect(await auth.revokeApiKey(attacker.userId, id)).toBe(false);
+    });
+  });
+
+  describe('KYC', () => {
+    it('raises the tier on the next issued token', async () => {
+      const handle = unique();
+      const session = await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      expect((await verifyAccessToken(session.accessToken, tokenConfig)).tier).toBe('none');
+
+      await auth.approveKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
+
+      const refreshed = await auth.refresh(session.refreshToken);
+      expect((await verifyAccessToken(refreshed.accessToken, tokenConfig)).tier).toBe('full');
+    });
+
+    it('reports the highest approved tier', async () => {
+      const session = await register();
+      await auth.approveKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.approveKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
+      expect(await auth.kycTier(session.userId)).toBe('full');
+    });
+
+    it('ignores an expired record', async () => {
+      const session = await register();
+      await auth.approveKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
+      await sql`UPDATE identity.kyc_records SET expires_at = now() - interval '1 day' WHERE user_id = ${session.userId}`;
+      expect(await auth.kycTier(session.userId)).toBe('none');
+    });
+  });
+
+  describe('rank engine', () => {
+    it('accumulates XP and promotes across tiers', async () => {
+      const session = await register(); // starts at 50
+
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'academy',
+        action: 'academy.certification.earned',
+        xpDelta: 500,
+        idempotencyKey: `cert:${session.userId}:1`,
+      });
+
+      const snapshot = await rank.get(session.userId);
+      expect(snapshot.xp).toBe(550n);
+      expect(snapshot.rank).toBe(1);
+      expect(snapshot.title).toBe('Operator');
+    });
+
+    it('emits rankUpdated only when the rank actually changes', async () => {
+      const session = await register();
+      bus.reset();
+
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'trade',
+        action: 'trade.order.filled',
+        xpDelta: 5,
+        idempotencyKey: `fill:${session.userId}:1`,
+      });
+      expect(bus.emitted('rankUpdated')).toHaveLength(0);
+
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'academy',
+        action: 'academy.certification.earned',
+        xpDelta: 500,
+        idempotencyKey: `cert:${session.userId}:2`,
+      });
+      expect(bus.emitted('rankUpdated')).toHaveLength(1);
+    });
+
+    it('is idempotent under a replayed event', async () => {
+      const session = await register();
+      const award = {
+        userId: session.userId,
+        sourceModule: 'p2p',
+        action: 'p2p.trade.completed',
+        xpDelta: 25,
+        idempotencyKey: `p2p:${session.userId}:trade-1`,
+      };
+
+      const first = await rank.awardXp(award);
+      const replay = await rank.awardXp(award);
+
+      expect(first.applied).toBe(true);
+      expect(replay.applied).toBe(false);
+      expect((await rank.get(session.userId)).xp).toBe(75n);
+    });
+
+    it('survives concurrent awards without losing any', async () => {
+      const session = await register();
+
+      await Promise.all(
+        Array.from({ length: 20 }, (_, i) =>
+          rank.awardXp({
+            userId: session.userId,
+            sourceModule: 'trade',
+            action: 'trade.order.filled',
+            xpDelta: 5,
+            idempotencyKey: `conc:${session.userId}:${i}`,
+          }),
+        ),
+      );
+
+      expect((await rank.get(session.userId)).xp).toBe(150n); // 50 + 20×5
+    });
+
+    it('demotes honestly on a correction — a rank you cannot lose is not a rank', async () => {
+      const session = await register();
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'academy',
+        action: 'academy.certification.earned',
+        xpDelta: 500,
+        idempotencyKey: `demote:${session.userId}:up`,
+      });
+      expect((await rank.get(session.userId)).rank).toBe(1);
+
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'academy',
+        action: 'academy.certification.revoked',
+        xpDelta: -500,
+        idempotencyKey: `demote:${session.userId}:down`,
+      });
+      expect((await rank.get(session.userId)).rank).toBe(0);
+    });
+
+    it('floors XP at zero', async () => {
+      const session = await register();
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'ops',
+        action: 'correction',
+        xpDelta: -10_000,
+        idempotencyKey: `floor:${session.userId}`,
+      });
+      expect((await rank.get(session.userId)).xp).toBe(0n);
+    });
+
+    it('resets season XP without touching lifetime XP or rank', async () => {
+      const session = await register();
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'academy',
+        action: 'academy.certification.earned',
+        xpDelta: 500,
+        idempotencyKey: `season:${session.userId}`,
+      });
+
+      await rank.resetSeason();
+
+      const snapshot = await rank.get(session.userId);
+      expect(snapshot.seasonXp).toBe(0n);
+      expect(snapshot.xp).toBe(550n);
+      expect(snapshot.rank).toBe(1);
+    });
+  });
+
+  // ── §4.4 PHASE 1 EXIT CRITERIA ────────────────────────────────────────────
+
+  describe('§4.4 exit criteria', () => {
+    it('full auth lifecycle: register → TOTP → refresh → scoped API key call', async () => {
+      const handle = unique();
+
+      // 1 · register
+      const registered = await auth.register({
+        handle,
+        email: `${handle}@example.com`,
+        password: 'correct horse battery staple',
+        region: 'DE',
+      });
+
+      // 2 · enrol TOTP
+      const { secret } = await auth.startTotpEnrolment(registered.userId);
+      await auth.confirmTotpEnrolment(registered.userId, secret, totp(secret));
+
+      // 3 · log in with the second factor
+      const loggedIn = await auth.login({
+        identifier: handle,
+        password: 'correct horse battery staple',
+        totpCode: totp(secret),
+      });
+      expect((await verifyAccessToken(loggedIn.accessToken, tokenConfig)).mfa).toBe(true);
+
+      // 4 · refresh the session
+      const refreshed = await auth.refresh(loggedIn.refreshToken);
+      const principal = await verifyAccessToken(refreshed.accessToken, tokenConfig);
+      expect(principal.userId).toBe(registered.userId);
+
+      // 5 · scoped API key call
+      const { key } = await auth.createApiKey({ userId: registered.userId, name: 'trading-bot', scopes: ['trade:read', 'trade:write'] });
+      const verified = await auth.verifyApiKey(key);
+
+      expect(verified?.userId).toBe(registered.userId);
+      expect(hasScope(verified!.scopes, 'trade:write')).toBe(true);
+      // The key cannot do what the session can.
+      expect(hasScope(verified!.scopes, 'trade:withdraw')).toBe(false);
+    });
+
+    it('XP event → rank recalc → perks visible to a second service', async () => {
+      const session = await register();
+
+      // A DIFFERENT module awards XP — svc-academy, which knows nothing about ranks.
+      await rank.awardXp({
+        userId: session.userId,
+        sourceModule: 'academy',
+        action: 'academy.certification.earned',
+        xpDelta: 4_000,
+        idempotencyKey: `exit-criteria:${session.userId}`,
+      });
+
+      // svc-identity recalculated. It is the only writer to rank_state.
+      const snapshot = await rank.get(session.userId);
+      expect(snapshot.rank).toBe(3);
+      expect(snapshot.title).toBe('Dealer');
+
+      // A THIRD service reads the perk table and acts on it, knowing nothing
+      // about the Academy — this is the whole point of one XP graph.
+      const perks = await rank.perks(session.userId);
+      expect(perks.feeDiscountBps).toBe(100); // svc-trade applies this
+      expect(perks.p2pLimitMultiplier).toBe(2); // svc-p2p applies this
+      expect(perks.cardTier).toBe('standard'); // svc-bank applies this
+
+      // And the rank change was announced so caches invalidate.
+      expect(bus.emitted('rankUpdated').some((e) => e.payload.userId === session.userId)).toBe(true);
+    });
+
+    it('a verified user passes the jurisdiction matrix that an unverified one fails', async () => {
+      const session = await register();
+
+      // Ties identity to §22: the tier this service issues is what the matrix reads.
+      expect(checkAccess({ module: 'bank', region: 'DE', plane: 'fiat', kycTier: await auth.kycTier(session.userId) }).allowed).toBe(false);
+
+      await auth.approveKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
+
+      expect(checkAccess({ module: 'bank', region: 'DE', plane: 'fiat', kycTier: await auth.kycTier(session.userId) }).allowed).toBe(true);
+    });
+  });
+}
