@@ -111,6 +111,30 @@ We are not going to maintain a project board. PRs are where coordination happens
 
 ---
 
+## 3.5 · The tracker — how you find work
+
+[`docs/TRACKER.md`](docs/TRACKER.md) lists **every feature in the build**, with its phase, its plane, and whether it can be started right now.
+
+```bash
+pnpm tracker          # regenerate + summary
+pnpm tracker ready    # just what is claimable today
+pnpm tracker trade    # everything for one module
+pnpm tracker 2        # everything in a phase
+```
+
+**To claim something:** find it under 🟢, then in `tooling/tracker/features.mjs` set `owner` and `status: 'wip'`, run `pnpm tracker`, and include both files in your first PR. That is how the other person knows not to start the same thing.
+
+**To ship something:** set `status: 'done'` and list the paths it created in `requires`.
+
+Two things keep this honest, because a tracker nobody trusts is worse than none:
+
+- **`blocked` is computed, never declared.** A feature is blocked when a dependency is not done. You cannot mark something ready by wishing.
+- **`done` is validated against the repo.** A feature claiming done whose service does not exist on disk fails CI. You cannot tick a box for code that is not there.
+
+This is why we can stay off a project board: the tracker is derived from the same registry the code is checked against, so it cannot quietly go stale the way a board does.
+
+---
+
 ## 4 · Issues only when useful
 
 Do **not** file an issue for everything. A tracker nobody reads is worse than no tracker.
