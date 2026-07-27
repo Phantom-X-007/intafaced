@@ -37,6 +37,12 @@ export const SCOPES = [
   'token:read',
   'token:stake',
 
+  // Blueprint — `:write` is what runs an onboarding session or erases a
+  // Blueprint. Reading someone else's is governed by `blueprints.visibility`
+  // on top of this scope, never by the scope alone.
+  'blueprint:read',
+  'blueprint:write',
+
   // Bank
   'bank:read',
   'bank:write',
@@ -87,6 +93,7 @@ const IMPLIED: Partial<Record<Scope, readonly Scope[]>> = {
   'pay:payout': ['pay:read'],
   'p2p:write': ['p2p:read'],
   'token:stake': ['token:read'],
+  'blueprint:write': ['blueprint:read'],
   'bank:write': ['bank:read'],
   'bank:card': ['bank:read'],
   'launch:write': ['launch:read'],

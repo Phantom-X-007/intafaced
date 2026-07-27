@@ -171,6 +171,59 @@ export const buybackExecuted = defineEvent(
   'Structural buyback & burn ran. One flywheel across both planes (§17.3).',
 );
 
+// ── blueprint (§7.1) ─────────────────────────────────────────────────────────
+//
+// Doctrine §0.7 governs these payloads as much as any UI string: nothing here
+// names the intelligence behind a profile. §10 governs their contents — no
+// payload on this bus carries profile axes, birth data, or anything else
+// derived from what a user told the session. Consumers that need the profile
+// read it through packages/contracts under the user's own authority.
+
+const crewRoleSchema = z.enum(['anchor', 'scout', 'builder', 'catalyst']);
+
+export const blueprintCreated = defineEvent(
+  'blueprint',
+  'blueprint',
+  'created',
+  1,
+  z.object({
+    blueprintId: z.string().uuid(),
+    userId: userIdSchema,
+    /** Which engine build produced it. Profiles are comparable only within a version. */
+    engineVersion: z.string().min(1),
+    visibility: z.enum(['private', 'crew', 'public']),
+  }),
+  "An Identity Blueprint exists. svc-identity sets profiles.blueprint_id on this signal — svc-blueprint never writes another service's tables (§2).",
+);
+
+export const blueprintDeleted = defineEvent(
+  'blueprint',
+  'blueprint',
+  'deleted',
+  1,
+  z.object({
+    blueprintId: z.string().uuid(),
+    userId: userIdSchema,
+    erasedAt: z.string().datetime({ offset: true }),
+  }),
+  'Hard delete (§7.2 "deletion truly cascades"). svc-identity clears profiles.blueprint_id; every consumer drops cached profile data. Idempotent on user id.',
+);
+
+export const crewMemberCreated = defineEvent(
+  'blueprint',
+  'crew_member',
+  'created',
+  1,
+  z.object({
+    crewId: z.string().uuid(),
+    userId: userIdSchema,
+    role: crewRoleSchema,
+    crewSize: z.number().int().min(1),
+    matchRunId: z.string().uuid(),
+  }),
+  'Crew placement. svc-academy routes the lobby, svc-agents opens the crew channel.',
+);
+
 // ── matching (§5.1) ──────────────────────────────────────────────────────────
 
 export const orderAccepted = defineEvent(
@@ -349,6 +402,9 @@ export const EVENT_CATALOG = {
   ledgerReconciliationFailed,
   stakeCreated,
   buybackExecuted,
+  blueprintCreated,
+  blueprintDeleted,
+  crewMemberCreated,
   orderAccepted,
   orderFilled,
   orderCancelled,
