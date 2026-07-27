@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**20 of 103 shipped (19%)** · 0 in progress · 20 ready to claim · 63 blocked · 8 deliberate §13 sockets
+**22 of 103 shipped (21%)** · 0 in progress · 21 ready to claim · 60 blocked · 8 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -28,8 +28,9 @@ pnpm wt feat/<the-thing>
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | WebAuthn registration + assertion (§9) | `identity` | 1 | `identity.webauthn` |
 | Proposals + IFC-weighted voting (§4.3) | `token` | 1 | `token.governance` |
-| Orderbook + matching engine, journal, replay | `matching` | 2 | `matching.engine` |
+| Spot markets, order lifecycle, fees | `trade` | 2 | `trade.spot` |
 | apps/web scaffold on the design system | `core-ops` | 2 | `web.shell` |
+| WebSocket fan-out: depth, trades, orders, positions | `trade` | 2 | `ws.gateway` |
 | Branded gateway, hosted checkout, payment links | `pay` | 3 | `pay.gateway` |
 | Offers, maker/taker, 100+ fiat currencies | `p2p` | 3 | `p2p.offers` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
@@ -52,14 +53,14 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
-| **26** | Orderbook + matching engine, journal, replay | 🟢 ready | `matching.engine` |
 | **20** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
-| **16** | Spot markets, order lifecycle, fees | ⛔ blocked | `trade.spot` |
+| **16** | Spot markets, order lifecycle, fees | 🟢 ready | `trade.spot` |
 | **13** | Branded gateway, hosted checkout, payment links | 🟢 ready | `pay.gateway` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
 | **6** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
 | **6** | Live lobbies, LiveKit SFU, capacity tiers | 🟢 ready | `academy.lobbies` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
+| **5** | Multi-currency account UX over the ledger | 🟢 ready | `bank.accounts` |
 
 ---
 
@@ -98,13 +99,13 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Buyback & burn split | F |  | `token.buyback` |
 | 🟢 | Proposals + IFC-weighted voting (§4.3) | F |  | `token.governance` |
 
-### Phase 2 — Trade (0/16)
+### Phase 2 — Trade (2/16)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| 🟢 | Orderbook + matching engine, journal, replay | F |  | `matching.engine` |
-| ⛔ | Determinism test — replay yields identical book | F | `matching.engine` | `matching.determinism` |
-| ⛔ | Spot markets, order lifecycle, fees | F | `matching.engine` | `trade.spot` |
+| ✅ | Orderbook + matching engine, journal, replay | F |  | `matching.engine` |
+| ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
+| 🟢 | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
 | ⛔ | One-tap Convert — the retail on-ramp | F | `trade.spot` | `trade.convert` |
 | ⛔ | Perps: cross/isolated margin, funding, liquidation ladder | F | `trade.spot` | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
@@ -117,7 +118,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | External venue adapters via CCXT (cross-venue) <br/>_LiquiditySource interface + router already built_ | F | `trade.spot` | `venue.aggregation` |
 | ⛔ | Pro terminal — depth, charts, hotkeys, sub-accounts | F | `trade.spot` | `web.terminal` |
 | 🟢 | apps/web scaffold on the design system | F |  | `web.shell` |
-| ⛔ | WebSocket fan-out: depth, trades, orders, positions | F | `matching.engine` | `ws.gateway` |
+| 🟢 | WebSocket fan-out: depth, trades, orders, positions | F |  | `ws.gateway` |
 
 ### Phase 3 — Pay + P2P (0/15)
 
@@ -165,7 +166,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| ⛔ | INTACHAIN — CometBFT + native CLOB module | P | `matching.engine`, `protocol.amm` | `chain.mainnet` |
+| ⛔ | INTACHAIN — CometBFT + native CLOB module | P | `protocol.amm` | `chain.mainnet` |
 | ⛔ | INTAEVM sharing validator set + state | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations | B | `chain.mainnet` | `bridge.canonical` |
 

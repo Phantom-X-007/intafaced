@@ -76,8 +76,20 @@ export const FEATURES = [
   f('token.governance', 'Proposals + IFC-weighted voting (§4.3)', { module: 'token', phase: '1', dependsOn: ['token.staking'] }),
 
   // ── PHASE 2 · TRADE ──────────────────────────────────────────────────────
-  f('matching.engine', 'Orderbook + matching engine, journal, replay', { module: 'matching', phase: '2', dependsOn: ['ledger.double-entry'] }),
-  f('matching.determinism', 'Determinism test — replay yields identical book', { module: 'matching', phase: '2', dependsOn: ['matching.engine'] }),
+  f('matching.engine', 'Orderbook + matching engine, journal, replay', {
+    module: 'matching',
+    phase: '2',
+    status: 'done',
+    requires: ['services/svc-matching'],
+    dependsOn: ['ledger.double-entry'],
+  }),
+  f('matching.determinism', 'Determinism test — replay yields identical book', {
+    module: 'matching',
+    phase: '2',
+    status: 'done',
+    requires: ['services/svc-matching/src/engine/engine.test.ts'],
+    dependsOn: ['matching.engine'],
+  }),
   f('trade.spot', 'Spot markets, order lifecycle, fees', { module: 'trade', phase: '2', dependsOn: ['matching.engine', 'identity.rank'] }),
   f('trade.convert', 'One-tap Convert — the retail on-ramp', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
   f('trade.futures', 'Perps: cross/isolated margin, funding, liquidation ladder', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
