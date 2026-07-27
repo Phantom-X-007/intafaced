@@ -31,7 +31,7 @@ await sql`SELECT 1 FROM trade.markets LIMIT 1`.catch(() => {
 
 // Value moves through svc-ledger, never through this service's own tables
 // (Doctrine §0.6). This client is the only path.
-const ledger = createLedgerClient(env.LEDGER_URL);
+const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
 // The book lives in svc-matching. This service never runs one of its own —
 // §5.1 draws that line and a second book would be a second truth.

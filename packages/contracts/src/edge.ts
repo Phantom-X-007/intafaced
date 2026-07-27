@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { accessClaimsSchema, type Principal } from '@intafaced/auth';
 import type { Context } from './trpc.js';
+import { verifyServiceHeaders } from './service-auth.js';
 
 /**
  * THE EDGE TRUST BOUNDARY (§9).
@@ -133,6 +134,15 @@ export interface EdgeContextOptions {
   secret: string;
   /** Service name, used only in the boot-time error message. */
   serviceName: string;
+  /**
+   * Shared secret for service-to-service calls (§2).
+   *
+   * Required by any service exposing a `serviceProcedure` — svc-ledger above
+   * all. Omit only for a service with no internal-only endpoints; the context
+   * then reports every caller as `service: null`, which fails those procedures
+   * closed rather than open.
+   */
+  internalSecret?: string;
 }
 
 /**
@@ -179,8 +189,14 @@ export function createEdgeContext(options: EdgeContextOptions): (req: EdgeReques
 
     const traceparent = header('traceparent');
 
+    // A service caller and a user principal are independent. Both may be
+    // absent, either may be present; `serviceProcedure` and `scopedProcedure`
+    // each check only their own, so neither can stand in for the other.
+    const service = options.internalSecret ? verifyServiceHeaders(req.headers, options.internalSecret).service : null;
+
     return {
       principal,
+      service,
       region: header('x-intafaced-region') ?? 'XX',
       requestId: String(req.id ?? ''),
       ...(traceparent ? { traceparent } : {}),

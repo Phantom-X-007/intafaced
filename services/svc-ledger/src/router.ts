@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import { router, publicProcedure, scopedProcedure, serviceProcedure, TRPCError } from '@intafaced/contracts';
 import {
   formatAmount,
   parseAmount,
@@ -53,8 +53,24 @@ export function createLedgerRouter(ledger: LedgerService) {
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-ledger'), postingEnabled: z.boolean() }))
       .query(() => ({ ok: true, service: 'svc-ledger' as const, postingEnabled: ledger.status().postingEnabled })),
 
-    /** Service-to-service only. Amounts arrive as decimal strings. */
-    post: publicProcedure
+    /**
+     * Service-to-service only — and now enforced, not merely documented.
+     *
+     * This was `publicProcedure`, justified by the note above: there is no
+     * `ledger:write` scope, so no user token can post. That reasoning is
+     * inverted. `publicProcedure` checks no scope at all, so the absence of
+     * `ledger:write` removed the last thing that could have been checked.
+     *
+     * Mounted, that meant anyone reaching the port could post a balanced
+     * transaction crediting `railBoundary` — a `treasury` account, the one
+     * owner type allowed to run negative — and debiting their own `available`.
+     * That is the `deposit` recipe. Sum-to-zero passes, non-negative passes,
+     * paired locks pass: the transaction is well-formed, just unauthorised.
+     *
+     * `serviceProcedure` requires the caller to prove it is a service holding
+     * the internal secret (§2).
+     */
+    post: serviceProcedure
       .input(postRequestSchema)
       .output(z.object({ txId: z.string(), hash: z.string(), postedAt: z.string() }))
       .mutation(async ({ input }) => {

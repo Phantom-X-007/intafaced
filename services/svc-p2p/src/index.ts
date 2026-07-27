@@ -40,7 +40,7 @@ const bus = await JetStreamEventBus.connect({
 
 // Escrowed value lives in svc-ledger's `escrow` accounts, never in this
 // service's tables (Doctrine §0.6). This client is the only path.
-const ledger = createLedgerClient(env.LEDGER_URL);
+const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
 const p2p = new P2pService(sql, ledger, bus, {
   feeBps: env.P2P_FEE_BPS,

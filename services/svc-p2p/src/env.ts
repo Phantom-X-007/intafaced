@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { loadEnv, serviceEnvSchema, internalServiceEnvSchema } from '@intafaced/config';
 
 const bool = z
   .union([z.boolean(), z.string()])
   .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
 
-const schema = serviceEnvSchema.merge(
+const schema = serviceEnvSchema.merge(internalServiceEnvSchema).merge(
   z.object({
     SERVICE_NAME: z.string().default('svc-p2p'),
     HTTP_PORT: z.coerce.number().int().default(4004),
