@@ -93,17 +93,24 @@ We are not going to maintain a project board. PRs are where coordination happens
 
 **Description:** the template asks what changed, why, and how you know it works. Fill it in. "Why" is the part reviewers cannot reconstruct from the diff.
 
-**Review each other's PRs before merge.** One approval required, even when it is just the two of us.
+**Review is asymmetric (on purpose).** Nitro is not a code reviewer; forcing him to Approve Denon’s PRs is theater and slows shipping.
 
-**Use "Request changes" liberally.** It is not an insult, it is the mechanism working. A PR that gets changes requested twice and then merges clean is the system doing its job. Approving something you have not read is the only real failure mode here.
+| Who opened the PR            | Before merge                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Denon**                    | CI green + his agent’s doctrine/money self-audit. He may squash-merge without Nitro’s Approve. |
+| **Nitro** (or Nitro’s agent) | Denon (or Denon’s agent) reviews, then merges.                                                 |
 
-**What to actually look at in a review** (in priority order):
+**Optional, not blocking:** Nitro’s agent may post an audit comment on Denon’s PR. That is signal, not a gate.
+
+**What to actually look at when reviewing Nitro’s PR / self-auditing Denon’s** (priority order):
 
 1. Does it touch money? Then read every line, and check the tests cover the failure branches.
 2. Does it cross a service boundary without going through `packages/contracts` or `packages/events`? Reject.
 3. Does it hold a balance outside the ledger? Reject (Doctrine §0.6).
 4. Is anything "temporary"? Reject, or make it a §13 socket entry.
 5. Everything else.
+
+Approving something you have not read (when you _are_ the technical reviewer) is the only real failure mode. Rubber-stamp Approves from a non-coder do not count as review.
 
 **Merge:** squash. One commit per PR on `main`, so history reads as a list of changes rather than a list of keystrokes.
 
@@ -221,3 +228,9 @@ Commit messages inside a PR do not need to be perfect — the squash-merge title
 4. Green CI before merge, no exceptions
 5. Delete the branch and the worktree when it merges
 6. If `main` is red, drop everything
+
+Agents automate process so humans don’t re-learn it: see **Nitro operator mode** and **Denon agent mode** in [`AGENTS.md`](AGENTS.md).
+
+- Plain map (Nitro): [`docs/START-HERE.md`](docs/START-HERE.md)
+- Paste prompt every chat: [`docs/NITRO-SESSION-PROMPT.md`](docs/NITRO-SESSION-PROMPT.md)
+- Paste for Denon: [`docs/MESSAGE-DENON-WORKFLOW.md`](docs/MESSAGE-DENON-WORKFLOW.md)
