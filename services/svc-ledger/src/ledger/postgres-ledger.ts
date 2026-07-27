@@ -32,6 +32,11 @@ import {
  * is what totally orders posts, makes the hash chain a chain, and makes
  * concurrent spends impossible to interleave into an overdraft. See the
  * isolation note at the end of `post()` for why READ COMMITTED is correct here.
+ *
+ * Schema: SQL is search_path-relative (not hard-coded `ledger.*`). Production
+ * connects with `search_path = ledger,public` (see `src/index.ts`). Tests use
+ * `createTestDb`, which allocates a unique schema per suite so parallel
+ * worktrees cannot TRUNCATE each other into a false insufficient-funds failure.
  */
 export class PostgresLedger implements LedgerClient {
   constructor(private readonly sql: Sql) {}
@@ -55,7 +60,7 @@ export class PostgresLedger implements LedgerClient {
         // READ COMMITTED is sufficient here (see the isolation note below) and
         // why the hash chain can be a chain at all.
         const tipRows = await tx<Array<{ hash: string | null; seq: string }>>`
-          SELECT hash, seq FROM ledger.chain_tip WHERE id = true FOR UPDATE
+          SELECT hash, seq FROM chain_tip WHERE id = true FOR UPDATE
         `;
 
         // Re-check inside the lock: two retries of the same key can both get
@@ -109,7 +114,7 @@ export class PostgresLedger implements LedgerClient {
         const hash = hashTx({ id: txId, module: request.module, reason: request.reason, postedAt, entries: postedEntries }, previousHash);
 
         const insertedTx = await tx<Array<{ id: string; seq: string; posted_at: Date }>>`
-        INSERT INTO ledger.ledger_tx (id, idempotency_key, module, reason, meta, posted_at, hash, previous_hash)
+        INSERT INTO ledger_tx (id, idempotency_key, module, reason, meta, posted_at, hash, previous_hash)
         VALUES (
           ${txId}, ${request.idempotencyKey}, ${request.module}, ${request.reason},
           ${tx.json((request.meta ?? {}) as never)}, ${postedAt}, ${hash}, ${previousHash}
@@ -120,7 +125,7 @@ export class PostgresLedger implements LedgerClient {
 
         for (const entry of postedEntries) {
           const inserted = await tx<Array<{ id: string }>>`
-          INSERT INTO ledger.ledger_entries (tx_id, account_id, asset_id, direction, amount, balance_after)
+          INSERT INTO ledger_entries (tx_id, account_id, asset_id, direction, amount, balance_after)
           VALUES (
             ${txId}, ${entry.accountId}, ${entry.assetId}, ${entry.direction},
             ${formatAmount(entry.amount)}::numeric, ${formatAmount(entry.balanceAfter)}::numeric
@@ -132,14 +137,14 @@ export class PostgresLedger implements LedgerClient {
 
         for (const [, account] of balances) {
           await tx`
-          UPDATE ledger.accounts
+          UPDATE accounts
              SET balance = ${formatAmount(account.balance)}::numeric
            WHERE id = ${account.id}
         `;
         }
 
         await tx`
-        UPDATE ledger.chain_tip
+        UPDATE chain_tip
            SET hash = ${hash}, seq = ${seq}, updated_at = now()
          WHERE id = true
       `;
@@ -177,11 +182,11 @@ export class PostgresLedger implements LedgerClient {
 
   async balance(ref: AccountRef): Promise<Balance> {
     const rows = await this.sql<Array<{ id: string; balance: string }>>`
-      SELECT id, balance FROM ledger.accounts
-       WHERE owner_type = ${ref.ownerType}::ledger.owner_type
+      SELECT id, balance FROM accounts
+       WHERE owner_type = ${ref.ownerType}::owner_type
          AND owner_id   = ${ref.ownerId}
          AND asset_id   = ${ref.assetId}
-         AND kind       = ${ref.kind}::ledger.account_kind
+         AND kind       = ${ref.kind}::account_kind
     `;
 
     const row = rows[0];
@@ -195,8 +200,8 @@ export class PostgresLedger implements LedgerClient {
       Array<{ id: string; owner_type: string; owner_id: string; asset_id: string; kind: string; balance: string }>
     >`
       SELECT id, owner_type, owner_id, asset_id, kind, balance
-        FROM ledger.accounts
-       WHERE owner_type = ${ownerType}::ledger.owner_type AND owner_id = ${ownerId}
+        FROM accounts
+       WHERE owner_type = ${ownerType}::owner_type AND owner_id = ${ownerId}
        ORDER BY asset_id, kind
     `;
 
@@ -213,19 +218,19 @@ export class PostgresLedger implements LedgerClient {
   }
 
   async getTx(txId: string): Promise<LedgerTx | null> {
-    const rows = await this.sql<TxRow[]>`SELECT * FROM ledger.ledger_tx WHERE id = ${txId}`;
+    const rows = await this.sql<TxRow[]>`SELECT * FROM ledger_tx WHERE id = ${txId}`;
     return rows[0] ? this.hydrate(this.sql, rows[0]) : null;
   }
 
   async getTxByKey(idempotencyKey: string): Promise<LedgerTx | null> {
-    const rows = await this.sql<TxRow[]>`SELECT * FROM ledger.ledger_tx WHERE idempotency_key = ${idempotencyKey}`;
+    const rows = await this.sql<TxRow[]>`SELECT * FROM ledger_tx WHERE idempotency_key = ${idempotencyKey}`;
     return rows[0] ? this.hydrate(this.sql, rows[0]) : null;
   }
 
   /** Every transaction in commit order — the replay source (§4.2). */
   async journal(limit = 10_000, afterSeq = 0n): Promise<LedgerTx[]> {
     const rows = await this.sql<TxRow[]>`
-      SELECT * FROM ledger.ledger_tx WHERE seq > ${String(afterSeq)} ORDER BY seq ASC LIMIT ${limit}
+      SELECT * FROM ledger_tx WHERE seq > ${String(afterSeq)} ORDER BY seq ASC LIMIT ${limit}
     `;
     return Promise.all(rows.map((row) => this.hydrate(this.sql, row)));
   }
@@ -236,10 +241,10 @@ export class PostgresLedger implements LedgerClient {
     // ON CONFLICT DO UPDATE (rather than DO NOTHING) so RETURNING always yields
     // a row, and so the row is locked for this transaction either way.
     const rows = await tx<Array<{ id: string; balance: string }>>`
-      INSERT INTO ledger.accounts (owner_type, owner_id, asset_id, kind)
+      INSERT INTO accounts (owner_type, owner_id, asset_id, kind)
       VALUES (
-        ${ref.ownerType}::ledger.owner_type, ${ref.ownerId},
-        ${ref.assetId}, ${ref.kind}::ledger.account_kind
+        ${ref.ownerType}::owner_type, ${ref.ownerId},
+        ${ref.assetId}, ${ref.kind}::account_kind
       )
       ON CONFLICT (owner_type, owner_id, asset_id, kind)
       DO UPDATE SET owner_id = EXCLUDED.owner_id
@@ -251,14 +256,14 @@ export class PostgresLedger implements LedgerClient {
   }
 
   private async loadTxByKey(tx: Sql, key: string): Promise<LedgerTx | null> {
-    const rows = await tx<TxRow[]>`SELECT * FROM ledger.ledger_tx WHERE idempotency_key = ${key}`;
+    const rows = await tx<TxRow[]>`SELECT * FROM ledger_tx WHERE idempotency_key = ${key}`;
     return rows[0] ? this.hydrate(tx, rows[0]) : null;
   }
 
   private async hydrate(sql: Sql, row: TxRow): Promise<LedgerTx> {
     const entries = await sql<EntryRow[]>`
       SELECT id, tx_id, account_id, asset_id, direction, amount, balance_after
-        FROM ledger.ledger_entries WHERE tx_id = ${row.id} ORDER BY id ASC
+        FROM ledger_entries WHERE tx_id = ${row.id} ORDER BY id ASC
     `;
 
     return {
