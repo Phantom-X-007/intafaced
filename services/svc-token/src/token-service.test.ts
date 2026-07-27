@@ -267,6 +267,52 @@ if (!available) {
       expect(a + b).toBeCloseTo(100, 10);
     });
 
+    it('pays a user holding TWO stakes the sum of both shares', async () => {
+      // The bug this covers: `distributeYield` returns one share PER STAKE, but
+      // the reward key is per (window, user). Posting each share separately made
+      // the second a silent idempotency no-op — the user was underpaid and the
+      // remainder sat in the rewards engine. Found by partner audit; there was
+      // no test, which is exactly why it survived.
+      await fund(USER_A, '2000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm12' });
+
+      await accrueFees('trade', '100');
+      const result = await token.distributeRevenue({ windowId: 'w-multi', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      // One recipient, one payout — and the WHOLE window distributed.
+      expect(result.recipients).toBe(1);
+      expect(formatAmount(result.distributed)).toBe('100');
+      expect(await balanceOf(USER_A)).toBe('100');
+
+      // Nothing stranded in the rewards engine.
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('0');
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('weights by the multiplier stored on the stake, not by today’s ladder', async () => {
+      // `multiplier_bps` was written at stake time and then never read — yield
+      // used the live STAKE_TIERS table instead. A staker who locked for twelve
+      // months bought THAT multiplier; re-tuning the ladder afterwards must not
+      // retroactively change what they earn.
+      await fund(USER_A, '1000');
+      await fund(USER_B, '1000');
+      const a = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex' });
+
+      // A stake opened under a more generous historical ladder.
+      await sql`UPDATE token.stakes SET multiplier_bps = 30000 WHERE id = ${a.id}`;
+
+      await accrueFees('trade', '100');
+      await token.distributeRevenue({ windowId: 'w-snapshot', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      // 3× weight against 1× → 75/25, not the 50/50 the live ladder would give.
+      expect(await balanceOf(USER_A)).toBe('75');
+      expect(await balanceOf(USER_B)).toBe('25');
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+
     it('distributes the exact total with no dust lost across uneven stakes', async () => {
       const users = [USER_A, USER_B, USER_C];
       const amounts = ['333.333333333333333333', '1000', '7'];
