@@ -410,6 +410,35 @@ export interface RewardPayInput {
   reason: string;
 }
 
+export interface FeeSweepInput {
+  /** Identifies the revenue window being swept — the dedupe key. */
+  windowId: string;
+  /** Module whose fee account is being drained, e.g. 'trade'. */
+  sourceModule: string;
+  assetId: string;
+  amount: Amount;
+}
+
+/**
+ * Move accrued fees from a module's house account into the rewards engine, so
+ * real-yield can be paid out of one pot (§4.3).
+ *
+ * This is what makes staking yield *real revenue* rather than emissions: the
+ * value paid to stakers demonstrably came from fees the platform actually
+ * earned, and the trail from `houseFees(module)` to a user's balance is two
+ * ledger transactions, both queryable.
+ */
+export function sweepFeesToRewards(input: FeeSweepInput): PostRequest {
+  requirePositive('fee sweep amount', input.amount);
+  return {
+    idempotencyKey: `token.fee.sweep:${input.windowId}:${input.sourceModule}:${input.assetId}`,
+    module: 'token',
+    reason: 'token.fee.swept',
+    meta: { windowId: input.windowId, sourceModule: input.sourceModule },
+    entries: [credit(houseFees(input.sourceModule, input.assetId), input.amount), debit(rewardsEngine(input.assetId), input.amount)],
+  };
+}
+
 /** Real-yield distribution, cashback, tournament prizes — all from one pot. */
 export function rewardPay(input: RewardPayInput): PostRequest {
   requirePositive('reward amount', input.amount);
@@ -497,6 +526,7 @@ export const recipes = {
   mintEmission,
   burn,
   feeCharge,
+  sweepFeesToRewards,
   rewardPay,
   collateralLock,
   collateralRelease,
