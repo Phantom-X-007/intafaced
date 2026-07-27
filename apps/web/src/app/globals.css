@@ -1,0 +1,122 @@
+/**
+ * apps/web — app-level wiring on top of @intafaced/ui.
+ *
+ * Rule for this whole app (§3): no colour is written here. Every visual value
+ * resolves to a `--if-*` custom property declared in packages/ui/tokens.css.
+ * If a shade is needed that does not exist there, it does not exist.
+ */
+
+:root {
+  /**
+   * next/font generates a hashed family name per font and exposes it as a CSS
+   * variable on <html>. The token stacks name 'Orbitron' / 'Inter' /
+   * 'JetBrains Mono' literally, which would only resolve if the user happened
+   * to have them installed — so the generated family is spliced in front and
+   * the token's own fallbacks are kept behind it, unchanged.
+   */
+  --if-font-display: var(--if-font-orbitron), 'Rajdhani', system-ui, sans-serif;
+  --if-font-body: var(--if-font-inter), system-ui, -apple-system, sans-serif;
+  --if-font-mono: var(--if-font-jetbrains), 'SF Mono', ui-monospace, monospace;
+
+  /**
+   * GAP — packages/ui/src/tokens.ts declares `space` (the 4px grid), `radius.sm`,
+   * `radius.pill` and `motion.fast`, but tokens.css does not emit custom
+   * properties for any of them, so CSS cannot reach them. These mirror the TS
+   * values exactly. Delete this block the day tokens.css emits them.
+   */
+  --if-space-px: 1px;
+  --if-space-1: 4px;
+  --if-space-2: 8px;
+  --if-space-3: 12px;
+  --if-space-4: 16px;
+  --if-space-5: 20px;
+  --if-space-6: 24px;
+  --if-space-8: 32px;
+  --if-space-10: 40px;
+  --if-space-12: 48px;
+  --if-space-16: 64px;
+  --if-radius-sm: 2px;
+  --if-radius-pill: 999px;
+  --if-motion-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  /* Never a horizontal scrollbar — the terminal columns scroll, the page does not. */
+  overflow-x: hidden;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Focus is phosphor, always visible, never removed. */
+:focus-visible {
+  outline: 1px solid var(--if-phosphor);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--if-glass-border-strong);
+  color: var(--if-text);
+}
+
+/* Scrollbars are part of the console, not the OS chrome. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--if-glass-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--if-glass-border-strong);
+  border-radius: var(--if-radius-pill);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/**
+ * §3 — motion is a signal, never decoration. A user who has asked their OS to
+ * stop moving things gets a completely static console.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
