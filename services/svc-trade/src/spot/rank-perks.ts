@@ -47,7 +47,9 @@ export function createRankPerksClient(baseUrl: string): RankPerksSource {
     async perksOf(userId: string): Promise<RankPerks> {
       let response: Response;
       try {
-        response = await fetch(`${url}/trpc/rank.perks?input=${encodeURIComponent(JSON.stringify({ userId }))}`, {
+        // Internal S2S path (mounted with Core). Avoids requiring a user principal
+        // on rank.perks while still failing closed on transport/parse errors.
+        response = await fetch(`${url}/internal/rank/${encodeURIComponent(userId)}/perks`, {
           method: 'GET',
           headers: { 'content-type': 'application/json' },
         });
@@ -59,8 +61,8 @@ export function createRankPerksClient(baseUrl: string): RankPerksSource {
         throw new TradeError(`rank perks unavailable (${response.status})`, 'trade.perks_unavailable');
       }
 
-      const body = (await response.json()) as { result?: { data?: unknown } };
-      const parsed = rankPerksSchema.safeParse(body.result?.data);
+      const body = await response.json();
+      const parsed = rankPerksSchema.safeParse(body);
       if (!parsed.success) {
         // A perk table we cannot parse is a perk table we must not guess at.
         throw new TradeError('rank perks payload did not match the published contract', 'trade.perks_unavailable');

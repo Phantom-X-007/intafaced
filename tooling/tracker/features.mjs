@@ -112,30 +112,30 @@ export const FEATURES = [
   f('trade.algo', 'TWAP / VWAP / POV execution', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', { module: 'trade', phase: '2', dependsOn: ['trade.spot'], note: 'contract already built in packages/exchange-contract' }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
-  f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', { module: 'trade', phase: '2', dependsOn: ['trade.spot'], note: 'LiquiditySource interface + router already built' }),
+  f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', { module: 'trade', phase: '2', status: 'done', dependsOn: ['trade.spot'], requires: ['packages/venue-adapter'], note: 'LiquiditySource + router package on main; live venue wiring still product work' }),
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', { module: 'trade', phase: '2', dependsOn: ['trade.spot', 'infra.ui-tokens'] }),
-  f('web.shell', 'apps/web scaffold on the design system', { module: 'core-ops', phase: '2', status: 'ready', dependsOn: ['infra.ui-tokens'] }),
+  f('web.shell', 'apps/web scaffold on the design system', { module: 'core-ops', phase: '2', status: 'done', dependsOn: ['infra.ui-tokens'], requires: ['apps/web'], note: 'Scaffold on main; trade UI still mock data until ws/terminal wire' }),
   f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', { module: 'trade', phase: '2', dependsOn: ['matching.engine'] }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
-  f('pay.gateway', 'Branded gateway, hosted checkout, payment links', { module: 'pay', phase: '3', dependsOn: ['ledger.double-entry'] }),
+  f('pay.gateway', 'Branded gateway, hosted checkout, payment links', { module: 'pay', phase: '3', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-pay'], note: 'svc-pay core on main; tRPC mount deferred to §9 gateway; product checkout links may still expand' }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', { module: 'pay', phase: '3', dependsOn: ['pay.psp'] }),
-  f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
+  f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', { module: 'pay', phase: '3', status: 'done', dependsOn: ['pay.gateway'], requires: ['services/svc-pay/src/rails'], note: 'Rails + conformance kit on main inside svc-pay' }),
   f('pay.routing', 'Smart routing — geo, method, risk, approval rate', { module: 'pay', phase: '3', dependsOn: ['pay.rails'] }),
   f('pay.settlement', 'Dual settlement — bank or crypto', { module: 'pay', phase: '3', dependsOn: ['pay.rails'] }),
   f('pay.fraud', 'Risk scoring, chargebacks, decline recovery', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.subscriptions', 'Recurring — card and crypto', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', { module: 'pay', phase: '3', plane: 'B', dependsOn: ['pay.gateway', 'identity.apikeys'] }),
-  f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', { module: 'p2p', phase: '3', dependsOn: ['ledger.double-entry'] }),
-  f('p2p.escrow', 'Ledger escrow — lock, release, refund', { module: 'p2p', phase: '3', dependsOn: ['p2p.offers'] }),
-  f('p2p.disputes', 'Moderated dispute resolution', { module: 'p2p', phase: '3', dependsOn: ['p2p.escrow'] }),
-  f('p2p.reputation', 'Reputation feeding the same XP graph', { module: 'p2p', phase: '3', dependsOn: ['p2p.offers', 'identity.rank'] }),
+  f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-p2p'], note: 'svc-p2p on main; router not mounted at boot yet' }),
+  f('p2p.escrow', 'Ledger escrow — lock, release, refund', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.offers'], requires: ['services/svc-p2p'], note: 'Escrow flows in svc-p2p; not a separate service' }),
+  f('p2p.disputes', 'Moderated dispute resolution', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.escrow'], requires: ['services/svc-p2p'], note: 'Dispute paths in svc-p2p core' }),
+  f('p2p.reputation', 'Reputation feeding the same XP graph', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.offers', 'identity.rank'], requires: ['services/svc-p2p/src/reputation.ts'], note: 'Reputation module on main' }),
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', { module: 'p2p', phase: '3', dependsOn: ['p2p.reputation'] }),
 
   // ── PHASE 3P · PROTOCOL PLANE P0 ─────────────────────────────────────────
-  f('protocol.smart-accounts', 'Passkey smart accounts, session keys (§17.4)', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['identity.accounts'] }),
+  f('protocol.smart-accounts', 'Passkey smart accounts, session keys (§17.4)', { module: 'protocol', phase: '3P', plane: 'P', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-protocol'], note: 'svc-protocol on main; open contract sockets remain elsewhere' }),
   f('protocol.amm', 'AMM pools from audited templates', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.amm'] }),
   f('protocol.escrow', 'Non-custodial P2P escrow contracts', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
@@ -144,7 +144,7 @@ export const FEATURES = [
   f('indexer.readmodels', 'Chain → Postgres read models', { module: 'indexer', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
 
   // ── PHASE 4 · BLUEPRINT ──────────────────────────────────────────────────
-  f('blueprint.onboarding', 'Blueprint session → profile JSON', { module: 'blueprint', phase: '4', dependsOn: ['identity.accounts'] }),
+  f('blueprint.onboarding', 'Blueprint session → profile JSON', { module: 'blueprint', phase: '4', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-blueprint'], note: 'svc-blueprint on main; router not wired at boot yet' }),
   f('blueprint.card', 'Share card render (1080×1350, 1200×630)', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
   f('blueprint.crews', 'Crew matching + mentor shortlist', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
   f('blueprint.ownership', 'Export + hard delete, cascading', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
@@ -156,13 +156,13 @@ export const FEATURES = [
   f('bridge.canonical', 'Canonical IFC bridge + attestations', { module: 'bridge', phase: '4P', plane: 'B', dependsOn: ['chain.mainnet', 'token.emissions'] }),
 
   // ── PHASE 5 · SURFACES ───────────────────────────────────────────────────
-  f('bank.accounts', 'Multi-currency account UX over the ledger', { module: 'bank', phase: '5', dependsOn: ['ledger.double-entry'] }),
+  f('bank.accounts', 'Multi-currency account UX over the ledger', { module: 'bank', phase: '5', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-bank'], note: 'svc-bank on main; tRPC not mounted; UX product may expand' }),
   f('bank.loans', 'Collateralised loans, LTV, margin calls, liquidation', { module: 'bank', phase: '5', dependsOn: ['bank.accounts', 'trade.spot'] }),
   f('bank.earn', 'Flexible + fixed yield pools', { module: 'bank', phase: '5', dependsOn: ['bank.accounts', 'token.staking'] }),
   f('bank.cards', 'CardIssuerAdapter + card-sim, <2s auth decision', { module: 'bank', phase: '5', dependsOn: ['bank.accounts'] }),
   f('bank.sovereign-card', 'Self-custody funded card, JIT conversion (§18)', { module: 'bank', phase: '5', plane: 'P', dependsOn: ['bank.cards', 'protocol.smart-accounts'] }),
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', { module: 'bank', phase: '5', dependsOn: ['pay.rails'] }),
-  f('agents.gateway', 'Model-agnostic gateway, per-user metering', { module: 'agents', phase: '5', dependsOn: ['identity.accounts'] }),
+  f('agents.gateway', 'Model-agnostic gateway, per-user metering', { module: 'agents', phase: '5', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-agents'], note: 'Only service that already mounts /trpc' }),
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
   f('agents.support', 'Support agent — KB + account-state grounded', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', { module: 'agents', phase: '5', dependsOn: ['agents.gateway', 'trade.spot'] }),
@@ -187,7 +187,7 @@ export const FEATURES = [
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', { module: 'core-ops', phase: '5', dependsOn: ['ledger.double-entry'] }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', { module: 'core-ops', phase: '5', dependsOn: ['identity.kyc'] }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', { module: 'core-ops', phase: '5', dependsOn: ['ledger.double-entry'] }),
-  f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', { module: 'core-ops', phase: '5', status: 'ready', dependsOn: ['infra.ui-tokens'] }),
+  f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', { module: 'core-ops', phase: '5', status: 'done', dependsOn: ['infra.ui-tokens'], requires: ['apps/admin'], note: 'Console scaffold on main; freeze/reconcile still simulated until wired' }),
   f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', { module: 'core-ops', phase: '5', dependsOn: ['infra.events'] }),
 
   // ── PHASE 5P · PROTOCOL P2–P3 ────────────────────────────────────────────

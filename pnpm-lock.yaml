@@ -520,6 +520,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
+      '@trpc/server':
+        specifier: ^11.0.0-rc.660
+        version: 11.18.0(typescript@5.9.3)
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@opentelemetry/api@1.9.1)(@types/react@19.2.17)(postgres@3.4.9)(react@19.2.8)
@@ -839,6 +842,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
+      '@trpc/server':
+        specifier: ^11.0.0-rc.660
+        version: 11.18.0(typescript@5.9.3)
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@opentelemetry/api@1.9.1)(@types/react@19.2.17)(postgres@3.4.9)(react@19.2.8)
@@ -897,6 +903,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
+      '@trpc/server':
+        specifier: ^11.0.0-rc.660
+        version: 11.18.0(typescript@5.9.3)
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@opentelemetry/api@1.9.1)(@types/react@19.2.17)(postgres@3.4.9)(react@19.2.8)
