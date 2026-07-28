@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**28 of 106 shipped (26%)** · 0 in progress · 41 ready to claim · 37 blocked · 13 deliberate §13 sockets
+**28 of 106 shipped (26%)** · 0 in progress · 41 ready to claim · 37 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -173,11 +173,13 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Non-custodial P2P escrow contracts | P |  | `protocol.escrow` |
 | ⛔ | Sovereign router — book vs pool best execution | P | `protocol.amm` | `protocol.router` |
 | 🟢 | Lane A merchant contracts — zero KYB (§24) | P |  | `protocol.merchant` |
-| 🟢 | Chain → Postgres read models | P |  | `indexer.readmodels` |
+| 🟢 | Chain → Postgres read models <br/>_Everything downstream of the chain is on main and mounted: schema-per-service read models (books, fills, positions), block-versioned rows with reorg unwind, idempotent projection, and a permissionless /trpc read API. 81 tests, 27 against real Postgres, reorg handling mutation-tested. NOT `done` because the "chain →" half is propped: `NullChainSource` is what boots, since there is no EVM RPC in this stack and no deployed CLOB to read — socket.evm-rpc. Also not yet routed at svc-edge._ | P |  | `indexer.readmodels` |
 | 🔌 | Foundry + contract test suite in CI <br/>_Solidity is written and cross-checked from TypeScript, but never executed. Blocks any mainnet deploy._ | P |  | `socket.contract-toolchain` |
 | 🔌 | External audit of the account + factory suite | P |  | `socket.contract-audit` |
 | 🔌 | getUserOperationHash checked against a live EntryPoint | P |  | `socket.userop-differential-test` |
 | 🔌 | Passkey (P-256) owner verifier contract <br/>_SmartAccount already routes contract owners through ERC-1271; the verifier itself is not built._ | P |  | `socket.p256-verifier` |
+| 🔌 | A real EVM ChainSource — RPC + deployed CLOB contracts <br/>_The ChainSource port (services/svc-indexer/src/chain/source.ts) is the shape the adapter must satisfy; MemoryChainSource is the deterministic reference its conformance is judged against. Blocked on there being contracts to read, not on the indexer._ | P |  | `socket.evm-rpc` |
+| 🔌 | Live book/tape feed from the projection (§5.2 ws-gateway) <br/>_The read path is pull-only today. packages/market-data already computes the deltas; what is missing is a subject in packages/events and the transport._ | P |  | `socket.indexer-stream` |
 
 ### Phase 4 — Blueprint (1/5)
 

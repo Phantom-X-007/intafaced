@@ -254,7 +254,14 @@ export const FEATURES = [
   f('protocol.escrow', 'Non-custodial P2P escrow contracts', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
   f('protocol.router', 'Sovereign router — book vs pool best execution', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.amm'] }),
   f('protocol.merchant', 'Lane A merchant contracts — zero KYB (§24)', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
-  f('indexer.readmodels', 'Chain → Postgres read models', { module: 'indexer', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
+  f('indexer.readmodels', 'Chain → Postgres read models', {
+    module: 'indexer',
+    phase: '3P',
+    plane: 'P',
+    dependsOn: ['protocol.smart-accounts'],
+    requires: ['services/svc-indexer'],
+    note: 'Everything downstream of the chain is on main and mounted: schema-per-service read models (books, fills, positions), block-versioned rows with reorg unwind, idempotent projection, and a permissionless /trpc read API. 81 tests, 27 against real Postgres, reorg handling mutation-tested. NOT `done` because the "chain →" half is propped: `NullChainSource` is what boots, since there is no EVM RPC in this stack and no deployed CLOB to read — socket.evm-rpc. Also not yet routed at svc-edge.',
+  }),
 
   // ── PHASE 4 · BLUEPRINT ──────────────────────────────────────────────────
   f('blueprint.onboarding', 'Blueprint session → profile JSON', { module: 'blueprint', phase: '4', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-blueprint'], note: 'svc-blueprint on main; self-mounts /trpc with an edge-verified principal' }),
@@ -331,6 +338,27 @@ export const FEATURES = [
   f('socket.userop-differential-test', 'getUserOperationHash checked against a live EntryPoint', { module: 'protocol', phase: '3P', plane: 'P', status: 'socket', dependsOn: ['socket.contract-toolchain'] }),
   f('socket.p256-verifier', 'Passkey (P-256) owner verifier contract', { module: 'protocol', phase: '3P', plane: 'P', status: 'socket', dependsOn: ['protocol.smart-accounts'], note: 'SmartAccount already routes contract owners through ERC-1271; the verifier itself is not built.' }),
   f('socket.social-recovery', 'Guardian-based account recovery', { module: 'protocol', phase: '5P', plane: 'P', status: 'socket', dependsOn: ['protocol.smart-accounts'], note: 'Deliberately absent: a guardian is a second party who can take the account, and the platform must never be one.' }),
+
+  // §13 socket opened by indexer.readmodels. It is the gap under BOTH Protocol
+  // Plane services: svc-protocol's PROTOCOL_RPC_URL points outside the compose
+  // network and a clean clone has none, and svc-indexer boots NullChainSource
+  // for the same reason. Nothing on this plane reads a real chain today.
+  f('socket.evm-rpc', 'A real EVM ChainSource — RPC + deployed CLOB contracts', {
+    module: 'indexer',
+    phase: '3P',
+    plane: 'P',
+    status: 'socket',
+    dependsOn: ['indexer.readmodels'],
+    note: 'The ChainSource port (services/svc-indexer/src/chain/source.ts) is the shape the adapter must satisfy; MemoryChainSource is the deterministic reference its conformance is judged against. Blocked on there being contracts to read, not on the indexer.',
+  }),
+  f('socket.indexer-stream', 'Live book/tape feed from the projection (§5.2 ws-gateway)', {
+    module: 'indexer',
+    phase: '3P',
+    plane: 'P',
+    status: 'socket',
+    dependsOn: ['indexer.readmodels'],
+    note: 'The read path is pull-only today. packages/market-data already computes the deltas; what is missing is a subject in packages/events and the transport.',
+  }),
 ];
 
 export const PHASE_ORDER = ['0', '1', '2', '3', '3P', '4', '4P', '5', '5P'];
