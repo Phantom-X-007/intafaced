@@ -5,6 +5,7 @@ import { createBankServices } from './bank-service.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
 import { createBankRouter } from './router.js';
 import { withSpan } from './tracing.js';
+import { verifyServiceHeaders } from '@intafaced/contracts';
 
 /**
  * svc-bank — multi-currency accounts over the ledger (§8.1).
@@ -46,6 +47,26 @@ app.get('/ready', async () => ({
 }));
 
 /**
+ * Service credentials on the job endpoints (§2).
+ *
+ * These two routes are the ONLY surface svc-bank serves — the tRPC router with
+ * its 17 scoped procedures is built and never mounted. So the entire reachable
+ * attack surface of this service was two unauthenticated POSTs that initiate
+ * ledger posts on other people's accounts.
+ *
+ * Idempotency and the due-date check mean an attacker could not double-pay or
+ * pull a transfer forward, so this is not theft. It is an unauthenticated
+ * trigger for money movement and unbounded database work, which is enough.
+ *
+ * Third instance of this shape today, after `ledger.post` (#50) and
+ * svc-matching's order writes (#55): a guard written on the tRPC layer while
+ * the raw route beside it served the same capability unguarded.
+ */
+function requireService(req: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service !== null;
+}
+
+/**
  * The standing-order runner.
  *
  * Exposed as an endpoint rather than an internal timer so the scheduler is
@@ -55,14 +76,22 @@ app.get('/ready', async () => ({
  * point of the idempotency work — but "safe when it happens" is not a reason to
  * make it happen on every deploy.
  */
-app.post('/internal/jobs/run-due-transfers', async (_req, reply) => {
+app.post('/internal/jobs/run-due-transfers', async (req, reply) => {
+  // 401 before the flag check: an unauthenticated caller must not be able to
+  // learn which jobs are enabled by reading the difference between 401 and 503.
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
   if (!env.SCHEDULED_TRANSFERS_ENABLED) {
     return reply.code(503).send({ error: 'scheduled transfers are disabled', code: 'bank.transfers_disabled' });
   }
   return withSpan('bank.job.runDueTransfers', async () => bank.transfers.runDueTransfers({ limit: env.TRANSFER_BATCH_SIZE }));
 });
 
-app.post('/internal/jobs/accrue-interest', async (_req, reply) => {
+app.post('/internal/jobs/accrue-interest', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
   if (!env.INTEREST_ACCRUAL_ENABLED) {
     return reply.code(503).send({ error: 'interest accrual is disabled', code: 'bank.accrual_disabled' });
   }
