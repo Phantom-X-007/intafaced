@@ -1,3 +1,5 @@
+import { serviceAuthHeaders } from '@intafaced/contracts';
+
 /**
  * THE ENGINE, AS SEEN FROM HERE (§5.1 / §5.2).
  *
@@ -138,8 +140,17 @@ export class MatchingUnavailableError extends Error {
  * that case explicitly rather than assuming a failed request means a failed
  * order.
  */
-export function createMatchingClient(baseUrl: string): MatchingClient {
+export function createMatchingClient(baseUrl: string, internalSecret: string): MatchingClient {
   const url = baseUrl.replace(/\/$/, '');
+
+  /**
+   * Order WRITES to the engine are service-only (§2, §5.1).
+   *
+   * The engine is allowed to be pure precisely because it never sees an
+   * unfunded order — and that holds only while svc-trade is the only thing able
+   * to submit one. Those routes accepted anyone at all until this change.
+   */
+  const authHeaders = () => serviceAuthHeaders('svc-trade', internalSecret);
 
   async function call<T>(path: string, init: RequestInit): Promise<T> {
     let response: Response;
@@ -161,7 +172,7 @@ export function createMatchingClient(baseUrl: string): MatchingClient {
     async submit(marketId, request) {
       return call<EngineSubmitResult>(`/markets/${encodeURIComponent(marketId)}/orders`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...authHeaders() },
         body: JSON.stringify(request),
       });
     },
@@ -170,7 +181,7 @@ export function createMatchingClient(baseUrl: string): MatchingClient {
       const path = `/markets/${encodeURIComponent(marketId)}/orders/${encodeURIComponent(orderId)}`;
       let response: Response;
       try {
-        response = await fetch(`${url}${path}`, { method: 'DELETE' });
+        response = await fetch(`${url}${path}`, { method: 'DELETE', headers: authHeaders() });
       } catch (err) {
         throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
       }

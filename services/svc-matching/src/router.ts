@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
+import { verifyServiceHeaders } from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
 import type { CancelledRef, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
 
@@ -101,8 +102,51 @@ function presentSubmit(result: SubmitResult) {
   };
 }
 
-export function registerRoutes(app: FastifyInstance, engine: MatchingEngine): void {
+/**
+ * WRITES ARE SERVICE-ONLY (§2, §5.1).
+ *
+ * The engine's whole design rests on one property, stated in svc-trade:
+ *
+ *     "svc-matching is allowed to be pure precisely because it never sees an
+ *      unfunded order."
+ *
+ * That holds only if svc-trade is the only thing that can submit. These routes
+ * had no authentication at all, so anyone reaching the port could:
+ *
+ *   · **submit an order the ledger never held funds for** — the engine matches
+ *     it, publishes a fill, and svc-trade is asked to settle a fill for an
+ *     order it has no record of. The invariant the engine's purity depends on
+ *     is broken from outside.
+ *   · **cancel any resting order by id.** The engine publishes `orderCancelled`
+ *     and svc-trade dutifully releases that user's hold. Cancel a whole book
+ *     with a for-loop over ids.
+ *
+ * Reads stay open: depth and the market list are public market data, and a
+ * price is not a secret. Writes are not.
+ */
+function requireService(req: { headers: Record<string, string | string[] | undefined> }, secret: string): void {
+  const { service } = verifyServiceHeaders(req.headers, secret);
+  if (!service) {
+    throw new MatchingAuthError('Order writes are callable only by another INTAFACED service with valid credentials (§2)');
+  }
+}
+
+export class MatchingAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MatchingAuthError';
+  }
+}
+
+export function registerRoutes(app: FastifyInstance, engine: MatchingEngine, internalSecret: string): void {
   app.post('/markets/:marketId/orders', async (req, reply) => {
+    // 401, not 403: the caller has not said who it is.
+    try {
+      requireService(req, internalSecret);
+    } catch (err) {
+      return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
+    }
+
     const { marketId } = req.params as { marketId: string };
     const parsed = submitBodySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -116,6 +160,12 @@ export function registerRoutes(app: FastifyInstance, engine: MatchingEngine): vo
   });
 
   app.delete('/markets/:marketId/orders/:orderId', async (req, reply) => {
+    try {
+      requireService(req, internalSecret);
+    } catch (err) {
+      return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
+    }
+
     const { marketId, orderId } = req.params as { marketId: string; orderId: string };
     const result = await engine.cancel(marketId, orderId);
     if (!result.cancelled) return reply.code(404).send({ code: 'OrderNotFound', message: `${orderId} is not live in ${marketId}` });

@@ -59,7 +59,7 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true, sequence: engine.markets.length };
 });
 
-registerRoutes(app, engine);
+registerRoutes(app, engine, env.INTERNAL_SERVICE_SECRET);
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT, ...recovered }, 'svc-matching ready — books replayed from journal');

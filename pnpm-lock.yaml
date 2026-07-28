@@ -616,6 +616,9 @@ importers:
       '@intafaced/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@intafaced/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
