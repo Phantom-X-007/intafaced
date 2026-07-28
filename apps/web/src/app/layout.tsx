@@ -53,7 +53,7 @@ export const viewport: Viewport = {
    */
   colorScheme: 'dark',
   /* Read from the token, never retyped — §3 keeps the hex in exactly one file. */
-  themeColor: color.black,
+  themeColor: color.base,
   width: 'device-width',
   initialScale: 1,
 };

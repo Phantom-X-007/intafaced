@@ -10,9 +10,9 @@ const css = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url))
 const normalise = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
 
 describe('§3 design tokens are locked', () => {
-  it('holds the brand to pure black and phosphor green', () => {
-    expect(color.black).toBe('#000000');
-    expect(color.phosphor).toBe('#00FF41');
+  it('holds the brand to deep navy with a gold accent', () => {
+    expect(color.surface).toBe('#192330');
+    expect(color.accent).toBe('#F0A70A');
   });
 
   it('specifies Orbitron for display and Inter for body', () => {
@@ -20,8 +20,43 @@ describe('§3 design tokens are locked', () => {
     expect(font.body).toContain('Inter');
   });
 
-  it('keeps glass borders on the phosphor at 15% — the spec value', () => {
-    expect(color.glassBorder).toBe('rgba(0, 255, 65, 0.15)');
+  /**
+   * The accent must never be a direction colour.
+   *
+   * If gold also meant "up", nothing would be left to mean "this is the button"
+   * on a falling market — the primary action would disappear into the price
+   * movement exactly when a user most needs to find it.
+   */
+  it('keeps the accent out of market semantics', () => {
+    expect(color.accent).not.toBe(color.long);
+    expect(color.accent).not.toBe(color.short);
+    expect(color.long).toBe('#00B275');
+    expect(color.short).toBe('#FF4A68');
+  });
+
+  /**
+   * Body text clears WCAG AA (4.5:1) on the surface it sits on.
+   *
+   * The reference palette puts #828EA1 on #192330, which measures 4.1:1 and
+   * fails. `textMuted` was lifted specifically to pass — so this asserts the
+   * CONTRAST, not the hex. A future tweak that looks nicer and reads worse
+   * fails here rather than shipping.
+   */
+  it('keeps text above 4.5:1 on the surfaces it sits on', () => {
+    const lum = (hex: string) => {
+      const parts = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const [r, g, b] = parts.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)) as [number, number, number];
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: string, b: string) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x) as [number, number];
+      return (hi + 0.05) / (lo + 0.05);
+    };
+
+    expect(ratio(color.textMuted, color.surface)).toBeGreaterThan(4.5);
+    expect(ratio(color.text, color.surface)).toBeGreaterThan(4.5);
+    // The accent has to carry its own text, or every primary button is unreadable.
+    expect(ratio(color.textOnAccent, color.accent)).toBeGreaterThan(4.5);
   });
 
   it('bases spacing on a 4px grid', () => {
