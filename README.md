@@ -10,21 +10,21 @@
 
 <!-- tracker:start -->
 
-`███████░░░░░░░░░░░░░` **36%** — 37 of 103 features shipped
+`███░░░░░░░░░░░░░░░░░` **17%** — 18 of 103 features shipped
 
-Phases: **0** ✅ · **1** 10/12 · **2** 5/16 · **3** 6/15 · **3P** 1/7 · **4** 1/5 · **4P** 0/3 · **5** 3/32 · **5P** 0/2
+Phases: **0** 10/11 · **1** 4/12 · **2** 3/16 · **3** 0/15 · **3P** 0/7 · **4** 0/5 · **4P** 0/3 · **5** 1/32 · **5P** 0/2
 
-**🟢 45 ready to claim** — nothing blocks these:
+**🟢 33 ready to claim** — nothing blocks these:
 
+- `infra.i18n` — 100+ languages — keyed from day one (§9)
+- `identity.apikeys` — Scoped API keys, sub-accounts
+- `identity.kyc` — KYC tiers wired to JURISDICTION_MATRIX
 - `identity.webauthn` — WebAuthn registration + assertion (§9)
-- `token.governance` — Proposals + IFC-weighted voting (§4.3)
-- `trade.convert` — One-tap Convert — the retail on-ramp
-- `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
-- `trade.otc` — OTC RFQ desk, staked-tier gate
-- `trade.copy` — Copy trading, audited leaders, profit share
-- `trade.forex` — Fiat pairs on the same engine
-- `trade.algo` — TWAP / VWAP / POV execution
-- …and 37 more
+- `token.emissions` — Emission curve, halving, single-minter guarantee
+- `token.staking` — Stake tiers, locks, access gating
+- `token.yield` — Real-yield distribution from platform fees
+- `token.buyback` — Buyback & burn split
+- …and 25 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

@@ -22,6 +22,30 @@
  *   ready   — every dependency is done; free to claim
  *   blocked — computed, not declared: a dependency is not done yet
  *   socket  — deliberately not in v1 (§13). The interface exists; the impl does not.
+ *
+ * ── What `done` MEANS here (tightened 2026-07-28) ───────────────────────────
+ * A feature is `done` only if ALL THREE hold. `requires` proves a path exists on
+ * disk; it does not prove any of these, so verify by reading code:
+ *
+ *   1. REACHABLE. The code is served from a mounted route, or is a library that
+ *      other shipped code actually imports. A router that `index.ts` constructs
+ *      for its TYPE and never registers is not reachable — seven of eleven
+ *      services were in exactly that state on 2026-07-28.
+ *   2. TESTED. There are tests that would fail if it broke.
+ *   3. NOT PROPPED UP. Nothing it depends on is a stub, a mock, or a TODO.
+ *
+ * Code-complete but unmounted is `ready`, not `done`, with a `note:` saying so.
+ * Evidence for every 2026-07-28 change: docs/audit/tracker-truth-2026-07-28.md.
+ *
+ * ── The gap that sits under every `done` on a scoped procedure ──────────────
+ * THE EDGE DOES NOT EXIST. `signPrincipalHeader` / `encodePrincipal`
+ * (packages/contracts/src/edge.ts) are called by nothing outside edge.test.ts,
+ * so no request anywhere carries a verified principal. Every `scopedProcedure`
+ * in the OS therefore refuses every caller today. That is the correct failure
+ * direction, and it means NO feature in this registry is usable by a logged-in
+ * human yet — including the ones still marked `done`. Those are marked `done`
+ * because their code is mounted, tested and unpropped; not because a user can
+ * reach them. See docs/decisions/mount-boundary.md:94.
  */
 
 /** @typedef {'done'|'wip'|'ready'|'socket'} DeclaredStatus */
@@ -62,9 +86,10 @@ export const FEATURES = [
   f('infra.i18n', '100+ languages — keyed from day one (§9)', {
     module: 'core-ops',
     phase: '0',
-    status: 'done',
+    status: 'ready',
     requires: ['packages/i18n'],
     dependsOn: ['infra.ui-tokens'],
+    note: 'Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface.',
   }),
 
   // ── PHASE 1 · THE CORE ───────────────────────────────────────────────────
@@ -72,13 +97,49 @@ export const FEATURES = [
   f('ledger.recipes', 'Money recipes — every value path in the OS', { module: 'ledger', phase: '1', status: 'done', requires: ['packages/ledger-client'] }),
   f('identity.accounts', 'Accounts, sessions, argon2id, TOTP', { module: 'identity', phase: '1', status: 'done', requires: ['services/svc-identity'] }),
   f('identity.rank', 'XP graph, rank ladder, machine-readable perks', { module: 'identity', phase: '1', status: 'done', requires: ['services/svc-identity'] }),
-  f('identity.apikeys', 'Scoped API keys, sub-accounts', { module: 'identity', phase: '1', status: 'done', requires: ['services/svc-identity'] }),
-  f('identity.kyc', 'KYC tiers wired to JURISDICTION_MATRIX', { module: 'identity', phase: '1', status: 'done', requires: ['services/svc-identity'] }),
+  f('identity.apikeys', 'Scoped API keys, sub-accounts', {
+    module: 'identity',
+    phase: '1',
+    status: 'ready',
+    requires: ['services/svc-identity'],
+    note: 'Downgraded 2026-07-28: create/list/revoke are reachable on the mounted router, but `verifyApiKey` (auth-service.ts:328) is called by nothing outside identity.test.ts. A key can be issued and never opens anything — no service accepts one.',
+  }),
+  f('identity.kyc', 'KYC tiers wired to JURISDICTION_MATRIX', {
+    module: 'identity',
+    phase: '1',
+    status: 'ready',
+    requires: ['services/svc-identity'],
+    note: 'Downgraded 2026-07-28: the READ side is wired (kycTier feeds the session tier the matrix reads), but `approveKyc` is exposed by no procedure and no HTTP route. Nothing in the repo can write identity.kyc_records, so every real user is tier `none` forever.',
+  }),
   f('identity.webauthn', 'WebAuthn registration + assertion (§9)', { module: 'identity', phase: '1', dependsOn: ['identity.accounts'] }),
-  f('token.emissions', 'Emission curve, halving, single-minter guarantee', { module: 'token', phase: '1', status: 'done', requires: ['services/svc-token'] }),
-  f('token.staking', 'Stake tiers, locks, access gating', { module: 'token', phase: '1', status: 'done', requires: ['services/svc-token'] }),
-  f('token.yield', 'Real-yield distribution from platform fees', { module: 'token', phase: '1', status: 'done', requires: ['services/svc-token'] }),
-  f('token.buyback', 'Buyback & burn split', { module: 'token', phase: '1', status: 'done', requires: ['services/svc-token'] }),
+  f('token.emissions', 'Emission curve, halving, single-minter guarantee', {
+    module: 'token',
+    phase: '1',
+    status: 'ready',
+    requires: ['services/svc-token'],
+    note: 'Downgraded 2026-07-28: `mintEpoch` is called by token-service.test.ts and nothing else. svc-token/src/router.ts exposes exactly three procedures (health, stakeOf, accessOf) and index.ts starts no scheduler. No epoch can ever be minted on a running system.',
+  }),
+  f('token.staking', 'Stake tiers, locks, access gating', {
+    module: 'token',
+    phase: '1',
+    status: 'ready',
+    requires: ['services/svc-token'],
+    note: 'Downgraded 2026-07-28: the READS ship (stakeOf/accessOf on /trpc, /internal/stake/:userId for svc-trade), but `stake` and `unstake` are called only by tests. Nobody can stake, so every access tier this gates resolves to the unstaked one.',
+  }),
+  f('token.yield', 'Real-yield distribution from platform fees', {
+    module: 'token',
+    phase: '1',
+    status: 'ready',
+    requires: ['services/svc-token'],
+    note: 'Downgraded 2026-07-28: `distributeRevenue` is called only by token-service.test.ts. No route, no consumer, no schedule — fees accrue nowhere and no yield is ever distributed.',
+  }),
+  f('token.buyback', 'Buyback & burn split', {
+    module: 'token',
+    phase: '1',
+    status: 'ready',
+    requires: ['services/svc-token'],
+    note: 'Downgraded 2026-07-28: `recordBuyback` and `burnedSupply` are called only by token-service.test.ts. Same shape as token.yield — the maths is tested, the trigger does not exist.',
+  }),
   f('token.governance', 'Proposals + IFC-weighted voting (§4.3)', { module: 'token', phase: '1', dependsOn: ['token.staking'] }),
 
   // ── PHASE 2 · TRADE ──────────────────────────────────────────────────────
@@ -112,30 +173,94 @@ export const FEATURES = [
   f('trade.algo', 'TWAP / VWAP / POV execution', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', { module: 'trade', phase: '2', dependsOn: ['trade.spot'], note: 'contract already built in packages/exchange-contract' }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
-  f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', { module: 'trade', phase: '2', status: 'done', dependsOn: ['trade.spot'], requires: ['packages/venue-adapter'], note: 'LiquiditySource + router package on main; live venue wiring still product work' }),
+  f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
+    module: 'trade',
+    phase: '2',
+    status: 'ready',
+    dependsOn: ['trade.spot'],
+    requires: ['packages/venue-adapter'],
+    note: 'Downgraded 2026-07-28: `@intafaced/venue-adapter` is imported by zero files outside its own package. There is no adapter for any real venue — `LiquiditySource` is an interface with no implementation, so nothing is aggregated.',
+  }),
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', { module: 'trade', phase: '2', dependsOn: ['trade.spot', 'infra.ui-tokens'] }),
-  f('web.shell', 'apps/web scaffold on the design system', { module: 'core-ops', phase: '2', status: 'done', dependsOn: ['infra.ui-tokens'], requires: ['apps/web'], note: 'Scaffold on main; trade UI still mock data until ws/terminal wire' }),
+  f('web.shell', 'apps/web scaffold on the design system', {
+    module: 'core-ops',
+    phase: '2',
+    status: 'ready',
+    dependsOn: ['infra.ui-tokens'],
+    requires: ['apps/web'],
+    note: 'Downgraded 2026-07-28: apps/web has ZERO test files, no `use client`, no state, no fetch and no websocket across all 7 tsx files. Every number on the page is a hardcoded string literal. It is a picture of the product, not the product.',
+  }),
   f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', { module: 'trade', phase: '2', dependsOn: ['matching.engine'] }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
-  f('pay.gateway', 'Branded gateway, hosted checkout, payment links', { module: 'pay', phase: '3', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-pay'], note: 'svc-pay core on main; tRPC mount deferred to §9 gateway; product checkout links may still expand' }),
+  f('pay.gateway', 'Branded gateway, hosted checkout, payment links', {
+    module: 'pay',
+    phase: '3',
+    status: 'ready',
+    dependsOn: ['ledger.double-entry'],
+    requires: ['services/svc-pay'],
+    note: 'Downgraded 2026-07-28: all 13 procedures are unreachable. svc-pay/src/index.ts:67 builds the router "so the type is exported" and never registers fastifyTRPCPlugin — the only served routes are /health, /ready and POST /webhooks/:railId. No merchant can create a payment. There is no hosted checkout and no payment link in the repo at all.',
+  }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', { module: 'pay', phase: '3', dependsOn: ['pay.psp'] }),
-  f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', { module: 'pay', phase: '3', status: 'done', dependsOn: ['pay.gateway'], requires: ['services/svc-pay/src/rails'], note: 'Rails + conformance kit on main inside svc-pay' }),
+  f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
+    module: 'pay',
+    phase: '3',
+    status: 'ready',
+    dependsOn: ['pay.gateway'],
+    requires: ['services/svc-pay/src/rails'],
+    note: 'Downgraded 2026-07-28: the interface and the conformance kit are real and well tested, but neither v1 rail can move real value — crypto-native runs on `MemoryChain`, an in-memory reference chain (index.ts:46, an explicit §13 socket), and the other is named card-SANDBOX. The only path that reaches a rail (the webhook route) can only be reached about a payment that pay.gateway cannot create.',
+  }),
   f('pay.routing', 'Smart routing — geo, method, risk, approval rate', { module: 'pay', phase: '3', dependsOn: ['pay.rails'] }),
   f('pay.settlement', 'Dual settlement — bank or crypto', { module: 'pay', phase: '3', dependsOn: ['pay.rails'] }),
   f('pay.fraud', 'Risk scoring, chargebacks, decline recovery', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.subscriptions', 'Recurring — card and crypto', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', { module: 'pay', phase: '3', plane: 'B', dependsOn: ['pay.gateway', 'identity.apikeys'] }),
-  f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-p2p'], note: 'svc-p2p on main; router not mounted at boot yet' }),
-  f('p2p.escrow', 'Ledger escrow — lock, release, refund', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.offers'], requires: ['services/svc-p2p'], note: 'Escrow flows in svc-p2p; not a separate service' }),
-  f('p2p.disputes', 'Moderated dispute resolution', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.escrow'], requires: ['services/svc-p2p'], note: 'Dispute paths in svc-p2p core' }),
-  f('p2p.reputation', 'Reputation feeding the same XP graph', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.offers', 'identity.rank'], requires: ['services/svc-p2p/src/reputation.ts'], note: 'Reputation module on main' }),
+  f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', {
+    module: 'p2p',
+    phase: '3',
+    status: 'ready',
+    dependsOn: ['ledger.double-entry'],
+    requires: ['services/svc-p2p'],
+    note: 'Downgraded 2026-07-28: svc-p2p/src/index.ts never even IMPORTS ./router.js. All 15 procedures are dead code at runtime; the served surface is /health, /ready and two unauthenticated /internal routes. 176 tests exercise the service class directly. There is no user-facing path to P2P or OTC of any kind.',
+  }),
+  f('p2p.escrow', 'Ledger escrow — lock, release, refund', {
+    module: 'p2p',
+    phase: '3',
+    status: 'ready',
+    dependsOn: ['p2p.offers'],
+    requires: ['services/svc-p2p'],
+    note: 'Downgraded 2026-07-28: the escrow logic and the sweeps are real and do run, but nothing can enter escrow — the router that would create a trade is not mounted (see p2p.offers).',
+  }),
+  f('p2p.disputes', 'Moderated dispute resolution', {
+    module: 'p2p',
+    phase: '3',
+    status: 'ready',
+    dependsOn: ['p2p.escrow'],
+    requires: ['services/svc-p2p'],
+    note: 'Downgraded 2026-07-28: `disputes.open` and `disputes.resolve` live on the unmounted router. No moderator can reach a dispute, and no user can raise one.',
+  }),
+  f('p2p.reputation', 'Reputation feeding the same XP graph', {
+    module: 'p2p',
+    phase: '3',
+    status: 'ready',
+    dependsOn: ['p2p.offers', 'identity.rank'],
+    requires: ['services/svc-p2p/src/reputation.ts'],
+    note: 'Downgraded 2026-07-28: computed from trades that cannot happen. The only served read is GET /internal/reputation/:userId, which the 2026-07-27 audit flags as unauthenticated (F7) — that is a leak, not a feature.',
+  }),
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', { module: 'p2p', phase: '3', dependsOn: ['p2p.reputation'] }),
 
   // ── PHASE 3P · PROTOCOL PLANE P0 ─────────────────────────────────────────
-  f('protocol.smart-accounts', 'Passkey smart accounts, session keys (§17.4)', { module: 'protocol', phase: '3P', plane: 'P', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-protocol'], note: 'svc-protocol on main; open contract sockets remain elsewhere' }),
+  f('protocol.smart-accounts', 'Passkey smart accounts, session keys (§17.4)', {
+    module: 'protocol',
+    phase: '3P',
+    plane: 'P',
+    status: 'ready',
+    dependsOn: ['identity.accounts'],
+    requires: ['services/svc-protocol'],
+    note: 'Downgraded 2026-07-28: svc-protocol/src/index.ts:68 exports appRouter for its TYPE and never registers fastifyTRPCPlugin — all nine procedures, relayUserOperation included, are unreachable. Separately, four open §13 sockets mean the Solidity is never compiled or executed (socket.contract-toolchain) and passkey ownership has no verifier (socket.p256-verifier). "Passkey smart accounts" is not something a user can do today.',
+  }),
   f('protocol.amm', 'AMM pools from audited templates', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.amm'] }),
   f('protocol.escrow', 'Non-custodial P2P escrow contracts', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
@@ -144,7 +269,14 @@ export const FEATURES = [
   f('indexer.readmodels', 'Chain → Postgres read models', { module: 'indexer', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
 
   // ── PHASE 4 · BLUEPRINT ──────────────────────────────────────────────────
-  f('blueprint.onboarding', 'Blueprint session → profile JSON', { module: 'blueprint', phase: '4', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-blueprint'], note: 'svc-blueprint on main; router not wired at boot yet' }),
+  f('blueprint.onboarding', 'Blueprint session → profile JSON', {
+    module: 'blueprint',
+    phase: '4',
+    status: 'ready',
+    dependsOn: ['identity.accounts'],
+    requires: ['services/svc-blueprint'],
+    note: 'Downgraded 2026-07-28: svc-blueprint/src/index.ts never imports ./router.js — onboard, me, mentors, export and erase are all unreachable. §7.2 export/erase being unreachable is the sharper half: the ownership promise has no door.',
+  }),
   f('blueprint.card', 'Share card render (1080×1350, 1200×630)', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
   f('blueprint.crews', 'Crew matching + mentor shortlist', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
   f('blueprint.ownership', 'Export + hard delete, cascading', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
@@ -156,13 +288,27 @@ export const FEATURES = [
   f('bridge.canonical', 'Canonical IFC bridge + attestations', { module: 'bridge', phase: '4P', plane: 'B', dependsOn: ['chain.mainnet', 'token.emissions'] }),
 
   // ── PHASE 5 · SURFACES ───────────────────────────────────────────────────
-  f('bank.accounts', 'Multi-currency account UX over the ledger', { module: 'bank', phase: '5', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-bank'], note: 'svc-bank on main; tRPC not mounted; UX product may expand' }),
+  f('bank.accounts', 'Multi-currency account UX over the ledger', {
+    module: 'bank',
+    phase: '5',
+    status: 'ready',
+    dependsOn: ['ledger.double-entry'],
+    requires: ['services/svc-bank'],
+    note: 'Downgraded 2026-07-28: svc-bank/src/index.ts:36 builds appRouter and never registers fastifyTRPCPlugin, so all 17 procedures are unreachable. What IS served is two unauthenticated /internal/jobs/* POSTs that run other people\'s standing orders and interest accrual (2026-07-27 audit, F4). The only reachable half of svc-bank is the half that should not be reachable.',
+  }),
   f('bank.loans', 'Collateralised loans, LTV, margin calls, liquidation', { module: 'bank', phase: '5', dependsOn: ['bank.accounts', 'trade.spot'] }),
   f('bank.earn', 'Flexible + fixed yield pools', { module: 'bank', phase: '5', dependsOn: ['bank.accounts', 'token.staking'] }),
   f('bank.cards', 'CardIssuerAdapter + card-sim, <2s auth decision', { module: 'bank', phase: '5', dependsOn: ['bank.accounts'] }),
   f('bank.sovereign-card', 'Self-custody funded card, JIT conversion (§18)', { module: 'bank', phase: '5', plane: 'P', dependsOn: ['bank.cards', 'protocol.smart-accounts'] }),
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', { module: 'bank', phase: '5', dependsOn: ['pay.rails'] }),
-  f('agents.gateway', 'Model-agnostic gateway, per-user metering', { module: 'agents', phase: '5', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-agents'], note: 'Only service that already mounts /trpc' }),
+  f('agents.gateway', 'Model-agnostic gateway, per-user metering', {
+    module: 'agents',
+    phase: '5',
+    status: 'done',
+    dependsOn: ['identity.accounts'],
+    requires: ['services/svc-agents'],
+    note: 'Mounted and scoped; 5 test files. Note corrected 2026-07-28 — it is one of FOUR services that mount /trpc (agents, identity, trade, token), not the only one. Subject to the edge gap: every scoped procedure here is unreachable until something issues a signed principal header.',
+  }),
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
   f('agents.support', 'Support agent — KB + account-state grounded', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', { module: 'agents', phase: '5', dependsOn: ['agents.gateway', 'trade.spot'] }),
@@ -187,7 +333,14 @@ export const FEATURES = [
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', { module: 'core-ops', phase: '5', dependsOn: ['ledger.double-entry'] }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', { module: 'core-ops', phase: '5', dependsOn: ['identity.kyc'] }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', { module: 'core-ops', phase: '5', dependsOn: ['ledger.double-entry'] }),
-  f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', { module: 'core-ops', phase: '5', status: 'done', dependsOn: ['infra.ui-tokens'], requires: ['apps/admin'], note: 'Console scaffold on main; freeze/reconcile still simulated until wired' }),
+  f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
+    module: 'core-ops',
+    phase: '5',
+    status: 'ready',
+    dependsOn: ['infra.ui-tokens'],
+    requires: ['apps/admin'],
+    note: 'Downgraded 2026-07-28: apps/admin has ZERO test files and makes no network call of any kind. Every kill-switch, freeze and reconcile is React `useState` in the browser — flipping one changes a local boolean and nothing else. An operator console that appears to halt the ledger and does not is worse than no console.',
+  }),
   f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', { module: 'core-ops', phase: '5', dependsOn: ['infra.events'] }),
 
   // ── PHASE 5P · PROTOCOL P2–P3 ────────────────────────────────────────────
