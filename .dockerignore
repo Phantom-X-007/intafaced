@@ -1,0 +1,39 @@
+# Build context exclusions.
+#
+# The first entry is the important one: a pnpm workspace's node_modules is a
+# forest of absolute symlinks into .pnpm. Copying it from the host would either
+# break (Linux container, Windows/macOS links) or — worse — silently work with
+# whatever the host had installed, which is how "works on my machine" gets
+# baked into an image. The image installs its own from the lockfile.
+node_modules
+**/node_modules
+
+# Build output — the image builds its own.
+dist
+**/dist
+.next
+**/.next
+.turbo
+**/.turbo
+*.tsbuildinfo
+**/*.tsbuildinfo
+coverage
+**/coverage
+
+# Secrets never enter an image layer. Compose injects them as environment.
+.env
+.env.local
+.env.*.local
+
+# Host-side state
+.git
+.githooks
+.docker-data
+**/.data
+*.log
+
+# Not needed to build or run anything
+.github
+docs
+*.pdf
+**/README.md

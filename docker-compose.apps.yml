@@ -1,0 +1,420 @@
+name: intafaced
+
+# THE WHOLE PLATFORM — eleven services, two apps, on top of the infrastructure.
+#
+#   docker compose -f docker-compose.apps.yml up -d --build     (or: pnpm platform:up)
+#
+# ── Why this is a second file and not more of docker-compose.yml ─────────────
+#
+# `docker-compose.yml` is what `pnpm infra:up` starts, and what the integration
+# tests need: a Postgres, a Redis, a NATS. Folding thirteen application
+# containers into it would mean a developer who wants a database for `vitest`
+# waits for a full monorepo image build first. That is a real cost paid every
+# day by people who did not ask for it.
+#
+# The alternative — one file, apps behind a `--profile` — keeps a single file
+# but moves the failure: forget the flag and you get a partial platform with no
+# error, which presents as "svc-trade can't reach the ledger" and costs an hour
+# before anyone suspects the flag. A missing file is a loud failure; a missing
+# profile is a quiet one.
+#
+# `include:` gives both: the infra file stays exactly what it was and remains
+# usable on its own, and this file is a single self-contained command that
+# brings up everything.
+include:
+  - docker-compose.yml
+
+# ── Shared blocks ────────────────────────────────────────────────────────────
+
+x-app: &app
+  # One image for every service and both apps — see the Dockerfile header for
+  # why. All thirteen declare the same build so `up` works from a clean clone
+  # with no image present; BuildKit deduplicates them into one build.
+  image: intafaced/app:dev
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: runtime
+  restart: unless-stopped
+
+x-service-env: &service-env
+  # Production Node, dev application environment. They are different questions:
+  # NODE_ENV picks the optimised runtime paths, APP_ENV picks the policy —
+  # svc-identity only hard-requires argon2 when APP_ENV is `prod` (§4.1).
+  NODE_ENV: production
+  APP_ENV: ${APP_ENV:-dev}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LAUNCH_DROP: ${LAUNCH_DROP:-0}
+  # Service names inside the compose network, and the CONTAINER ports — not the
+  # host ports below. Postgres is 5432 in here even though it is 5433 outside.
+  REDIS_URL: redis://redis:6379
+  NATS_URL: nats://nats:4222
+  NATS_STREAM_PREFIX: ${NATS_STREAM_PREFIX:-INTAFACED}
+  OTEL_ENABLED: ${OTEL_ENABLED:-true}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+  DATABASE_SSL: 'false'
+  HTTP_HOST: 0.0.0.0
+
+# The two fleet-wide secrets. `:?` means compose REFUSES to start if either is
+# unset — see .env.example for why they must hold the same value everywhere.
+x-edge-secret: &edge-secret
+  EDGE_PRINCIPAL_SECRET: ${EDGE_PRINCIPAL_SECRET:?missing — copy .env.example to .env. Every service must share ONE value or edge-signed principals fail verification.}
+
+x-internal-secret: &internal-secret
+  INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?missing — copy .env.example to .env. Every service must share ONE value or service-to-service calls return 401.}
+
+# `/health`, never `/ready` — the script explains why at length.
+x-healthcheck: &healthcheck
+  test: ['CMD', 'node', '/app/tooling/infra/healthcheck.mjs']
+  interval: 5s
+  timeout: 5s
+  retries: 30
+  # Node + Fastify + a JetStream handshake takes a few seconds; failures inside
+  # this window do not count against `retries`.
+  start_period: 20s
+
+# What a service that owns a Postgres schema needs before it may start.
+x-needs-schema: &needs-schema
+  postgres:
+    condition: service_healthy
+  migrate:
+    condition: service_completed_successfully
+
+x-needs-bus: &needs-bus
+  nats:
+    condition: service_healthy
+
+services:
+  # ── Migrations ─────────────────────────────────────────────────────────────
+  # Runs every service's `db:migrate` and exits. Everything with a schema waits
+  # on `service_completed_successfully`, so a service physically cannot reach
+  # its `SELECT 1 FROM <schema>.<table>` boot assertion before its migration has
+  # been applied. tooling/infra/migrate-all.mjs argues the design choice.
+  migrate:
+    <<: *app
+    container_name: intafaced-migrate
+    restart: 'no'
+    command: ['node', 'tooling/infra/migrate-all.mjs']
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: intafaced
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Phase 1 · THE CORE ─────────────────────────────────────────────────────
+
+  # svc-ledger is the root of the money plane: six services call it and none of
+  # them can move value without it. It owns the `ledger` JetStream stream and
+  # asserts `chain_tip` exists at boot.
+  svc-ledger:
+    <<: *app
+    container_name: intafaced-svc-ledger
+    command: ['node', 'services/svc-ledger/dist/index.js']
+    environment:
+      <<: [*service-env, *internal-secret]
+      SERVICE_NAME: svc-ledger
+      HTTP_PORT: '4001'
+      DATABASE_URL: postgres://svc_ledger:svc_ledger@postgres:5432/intafaced
+    ports: ['4001:4001']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+
+  svc-identity:
+    <<: *app
+    container_name: intafaced-svc-identity
+    command: ['node', 'services/svc-identity/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-identity
+      HTTP_PORT: '4002'
+      DATABASE_URL: postgres://svc_identity:svc_identity@postgres:5432/intafaced
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
+      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+    ports: ['4002:4002']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+
+  svc-token:
+    <<: *app
+    container_name: intafaced-svc-token
+    command: ['node', 'services/svc-token/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret, *internal-secret]
+      SERVICE_NAME: svc-token
+      HTTP_PORT: '4003'
+      DATABASE_URL: postgres://svc_token:svc_token@postgres:5432/intafaced
+      LEDGER_URL: http://svc-ledger:4001
+      TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
+    ports: ['4003:4003']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+      # Not a boot assertion — svc-token connects to the ledger lazily. Ordered
+      # anyway so the first mint after `up` does not race the ledger's own boot.
+      svc-ledger:
+        condition: service_healthy
+
+  # ── Phase 2 · TRADE ────────────────────────────────────────────────────────
+
+  # No DATABASE_URL, deliberately: §5.1 gives this service in-memory books and
+  # the file journal below, and nothing else. It is therefore not gated on
+  # `migrate` — there is no schema to migrate.
+  svc-matching:
+    <<: *app
+    container_name: intafaced-svc-matching
+    command: ['node', 'services/svc-matching/dist/index.js']
+    environment:
+      <<: [*service-env, *internal-secret]
+      SERVICE_NAME: svc-matching
+      # 4005, not the code default of 4004: svc-trade's MATCHING_URL default is
+      # `http://localhost:4005`, and three services share 4004 as a default
+      # because each was written without knowing the others' ports.
+      HTTP_PORT: '4005'
+      MATCHING_JOURNAL_PATH: /data/matching/engine_journal.ndjson
+    ports: ['4005:4005']
+    volumes:
+      # The journal is the recovery guarantee (§5.1): the engine replays it
+      # before it will accept an order. On an anonymous volume a container
+      # replacement would silently start with empty books.
+      - matchingjournal:/data/matching
+    healthcheck: *healthcheck
+    depends_on:
+      <<: *needs-bus
+
+  # THE ORDERING THAT ACTUALLY MATTERS.
+  #
+  # svc-trade calls `bus.subscribe('orderFilled')` at boot, and `orderFilled`
+  # lives on the `matching` stream. JetStreamEventBus creates streams only for
+  # its `ownedStreams` (packages/events/src/jetstream-bus.ts) and svc-trade
+  # owns NONE — `ownedStreams: []`. So `consumers.add` against a stream that
+  # svc-matching has not created yet fails and this process exits.
+  #
+  # It also publishes `intafaced.identity.xp.earned` per filled order, on the
+  # `identity` stream, which svc-identity owns. Same failure mode, later.
+  svc-trade:
+    <<: *app
+    container_name: intafaced-svc-trade
+    command: ['node', 'services/svc-trade/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret, *internal-secret]
+      SERVICE_NAME: svc-trade
+      HTTP_PORT: '4004'
+      DATABASE_URL: postgres://svc_trade:svc_trade@postgres:5432/intafaced
+      LEDGER_URL: http://svc-ledger:4001
+      IDENTITY_URL: http://svc-identity:4002
+      MATCHING_URL: http://svc-matching:4005
+    ports: ['4004:4004']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+      svc-matching:
+        condition: service_healthy # owns the `matching` stream this subscribes to
+      svc-identity:
+        condition: service_healthy # owns the `identity` stream this publishes to
+      svc-ledger:
+        condition: service_healthy # every fill settles through it
+
+  # ── Phase 3 · PAY + P2P ────────────────────────────────────────────────────
+
+  svc-pay:
+    <<: *app
+    container_name: intafaced-svc-pay
+    command: ['node', 'services/svc-pay/dist/index.js']
+    environment:
+      <<: [*service-env, *internal-secret]
+      SERVICE_NAME: svc-pay
+      HTTP_PORT: '4006'
+      DATABASE_URL: postgres://svc_pay:svc_pay@postgres:5432/intafaced
+      LEDGER_URL: http://svc-ledger:4001
+      # Both are `z.string().min(32)` with no default. A forged delivery on the
+      # webhook endpoint asserts that money moved, so the service refuses to
+      # boot rather than verify everything.
+      PAY_CRYPTO_WEBHOOK_SECRET: ${PAY_CRYPTO_WEBHOOK_SECRET:?missing — copy .env.example to .env}
+      PAY_CARD_SANDBOX_WEBHOOK_SECRET: ${PAY_CARD_SANDBOX_WEBHOOK_SECRET:?missing — copy .env.example to .env}
+    ports: ['4006:4006']
+    healthcheck: *healthcheck
+    depends_on:
+      # No `nats` — svc-pay connects to no bus (see its index.ts).
+      <<: *needs-schema
+      svc-ledger:
+        condition: service_healthy
+
+  svc-p2p:
+    <<: *app
+    container_name: intafaced-svc-p2p
+    command: ['node', 'services/svc-p2p/dist/index.js']
+    environment:
+      <<: [*service-env, *internal-secret]
+      SERVICE_NAME: svc-p2p
+      # 4007: the code default is 4004, which svc-trade already holds.
+      HTTP_PORT: '4007'
+      DATABASE_URL: postgres://svc_p2p:svc_p2p@postgres:5432/intafaced
+      LEDGER_URL: http://svc-ledger:4001
+    ports: ['4007:4007']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+      # This one is a boot dependency, not a nicety: the settlement sweep runs
+      # ONCE before the HTTP listener opens, and it posts to the ledger.
+      svc-ledger:
+        condition: service_healthy
+
+  # ── Phase 4 · BLUEPRINT ────────────────────────────────────────────────────
+
+  svc-blueprint:
+    <<: *app
+    container_name: intafaced-svc-blueprint
+    command: ['node', 'services/svc-blueprint/dist/index.js']
+    environment:
+      <<: *service-env
+      SERVICE_NAME: svc-blueprint
+      # 4011: the code default is 4008, which svc-agents already holds.
+      HTTP_PORT: '4011'
+      DATABASE_URL: postgres://svc_blueprint:svc_blueprint@postgres:5432/intafaced
+      # `mock` because the Neural Engine is a separate external deployment that
+      # a clean clone does not have. The service picks its engine explicitly and
+      # never falls back, so pointing `http` at nothing would serve onboarding
+      # traffic at an engine that cannot answer.
+      BLUEPRINT_ENGINE_MODE: ${BLUEPRINT_ENGINE_MODE:-mock}
+      BLUEPRINT_ENGINE_URL: ${BLUEPRINT_ENGINE_URL:-http://host.docker.internal:4108}
+    ports: ['4011:4011']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+
+  # ── Phase 5 · SURFACES ─────────────────────────────────────────────────────
+
+  svc-bank:
+    <<: *app
+    container_name: intafaced-svc-bank
+    command: ['node', 'services/svc-bank/dist/index.js']
+    environment:
+      <<: [*service-env, *internal-secret]
+      SERVICE_NAME: svc-bank
+      HTTP_PORT: '4009'
+      DATABASE_URL: postgres://svc_bank:svc_bank@postgres:5432/intafaced
+      LEDGER_URL: http://svc-ledger:4001
+      TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
+    ports: ['4009:4009']
+    healthcheck: *healthcheck
+    depends_on:
+      # No `nats` — svc-bank publishes no subject yet (its index.ts says so).
+      <<: *needs-schema
+      svc-ledger:
+        condition: service_healthy
+
+  svc-agents:
+    <<: *app
+    container_name: intafaced-svc-agents
+    command: ['node', 'services/svc-agents/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret, *internal-secret]
+      SERVICE_NAME: svc-agents
+      HTTP_PORT: '4008'
+      DATABASE_URL: postgres://svc_agents:svc_agents@postgres:5432/intafaced
+      LEDGER_URL: http://svc-ledger:4001
+      # `mock` by default so bringing the fleet up cannot spend money. The
+      # upstream's identity is deployment configuration — set the
+      # AGENTS_UPSTREAM_* block in .env to point it somewhere real.
+      AGENTS_PROVIDER: ${AGENTS_PROVIDER:-mock}
+      AGENTS_FEE_ASSET_ID: ${AGENTS_FEE_ASSET_ID:-IFC}
+      AGENTS_METERING_ENABLED: ${AGENTS_METERING_ENABLED:-true}
+      # Pass-through form (key, no value): compose forwards these ONLY if they
+      # are set in .env, and omits them entirely otherwise. `${VAR:-}` would set
+      # them to the empty string instead, and the schema types them as an
+      # optional URL and a min(1) string — an empty string is a present, invalid
+      # value, and svc-agents would refuse to boot with `mock` selected.
+      AGENTS_UPSTREAM_BASE_URL:
+      AGENTS_UPSTREAM_API_KEY:
+      AGENTS_UPSTREAM_HEADERS:
+      AGENTS_UPSTREAM_MODELS:
+      AGENTS_UPSTREAM_COMPLETIONS_PATH:
+      AGENTS_UPSTREAM_EMBEDDINGS_PATH:
+      AGENTS_ROUTING_TABLE:
+    ports: ['4008:4008']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+      svc-ledger:
+        condition: service_healthy
+
+  # ── Protocol Plane (§17.4) ─────────────────────────────────────────────────
+
+  # Non-custodial and permissionless: no ledger connection, no signing key.
+  # PROTOCOL_RPC_URL points OUTSIDE the compose network on purpose — the chain
+  # is not ours to run, and a clean clone has none. Without one this service
+  # still boots and still serves `/health`; `/ready` reports 503 until an RPC
+  # answers, which is the honest state.
+  svc-protocol:
+    <<: *app
+    container_name: intafaced-svc-protocol
+    command: ['node', 'services/svc-protocol/dist/index.js']
+    environment:
+      <<: *service-env
+      SERVICE_NAME: svc-protocol
+      # 4012: the code default is 4004, which svc-trade already holds.
+      HTTP_PORT: '4012'
+      DATABASE_URL: postgres://svc_protocol:svc_protocol@postgres:5432/intafaced
+      PROTOCOL_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-31337}
+      PROTOCOL_RPC_URL: ${PROTOCOL_RPC_URL:-http://host.docker.internal:8545}
+      PROTOCOL_ENTRYPOINT_ADDRESS: ${PROTOCOL_ENTRYPOINT_ADDRESS:-0x0000000071727De22E5E9d8BAf0edAc6f37da032}
+      PROTOCOL_FACTORY_ADDRESS: ${PROTOCOL_FACTORY_ADDRESS:-0x0000000000000000000000000000000000000000}
+      PROTOCOL_IMPLEMENTATION_ADDRESS: ${PROTOCOL_IMPLEMENTATION_ADDRESS:-0x0000000000000000000000000000000000000000}
+    ports: ['4012:4012']
+    extra_hosts:
+      # Linux docker has no host.docker.internal by default; Desktop does. This
+      # makes the default RPC URL above mean the same thing on both.
+      - 'host.docker.internal:host-gateway'
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+
+  # ── Apps ───────────────────────────────────────────────────────────────────
+  #
+  # Both are Next 15, both are served by `next start` from the build already in
+  # the image. Neither declares a `depends_on` on a service, and that is not an
+  # oversight: apps/web reads no environment at all and apps/admin reads only
+  # LAUNCH_DROP and the INTAFACED_FLAG_* overrides (apps/src/lib/operator-env.ts).
+  # Nothing in either app calls a service over HTTP today. Adding a dependency
+  # we do not have would make the platform slower to start and would lie about
+  # the coupling.
+
+  web:
+    <<: *app
+    container_name: intafaced-web
+    command: ['pnpm', '--filter', '@intafaced/web', 'start']
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+      HEALTHCHECK_PORT: '3000'
+      HEALTHCHECK_PATH: /
+    ports: ['3000:3000']
+    healthcheck: *healthcheck
+
+  admin:
+    <<: *app
+    container_name: intafaced-admin
+    # 3100 comes from the package's own start script (`next start --port 3100`).
+    command: ['pnpm', '--filter', '@intafaced/admin', 'start']
+    environment:
+      NODE_ENV: production
+      APP_ENV: ${APP_ENV:-dev}
+      # The console reports the drop it is told about, per request (§11).
+      LAUNCH_DROP: ${LAUNCH_DROP:-0}
+      HOSTNAME: 0.0.0.0
+      HEALTHCHECK_PORT: '3100'
+      HEALTHCHECK_PATH: /
+    ports: ['3100:3100']
+    healthcheck: *healthcheck
+
+volumes:
+  matchingjournal:
