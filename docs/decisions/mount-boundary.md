@@ -12,11 +12,21 @@ Nitro's proposed default, accepted as written:
 | Service                                    | Mount                  |
 | ------------------------------------------ | ---------------------- |
 | Core (identity, ledger, token) + **trade** | **self-mount `/trpc`** |
-| **pay**                                    | gateway only (§9)      |
+| **pay**                                    | self-mount, edge-only  |
 | **matching**                               | plain HTTP, no `/trpc` |
 | p2p, bank, blueprint, agents, protocol     | self-mount `/trpc`     |
 
 **No public money env until purpose-keyed holds (P0-3) land.** Unchanged.
+
+### AMENDED 2026-07-28 — "gateway only" was ambiguous, and the ambiguity cost real work
+
+That row originally read **"gateway only (§9)"**. It meant _not publicly exposed_, which is now satisfied by svc-edge being the only public listener. It did **not** mean "does not serve `/trpc`".
+
+An agent building the mounts read it as a prohibition and correctly stopped rather than overturn a stamped decision on the one service that owns a public webhook. That was the right call on the information available — the wording was mine and it was wrong.
+
+The consequence of leaving it: svc-edge routes `/api/pay` to svc-pay, so an unmounted svc-pay means the edge forwards to a service with nothing behind it. Every mounted service is reached the same way — it serves `/trpc`, and only the edge is public. `pay` is not different.
+
+**Lesson for the next stamp:** state the property (_"not publicly exposed"_), not the mechanism (_"gateway only"_). A reader cannot tell which mechanisms a property forbids.
 
 `svc-agents` is the reference implementation. Copy its `index.ts`.
 
