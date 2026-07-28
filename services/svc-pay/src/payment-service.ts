@@ -83,7 +83,16 @@ export type PayErrorCode =
   | 'pay.nothing_to_settle'
   | 'pay.fee_exceeds_gross'
   | 'pay.invalid_window'
-  | 'pay.settlement_not_found';
+  | 'pay.settlement_not_found'
+  // ── User money in and out (`user-money-service.ts`) ──
+  | 'pay.rail_unknown'
+  /** The rail exists but does not accept hand-typed operator credits. */
+  | 'pay.rail_not_creditable'
+  /** A rail reference already credited something else. Never resolved by retrying. */
+  | 'pay.deposit_conflict'
+  | 'pay.withdrawal_not_found'
+  /** A client reference already names a different withdrawal. */
+  | 'pay.withdrawal_conflict';
 
 export class PayError extends Error {
   constructor(

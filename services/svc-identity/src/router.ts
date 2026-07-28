@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
-import { AuthError, type AuthService } from './auth/auth-service.js';
+import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
+import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 
 /**
@@ -13,6 +14,12 @@ import type { RankService } from './rank/rank-service.js';
  */
 
 function toTrpcError(err: unknown): TRPCError {
+  // A guard rejection (`requireMfa`) is not a server fault. It arrives as the
+  // shared package's AuthError, which is a different class from this service's.
+  if (err instanceof GuardError) {
+    return new TRPCError({ code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN', message: err.message, cause: err });
+  }
+
   if (!(err instanceof AuthError)) {
     return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
   }
@@ -25,6 +32,13 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials', cause: err });
     case 'auth.mfa_required':
       return new TRPCError({ code: 'UNAUTHORIZED', message: 'Two-factor code required', cause: err });
+    case 'auth.mfa_not_enrolled':
+      // FORBIDDEN, not UNAUTHORIZED: retrying with a code cannot help. The
+      // client has to send the user through TOTP enrolment first, and the two
+      // need different UI.
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+    case 'auth.kyc_not_pending':
+      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
     case 'auth.session_invalid':
     case 'auth.session_reused':
       return new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
@@ -45,6 +59,41 @@ const sessionOutput = z.object({
   expiresAt: z.string(),
   userId: z.string().uuid(),
 });
+
+/** The tiers a user can ask for. `none` is the absence of a record, not a request. */
+const submittableTier = z.enum(['basic', 'full', 'institutional']);
+
+const kycRecordOutput = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  tier: z.enum(['none', 'basic', 'full', 'institutional']),
+  jurisdiction: z.string(),
+  status: z.enum(['pending', 'approved', 'rejected', 'expired']),
+  reviewedAt: z.string().nullable(),
+  expiresAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+/**
+ * What a KYC record looks like on the wire.
+ *
+ * `providerRef` and `reviewedBy` are deliberately absent. §10 PII isolation:
+ * the provider pointer is an internal reference to a document store, and naming
+ * the reviewing operator to the user under review is how a compliance officer
+ * acquires a personal adversary. Both stay server-side.
+ */
+function presentKyc(record: KycRecordView) {
+  return {
+    id: record.id,
+    userId: record.userId,
+    tier: record.tier,
+    jurisdiction: record.jurisdiction,
+    status: record.status,
+    reviewedAt: record.reviewedAt?.toISOString() ?? null,
+    expiresAt: record.expiresAt?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+  };
+}
 
 export function createIdentityRouter(auth: AuthService, rank: RankService, options: { registrationOpen: boolean }) {
   return router({
@@ -110,6 +159,35 @@ export function createIdentityRouter(auth: AuthService, rank: RankService, optio
       logoutAll: protectedProcedure.output(z.object({ revoked: z.number() })).mutation(async ({ ctx }) => ({
         revoked: await auth.logoutAll(ctx.principal.userId),
       })),
+
+      /**
+       * THE STEP-UP CHALLENGE.
+       *
+       * `defaultScopes()` withholds `trade:withdraw` — "added only after a
+       * step-up challenge" — and there was no step-up challenge anywhere in the
+       * OS, which made every withdrawal surface unreachable by a real session.
+       * This is that challenge: a live session plus a fresh TOTP code buys a
+       * five-minute token that carries the scope.
+       *
+       * `protectedProcedure`, not `scopedProcedure`: the caller is proving a
+       * second factor, not exercising a permission. Requiring a scope to ask for
+       * a scope would only mean the answer was already yes.
+       */
+      stepUp: protectedProcedure
+        .input(z.object({ totpCode: z.string().regex(/^\d{6}$/) }))
+        .output(z.object({ accessToken: z.string(), expiresAt: z.string(), scopes: z.array(z.string()) }))
+        .mutation(async ({ ctx, input }) => {
+          try {
+            const elevated = await auth.stepUp({
+              userId: ctx.principal.userId,
+              sessionId: ctx.principal.sid,
+              totpCode: input.totpCode,
+            });
+            return { ...elevated, expiresAt: elevated.expiresAt.toISOString() };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
     }),
 
     totp: router({
@@ -134,6 +212,129 @@ export function createIdentityRouter(auth: AuthService, rank: RankService, optio
             throw toTrpcError(err);
           }
         }),
+    }),
+
+    /**
+     * KYC (§4.1 `kyc.start / kyc.webhook / kyc.status`).
+     *
+     * WHAT THIS GATES, AND WHAT IT DOES NOT. §22 — zero-KYC follows custody.
+     * These procedures exist for the CUSTODIAL side: the ledger holds the asset,
+     * so the jurisdiction matrix applies to it. Nothing here gates a
+     * non-custodial surface, and nothing here should ever be made to: a Protocol
+     * Plane module is `custodial: false`, `checkAccess` returns
+     * `allowed.permissionless` for it before any tier is read, and that
+     * short-circuit is the law as code (`packages/config/src/jurisdiction.ts`).
+     *
+     * There is no provider integration here on purpose. Approval is an OPERATOR
+     * ACTION against `kyc_records` — a human decides, and the row records which
+     * human. A provider webhook can be added later as one more way to move a
+     * record from `pending`, without changing what approval means.
+     */
+    kyc: router({
+      /**
+       * A user asks to be verified. Grants nothing.
+       *
+       * There is no `userId` input, so there is no way to submit on somebody
+       * else's behalf — the identity comes from the token and cannot be
+       * overridden. An ownership check would be a check on a value the caller
+       * supplies; not accepting the value is stronger.
+       */
+      submit: scopedProcedure('identity:write')
+        .input(
+          z.object({
+            tier: submittableTier,
+            /** ISO-3166 alpha-2. The matrix is keyed on it, so it is not free text. */
+            jurisdiction: z.string().length(2).toUpperCase(),
+            providerRef: z.string().min(1).max(200).optional(),
+          }),
+        )
+        .output(kycRecordOutput)
+        .mutation(async ({ ctx, input }) => {
+          try {
+            return presentKyc(
+              await auth.submitKyc({
+                userId: ctx.principal.userId,
+                tier: input.tier,
+                jurisdiction: input.jurisdiction,
+                ...(input.providerRef ? { providerRef: input.providerRef } : {}),
+              }),
+            );
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /** The caller's own records, and the tier they currently add up to. */
+      status: scopedProcedure('identity:read')
+        .output(z.object({ tier: z.enum(['none', 'basic', 'full', 'institutional']), records: z.array(kycRecordOutput) }))
+        .query(async ({ ctx }) => ({
+          // Read from the same function the token issuer uses, rather than
+          // re-deriving "highest approved, unexpired" here. Two implementations
+          // of that rule would eventually disagree, and the one the user is
+          // shown is not the one that decides what they can do.
+          tier: await auth.kycTier(ctx.principal.userId),
+          records: (await auth.listKycRecords(ctx.principal.userId)).map(presentKyc),
+        })),
+
+      /**
+       * THE OPERATOR ACTION — THIS GRANTS TRADING ACCESS.
+       *
+       * `admin:compliance`, which no user session carries, plus an explicit
+       * second-factor check.
+       *
+       * WHY `requireMfa` IS HERE AND NOT IMPLIED BY THE SCOPE.
+       * `INTERACTIVE_ONLY_SCOPES` is what forces 2FA on a scope, and
+       * `admin:compliance` is NOT in that list — its stated membership test is
+       * "does this move value OFF the platform", and approving a record moves
+       * nothing. But it is a privilege-escalation primitive: a leaked operator
+       * key that can self-approve an account to `institutional` unlocks every
+       * custodial module in the OS. So the second factor is enforced here,
+       * locally, and the question of whether the shared list should grow is
+       * argued in the PR rather than settled by editing a shared package inside
+       * a service PR (§15.2).
+       */
+      approve: scopedProcedure('admin:compliance')
+        .input(
+          z.object({
+            recordId: z.string().uuid(),
+            /** When the verification lapses. Null means it does not. */
+            expiresAt: z.string().datetime({ offset: true }).nullish(),
+          }),
+        )
+        .output(kycRecordOutput)
+        .mutation(async ({ ctx, input }) => {
+          try {
+            requireMfa(ctx.principal);
+            return presentKyc(
+              await auth.approveKycRecord({
+                recordId: input.recordId,
+                reviewerId: ctx.principal.userId,
+                expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+              }),
+            );
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /** The other half of a review. Grants nothing and announces nothing. */
+      reject: scopedProcedure('admin:compliance')
+        .input(z.object({ recordId: z.string().uuid() }))
+        .output(kycRecordOutput)
+        .mutation(async ({ ctx, input }) => {
+          try {
+            requireMfa(ctx.principal);
+            return presentKyc(await auth.rejectKycRecord({ recordId: input.recordId, reviewerId: ctx.principal.userId }));
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /** The review queue. Without it `approve` needs a record id nobody can find. */
+      pending: scopedProcedure('admin:compliance')
+        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .output(z.array(kycRecordOutput))
+        .query(async ({ input }) => (await auth.listPendingKyc(input?.limit ?? 50)).map(presentKyc)),
     }),
 
     rank: router({

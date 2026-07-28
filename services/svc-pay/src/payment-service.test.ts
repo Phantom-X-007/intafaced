@@ -37,6 +37,9 @@ const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@loc
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_pay_init.sql'), 'utf8');
 
+/** Shared by every svc-pay suite that brings the schema up. Any constant, as long as it is the same one. */
+const PAY_MIGRATION_LOCK = 8_140_701;
+
 const SECRET = 'svc-pay-test-secret-at-least-32-characters';
 const MERCHANT_USER = '11111111-1111-4111-8111-111111111111';
 const OTHER_USER = '22222222-2222-4222-8222-222222222222';
@@ -66,7 +69,15 @@ if (!available) {
     onnotice: () => undefined,
   });
 
-  await sql.unsafe(migration);
+  // Under an advisory lock: vitest runs test FILES in parallel, and the other
+  // svc-pay suite brings the same schema up on the same database. The migration
+  // re-asserts CHECK constraints with DROP ... IF EXISTS first, so two files
+  // running it at once take the same table locks in opposite orders and
+  // Postgres kills one of them with a deadlock. Same constant, both files.
+  await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${PAY_MIGRATION_LOCK})`;
+    await tx.unsafe(migration);
+  });
 
   let ledger: MemoryLedger;
   let chain: MemoryChain;

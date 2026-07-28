@@ -22,7 +22,10 @@ import { totp } from './auth/totp.js';
 
 const URL = process.env.TEST_DATABASE_URL_IDENTITY ?? 'postgres://svc_identity:svc_identity@localhost:5433/intafaced';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', 'drizzle', '0000_identity_init.sql'), 'utf8');
+/** Every migration, in order. A suite that applies only 0000 tests a schema nobody deploys. */
+const migrations = ['0000_identity_init.sql', '0001_identity_kyc_review.sql'].map((f) =>
+  readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
+);
 
 const tokenConfig = {
   secret: 'an-identity-test-signing-secret-long-enough',
@@ -57,7 +60,7 @@ if (!available) {
     onnotice: () => undefined,
   });
 
-  await sql.unsafe(migration);
+  for (const migration of migrations) await sql.unsafe(migration);
 
   const bus = new MemoryEventBus('svc-identity');
   const rank = new RankService(sql, bus);
@@ -346,6 +349,248 @@ if (!available) {
       await auth.approveKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
       await sql`UPDATE identity.kyc_records SET expires_at = now() - interval '1 day' WHERE user_id = ${session.userId}`;
       expect(await auth.kycTier(session.userId)).toBe('none');
+    });
+  });
+
+  /**
+   * THE ROUTED OPERATOR FLOW — submit → approve.
+   *
+   * This is the gap that made the custodial side unusable: `approveKyc` existed
+   * on no route, so every account sat at `none` forever and every module the
+   * jurisdiction matrix gates on a tier was unreachable. These tests are the
+   * ones that fail if the flow breaks again.
+   */
+  describe('KYC review flow', () => {
+    it('SUBMIT GRANTS NOTHING — a submitted record leaves the tier at none', async () => {
+      const session = await register();
+      const record = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      expect(record.status).toBe('pending');
+      expect(record.reviewedBy).toBeNull();
+      // The whole point of splitting submit from approve. If this ever returns
+      // 'basic', a user has granted themselves custodial access.
+      expect(await auth.kycTier(session.userId)).toBe('none');
+    });
+
+    it('approval raises the tier and records WHICH operator granted it', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      const approved = await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+
+      expect(approved.status).toBe('approved');
+      expect(approved.reviewedBy).toBe(operator.userId);
+      expect(approved.reviewedAt).toBeInstanceOf(Date);
+      expect(await auth.kycTier(session.userId)).toBe('basic');
+    });
+
+    it('unblocks the custodial matrix rule that was blocking every new account', async () => {
+      const session = await register();
+      const operator = await register();
+
+      // `trade` is OPEN_BASIC — the CUSTODIAL spot venue, which holds user funds
+      // in ledger accounts. Before approval a freshly registered user cannot
+      // place an order at all.
+      const before = checkAccess({ module: 'trade', region: 'DE', plane: 'fiat', kycTier: await auth.kycTier(session.userId) });
+      expect(before.allowed).toBe(false);
+      expect(before.code).toBe('denied.kyc_required');
+
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+
+      const after = checkAccess({ module: 'trade', region: 'DE', plane: 'fiat', kycTier: await auth.kycTier(session.userId) });
+      expect(after.allowed).toBe(true);
+    });
+
+    it('leaves the PERMISSIONLESS plane alone — no tier is ever consulted there (§22)', async () => {
+      const session = await register();
+
+      // The correction that matters: zero-KYC follows custody. A non-custodial
+      // Protocol Plane module returns `allowed.permissionless` BEFORE any tier
+      // is read, so an unverified account is not second class there — it is the
+      // normal case. If this ever fails, a KYC gate has leaked onto a plane that
+      // holds nothing.
+      const decision = checkAccess({ module: 'protocol', region: 'DE', plane: 'protocol', kycTier: await auth.kycTier(session.userId) });
+      expect(decision.allowed).toBe(true);
+      expect(decision.code).toBe('allowed.permissionless');
+    });
+
+    it('is idempotent on (user, tier) — a double tap does not queue two reviews', async () => {
+      const session = await register();
+      const first = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      const second = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      expect(second.id).toBe(first.id);
+      const rows = await sql`SELECT id FROM identity.kyc_records WHERE user_id = ${session.userId}`;
+      expect(rows).toHaveLength(1);
+    });
+
+    it('does not let a re-submit reset an approved tier back to pending', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
+      await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+
+      const again = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      expect(again.status).toBe('approved');
+      // Still `full`. A resubmit that downgraded a live tier would be a way for
+      // a user to lock themselves out, and for an attacker to do it to them.
+      expect(await auth.kycTier(session.userId)).toBe('full');
+    });
+
+    it('approving twice is a no-op, not a second grant', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      const once = await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+      const twice = await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+
+      expect(twice.id).toBe(once.id);
+      expect(twice.reviewedAt?.getTime()).toBe(once.reviewedAt?.getTime());
+      const rows = await sql`SELECT id FROM identity.kyc_records WHERE user_id = ${session.userId} AND status = 'approved'`;
+      expect(rows).toHaveLength(1);
+    });
+
+    it('refuses to approve a rejected record', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.rejectKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+
+      await expect(auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId })).rejects.toMatchObject({
+        code: 'auth.kyc_not_pending',
+      });
+      expect(await auth.kycTier(session.userId)).toBe('none');
+    });
+
+    it('refuses an unknown record rather than creating one', async () => {
+      await expect(auth.approveKycRecord({ recordId: '00000000-0000-4000-8000-000000000000', reviewerId: 'op' })).rejects.toMatchObject({
+        code: 'auth.not_found',
+      });
+    });
+
+    it('announces the grant once, on the bus and as XP', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      bus.reset();
+      await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+      await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+
+      const published = bus.published.filter((p) => p.subject.includes('kyc'));
+      expect(published).toHaveLength(1);
+    });
+
+    it('surfaces the pending queue oldest first, and drops a record once reviewed', async () => {
+      const a = await register();
+      const b = await register();
+      const operator = await register();
+      const first = await auth.submitKyc({ userId: a.userId, tier: 'basic', jurisdiction: 'DE' });
+      const second = await auth.submitKyc({ userId: b.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      const queue = await auth.listPendingKyc(200);
+      const ids = queue.map((r) => r.id);
+      expect(ids).toContain(first.id);
+      expect(ids).toContain(second.id);
+      expect(ids.indexOf(first.id)).toBeLessThan(ids.indexOf(second.id));
+
+      await auth.approveKycRecord({ recordId: first.id, reviewerId: operator.userId });
+      expect((await auth.listPendingKyc(200)).map((r) => r.id)).not.toContain(first.id);
+    });
+  });
+
+  /**
+   * THE STEP-UP CHALLENGE.
+   *
+   * `defaultScopes()` withholds `trade:withdraw` "until a step-up challenge",
+   * and there was no step-up challenge anywhere in the OS — so no session could
+   * ever reach a withdrawal endpoint. These tests hold that door open.
+   */
+  describe('step-up elevation', () => {
+    const enrol = async (userId: string) => {
+      const { secret } = await auth.startTotpEnrolment(userId);
+      await auth.confirmTotpEnrolment(userId, secret, totp(secret));
+      return secret;
+    };
+
+    it('a normal session does NOT carry trade:withdraw', async () => {
+      const session = await register();
+      const principal = await verifyAccessToken(session.accessToken, tokenConfig);
+
+      expect(hasScope(principal.scopes, 'trade:withdraw')).toBe(false);
+      expect(principal.mfa).toBe(false);
+    });
+
+    it('a valid TOTP code buys a token that carries trade:withdraw with mfa set', async () => {
+      const session = await register();
+      const secret = await enrol(session.userId);
+
+      const elevated = await auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) });
+      const principal = await verifyAccessToken(elevated.accessToken, tokenConfig);
+
+      expect(hasScope(principal.scopes, 'trade:withdraw')).toBe(true);
+      // Both halves matter: `requireScope` demands the scope AND `mfa`, because
+      // `trade:withdraw` is in INTERACTIVE_ONLY_SCOPES.
+      expect(principal.mfa).toBe(true);
+    });
+
+    it('the elevated token expires far sooner than a normal one', async () => {
+      const session = await register();
+      const secret = await enrol(session.userId);
+
+      const elevated = await auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) });
+      const lifetimeSeconds = (elevated.expiresAt.getTime() - Date.now()) / 1000;
+
+      // Five minutes, not the 900s a normal access token gets. An elevation that
+      // lasted the full TTL would hand a thief the same window as the owner.
+      expect(lifetimeSeconds).toBeLessThanOrEqual(300);
+      expect(lifetimeSeconds).toBeGreaterThan(240);
+    });
+
+    it('refuses a wrong code', async () => {
+      const session = await register();
+      await enrol(session.userId);
+
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: '000000' })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+    });
+
+    it('refuses an account with no second factor to step up with', async () => {
+      const session = await register();
+
+      // §9: moving value off the platform requires 2FA. An account without it
+      // is refused, not waved through — and the code says which, so the client
+      // can send the user to enrolment rather than retrying a code forever.
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: '123456' })).rejects.toMatchObject({
+        code: 'auth.mfa_not_enrolled',
+      });
+    });
+
+    it('refuses to elevate off a session that has been logged out', async () => {
+      const session = await register();
+      const secret = await enrol(session.userId);
+      await auth.logoutAll(session.userId);
+
+      // Otherwise a logout could be undone by whoever still holds the old
+      // access token, which is precisely the party a logout is aimed at.
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) })).rejects.toMatchObject({
+        code: 'auth.session_invalid',
+      });
+    });
+
+    it('refuses a frozen account', async () => {
+      const session = await register();
+      const secret = await enrol(session.userId);
+      await sql`UPDATE identity.users SET status = 'frozen' WHERE id = ${session.userId}`;
+
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) })).rejects.toMatchObject({
+        code: 'auth.account_frozen',
+      });
     });
   });
 

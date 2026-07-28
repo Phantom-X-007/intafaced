@@ -1,0 +1,511 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import postgres from 'postgres';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import {
+  MemoryLedger,
+  formatAmount,
+  parseAmount as amt,
+  railBoundary,
+  userAvailable,
+  withdrawalHoldAccount,
+} from '@intafaced/ledger-client';
+import { PayError } from './payment-service.js';
+import { UserMoneyService } from './user-money-service.js';
+import { RailRegistry } from './rails/registry.js';
+import { CardSandboxAdapter } from './rails/card-sandbox.js';
+import { CryptoNativeAdapter } from './rails/crypto-native.js';
+import { MemoryChain } from './rails/chain-port.js';
+
+/**
+ * USER MONEY IN AND OUT — the two paths whose absence made the platform
+ * unusable end to end.
+ *
+ * Before this: `recipes.deposit` was called from tests only, so nothing ever
+ * credited a user's `available` balance and `orderHold` could only fail; and
+ * `withdrawHold/Settle/Reverse` were used in exactly one production site, a
+ * MERCHANT payout, so a user could not get money out at all.
+ *
+ * WHAT EACH TEST HERE IS FOR. Every one of them fails if a specific money path
+ * breaks — not if the code is merely rearranged. In particular the questions
+ * this file exists to answer are the §5 ones: *if this crashes exactly here,
+ * whose funds are stranded?* Each crash point is simulated by driving the two
+ * phases separately and asserting what the BOOK says in between, because the
+ * book is the only thing that matters when a process dies.
+ *
+ * Postgres is real: the unique indexes on `(rail, rail_ref)` and
+ * `(user_id, client_ref)` are the idempotency, and an in-memory fake would
+ * quietly not have them. The ledger is `MemoryLedger`, the reference
+ * implementation the conformance suite proves equivalent to svc-ledger's
+ * Postgres engine (§4.4).
+ */
+
+const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@localhost:5433/intafaced';
+const here = dirname(fileURLToPath(import.meta.url));
+/**
+ * 0001 only, and deliberately not 0000.
+ *
+ * `deposits` and `withdrawals` reference nothing in 0000 — no foreign keys, no
+ * shared types — so this suite can stand its own schema up without touching a
+ * single table the other svc-pay suite owns. That disjointness is the point:
+ * vitest runs test FILES in parallel, and 0000 re-asserts its CHECK constraints
+ * with DROP ... IF EXISTS first, so a second file re-applying it holds
+ * ACCESS EXCLUSIVE locks on tables `payment-service.test.ts` is truncating at
+ * the same moment. Postgres resolves that by killing one of them.
+ */
+const migrations = ['0001_pay_user_money.sql'].map((f) => readFileSync(join(here, '..', 'drizzle', f), 'utf8'));
+
+/** Shared by every svc-pay suite that brings the schema up. Any constant, as long as it is the same one. */
+const PAY_MIGRATION_LOCK = 8_140_701;
+
+const SECRET = 'svc-pay-user-money-test-secret-at-least-32-chars';
+const USER = '11111111-1111-4111-8111-111111111111';
+const OTHER_USER = '22222222-2222-4222-8222-222222222222';
+const OPERATOR = '99999999-9999-4999-8999-999999999999';
+
+async function reachable(): Promise<boolean> {
+  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
+  try {
+    await probe`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await probe.end({ timeout: 2 }).catch(() => undefined);
+  }
+}
+
+const available = await reachable();
+
+if (!available) {
+  describe.skip('svc-pay user money (Postgres unavailable — start docker compose)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  const sql = postgres(URL, {
+    max: 12,
+    connection: { search_path: 'pay,public', application_name: 'svc-pay-user-money-test' },
+    onnotice: () => undefined,
+  });
+
+  /**
+   * Applied under an advisory lock, because vitest runs test FILES in parallel
+   * and both svc-pay suites bring the schema up on the same database.
+   *
+   * The migration re-asserts CHECK constraints with DROP ... IF EXISTS first, so
+   * two files running it at once take the same table locks in opposite orders
+   * and Postgres kills one of them with a deadlock. That is a test-harness race,
+   * not a schema problem — but a suite that fails one run in three is a suite
+   * people learn to re-run instead of read.
+   */
+  await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${PAY_MIGRATION_LOCK})`;
+    for (const migration of migrations) await tx.unsafe(migration);
+  });
+
+  let ledger: MemoryLedger;
+  let chain: MemoryChain;
+  let card: CardSandboxAdapter;
+  let rails: RailRegistry;
+  let money: UserMoneyService;
+
+  beforeEach(async () => {
+    await sql`TRUNCATE pay.withdrawals, pay.deposits RESTART IDENTITY CASCADE`;
+    ledger = new MemoryLedger();
+    chain = new MemoryChain();
+    card = new CardSandboxAdapter({ secret: SECRET });
+    rails = new RailRegistry([card, new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 })]);
+    money = new UserMoneyService(sql, ledger, rails, { operatorCreditRails: ['card-sandbox'] });
+  });
+
+  afterAll(async () => {
+    await sql.end({ timeout: 5 });
+  });
+
+  // ── helpers ────────────────────────────────────────────────────────────────
+
+  const deposit = (overrides: Partial<Parameters<UserMoneyService['credit']>[0]> = {}) =>
+    money.credit({
+      userId: USER,
+      assetId: 'USDT',
+      amount: amt('100'),
+      rail: 'card-sandbox',
+      railRef: 'psp_ref_1',
+      creditedBy: OPERATOR,
+      ...overrides,
+    });
+
+  const withdraw = (overrides: Partial<Parameters<UserMoneyService['withdraw']>[0]> = {}) =>
+    money.withdraw({
+      userId: USER,
+      assetId: 'USDT',
+      amount: amt('40'),
+      rail: 'card-sandbox',
+      destination: { kind: 'bank', ref: 'DE00 1234' },
+      clientRef: 'w-1',
+      ...overrides,
+    });
+
+  const availableOf = async (userId = USER, assetId = 'USDT') =>
+    formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
+  const boundaryOf = async (rail = 'card-sandbox', assetId = 'USDT') =>
+    formatAmount((await ledger.balance(railBoundary(rail, assetId))).amount);
+  const holdOf = async (withdrawalId: string, attempt: number, userId = USER, assetId = 'USDT') =>
+    formatAmount((await ledger.balance(withdrawalHoldAccount(userId, assetId, `${withdrawalId}:${attempt}`))).amount);
+
+  // ══ DEPOSIT ════════════════════════════════════════════════════════════════
+
+  describe('deposit — value enters the book from a rail', () => {
+    it('credits the user’s available balance, and the rail boundary carries the obligation', async () => {
+      expect(await availableOf()).toBe('0');
+
+      const record = await deposit();
+
+      expect(record.status).toBe('credited');
+      expect(await availableOf()).toBe('100');
+      // The boundary account goes NEGATIVE by exactly the amount. That number is
+      // the platform's obligation to the outside world, and it is the figure
+      // reconciliation checks against actual custody.
+      expect(await boundaryOf()).toBe('-100');
+    });
+
+    it('UNBLOCKS TRADING: an order-sized hold now succeeds where it could only fail before', async () => {
+      // The whole reason this path exists. Without a deposit, `orderHold` has
+      // nothing to draw on and `orders.create` fails for every account on the
+      // platform.
+      await deposit({ amount: amt('100') });
+
+      const { recipes } = await import('@intafaced/ledger-client');
+      await expect(
+        ledger.post(recipes.orderHold({ orderId: 'ord-1', userId: USER, assetId: 'USDT', amount: amt('60') })),
+      ).resolves.toBeDefined();
+      expect(await availableOf()).toBe('40');
+    });
+
+    it('is idempotent on (rail, railRef) — a redelivered webhook credits once', async () => {
+      const first = await deposit();
+      const second = await deposit();
+
+      expect(second.id).toBe(first.id);
+      expect(await availableOf()).toBe('100');
+      const rows = await sql`SELECT id FROM pay.deposits`;
+      expect(rows).toHaveLength(1);
+    });
+
+    it('REFUSES A REUSED RAIL REFERENCE THAT NAMES A DIFFERENT AMOUNT', async () => {
+      await deposit({ amount: amt('5') });
+
+      // The branch that would otherwise lose money silently. `recipes.deposit`
+      // is keyed on (rail, railRef) alone, so posting again returns the ORIGINAL
+      // transaction — the book moves 5 and the caller is told 500.
+      await expect(deposit({ amount: amt('500') })).rejects.toMatchObject({ code: 'pay.deposit_conflict' });
+      expect(await availableOf()).toBe('5');
+    });
+
+    it('refuses a reused rail reference that names a different user or asset', async () => {
+      await deposit();
+
+      await expect(deposit({ userId: OTHER_USER })).rejects.toMatchObject({ code: 'pay.deposit_conflict' });
+      await expect(deposit({ assetId: 'BTC' })).rejects.toMatchObject({ code: 'pay.deposit_conflict' });
+      expect(await availableOf(OTHER_USER)).toBe('0');
+    });
+
+    it('records WHICH OPERATOR credited it', async () => {
+      const record = await deposit();
+      expect(record.creditedBy).toBe(OPERATOR);
+
+      const rows = await sql<Array<{ credited_by: string }>>`SELECT credited_by FROM pay.deposits WHERE id = ${record.id}`;
+      expect(rows[0]!.credited_by).toBe(OPERATOR);
+    });
+
+    it('refuses a rail that is not on the operator-credit list', async () => {
+      // `crypto-native` is registered and perfectly capable — but a hand-typed
+      // credit there would move `railBoundary('crypto-native')` away from the
+      // chain balance it mirrors, and reconciliation would report a discrepancy
+      // that is really a typo.
+      await expect(deposit({ rail: 'crypto-native' })).rejects.toMatchObject({ code: 'pay.rail_not_creditable' });
+      expect(await availableOf()).toBe('0');
+    });
+
+    it('refuses a rail that does not exist at all', async () => {
+      await expect(deposit({ rail: 'not-a-rail' })).rejects.toMatchObject({ code: 'pay.rail_unknown' });
+    });
+
+    it('refuses a zero or negative amount before anything is claimed', async () => {
+      await expect(deposit({ amount: 0n })).rejects.toMatchObject({ code: 'pay.invalid_amount' });
+      await expect(deposit({ amount: -1n })).rejects.toMatchObject({ code: 'pay.invalid_amount' });
+      expect(await sql`SELECT id FROM pay.deposits`).toHaveLength(0);
+    });
+
+    it('keeps 18 decimal places intact end to end', async () => {
+      const record = await deposit({ amount: amt('0.000000000000000001'), railRef: 'dust' });
+      expect(formatAmount(record.amount)).toBe('0.000000000000000001');
+      expect(await availableOf()).toBe('0.000000000000000001');
+    });
+
+    /**
+     * CRASH POINT: claimed, not yet booked.
+     *
+     * Whose funds are stranded? The user's — at the rail, not in the book. The
+     * `pending` row is the marker that says so, and repeating the call finishes
+     * the job.
+     */
+    it('resumes a deposit that was claimed but never booked', async () => {
+      await sql`
+        INSERT INTO pay.deposits (user_id, asset_id, amount, rail, rail_ref, credited_by, status)
+        VALUES (${USER}, 'USDT', 100, 'card-sandbox', 'psp_ref_1', ${OPERATOR}, 'pending')
+      `;
+      expect(await availableOf()).toBe('0');
+
+      const resumed = await deposit();
+
+      expect(resumed.status).toBe('credited');
+      expect(await availableOf()).toBe('100');
+      expect(await sql`SELECT id FROM pay.deposits`).toHaveLength(1);
+    });
+
+    /**
+     * CRASH POINT: booked, row one status behind.
+     *
+     * Nobody's funds are stranded — the user has their money. Repeating the call
+     * must NOT credit twice; the ledger's idempotency key is what guarantees it.
+     */
+    it('does not double-credit when the book already moved but the row says pending', async () => {
+      await deposit();
+      await sql`UPDATE pay.deposits SET status = 'pending'`;
+
+      await deposit();
+
+      expect(await availableOf()).toBe('100');
+      expect(await boundaryOf()).toBe('-100');
+    });
+  });
+
+  // ══ WITHDRAWAL ═════════════════════════════════════════════════════════════
+
+  describe('withdrawal — value leaves the book through a rail', () => {
+    beforeEach(async () => {
+      await deposit({ amount: amt('100') });
+    });
+
+    it('moves available → hold → out, and leaves nothing behind', async () => {
+      const record = await withdraw({ amount: amt('40') });
+
+      expect(record.status).toBe('sent');
+      expect(record.railRef).toBeTruthy();
+      expect(await availableOf()).toBe('60');
+      // The hold is empty: it was a waypoint, not a destination.
+      expect(await holdOf(record.id, 0)).toBe('0');
+      // 100 in, 40 out: the boundary owes 60 net.
+      expect(await boundaryOf()).toBe('-60');
+    });
+
+    it('HOLDS FIRST — the funds are out of `available` before the rail is asked', async () => {
+      // The ordering that makes the whole path safe. Proven by watching the
+      // balance from inside the rail call, which is the only moment it is
+      // observable.
+      let availableDuringRail: string | null = null;
+      const spy = new Proxy(card, {
+        get(target, prop, receiver) {
+          if (prop === 'payout') {
+            return async (...args: Parameters<CardSandboxAdapter['payout']>) => {
+              availableDuringRail = await availableOf();
+              return target.payout(...args);
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+      money = new UserMoneyService(sql, ledger, new RailRegistry([spy]), { operatorCreditRails: ['card-sandbox'] });
+
+      await withdraw({ amount: amt('40') });
+
+      // Already debited when the rail was called. If this ever reads '100', the
+      // platform is asking a rail to send money it has not yet reserved.
+      expect(availableDuringRail).toBe('60');
+    });
+
+    it('uses a PURPOSE-KEYED hold, not the user’s one shared hold (P0-3)', async () => {
+      const { recipes } = await import('@intafaced/ledger-client');
+      // An open order reserving funds at the same time.
+      await ledger.post(recipes.orderHold({ orderId: 'ord-1', userId: USER, assetId: 'USDT', amount: amt('50') }));
+
+      const record = await withdraw({ amount: amt('40') });
+
+      // The order's reservation is untouched. With one shared hold per
+      // (user, asset), the withdrawal's settle could have consumed it — the
+      // books would still balance and the order would be unfunded.
+      const orderHold = await ledger.balance({ ownerType: 'user', ownerId: USER, assetId: 'USDT', kind: 'hold', purpose: 'order:ord-1' });
+      expect(formatAmount(orderHold.amount)).toBe('50');
+      expect(record.status).toBe('sent');
+      expect(await availableOf()).toBe('10');
+    });
+
+    it('REFUSES A WITHDRAWAL THE USER CANNOT AFFORD, before any rail is asked', async () => {
+      await expect(withdraw({ amount: amt('500') })).rejects.toThrow(/insufficient/i);
+
+      // Nothing moved, and the row records why.
+      expect(await availableOf()).toBe('100');
+      const rows = await sql<Array<{ status: string; failure_code: string }>>`SELECT status, failure_code FROM pay.withdrawals`;
+      expect(rows[0]).toMatchObject({ status: 'failed', failure_code: 'ledger.insufficient_funds' });
+    });
+
+    it('REVERSES THE HOLD when the rail refuses — the user gets their money back in the same call', async () => {
+      card.failNext('bank.rejected', 'Beneficiary account closed');
+
+      await expect(withdraw({ amount: amt('40') })).rejects.toMatchObject({ code: 'pay.rail_failed' });
+
+      // Whole balance back. Not "eventually", not "after a sweep" — in the same
+      // call that failed.
+      expect(await availableOf()).toBe('100');
+      const record = (await money.listWithdrawals(USER))[0]!;
+      expect(record.status).toBe('failed');
+      expect(record.failureCode).toBe('bank.rejected');
+      expect(await holdOf(record.id, 0)).toBe('0');
+    });
+
+    it('advances the attempt counter on refusal, so the retry does not reuse a released hold', async () => {
+      card.failNext('bank.rejected', 'Beneficiary account closed');
+      await expect(withdraw()).rejects.toMatchObject({ code: 'pay.rail_failed' });
+
+      const failed = (await money.listWithdrawals(USER))[0]!;
+      expect(failed.attempts).toBe(1);
+
+      // The retry re-holds under `withdraw:<id>:1`. Reusing `:0` would find the
+      // released hold, move nothing, and then settle out of a hold that is not
+      // there — a balanced book and a user who was never paid.
+      const retried = await withdraw();
+      expect(retried.status).toBe('sent');
+      expect(await availableOf()).toBe('60');
+      expect(await holdOf(retried.id, 0)).toBe('0');
+      expect(await holdOf(retried.id, 1)).toBe('0');
+    });
+
+    it('is idempotent on clientRef — a retried request resumes, it does not debit twice', async () => {
+      const first = await withdraw({ clientRef: 'w-42' });
+      const second = await withdraw({ clientRef: 'w-42' });
+
+      expect(second.id).toBe(first.id);
+      expect(second.status).toBe('sent');
+      // 40 once, not 80.
+      expect(await availableOf()).toBe('60');
+      expect(await sql`SELECT id FROM pay.withdrawals`).toHaveLength(1);
+    });
+
+    it('refuses a reused clientRef that names different money', async () => {
+      await withdraw({ clientRef: 'w-42', amount: amt('40') });
+
+      await expect(withdraw({ clientRef: 'w-42', amount: amt('50') })).rejects.toMatchObject({ code: 'pay.withdrawal_conflict' });
+      await expect(withdraw({ clientRef: 'w-42', destination: { kind: 'bank', ref: 'ATTACKER' } })).rejects.toMatchObject({
+        code: 'pay.withdrawal_conflict',
+      });
+      expect(await availableOf()).toBe('60');
+    });
+
+    /**
+     * CRASH POINT: held, rail never asked.
+     *
+     * THE ONE BRANCH WHERE VALUE IS IMMOBILISED. The funds are the user's, out
+     * of `available` and sitting in `withdraw:<id>:0`. Recoverable by repeating
+     * the call, which is why `held` is a real status with its own index.
+     */
+    it('resumes a withdrawal stuck in `held` and finishes it, without holding twice', async () => {
+      const { recipes } = await import('@intafaced/ledger-client');
+      const rows = await sql<Array<{ id: string }>>`
+        INSERT INTO pay.withdrawals (user_id, asset_id, amount, rail, destination, client_ref, status)
+        VALUES (${USER}, 'USDT', 40, 'card-sandbox', ${sql.json({ kind: 'bank', ref: 'DE00 1234' } as never)}, 'w-1', 'held')
+        RETURNING id
+      `;
+      const id = rows[0]!.id;
+      await ledger.post(
+        recipes.withdrawHold({ userId: USER, assetId: 'USDT', amount: amt('40'), rail: 'card-sandbox', withdrawalId: `${id}:0` }),
+      );
+
+      // Immobilised: out of available, not yet gone.
+      expect(await availableOf()).toBe('60');
+      expect(await holdOf(id, 0)).toBe('40');
+
+      const resumed = await withdraw();
+
+      expect(resumed.id).toBe(id);
+      expect(resumed.status).toBe('sent');
+      // Still 60 — the resume re-posted the same hold key, which moved nothing.
+      expect(await availableOf()).toBe('60');
+      expect(await holdOf(id, 0)).toBe('0');
+      expect(await boundaryOf()).toBe('-60');
+    });
+
+    /**
+     * CRASH POINT: rail sent, settle not posted.
+     *
+     * Nobody's money is lost, but the PLATFORM is short: the rail has paid out
+     * and the book still shows the value in a hold. Repeating the call posts the
+     * settle once and squares it, and does not ask the rail again because the
+     * rail's own idempotency key is the same string.
+     */
+    it('squares the book when the rail already sent but the settle never posted', async () => {
+      const record = await withdraw();
+      expect(record.status).toBe('sent');
+      const before = await boundaryOf();
+
+      // Repeating a finished withdrawal is a read, not a second payout.
+      const again = await withdraw();
+      expect(again.status).toBe('sent');
+      expect(again.id).toBe(record.id);
+      expect(await boundaryOf()).toBe(before);
+      expect(await availableOf()).toBe('60');
+    });
+
+    it('refuses a rail that cannot pay out, before a row exists', async () => {
+      await expect(withdraw({ rail: 'not-a-rail' })).rejects.toThrow(/No rail adapter/);
+      expect(await sql`SELECT id FROM pay.withdrawals`).toHaveLength(0);
+      expect(await availableOf()).toBe('100');
+    });
+
+    it('refuses a zero or negative amount before anything is claimed', async () => {
+      await expect(withdraw({ amount: 0n })).rejects.toMatchObject({ code: 'pay.invalid_amount' });
+      await expect(withdraw({ amount: -1n })).rejects.toMatchObject({ code: 'pay.invalid_amount' });
+      expect(await sql`SELECT id FROM pay.withdrawals`).toHaveLength(0);
+    });
+
+    it('reads the withdrawable balance from the LEDGER, not from these tables', async () => {
+      await withdraw({ amount: amt('40') });
+      // Deliberately independent of `pay.deposits` and `pay.withdrawals` — that
+      // independence is the whole property reconciliation needs (Doctrine §0.6).
+      expect(formatAmount(await money.availableBalance(USER, 'USDT'))).toBe('60');
+    });
+
+    it('does not find another user’s withdrawal by id', async () => {
+      const record = await withdraw();
+      // The service returns the row; the ROUTER is what refuses a stranger.
+      // Asserted here so the ownership field the router checks is definitely on
+      // the record it checks.
+      expect((await money.getWithdrawal(record.id)).userId).toBe(USER);
+      expect(await money.listWithdrawals(OTHER_USER)).toHaveLength(0);
+    });
+
+    it('reports a missing withdrawal rather than returning nothing', async () => {
+      await expect(money.getWithdrawal('00000000-0000-4000-8000-000000000000')).rejects.toBeInstanceOf(PayError);
+    });
+  });
+
+  // ══ THE ROUND TRIP ═════════════════════════════════════════════════════════
+
+  describe('register → deposit → trade → withdraw, in the book', () => {
+    it('conserves value across the whole journey', async () => {
+      await deposit({ amount: amt('100'), railRef: 'psp_in' });
+
+      const { recipes } = await import('@intafaced/ledger-client');
+      await ledger.post(recipes.orderHold({ orderId: 'ord-9', userId: USER, assetId: 'USDT', amount: amt('30') }));
+      await ledger.post(recipes.orderHoldRelease({ orderId: 'ord-9', userId: USER, assetId: 'USDT', amount: amt('30') }));
+
+      await withdraw({ amount: amt('100'), clientRef: 'w-out' });
+
+      // Everything the user had is gone, cleanly, and the boundary is square:
+      // 100 came in, 100 went out, and the platform owes nothing.
+      expect(await availableOf()).toBe('0');
+      expect(await boundaryOf()).toBe('0');
+    });
+  });
+}

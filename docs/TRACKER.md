@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**25 of 103 shipped (24%)** · 0 in progress · 41 ready to claim · 37 blocked · 13 deliberate §13 sockets
+**28 of 106 shipped (26%)** · 0 in progress · 41 ready to claim · 37 blocked · 13 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -27,7 +27,6 @@ pnpm wt feat/<the-thing>
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | Scoped API keys, sub-accounts | `identity` | 1 | `identity.apikeys` |
-| KYC tiers wired to JURISDICTION_MATRIX | `identity` | 1 | `identity.kyc` |
 | WebAuthn registration + assertion (§9) | `identity` | 1 | `identity.webauthn` |
 | Emission curve, halving, single-minter guarantee | `token` | 1 | `token.emissions` |
 | Stake tiers, locks, access gating | `token` | 1 | `token.staking` |
@@ -63,6 +62,7 @@ pnpm wt feat/<the-thing>
 | ERC-20 deploy from audited templates | `launch` | 5 | `launch.token-factory` |
 | Support desk, tickets, KB | `core-ops` | 5 | `ops.support` |
 | Multi-tier affiliate / IB trees, payout automation | `core-ops` | 5 | `ops.affiliates` |
+| Screening queues, geo-block, VPN/Tor detection | `core-ops` | 5 | `ops.compliance` |
 | Warehouse — read replica + cube layer | `core-ops` | 5 | `ops.analytics` |
 | apps/admin — listings, fee params, treasury, kill-switches | `core-ops` | 5 | `ops.admin` |
 | Event-driven fan-out: in-app, push, email, SMS | `core-ops` | 5 | `ops.notifications` |
@@ -73,10 +73,10 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
-| **13** | Branded gateway, hosted checkout, payment links | 🟢 ready | `pay.gateway` |
+| **14** | Branded gateway, hosted checkout, payment links | 🟢 ready | `pay.gateway` |
 | **9** | AMM pools from audited templates | 🟢 ready | `protocol.amm` |
 | **8** | Stake tiers, locks, access gating | 🟢 ready | `token.staking` |
-| **6** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
+| **7** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
 | **6** | Live lobbies, LiveKit SFU, capacity tiers | 🟢 ready | `academy.lobbies` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **4** | ERC-20 deploy from audited templates | 🟢 ready | `launch.token-factory` |
@@ -102,7 +102,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Worktree tooling + GitHub Flow | F |  | `infra.worktrees` |
 | 🟢 | 100+ languages — keyed from day one (§9) <br/>_Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface._ | F |  | `infra.i18n` |
 
-### Phase 1 — THE CORE (4/12)
+### Phase 1 — THE CORE (7/14)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -111,7 +111,9 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Accounts, sessions, argon2id, TOTP | F |  | `identity.accounts` |
 | ✅ | XP graph, rank ladder, machine-readable perks | F |  | `identity.rank` |
 | 🟢 | Scoped API keys, sub-accounts <br/>_Downgraded 2026-07-28: create/list/revoke are reachable on the mounted router, but `verifyApiKey` (auth-service.ts:328) is called by nothing outside identity.test.ts. A key can be issued and never opens anything — no service accepts one._ | F |  | `identity.apikeys` |
-| 🟢 | KYC tiers wired to JURISDICTION_MATRIX <br/>_Downgraded 2026-07-28: the READ side is wired (kycTier feeds the session tier the matrix reads), but `approveKyc` is exposed by no procedure and no HTTP route. Nothing in the repo can write identity.kyc_records, so every real user is tier `none` forever._ | F |  | `identity.kyc` |
+| ✅ | KYC tiers wired to JURISDICTION_MATRIX <br/>_Restored to done 2026-07-28: the write side the audit called out now exists. `kyc.submit` / `kyc.approve` / `kyc.reject` / `kyc.pending` / `kyc.status` are served from svc-identity's mounted /trpc, so identity.kyc_records is writable and a real user can leave tier `none`. See identity.kyc-review._ | F |  | `identity.kyc` |
+| ✅ | Routed KYC — submit, operator approve/reject, review queue <br/>_Reachable on svc-identity's mounted /trpc; tested in router.test.ts + identity.test.ts; nothing propped up — approval is an operator action against kyc_records, no provider stub. Custodial side only: §22 permissionless surfaces read no tier (docs/decisions/kyc-posture.md)._ | F |  | `identity.kyc-review` |
+| ✅ | Step-up challenge minting trade:withdraw for five minutes <br/>_defaultScopes() withheld trade:withdraw "until a step-up challenge" that did not exist, so no session could reach any withdrawal. Reachable on the mounted router. Known limit, platform-wide and not introduced here: a TOTP code is replayable inside its validity window._ | F |  | `identity.step-up` |
 | 🟢 | WebAuthn registration + assertion (§9) | F |  | `identity.webauthn` |
 | 🟢 | Emission curve, halving, single-minter guarantee <br/>_Downgraded 2026-07-28: `mintEpoch` is called by token-service.test.ts and nothing else. svc-token/src/router.ts exposes exactly three procedures (health, stakeOf, accessOf) and index.ts starts no scheduler. No epoch can ever be minted on a running system._ | F |  | `token.emissions` |
 | 🟢 | Stake tiers, locks, access gating <br/>_Downgraded 2026-07-28: the READS ship (stakeOf/accessOf on /trpc, /internal/stake/:userId for svc-trade), but `stake` and `unstake` are called only by tests. Nobody can stake, so every access tier this gates resolves to the unstaked one._ | F |  | `token.staking` |
@@ -140,7 +142,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | apps/web scaffold on the design system <br/>_Downgraded 2026-07-28: apps/web has ZERO test files, no `use client`, no state, no fetch and no websocket across all 7 tsx files. Every number on the page is a hardcoded string literal. It is a picture of the product, not the product._ | F |  | `web.shell` |
 | 🟢 | WebSocket fan-out: depth, trades, orders, positions | F |  | `ws.gateway` |
 
-### Phase 3 — Pay + P2P (4/15)
+### Phase 3 — Pay + P2P (4/16)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -148,6 +150,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | PSP mode — own the merchant, digital KYB, custom pricing | F | `pay.gateway` | `pay.psp` |
 | ⛔ | PayFac mode — sub-merchant trees, 14 permission areas | F | `pay.psp` | `pay.payfac` |
 | ⛔ | RailAdapter interface + crypto-native + card-sandbox <br/>_Downgraded 2026-07-28: the interface and the conformance kit are real and well tested, but neither v1 rail can move real value — crypto-native runs on `MemoryChain`, an in-memory reference chain (index.ts:46, an explicit §13 socket), and the other is named card-SANDBOX. The only path that reaches a rail (the webhook route) can only be reached about a payment that pay.gateway cannot create._ | F | `pay.gateway` | `pay.rails` |
+| ⛔ | User deposit + withdrawal — the two paths off the merchant path <br/>_Code-complete and tested, NOT reachable. recipes.deposit had no production caller and there was no user withdrawal anywhere, so register → deposit → order → fill → withdraw could not complete; deposit.credit (admin:treasury) and withdrawal.create (trade:withdraw, INTERACTIVE_ONLY + 2FA) now exist and are covered by 28 money-path tests against real Postgres. The one thing between them and a caller is that svc-pay still does not register fastifyTRPCPlugin — svc-edge already routes /api/pay to it, so the edge forwards to a service with no /trpc. `ready`, not `done`, until svc-pay mounts per docs/decisions/mount-boundary.md._ | F | `pay.rails` | `pay.user-money` |
 | ⛔ | Smart routing — geo, method, risk, approval rate | F | `pay.rails` | `pay.routing` |
 | ⛔ | Dual settlement — bank or crypto | F | `pay.rails` | `pay.settlement` |
 | ⛔ | Risk scoring, chargebacks, decline recovery | F | `pay.gateway` | `pay.fraud` |
@@ -227,7 +230,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | Stratum share protocol, PPLNS payouts | F | `token.emissions` | `mining.pool` |
 | 🟢 | Support desk, tickets, KB | F |  | `ops.support` |
 | 🟢 | Multi-tier affiliate / IB trees, payout automation | F |  | `ops.affiliates` |
-| ⛔ | Screening queues, geo-block, VPN/Tor detection | F | `identity.kyc` | `ops.compliance` |
+| 🟢 | Screening queues, geo-block, VPN/Tor detection | F |  | `ops.compliance` |
 | 🟢 | Warehouse — read replica + cube layer | F |  | `ops.analytics` |
 | 🟢 | apps/admin — listings, fee params, treasury, kill-switches <br/>_Downgraded 2026-07-28: apps/admin has ZERO test files and makes no network call of any kind. Every kill-switch, freeze and reconcile is React `useState` in the browser — flipping one changes a local boolean and nothing else. An operator console that appears to halt the ledger and does not is worse than no console._ | F |  | `ops.admin` |
 | 🟢 | Event-driven fan-out: in-app, push, email, SMS | F |  | `ops.notifications` |

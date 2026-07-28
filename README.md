@@ -10,20 +10,20 @@
 
 <!-- tracker:start -->
 
-`█████░░░░░░░░░░░░░░░` **24%** — 25 of 103 features shipped
+`█████░░░░░░░░░░░░░░░` **26%** — 28 of 106 features shipped
 
-Phases: **0** 10/11 · **1** 4/12 · **2** 3/16 · **3** 4/15 · **3P** 1/7 · **4** 1/5 · **4P** 0/3 · **5** 2/32 · **5P** 0/2
+Phases: **0** 10/11 · **1** 7/14 · **2** 3/16 · **3** 4/16 · **3P** 1/7 · **4** 1/5 · **4P** 0/3 · **5** 2/32 · **5P** 0/2
 
 **🟢 41 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `identity.apikeys` — Scoped API keys, sub-accounts
-- `identity.kyc` — KYC tiers wired to JURISDICTION_MATRIX
 - `identity.webauthn` — WebAuthn registration + assertion (§9)
 - `token.emissions` — Emission curve, halving, single-minter guarantee
 - `token.staking` — Stake tiers, locks, access gating
 - `token.yield` — Real-yield distribution from platform fees
 - `token.buyback` — Buyback & burn split
+- `trade.convert` — One-tap Convert — the retail on-ramp
 - …and 33 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`

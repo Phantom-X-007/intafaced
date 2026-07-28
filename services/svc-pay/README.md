@@ -56,9 +56,45 @@ Refunds and payouts carry their own scopes. Taking a payment and sending money b
 
 **HTTP:** `POST /webhooks/:railId` (public, signature-authenticated), `GET /health`, `GET /ready`.
 
+### User money in and out
+
+Everything above is **merchant** money — a third party pays a merchant. These are the other half: a **user's own** balance entering and leaving the book.
+
+| Procedure            | Scope            | Input                                                 | Output          |
+| -------------------- | ---------------- | ----------------------------------------------------- | --------------- |
+| `deposit.credit`     | `admin:treasury` | `{ userId, assetId, amount, railId, railRef }`        | `Deposit`       |
+| `withdrawal.create`  | `trade:withdraw` | `{ assetId, amount, railId, destination, clientRef }` | `Withdrawal`    |
+| `withdrawal.get`     | `trade:read`     | `{ withdrawalId }`                                    | `Withdrawal`    |
+| `withdrawal.mine`    | `trade:read`     | `{ limit? }`                                          | `Withdrawal[]`  |
+| `withdrawal.balance` | `ledger:read`    | `{ assetId }`                                         | `{ available }` |
+
+**Why these live here.** Value entering the book must come from a rail and value leaving goes out through one; the `RailAdapter` interface, the registry and both v1 adapters are in this service. The alternative was a second service learning about rails, or a money path with no rail behind it — which is a money path reconciliation has nothing to check against.
+
+**Why the withdrawal is not in svc-trade.** `services/svc-trade/src/router.ts` says `trade:withdraw` "appears nowhere here, deliberately: it is an INTERACTIVE_ONLY scope that no API key may hold, which is what protects a leaked bot key from moving value off the platform." That reasoning is about the **surface**, not about where the scope lives — svc-trade is the exchange API that bots hit with long-lived keys. It is respected rather than worked around: the withdrawal lives where the rails live, and svc-trade stays a pure exchange API.
+
+#### `deposit.credit` — operator-credentialed, never user-facing
+
+A user who can call the thing that credits their own balance does not need to deposit. So:
+
+- **`admin:treasury`**, which is in `INTERACTIVE_ONLY_SCOPES`. Both halves of that protection apply for free: a long-lived API key may **never** hold it, and a session without 2FA may not exercise it. `pay:write` would have let any merchant credit any user; `admin:write` is broad and not interactive-only.
+- **`creditedBy` comes from the token**, never the body. Every unit of value entering this way names the operator who asserted it arrived.
+- **Only rails on `PAY_OPERATOR_CREDIT_RAILS`** (default: `card-sandbox`). A hand-typed `crypto-native` credit would move `railBoundary('crypto-native')` away from the chain balance it mirrors, and reconciliation would report a discrepancy that is really a typo. Misconfiguring it fails at **boot**, not at request time.
+- **No jurisdiction guard, and no tier check on the payee.** The matrix judges the user being served, and the principal here is an operator who is not the beneficiary — checking their tier measures the wrong person. And money that has already reached a rail must always be bookable: refusing to credit an unverified user does not undo their payment, it strands it at the boundary. The gate belongs on what a balance can **do**, not on being allowed to receive one.
+
+#### `withdrawal.create` — the interactive path off the platform
+
+- **`trade:withdraw`**, INTERACTIVE_ONLY: no API key may hold it, and `requireScope` refuses a session that has not passed 2FA. A normal session does not carry it at all — `auth.stepUp` in svc-identity mints the five-minute token that does.
+- **`{ module: 'ledger' }`, not `{ module: 'pay' }`.** The matrix rule governing a user moving their own custodial balance is the rule for the module that **holds** it, and the ledger holds it (`custodial: true`, `OPEN_BASIC`). `pay`'s `full` tier governs merchant acquiring — third-party card money — a different risk and a different subject. Gating a withdrawal above the tier that admitted the value would build a one-way door: verified enough to deposit and trade, not verified enough to leave.
+- **`clientRef` is required, not optional.** A timed-out request retried without one opens a second withdrawal, and a second withdrawal is a second debit. `clientOrderId` is merely recommended on an order because a duplicate order can be cancelled; there is no cancelling a payout.
+- **The account comes from the token.** There is no `userId` input, so there is nothing to forge.
+
+> **Interface mismatch, flagged not papered over.** `RailAdapter.payout` takes a `SettlementInstruction`, which is merchant-shaped — it is the only payout shape §6.1 has. Every adapter uses `settlementId` purely as the payout idempotency key and reads `merchantId` not at all, so a user withdrawal passes its own id and the user id and works correctly. Generalising it to a `PayoutInstruction` is a change to a reviewed interface plus its conformance kit, so it belongs in its own PR (§15.2).
+
 ### Error codes
 
-`pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`.
+`pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`, `pay.rail_unknown`, `pay.rail_not_creditable`, `pay.deposit_conflict`, `pay.withdrawal_not_found`, `pay.withdrawal_conflict`.
+
+`pay.deposit_conflict` and `pay.withdrawal_conflict` map to **CONFLICT**, never BAD_REQUEST: the caller reused a business key for different numbers, and nothing they resend fixes it.
 
 ---
 
@@ -103,9 +139,12 @@ Every value movement is a recipe. This service holds no balance of any kind (Doc
 | `merchantSettlement`   | `pay.settled`             | `pay:clearing:<merchantId>` → merchant available + `houseFees('pay')`  |
 | `paymentRefund`        | `payment.refunded`        | clearing (pre-settlement) or merchant available (post) → rail boundary |
 | `paymentRefundReverse` | `payment.refund.reversed` | rail boundary → back where the refund came from                        |
-| `withdrawHold`         | `withdraw.held`           | merchant available → merchant hold (payout in flight)                  |
-| `withdrawSettle`       | `withdraw.settled`        | merchant hold → rail boundary (payout completed)                       |
-| `withdrawReverse`      | `withdraw.reversed`       | merchant hold → merchant available (payout refused)                    |
+| `withdrawHold`         | `withdraw.held`           | available → purpose-keyed hold (payout / withdrawal in flight)         |
+| `withdrawSettle`       | `withdraw.settled`        | hold → rail boundary (completed)                                       |
+| `withdrawReverse`      | `withdraw.reversed`       | hold → available (refused)                                             |
+| `deposit`              | `deposit.credited`        | rail boundary → user available                                         |
+
+The three `withdraw*` recipes serve **both** outbound paths — a merchant payout keyed on `<settlementId>:<attempt>`, and a user withdrawal keyed on `<withdrawalId>:<attempt>`. Same shape, same reasoning, one set of recipes.
 
 **`merchantClearing(merchantId, assetId)`** is a new account constructor: a `module`-owned account per merchant, per asset. It answers "a payment was captured but not settled — whose funds are those?" as a balance rather than an investigation. `sum(merchantClearing(m))` is exactly what svc-pay owes merchant `m` right now, readable from the ledger without touching a single svc-pay table — which is what makes reconciliation between the two meaningful.
 
@@ -117,7 +156,9 @@ Every value movement is a recipe. This service holds no balance of any kind (Doc
 | `payment.refund:<refundId>`                               | One refund, one posting. `<refundId>` defaults to `<paymentId>:<n>`.     |
 | `payment.refund.reverse:<refundId>`                       | The reversal of that refund.                                             |
 | `settlement:<merchantId>:<window>:<assetId>`              | A window settles once, per asset.                                        |
-| `withdraw.hold\|settle\|reverse:<settlementId>:<attempt>` | One payout attempt.                                                      |
+| `withdraw.hold\|settle\|reverse:<settlementId>:<attempt>` | One merchant payout attempt.                                             |
+| `withdraw.hold\|settle\|reverse:<withdrawalId>:<attempt>` | One user withdrawal attempt.                                             |
+| `deposit:<rail>:<railRef>`                                | A rail reference is credited once, however often it is redelivered.      |
 
 > **Why the asset is in the settlement key.** §6.1's settlement is keyed on merchant and window. A merchant taking USDT and BTC on the same day has two settlements, and without the asset in the key the second would find the first's transaction, return it, and strand a whole currency's takings in clearing. The `settlements` table carries an `asset_id` column for the same reason: `gross`/`fees`/`net` are meaningless without one.
 
@@ -129,6 +170,28 @@ The direction of the money decides the order:
 - **Outbound (refund, payout):** the ledger moves first, the rail second. The merchant must be shown to have the money before any of it goes somewhere irreversible; a post-settlement refund they cannot cover fails at the ledger, before the rail is asked. A crash in between leaves the book correct and only the status projection behind. If the rail then refuses, the ledger posting is reversed in the same call.
 
 A refund whose id is already in flight is **refused**, not re-sent: `RailAdapter.refund(ref, amount)` carries no refund id (§6.1), so the rail cannot dedupe it for us, and "send it again and hope" is how one refund becomes two.
+
+### User money: whose funds are stranded, per branch
+
+**Deposit** (inbound — the rail already moved, in the real world):
+
+| Crash point                  | Whose funds, and where                                            | Recovery                                                                      |
+| ---------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Before the claim row commits | Nobody's in the book. Value sits at the rail with no record here. | Re-run. Nothing was recorded, so nothing is inconsistent.                     |
+| Claimed, not yet booked      | **The user's** — at the rail, not in the book. Row is `pending`.  | Re-run the same `(rail, railRef)`; `deposits_status_idx` lists exactly these. |
+| Booked, row not flipped      | Nobody's. The user has their money; the row is one status behind. | Re-run: the ledger key is identical, so the post is a no-op.                  |
+
+**Withdrawal** (outbound — the ledger moves first):
+
+| Crash point                  | Whose funds, and where                                                                                                | Recovery                                                                                                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before the hold posts        | Nobody's. The balance is untouched.                                                                                   | Re-run on the same `clientRef`.                                                                                                                                 |
+| Insufficient funds           | Nobody's. Nothing moved, and it failed **before** a rail was asked.                                                   | The row records `ledger.insufficient_funds`.                                                                                                                    |
+| **Held, rail never asked**   | **The user's, immobilised** — out of `available`, in `withdraw:<id>:<attempt>`. The only branch where value is stuck. | Re-run on the same `clientRef`: the hold key is identical so it moves nothing, and the rail is then asked. `withdrawals_status_idx` lists everything in `held`. |
+| Rail refused                 | Nobody's. Reversed to `available` **in the same call**, `attempts` advances.                                          | None needed. Retrying takes a fresh hold key.                                                                                                                   |
+| Rail sent, settle not posted | Nobody's is lost, but **the platform is short**: the rail paid out and the book still shows a hold.                   | Re-run: the settle posts once, and the rail is not re-asked because its idempotency key is the same string.                                                     |
+
+The one genuinely stuck state is `held`, which is exactly why it is a real status with its own index rather than something inferred.
 
 ---
 
@@ -192,4 +255,12 @@ pnpm --filter @intafaced/svc-pay test            # needs Postgres on :5433; skip
 pnpm gate svc-pay
 ```
 
-Tests run against real Postgres (`postgres://svc_pay:svc_pay@localhost:5433/intafaced`) with `MemoryLedger` as the ledger — legitimate because the ledger conformance suite proves the reference implementation and svc-ledger's Postgres engine behave identically (§4.4). Postgres is real because the payment row / event log / ledger interaction is exactly where a bug would hide, and because the append-only guarantee is a database trigger an in-memory fake would quietly not have.
+Tests run against real Postgres (`postgres://svc_pay:svc_pay@localhost:5433/intafaced`) with `MemoryLedger` as the ledger — legitimate because the ledger conformance suite proves the reference implementation and svc-ledger's Postgres engine behave identically (§4.4). Postgres is real because the payment row / event log / ledger interaction is exactly where a bug would hide, because the append-only guarantee is a database trigger an in-memory fake would quietly not have, and because the deposit and withdrawal idempotency **is** a unique index.
+
+The two Postgres suites bring the schema up under a shared advisory lock and own disjoint tables — vitest runs test files in parallel, and both re-asserting the same CHECK constraints at once deadlocks.
+
+### Configuration worth knowing
+
+| Variable                    | Default        | Why                                                                                               |
+| --------------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
+| `PAY_OPERATOR_CREDIT_RAILS` | `card-sandbox` | Rails an operator may credit a deposit on by hand. Widening it is a deliberate operator decision. |

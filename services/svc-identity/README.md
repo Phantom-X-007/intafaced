@@ -16,7 +16,12 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `auth.login`                         | —                         | Handle or email; requires TOTP once enrolled         |
 | `auth.refresh`                       | —                         | Rotates the refresh token                            |
 | `auth.logout` / `auth.logoutAll`     | — / session               | Revokes one or all sessions                          |
+| `auth.stepUp`                        | session                   | **TOTP → 5-minute token carrying `trade:withdraw`**  |
 | `totp.enrol` / `totp.confirm`        | session                   | Two-step; secret persists only on confirm            |
+| `kyc.submit`                         | `identity:write`          | Own record only; **grants nothing**                  |
+| `kyc.status`                         | `identity:read`           | Own records + effective tier                         |
+| `kyc.pending`                        | `admin:compliance`        | Operator review queue, oldest first                  |
+| `kyc.approve` / `kyc.reject`         | `admin:compliance` + MFA  | **Approval grants custodial access**                 |
 | `rank.get`                           | `identity:read`           | Rank, XP, XP to next tier                            |
 | `rank.perks`                         | `identity:read`           | **The hot path** — every module calls this           |
 | `rank.awardXp`                       | service                   | Modules award XP here, never by writing `rank_state` |
@@ -24,6 +29,32 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `subAccounts.create`                 | `identity:write`          | Ledger-visible; real separate balances               |
 
 HTTP: `GET /health` · `GET /ready` (reports whether argon2id is active).
+
+### KYC — what it gates, and what it must never gate
+
+**Zero-KYC follows custody (§22), and that is already code.** `checkAccess` short-circuits to `allowed.permissionless` whenever the plane is `protocol` and the module is `custodial: false`, **before any tier is read** (`packages/config/src/jurisdiction.ts`). Nothing in this service can gate such a surface, and nothing here should ever be made to.
+
+These procedures exist for the **custodial** side only — the modules whose `JURISDICTION_MATRIX` rule carries a `minTier` because the platform holds the asset:
+
+| Surface                                        | KYC?                  | Why                                                              |
+| ---------------------------------------------- | --------------------- | ---------------------------------------------------------------- |
+| Protocol Plane (`svc-protocol` smart accounts) | **None. Ever.**       | `custodial: false` — there is nothing held, so nothing to verify |
+| Custodial spot venue (`svc-trade`)             | `basic`               | Holds user funds in ledger accounts                              |
+| Ledger withdrawal (`svc-pay withdrawal.*`)     | `basic`               | Same balance, leaving                                            |
+| Deposit (`svc-pay deposit.credit`)             | **None on the payee** | Value already at a rail must always be bookable                  |
+| Merchant acquiring, bank, launch               | `full`                | Third-party money, card rails                                    |
+
+**Submit and approve are separate procedures on separate scopes**, and that split is the point: a single "set my tier" would be a procedure whose caller grants themselves access to every custodial module. `kyc.submit` writes a `pending` row and nothing else. Only `admin:compliance` can approve, and the row records **which operator did it** in `reviewed_by` — because approving is granting, and a grant with no name on it is not auditable.
+
+There is **no verification-provider integration** here. Approval is an operator action against `kyc_records`. A provider webhook can land later as one more way to move a record off `pending`, without changing what approval means.
+
+### Step-up
+
+`defaultScopes()` deliberately withholds `trade:withdraw` — "added only after a step-up challenge". `auth.stepUp` **is** that challenge, and before it existed no session in the OS could reach a withdrawal endpoint at all.
+
+A live session plus a fresh TOTP code buys an access token that is weaker than a normal one in three ways, all of which matter: it lasts **five minutes**, it is bound to the session that asked for it, and it is only issued to an account that actually has a second factor. An account with no TOTP is refused with `auth.mfa_not_enrolled` — `FORBIDDEN`, not `UNAUTHORIZED`, because retrying with a code cannot help and the client needs to send the user to enrolment instead.
+
+> **Known gap, not introduced here:** a TOTP code is accepted anywhere in its validity window, so a captured code can be replayed within it. That is true of `auth.login` too and is platform-wide; fixing it means tracking a last-used counter per user and belongs in its own PR rather than being solved on one endpoint.
 
 ---
 

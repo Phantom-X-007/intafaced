@@ -236,4 +236,127 @@ export const settlements = pay.table(
   ],
 );
 
-export const schema = { merchants, paymentProfiles, payments, paymentEvents, settlements };
+// ── USER MONEY IN AND OUT ────────────────────────────────────────────────────
+//
+// Everything above this line is MERCHANT money: a third party pays a merchant,
+// and svc-pay clears and settles it. The two tables below are the other half —
+// a USER's own balance entering and leaving the book.
+//
+// They live here because this is the service that owns rails. Value entering
+// the book must come from one (§4.2 `deposit(user, asset, amount, rail)`), value
+// leaving it goes out through one, and `RailAdapter` + `RailRegistry` are here.
+// Putting them anywhere else would mean a second service learning about rails,
+// or a money path with no rail behind it at all.
+//
+// Neither table holds a balance. Both hold a RECORD of an intent and where it
+// got to; the value itself is in the ledger, and always was (Doctrine §0.6).
+
+/**
+ * `pending` — the row exists, nothing has been booked. The crash-resumable
+ * middle. `credited` — the ledger transaction is posted and the user can spend.
+ */
+export const depositStatusEnum = pay.enum('deposit_status', ['pending', 'credited']);
+
+/**
+ * A user's balance being credited from a rail (§4.2 `deposit`).
+ *
+ * OPERATOR-CREDENTIALED, never user-facing: a user who can call the thing that
+ * credits their own balance does not need to deposit at all. The row records
+ * `credited_by` so every unit of value that entered the book this way names the
+ * operator who asserted it had arrived.
+ *
+ * `(rail, rail_ref)` is UNIQUE and that is the whole idempotency story, at the
+ * database level rather than in application logic. It is the same key the ledger
+ * recipe builds (`deposit:<rail>:<railRef>`), so the two cannot disagree about
+ * what "already credited" means — and a webhook redelivery, a double-click, or
+ * a retried job all land on the same row.
+ */
+export const deposits = pay.table(
+  'deposits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** The beneficiary. `text`, matching `merchants.user_id` — svc-pay does not own the user table. */
+    userId: text('user_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    amount: amount('amount').notNull(),
+    /** Which `RailAdapter` the value arrived on. The adapter's `id`, always. */
+    rail: text('rail').notNull(),
+    /** The rail's own reference — tx hash, PSP id. Half the business key. */
+    railRef: text('rail_ref').notNull(),
+    /** The operator who credited it. The only record of who asserted the value arrived. */
+    creditedBy: text('credited_by').notNull(),
+    status: depositStatusEnum('status').notNull().default('pending'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    /** THE IDEMPOTENCY. One credit per rail reference, enforced by the database. */
+    uniqueIndex('deposits_rail_ref_idx').on(t.rail, t.railRef),
+    index('deposits_user_idx').on(t.userId, t.createdAt),
+    /** The resume sweep: everything booked at a rail but not yet in the book. */
+    index('deposits_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * Where a withdrawal got to.
+ *
+ * `held` is a real state, not an implementation detail: the user's funds have
+ * left `available` and are sitting in a purpose-keyed hold while a rail works.
+ * A withdrawal stuck in `held` is the one state where value is immobilised, so
+ * it has to be queryable rather than inferred.
+ */
+export const withdrawalStatusEnum = pay.enum('withdrawal_status', ['pending', 'held', 'sent', 'failed']);
+
+/**
+ * A USER moving their own balance off the platform.
+ *
+ * `trade:withdraw` — an INTERACTIVE_ONLY scope no API key may hold, so a leaked
+ * bot key cannot reach it. `client_ref` is required and unique per user, which
+ * is what makes the whole hold → settle/reverse sequence resumable: a retry
+ * finds the existing row and continues from its status rather than opening a
+ * second withdrawal.
+ *
+ * `attempts` is part of the ledger hold's business key, exactly as
+ * `settlements.payout_attempts` is. It advances only on a rail REFUSAL — a
+ * refusal reverses the hold, so the next attempt needs a fresh key, while a
+ * crash-and-resume reuses its key and stays idempotent.
+ */
+export const withdrawals = pay.table(
+  'withdrawals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    amount: amount('amount').notNull(),
+    rail: text('rail').notNull(),
+    /**
+     * Where the money is going: `{ kind: 'bank' | 'crypto', ref }`.
+     *
+     * jsonb because a destination's shape is the rail's business, not ours, and
+     * because a masked account reference is the sort of thing that must never
+     * end up in a WHERE clause by accident.
+     */
+    destination: jsonb('destination').notNull(),
+    /** The caller's own key for this withdrawal. What makes a retry a resume. */
+    clientRef: text('client_ref').notNull(),
+    /** The rail's reference once it has sent. NULL until then. */
+    railRef: text('rail_ref'),
+    /** Rail refusals so far. Part of the hold's ledger idempotency key. */
+    attempts: integer('attempts').notNull().default(0),
+    /** Machine-readable reason the last attempt failed, for the user and the operator. */
+    failureCode: text('failure_code'),
+    status: withdrawalStatusEnum('status').notNull().default('pending'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    /** ONE WITHDRAWAL PER CLIENT REFERENCE. A retry resumes; it does not duplicate. */
+    uniqueIndex('withdrawals_client_ref_idx').on(t.userId, t.clientRef),
+    index('withdrawals_user_idx').on(t.userId, t.createdAt),
+    /** The stuck-in-flight query: whose money is sitting in a hold right now. */
+    index('withdrawals_status_idx').on(t.status),
+  ],
+);
+
+export const schema = { merchants, paymentProfiles, payments, paymentEvents, settlements, deposits, withdrawals };

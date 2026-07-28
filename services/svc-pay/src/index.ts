@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import postgres from 'postgres';
 import { env } from './env.js';
 import { PayError, PayService } from './payment-service.js';
+import { UserMoneyService } from './user-money-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
@@ -62,9 +63,28 @@ const pay = new PayService(sql, ledger, rails, {
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
 });
 
+/**
+ * User money in and out (§4.2). Merchant money is `PayService`; this is a user's
+ * own balance crossing the platform boundary.
+ *
+ * Fails fast on a misconfigured credit rail. `PAY_OPERATOR_CREDIT_RAILS` naming
+ * a rail that is not registered would mean every operator deposit on it failing
+ * at request time with an error about a rail id, which reads like a caller
+ * mistake; it is a deployment one, and it belongs at boot.
+ */
+for (const railId of env.PAY_OPERATOR_CREDIT_RAILS) {
+  if (!rails.has(railId)) {
+    throw new Error(`PAY_OPERATOR_CREDIT_RAILS names "${railId}", which is not a registered rail. Registered: ${rails.ids().join(', ')}`);
+  }
+}
+
+const userMoney = new UserMoneyService(sql, ledger, rails, {
+  operatorCreditRails: env.PAY_OPERATOR_CREDIT_RAILS,
+});
+
 // The router is constructed so the type is exported and the wiring is exercised
 // at boot; mounting it is the API gateway's job (§9).
-export const appRouter = createPayRouter(pay, rails);
+export const appRouter = createPayRouter(pay, rails, userMoney);
 export type { PayRouter } from './router.js';
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL } });
