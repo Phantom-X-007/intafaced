@@ -10,9 +10,24 @@ const css = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url))
 const normalise = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
 
 describe('§3 design tokens are locked', () => {
-  it('holds the brand to deep navy with a gold accent', () => {
-    expect(color.surface).toBe('#192330');
-    expect(color.accent).toBe('#F0A70A');
+  it('holds the brand to black with an orange accent', () => {
+    expect(color.base).toBe('#000000');
+    expect(color.accent).toBe('#FF6B00');
+  });
+
+  /**
+   * The surface ramp carries no hue.
+   *
+   * Any blue or warm cast in the background competes with the only two colours
+   * that mean anything on a trading screen. A tinted grey also makes every red
+   * look slightly wrong, which is the kind of bug nobody files and everybody
+   * feels.
+   */
+  it('keeps the surface ramp neutral — no colour cast', () => {
+    for (const hex of [color.surface, color.surfaceRaised, color.surfaceOverlay]) {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!)).toBeLessThanOrEqual(8);
+    }
   });
 
   it('specifies Orbitron for display and Inter for body', () => {
@@ -23,24 +38,24 @@ describe('§3 design tokens are locked', () => {
   /**
    * The accent must never be a direction colour.
    *
-   * If gold also meant "up", nothing would be left to mean "this is the button"
+   * If orange also meant "up", nothing would be left to mean "this is the button"
    * on a falling market — the primary action would disappear into the price
    * movement exactly when a user most needs to find it.
    */
   it('keeps the accent out of market semantics', () => {
     expect(color.accent).not.toBe(color.long);
     expect(color.accent).not.toBe(color.short);
-    expect(color.long).toBe('#00B275');
-    expect(color.short).toBe('#FF4A68');
+    expect(color.long).toBe('#00C46A');
+    expect(color.short).toBe('#FF3B5C');
   });
 
   /**
    * Body text clears WCAG AA (4.5:1) on the surface it sits on.
    *
-   * The reference palette puts #828EA1 on #192330, which measures 4.1:1 and
-   * fails. `textMuted` was lifted specifically to pass — so this asserts the
-   * CONTRAST, not the hex. A future tweak that looks nicer and reads worse
-   * fails here rather than shipping.
+   * Asserted as CONTRAST, not as a hex. A future tweak that looks nicer and
+   * reads worse fails here rather than shipping — which is the whole point,
+   * because "slightly dimmer grey" is the single easiest way to quietly make a
+   * product unusable for a chunk of its users.
    */
   it('keeps text above 4.5:1 on the surfaces it sits on', () => {
     const lum = (hex: string) => {

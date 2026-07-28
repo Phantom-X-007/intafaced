@@ -1,79 +1,75 @@
 /**
  * DESIGN TOKENS — the brand (§3 Phase 0 deliverable).
  *
- * Deep navy with a gold accent. These values are the brand; components read
- * them and nothing hard-codes a hex outside this file. A colour that is not
- * here does not exist in the product.
+ * Black and orange. These values are the brand; components read them and
+ * nothing hard-codes a hex outside this file. A colour that is not here does
+ * not exist in the product.
  *
  * The CSS custom properties in tokens.css are generated from these same values
  * — see tokens.test.ts, which fails if the two ever drift apart.
  *
- * ── Why this replaced the phosphor-green terminal palette ───────────────────
+ * ── Why black, and why orange ───────────────────────────────────────────────
  *
- * The previous scheme was pure black with a CRT green accent. It reads as a
- * hacker aesthetic, and a platform asking people to deposit money should not
- * look like a prop. This palette is derived from the reference exchange UI in
- * `vendor/` (see docs/adr/2026-07-28-bizzan-ui.md) because it is the visual
- * language people already associate with a real trading venue: a dark navy
- * surface that lets green and red carry meaning, and a single warm accent that
- * does not compete with them.
+ * True black, not a tinted near-black. A trading screen is mostly numbers on a
+ * background, and any hue in that background competes with the only two colours
+ * that carry meaning — the green and the red. Neutral greys keep the surface
+ * out of the way; the ramp gives depth without borders, which is what stops a
+ * dense screen reading as a spreadsheet.
  *
- * MODERNISED, not copied. The reference stops at flat hexes; this adds the
- * elevation ramp, the alpha-based borders, and the contrast levels a current
- * interface needs — the source's `#828ea1` body text on `#192330` sits at 4.1:1
- * and fails WCAG AA, so `textMuted` here is lifted to pass.
+ * Orange is the single accent: primary actions, active nav, focus, live state.
+ * It sits far enough from both green and red in hue that it never reads as
+ * direction, which matters more than it sounds — see the test.
  */
 
 export const color = {
   /**
-   * Surface ramp. Not one flat background — depth comes from stacked navies
-   * rather than from borders, which is what stops a dense trading screen
-   * reading as a spreadsheet.
+   * Surface ramp. Pure black at the base, neutral greys above it. No blue
+   * cast: a tinted background makes every red look slightly wrong.
    */
-  base: '#0F1620',
-  surface: '#192330',
-  surfaceRaised: '#27313E',
-  surfaceOverlay: '#313B48',
+  base: '#000000',
+  surface: '#0C0C0E',
+  surfaceRaised: '#16161A',
+  surfaceOverlay: '#232329',
 
   /**
-   * Gold. The single accent: primary actions, active nav, focus rings.
+   * Orange. The single accent.
    *
-   * Deliberately NOT used for market direction. An accent that also means
-   * "up" leaves you no colour for "this is the button" on a red day.
+   * Deliberately NOT used for market direction. An accent that also means "up"
+   * leaves nothing to mean "this is the button" on a falling market — the
+   * primary action disappears into the price movement exactly when a user most
+   * needs to find it.
    */
-  accent: '#F0A70A',
-  accentBright: '#F0AC19',
-  accentDim: '#B87D06',
-  accentGlow: 'rgba(240, 167, 10, 0.28)',
+  accent: '#FF6B00',
+  accentBright: '#FF8A2B',
+  accentDim: '#C24F00',
+  accentGlow: 'rgba(255, 107, 0, 0.30)',
 
   /** Secondary — links, informational chips, chart axes. */
   azure: '#3BB3E4',
   azureDim: '#049DDC',
 
   /** Borders as alpha over the surface, so they hold on every ramp step. */
-  border: 'rgba(255, 255, 255, 0.08)',
-  borderStrong: 'rgba(255, 255, 255, 0.16)',
-  borderAccent: 'rgba(240, 167, 10, 0.45)',
+  border: 'rgba(255, 255, 255, 0.09)',
+  borderStrong: 'rgba(255, 255, 255, 0.18)',
+  borderAccent: 'rgba(255, 107, 0, 0.50)',
 
-  text: '#F5F7FA',
-  /** Lifted from the reference's #828EA1, which fails AA on this surface. */
-  textMuted: '#A6B2C4',
-  textFaint: 'rgba(245, 247, 250, 0.42)',
-  /** For use ON the gold accent, where white would smear. */
-  textOnAccent: '#1A1200',
+  text: '#F7F7F8',
+  textMuted: '#A2A2AC',
+  textFaint: 'rgba(247, 247, 248, 0.40)',
+  /** For use ON the orange accent, where white smears and fails contrast. */
+  textOnAccent: '#1A0A00',
 
   /**
-   * Market semantics. These two are load-bearing: they are the only way a
-   * trader reads direction at a glance, so nothing else in the palette may
-   * claim them.
+   * Market semantics. Load-bearing: these two are the only way a trader reads
+   * direction at a glance, so nothing else in the palette may claim them.
    */
-  long: '#00B275',
-  longDim: '#00875A',
-  short: '#FF4A68',
-  shortDim: '#D93A54',
+  long: '#00C46A',
+  longDim: '#00994F',
+  short: '#FF3B5C',
+  shortDim: '#D42B47',
 
-  warn: '#F0A70A',
-  danger: '#FF4A68',
+  warn: '#FFB020',
+  danger: '#FF3B5C',
   info: '#3BB3E4',
 } as const;
 
