@@ -55,6 +55,33 @@ const settlementView = z.object({
 type PaymentViewOut = z.infer<typeof paymentView>;
 type SettlementViewOut = z.infer<typeof settlementView>;
 
+/**
+ * A merchant may only read its OWN payments and settlements, whatever its
+ * scopes say.
+ *
+ * HOW MERCHANTS RELATE TO USERS. `pay.merchants` carries `user_id` and inserts
+ * `ON CONFLICT (user_id) DO NOTHING` (`payment-service.ts`), so today there is
+ * exactly one merchant per user and ownership is a single comparison after one
+ * lookup. Nothing on a `payments` or `settlements` row names the user, so the
+ * lookup is unavoidable: id → merchantId → merchant.userId. When PayFac trees
+ * or merchant teams land (§6.1), this function is the one place a membership
+ * check replaces the equality.
+ *
+ * WHY FORBIDDEN AND NOT NOT_FOUND — same call, same reasoning, as svc-bank's
+ * `assertSelf`, and deliberately the same across all five procedures fixed
+ * together. NOT_FOUND leaks less because it never confirms the id exists, but
+ * every id here is a v4 uuid the caller already holds, so the realistic caller
+ * is a merchant integration with the wrong id and the realistic cost of lying
+ * to them is an engineer's afternoon. The disclosure bought by the lie is one
+ * bit about a uuid nobody can enumerate.
+ */
+async function assertMerchantOwner(pay: PayService, principalUserId: string | undefined, merchantId: string): Promise<void> {
+  const merchant = await pay.getMerchant(merchantId);
+  if (merchant.userId !== principalUserId) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'This merchant belongs to another user' });
+  }
+}
+
 export function createPayRouter(pay: PayService, rails: RailRegistry) {
   const wrap = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
@@ -196,7 +223,17 @@ export function createPayRouter(pay: PayService, rails: RailRegistry) {
       get: scopedProcedure('pay:read', { module: 'pay' })
         .input(z.object({ paymentId: z.string().uuid() }))
         .output(paymentView)
-        .query(({ input }) => wrap(async () => toPaymentOut(await pay.getPayment(input.paymentId)))),
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            // Fetched, then checked, then returned. The row has to be read to
+            // learn which merchant it belongs to — so what the check protects
+            // is the RESPONSE, and it must come before the return, not after
+            // the caller has the object.
+            const payment = await pay.getPayment(input.paymentId);
+            await assertMerchantOwner(pay, ctx.principal.userId, payment.merchantId);
+            return toPaymentOut(payment);
+          }),
+        ),
 
       /** The append-only state history (§6.1). Read-only, by construction. */
       history: scopedProcedure('pay:read', { module: 'pay' })
@@ -212,16 +249,22 @@ export function createPayRouter(pay: PayService, rails: RailRegistry) {
             }),
           ),
         )
-        .query(({ input }) =>
-          wrap(async () =>
-            (await pay.history(input.paymentId)).map((e) => ({
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            // The payment row is read first only to learn its merchant; the
+            // event log is never touched for a caller who does not own it.
+            // `payment_events` carries instrument metadata, customer refs and
+            // rail references, so this is the more sensitive of the two reads.
+            const payment = await pay.getPayment(input.paymentId);
+            await assertMerchantOwner(pay, ctx.principal.userId, payment.merchantId);
+            return (await pay.history(input.paymentId)).map((e) => ({
               id: e.id,
               event: e.event,
               payload: e.payload,
               railEventId: e.railEventId,
               ts: e.ts.toISOString(),
-            })),
-          ),
+            }));
+          }),
         ),
     }),
 
@@ -246,7 +289,15 @@ export function createPayRouter(pay: PayService, rails: RailRegistry) {
       get: scopedProcedure('pay:read', { module: 'pay' })
         .input(z.object({ settlementId: z.string().uuid() }))
         .output(settlementView)
-        .query(({ input }) => wrap(async () => toSettlementOut(await pay.getSettlement(input.settlementId)))),
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            // A settlement names gross, fees and net for a window — another
+            // merchant's revenue and the rate we charge them.
+            const settlement = await pay.getSettlement(input.settlementId);
+            await assertMerchantOwner(pay, ctx.principal.userId, settlement.merchantId);
+            return toSettlementOut(settlement);
+          }),
+        ),
     }),
   });
 }

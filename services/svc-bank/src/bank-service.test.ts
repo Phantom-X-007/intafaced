@@ -3,6 +3,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
+import type { Context } from '@intafaced/contracts';
 import {
   MemoryLedger,
   earnPoolReserve,
@@ -15,6 +17,7 @@ import {
   userStake,
 } from '@intafaced/ledger-client';
 import { createBankServices, type BankServices } from './bank-service.js';
+import { createBankRouter } from './router.js';
 import { accountForSpace } from './spaces/space-service.js';
 import { memoryLedgerHistory } from './analytics/ledger-history.js';
 import { occurrenceStart, planDue, dueOccurrence } from './transfers/schedule.js';
@@ -32,6 +35,13 @@ import { BankError } from './errors.js';
  *
  * Postgres is real, because the claim-row / ledger interaction is exactly where
  * a double-fire bug would hide.
+ *
+ * The tRPC boundary is exercised at the bottom of this file rather than in a
+ * `router.test.ts` of its own. That is not a stylistic preference: svc-bank's
+ * SQL is schema-qualified (`bank.spaces`), so `createTestDb`'s per-suite schema
+ * cannot isolate it the way it isolates svc-ledger, and two files truncating
+ * the shared `bank` schema in parallel `beforeEach` hooks race each other. One
+ * file per database is the shape every service here has for that reason.
  */
 
 const URL = process.env.TEST_DATABASE_URL_BANK ?? 'postgres://svc_bank:svc_bank@localhost:5433/intafaced';
@@ -73,6 +83,7 @@ if (!available) {
 
   let ledger: MemoryLedger;
   let bank: BankServices;
+  let router: ReturnType<typeof createBankRouter>;
 
   /** Put real value in a user's available balance, the way a deposit would. */
   async function fund(userId: string, assetId: string, value: string) {
@@ -109,6 +120,7 @@ if (!available) {
     `;
     ledger = new MemoryLedger();
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), { nativeAssetId: 'IFC' });
+    router = createBankRouter(bank);
   });
 
   afterAll(async () => {
@@ -1309,6 +1321,129 @@ if (!available) {
       await expect(bank.transfers.cancelSchedule('44444444-4444-4444-8444-444444444444')).rejects.toMatchObject({
         code: 'bank.schedule_inactive',
       });
+    });
+  });
+
+  // ══ The tRPC boundary: whose row, not just what kind ══════════════════════
+
+  /**
+   * A scope answers "may this principal do this KIND of thing". It has never
+   * answered "may they do it to THIS row", and `bank:read` / `bank:write` are
+   * held by every user on the platform.
+   *
+   * Both callers below clear every guard svc-bank declares — scope, `full`
+   * verification, a region the matrix allows. That is the point: clearing all
+   * of them was still enough to reach another user's standing order.
+   */
+  const authConfig = {
+    secret: 'a-test-signing-secret-that-is-long-enough',
+    issuer: 'intafaced',
+    audience: 'intafaced.api',
+    accessTtlSeconds: 900,
+  };
+
+  async function ctx(userId: string, scopes: string[]): Promise<Context> {
+    const { token } = await issueAccessToken(
+      { userId, sessionId: '77777777-7777-4777-8777-777777777777', scopes, tier: 'full', mfa: true },
+      authConfig,
+    );
+    return { principal: await verifyAccessToken(token, authConfig), service: null, region: 'DE', requestId: 'req-1' };
+  }
+
+  const caller = async (userId: string, scopes: string[]) => router.createCaller(await ctx(userId, scopes));
+  const codeOf = (err: unknown) => (err as { code?: string }).code;
+
+  /** A standing order owned by `userId`, with one occurrence already fired. */
+  async function firedStandingOrder(userId: string) {
+    const primary = await bank.spaces.ensurePrimary(userId, 'USDT');
+    const rent = await bank.spaces.create({ userId, assetId: 'USDT', name: 'Rent' });
+    await fund(userId, 'USDT', '1000');
+
+    const schedule = await bank.transfers.schedule({
+      userId,
+      fromSpaceId: primary.id,
+      toSpaceId: rent.id,
+      amount: amt('100'),
+      cadence: 'monthly',
+      startsAt: new Date('2026-01-01T09:00:00Z'),
+    });
+
+    // Fire it, so `executions` has something worth stealing: an amount, a
+    // status and a ledger transaction id.
+    await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+    return schedule;
+  }
+
+  describe('transfers.executions is not readable by another user', () => {
+    it('refuses user B the firing history of user A’s standing order', async () => {
+      const schedule = await firedStandingOrder(USER_A);
+      const api = await caller(USER_B, ['bank:read']);
+
+      const err = await api.transfers.executions({ scheduleId: schedule.id }).catch((e: unknown) => e);
+      expect(codeOf(err)).toBe('FORBIDDEN');
+    });
+
+    it('still serves the history to the user who owns the schedule', async () => {
+      const schedule = await firedStandingOrder(USER_A);
+      const api = await caller(USER_A, ['bank:read']);
+
+      // The half that matters more: a check tight enough to lock the owner out
+      // is a worse bug than the leak it was written for, because it breaks
+      // everybody at once instead of one row at a time.
+      const executions = await api.transfers.executions({ scheduleId: schedule.id });
+      expect(executions).toHaveLength(1);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled', amount: '100' });
+    });
+  });
+
+  describe('transfers.cancel is not callable by another user', () => {
+    it('refuses user B, and leaves user A’s standing order active', async () => {
+      const schedule = await firedStandingOrder(USER_A);
+      const api = await caller(USER_B, ['bank:write']);
+
+      const err = await api.transfers.cancel({ scheduleId: schedule.id }).catch((e: unknown) => e);
+      expect(codeOf(err)).toBe('FORBIDDEN');
+
+      // The refusal has to come BEFORE the UPDATE. A check applied to the
+      // result would refuse a caller whose write had already landed.
+      expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('active');
+    });
+
+    it('still lets the user who owns the schedule cancel it', async () => {
+      const schedule = await firedStandingOrder(USER_A);
+      const api = await caller(USER_A, ['bank:write']);
+
+      await expect(api.transfers.cancel({ scheduleId: schedule.id })).resolves.toEqual({ cancelled: true });
+      expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('cancelled');
+    });
+  });
+
+  describe('an ownership refusal reaches the caller as FORBIDDEN', () => {
+    it('survives `guard`, which used to re-wrap it as INTERNAL_SERVER_ERROR', async () => {
+      // `guard` maps service errors onto tRPC codes and its fallback is a 500.
+      // A TRPCError thrown inside it is already an answer; re-wrapping told the
+      // caller to retry something that can never succeed, and hid every 403 in
+      // this service from anything grouping on status.
+      const schedule = await firedStandingOrder(USER_A);
+
+      const read = await (await caller(USER_B, ['bank:read'])).transfers
+        .executions({ scheduleId: schedule.id })
+        .catch((e: unknown) => e);
+      const write = await (await caller(USER_B, ['bank:write'])).transfers
+        .cancel({ scheduleId: schedule.id })
+        .catch((e: unknown) => e);
+
+      expect([codeOf(read), codeOf(write)]).toEqual(['FORBIDDEN', 'FORBIDDEN']);
+    });
+
+    it('applies to the ownership checks that were already here, not only the new ones', async () => {
+      // `spaces.archive` has called `assertSelf` since svc-bank shipped, and
+      // has been answering 500 to every refusal the whole time.
+      const space = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
+      const api = await caller(USER_B, ['bank:write']);
+
+      const err = await api.spaces.archive({ spaceId: space.id }).catch((e: unknown) => e);
+      expect(codeOf(err)).toBe('FORBIDDEN');
     });
   });
 }
