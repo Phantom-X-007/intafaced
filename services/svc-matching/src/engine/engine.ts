@@ -100,6 +100,13 @@ export class MatchingEngine {
 
   // ── Read surface ──────────────────────────────────────────────────────────
 
+  /**
+   * Get or create a book. Creation is correct here: an order for a market that
+   * has not traded yet is the first order in that market, and refusing it would
+   * mean no market could ever open.
+   *
+   * WRITES ONLY. See `existingBook` for reads and why the distinction matters.
+   */
   book(marketId: MarketId): OrderBook {
     let book = this.books.get(marketId);
     if (!book) {
@@ -107,6 +114,27 @@ export class MatchingEngine {
       this.books.set(marketId, book);
     }
     return book;
+  }
+
+  /**
+   * Look up a book without creating one.
+   *
+   * `depth()` used to go through `book()`, which allocated and STORED an
+   * OrderBook for any string it was handed. The depth route is unauthenticated
+   * — deliberately, because a price is not a secret (#55) — so
+   * `GET /markets/<anything>/depth` was an unbounded memory-growth primitive
+   * against the engine, drivable from any browser once a public websocket
+   * existed.
+   *
+   * Found while building svc-ws, which guards its own path by validating the
+   * market against `GET /markets` first. That guard is right, but it protects
+   * one caller; this protects the engine.
+   *
+   * A read must never mutate the thing it is reading. That is the general rule
+   * and this was a live counter-example.
+   */
+  existingBook(marketId: MarketId): OrderBook | null {
+    return this.books.get(marketId) ?? null;
   }
 
   hasMarket(marketId: MarketId): boolean {
@@ -117,8 +145,16 @@ export class MatchingEngine {
     return [...this.books.keys()].sort();
   }
 
-  depth(marketId: MarketId, limit = 50): ReturnType<OrderBook['depth']> {
-    return this.book(marketId).depth(limit);
+  /**
+   * Depth for a market, or null if it has never traded.
+   *
+   * null rather than an empty book: "this market does not exist" and "this
+   * market exists and nobody is quoting" are different facts, and a caller
+   * rendering an empty ladder for a typo'd symbol is showing a market that
+   * isn't there.
+   */
+  depth(marketId: MarketId, limit = 50): ReturnType<OrderBook['depth']> | null {
+    return this.existingBook(marketId)?.depth(limit) ?? null;
   }
 
   snapshot(): EngineSnapshot {
