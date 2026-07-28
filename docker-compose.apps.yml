@@ -142,6 +142,30 @@ services:
   # Deliberately holds no DATABASE_URL and no INTERNAL_SERVICE_SECRET. The
   # internet-facing component gets the smallest blast radius in the fleet, and
   # that is a property of what it is allowed to hold.
+  # ── Protocol Plane: the DEX (§8.6, §17.5) ──────────────────────────────────
+  #
+  # Non-custodial by construction, and the environment is part of the proof:
+  # no DATABASE_URL (a position we hold is custody) and no
+  # INTERNAL_SERVICE_SECRET (that secret is what reaches ledger.post).
+  # custody-scan covers the source; this covers the deployment.
+  svc-dex:
+    <<: *app
+    container_name: intafaced-svc-dex
+    command: ['node', 'services/svc-dex/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-dex
+      HTTP_PORT: '4013'
+      INDEXER_URL: http://svc-indexer:4012
+      MATCHING_URL: http://svc-matching:4004
+      QUOTE_MAX_AGE_MS: ${QUOTE_MAX_AGE_MS:-2000}
+    ports: ['4013:4013']
+    healthcheck: *healthcheck
+    # No schema and no bus: it reads projections and quotes. Depending on
+    # svc-matching would be wrong — a DEX whose front door needs the CENTRALISED
+    # engine alive to answer is not much of a DEX.
+    depends_on: {}
+
   svc-edge:
     <<: *app
     container_name: intafaced-svc-edge
@@ -164,6 +188,7 @@ services:
       PAY_URL: http://svc-pay:4007
       BLUEPRINT_URL: http://svc-blueprint:4010
       PROTOCOL_URL: http://svc-protocol:4011
+      DEX_URL: http://svc-dex:4013
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are
