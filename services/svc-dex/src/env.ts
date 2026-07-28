@@ -22,7 +22,7 @@ const schema = baseEnvSchema
   .merge(
     z.object({
       SERVICE_NAME: z.string().default('svc-dex'),
-      HTTP_PORT: z.coerce.number().int().default(4013),
+      HTTP_PORT: z.coerce.number().int().default(4010),
 
       /** Read models. Quotes are served from projections, never from a chain call. */
       INDEXER_URL: z.string().url().default('http://localhost:4012'),

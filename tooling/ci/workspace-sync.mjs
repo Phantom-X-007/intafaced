@@ -94,6 +94,29 @@ if (compose !== null) {
   }
 }
 
+
+// ── 4 · no two services claim the same host port ────────────────────────────
+// Docker does not detect this until the second container tries to bind, so the
+// fleet comes up MOSTLY working and one service is missing — which reads like
+// that service crashed rather than like a config clash. svc-dex and svc-indexer
+// both claimed 4013 and only the second one to start failed.
+if (compose !== null) {
+  const claimed = new Map();
+  const re = /^  ([a-z0-9-]+):([\s\S]*?)(?=^  \S|\Z)/gm;
+  for (const [, name, body] of compose.matchAll(re)) {
+    for (const [, host] of body.matchAll(/ports: \['(\d+):/g)) {
+      if (claimed.has(host)) {
+        failures.push({
+          file: 'docker-compose.apps.yml',
+          reason: `port ${host} is claimed by both ${claimed.get(host)} and ${name} — whichever starts second fails to bind, and it looks like a crash rather than a clash`,
+        });
+      } else {
+        claimed.set(host, name);
+      }
+    }
+  }
+}
+
 if (failures.length === 0) {
   console.log(`  ✓ workspace-sync clean — ${services.length} service(s) reach both the image and the fleet`);
   process.exitCode = 0;
