@@ -54,6 +54,7 @@ export const MODULE_IDS = [
   'indexer',
   'bridge',
   'protocol',
+  'dex',
 ] as const;
 
 export type ModuleId = (typeof MODULE_IDS)[number];
@@ -62,6 +63,11 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
   // Infrastructure, not a product. Non-custodial by definition: it holds no
   // balance and no service secret, and it enforces no jurisdiction of its own —
   // it forwards to modules that do. See services/svc-edge/README.md.
+  // §17.5: "the DEX is not a module beside the exchange; it IS the Protocol
+  // Plane's front door." custodial:false is what makes it permissionless —
+  // checkAccess short-circuits before any tier is read, and custody-scan fails
+  // the build if this service ever imports a ledger write recipe.
+  dex: { id: 'dex', service: 'svc-dex', planes: ['protocol'], phase: '5', custodial: false },
   edge: { id: 'edge', service: 'svc-edge', planes: ['fiat', 'protocol'], phase: '1', custodial: false },
   identity: { id: 'identity', service: 'svc-identity', planes: ['fiat', 'protocol'], phase: '1', custodial: false },
   ledger: { id: 'ledger', service: 'svc-ledger', planes: ['fiat'], phase: '1', custodial: true },

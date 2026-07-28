@@ -1,0 +1,320 @@
+import { formatAmount, type Amount } from '@intafaced/ledger-client/money';
+import {
+  amountOf,
+  assertValidBlock,
+  nonNegativeAmountOf,
+  positiveAmountOf,
+  type BookSide,
+  type ChainBlock,
+  type TakerSide,
+} from '../chain/source.js';
+import type {
+  ApplyOutcome,
+  BookLevel,
+  BookView,
+  FillRecord,
+  PositionRecord,
+  ProjectionStore,
+  StoredBlock,
+  UnwindOutcome,
+} from './store.js';
+
+/**
+ * In-memory `ProjectionStore` — the reference implementation.
+ *
+ * Its job is to be OBVIOUSLY correct, so that when it and `PostgresStore`
+ * disagree the suite has an opinion about which one is wrong. Both run the same
+ * conformance suite (`conformance.ts`), which is the only reason a second
+ * implementation earns its keep: a single implementation tested against itself
+ * proves that the tests match the code, not that the code matches the design.
+ *
+ * It is also what makes the reorg tests runnable with no database at all, so
+ * the property this service is built around is checked on every `pnpm test`
+ * rather than only where Postgres happens to be up.
+ */
+
+interface LevelRow {
+  market: string;
+  side: BookSide;
+  /** Canonical decimal string — the identity of a price level. */
+  priceKey: string;
+  price: Amount;
+  quantity: Amount;
+  blockHeight: number;
+  blockHash: string;
+}
+
+interface PositionRow {
+  market: string;
+  account: string;
+  size: Amount;
+  entryPrice: Amount;
+  blockHeight: number;
+  blockHash: string;
+}
+
+export class MemoryProjectionStore implements ProjectionStore {
+  #blocks = new Map<string, StoredBlock>();
+  #levels: LevelRow[] = [];
+  #fills: FillRecord[] = [];
+  #positions: PositionRow[] = [];
+
+  constructor(readonly chainId: number) {}
+
+  // ── Chain of record ───────────────────────────────────────────────────────
+
+  #canonical(): StoredBlock[] {
+    return [...this.#blocks.values()].filter((b) => b.status === 'canonical').sort((a, b) => a.height - b.height);
+  }
+
+  async head(): Promise<StoredBlock | null> {
+    return this.#canonical().at(-1) ?? null;
+  }
+
+  async blockAt(height: number): Promise<StoredBlock | null> {
+    return this.#canonical().find((b) => b.height === height) ?? null;
+  }
+
+  async earliestHeight(): Promise<number | null> {
+    return this.#canonical()[0]?.height ?? null;
+  }
+
+  // ── Projection ────────────────────────────────────────────────────────────
+
+  async applyBlock(block: ChainBlock): Promise<ApplyOutcome> {
+    assertValidBlock(block);
+
+    const existing = this.#blocks.get(block.hash);
+    const duplicate = existing?.status === 'canonical';
+
+    // The competing-block check the partial unique index enforces in Postgres.
+    // Modelled here so the two stores fail the same way rather than one of them
+    // quietly accepting a state the other cannot represent.
+    const occupant = await this.blockAt(block.height);
+    if (occupant && occupant.hash !== block.hash) {
+      throw new Error(`indexer.competing_canonical_block: height ${block.height} already holds canonical ${occupant.hash} — unwind first`);
+    }
+
+    this.#blocks.set(block.hash, {
+      chainId: block.chainId,
+      height: block.height,
+      hash: block.hash,
+      parentHash: block.parentHash,
+      status: 'canonical',
+      blockTime: new Date(block.timestamp * 1000),
+      eventCount: block.events.length,
+    });
+
+    for (const event of block.events) {
+      switch (event.kind) {
+        case 'book_level': {
+          const price = positiveAmountOf(event.price, 'book level price');
+          const priceKey = formatAmount(price);
+          const quantity = nonNegativeAmountOf(event.quantity, 'book level quantity');
+          const row = this.#levels.find(
+            (l) => l.market === event.market && l.side === event.side && l.priceKey === priceKey && l.blockHeight === block.height,
+          );
+          // Absolute state: last writer in the block wins, and re-applying the
+          // same block reaches the same value. Nothing accumulates.
+          if (row) {
+            row.quantity = quantity;
+            row.blockHash = block.hash;
+          } else {
+            this.#levels.push({
+              market: event.market,
+              side: event.side,
+              priceKey,
+              price,
+              quantity,
+              blockHeight: block.height,
+              blockHash: block.hash,
+            });
+          }
+          break;
+        }
+
+        case 'fill': {
+          // (block hash, log index) is the chain's own identity for a log —
+          // THE reason re-processing a block cannot double-count a trade.
+          const key = (f: FillRecord) => f.blockHash === block.hash && f.logIndex === event.logIndex;
+          if (this.#fills.some(key)) break;
+          this.#fills.push({
+            blockHeight: block.height,
+            blockHash: block.hash,
+            logIndex: event.logIndex,
+            market: event.market,
+            price: positiveAmountOf(event.price, 'fill price'),
+            quantity: positiveAmountOf(event.quantity, 'fill quantity'),
+            takerSide: event.takerSide as TakerSide,
+            maker: event.maker,
+            taker: event.taker,
+            blockTime: new Date(block.timestamp * 1000),
+          });
+          break;
+        }
+
+        case 'position': {
+          const row = this.#positions.find(
+            (p) => p.market === event.market && p.account === event.account && p.blockHeight === block.height,
+          );
+          const size = amountOf(event.size, 'position size');
+          const entryPrice = nonNegativeAmountOf(event.entryPrice, 'position entry price');
+          if (row) {
+            row.size = size;
+            row.entryPrice = entryPrice;
+            row.blockHash = block.hash;
+          } else {
+            this.#positions.push({
+              market: event.market,
+              account: event.account,
+              size,
+              entryPrice,
+              blockHeight: block.height,
+              blockHash: block.hash,
+            });
+          }
+          break;
+        }
+      }
+    }
+
+    return { duplicate, eventsApplied: block.events.length };
+  }
+
+  async unwindTo(height: number): Promise<UnwindOutcome> {
+    let blocksOrphaned = 0;
+    for (const [hash, block] of this.#blocks) {
+      if (block.status === 'canonical' && block.height >= height) {
+        this.#blocks.set(hash, { ...block, status: 'orphaned' });
+        blocksOrphaned++;
+      }
+    }
+
+    const levelsBefore = this.#levels.length;
+    this.#levels = this.#levels.filter((l) => l.blockHeight < height);
+    const fillsBefore = this.#fills.length;
+    this.#fills = this.#fills.filter((f) => f.blockHeight < height);
+    const positionsBefore = this.#positions.length;
+    this.#positions = this.#positions.filter((p) => p.blockHeight < height);
+
+    return {
+      blocksOrphaned,
+      bookLevelsRemoved: levelsBefore - this.#levels.length,
+      fillsRemoved: fillsBefore - this.#fills.length,
+      positionsRemoved: positionsBefore - this.#positions.length,
+    };
+  }
+
+  async prune(throughHeight: number): Promise<number> {
+    let removed = 0;
+
+    const keepNewest = <T extends { blockHeight: number }>(rows: T[], keyOf: (row: T) => string): T[] => {
+      const newest = new Map<string, number>();
+      for (const row of rows) {
+        if (row.blockHeight > throughHeight) continue;
+        const key = keyOf(row);
+        const current = newest.get(key);
+        if (current === undefined || row.blockHeight > current) newest.set(key, row.blockHeight);
+      }
+      return rows.filter((row) => row.blockHeight > throughHeight || newest.get(keyOf(row)) === row.blockHeight);
+    };
+
+    const levelsBefore = this.#levels.length;
+    this.#levels = keepNewest(this.#levels, (l) => `${l.market}|${l.side}|${l.priceKey}`);
+    removed += levelsBefore - this.#levels.length;
+
+    const positionsBefore = this.#positions.length;
+    this.#positions = keepNewest(this.#positions, (p) => `${p.market}|${p.account}`);
+    removed += positionsBefore - this.#positions.length;
+
+    // Orphan records below the horizon have outlived their forensic value —
+    // they describe a branch nothing can reorg back to.
+    for (const [hash, block] of this.#blocks) {
+      if (block.status === 'orphaned' && block.height <= throughHeight) {
+        this.#blocks.delete(hash);
+        removed++;
+      }
+    }
+
+    return removed;
+  }
+
+  // ── Reads ─────────────────────────────────────────────────────────────────
+
+  /** Newest version per key, which is what "current" means in this design. */
+  #currentLevels(market: string, side: BookSide): LevelRow[] {
+    const newest = new Map<string, LevelRow>();
+    for (const row of this.#levels) {
+      if (row.market !== market || row.side !== side) continue;
+      const held = newest.get(row.priceKey);
+      if (!held || row.blockHeight > held.blockHeight) newest.set(row.priceKey, row);
+    }
+    return [...newest.values()];
+  }
+
+  async book(market: string, depth: number): Promise<BookView> {
+    const head = await this.head();
+
+    const side = (s: BookSide, direction: 1 | -1): BookLevel[] =>
+      this.#currentLevels(market, s)
+        // Quantity 0 is an empty level, and it is filtered AFTER the newest
+        // version is chosen — a level emptied in block N must not fall back to
+        // its depth in block N-1.
+        .filter((row) => row.quantity > 0n)
+        .sort((a, b) => (a.price === b.price ? 0 : a.price > b.price ? direction : -direction))
+        .slice(0, depth)
+        .map((row) => ({ price: row.price, quantity: row.quantity }));
+
+    return {
+      market,
+      chainId: this.chainId,
+      asOfHeight: head?.height ?? null,
+      asOfHash: head?.hash ?? null,
+      bids: side('bid', -1),
+      asks: side('ask', 1),
+    };
+  }
+
+  #newestFirst(fills: readonly FillRecord[]): FillRecord[] {
+    return [...fills].sort((a, b) => b.blockHeight - a.blockHeight || b.logIndex - a.logIndex);
+  }
+
+  async recentFills(market: string, limit: number): Promise<readonly FillRecord[]> {
+    return this.#newestFirst(this.#fills.filter((f) => f.market === market)).slice(0, limit);
+  }
+
+  async fillsForAccount(account: string, limit: number): Promise<readonly FillRecord[]> {
+    const lower = account.toLowerCase();
+    return this.#newestFirst(this.#fills.filter((f) => f.maker.toLowerCase() === lower || f.taker.toLowerCase() === lower)).slice(0, limit);
+  }
+
+  #currentPositions(): PositionRow[] {
+    const newest = new Map<string, PositionRow>();
+    for (const row of this.#positions) {
+      const key = `${row.market}|${row.account.toLowerCase()}`;
+      const held = newest.get(key);
+      if (!held || row.blockHeight > held.blockHeight) newest.set(key, row);
+    }
+    return [...newest.values()];
+  }
+
+  async position(market: string, account: string): Promise<PositionRecord | null> {
+    const lower = account.toLowerCase();
+    return this.#currentPositions().find((p) => p.market === market && p.account.toLowerCase() === lower) ?? null;
+  }
+
+  async positionsOf(account: string): Promise<readonly PositionRecord[]> {
+    const lower = account.toLowerCase();
+    return this.#currentPositions()
+      .filter((p) => p.account.toLowerCase() === lower)
+      .sort((a, b) => a.market.localeCompare(b.market));
+  }
+
+  async markets(): Promise<readonly string[]> {
+    const seen = new Set<string>();
+    for (const row of this.#levels) seen.add(row.market);
+    for (const row of this.#fills) seen.add(row.market);
+    for (const row of this.#positions) seen.add(row.market);
+    return [...seen].sort();
+  }
+}

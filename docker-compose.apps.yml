@@ -124,6 +124,54 @@ services:
     depends_on:
       <<: [*needs-schema, *needs-bus]
 
+  # ── THE FRONT DOOR ─────────────────────────────────────────────────────────
+  #
+  # svc-edge is the only service a browser talks to. It exchanges a bearer token
+  # for the signed principal every mounted service requires, and strips anything
+  # a caller tried to send under the x-intafaced- prefix.
+  #
+  # It was absent from this file entirely: the compose was written before the
+  # edge existed, so `platform:up` brought up eleven services behind a door that
+  # was never opened. Every request would have been anonymous.
+  #
+  # JWT_ACCESS_SECRET must be THE SAME VALUE as svc-identity's. A mismatch is
+  # the worst failure mode in the fleet because nothing errors: every login
+  # succeeds, every request after it is anonymous, and it presents to a user as
+  # "logged in but nothing works".
+  #
+  # Deliberately holds no DATABASE_URL and no INTERNAL_SERVICE_SECRET. The
+  # internet-facing component gets the smallest blast radius in the fleet, and
+  # that is a property of what it is allowed to hold.
+  svc-edge:
+    <<: *app
+    container_name: intafaced-svc-edge
+    command: ['node', 'services/svc-edge/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-edge
+      HTTP_PORT: '4000'
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
+      DEFAULT_REGION: ${DEFAULT_REGION:-XX}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-15000}
+      IDENTITY_URL: http://svc-identity:4002
+      TRADE_URL: http://svc-trade:4005
+      TOKEN_URL: http://svc-token:4003
+      AGENTS_URL: http://svc-agents:4008
+      BANK_URL: http://svc-bank:4009
+      P2P_URL: http://svc-p2p:4006
+      PAY_URL: http://svc-pay:4007
+      BLUEPRINT_URL: http://svc-blueprint:4010
+      PROTOCOL_URL: http://svc-protocol:4011
+    ports: ['4000:4000']
+    healthcheck: *healthcheck
+    # Started last on purpose: the door should open onto services that are
+    # already answering, so a user's first request is not a 502.
+    depends_on:
+      svc-identity: { condition: service_healthy }
+      svc-trade: { condition: service_healthy }
+
   svc-identity:
     <<: *app
     container_name: intafaced-svc-identity
@@ -229,7 +277,7 @@ services:
     container_name: intafaced-svc-pay
     command: ['node', 'services/svc-pay/dist/index.js']
     environment:
-      <<: [*service-env, *internal-secret]
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-pay
       HTTP_PORT: '4006'
       DATABASE_URL: postgres://svc_pay:svc_pay@postgres:5432/intafaced
@@ -252,7 +300,7 @@ services:
     container_name: intafaced-svc-p2p
     command: ['node', 'services/svc-p2p/dist/index.js']
     environment:
-      <<: [*service-env, *internal-secret]
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-p2p
       # 4007: the code default is 4004, which svc-trade already holds.
       HTTP_PORT: '4007'
@@ -274,7 +322,7 @@ services:
     container_name: intafaced-svc-blueprint
     command: ['node', 'services/svc-blueprint/dist/index.js']
     environment:
-      <<: *service-env
+      <<: [*service-env, *edge-secret]
       SERVICE_NAME: svc-blueprint
       # 4011: the code default is 4008, which svc-agents already holds.
       HTTP_PORT: '4011'
@@ -297,7 +345,7 @@ services:
     container_name: intafaced-svc-bank
     command: ['node', 'services/svc-bank/dist/index.js']
     environment:
-      <<: [*service-env, *internal-secret]
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-bank
       HTTP_PORT: '4009'
       DATABASE_URL: postgres://svc_bank:svc_bank@postgres:5432/intafaced
@@ -358,7 +406,7 @@ services:
     container_name: intafaced-svc-protocol
     command: ['node', 'services/svc-protocol/dist/index.js']
     environment:
-      <<: *service-env
+      <<: [*service-env, *edge-secret]
       SERVICE_NAME: svc-protocol
       # 4012: the code default is 4004, which svc-trade already holds.
       HTTP_PORT: '4012'
@@ -376,6 +424,34 @@ services:
     healthcheck: *healthcheck
     depends_on:
       <<: [*needs-schema, *needs-bus]
+
+  # The read path for the Protocol Plane: chain → Postgres → apps/web.
+  #
+  # No `nats` dependency: this service publishes no subject and consumes none.
+  # It reads a chain and writes its own schema, and that is the whole coupling.
+  #
+  # It boots with `NullChainSource` (SOCKET §13 `socket.evm-rpc`) — there is no
+  # EVM RPC in this stack, so the honest wiring is a source that reports no
+  # chain rather than a fabricated one. Reads are served from whatever is in
+  # Postgres and `indexer.status` says `chainSource: "null"` out loud.
+  svc-indexer:
+    <<: *app
+    container_name: intafaced-svc-indexer
+    command: ['node', 'services/svc-indexer/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-indexer
+      # 4013: every port from 4000 to 4012 is already taken above.
+      HTTP_PORT: '4013'
+      DATABASE_URL: postgres://svc_indexer:svc_indexer@postgres:5432/intafaced
+      # Matches PROTOCOL_CHAIN_ID — the two services describe one chain.
+      INDEXER_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-31337}
+      INDEXER_FINALITY_DEPTH: ${INDEXER_FINALITY_DEPTH:-64}
+      INDEXER_INGEST_ENABLED: ${INDEXER_INGEST_ENABLED:-true}
+    ports: ['4013:4013']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: *needs-schema
 
   # ── Apps ───────────────────────────────────────────────────────────────────
   #

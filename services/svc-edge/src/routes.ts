@@ -32,6 +32,10 @@ export const UPSTREAMS: readonly Upstream[] = [
   { prefix: '/api/pay', envVar: 'PAY_URL', devUrl: 'http://localhost:4007' },
   { prefix: '/api/blueprint', envVar: 'BLUEPRINT_URL', devUrl: 'http://localhost:4010' },
   { prefix: '/api/protocol', envVar: 'PROTOCOL_URL', devUrl: 'http://localhost:4011' },
+  // The Protocol Plane's front door. Routed like any other service — the edge
+  // does not know or care that its procedures are permissionless; that is the
+  // module's own jurisdiction rule, not a property of the route table.
+  { prefix: '/api/dex', envVar: 'DEX_URL', devUrl: 'http://localhost:4013' },
 ] as const;
 
 export interface Resolved {
