@@ -1,0 +1,173 @@
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
+
+/**
+ * THE SMART ORDER ROUTER (§8.6).
+ *
+ * "Smart order router: internal book vs. pool quote → best execution."
+ *
+ * Two venues can fill the same order and they are not comparable at face value.
+ * An AMM quote already includes its price impact but pays gas; a book quote is
+ * exact at the top and worse as you consume depth. Comparing headline prices
+ * picks the wrong venue routinely.
+ *
+ * So this module compares **effective price** — what the taker actually ends up
+ * with, after impact, fees and gas. That is the only comparison that means
+ * anything to the person trading.
+ *
+ * ── Why this file holds no I/O ──────────────────────────────────────────────
+ *
+ * Routing is arithmetic over quotes. Keeping it pure means the decision is
+ * unit-testable against constructed books and pools, with no chain and no
+ * engine, and it means the same code decides identically in a test and in
+ * production. Fetching quotes is the caller's job.
+ *
+ * ── Custody ─────────────────────────────────────────────────────────────────
+ *
+ * Nothing here moves value. svc-dex is a Protocol Plane service: it may read,
+ * quote and route, and it must never post to the ledger — `custody-scan`
+ * (Doctrine §16.10) fails the build if this service imports a write recipe.
+ * That check is what makes "non-custodial" a property rather than a claim, and
+ * it is the reason the DEX ships permissionless (§585).
+ */
+
+export type VenueKind = 'book' | 'pool';
+
+export interface VenueQuote {
+  readonly venue: string;
+  readonly kind: VenueKind;
+  /**
+   * Base quantity this venue can fill at `quoteAmount`. May be less than
+   * requested — a partial quote is honest and a router that ignores it will
+   * route the whole order to a venue that cannot take it.
+   */
+  readonly fillableQty: Amount;
+  /** Total quote-asset cost (buy) or proceeds (sell) for `fillableQty`. */
+  readonly quoteAmount: Amount;
+  /** Taker fee in basis points, charged by the venue on the received asset. */
+  readonly feeBps: number;
+  /**
+   * Estimated settlement cost in the QUOTE asset — gas on a pool, zero on the
+   * internal book. Not a rate: a fixed cost, which is exactly why small orders
+   * route to the book and large ones can still prefer a pool.
+   */
+  readonly settlementCost: Amount;
+}
+
+export interface RouteRequest {
+  readonly side: 'buy' | 'sell';
+  /** Base quantity the taker wants. */
+  readonly qty: Amount;
+}
+
+export interface RouteLeg {
+  readonly venue: string;
+  readonly kind: VenueKind;
+  readonly qty: Amount;
+  readonly quoteAmount: Amount;
+  /** Quote cost per unit of base, after fees and settlement. Lower is better on a buy. */
+  readonly effectivePrice: Amount;
+}
+
+export interface Route {
+  readonly legs: readonly RouteLeg[];
+  readonly filledQty: Amount;
+  /** Unfilled remainder. Non-zero means no venue could take the rest. */
+  readonly unfilledQty: Amount;
+  readonly totalQuoteAmount: Amount;
+}
+
+const SCALE = 10n ** 18n;
+const BPS = 10_000n;
+
+/**
+ * Effective price per unit of base, in the quote asset, at 18 decimals.
+ *
+ * Fees are applied to the side that actually pays them: a buyer receives less
+ * base, which raises their cost per unit; a seller receives less quote, which
+ * lowers their proceeds per unit. Modelling the fee as a flat adjustment to the
+ * quote amount would misprice one side.
+ *
+ * Settlement cost is added to a buy and subtracted from a sell for the same
+ * reason — it is a cost to the taker in both directions.
+ */
+export function effectivePrice(quote: VenueQuote, side: 'buy' | 'sell'): Amount {
+  if (quote.fillableQty <= 0n) throw new RangeError('cannot price a quote with no fillable quantity');
+
+  const feeOnBase = (quote.fillableQty * BigInt(quote.feeBps)) / BPS;
+
+  if (side === 'buy') {
+    // Buyer pays quote + gas, receives base minus fee.
+    const received = quote.fillableQty - feeOnBase;
+    if (received <= 0n) throw new RangeError('venue fee consumes the entire fill');
+    return ((quote.quoteAmount + quote.settlementCost) * SCALE) / received;
+  }
+
+  // Seller delivers base, receives quote minus fee, minus gas.
+  const feeOnQuote = (quote.quoteAmount * BigInt(quote.feeBps)) / BPS;
+  const proceeds = quote.quoteAmount - feeOnQuote - quote.settlementCost;
+  return (proceeds * SCALE) / quote.fillableQty;
+}
+
+/**
+ * Choose the best execution across venues, splitting when one cannot fill alone.
+ *
+ * Greedy by effective price. Not provably optimal — a true optimum would have
+ * to model how each venue's price moves as it is consumed, which needs a depth
+ * curve rather than a single quote. Greedy over honest per-venue quotes is the
+ * right first version, and the comment is here so nobody later mistakes it for
+ * something cleverer than it is.
+ *
+ * Ties break on venue id, so routing is a function of the quote SET rather than
+ * of whatever order they happened to arrive in. Two identical requests must
+ * route identically or a fill becomes unreproducible.
+ */
+export function route(request: RouteRequest, quotes: readonly VenueQuote[]): Route {
+  if (request.qty <= 0n) throw new RangeError('route quantity must be positive');
+
+  const priced = quotes
+    .filter((q) => q.fillableQty > 0n)
+    .map((q) => ({ quote: q, price: effectivePrice(q, request.side) }))
+    .sort((a, b) => {
+      // Buy: cheapest first. Sell: highest proceeds first.
+      const better = request.side === 'buy' ? a.price - b.price : b.price - a.price;
+      if (better !== 0n) return better < 0n ? -1 : 1;
+      return a.quote.venue < b.quote.venue ? -1 : a.quote.venue > b.quote.venue ? 1 : 0;
+    });
+
+  const legs: RouteLeg[] = [];
+  let remaining = request.qty;
+  let totalQuote = 0n;
+
+  for (const { quote, price } of priced) {
+    if (remaining === 0n) break;
+
+    const take = quote.fillableQty < remaining ? quote.fillableQty : remaining;
+    // Pro-rate the quote amount when taking only part of a venue's fill. Exact
+    // integer arithmetic: no rounding to a float, ever.
+    const legQuote = (quote.quoteAmount * take) / quote.fillableQty;
+
+    legs.push({ venue: quote.venue, kind: quote.kind, qty: take, quoteAmount: legQuote, effectivePrice: price });
+    remaining -= take;
+    totalQuote += legQuote;
+  }
+
+  return { legs, filledQty: request.qty - remaining, unfilledQty: remaining, totalQuoteAmount: totalQuote };
+}
+
+/** Render a route for an API response — decimal strings, never numbers. */
+export function presentRoute(r: Route) {
+  return {
+    legs: r.legs.map((l) => ({
+      venue: l.venue,
+      kind: l.kind,
+      qty: formatAmount(l.qty),
+      quoteAmount: formatAmount(l.quoteAmount),
+      effectivePrice: formatAmount(l.effectivePrice),
+    })),
+    filledQty: formatAmount(r.filledQty),
+    unfilledQty: formatAmount(r.unfilledQty),
+    totalQuoteAmount: formatAmount(r.totalQuoteAmount),
+  };
+}
+
+export { parseAmount };

@@ -75,6 +75,10 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   // anonymous requests that `auth.register` and `auth.login` depend on, and
   // would put a jurisdiction check in front of every module rather than in the
   // module that owns the rule.
+  // No tier: the platform never holds the asset, so there is nothing to
+  // verify anyone against (§503, §585). The jurisdiction STATUS still applies —
+  // a sanctioned region is a legal constraint, not a custody one.
+  dex: { status: 'open', minTier: 'none' },
   edge: { status: 'open', minTier: 'none' },
   identity: { status: 'open', minTier: 'none' },
   ledger: OPEN_BASIC,
