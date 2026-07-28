@@ -181,6 +181,14 @@ export function registerRoutes(app: FastifyInstance, engine: MatchingEngine, int
     const { marketId } = req.params as { marketId: string };
     const limit = Number((req.query as { limit?: string }).limit ?? '50');
     const depth = engine.depth(marketId, Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 50);
+
+    // 404 for a market that has never traded. Previously this route allocated
+    // and STORED a book for any string, so an unauthenticated caller could grow
+    // the engine's memory without bound — and every one of those phantom books
+    // then appeared to exist. Reading must not create.
+    if (depth === null) {
+      return reply.code(404).send({ code: 'MarketNotFound', message: `${marketId} is not a market on this engine` });
+    }
     return reply.code(200).send({ marketId, ...depth });
   });
 

@@ -132,3 +132,36 @@ describe('order writes require service credentials', () => {
     expect(captured.status).toBe(200);
   });
 });
+
+// ── Reading must not create ──────────────────────────────────────────────────
+
+describe('depth does not allocate a book', () => {
+  /**
+   * `engine.depth()` went through `engine.book()`, which creates and STORES an
+   * OrderBook for any market id it is handed. The depth route is unauthenticated
+   * by design — a price is not a secret — so `GET /markets/<anything>/depth` was
+   * an unbounded memory-growth primitive against the engine, drivable from any
+   * browser the moment a public websocket existed.
+   *
+   * Found while building svc-ws, which guards its own path by validating
+   * against `GET /markets`. That guard protects one caller. This protects the
+   * engine from every caller.
+   */
+  it('returns null for an unknown market instead of creating one', async () => {
+    const { MatchingEngine } = await import('./engine/engine.js');
+    const engine = new MatchingEngine({ journalPath: null } as never);
+
+    expect(engine.depth('NOT-A-MARKET')).toBeNull();
+    // The real assertion: the engine did not quietly grow.
+    expect(engine.markets).not.toContain('NOT-A-MARKET');
+  });
+
+  it('does not grow the engine under repeated probing', async () => {
+    const { MatchingEngine } = await import('./engine/engine.js');
+    const engine = new MatchingEngine({ journalPath: null } as never);
+
+    for (let i = 0; i < 500; i++) engine.depth(`PHANTOM-${i}`);
+
+    expect(engine.markets).toHaveLength(0);
+  });
+});
