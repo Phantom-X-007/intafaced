@@ -43,6 +43,16 @@ WORKDIR /app
 # Manifests only, so this layer is invalidated by a dependency change and not
 # by every edit to a source file. The list is explicit rather than `COPY . .`
 # for exactly that reason.
+#
+# THE LIST MUST STAY IN SYNC WITH THE WORKSPACE, and nothing about a missing
+# entry is obvious: pnpm installs a workspace it cannot see the manifest for as
+# though it had no dependencies, so the failure surfaces as
+# "Cannot find module '@intafaced/contracts'" during `pnpm build` — which reads
+# like a broken import rather than a missing COPY.
+#
+# `tooling/ci/workspace-sync.mjs` compares this list against pnpm-workspace.yaml
+# and fails the build when they diverge. That check exists because this went
+# wrong three times in one day: twice in compose, once here.
 FROM base AS deps
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -73,6 +83,10 @@ COPY services/svc-pay/package.json           services/svc-pay/
 COPY services/svc-protocol/package.json      services/svc-protocol/
 COPY services/svc-token/package.json         services/svc-token/
 COPY services/svc-trade/package.json         services/svc-trade/
+COPY services/svc-dex/package.json           services/svc-dex/
+COPY services/svc-edge/package.json          services/svc-edge/
+COPY services/svc-indexer/package.json       services/svc-indexer/
+COPY services/svc-ws/package.json            services/svc-ws/
 
 # `--frozen-lockfile` is the point of this line: the image resolves to exactly
 # what the repo resolved to, or it fails. A lockfile drift discovered here is a

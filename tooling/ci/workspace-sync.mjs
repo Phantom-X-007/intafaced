@@ -1,0 +1,105 @@
+#!/usr/bin/env node
+/**
+ * WORKSPACE SYNC — every workspace package reaches the image and the fleet.
+ *
+ * Three times in one day a service was added and a deployment file was not:
+ *
+ *   1. five mounted services never received EDGE_PRINCIPAL_SECRET in compose,
+ *      so each would crash-loop on a boot secret that has no default;
+ *   2. svc-edge — the front door — had no compose block at all, so the fleet
+ *      came up behind a door that was never opened;
+ *   3. four services were missing from the Dockerfile's manifest list.
+ *
+ * None of those failed loudly at the point of the mistake. The Dockerfile one
+ * is the nastiest: pnpm installs a workspace whose manifest it cannot see as
+ * though it had no dependencies, so the error arrives much later as
+ * "Cannot find module '@intafaced/contracts'" during a build — which reads like
+ * a broken import, not a missing COPY.
+ *
+ * This makes all three loud, at the commit that causes them.
+ *
+ * Exit 0 = the workspace, the image and the fleet agree.
+ */
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+const ROOT = process.cwd();
+
+/** Every workspace package that produces a deployable service. */
+function servicesInRepo() {
+  const dir = join(ROOT, 'services');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(dir, d.name, 'package.json')))
+    .map((d) => d.name)
+    .sort();
+}
+
+function read(file) {
+  const path = join(ROOT, file);
+  return existsSync(path) ? readFileSync(path, 'utf8') : null;
+}
+
+const services = servicesInRepo();
+const failures = [];
+
+// ── 1 · the image can install every workspace ───────────────────────────────
+const dockerfile = read('Dockerfile');
+if (dockerfile === null) {
+  failures.push({ file: 'Dockerfile', reason: 'missing entirely' });
+} else {
+  for (const svc of services) {
+    if (!dockerfile.includes(`services/${svc}/package.json`)) {
+      failures.push({
+        file: 'Dockerfile',
+        reason: `no COPY for services/${svc}/package.json — pnpm will install it as if it had no dependencies, and the build fails later with a misleading "cannot find module"`,
+      });
+    }
+  }
+}
+
+// ── 2 · the fleet actually runs every service ───────────────────────────────
+const compose = read('docker-compose.apps.yml');
+if (compose === null) {
+  failures.push({ file: 'docker-compose.apps.yml', reason: 'missing entirely' });
+} else {
+  for (const svc of services) {
+    // A service may legitimately be absent if it is not deployable, but that
+    // must be a decision someone wrote down rather than an oversight.
+    if (!new RegExp(`^\\s{2}${svc}:`, 'm').test(compose) && !compose.includes(`# no-deploy: ${svc}`)) {
+      failures.push({
+        file: 'docker-compose.apps.yml',
+        reason: `no service block for ${svc} — it will never start. If that is deliberate, add a "# no-deploy: ${svc}" comment saying why`,
+      });
+    }
+  }
+}
+
+// ── 3 · a service that mounts /trpc gets the secret it cannot boot without ──
+// `edgeEnvSchema` has NO default, by design: a service that cannot authenticate
+// the edge must refuse to start rather than serve every caller as anonymous.
+// So a missing secret is a crash loop, not a warning.
+if (compose !== null) {
+  for (const svc of services) {
+    const env = read(`services/${svc}/src/env.ts`);
+    if (!env?.includes('edgeEnvSchema')) continue;
+
+    const block = new RegExp(`^  ${svc}:([\\s\\S]*?)(?=^  \\S|\\Z)`, 'm').exec(compose);
+    if (block && !block[1].includes('edge-secret')) {
+      failures.push({
+        file: 'docker-compose.apps.yml',
+        reason: `${svc} merges edgeEnvSchema but its compose block does not receive *edge-secret — it will crash-loop on EDGE_PRINCIPAL_SECRET`,
+      });
+    }
+  }
+}
+
+if (failures.length === 0) {
+  console.log(`  ✓ workspace-sync clean — ${services.length} service(s) reach both the image and the fleet`);
+  process.exitCode = 0;
+} else {
+  console.error(`  ✖ workspace-sync — ${failures.length} problem(s)`);
+  for (const f of failures) console.error(`        · ${f.file}: ${f.reason}`);
+  console.error('\n  A service that exists but does not deploy is not shipped (Doctrine §0.1).');
+  process.exitCode = 1;
+}
