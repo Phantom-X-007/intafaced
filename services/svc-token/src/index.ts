@@ -34,7 +34,9 @@ const bus = await JetStreamEventBus.connect({
   ownedStreams: ['token'],
 });
 
-const ledger = createLedgerClient(env.LEDGER_URL);
+// Value moves through svc-ledger, never through this service's own tables
+// (Doctrine §0.6). This client is the only path.
+const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
 const token = new TokenService(sql, ledger, bus, {
   assetId: env.TOKEN_ASSET_ID,

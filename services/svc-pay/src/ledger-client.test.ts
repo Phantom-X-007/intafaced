@@ -8,6 +8,7 @@ import {
   userAvailable,
   type PostRequest,
 } from '@intafaced/ledger-client';
+import { verifyServiceCall } from '@intafaced/contracts';
 import { createLedgerClient } from './ledger-client.js';
 
 /**
@@ -66,7 +67,8 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-const client = () => createLedgerClient('http://ledger.test');
+const SECRET = 'test-internal-service-secret-32-chars';
+const client = () => createLedgerClient('http://ledger.test', SECRET);
 
 /** Walk a parsed JSON body and collect every value that is a number. */
 function numbersIn(value: unknown, path = '$'): string[] {
@@ -213,8 +215,40 @@ describe('post — amounts leave as decimal strings', () => {
     expect(sent[0]!.headers['content-type']).toBe('application/json');
   });
 
+  /**
+   * The credential actually leaves the process (§2).
+   *
+   * Worth its own assertion because the failure mode is silent in the wrong
+   * direction: a client that quietly omits these still works against a ledger
+   * that is not yet enforcing, and breaks only where it matters. `post` is a
+   * `serviceProcedure` now — an unsigned call is refused.
+   */
+  it('presents service credentials on every call', async () => {
+    await client().post(
+      recipes.paymentCapture({
+        paymentId: 'p-auth',
+        merchantId: MERCHANT,
+        assetId: 'USDT',
+        amount: amt('1'),
+        rail: 'card-sandbox',
+        railRef: 'ch_auth',
+      }),
+    );
+
+    const headers = sent[0]!.headers;
+    expect(headers['x-intafaced-service']).toBe('svc-pay');
+    expect(headers['x-intafaced-service-sig']).toMatch(/^[0-9a-f]{64}$/);
+
+    // Verified against the same secret the ledger would hold, rather than
+    // merely asserting the header is present and non-empty.
+    expect(
+      verifyServiceCall(headers['x-intafaced-service'], headers['x-intafaced-service-ts'], headers['x-intafaced-service-sig'], SECRET)
+        .service,
+    ).toBe('svc-pay');
+  });
+
   it('normalises a trailing slash on the base URL rather than doubling it', async () => {
-    await createLedgerClient('http://ledger.test/').post(
+    await createLedgerClient('http://ledger.test/', SECRET).post(
       recipes.paymentCapture({
         paymentId: 'p-3',
         merchantId: MERCHANT,

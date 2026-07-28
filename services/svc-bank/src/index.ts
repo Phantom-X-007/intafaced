@@ -28,8 +28,8 @@ await sql`SELECT 1 FROM bank.spaces LIMIT 1`.catch(() => {
 
 // Value moves through svc-ledger, never through this service's own tables
 // (Doctrine §0.6). This client is the only path.
-const ledger = createLedgerClient(env.LEDGER_URL);
-const history = createLedgerHistory(env.LEDGER_URL);
+const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
+const history = createLedgerHistory(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
 const bank = createBankServices(sql, ledger, history, { nativeAssetId: env.TOKEN_ASSET_ID });
 

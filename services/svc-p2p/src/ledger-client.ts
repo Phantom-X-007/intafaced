@@ -7,6 +7,7 @@ import {
   type LedgerTx,
   type PostRequest,
 } from '@intafaced/ledger-client';
+import { serviceAuthHeaders } from '@intafaced/contracts';
 
 /**
  * HTTP client for svc-ledger.
@@ -20,13 +21,26 @@ import {
  * That equivalence is why the escrow money paths can be tortured in tests
  * without a network and still mean something.
  */
-export function createLedgerClient(baseUrl: string): LedgerClient {
+export function createLedgerClient(baseUrl: string, internalSecret: string): LedgerClient {
+  /**
+   * Service credentials, per call (§2).
+   *
+   * svc-ledger's `post` is a `serviceProcedure` now, so this client must prove
+   * which service it is. It previously sent `content-type` and nothing else —
+   * there was no credential to check even before `post` began checking.
+   *
+   * Signed per request rather than once at construction, because the signature
+   * covers a timestamp: a captured header stops working after the skew window
+   * instead of being a permanent bearer token.
+   */
+  const authHeaders = () => serviceAuthHeaders('svc-p2p', internalSecret);
+
   const url = baseUrl.replace(/\/$/, '');
 
   async function call<T>(path: string, body: unknown): Promise<T> {
     const response = await fetch(`${url}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...authHeaders() },
       body: JSON.stringify(body),
     });
 

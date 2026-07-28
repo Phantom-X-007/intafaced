@@ -42,14 +42,20 @@ const OTHER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
  * operator tests below pass `mfa: true`. Discovered by writing this file: the
  * first draft omitted it and the freeze tests failed, correctly.
  */
-async function ctx(scopes: string[], mfa = false): Promise<Context> {
-  if (scopes.length === 0) return { principal: null, region: 'DE', requestId: 'req-1' };
+async function ctx(scopes: string[], mfa = false, service: string | null = 'svc-trade'): Promise<Context> {
+  if (scopes.length === 0) return { principal: null, service, region: 'DE', requestId: 'req-1' };
   const { token } = await issueAccessToken(
     { userId: USER, sessionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', scopes, tier: 'basic', mfa },
     authConfig,
   );
-  return { principal: await verifyAccessToken(token, authConfig), region: 'DE', requestId: 'req-1' };
+  return { principal: await verifyAccessToken(token, authConfig), service, region: 'DE', requestId: 'req-1' };
 }
+
+/**
+ * A caller off the network with no credentials of any kind — no principal, no
+ * service. This is what `post` used to accept.
+ */
+const anonymousCtx = (): Context => ({ principal: null, service: null, region: 'DE', requestId: 'req-anon' });
 
 /** Minimal stand-in — the router only ever calls these five. */
 function stubService(overrides: Partial<Record<string, unknown>> = {}) {
@@ -78,6 +84,50 @@ const validPost = {
     },
   ],
 };
+
+describe('post — who may call it at all', () => {
+  /**
+   * THE ONE THAT MATTERS.
+   *
+   * `post` was a `publicProcedure`. Mounted, that let anyone reaching the port
+   * post a balanced transaction crediting `railBoundary` — a `treasury`
+   * account, the only owner type allowed to run negative — and debiting their
+   * own `available`. That is the `deposit` recipe: sum-to-zero passes,
+   * non-negative passes, paired locks pass. Well-formed, and unauthorised.
+   *
+   * Note the shape of this test: it does not check an error message, it checks
+   * that the ledger was never asked to move anything.
+   */
+  it('refuses a caller with no service credentials, and moves nothing', async () => {
+    let posted = false;
+    const service = stubService({
+      post: async () => {
+        posted = true;
+        return { id: 'tx-1', hash: 'abc', postedAt: new Date() };
+      },
+    });
+
+    await expect(createLedgerRouter(service).createCaller(anonymousCtx()).post(validPost)).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(posted).toBe(false);
+  });
+
+  it('is not satisfied by a USER token, however privileged', async () => {
+    // A user principal is not a service. There is no `ledger:write` scope by
+    // design, and `admin:treasury` with MFA still must not reach `post`.
+    await expect(
+      createLedgerRouter(stubService())
+        .createCaller(await ctx(['admin:treasury'], true, null))
+        .post(validPost),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('accepts an authenticated service caller', async () => {
+    const caller = createLedgerRouter(stubService()).createCaller(await ctx([], false, 'svc-trade'));
+    await expect(caller.post(validPost)).resolves.toMatchObject({ txId: 'tx-1', hash: 'abc' });
+  });
+});
 
 describe('post — error mapping', () => {
   it('accepts a valid post and returns the transaction', async () => {

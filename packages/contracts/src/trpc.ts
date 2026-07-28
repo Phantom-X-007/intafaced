@@ -3,6 +3,7 @@ import type { Principal, Scope } from '@intafaced/auth';
 import { requireScope, requireTier, AuthError } from '@intafaced/auth';
 import type { KycTier, ModuleId, Plane } from '@intafaced/config';
 import { checkAccess } from '@intafaced/config';
+import { requireServiceCaller } from './service-auth.js';
 
 /**
  * The tRPC foundation every internal router builds on.
@@ -15,6 +16,15 @@ import { checkAccess } from '@intafaced/config';
 export interface Context {
   /** Null for anonymous calls. */
   principal: Principal | null;
+  /**
+   * The calling SERVICE, when one authenticated itself (§2).
+   *
+   * Orthogonal to `principal`: a service call carries no user. `ledger.post` is
+   * the case that matters — it moves value on behalf of a module's own
+   * decision, which is why there is no `ledger:write` scope for a user to hold.
+   * Null when the caller did not present service credentials.
+   */
+  service: string | null;
   /** Resolved at the edge from IP / account region. Drives the matrix. */
   region: string;
   /** W3C traceparent so a call keeps its trace across services (§9). */
@@ -97,6 +107,22 @@ export function scopedProcedure(scope: Scope, guards: GuardOptions = {}) {
     return next({ ctx });
   });
 }
+
+/**
+ * A procedure only another INTAFACED service may call (§2).
+ *
+ * Carries no principal and checks no scope, because a service call is not made
+ * on behalf of a user — `ledger.post` moves value because svc-trade decided a
+ * fill was legal, not because a token said so. That is exactly why there is no
+ * `ledger:write` scope for anyone to hold.
+ *
+ * What it replaces is `publicProcedure`, which checked nothing at all and left
+ * every mounted money endpoint open to whoever could reach the port.
+ */
+export const serviceProcedure = t.procedure.use(({ ctx, next }) => {
+  requireServiceCaller(ctx.service);
+  return next({ ctx });
+});
 
 /**
  * Jurisdiction gate for procedures with no principal — public checkout pages,
