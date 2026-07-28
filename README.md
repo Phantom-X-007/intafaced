@@ -34,10 +34,21 @@ Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
 ## Run it
 
+**The whole platform — eleven services, both apps, and the infrastructure:**
+
 ```bash
 pnpm install
-cp .env.example .env
-docker compose up -d        # postgres · redis · nats · otel · tempo · prometheus · grafana
+cp .env.example .env        # read the header — two secrets must match fleet-wide
+pnpm platform:up            # everything, migrations included
+```
+
+Ports, boot order, and what to do when it does not come up:
+**[docs/RUNNING.md](docs/RUNNING.md)**.
+
+**Just a database, for tests:**
+
+```bash
+pnpm infra:up               # postgres · redis · nats · otel · tempo · prometheus · grafana
 pnpm build
 pnpm test
 pnpm gate                   # the §14 Definition of Done gate
