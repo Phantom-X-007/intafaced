@@ -117,6 +117,32 @@ if (compose !== null) {
   }
 }
 
+
+// ── 5 · the edge calls each service on the port it actually listens on ──────
+// Nothing catches this until a request fails at runtime with ECONNREFUSED, and
+// the fleet looks entirely healthy meanwhile: every container is up, every
+// health check passes, and only the proxied call fails. Five of ten upstream
+// URLs were wrong at once because the route table was written from memory
+// rather than read from the compose.
+if (compose !== null) {
+  const listens = new Map();
+  for (const [, name, body] of compose.matchAll(/^  (svc-[a-z0-9-]+):([\s\S]*?)(?=^  \S|\Z)/gm)) {
+    const port = /HTTP_PORT: '(\d+)'/.exec(body);
+    if (port) listens.set(name, port[1]);
+  }
+
+  const edgeBlock = /^  svc-edge:([\s\S]*?)(?=^  \S|\Z)/m.exec(compose);
+  for (const [, varName, svc, port] of (edgeBlock?.[1] ?? '').matchAll(/(\w+_URL): http:\/\/(svc-[a-z0-9-]+):(\d+)/g)) {
+    const real = listens.get(svc);
+    if (real && real !== port) {
+      failures.push({
+        file: 'docker-compose.apps.yml',
+        reason: `svc-edge calls ${svc} on ${port} via ${varName}, but ${svc} listens on ${real} — every request through that route 502s while both containers report healthy`,
+      });
+    }
+  }
+}
+
 if (failures.length === 0) {
   console.log(`  ✓ workspace-sync clean — ${services.length} service(s) reach both the image and the fleet`);
   process.exitCode = 0;
