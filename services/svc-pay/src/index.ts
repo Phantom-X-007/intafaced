@@ -9,6 +9,8 @@ import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { MemoryChain } from './rails/chain-port.js';
 import { RailRegistry } from './rails/registry.js';
 import { createPayRouter } from './router.js';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 
 /**
  * svc-pay — the payments core (§6.1).
@@ -82,12 +84,16 @@ const userMoney = new UserMoneyService(sql, ledger, rails, {
   operatorCreditRails: env.PAY_OPERATOR_CREDIT_RAILS,
 });
 
-// The router is constructed so the type is exported and the wiring is exercised
-// at boot; mounting it is the API gateway's job (§9).
 export const appRouter = createPayRouter(pay, rails, userMoney);
 export type { PayRouter } from './router.js';
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+
+/**
+ * Built before the listener opens: a service that cannot authenticate the edge
+ * must fail to start, not start and serve every caller as anonymous.
+ */
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, rails: rails.ids() }));
@@ -107,37 +113,75 @@ app.get('/ready', async () => ({ ready: true, rails: rails.ids() }));
  *  2. One response for every rejection. A verification endpoint that explains
  *     why it rejected something is an oracle for forging the next attempt.
  */
-app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
-  done(null, body);
+/**
+ * THE PARSER COLLISION, and why the webhook is encapsulated.
+ *
+ * This service needs two mutually exclusive body parsers on one port:
+ *
+ *   · the webhook needs the RAW STRING, or signature verification compares
+ *     re-serialised bytes against a signature over the original ones;
+ *   · tRPC needs a PARSED OBJECT, and is handed a string it cannot read.
+ *
+ * Registering the raw parser on the root instance — as this file did while
+ * nothing was mounted — makes every tRPC procedure fail to deserialise its
+ * input. The failure is not obvious: the request arrives, the router matches,
+ * and zod reports a malformed payload, which reads like a client bug.
+ *
+ * Fastify content-type parsers are per-encapsulation-context, so the webhook
+ * gets its own plugin scope and its parser stays inside it. Nothing outside
+ * this scope is affected, and the two can share a port without either being
+ * compromised for the other's benefit.
+ */
+await app.register(async (webhookScope) => {
+  webhookScope.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    done(null, body);
+  });
+
+  webhookScope.post<{ Params: { railId: string }; Body: string }>('/webhooks/:railId', async (request, reply) => {
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (typeof value === 'string') headers[key.toLowerCase()] = value;
+    }
+
+    try {
+      const outcome = await pay.handleWebhook(request.params.railId, {
+        headers,
+        body: typeof request.body === 'string' ? request.body : '',
+      });
+      // A duplicate is a 200. A rail that gets anything else will keep retrying
+      // a delivery we have already handled, forever.
+      return reply.code(200).send({ received: true, duplicate: outcome.duplicate });
+    } catch (err) {
+      if (err instanceof PayError && err.code === 'pay.webhook_invalid') {
+        return reply.code(401).send({ error: 'invalid signature' });
+      }
+      if (err instanceof PayError && err.code === 'pay.webhook_unmatched') {
+        // 202: the delivery is genuine but about something we do not know. Not
+        // the rail's fault, and not something a retry will fix — an operator
+        // signal, and the trace carries the detail.
+        app.log.warn({ err: err.message, railId: request.params.railId }, 'verified webhook matched no payment');
+        return reply.code(202).send({ received: true, matched: false });
+      }
+      throw err;
+    }
+  });
 });
 
-app.post<{ Params: { railId: string }; Body: string }>('/webhooks/:railId', async (request, reply) => {
-  const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(request.headers)) {
-    if (typeof value === 'string') headers[key.toLowerCase()] = value;
-  }
-
-  try {
-    const outcome = await pay.handleWebhook(request.params.railId, {
-      headers,
-      body: typeof request.body === 'string' ? request.body : '',
-    });
-    // A duplicate is a 200. A rail that gets anything else will keep retrying
-    // a delivery we have already handled, forever.
-    return reply.code(200).send({ received: true, duplicate: outcome.duplicate });
-  } catch (err) {
-    if (err instanceof PayError && err.code === 'pay.webhook_invalid') {
-      return reply.code(401).send({ error: 'invalid signature' });
-    }
-    if (err instanceof PayError && err.code === 'pay.webhook_unmatched') {
-      // 202: the delivery is genuine but about something we do not know. Not
-      // the rail's fault, and not something a retry will fix — an operator
-      // signal, and the trace carries the detail.
-      app.log.warn({ err: err.message, railId: request.params.railId }, 'verified webhook matched no payment');
-      return reply.code(202).send({ received: true, matched: false });
-    }
-    throw err;
-  }
+/**
+ * The user-facing surface, reached only through svc-edge.
+ *
+ * The mount boundary decision records pay as "gateway only". That was written
+ * before svc-edge existed and it meant NOT PUBLICLY EXPOSED — which is now
+ * satisfied by the edge being the only public listener. It did not mean "does
+ * not serve /trpc": the edge routes `/api/pay` here, so without this mount it
+ * forwards to a service with nothing to forward to.
+ */
+await app.register(fastifyTRPCPlugin, {
+  prefix: '/trpc',
+  trpcOptions: {
+    router: appRouter,
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  } satisfies FastifyTRPCPluginOptions<typeof appRouter>['trpcOptions'],
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
