@@ -30,7 +30,7 @@ export interface PanelProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
   title?: ReactNode;
   /** Rendered at the right of the header — filters, timeframe switches. */
   actions?: ReactNode;
-  /** Streaming or otherwise live; gets the phosphor bloom. */
+  /** Streaming or otherwise live; gets the accent bloom. */
   live?: boolean;
   children: ReactNode;
 }
