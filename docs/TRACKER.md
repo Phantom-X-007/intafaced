@@ -158,7 +158,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Recurring — card and crypto | F |  | `pay.subscriptions` |
 | 🟢 | Woo / Magento / OpenCart plugins | F |  | `pay.plugins` |
 | 🟢 | Public REST + webhooks + sandbox (§9) | B |  | `pay.public-api` |
-| ✅ | Offers, maker/taker, 100+ fiat currencies <br/>_svc-p2p on main; router not mounted at boot yet_ | F |  | `p2p.offers` |
+| ✅ | Offers, maker/taker, 100+ fiat currencies <br/>_svc-p2p on main; self-mounts /trpc with an edge-verified principal_ | F |  | `p2p.offers` |
 | ✅ | Ledger escrow — lock, release, refund <br/>_Escrow flows in svc-p2p; not a separate service_ | F |  | `p2p.escrow` |
 | ✅ | Moderated dispute resolution <br/>_Dispute paths in svc-p2p core_ | F |  | `p2p.disputes` |
 | ✅ | Reputation feeding the same XP graph <br/>_Reputation module on main_ | F |  | `p2p.reputation` |
@@ -168,7 +168,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| ✅ | Passkey smart accounts, session keys (§17.4) <br/>_svc-protocol on main; open contract sockets remain elsewhere_ | P |  | `protocol.smart-accounts` |
+| ✅ | Passkey smart accounts, session keys (§17.4) <br/>_svc-protocol on main; self-mounts /trpc with an edge-verified principal; open contract sockets remain elsewhere_ | P |  | `protocol.smart-accounts` |
 | 🟢 | AMM pools from audited templates | P |  | `protocol.amm` |
 | ⛔ | On-chain lending markets, keeper liquidations | P | `protocol.amm` | `protocol.lending` |
 | 🟢 | Non-custodial P2P escrow contracts | P |  | `protocol.escrow` |
@@ -184,7 +184,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| ✅ | Blueprint session → profile JSON <br/>_svc-blueprint on main; router not wired at boot yet_ | F |  | `blueprint.onboarding` |
+| ✅ | Blueprint session → profile JSON <br/>_svc-blueprint on main; self-mounts /trpc with an edge-verified principal_ | F |  | `blueprint.onboarding` |
 | 🟢 | Share card render (1080×1350, 1200×630) | F |  | `blueprint.card` |
 | 🟢 | Crew matching + mentor shortlist | F |  | `blueprint.crews` |
 | 🟢 | Export + hard delete, cascading | F |  | `blueprint.ownership` |
@@ -202,13 +202,13 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| ✅ | Multi-currency account UX over the ledger <br/>_svc-bank on main; tRPC not mounted; UX product may expand_ | F |  | `bank.accounts` |
+| ✅ | Multi-currency account UX over the ledger <br/>_svc-bank on main; self-mounts /trpc with an edge-verified principal; UX product may expand_ | F |  | `bank.accounts` |
 | 🟢 | Collateralised loans, LTV, margin calls, liquidation | F |  | `bank.loans` |
 | 🟢 | Flexible + fixed yield pools | F |  | `bank.earn` |
 | 🟢 | CardIssuerAdapter + card-sim, <2s auth decision | F |  | `bank.cards` |
 | ⛔ | Self-custody funded card, JIT conversion (§18) | P | `bank.cards` | `bank.sovereign-card` |
 | 🟢 | Fiat on/off ramp reusing svc-pay adapters | F |  | `bank.ramps` |
-| ✅ | Model-agnostic gateway, per-user metering <br/>_Only service that already mounts /trpc_ | F |  | `agents.gateway` |
+| ✅ | Model-agnostic gateway, per-user metering <br/>_Reference mount — the /trpc + createEdgeContext recipe every other service copies_ | F |  | `agents.gateway` |
 | 🟢 | Navigator — tool-calling inside user guardrails | F |  | `agents.navigator` |
 | 🟢 | Support agent — KB + account-state grounded | F |  | `agents.support` |
 | 🟢 | Market Scanner — ranked signals by tier | F |  | `agents.scanner` |

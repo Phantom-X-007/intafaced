@@ -1,11 +1,14 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { BlueprintService } from './blueprint-service.js';
 import { HttpNeuralEngineClient } from './engine/http-engine.js';
 import { MockNeuralEngine } from './engine/mock-engine.js';
 import { isUsable, type NeuralEngineClient } from './engine/neural-engine.js';
+import { createBlueprintRouter, type BlueprintRouter } from './router.js';
 
 /**
  * svc-blueprint — the Identity Blueprint (§7.1).
@@ -55,7 +58,14 @@ const blueprint = new BlueprintService(sql, engine, bus, {
   season: env.BLUEPRINT_SEASON,
 });
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+export const appRouter = createBlueprintRouter(blueprint);
+export type AppRouter = typeof appRouter;
+
+// Built before the listener opens: a service that cannot authenticate the edge
+// must fail to start, not start and serve every request as anonymous.
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
@@ -68,6 +78,18 @@ app.get('/ready', async () => ({
   ready: true,
   engine: { id: engine.id, usable: isUsable(engine), mode: env.BLUEPRINT_ENGINE_MODE },
 }));
+
+await app.register(fastifyTRPCPlugin, {
+  prefix: '/trpc',
+  trpcOptions: {
+    router: appRouter,
+    // The edge terminates auth and forwards the resolved principal; this
+    // service never parses a token itself (§4.1 owns that). It does verify the
+    // edge's signature over that principal — see packages/contracts/src/edge.ts
+    // for why an unsigned header makes every scope check decorative.
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  } satisfies FastifyTRPCPluginOptions<BlueprintRouter>['trpcOptions'],
+});
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT, engineMode: env.BLUEPRINT_ENGINE_MODE, season: env.BLUEPRINT_SEASON }, 'svc-blueprint ready');
