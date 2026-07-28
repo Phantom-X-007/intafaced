@@ -241,6 +241,47 @@ interface DisputeRow {
 /** Who authorised a terminal decision. Goes on the event and into the trace. */
 type Actor = 'seller' | 'buyer' | 'moderator' | 'timeout';
 
+/**
+ * THE CLOCK. Postgres', never this process'.
+ *
+ * `settled_at` is stamped by the database (`SET settled_at = now()`), and the
+ * two properties this service exists to guarantee both compare against it:
+ * "decide, then post" means `resolved_at <= settled_at`, and
+ * `sweepSettlements()` orders the decisions it has to re-drive by `resolved_at`.
+ * Reading `new Date()` for one side of those comparisons and `now()` for the
+ * other put an unbounded skew term into an ordering that value depends on — a
+ * Node clock a few milliseconds ahead of the server's is enough to record a
+ * decision as having happened AFTER the movement it authorised, which is an
+ * audit trail that contradicts itself.
+ *
+ * It also does not survive a second replica. Two svc-p2p processes each stamp
+ * `resolved_at` from their own hardware, so the sweeper's FIFO becomes an
+ * ordering over two clocks that were never synchronised. Postgres is the one
+ * clock every replica already shares, so every instant on the row comes from
+ * here — not just the two the test happens to compare.
+ *
+ * `now()` is the TRANSACTION timestamp, not the statement timestamp, and that
+ * is deliberate:
+ *
+ *   · Within one transaction it is a constant, so `resolveDispute` stamps the
+ *     trade's `resolved_at` and the dispute's `resolved_at` with the identical
+ *     instant. One ruling happened at one moment; two rows disagreeing about
+ *     when a moderator decided would be the audit-trail hole all over again.
+ *   · Across transactions it still gives strict ordering where we need it.
+ *     `settled_at` is written by a LATER, separate transaction — the decision
+ *     has committed before the ledger post is even attempted — so its
+ *     transaction timestamp is strictly greater. `clock_timestamp()` would buy
+ *     no extra strictness here and would cost the constant above.
+ *
+ * The truncation is also in the safe direction: the driver parses Postgres'
+ * microseconds down to JS millisecond precision, so a value read here and bound
+ * back into a column is always <= the true transaction timestamp, never past it.
+ */
+async function txNow(tx: Sql): Promise<Date> {
+  const rows = await tx<Array<{ now: Date }>>`SELECT now() AS now`;
+  return rows[0]!.now;
+}
+
 export class P2pService {
   private readonly feeBps: number;
   private readonly deadlines: DeadlinePolicy;
@@ -495,7 +536,7 @@ export class P2pService {
         });
 
         const { sellerId, buyerId } = partiesFor(offer.side, offer.makerId, input.takerId);
-        const now = new Date();
+        const now = await txNow(tx);
         const deadlineAt = deadlineFor('created', now, this.deadlines);
         const deadlines = withDeadline({}, 'created', deadlineAt);
         const feeBps = input.feeBps ?? this.feeBps;
@@ -587,7 +628,7 @@ export class P2pService {
         if (!row) throw new P2pError(`Trade ${tradeId} not found`, 'p2p.trade_not_found');
         if (row.status !== 'created') return toTrade(row);
 
-        const now = new Date();
+        const now = await txNow(tx);
         const deadlineAt = deadlineFor('escrowed', now, this.deadlines);
         const deadlines = withDeadline(row.deadlines ?? {}, 'escrowed', deadlineAt);
 
@@ -644,7 +685,7 @@ export class P2pService {
           }
           assertTransition(trade.status, 'fiat_sent');
 
-          const now = new Date();
+          const now = await txNow(tx);
           const deadlineAt = deadlineFor('fiat_sent', now, this.deadlines);
           const deadlines = withDeadline(trade.deadlines, 'fiat_sent', deadlineAt);
 
@@ -762,7 +803,7 @@ export class P2pService {
         }
         assertTransition(trade.status, 'disputed');
 
-        const now = new Date();
+        const now = await txNow(tx);
         const deadlineAt = deadlineFor('disputed', now, this.deadlines);
         const deadlines = withDeadline(trade.deadlines, 'disputed', deadlineAt);
 
@@ -852,7 +893,9 @@ export class P2pService {
             const to: TradeStatus = input.resolution === 'release' ? 'released' : 'cancelled';
             assertTransition(trade.status, to);
 
-            const now = new Date();
+            // One reading, used for the dispute row and the trade row below, so
+            // the ruling carries a single instant across both.
+            const now = await txNow(tx);
 
             await tx`
               UPDATE p2p.p2p_disputes
@@ -933,13 +976,19 @@ export class P2pService {
           );
         }
 
-        await this.writeDecision(tx, { trade, to: input.to, resolution: input.resolution, reason: input.reason, now: new Date() });
+        await this.writeDecision(tx, { trade, to: input.to, resolution: input.resolution, reason: input.reason, now: await txNow(tx) });
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
   }
 
-  /** The decision write itself, shared by the plain and the moderator paths. */
+  /**
+   * The decision write itself, shared by the plain and the moderator paths.
+   *
+   * `now` must be `txNow(tx)` — `settled_at` is compared against the
+   * `resolved_at` written here, so a caller that reaches for its own clock
+   * reopens the skew this service cannot tolerate.
+   */
   private async writeDecision(
     tx: Sql,
     args: { trade: TradeRecord; to: TradeStatus; resolution: TradeResolution; reason: string; now: Date },
@@ -1109,10 +1158,16 @@ export class P2pService {
    * Trades are processed one at a time and independently. One trade that fails
    * to settle must not stop the sweep reaching the next.
    */
-  async sweepDeadlines(now: Date = new Date(), limit = 100): Promise<{ swept: number; failed: number }> {
+  async sweepDeadlines(now?: Date, limit = 100): Promise<{ swept: number; failed: number }> {
+    // Every `deadline_at` was derived from the server clock, so the cutoff this
+    // compares them against has to come from there too. A caller may still pass
+    // its own instant — that is how a test asks "what would be due at T?" — but
+    // the default must not reintroduce this process' clock.
+    const at = now ?? (await txNow(this.sql));
+
     const due = await this.sql<Array<{ id: string; status: TradeStatus }>>`
       SELECT id, status FROM p2p.p2p_trades
-       WHERE deadline_at IS NOT NULL AND deadline_at <= ${now} AND resolution IS NULL
+       WHERE deadline_at IS NOT NULL AND deadline_at <= ${at} AND resolution IS NULL
        ORDER BY deadline_at ASC
        LIMIT ${limit}
     `;

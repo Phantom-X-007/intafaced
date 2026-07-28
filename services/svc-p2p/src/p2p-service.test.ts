@@ -433,14 +433,30 @@ if (!available) {
       await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
       await p2p.resolveDispute({ tradeId: trade.id, moderatorId: MODERATOR, resolution: 'release' });
 
-      const rows = await sql<Array<{ resolved_at: Date; settled_at: Date }>>`
-        SELECT resolved_at, settled_at FROM p2p.p2p_trades WHERE id = ${trade.id}
+      const rows = await sql<Array<{ created_at: Date; escrowed_at: Date; resolved_at: Date; settled_at: Date }>>`
+        SELECT created_at, escrowed_at, resolved_at, settled_at FROM p2p.p2p_trades WHERE id = ${trade.id}
       `;
       expect(rows[0]!.resolved_at.getTime()).toBeLessThanOrEqual(rows[0]!.settled_at.getTime());
+
+      // The whole lifecycle, not just the pair above. Each of these instants is
+      // stamped by a later transaction than the one before it, so on ONE clock
+      // the chain is monotonic by construction. It is only orderable at all
+      // because every column is written from the server's clock — read any one
+      // of them from this process instead and the chain stops meaning anything.
+      const { created_at, escrowed_at, resolved_at, settled_at } = rows[0]!;
+      expect(created_at.getTime()).toBeLessThanOrEqual(escrowed_at.getTime());
+      expect(escrowed_at.getTime()).toBeLessThanOrEqual(resolved_at.getTime());
+      expect(resolved_at.getTime()).toBeLessThanOrEqual(settled_at.getTime());
 
       const dispute = await p2p.getDispute(trade.id);
       expect(dispute).toMatchObject({ status: 'resolved', moderatorId: MODERATOR, resolution: 'release' });
       expect(dispute.resolvedAt).not.toBeNull();
+
+      // One ruling, one instant. Both rows are written in the moderator's single
+      // transaction and `now()` is the TRANSACTION timestamp, so they record the
+      // same moment exactly — two rows disagreeing about when a moderator
+      // decided is the same audit-trail hole this test exists to rule out.
+      expect(dispute.resolvedAt!.getTime()).toBe(resolved_at.getTime());
     });
 
     it('refuses a second dispute on the same trade', async () => {
