@@ -43,6 +43,29 @@ const schema = serviceEnvSchema.merge(internalServiceEnvSchema).merge(
      * that is not merely lost but invisible.
      */
     PAY_DEFAULT_FEE_BPS: z.coerce.number().int().min(0).max(10_000).optional(),
+
+    /**
+     * Rails on which an operator may credit a deposit by hand.
+     *
+     * Default: the sandbox acquirer, and nothing else. An operator credit is an
+     * assertion that value arrived; on a real rail that assertion has a
+     * counterparty who can be asked, so deposits there belong to that rail's own
+     * confirmation path. A hand-typed `crypto-native` credit would move
+     * `railBoundary('crypto-native')` away from the chain balance it mirrors,
+     * and reconciliation would then report a discrepancy that is really a typo.
+     *
+     * Widening this is a deliberate operator decision, which is why it is
+     * configuration rather than a list in the code.
+     */
+    PAY_OPERATOR_CREDIT_RAILS: z
+      .string()
+      .default('card-sandbox')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
   }),
 );
 

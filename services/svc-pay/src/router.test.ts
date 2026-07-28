@@ -1,9 +1,10 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
+import { INTERACTIVE_ONLY_SCOPES, assertKeyScopesAllowed, issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { createPayRouter } from './router.js';
 import { PayError, type PayService, type PaymentView, type SettlementRecord } from './payment-service.js';
+import type { DepositRecord, UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import { RailRegistry } from './rails/registry.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
 
@@ -41,17 +42,20 @@ const SETTLEMENT = '33333333-3333-4333-8333-333333333333';
  * `full` verification is the floor. Anything less is refused by the guard, not
  * by this service.
  */
-async function ctx(scopes: string[], opts: { tier?: 'none' | 'basic' | 'full'; region?: string } = {}): Promise<Context> {
+async function ctx(
+  scopes: string[],
+  opts: { tier?: 'none' | 'basic' | 'full'; region?: string; mfa?: boolean; userId?: string } = {},
+): Promise<Context> {
   const region = opts.region ?? 'DE';
   if (scopes.length === 0) return { principal: null, region, requestId: 'req-1' };
 
   const { token } = await issueAccessToken(
     {
-      userId: USER,
+      userId: opts.userId ?? USER,
       sessionId: '77777777-7777-4777-8777-777777777777',
       scopes,
       tier: opts.tier ?? 'full',
-      mfa: true,
+      mfa: opts.mfa ?? true,
     },
     authConfig,
   );
@@ -164,14 +168,92 @@ function stubService(): Stub {
   };
 }
 
+// ── The user-money stub ──────────────────────────────────────────────────────
+
+const DEPOSIT = '12121212-1212-4212-8212-121212121212';
+const WITHDRAWAL = '13131313-1313-4313-8313-131313131313';
+
+interface MoneyStub {
+  service: UserMoneyService;
+  calls: Array<{ method: string; args: unknown[] }>;
+  fail(err: unknown): void;
+  /** Whose withdrawal `get` returns. */
+  ownedBy(userId: string): void;
+}
+
+function stubUserMoney(): MoneyStub {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  let nextError: unknown = null;
+  let owner = USER;
+
+  const record = <T>(method: string, result: (...args: never[]) => T) =>
+    ((...args: never[]) => {
+      calls.push({ method, args });
+      if (nextError) {
+        const err = nextError;
+        nextError = null;
+        return Promise.reject(err);
+      }
+      return Promise.resolve(result(...args));
+    }) as never;
+
+  const deposit = (): DepositRecord => ({
+    id: DEPOSIT,
+    userId: USER,
+    assetId: 'USDT',
+    amount: amt('100'),
+    rail: 'card-sandbox',
+    railRef: 'psp_1',
+    creditedBy: 'operator-identity-that-must-not-leak',
+    status: 'credited',
+    createdAt: new Date('2026-07-27T12:00:00.000Z'),
+  });
+
+  const withdrawal = (): WithdrawalRecord => ({
+    id: WITHDRAWAL,
+    userId: owner,
+    assetId: 'USDT',
+    amount: amt('40'),
+    rail: 'card-sandbox',
+    destination: { kind: 'bank', ref: 'DE00 1234' },
+    clientRef: 'w-1',
+    railRef: 'po_1',
+    attempts: 0,
+    failureCode: null,
+    status: 'sent',
+    createdAt: new Date('2026-07-27T12:00:00.000Z'),
+  });
+
+  const service = {
+    credit: record('credit', deposit),
+    withdraw: record('withdraw', withdrawal),
+    getWithdrawal: record('getWithdrawal', withdrawal),
+    listWithdrawals: record('listWithdrawals', () => [withdrawal()]),
+    availableBalance: record('availableBalance', () => amt('60.5')),
+  } as unknown as UserMoneyService;
+
+  return {
+    service,
+    calls,
+    fail: (err) => {
+      nextError = err;
+    },
+    ownedBy: (userId) => {
+      owner = userId;
+    },
+  };
+}
+
 const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'router-test-secret-at-least-32-characters' })]);
 
 let stub: Stub;
+let money: MoneyStub;
 let router: ReturnType<typeof createPayRouter>;
 
 beforeEach(() => {
   stub = stubService();
-  router = createPayRouter(stub.service, rails);
+  money = stubUserMoney();
+  router = createPayRouter(stub.service, rails, money.service);
 });
 
 const caller = async (scopes: string[], opts?: Parameters<typeof ctx>[1]) => router.createCaller(await ctx(scopes, opts));
@@ -544,5 +626,309 @@ describe('read surfaces', () => {
     expect(health).toHaveLength(1);
     expect(health[0]).toMatchObject({ id: 'card-sandbox', healthy: true, usable: true });
     expect(health[0]!.capabilities).toContain('refund');
+  });
+});
+
+// ── User money in: the operator deposit ──────────────────────────────────────
+
+/**
+ * `deposit.credit` credits a user's spendable balance. Every test here asks the
+ * same question: could the BENEFICIARY have called this?
+ */
+describe('deposit.credit is operator-credentialed, never user-facing', () => {
+  const codeOf = (err: unknown) => (err as { code?: string }).code;
+  const body = { userId: USER, assetId: 'USDT', amount: '100', railId: 'card-sandbox', railRef: 'psp_1' };
+
+  it('serves an operator holding admin:treasury with a second factor', async () => {
+    const api = await caller(['admin:treasury']);
+    await expect(api.deposit.credit(body)).resolves.toMatchObject({ id: DEPOSIT, status: 'credited' });
+  });
+
+  it('REFUSES EVERY SCOPE A USER SESSION ACTUALLY CARRIES', async () => {
+    // The exact list `AuthService.defaultScopes()` issues. If any of these ever
+    // reaches this procedure, a user can credit their own balance and the
+    // platform mints money on request.
+    const sessionScopes = [
+      'identity:read',
+      'identity:write',
+      'ledger:read',
+      'trade:read',
+      'trade:write',
+      'p2p:read',
+      'p2p:write',
+      'token:read',
+      'token:stake',
+      'academy:read',
+      'agents:read',
+    ];
+
+    for (const scope of sessionScopes) {
+      const api = await caller([scope]);
+      expect(codeOf(await api.deposit.credit(body).catch((e: unknown) => e))).toBe('FORBIDDEN');
+    }
+    // Not even all of them at once.
+    const everything = await caller(sessionScopes);
+    expect(codeOf(await everything.deposit.credit(body).catch((e: unknown) => e))).toBe('FORBIDDEN');
+    expect(money.calls.filter((c) => c.method === 'credit')).toHaveLength(0);
+  });
+
+  it('refuses the merchant scopes too — taking a payment is not minting a balance', async () => {
+    for (const scope of ['pay:write', 'pay:refund', 'pay:payout']) {
+      const api = await caller([scope]);
+      expect(codeOf(await api.deposit.credit(body).catch((e: unknown) => e))).toBe('FORBIDDEN');
+    }
+  });
+
+  it('refuses an anonymous caller', async () => {
+    const api = await caller([]);
+    await expect(api.deposit.credit(body)).rejects.toThrow(/Authentication required/);
+  });
+
+  it('REQUIRES A SECOND FACTOR — admin:treasury is INTERACTIVE_ONLY', async () => {
+    const api = await caller(['admin:treasury'], { mfa: false });
+    const err = await api.deposit.credit(body).catch((e: unknown) => e);
+
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+    expect((err as Error).message).toMatch(/two-factor/i);
+    expect(money.calls.filter((c) => c.method === 'credit')).toHaveLength(0);
+  });
+
+  it('can never be granted to a long-lived API key', async () => {
+    // The other half of the INTERACTIVE_ONLY protection, and the reason this
+    // scope was chosen: a leaked bot key cannot reach this endpoint at all.
+    expect(INTERACTIVE_ONLY_SCOPES).toContain('admin:treasury');
+    expect(() => assertKeyScopesAllowed(['admin:treasury'])).toThrow(/interactive/i);
+  });
+
+  it('names the CALLER as the crediting operator, whatever the body says', async () => {
+    const operator = '55555555-5555-4555-8555-555555555551';
+    const api = await caller(['admin:treasury'], { userId: operator });
+    await api.deposit.credit({ ...body, creditedBy: 'somebody-else' } as never);
+
+    const call = money.calls.find((c) => c.method === 'credit')!;
+    expect((call.args[0] as { creditedBy: string }).creditedBy).toBe(operator);
+  });
+
+  it('takes money as a decimal string and hands the service a scaled bigint', async () => {
+    const api = await caller(['admin:treasury']);
+    await api.deposit.credit({ ...body, amount: '100.000000000000000001' });
+
+    const call = money.calls.find((c) => c.method === 'credit')!;
+    expect((call.args[0] as { amount: unknown }).amount).toBe(amt('100.000000000000000001'));
+  });
+
+  it('rejects a JSON number, a negative amount, and more precision than the ledger carries', async () => {
+    const api = await caller(['admin:treasury']);
+    for (const amount of [100.5 as never, '-1', '', '1e3', '1.0000000000000000001']) {
+      await expect(api.deposit.credit({ ...body, amount })).rejects.toThrow();
+    }
+    expect(money.calls).toHaveLength(0);
+  });
+
+  it('requires a rail reference — it is half the idempotency key', async () => {
+    const api = await caller(['admin:treasury']);
+    await expect(api.deposit.credit({ ...body, railRef: '' })).rejects.toThrow();
+    expect(money.calls).toHaveLength(0);
+  });
+
+  it('maps a reused rail reference to CONFLICT, so a client does not retry it forever', async () => {
+    money.fail(new PayError('already credited as 5', 'pay.deposit_conflict'));
+    const api = await caller(['admin:treasury']);
+    expect(codeOf(await api.deposit.credit(body).catch((e: unknown) => e))).toBe('CONFLICT');
+  });
+
+  it('maps a non-creditable rail to FORBIDDEN and an unknown one to BAD_REQUEST', async () => {
+    money.fail(new PayError('not creditable', 'pay.rail_not_creditable'));
+    const forbidden = await caller(['admin:treasury']);
+    expect(codeOf(await forbidden.deposit.credit(body).catch((e: unknown) => e))).toBe('FORBIDDEN');
+
+    money.fail(new PayError('no such rail', 'pay.rail_unknown'));
+    const bad = await caller(['admin:treasury']);
+    expect(codeOf(await bad.deposit.credit(body).catch((e: unknown) => e))).toBe('BAD_REQUEST');
+  });
+
+  it('never returns the crediting operator to the wire', async () => {
+    const api = await caller(['admin:treasury']);
+    const record = await api.deposit.credit(body);
+    expect(JSON.stringify(record)).not.toContain('operator-identity-that-must-not-leak');
+  });
+});
+
+// ── User money out: the withdrawal ───────────────────────────────────────────
+
+describe('withdrawal.create is the interactive, 2FA-backed path off the platform', () => {
+  const codeOf = (err: unknown) => (err as { code?: string }).code;
+  const body = {
+    assetId: 'USDT',
+    amount: '40',
+    railId: 'card-sandbox',
+    destination: { kind: 'bank', ref: 'DE00 1234' },
+    clientRef: 'w-1',
+  };
+
+  it('serves an elevated session holding trade:withdraw', async () => {
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    await expect(api.withdrawal.create(body)).resolves.toMatchObject({ id: WITHDRAWAL, status: 'sent' });
+  });
+
+  it('REQUIRES MFA — the INTERACTIVE_ONLY guarantee, verified on THIS endpoint', async () => {
+    // `trade:withdraw` is in INTERACTIVE_ONLY_SCOPES, so `requireScope` refuses
+    // a session that has not passed 2FA even though the scope is present.
+    // Asserted against the real procedure, not against the guard in isolation.
+    const api = await caller(['trade:withdraw'], { tier: 'basic', mfa: false });
+    const err = await api.withdrawal.create(body).catch((e: unknown) => e);
+
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+    expect((err as Error).message).toMatch(/two-factor/i);
+    expect(money.calls.filter((c) => c.method === 'withdraw')).toHaveLength(0);
+  });
+
+  it('can never be granted to a long-lived API key', async () => {
+    expect(INTERACTIVE_ONLY_SCOPES).toContain('trade:withdraw');
+    expect(() => assertKeyScopesAllowed(['trade:read', 'trade:withdraw'])).toThrow(/trade:withdraw/);
+    // A bot key with everything else is still refused this one.
+    expect(() => assertKeyScopesAllowed(['trade:read', 'trade:write'])).not.toThrow();
+  });
+
+  it('IS NOT REACHABLE FROM A NORMAL SESSION — trade:write does not imply it', async () => {
+    // `defaultScopes()` withholds `trade:withdraw`; `auth.stepUp` is what adds
+    // it. If `trade:write` ever implied it, an XSS-stolen access token would
+    // drain accounts.
+    const api = await caller(['trade:write', 'trade:read', 'ledger:read'], { tier: 'basic' });
+    const err = await api.withdrawal.create(body).catch((e: unknown) => e);
+
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as Error).message).toContain('trade:withdraw');
+  });
+
+  it('refuses an anonymous caller', async () => {
+    const api = await caller([]);
+    await expect(api.withdrawal.create(body)).rejects.toThrow(/Authentication required/);
+  });
+
+  it('applies the LEDGER matrix rule — `basic`, the tier that admitted the value', async () => {
+    // `{ module: 'ledger' }`: the rule that governs moving a custodial balance
+    // out is the rule for the module that holds it. Gating above the tier that
+    // admitted the value would build a one-way door.
+    const unverified = await caller(['trade:withdraw'], { tier: 'none' });
+    const err = await unverified.withdrawal.create(body).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as Error).message).toMatch(/basic/);
+
+    const verified = await caller(['trade:withdraw'], { tier: 'basic' });
+    await expect(verified.withdrawal.create(body)).resolves.toBeDefined();
+  });
+
+  it('takes the account from the token — there is no userId to tamper with', async () => {
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    await api.withdrawal.create({ ...body, userId: '66666666-6666-4666-8666-666666666667' } as never);
+
+    const call = money.calls.find((c) => c.method === 'withdraw')!;
+    expect((call.args[0] as { userId: string }).userId).toBe(USER);
+  });
+
+  it('REQUIRES clientRef — without one a retry is a second debit', async () => {
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    await expect(api.withdrawal.create({ ...body, clientRef: undefined } as never)).rejects.toThrow();
+    await expect(api.withdrawal.create({ ...body, clientRef: '' })).rejects.toThrow();
+    expect(money.calls).toHaveLength(0);
+  });
+
+  it('takes money as a decimal string and hands the service a scaled bigint', async () => {
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    await api.withdrawal.create({ ...body, amount: '40.000000000000000001' });
+
+    const call = money.calls.find((c) => c.method === 'withdraw')!;
+    expect((call.args[0] as { amount: unknown }).amount).toBe(amt('40.000000000000000001'));
+  });
+
+  it('rejects a JSON number and a negative amount at the boundary', async () => {
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    for (const amount of [40.5 as never, '-1', '', 'forty']) {
+      await expect(api.withdrawal.create({ ...body, amount })).rejects.toThrow();
+    }
+    expect(money.calls).toHaveLength(0);
+  });
+
+  it('requires a destination with somewhere to send to', async () => {
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    await expect(api.withdrawal.create({ ...body, destination: { kind: 'bank', ref: '' } })).rejects.toThrow();
+    await expect(api.withdrawal.create({ ...body, destination: { kind: '', ref: 'X' } })).rejects.toThrow();
+    expect(money.calls).toHaveLength(0);
+  });
+
+  it('returns every amount as a decimal string that survives JSON', async () => {
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    const record = await api.withdrawal.create(body);
+
+    expect(record.amount).toBe('40');
+    expect(typeof record.amount).toBe('string');
+    expect(() => JSON.stringify(record)).not.toThrow();
+  });
+
+  it('maps a rail refusal to BAD_REQUEST and keeps the rail code', async () => {
+    money.fail(new PayError('Beneficiary account closed', 'pay.rail_failed', { failureCode: 'bank.rejected' }));
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    const err = await api.withdrawal.create(body).catch((e: unknown) => e);
+
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect((err as Error).message).toContain('pay.rail_failed');
+  });
+
+  it('maps a reused client reference to CONFLICT', async () => {
+    money.fail(new PayError('already names a withdrawal', 'pay.withdrawal_conflict'));
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    expect(codeOf(await api.withdrawal.create(body).catch((e: unknown) => e))).toBe('CONFLICT');
+  });
+
+  it('lets an insufficient-funds error through untranslated', async () => {
+    // Not a BAD_REQUEST dressed up: a client that retries a withdrawal it
+    // cannot afford just fails again.
+    money.fail(new Error('ledger.insufficient_funds'));
+    const api = await caller(['trade:withdraw'], { tier: 'basic' });
+    const err = await api.withdrawal.create(body).catch((e: unknown) => e);
+    expect((err as Error).message).toContain('ledger.insufficient_funds');
+  });
+});
+
+describe('withdrawal reads', () => {
+  const codeOf = (err: unknown) => (err as { code?: string }).code;
+
+  it('are served to an ordinary session, long after the elevation expires', async () => {
+    // `trade:read`, not `trade:withdraw`. A user checking whether their money
+    // arrived should not have to re-do 2FA five minutes later.
+    const api = await caller(['trade:read'], { tier: 'basic' });
+    await expect(api.withdrawal.get({ withdrawalId: WITHDRAWAL })).resolves.toMatchObject({ id: WITHDRAWAL });
+    await expect(api.withdrawal.mine()).resolves.toHaveLength(1);
+  });
+
+  it('REFUSE ANOTHER ACCOUNT’S WITHDRAWAL — a scope is not an ownership check', async () => {
+    money.ownedBy('88888888-8888-4888-8888-888888888888');
+    const api = await caller(['trade:read'], { tier: 'basic' });
+
+    const err = await api.withdrawal.get({ withdrawalId: WITHDRAWAL }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+  });
+
+  it('still serve the owner their own withdrawal', async () => {
+    const api = await caller(['trade:read'], { tier: 'basic' });
+    await expect(api.withdrawal.get({ withdrawalId: WITHDRAWAL })).resolves.toMatchObject({ id: WITHDRAWAL, userId: USER });
+  });
+
+  it('map a missing withdrawal to NOT_FOUND', async () => {
+    money.fail(new PayError('gone', 'pay.withdrawal_not_found'));
+    const api = await caller(['trade:read'], { tier: 'basic' });
+    expect(codeOf(await api.withdrawal.get({ withdrawalId: WITHDRAWAL }).catch((e: unknown) => e))).toBe('NOT_FOUND');
+  });
+
+  it('report the withdrawable balance from the ledger, as a decimal string', async () => {
+    const api = await caller(['ledger:read'], { tier: 'basic' });
+    await expect(api.withdrawal.balance({ assetId: 'USDT' })).resolves.toEqual({ available: '60.5' });
+  });
+
+  it('do not let a bare merchant scope read a user’s withdrawals', async () => {
+    const api = await caller(['pay:read']);
+    expect(codeOf(await api.withdrawal.get({ withdrawalId: WITHDRAWAL }).catch((e: unknown) => e))).toBe('FORBIDDEN');
+    expect(codeOf(await api.withdrawal.balance({ assetId: 'USDT' }).catch((e: unknown) => e))).toBe('FORBIDDEN');
   });
 });

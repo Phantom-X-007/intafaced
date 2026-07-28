@@ -74,11 +74,26 @@ export const kycRecords = identity.table(
     providerRef: text('provider_ref'),
     jurisdiction: text('jurisdiction').notNull(),
     status: kycStatusEnum('status').notNull().default('pending'),
+    /**
+     * WHICH OPERATOR granted the tier.
+     *
+     * Approving a record grants access to every custodial module in the OS, so
+     * "who did this" has to be answerable from the row itself rather than from a
+     * log somebody has to still have. Deliberately not a foreign key to `users`:
+     * an approval can arrive from an admin console service identity that is not
+     * a platform account, and a constraint saying otherwise would be wrong the
+     * first time that happens.
+     */
+    reviewedBy: text('reviewed_by'),
     reviewedAt: tstz('reviewed_at'),
     expiresAt: tstz('expires_at'),
     createdAt: createdAt(),
   },
-  (t) => [index('kyc_user_idx').on(t.userId, t.status)],
+  (t) => [
+    index('kyc_user_idx').on(t.userId, t.status),
+    /** The operator queue: every record waiting on a human, oldest first. */
+    index('kyc_pending_idx').on(t.status, t.createdAt),
+  ],
 );
 
 /**

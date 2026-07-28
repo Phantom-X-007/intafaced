@@ -26,12 +26,76 @@ export class AuthError extends Error {
       | 'auth.mfa_already_enrolled'
       | 'auth.session_invalid'
       | 'auth.session_reused'
-      | 'auth.not_found',
+      | 'auth.not_found'
+      /** A KYC record exists but is not in a state an operator can act on. */
+      | 'auth.kyc_not_pending'
+      /** Step-up asked for on an account with no second factor to step up with. */
+      | 'auth.mfa_not_enrolled',
   ) {
     super(message);
     this.name = 'AuthError';
   }
 }
+
+export type KycTier = 'none' | 'basic' | 'full' | 'institutional';
+export type SubmittableKycTier = Exclude<KycTier, 'none'>;
+
+export interface KycRecordView {
+  id: string;
+  userId: string;
+  tier: KycTier;
+  jurisdiction: string;
+  providerRef: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  /** The operator who granted it. Null on a record nobody has reviewed yet. */
+  reviewedBy: string | null;
+  reviewedAt: Date | null;
+  expiresAt: Date | null;
+  createdAt: Date;
+}
+
+interface KycRow {
+  id: string;
+  user_id: string;
+  tier: KycTier;
+  jurisdiction: string;
+  provider_ref: string | null;
+  status: KycRecordView['status'];
+  reviewed_by: string | null;
+  reviewed_at: Date | null;
+  expires_at: Date | null;
+  created_at: Date;
+}
+
+function toKycRecord(row: KycRow): KycRecordView {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    tier: row.tier,
+    jurisdiction: row.jurisdiction,
+    providerRef: row.provider_ref,
+    status: row.status,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  };
+}
+
+const TIER_ORDER: Readonly<Record<KycTier, number>> = { none: 0, basic: 1, full: 2, institutional: 3 };
+
+/**
+ * How long an elevated (step-up) access token lives.
+ *
+ * Five minutes, and deliberately far shorter than a normal access token: the
+ * whole reason `trade:withdraw` is absent from a session's default scopes is so
+ * that a stolen token cannot drain an account. An elevation that lasted the
+ * full access TTL would hand the thief the same window as the owner.
+ */
+const STEP_UP_TTL_SECONDS = 300;
+
+/** The only scopes a step-up may add. Not caller-supplied — an elevation endpoint that takes a scope list is a scope-granting endpoint. */
+const STEP_UP_SCOPES: readonly Scope[] = ['trade:withdraw'];
 
 export interface RegisterInput {
   handle: string;
@@ -368,30 +432,232 @@ export class AuthService {
     return best;
   }
 
-  async approveKyc(input: {
-    userId: string;
-    tier: 'basic' | 'full' | 'institutional';
-    jurisdiction: string;
-    providerRef?: string;
-  }): Promise<void> {
+  /**
+   * A user asks to be verified at a tier. Nothing is granted here.
+   *
+   * The record lands `pending` and only an operator holding `admin:compliance`
+   * can move it to `approved` — which is the whole point of splitting submit
+   * from approve. A single "setKycTier" would be a procedure that grants its own
+   * caller access to every custodial module, and no scope check makes that safe.
+   *
+   * Idempotent on (user, tier), serialised on the user row rather than on a
+   * unique index: two taps on a slow "Verify me" button must not produce two
+   * pending records for one operator to adjudicate, and `kyc_records` carries no
+   * constraint that would stop them.
+   */
+  async submitKyc(input: { userId: string; tier: SubmittableKycTier; jurisdiction: string; providerRef?: string }): Promise<KycRecordView> {
+    return transaction(this.sql, async (tx) => {
+      const users = await tx<Array<{ id: string }>>`SELECT id FROM identity.users WHERE id = ${input.userId} FOR UPDATE`;
+      if (!users[0]) throw new AuthError('User not found', 'auth.not_found');
+
+      // An approved, unexpired record at this tier or higher already answers the
+      // request. Re-submitting must not reset anyone to `pending` — that would
+      // let a user drop their own tier and, worse, make it look reviewable again.
+      const existing = await tx<KycRow[]>`
+        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records
+         WHERE user_id = ${input.userId}
+           AND (
+             (status = 'approved' AND (expires_at IS NULL OR expires_at > now()))
+             OR (status = 'pending' AND tier = ${input.tier})
+           )
+         ORDER BY created_at DESC
+      `;
+
+      const approved = existing.find((r) => r.status === 'approved' && TIER_ORDER[r.tier] >= TIER_ORDER[input.tier]);
+      if (approved) return toKycRecord(approved);
+
+      const pending = existing.find((r) => r.status === 'pending');
+      if (pending) return toKycRecord(pending);
+
+      const inserted = await tx<KycRow[]>`
+        INSERT INTO identity.kyc_records (user_id, tier, jurisdiction, provider_ref, status)
+        VALUES (${input.userId}, ${input.tier}, ${input.jurisdiction}, ${input.providerRef ?? null}, 'pending')
+        RETURNING id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at
+      `;
+      return toKycRecord(inserted[0]!);
+    });
+  }
+
+  /** Every record for one user, newest first. What `kyc.status` renders. */
+  async listKycRecords(userId: string): Promise<KycRecordView[]> {
+    const rows = await this.sql<KycRow[]>`
+      SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records
+       WHERE user_id = ${userId} ORDER BY created_at DESC
+    `;
+    return rows.map(toKycRecord);
+  }
+
+  /** The operator review queue — oldest first, because a queue that is not FIFO is a backlog. */
+  async listPendingKyc(limit = 50): Promise<KycRecordView[]> {
+    const rows = await this.sql<KycRow[]>`
+      SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at
+        FROM identity.kyc_records
+       WHERE status = 'pending' ORDER BY created_at ASC LIMIT ${limit}
+    `;
+    return rows.map(toKycRecord);
+  }
+
+  async getKycRecord(recordId: string): Promise<KycRecordView | null> {
+    const rows = await this.sql<KycRow[]>`
+      SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records WHERE id = ${recordId}
+    `;
+    return rows[0] ? toKycRecord(rows[0]) : null;
+  }
+
+  /**
+   * THE OPERATOR ACTION. A pending record becomes an approved tier.
+   *
+   * This is the single most consequential write in this service: the tier it
+   * sets is what `checkAccess` reads, so approving a record is granting access
+   * to every custodial module in the OS. `reviewed_by` is therefore not
+   * decoration — it is the only record of who made that grant.
+   *
+   * Idempotent: approving an already-approved record returns it and re-announces
+   * nothing new, because both the event and the XP award carry business keys.
+   */
+  async approveKycRecord(input: { recordId: string; reviewerId: string; expiresAt?: Date | null }): Promise<KycRecordView> {
+    const outcome = await transaction(this.sql, async (tx) => {
+      const rows = await tx<KycRow[]>`
+        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records WHERE id = ${input.recordId} FOR UPDATE
+      `;
+      const row = rows[0];
+      if (!row) throw new AuthError('KYC record not found', 'auth.not_found');
+      if (row.status === 'approved') return { record: toKycRecord(row), granted: false };
+      if (row.status !== 'pending') {
+        throw new AuthError(`KYC record is ${row.status}; only a pending record can be approved`, 'auth.kyc_not_pending');
+      }
+
+      const updated = await tx<KycRow[]>`
+        UPDATE identity.kyc_records
+           SET status = 'approved', reviewed_at = now(), reviewed_by = ${input.reviewerId},
+               expires_at = ${input.expiresAt ?? null}
+         WHERE id = ${row.id}
+        RETURNING id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at
+      `;
+      return { record: toKycRecord(updated[0]!), granted: true };
+    });
+
+    // Announced AFTER the transaction commits, and only when a grant actually
+    // happened. Publishing from inside would emit "tier granted" from a
+    // transaction that may still roll back; publishing on the no-op path would
+    // re-announce a grant that is already old news, and the bus is at-least-once
+    // in the other direction already.
+    if (outcome.granted) await this.announceKycApproval(outcome.record);
+    return outcome.record;
+  }
+
+  /** Reject a pending record. No tier is granted, nothing is announced. */
+  async rejectKycRecord(input: { recordId: string; reviewerId: string }): Promise<KycRecordView> {
+    return transaction(this.sql, async (tx) => {
+      const rows = await tx<KycRow[]>`
+        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records WHERE id = ${input.recordId} FOR UPDATE
+      `;
+      const row = rows[0];
+      if (!row) throw new AuthError('KYC record not found', 'auth.not_found');
+      if (row.status === 'rejected') return toKycRecord(row);
+      if (row.status !== 'pending') {
+        throw new AuthError(`KYC record is ${row.status}; only a pending record can be rejected`, 'auth.kyc_not_pending');
+      }
+
+      const updated = await tx<KycRow[]>`
+        UPDATE identity.kyc_records
+           SET status = 'rejected', reviewed_at = now(), reviewed_by = ${input.reviewerId}
+         WHERE id = ${row.id}
+        RETURNING id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at
+      `;
+      return toKycRecord(updated[0]!);
+    });
+  }
+
+  /**
+   * Direct grant, with no reviewable record in front of it.
+   *
+   * Kept for seeding and for tests that need a verified user without driving the
+   * operator flow. It is exposed on NO route on purpose — the routed path is
+   * `submitKyc` → `approveKycRecord`, so that every tier granted in production
+   * carries a `reviewed_by`.
+   */
+  async approveKyc(input: { userId: string; tier: SubmittableKycTier; jurisdiction: string; providerRef?: string }): Promise<void> {
     await this.sql`
       INSERT INTO identity.kyc_records (user_id, tier, jurisdiction, provider_ref, status, reviewed_at)
       VALUES (${input.userId}, ${input.tier}, ${input.jurisdiction}, ${input.providerRef ?? null}, 'approved', now())
     `;
 
+    await this.announceKycApproval({ userId: input.userId, tier: input.tier, jurisdiction: input.jurisdiction });
+  }
+
+  private async announceKycApproval(record: { userId: string; tier: KycTier; jurisdiction: string }): Promise<void> {
+    if (record.tier === 'none') return;
+
     await this.bus.publish(
       'kycApproved',
-      { userId: input.userId, tier: input.tier, jurisdiction: input.jurisdiction },
-      { idempotencyKey: `kyc.approved:${input.userId}:${input.tier}` },
+      { userId: record.userId, tier: record.tier, jurisdiction: record.jurisdiction },
+      { idempotencyKey: `kyc.approved:${record.userId}:${record.tier}` },
     );
 
     await this.rank.awardXp({
-      userId: input.userId,
+      userId: record.userId,
       sourceModule: 'identity',
       action: 'identity.kyc.approved',
       xpDelta: 200,
-      idempotencyKey: `identity.kyc.approved:${input.userId}:${input.tier}`,
+      idempotencyKey: `identity.kyc.approved:${record.userId}:${record.tier}`,
     });
+  }
+
+  // ── Step-up ────────────────────────────────────────────────────────────────
+
+  /**
+   * Trade a live session plus a fresh TOTP code for a SHORT-LIVED token that
+   * carries `trade:withdraw`.
+   *
+   * This exists because `defaultScopes()` deliberately withholds
+   * `trade:withdraw` — "added only after a step-up challenge" — and until now
+   * there was no step-up challenge, which made every withdrawal surface in the
+   * OS unreachable by any real session. A guard nothing can satisfy is not a
+   * guard; it is an outage with a comment.
+   *
+   * Three things make the elevated token weaker than a normal one, and all three
+   * matter: it lasts five minutes, it is bound to the session that asked for it,
+   * and it is only issued to an account that actually has a second factor.
+   */
+  async stepUp(input: { userId: string; sessionId: string; totpCode: string }): Promise<{
+    accessToken: string;
+    expiresAt: Date;
+    scopes: Scope[];
+  }> {
+    const users = await this.sql<Array<{ totp_secret: string | null; status: string }>>`
+      SELECT totp_secret, status FROM identity.users WHERE id = ${input.userId}
+    `;
+    const user = users[0];
+    if (!user) throw new AuthError('User not found', 'auth.not_found');
+    if (user.status !== 'active') throw new AuthError(`Account is ${user.status}`, 'auth.account_frozen');
+
+    // §9: moving value off the platform requires a second factor. An account
+    // with none cannot be elevated — not "is elevated without one".
+    if (!user.totp_secret) {
+      throw new AuthError('Enrol two-factor authentication before withdrawing', 'auth.mfa_not_enrolled');
+    }
+    if (!verifyTotp(user.totp_secret, input.totpCode)) {
+      throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+    }
+
+    // The session must still be live. Elevating off a revoked session would let
+    // a logout be undone by whoever still holds the old access token.
+    const sessions = await this.sql<Array<{ id: string }>>`
+      SELECT id FROM identity.sessions
+       WHERE id = ${input.sessionId} AND user_id = ${input.userId} AND revoked = false AND expires_at > now()
+    `;
+    if (!sessions[0]) throw new AuthError('Session is no longer valid', 'auth.session_invalid');
+
+    const scopes: Scope[] = [...this.defaultScopes(), ...STEP_UP_SCOPES];
+    const tier = await this.kycTier(input.userId);
+
+    const { token, expiresAt } = await issueAccessToken(
+      { userId: input.userId, sessionId: input.sessionId, scopes, tier, mfa: true },
+      { ...this.tokens, accessTtlSeconds: Math.min(this.tokens.accessTtlSeconds, STEP_UP_TTL_SECONDS) },
+    );
+
+    return { accessToken: token, expiresAt, scopes };
   }
 
   // ── Sub-accounts ───────────────────────────────────────────────────────────
