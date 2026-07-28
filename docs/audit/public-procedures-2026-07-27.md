@@ -24,7 +24,12 @@ No middleware. Nothing.
 ```ts
 export function publicJurisdictionProcedure(module: ModuleId, plane: Plane = 'fiat') {
   return t.procedure.use(({ ctx, next }) => {
-    const decision = checkAccess({ module, plane, region: ctx.region, kycTier: ctx.principal?.tier ?? 'none' });
+    const decision = checkAccess({
+      module,
+      plane,
+      region: ctx.region,
+      kycTier: ctx.principal?.tier ?? 'none',
+    });
     if (!decision.allowed) throw new TRPCError({ code: 'FORBIDDEN', message: decision.reason });
     return next({ ctx });
   });
@@ -47,35 +52,35 @@ Also relevant throughout: `HTTP_HOST` defaults to `0.0.0.0` (`packages/config/sr
 
 27 across 10 services (`svc-matching` has no tRPC router at all).
 
-| # | Service | File:line | Procedure | Type | What the resolver does | Value / state / user data | Verdict |
-|---|---------|-----------|-----------|------|------------------------|---------------------------|---------|
-| 1 | svc-agents | `router.ts:137` | `health` | `publicProcedure` | Returns `{ok:true, service}` | none | SAFE-PUBLIC |
-| 2 | svc-bank | `router.ts:440` | `health` | `publicProcedure` | Returns `{ok:true, service}` | none | SAFE-PUBLIC |
-| 3 | svc-blueprint | `router.ts:53` | `health` | `publicProcedure` | Returns `{ok:true, service}` | none | SAFE-PUBLIC |
-| 4 | svc-identity | `router.ts:51` | `health` | `publicProcedure` | Returns `{ok:true, service}` | none | SAFE-PUBLIC |
-| 5 | svc-identity | `router.ts:56` | `auth.register` | `publicProcedure` | `auth.register()` — inserts `users`, `profiles`, `rank_state`; publishes `userCreated`; awards 50 XP; issues a session | **Mutation.** Creates a user and a session | **NEEDS-REVIEW** — F5 |
-| 6 | svc-identity | `router.ts:78` | `auth.login` | `publicProcedure` | `auth.login()` — constant-time password compare, TOTP if enrolled, issues session | **Mutation.** Issues credentials | **NEEDS-REVIEW** — F6 |
-| 7 | svc-identity | `router.ts:90` | `auth.refresh` | `publicProcedure` | `auth.refresh()` — rotates refresh token; reuse of a rotated token revokes every session for that user | **Mutation.** Bearer-authenticated by the token itself | SAFE-PUBLIC (rate-limit gap, F6) |
-| 8 | svc-identity | `router.ts:102` | `auth.logout` | `publicProcedure` | `auth.logout()` — revokes the session for that refresh hash; returns `{ok:true}` unconditionally | **Mutation.** Bearer-authenticated; no existence oracle | SAFE-PUBLIC |
-| 9 | svc-ledger | `router.ts:52` | `health` | `publicProcedure` | `{ok, service, postingEnabled}` from `ledger.status()` | operational flag | SAFE-PUBLIC |
-| 10 | svc-ledger | `router.ts:57` | `post` | `publicProcedure` | **Posts a ledger transaction.** Parses `postRequestSchema`, calls `ledger.post()` | **Moves value** | **NEEDS-SERVICE-AUTH** — F2 (known; see F1 for why the announced fix is insufficient) |
-| 11 | svc-p2p | `router.ts:132` | `health` | `publicProcedure` | Returns `{ok:true, service}` | none | SAFE-PUBLIC |
-| 12 | svc-p2p | `router.ts:143` | `fiat.list` | `publicProcedure` | `enabledFiat()` from `packages/config` — static currency table | none | SAFE-PUBLIC |
-| 13 | svc-pay | `router.ts:68` | `health` | `publicProcedure` | `{ok, service, rails: rails.ids()}` — logical rail ids | rail id list | SAFE-PUBLIC |
-| 14 | svc-protocol | `router.ts:129` | `health` | `publicProcedure` | `{ok, service, chainId, custodial:false, relayEnabled}` | public chain config | SAFE-PUBLIC |
-| 15 | svc-protocol | `router.ts:151` | `predictAddress` | `publicJurisdictionProcedure('protocol','protocol')` | CREATE2 arithmetic over public constants + one `isDeployed` RPC call | none (public chain data) | SAFE-PUBLIC (RPC amplification, F9) |
-| 16 | svc-protocol | `router.ts:183` | `buildDeployment` | `publicJurisdictionProcedure` | Returns unsigned calldata. Pure function | none | SAFE-PUBLIC |
-| 17 | svc-protocol | `router.ts:209` | `buildSessionGrant` | `publicJurisdictionProcedure` | Validates a spec via `createSessionSpec` (which refuses withdrawal selectors), returns unsigned calldata | none | SAFE-PUBLIC |
-| 18 | svc-protocol | `router.ts:232` | `buildSessionRevoke` | `publicJurisdictionProcedure` | Returns unsigned calldata | none | SAFE-PUBLIC |
-| 19 | svc-protocol | `router.ts:241` | `buildRevokeAllSessions` | `publicJurisdictionProcedure` | Returns unsigned calldata for `bumpSessionEpoch` | none | SAFE-PUBLIC |
-| 20 | svc-protocol | `router.ts:250` | `sessionStatus` | `publicJurisdictionProcedure` | Reads `chain.sessionOf` / `isSessionLive` | public chain state | SAFE-PUBLIC |
-| 21 | svc-protocol | `router.ts:292` | `checkSessionCall` | `publicJurisdictionProcedure` | Pure evaluation of a spec against a hypothetical call | none | SAFE-PUBLIC |
-| 22 | svc-protocol | `router.ts:324` | `sessionSpecHash` | `publicJurisdictionProcedure` | Pure hash | none | SAFE-PUBLIC |
-| 23 | svc-protocol | `router.ts:346` | `relayUserOperation` | `publicJurisdictionProcedure` | **Mutation.** `relay.submit()` → `verify()` (sender match, userOpHash re-derivation, `recoverAddress` against on-chain owner or a live session key, guarded-entry + specHash checks) then forwards to a public bundler | Moves nothing the user did not sign | SAFE-PUBLIC (verified — F9 for the residual) |
-| 24 | svc-token | `router.ts:13` | `health` | `publicProcedure` | Returns `{ok:true, service}` | none | SAFE-PUBLIC |
-| 25 | svc-trade | `router.ts:195` | `health` | `publicProcedure` | Returns `{ok:true, service}` | none | SAFE-PUBLIC |
-| 26 | svc-trade | `router.ts:201` | `markets.list` | `publicProcedure` | `trade.markets()` — listed market config (tick, lot, fee bps, status) | listing config, no user data | SAFE-PUBLIC |
-| 27 | svc-trade | `router.ts:203` | `markets.get` | `publicProcedure` | Market by symbol, `NOT_FOUND` otherwise | listing config | SAFE-PUBLIC |
+| #   | Service       | File:line       | Procedure                | Type                                                 | What the resolver does                                                                                                                                                                                                 | Value / state / user data                               | Verdict                                                                               |
+| --- | ------------- | --------------- | ------------------------ | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 1   | svc-agents    | `router.ts:137` | `health`                 | `publicProcedure`                                    | Returns `{ok:true, service}`                                                                                                                                                                                           | none                                                    | SAFE-PUBLIC                                                                           |
+| 2   | svc-bank      | `router.ts:440` | `health`                 | `publicProcedure`                                    | Returns `{ok:true, service}`                                                                                                                                                                                           | none                                                    | SAFE-PUBLIC                                                                           |
+| 3   | svc-blueprint | `router.ts:53`  | `health`                 | `publicProcedure`                                    | Returns `{ok:true, service}`                                                                                                                                                                                           | none                                                    | SAFE-PUBLIC                                                                           |
+| 4   | svc-identity  | `router.ts:51`  | `health`                 | `publicProcedure`                                    | Returns `{ok:true, service}`                                                                                                                                                                                           | none                                                    | SAFE-PUBLIC                                                                           |
+| 5   | svc-identity  | `router.ts:56`  | `auth.register`          | `publicProcedure`                                    | `auth.register()` — inserts `users`, `profiles`, `rank_state`; publishes `userCreated`; awards 50 XP; issues a session                                                                                                 | **Mutation.** Creates a user and a session              | **NEEDS-REVIEW** — F5                                                                 |
+| 6   | svc-identity  | `router.ts:78`  | `auth.login`             | `publicProcedure`                                    | `auth.login()` — constant-time password compare, TOTP if enrolled, issues session                                                                                                                                      | **Mutation.** Issues credentials                        | **NEEDS-REVIEW** — F6                                                                 |
+| 7   | svc-identity  | `router.ts:90`  | `auth.refresh`           | `publicProcedure`                                    | `auth.refresh()` — rotates refresh token; reuse of a rotated token revokes every session for that user                                                                                                                 | **Mutation.** Bearer-authenticated by the token itself  | SAFE-PUBLIC (rate-limit gap, F6)                                                      |
+| 8   | svc-identity  | `router.ts:102` | `auth.logout`            | `publicProcedure`                                    | `auth.logout()` — revokes the session for that refresh hash; returns `{ok:true}` unconditionally                                                                                                                       | **Mutation.** Bearer-authenticated; no existence oracle | SAFE-PUBLIC                                                                           |
+| 9   | svc-ledger    | `router.ts:52`  | `health`                 | `publicProcedure`                                    | `{ok, service, postingEnabled}` from `ledger.status()`                                                                                                                                                                 | operational flag                                        | SAFE-PUBLIC                                                                           |
+| 10  | svc-ledger    | `router.ts:57`  | `post`                   | `publicProcedure`                                    | **Posts a ledger transaction.** Parses `postRequestSchema`, calls `ledger.post()`                                                                                                                                      | **Moves value**                                         | **NEEDS-SERVICE-AUTH** — F2 (known; see F1 for why the announced fix is insufficient) |
+| 11  | svc-p2p       | `router.ts:132` | `health`                 | `publicProcedure`                                    | Returns `{ok:true, service}`                                                                                                                                                                                           | none                                                    | SAFE-PUBLIC                                                                           |
+| 12  | svc-p2p       | `router.ts:143` | `fiat.list`              | `publicProcedure`                                    | `enabledFiat()` from `packages/config` — static currency table                                                                                                                                                         | none                                                    | SAFE-PUBLIC                                                                           |
+| 13  | svc-pay       | `router.ts:68`  | `health`                 | `publicProcedure`                                    | `{ok, service, rails: rails.ids()}` — logical rail ids                                                                                                                                                                 | rail id list                                            | SAFE-PUBLIC                                                                           |
+| 14  | svc-protocol  | `router.ts:129` | `health`                 | `publicProcedure`                                    | `{ok, service, chainId, custodial:false, relayEnabled}`                                                                                                                                                                | public chain config                                     | SAFE-PUBLIC                                                                           |
+| 15  | svc-protocol  | `router.ts:151` | `predictAddress`         | `publicJurisdictionProcedure('protocol','protocol')` | CREATE2 arithmetic over public constants + one `isDeployed` RPC call                                                                                                                                                   | none (public chain data)                                | SAFE-PUBLIC (RPC amplification, F9)                                                   |
+| 16  | svc-protocol  | `router.ts:183` | `buildDeployment`        | `publicJurisdictionProcedure`                        | Returns unsigned calldata. Pure function                                                                                                                                                                               | none                                                    | SAFE-PUBLIC                                                                           |
+| 17  | svc-protocol  | `router.ts:209` | `buildSessionGrant`      | `publicJurisdictionProcedure`                        | Validates a spec via `createSessionSpec` (which refuses withdrawal selectors), returns unsigned calldata                                                                                                               | none                                                    | SAFE-PUBLIC                                                                           |
+| 18  | svc-protocol  | `router.ts:232` | `buildSessionRevoke`     | `publicJurisdictionProcedure`                        | Returns unsigned calldata                                                                                                                                                                                              | none                                                    | SAFE-PUBLIC                                                                           |
+| 19  | svc-protocol  | `router.ts:241` | `buildRevokeAllSessions` | `publicJurisdictionProcedure`                        | Returns unsigned calldata for `bumpSessionEpoch`                                                                                                                                                                       | none                                                    | SAFE-PUBLIC                                                                           |
+| 20  | svc-protocol  | `router.ts:250` | `sessionStatus`          | `publicJurisdictionProcedure`                        | Reads `chain.sessionOf` / `isSessionLive`                                                                                                                                                                              | public chain state                                      | SAFE-PUBLIC                                                                           |
+| 21  | svc-protocol  | `router.ts:292` | `checkSessionCall`       | `publicJurisdictionProcedure`                        | Pure evaluation of a spec against a hypothetical call                                                                                                                                                                  | none                                                    | SAFE-PUBLIC                                                                           |
+| 22  | svc-protocol  | `router.ts:324` | `sessionSpecHash`        | `publicJurisdictionProcedure`                        | Pure hash                                                                                                                                                                                                              | none                                                    | SAFE-PUBLIC                                                                           |
+| 23  | svc-protocol  | `router.ts:346` | `relayUserOperation`     | `publicJurisdictionProcedure`                        | **Mutation.** `relay.submit()` → `verify()` (sender match, userOpHash re-derivation, `recoverAddress` against on-chain owner or a live session key, guarded-entry + specHash checks) then forwards to a public bundler | Moves nothing the user did not sign                     | SAFE-PUBLIC (verified — F9 for the residual)                                          |
+| 24  | svc-token     | `router.ts:13`  | `health`                 | `publicProcedure`                                    | Returns `{ok:true, service}`                                                                                                                                                                                           | none                                                    | SAFE-PUBLIC                                                                           |
+| 25  | svc-trade     | `router.ts:195` | `health`                 | `publicProcedure`                                    | Returns `{ok:true, service}`                                                                                                                                                                                           | none                                                    | SAFE-PUBLIC                                                                           |
+| 26  | svc-trade     | `router.ts:201` | `markets.list`           | `publicProcedure`                                    | `trade.markets()` — listed market config (tick, lot, fee bps, status)                                                                                                                                                  | listing config, no user data                            | SAFE-PUBLIC                                                                           |
+| 27  | svc-trade     | `router.ts:203` | `markets.get`            | `publicProcedure`                                    | Market by symbol, `NOT_FOUND` otherwise                                                                                                                                                                                | listing config                                          | SAFE-PUBLIC                                                                           |
 
 **Note on `svc-p2p offers.list`:** the brief flagged it. It is `scopedProcedure('p2p:read', { module: 'p2p' })` (`router.ts:185`) — scope plus jurisdiction plus `minTier: 'basic'`. Not public. Same for `offers.get`, `trades.*`, `reputation.get`.
 
@@ -85,41 +90,41 @@ Also relevant throughout: `HTTP_HOST` defaults to `0.0.0.0` (`packages/config/sr
 
 33 routes. These bypass tRPC entirely: no context factory, no principal, no scope middleware. Ten of them are the real problem.
 
-| # | Service | File:line | Route | What it does | Verdict |
-|---|---------|-----------|-------|--------------|---------|
-| 1 | svc-agents | `index.ts:101` | `GET /health` | `{ok, service}` | SAFE-PUBLIC |
-| 2 | svc-agents | `index.ts:102` | `GET /ready` | `{ready, meteringEnabled, tasks[]}` — logical task ids, no vendor names | SAFE-PUBLIC |
-| 3 | svc-bank | `index.ts:41` | `GET /health` | `{ok, service}` | SAFE-PUBLIC |
-| 4 | svc-bank | `index.ts:42` | `GET /ready` | `{ready, scheduledTransfers, interestAccrual}` | SAFE-PUBLIC |
-| 5 | svc-bank | `index.ts:58` | `POST /internal/jobs/run-due-transfers` | Executes every due standing order — real ledger posts, other users' money | **NEEDS-SERVICE-AUTH** — F4 |
-| 6 | svc-bank | `index.ts:65` | `POST /internal/jobs/accrue-interest` | Pays interest from every pool reserve | **NEEDS-SERVICE-AUTH** — F4 |
-| 7 | svc-blueprint | `index.ts:60` | `GET /health` | `{ok, service}` | SAFE-PUBLIC |
-| 8 | svc-blueprint | `index.ts:67` | `GET /ready` | `{ready, engine:{id, usable, mode}}` — logical engine id | SAFE-PUBLIC |
-| 9 | svc-identity | `index.ts:56` | `GET /health` | `{ok, service}` | SAFE-PUBLIC |
-| 10 | svc-identity | `index.ts:57` | `GET /ready` | `{ready, argon2}` | SAFE-PUBLIC |
-| 11 | svc-identity | `index.ts:63` | `GET /internal/rank/:userId/perks` | Any user's rank perks by id | **NEEDS-SERVICE-AUTH** — F7 |
-| 12 | svc-ledger | `index.ts:41` | `GET /health` | `{ok, service, ...ledger.status()}` — spreads `frozenReason` | **NEEDS-REVIEW** — F8 |
-| 13 | svc-ledger | `index.ts:43` | `GET /ready` | 503 body carries `reason: status.frozenReason` | **NEEDS-REVIEW** — F8 |
-| 14 | svc-ledger | `s2s-http.ts:82` | `POST /trpc/post` | **Posts a ledger transaction.** No auth | **NEEDS-SERVICE-AUTH** — F1 |
-| 15 | svc-ledger | `s2s-http.ts:91` | `POST /trpc/balance` | Any account's balance. No auth | **NEEDS-SERVICE-AUTH** — F3 |
-| 16 | svc-ledger | `s2s-http.ts:100` | `POST /trpc/balances` | Every balance for any owner. No auth, **no ownership check** | **NEEDS-SERVICE-AUTH** — F3 |
-| 17 | svc-matching | `index.ts:43` | `GET /health` | `{ok, service, enabled, markets, journalRecords}` | SAFE-PUBLIC |
-| 18 | svc-matching | `index.ts:57` | `GET /ready` | 503 when engine disabled | SAFE-PUBLIC |
-| 19 | svc-matching | `router.ts:105` | `POST /markets/:marketId/orders` | Submits an order to the engine. No auth, no ownership, `accountId` is a caller-supplied string | **NEEDS-SERVICE-AUTH** — F2 |
-| 20 | svc-matching | `router.ts:118` | `DELETE /markets/:marketId/orders/:orderId` | Cancels a live order by id. No auth, **no ownership check** | **NEEDS-SERVICE-AUTH** — F2 |
-| 21 | svc-matching | `router.ts:130` | `GET /markets/:marketId/depth` | Price-level aggregate — `[price, total]` pairs, no account ids | SAFE-PUBLIC |
-| 22 | svc-matching | `router.ts:137` | `GET /markets` | Market id list | SAFE-PUBLIC |
-| 23 | svc-p2p | `index.ts:63` | `GET /health` | `{ok, service}` | SAFE-PUBLIC |
-| 24 | svc-p2p | `index.ts:64` | `GET /ready` | `{ready, tradingEnabled}` | SAFE-PUBLIC |
-| 25 | svc-p2p | `index.ts:71` | `GET /internal/escrow-integrity` | Escrow-vs-ledger drift per (seller, asset) | **NEEDS-SERVICE-AUTH** — F7 |
-| 26 | svc-p2p | `index.ts:77` | `GET /internal/reputation/:userId` | Any user's P2P reputation by id | **NEEDS-SERVICE-AUTH** — F7 |
-| 27 | svc-pay | `index.ts:72` | `GET /health` | `{ok, service}` | SAFE-PUBLIC |
-| 28 | svc-pay | `index.ts:73` | `GET /ready` | `{ready, rails}` | SAFE-PUBLIC |
-| 29 | svc-pay | `index.ts:94` | `POST /webhooks/:railId` | Rail webhook. Raw body preserved; `adapter.verifyWebhook` does HMAC + timestamp tolerance and returns `null` on failure; parse happens only after verify; one uninformative 401 for every rejection | SAFE-PUBLIC (authenticated by rail signature) |
-| 30 | svc-protocol | `index.ts:80` | `GET /health` | `{ok, service, chainId, custodial:false, relayEnabled}` | SAFE-PUBLIC |
-| 31 | svc-protocol | `index.ts:92` | `GET /ready` | 503 + chain error message when RPC unreachable | SAFE-PUBLIC |
-| 32 | svc-token | `index.ts:52` / `:53` | `GET /health`, `GET /ready` | `{ok, service}` / `{ready, emissionsEnabled}` | SAFE-PUBLIC |
-| 33 | svc-token | `index.ts:55` | `GET /internal/stake/:userId` | Any user's staked amount, tier and fee discount | **NEEDS-SERVICE-AUTH** — F7 |
+| #   | Service       | File:line             | Route                                       | What it does                                                                                                                                                                                        | Verdict                                       |
+| --- | ------------- | --------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 1   | svc-agents    | `index.ts:101`        | `GET /health`                               | `{ok, service}`                                                                                                                                                                                     | SAFE-PUBLIC                                   |
+| 2   | svc-agents    | `index.ts:102`        | `GET /ready`                                | `{ready, meteringEnabled, tasks[]}` — logical task ids, no vendor names                                                                                                                             | SAFE-PUBLIC                                   |
+| 3   | svc-bank      | `index.ts:41`         | `GET /health`                               | `{ok, service}`                                                                                                                                                                                     | SAFE-PUBLIC                                   |
+| 4   | svc-bank      | `index.ts:42`         | `GET /ready`                                | `{ready, scheduledTransfers, interestAccrual}`                                                                                                                                                      | SAFE-PUBLIC                                   |
+| 5   | svc-bank      | `index.ts:58`         | `POST /internal/jobs/run-due-transfers`     | Executes every due standing order — real ledger posts, other users' money                                                                                                                           | **NEEDS-SERVICE-AUTH** — F4                   |
+| 6   | svc-bank      | `index.ts:65`         | `POST /internal/jobs/accrue-interest`       | Pays interest from every pool reserve                                                                                                                                                               | **NEEDS-SERVICE-AUTH** — F4                   |
+| 7   | svc-blueprint | `index.ts:60`         | `GET /health`                               | `{ok, service}`                                                                                                                                                                                     | SAFE-PUBLIC                                   |
+| 8   | svc-blueprint | `index.ts:67`         | `GET /ready`                                | `{ready, engine:{id, usable, mode}}` — logical engine id                                                                                                                                            | SAFE-PUBLIC                                   |
+| 9   | svc-identity  | `index.ts:56`         | `GET /health`                               | `{ok, service}`                                                                                                                                                                                     | SAFE-PUBLIC                                   |
+| 10  | svc-identity  | `index.ts:57`         | `GET /ready`                                | `{ready, argon2}`                                                                                                                                                                                   | SAFE-PUBLIC                                   |
+| 11  | svc-identity  | `index.ts:63`         | `GET /internal/rank/:userId/perks`          | Any user's rank perks by id                                                                                                                                                                         | **NEEDS-SERVICE-AUTH** — F7                   |
+| 12  | svc-ledger    | `index.ts:41`         | `GET /health`                               | `{ok, service, ...ledger.status()}` — spreads `frozenReason`                                                                                                                                        | **NEEDS-REVIEW** — F8                         |
+| 13  | svc-ledger    | `index.ts:43`         | `GET /ready`                                | 503 body carries `reason: status.frozenReason`                                                                                                                                                      | **NEEDS-REVIEW** — F8                         |
+| 14  | svc-ledger    | `s2s-http.ts:82`      | `POST /trpc/post`                           | **Posts a ledger transaction.** No auth                                                                                                                                                             | **NEEDS-SERVICE-AUTH** — F1                   |
+| 15  | svc-ledger    | `s2s-http.ts:91`      | `POST /trpc/balance`                        | Any account's balance. No auth                                                                                                                                                                      | **NEEDS-SERVICE-AUTH** — F3                   |
+| 16  | svc-ledger    | `s2s-http.ts:100`     | `POST /trpc/balances`                       | Every balance for any owner. No auth, **no ownership check**                                                                                                                                        | **NEEDS-SERVICE-AUTH** — F3                   |
+| 17  | svc-matching  | `index.ts:43`         | `GET /health`                               | `{ok, service, enabled, markets, journalRecords}`                                                                                                                                                   | SAFE-PUBLIC                                   |
+| 18  | svc-matching  | `index.ts:57`         | `GET /ready`                                | 503 when engine disabled                                                                                                                                                                            | SAFE-PUBLIC                                   |
+| 19  | svc-matching  | `router.ts:105`       | `POST /markets/:marketId/orders`            | Submits an order to the engine. No auth, no ownership, `accountId` is a caller-supplied string                                                                                                      | **NEEDS-SERVICE-AUTH** — F2                   |
+| 20  | svc-matching  | `router.ts:118`       | `DELETE /markets/:marketId/orders/:orderId` | Cancels a live order by id. No auth, **no ownership check**                                                                                                                                         | **NEEDS-SERVICE-AUTH** — F2                   |
+| 21  | svc-matching  | `router.ts:130`       | `GET /markets/:marketId/depth`              | Price-level aggregate — `[price, total]` pairs, no account ids                                                                                                                                      | SAFE-PUBLIC                                   |
+| 22  | svc-matching  | `router.ts:137`       | `GET /markets`                              | Market id list                                                                                                                                                                                      | SAFE-PUBLIC                                   |
+| 23  | svc-p2p       | `index.ts:63`         | `GET /health`                               | `{ok, service}`                                                                                                                                                                                     | SAFE-PUBLIC                                   |
+| 24  | svc-p2p       | `index.ts:64`         | `GET /ready`                                | `{ready, tradingEnabled}`                                                                                                                                                                           | SAFE-PUBLIC                                   |
+| 25  | svc-p2p       | `index.ts:71`         | `GET /internal/escrow-integrity`            | Escrow-vs-ledger drift per (seller, asset)                                                                                                                                                          | **NEEDS-SERVICE-AUTH** — F7                   |
+| 26  | svc-p2p       | `index.ts:77`         | `GET /internal/reputation/:userId`          | Any user's P2P reputation by id                                                                                                                                                                     | **NEEDS-SERVICE-AUTH** — F7                   |
+| 27  | svc-pay       | `index.ts:72`         | `GET /health`                               | `{ok, service}`                                                                                                                                                                                     | SAFE-PUBLIC                                   |
+| 28  | svc-pay       | `index.ts:73`         | `GET /ready`                                | `{ready, rails}`                                                                                                                                                                                    | SAFE-PUBLIC                                   |
+| 29  | svc-pay       | `index.ts:94`         | `POST /webhooks/:railId`                    | Rail webhook. Raw body preserved; `adapter.verifyWebhook` does HMAC + timestamp tolerance and returns `null` on failure; parse happens only after verify; one uninformative 401 for every rejection | SAFE-PUBLIC (authenticated by rail signature) |
+| 30  | svc-protocol  | `index.ts:80`         | `GET /health`                               | `{ok, service, chainId, custodial:false, relayEnabled}`                                                                                                                                             | SAFE-PUBLIC                                   |
+| 31  | svc-protocol  | `index.ts:92`         | `GET /ready`                                | 503 + chain error message when RPC unreachable                                                                                                                                                      | SAFE-PUBLIC                                   |
+| 32  | svc-token     | `index.ts:52` / `:53` | `GET /health`, `GET /ready`                 | `{ok, service}` / `{ready, emissionsEnabled}`                                                                                                                                                       | SAFE-PUBLIC                                   |
+| 33  | svc-token     | `index.ts:55`         | `GET /internal/stake/:userId`               | Any user's staked amount, tier and fee discount                                                                                                                                                     | **NEEDS-SERVICE-AUTH** — F7                   |
 
 ---
 
@@ -138,7 +143,7 @@ This is the most important finding in the document, and it is not the one that w
 `services/svc-ledger/src/index.ts` never registers `fastifyTRPCPlugin`. It has no `createEdgeContext` call. The only thing it mounts is:
 
 ```ts
-registerS2sHttp(app, ledger);   // index.ts:49
+registerS2sHttp(app, ledger); // index.ts:49
 ```
 
 which is:
@@ -175,9 +180,9 @@ Balanced, so every invariant holds; `railBoundary` is a treasury account permitt
 
 The service's own header comment states the intent:
 
-> `index.ts:13` — *"Graph W1-C: S2S money plane via registerS2sHttp (plain /trpc/\* for clients). Network policy must keep these off the public internet until holds + service auth land for real deploy."*
+> `index.ts:13` — _"Graph W1-C: S2S money plane via registerS2sHttp (plain /trpc/\* for clients). Network policy must keep these off the public internet until holds + service auth land for real deploy."_
 
-That is a comment, not a control — the same category of thing `svc-identity`'s `awardXp` was corrected for (`services/svc-identity/src/router.ts:165`: *"This was `publicProcedure` with only a comment saying 'service-to-service', which is a comment, not a control"*). The same reasoning applies here with money instead of XP.
+That is a comment, not a control — the same category of thing `svc-identity`'s `awardXp` was corrected for (`services/svc-identity/src/router.ts:165`: _"This was `publicProcedure` with only a comment saying 'service-to-service', which is a comment, not a control"_). The same reasoning applies here with money instead of XP.
 
 ---
 
@@ -254,7 +259,7 @@ app.post('/internal/jobs/run-due-transfers', async (_req, reply) => {
 });
 ```
 
-The router's own comment states why the scope is there (`router.ts:385`): *"The jobs live behind `admin:treasury` — a scope §4.1 marks interactive-only, so it can never be held by a long-lived API key."* The HTTP route requires neither the scope nor the MFA that scope implies.
+The router's own comment states why the scope is there (`router.ts:385`): _"The jobs live behind `admin:treasury` — a scope §4.1 marks interactive-only, so it can never be held by a long-lived API key."_ The HTTP route requires neither the scope nor the MFA that scope implies.
 
 **What an anonymous caller actually gets.** Both jobs are properly idempotent, and the audit checked this rather than assuming it — `accrueInner` claims the day with `INSERT ... ON CONFLICT (pool_id, accrual_date) DO NOTHING` (`earn/earn-service.ts:428`), and `driveSchedule` derives what has fired from `MAX(occurrence)` in `bank.transfer_executions` rather than a counter (`transfers/transfer-service.ts:265`). So this is **not** an interest-minting or double-payment bug, and it should not be written up as one.
 
@@ -275,9 +280,11 @@ Registration must be public. Two things about this implementation are not conseq
 **Enumeration.** `auth-service.ts:68`:
 
 ```ts
-const clash = await tx`SELECT handle, email FROM identity.users WHERE handle = ${input.handle} OR email = ${input.email}`;
+const clash =
+  await tx`SELECT handle, email FROM identity.users WHERE handle = ${input.handle} OR email = ${input.email}`;
 for (const row of clash) {
-  if (row.handle.toLowerCase() === input.handle.toLowerCase()) throw new AuthError('That handle is taken', 'auth.handle_taken');
+  if (row.handle.toLowerCase() === input.handle.toLowerCase())
+    throw new AuthError('That handle is taken', 'auth.handle_taken');
   throw new AuthError('An account with that email already exists', 'auth.email_taken');
 }
 ```
@@ -286,7 +293,7 @@ Both map to `CONFLICT` (`router.ts:31-34`) but with distinct `intafacedCode`s (`
 
 Worth contrasting with `login`, which gets the same problem right — `auth-service.ts:123` hashes against `dummyPasswordHash()` when no user exists specifically so an unknown account costs the same time as a wrong password. The care taken on the login path was not carried to the registration path.
 
-**No metering.** `grep -ri 'rate.?limit|@fastify/rate-limit|lockout|captcha'` across the repo returns matches only in `packages/i18n`, `packages/exchange-contract`, `INTAFACED_DEFINITIVE_BUILD.md`, and `docs/decisions/mount-boundary.md:95` (which records the gap: *"No rate limiting, no request size cap on mounted services"*). There is no implementation. `REGISTRATION_OPEN` is the only brake, and it is binary. Each registration runs an argon2id hash, three inserts, a NATS publish and an XP award, so this is also the cheapest CPU-exhaustion request in the system.
+**No metering.** `grep -ri 'rate.?limit|@fastify/rate-limit|lockout|captcha'` across the repo returns matches only in `packages/i18n`, `packages/exchange-contract`, `INTAFACED_DEFINITIVE_BUILD.md`, and `docs/decisions/mount-boundary.md:95` (which records the gap: _"No rate limiting, no request size cap on mounted services"_). There is no implementation. `REGISTRATION_OPEN` is the only brake, and it is binary. Each registration runs an argon2id hash, three inserts, a NATS publish and an XP award, so this is also the cheapest CPU-exhaustion request in the system.
 
 **Bug, unrelated to auth, found on this path.** `router.ts:71`:
 
@@ -316,16 +323,16 @@ The cryptography here is careful — constant-time comparison against a real dum
 
 Each of these has a tRPC counterpart carrying a scope. The HTTP version carries nothing. The prefix `/internal/` is a naming convention; Fastify does not treat it specially and nothing in these services filters on path.
 
-| Route | File:line | Returns | Scope on the tRPC twin |
-|-------|-----------|---------|------------------------|
-| `GET /internal/stake/:userId` | `svc-token/src/index.ts:55` | `{staked, tier, feeDiscountBps}` — **a balance** | `stakeOf`: `scopedProcedure('token:read')` (`svc-token/src/router.ts:17`) |
-| `GET /internal/rank/:userId/perks` | `svc-identity/src/index.ts:63` | Rank perks — fee discounts, limits | `rank.perks`: `scopedProcedure('identity:read')` (`svc-identity/src/router.ts:156`) |
-| `GET /internal/reputation/:userId` | `svc-p2p/src/index.ts:77` | Trade counts, disputes, disputes lost, completion rate | `reputation.get`: `scopedProcedure('p2p:read', { module: 'p2p' })` — scope **and** `minTier: 'basic'` (`svc-p2p/src/router.ts:356`) |
-| `GET /internal/escrow-integrity` | `svc-p2p/src/index.ts:71` | Escrow-vs-ledger drift per (seller, asset) | none — operator surface with no tRPC equivalent |
+| Route                              | File:line                      | Returns                                                | Scope on the tRPC twin                                                                                                              |
+| ---------------------------------- | ------------------------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /internal/stake/:userId`      | `svc-token/src/index.ts:55`    | `{staked, tier, feeDiscountBps}` — **a balance**       | `stakeOf`: `scopedProcedure('token:read')` (`svc-token/src/router.ts:17`)                                                           |
+| `GET /internal/rank/:userId/perks` | `svc-identity/src/index.ts:63` | Rank perks — fee discounts, limits                     | `rank.perks`: `scopedProcedure('identity:read')` (`svc-identity/src/router.ts:156`)                                                 |
+| `GET /internal/reputation/:userId` | `svc-p2p/src/index.ts:77`      | Trade counts, disputes, disputes lost, completion rate | `reputation.get`: `scopedProcedure('p2p:read', { module: 'p2p' })` — scope **and** `minTier: 'basic'` (`svc-p2p/src/router.ts:356`) |
+| `GET /internal/escrow-integrity`   | `svc-p2p/src/index.ts:71`      | Escrow-vs-ledger drift per (seller, asset)             | none — operator surface with no tRPC equivalent                                                                                     |
 
 **Concrete attack.** Walk user uuids (obtainable from `sessionOutput.userId`, from `offerOutput.makerId`, from `tradeOutput.sellerId`/`buyerId`) and harvest, per user, their staked balance, their fee tier, and their full P2P dispute history. Cross-referenced, that is a ranked target list: who holds the most, who has lost disputes, who trades at volume. All of it is behind a scope on the tRPC path and behind nothing here.
 
-`svc-identity/src/index.ts:61` states the assumption explicitly: *"Not edge-principal: internal network only; no scopes to elevate."* `HTTP_HOST` defaults to `0.0.0.0` and no network policy is asserted anywhere in the repo, so "internal network only" is a deployment intention. The second clause — "no scopes to elevate" — is true and is why this is an F7 and not an F1: these leak data, they do not move value.
+`svc-identity/src/index.ts:61` states the assumption explicitly: _"Not edge-principal: internal network only; no scopes to elevate."_ `HTTP_HOST` defaults to `0.0.0.0` and no network policy is asserted anywhere in the repo, so "internal network only" is a deployment intention. The second clause — "no scopes to elevate" — is true and is why this is an F7 and not an F1: these leak data, they do not move value.
 
 `escrow-integrity` is a different shape: it is the operator alarm for Doctrine §0.6 drift. Exposing it tells an attacker when this service's view of escrow and the ledger's view disagree, which is precisely the window in which an escrow bug is exploitable.
 
@@ -364,12 +371,12 @@ Every other service's `/health` returns `{ok, service}` and nothing more. This o
 - owner mode: `recoverAddress` over the EIP-191 digest, compared against `chain.ownerOf(account)` read from the chain (`:164-170`);
 - session mode: the recovered signer must hold a session on-chain, that session must be live, the calldata must decode to `executeWithSession`, the named key must equal the recovered signer, and the presented spec hash must equal the granted one (`:178-198`).
 
-There is no signing key in the service (`index.ts:22` — *"it loads no private key"*). An anonymous caller can only relay an operation the account's own owner or a live session key already signed, and could equally submit it to any public bundler themselves. **SAFE-PUBLIC, verified.**
+There is no signing key in the service (`index.ts:22` — _"it loads no private key"_). An anonymous caller can only relay an operation the account's own owner or a live session key already signed, and could equally submit it to any public bundler themselves. **SAFE-PUBLIC, verified.**
 
 The residual, stated at its real size:
 
 - **Unmetered outbound work.** `verify` calls `chain.ownerOf` / `sessionOf` / `isSessionLive` **before** any expensive rejection, and `predictAddress` calls `chain.isDeployed` on every request. Each is an RPC call to `PROTOCOL_RPC_URL`. An anonymous caller sends `relayUserOperation` with arbitrary `account` addresses and a junk signature — every one costs an upstream RPC call before it is refused. Against a metered RPC provider that is a billing-drain and quota-exhaustion vector, and exhausting the quota takes `/ready` to 503 (`index.ts:92`) and the service out of rotation. Not a doctrine violation and not a custody risk; a rate limit, not a scope, is the fix.
-- **The jurisdiction guard is decorative here.** As established at the top: `publicJurisdictionProcedure('protocol', 'protocol')` cannot deny anything, because `checkAccess` short-circuits before the region lookup for anything but `entry.blocked`, and no entry sets it. This is *intended* — §22 is the whole point — but it means the guard provides no defence-in-depth if `MODULES.protocol.custodial` is ever flipped. The boot assertion at `index.ts:108` is what actually protects that invariant, and it is the right control.
+- **The jurisdiction guard is decorative here.** As established at the top: `publicJurisdictionProcedure('protocol', 'protocol')` cannot deny anything, because `checkAccess` short-circuits before the region lookup for anything but `entry.blocked`, and no entry sets it. This is _intended_ — §22 is the whole point — but it means the guard provides no defence-in-depth if `MODULES.protocol.custodial` is ever flipped. The boot assertion at `index.ts:108` is what actually protects that invariant, and it is the right control.
 
 ---
 
@@ -377,11 +384,11 @@ The residual, stated at its real size:
 
 Out of scope for this audit's question but in scope for "report bugs in the doc". All are authenticated-caller IDORs: a scope is checked, ownership is not.
 
-| File:line | Procedure | Missing check |
-|-----------|-----------|---------------|
-| `svc-bank/src/router.ts:248` | `transfers.cancel` | `scopedProcedure('bank:write')` with no `assertSelf`. Any authenticated user cancels any user's standing order by `scheduleId`. Neighbouring mutations (`transfers.create:165`, `transfers.schedule:191`, `earn.withdraw:311`, `spaces.archive:140`) all call `assertSelf`; this one does not. |
-| `svc-bank/src/router.ts:233` | `transfers.executions` | `scopedProcedure('bank:read')` with no ownership check on `scheduleId` — returns another user's transfer history, amounts included. |
-| `svc-pay/src/router.ts:196`, `:202`, `:246` | `payment.get`, `payment.history`, `settlement.get` | `pay:read` with no merchant-ownership check. Any merchant reads any other merchant's payments, event history and settlements by id. |
+| File:line                                   | Procedure                                          | Missing check                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `svc-bank/src/router.ts:248`                | `transfers.cancel`                                 | `scopedProcedure('bank:write')` with no `assertSelf`. Any authenticated user cancels any user's standing order by `scheduleId`. Neighbouring mutations (`transfers.create:165`, `transfers.schedule:191`, `earn.withdraw:311`, `spaces.archive:140`) all call `assertSelf`; this one does not. |
+| `svc-bank/src/router.ts:233`                | `transfers.executions`                             | `scopedProcedure('bank:read')` with no ownership check on `scheduleId` — returns another user's transfer history, amounts included.                                                                                                                                                            |
+| `svc-pay/src/router.ts:196`, `:202`, `:246` | `payment.get`, `payment.history`, `settlement.get` | `pay:read` with no merchant-ownership check. Any merchant reads any other merchant's payments, event history and settlements by id.                                                                                                                                                            |
 
 `svc-trade` and `svc-agents` do this correctly and are worth copying: `trade.getOrder` filters on `order.userId !== principal.userId` (`spot/trade-service.ts:762`), and `ownedSession` (`svc-agents/src/router.ts:126`) returns the same `NOT_FOUND` for "does not exist" and "is not yours" so the endpoint is not an id oracle.
 
@@ -393,7 +400,7 @@ Derived from what this audit actually found, not from first principles. Every qu
 
 **Before mounting any service:**
 
-1. **Is the router you audited the surface that is actually served?** F1. `svc-ledger` has a fully-scoped tRPC router that `index.ts` never registers, and a raw handler that is registered and has no auth. Open `index.ts`, list every `app.get`/`app.post`/`app.delete`/`register(...)` call, and audit *that* list. A `publicProcedure` in an unmounted router is a typo; an unauthenticated `app.post` in a mounted one is an incident.
+1. **Is the router you audited the surface that is actually served?** F1. `svc-ledger` has a fully-scoped tRPC router that `index.ts` never registers, and a raw handler that is registered and has no auth. Open `index.ts`, list every `app.get`/`app.post`/`app.delete`/`register(...)` call, and audit _that_ list. A `publicProcedure` in an unmounted router is a typo; an unauthenticated `app.post` in a mounted one is an incident.
 
 2. **Does every raw Fastify route have the same guard as its tRPC twin — or a documented reason it does not?** F3, F4, F7. Five services expose the same data or the same job twice, once behind a scope and once behind nothing. Diff the two lists explicitly. If a route has no twin (`escrow-integrity`), say who is allowed to call it and what enforces that.
 
@@ -411,7 +418,7 @@ Derived from what this audit actually found, not from first principles. Every qu
 
 9. **Does any error distinguish "exists" from "does not exist"?** F5. `auth.handle_taken` vs `auth.email_taken` is an enumeration oracle. `ownedSession` in svc-agents is the pattern to copy: same error either way.
 
-10. **Does every mutation that names an id verify the caller owns it?** Adjacent findings. A scope answers "may this principal do this kind of thing"; it never answers "may they do it to *this* row".
+10. **Does every mutation that names an id verify the caller owns it?** Adjacent findings. A scope answers "may this principal do this kind of thing"; it never answers "may they do it to _this_ row".
 
 ---
 
