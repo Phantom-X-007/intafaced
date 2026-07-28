@@ -3,11 +3,16 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   /**
-   * `@intafaced/ui` is a workspace package that ships untranspiled-for-Next
-   * ESM plus a raw `tokens.css`. Without this, Next treats it as an external
-   * and the CSS import from `layout.tsx` never reaches the bundler.
+   * Workspace packages ship untranspiled-for-Next ESM (and, for `@intafaced/ui`,
+   * a raw `tokens.css`). Without this, Next treats them as externals and the CSS
+   * import from `layout.tsx` never reaches the bundler.
+   *
+   * Only browser-safe packages are listed. `@intafaced/contracts` is imported at
+   * the `/identity` subpath for its zod schemas alone — its root export reaches
+   * `node:crypto` through `edge.ts`, which has no business in a browser bundle
+   * and would not resolve in one anyway.
    */
-  transpilePackages: ['@intafaced/ui'],
+  transpilePackages: ['@intafaced/ui', '@intafaced/config', '@intafaced/contracts', '@intafaced/ledger-client', '@intafaced/market-data'],
 
   /**
    * pnpm symlinks workspace deps, so Next's file tracer walks up out of

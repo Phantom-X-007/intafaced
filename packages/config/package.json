@@ -18,6 +18,10 @@
       "types": "./dist/flags.d.ts",
       "default": "./dist/flags.js"
     },
+    "./modules": {
+      "types": "./dist/modules.d.ts",
+      "default": "./dist/modules.js"
+    },
     "./jurisdiction": {
       "types": "./dist/jurisdiction.d.ts",
       "default": "./dist/jurisdiction.js"

@@ -3,7 +3,7 @@
   inset: 0;
   z-index: -1;
   overflow: hidden;
-  background: var(--if-black);
+  background: var(--if-base);
   pointer-events: none;
 }
 
@@ -12,12 +12,12 @@
   position: absolute;
   inset: -1px;
   background-image:
-    linear-gradient(to right, var(--if-glass-border) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--if-glass-border) 1px, transparent 1px);
+    linear-gradient(to right, var(--if-border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--if-border) 1px, transparent 1px);
   background-size: 64px 64px;
   opacity: 0.35;
-  mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, var(--if-black) 0%, transparent 75%);
-  -webkit-mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, var(--if-black) 0%, transparent 75%);
+  mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, var(--if-base) 0%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, var(--if-base) 0%, transparent 75%);
 }
 
 /* Phosphor bloom over the masthead — the CRT is warm at the top. */
@@ -25,8 +25,8 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 60% 40% at 50% -10%, var(--if-phosphor-glow) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 30% at 90% 10%, var(--if-glass-border) 0%, transparent 70%);
+    radial-gradient(ellipse 60% 40% at 50% -10%, var(--if-accent-glow) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 90% 10%, var(--if-border) 0%, transparent 70%);
   opacity: 0.5;
 }
 
@@ -34,7 +34,7 @@
 .scan {
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(to bottom, transparent 0 2px, var(--if-glass) 2px 4px);
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, var(--if-surface) 2px 4px);
   opacity: 0.6;
   animation: drift 12s linear infinite;
 }

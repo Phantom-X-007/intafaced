@@ -77,19 +77,19 @@ textarea {
 
 /* Focus is phosphor, always visible, never removed. */
 :focus-visible {
-  outline: 1px solid var(--if-phosphor);
+  outline: 1px solid var(--if-accent);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--if-glass-border-strong);
+  background: var(--if-border-strong);
   color: var(--if-text);
 }
 
 /* Scrollbars are part of the console, not the OS chrome. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--if-glass-border-strong) transparent;
+  scrollbar-color: var(--if-border-strong) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -98,7 +98,7 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--if-glass-border-strong);
+  background: var(--if-border-strong);
   border-radius: var(--if-radius-pill);
 }
 

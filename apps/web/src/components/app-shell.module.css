@@ -12,10 +12,10 @@
   top: calc(var(--if-space-4) * -4);
   z-index: 100;
   padding: var(--if-space-2) var(--if-space-4);
-  border: 1px solid var(--if-glass-border-strong);
+  border: 1px solid var(--if-border-strong);
   border-radius: var(--if-radius-md);
-  background: var(--if-black);
-  color: var(--if-phosphor);
+  background: var(--if-base);
+  color: var(--if-accent);
   font-family: var(--if-font-display);
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -37,10 +37,10 @@
   align-items: center;
   gap: var(--if-space-6);
   padding: var(--if-space-3) var(--if-space-6);
-  border-bottom: 1px solid var(--if-glass-border);
-  background: var(--if-glass);
-  backdrop-filter: var(--if-blur-glass);
-  -webkit-backdrop-filter: var(--if-blur-glass);
+  border-bottom: 1px solid var(--if-border);
+  background: var(--if-surface);
+  backdrop-filter: var(--if-blur-panel);
+  -webkit-backdrop-filter: var(--if-blur-panel);
 }
 
 .brand {
@@ -52,9 +52,9 @@
 .mark {
   width: 10px;
   height: 10px;
-  border: 1px solid var(--if-phosphor);
+  border: 1px solid var(--if-accent);
   border-radius: var(--if-radius-sm);
-  background: var(--if-glass-border-strong);
+  background: var(--if-border-strong);
   box-shadow: var(--if-shadow-glow);
 }
 
@@ -91,9 +91,9 @@
 }
 
 .navLink:hover {
-  color: var(--if-phosphor);
-  border-color: var(--if-glass-border);
-  background: var(--if-glass-raised);
+  color: var(--if-accent);
+  border-color: var(--if-border);
+  background: var(--if-surface-raised);
 }
 
 .status {
@@ -107,19 +107,32 @@
   color: var(--if-text-faint);
 }
 
+/**
+ * The status dot carries a measured tone, and only the reachable one pulses. A
+ * dot that glows the same colour whatever the fleet is doing is decoration
+ * pretending to be telemetry.
+ */
 .pulse {
   width: 6px;
   height: 6px;
   border-radius: var(--if-radius-pill);
-  background: var(--if-phosphor);
+  background: var(--if-text-faint);
+}
+
+.pulse[data-tone='up'] {
+  background: var(--if-accent);
   box-shadow: var(--if-shadow-glow);
   animation: statusPulse 2.4s ease-in-out infinite;
+}
+
+.pulse[data-tone='down'] {
+  background: var(--if-danger);
 }
 
 .divider {
   width: 1px;
   height: 12px;
-  background: var(--if-glass-border);
+  background: var(--if-border);
 }
 
 .session {
@@ -140,7 +153,7 @@
   justify-content: space-between;
   gap: var(--if-space-4);
   padding: var(--if-space-4) var(--if-space-6);
-  border-top: 1px solid var(--if-glass-border);
+  border-top: 1px solid var(--if-border);
   font-family: var(--if-font-display);
   font-size: 10px;
   letter-spacing: 0.14em;

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import styles from './app-shell.module.css';
 import { GridBackdrop } from './grid-backdrop';
+import { PlatformStatus } from './platform-status';
 
 /**
  * The chrome every surface sits inside: masthead, module nav, status rail.
@@ -19,9 +20,7 @@ const copy = {
     { href: '/', label: 'Overview' },
     { href: '/trade', label: 'Trade' },
   ],
-  status: 'Systems nominal',
-  session: 'Guest session',
-  footprint: 'Sovereign OS · Phase 2 shell',
+  footprint: 'Sovereign OS · Phase 2',
 } as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -47,12 +46,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className={styles.status}>
-          <span className={styles.pulse} aria-hidden="true" />
-          <span>{copy.status}</span>
-          <span className={styles.divider} aria-hidden="true" />
-          <span className={styles.session}>{copy.session}</span>
-        </div>
+        {/* Measured, not asserted — see platform-status.tsx. */}
+        <PlatformStatus />
       </header>
 
       <main id="main" className={styles.main}>
