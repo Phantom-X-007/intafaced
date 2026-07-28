@@ -228,6 +228,64 @@ if (!available) {
     });
   });
 
+  // ── Fee discount (§4.3) ───────────────────────────────────────────────────
+
+  describe('fee discount — token_params is the authority', () => {
+    /** The seeded row, restored after any test that edits it. */
+    const readSchedule = async () =>
+      (await sql<Array<{ fee_discount_schedule: unknown }>>`SELECT fee_discount_schedule FROM token.token_params WHERE id = true`)[0]!
+        .fee_discount_schedule;
+
+    it('answers from the seeded row', async () => {
+      await fund(USER_A, '10000');
+      await token.stake({ userId: USER_A, amount: amt('10000'), tier: 'flex' });
+
+      // 2000 is what `token_params` holds at the 10,000 IFC step. Written out, not read back
+      // out of the schedule — the old tests derived their expectation from the very array
+      // they were checking, which is why a four-step divergence survived.
+      expect((await token.accessOf(USER_A)).feeDiscountBps).toBe(2_000);
+    });
+
+    it('follows a governance edit to the row without a redeploy (§4.3 fee_param)', async () => {
+      const original = await readSchedule();
+      try {
+        await sql`
+          UPDATE token.token_params
+             SET fee_discount_schedule = ${sql.json({
+               basis: 'staked',
+               tiers: [
+                 { minStake: '0', discountBps: 0 },
+                 { minStake: '10000', discountBps: 4_200 },
+               ],
+             } as never)}
+           WHERE id = true
+        `;
+
+        await fund(USER_A, '10000');
+        await token.stake({ userId: USER_A, amount: amt('10000'), tier: 'flex' });
+
+        // ttl 0 so the read is not answered from a cache filled before the edit.
+        const fresh = new TokenService(sql, ledger, bus, { ...options, feeScheduleTtlMs: 0 });
+        expect((await fresh.accessOf(USER_A)).feeDiscountBps).toBe(4_200);
+      } finally {
+        await sql`UPDATE token.token_params SET fee_discount_schedule = ${sql.json(original as never)} WHERE id = true`;
+      }
+    });
+
+    it('refuses to serve a discount at all when the row is unreadable', async () => {
+      // No fallback to the compiled-in default, deliberately: falling back would charge a
+      // discount the database does not hold, silently — the exact failure being fixed here.
+      const original = await readSchedule();
+      try {
+        await sql`UPDATE token.token_params SET fee_discount_schedule = '{"basis":"balance","tiers":[]}'::jsonb WHERE id = true`;
+        const fresh = new TokenService(sql, ledger, bus, { ...options, feeScheduleTtlMs: 0 });
+        await expect(fresh.accessOf(USER_A)).rejects.toThrow(RangeError);
+      } finally {
+        await sql`UPDATE token.token_params SET fee_discount_schedule = ${sql.json(original as never)} WHERE id = true`;
+      }
+    });
+  });
+
   // ── Real yield ────────────────────────────────────────────────────────────
 
   describe('real-yield distribution', () => {
