@@ -71,6 +71,11 @@ const BLOCKED: JurisdictionRule = { status: 'blocked', minTier: 'institutional' 
  * and issuance products need `full`.
  */
 export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> = {
+  // The edge gates nothing itself. Applying a tier here would block the
+  // anonymous requests that `auth.register` and `auth.login` depend on, and
+  // would put a jurisdiction check in front of every module rather than in the
+  // module that owns the rule.
+  edge: { status: 'open', minTier: 'none' },
   identity: { status: 'open', minTier: 'none' },
   ledger: OPEN_BASIC,
   token: OPEN_BASIC,

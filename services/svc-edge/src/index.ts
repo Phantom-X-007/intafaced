@@ -1,0 +1,116 @@
+import Fastify from 'fastify';
+import { env } from './env.js';
+import { exchangePrincipal } from './principal-exchange.js';
+import { resolve, UPSTREAMS } from './routes.js';
+import { withEdgeSpan } from './tracing.js';
+
+/**
+ * svc-edge — the front door (§9).
+ *
+ * Everything a browser touches arrives here, and nothing reaches a service any
+ * other way. Its single job: turn a bearer token into a principal the services
+ * will believe, and refuse to carry anything else the caller tried to smuggle
+ * under our header prefix.
+ *
+ * Until this existed, `packages/contracts/src/edge.ts` verified a signature no
+ * component produced, so every `scopedProcedure` in the platform refused every
+ * caller. svc-identity issued a JWT that opened no door.
+ */
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, disableRequestLogging: false });
+
+const upstreamUrl = (envVar: string, devUrl: string): string => (process.env[envVar] ?? devUrl).replace(/\/$/, '');
+
+app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
+
+app.get('/ready', async () => ({
+  ready: true,
+  // The route table, so an operator can see what the edge will forward without
+  // reading the source. Deliberately no secrets, no upstream URLs.
+  routes: UPSTREAMS.map((u) => u.prefix),
+}));
+
+/**
+ * The proxy.
+ *
+ * A catch-all rather than a route per upstream, because the failure mode of a
+ * missing route must be 404 — not "fell through to a default upstream".
+ */
+app.all('/api/*', async (req, reply) => {
+  const url = new URL(req.url, `http://${env.HTTP_HOST}`);
+  const target = resolve(url.pathname);
+
+  if (!target) {
+    // An unlisted prefix is not forwarded anywhere. An edge that proxies what
+    // it does not recognise is a proxy for the entire internal network.
+    return reply.code(404).send({ error: 'no route', code: 'edge.no_route' });
+  }
+
+  const exchanged = await exchangePrincipal(req.headers, {
+    tokens: {
+      secret: env.JWT_ACCESS_SECRET,
+      issuer: env.JWT_ISSUER,
+      audience: env.JWT_AUDIENCE,
+      accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
+    },
+    edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+    // Resolved here, never read from the request: region drives the
+    // jurisdiction matrix, so a caller who could set it would choose its own
+    // regulator. A single configured value today; geo-IP replaces this line.
+    region: env.DEFAULT_REGION,
+  });
+
+  // A refused token is logged and the request continues as ANONYMOUS. The
+  // service decides — `protectedProcedure` answers UNAUTHORIZED with the right
+  // status, and a `publicProcedure` still works, which is what lets a caller
+  // with an expired token reach `auth.refresh` and recover.
+  if (exchanged.rejected) {
+    req.log.info({ reason: exchanged.rejected, path: url.pathname }, 'edge: token refused, forwarding anonymous');
+  }
+
+  const base = upstreamUrl(target.upstream.envVar, target.upstream.devUrl);
+  const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : (req.body as unknown);
+
+  return withEdgeSpan(
+    'edge.proxy',
+    {
+      upstream: target.upstream.prefix,
+      method: req.method,
+      auth: exchanged.rejected ?? (exchanged.principal ? 'authenticated' : 'anonymous'),
+    },
+    async () => {
+      let response: Response;
+      try {
+        response = await fetch(`${base}${target.path}${url.search}`, {
+          method: req.method,
+          headers: exchanged.headers,
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          signal: AbortSignal.timeout(env.UPSTREAM_TIMEOUT_MS),
+        });
+      } catch (err) {
+        // 502, not 500: the edge is fine, the upstream is not, and a caller
+        // needs to tell those apart before deciding whether to retry.
+        req.log.error({ err, upstream: target.upstream.prefix }, 'edge: upstream unreachable');
+        return reply.code(502).send({ error: 'upstream unavailable', code: 'edge.upstream_unavailable' });
+      }
+
+      const text = await response.text();
+      return reply
+        .code(response.status)
+        .header('content-type', response.headers.get('content-type') ?? 'application/json')
+        .send(text);
+    },
+  );
+});
+
+await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
+app.log.info({ port: env.HTTP_PORT, routes: UPSTREAMS.length }, 'svc-edge ready');
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => {
+    void (async () => {
+      await app.close();
+      process.exit(0);
+    })();
+  });
+}
