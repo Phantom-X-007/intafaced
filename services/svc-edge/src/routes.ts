@@ -24,14 +24,14 @@ export interface Upstream {
 
 export const UPSTREAMS: readonly Upstream[] = [
   { prefix: '/api/identity', envVar: 'IDENTITY_URL', devUrl: 'http://localhost:4002' },
-  { prefix: '/api/trade', envVar: 'TRADE_URL', devUrl: 'http://localhost:4005' },
+  { prefix: '/api/trade', envVar: 'TRADE_URL', devUrl: 'http://localhost:4004' },
   { prefix: '/api/token', envVar: 'TOKEN_URL', devUrl: 'http://localhost:4003' },
   { prefix: '/api/agents', envVar: 'AGENTS_URL', devUrl: 'http://localhost:4008' },
   { prefix: '/api/bank', envVar: 'BANK_URL', devUrl: 'http://localhost:4009' },
-  { prefix: '/api/p2p', envVar: 'P2P_URL', devUrl: 'http://localhost:4006' },
-  { prefix: '/api/pay', envVar: 'PAY_URL', devUrl: 'http://localhost:4007' },
-  { prefix: '/api/blueprint', envVar: 'BLUEPRINT_URL', devUrl: 'http://localhost:4010' },
-  { prefix: '/api/protocol', envVar: 'PROTOCOL_URL', devUrl: 'http://localhost:4011' },
+  { prefix: '/api/p2p', envVar: 'P2P_URL', devUrl: 'http://localhost:4007' },
+  { prefix: '/api/pay', envVar: 'PAY_URL', devUrl: 'http://localhost:4006' },
+  { prefix: '/api/blueprint', envVar: 'BLUEPRINT_URL', devUrl: 'http://localhost:4011' },
+  { prefix: '/api/protocol', envVar: 'PROTOCOL_URL', devUrl: 'http://localhost:4012' },
   // The Protocol Plane's front door. Routed like any other service — the edge
   // does not know or care that its procedures are permissionless; that is the
   // module's own jurisdiction rule, not a property of the route table.

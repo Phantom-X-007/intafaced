@@ -180,14 +180,14 @@ services:
       DEFAULT_REGION: ${DEFAULT_REGION:-XX}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-15000}
       IDENTITY_URL: http://svc-identity:4002
-      TRADE_URL: http://svc-trade:4005
+      TRADE_URL: http://svc-trade:4004
       TOKEN_URL: http://svc-token:4003
       AGENTS_URL: http://svc-agents:4008
       BANK_URL: http://svc-bank:4009
-      P2P_URL: http://svc-p2p:4006
-      PAY_URL: http://svc-pay:4007
-      BLUEPRINT_URL: http://svc-blueprint:4010
-      PROTOCOL_URL: http://svc-protocol:4011
+      P2P_URL: http://svc-p2p:4007
+      PAY_URL: http://svc-pay:4006
+      BLUEPRINT_URL: http://svc-blueprint:4011
+      PROTOCOL_URL: http://svc-protocol:4012
       DEX_URL: http://svc-dex:4010
     ports: ['4000:4000']
     healthcheck: *healthcheck
