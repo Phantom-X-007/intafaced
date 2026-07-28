@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`███░░░░░░░░░░░░░░░░░` **17%** — 18 of 103 features shipped
+`█████░░░░░░░░░░░░░░░` **24%** — 25 of 103 features shipped
 
-Phases: **0** 10/11 · **1** 4/12 · **2** 3/16 · **3** 0/15 · **3P** 0/7 · **4** 0/5 · **4P** 0/3 · **5** 1/32 · **5P** 0/2
+Phases: **0** 10/11 · **1** 4/12 · **2** 3/16 · **3** 4/15 · **3P** 1/7 · **4** 1/5 · **4P** 0/3 · **5** 2/32 · **5P** 0/2
 
-**🟢 33 ready to claim** — nothing blocks these:
+**🟢 41 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `identity.apikeys` — Scoped API keys, sub-accounts
@@ -24,7 +24,7 @@ Phases: **0** 10/11 · **1** 4/12 · **2** 3/16 · **3** 0/15 · **3P** 0/7 · *
 - `token.staking` — Stake tiers, locks, access gating
 - `token.yield` — Real-yield distribution from platform fees
 - `token.buyback` — Buyback & burn split
-- …and 25 more
+- …and 33 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

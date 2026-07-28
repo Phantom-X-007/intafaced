@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createDb } from '@intafaced/db';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { checkAccess } from '@intafaced/config';
 import type { Address } from 'viem';
@@ -10,7 +12,7 @@ import { AccountRegistry } from './accounts/registry.js';
 import { ProtocolChain } from './chain/client.js';
 import { SessionRelay } from './session/relay.js';
 import { ChainObserver } from './events.js';
-import { createProtocolRouter } from './router.js';
+import { createProtocolRouter, type ProtocolRouter } from './router.js';
 
 /**
  * svc-protocol — the Protocol Plane's smart account layer (§17.4, §17.5).
@@ -68,7 +70,11 @@ let relayEnabled = env.PROTOCOL_RELAY_ENABLED;
 export const appRouter = createProtocolRouter({ chain, registry, relay, relayEnabled: () => relayEnabled });
 export type AppRouter = typeof appRouter;
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+// Built before the listener opens: a service that cannot authenticate the edge
+// must fail to start, not start and serve every request as anonymous.
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 const observer = new ChainObserver({
   chain,

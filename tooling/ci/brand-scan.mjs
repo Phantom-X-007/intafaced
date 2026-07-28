@@ -45,6 +45,21 @@ const FORBIDDEN = [
   { pattern: /\bClaude\b/i, reason: 'model provider' },
   { pattern: /\bOpenAI\b/i, reason: 'model provider' },
   { pattern: /\bGPT-\d/i, reason: 'model provider' },
+
+  // Third-party exchange provenance. These names carry no product meaning for
+  // us, so the only route into the tree is somebody copying in another
+  // project's source — which is precisely the moment a demo domain or a
+  // stranger's contact address ships to a customer. Added pre-emptively: as of
+  // this commit the repo contains none of them, and a guard that costs nothing
+  // is worth more than noticing late that support mail points at a person who
+  // has never heard of us.
+  { pattern: /\bbizzan\b/i, reason: 'third-party exchange vendor identity — also covers BizzanExchange, com.bizzan, bizzan.com' },
+  { pattern: /\bbitrade\b/i, reason: 'third-party exchange vendor identity (upstream module prefix)' },
+  { pattern: /\bcoinexchange\b/i, reason: 'third-party exchange vendor identity' },
+  {
+    pattern: /\b(?:877070886|837385225|220806216)@qq\.com\b/i,
+    reason: 'upstream author contact address — never ours to publish or point users at',
+  },
 ];
 
 /** Directories never scanned. */
@@ -57,6 +72,15 @@ const SKIP_DIRS = new Set([
   'coverage',
   'drizzle',
   '.docker-data',
+  // Third-party source we redistribute rather than author. Its package names,
+  // groupIds and entity→table mappings are load-bearing — renaming them to
+  // strip a vendor's identity breaks the build it came with. The rule that
+  // still applies is §0.7 at the boundary: nothing from here may surface in
+  // our UI, API responses or docs unrebranded, and the FORBIDDEN entries above
+  // are what catch it if it tries. Note the trade-off this makes: our own code
+  // would go unscanned if it were ever parked under a `vendor/` directory.
+  // Don't do that.
+  'vendor',
 ]);
 
 /**

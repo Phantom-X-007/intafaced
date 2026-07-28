@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
 const evmAddress = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address');
 
@@ -14,8 +14,14 @@ const evmAddress = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte he
  *
  * If a future change adds a private key to this file, that change is either
  * wrong or belongs in svc-bridge, which is custodial by design (§17.3).
+ *
+ * `EDGE_PRINCIPAL_SECRET` is here because this service self-mounts /trpc. It is
+ * not a custody key and grants nothing on-chain: it only lets this service tell
+ * a principal the edge vouched for from one a caller typed. Most of the surface
+ * is permissionless; the registry procedures are not, and they are the reason
+ * (docs/decisions/mount-boundary.md).
  */
-const schema = serviceEnvSchema.merge(
+const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
   z.object({
     SERVICE_NAME: z.string().default('svc-protocol'),
     HTTP_PORT: z.coerce.number().int().default(4004),
