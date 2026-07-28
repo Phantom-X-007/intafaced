@@ -29,7 +29,7 @@ const SERVICES = join(ROOT, 'services');
  * svc-bridge is deliberately NOT here: it is the one seam that debits the
  * ledger and credits the chain, and it is custodial by design (§17.3).
  */
-const PROTOCOL_PLANE_SERVICES = ['svc-chain', 'svc-indexer', 'svc-protocol'];
+const PROTOCOL_PLANE_SERVICES = ['svc-chain', 'svc-dex', 'svc-indexer', 'svc-protocol'];
 
 /** Importing any of these means the service can move value in the ledger. */
 const WRITE_SURFACE = [
