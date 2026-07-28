@@ -4,41 +4,45 @@
  */
 
 :root {
-  --if-black: #000000;
-  --if-phosphor: #00ff41;
-  --if-phosphor-dim: #00b32d;
-  --if-phosphor-glow: rgba(0, 255, 65, 0.35);
-
-  --if-glass: rgba(255, 255, 255, 0.03);
-  --if-glass-raised: rgba(255, 255, 255, 0.06);
-  --if-glass-border: rgba(0, 255, 65, 0.15);
-  --if-glass-border-strong: rgba(0, 255, 65, 0.35);
-
-  --if-text: #e8ffe8;
-  --if-text-muted: rgba(232, 255, 232, 0.55);
-  --if-text-faint: rgba(232, 255, 232, 0.32);
-
-  --if-long: #00ff41;
+  --if-base: #000000;
+  --if-surface: #0c0c0e;
+  --if-surface-raised: #16161a;
+  --if-surface-overlay: #232329;
+  --if-accent: #ff6b00;
+  --if-accent-bright: #ff8a2b;
+  --if-accent-dim: #c24f00;
+  --if-accent-glow: rgba(255, 107, 0, 0.30);
+  --if-azure: #3bb3e4;
+  --if-azure-dim: #049ddc;
+  --if-border: rgba(255, 255, 255, 0.09);
+  --if-border-strong: rgba(255, 255, 255, 0.18);
+  --if-border-accent: rgba(255, 107, 0, 0.50);
+  --if-text: #f7f7f8;
+  --if-text-muted: #a2a2ac;
+  --if-text-faint: rgba(247, 247, 248, 0.40);
+  --if-text-on-accent: #1a0a00;
+  --if-long: #00c46a;
+  --if-long-dim: #00994f;
   --if-short: #ff3b5c;
-  --if-warn: #ffb300;
-  --if-info: #39c0ed;
-
+  --if-short-dim: #d42b47;
+  --if-warn: #ffb020;
+  --if-danger: #ff3b5c;
+  --if-info: #3bb3e4;
   --if-font-display: 'Orbitron', 'Rajdhani', system-ui, sans-serif;
   --if-font-body: 'Inter', system-ui, -apple-system, sans-serif;
   --if-font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
-
   --if-radius-md: 4px;
   --if-radius-lg: 8px;
-
-  --if-blur-glass: blur(12px);
-  --if-shadow-glow: 0 0 12px rgba(0, 255, 65, 0.35);
-  --if-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --if-blur-panel: blur(12px);
+  --if-shadow-glow: 0 0 12px rgba(255, 107, 0, 0.30);
+  --if-shadow-panel: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --if-shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.6);
   --if-motion-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 html,
 body {
-  background: var(--if-black);
+  background: var(--if-base);
   color: var(--if-text);
   font-family: var(--if-font-body);
   /* The OS is a console. There is no light mode. */
@@ -62,16 +66,16 @@ body {
 
 .if-panel {
   position: relative;
-  background: var(--if-glass);
-  border: 1px solid var(--if-glass-border);
+  background: var(--if-surface);
+  border: 1px solid var(--if-border);
   border-radius: var(--if-radius-lg);
-  backdrop-filter: var(--if-blur-glass);
-  -webkit-backdrop-filter: var(--if-blur-glass);
+  backdrop-filter: var(--if-blur-panel);
+  -webkit-backdrop-filter: var(--if-blur-panel);
   box-shadow: var(--if-shadow-panel);
 }
 
 .if-panel[data-live='true'] {
-  border-color: var(--if-glass-border-strong);
+  border-color: var(--if-border-strong);
   box-shadow: var(--if-shadow-panel), var(--if-shadow-glow);
 }
 
@@ -81,7 +85,7 @@ body {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--if-glass-border);
+  border-bottom: 1px solid var(--if-border);
 }
 
 .if-panel__title {
@@ -89,7 +93,7 @@ body {
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--if-phosphor);
+  color: var(--if-accent);
 }
 
 .if-panel__body {
@@ -138,18 +142,18 @@ body {
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  border: 1px solid var(--if-glass-border);
+  border: 1px solid var(--if-border);
   border-radius: 999px;
-  background: var(--if-glass-raised);
+  background: var(--if-surface-raised);
   font-family: var(--if-font-display);
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--if-phosphor);
+  color: var(--if-accent);
 }
 
 .if-rank[data-tier='elite'] {
-  border-color: var(--if-glass-border-strong);
+  border-color: var(--if-border-strong);
   box-shadow: var(--if-shadow-glow);
 }
 
@@ -206,23 +210,23 @@ body {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  background: var(--if-glass);
-  border: 1px solid var(--if-glass-border);
+  background: var(--if-surface);
+  border: 1px solid var(--if-border);
   border-radius: var(--if-radius-lg);
-  backdrop-filter: var(--if-blur-glass);
-  -webkit-backdrop-filter: var(--if-blur-glass);
+  backdrop-filter: var(--if-blur-panel);
+  -webkit-backdrop-filter: var(--if-blur-panel);
   transition:
     border-color var(--if-motion-base),
     transform var(--if-motion-base);
 }
 
 .if-lobby:hover {
-  border-color: var(--if-glass-border-strong);
+  border-color: var(--if-border-strong);
   transform: translateY(-1px);
 }
 
 .if-lobby[data-live='true'] .if-lobby__status {
-  color: var(--if-phosphor);
+  color: var(--if-accent);
 }
 
 .if-lobby__status {

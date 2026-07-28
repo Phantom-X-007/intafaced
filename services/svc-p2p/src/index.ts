@@ -1,9 +1,12 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { P2pService } from './p2p-service.js';
 import { createLedgerClient } from './ledger-client.js';
+import { createP2pRouter, type P2pRouter } from './router.js';
 
 /**
  * svc-p2p — peer-to-peer trading with escrow (§6.2).
@@ -58,7 +61,14 @@ const p2p = new P2pService(sql, ledger, bus, {
   // when its mark-price surface lands.
 });
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+export const appRouter = createP2pRouter(p2p);
+export type AppRouter = typeof appRouter;
+
+// Built before the listener opens: a service that cannot authenticate the edge
+// must fail to start, not start and serve every request as anonymous.
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, tradingEnabled: env.P2P_TRADING_ENABLED }));
@@ -106,6 +116,18 @@ async function sweep(): Promise<void> {
 const sweepTimer = setInterval(() => void sweep(), env.P2P_SWEEP_INTERVAL_SECONDS * 1000);
 sweepTimer.unref();
 await sweep();
+
+await app.register(fastifyTRPCPlugin, {
+  prefix: '/trpc',
+  trpcOptions: {
+    router: appRouter,
+    // The edge terminates auth and forwards the resolved principal; this
+    // service never parses a token itself (§4.1 owns that). It does verify the
+    // edge's signature over that principal — see packages/contracts/src/edge.ts
+    // for why an unsigned header makes every scope check decorative.
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  } satisfies FastifyTRPCPluginOptions<P2pRouter>['trpcOptions'],
+});
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT, tradingEnabled: env.P2P_TRADING_ENABLED, feeBps: env.P2P_FEE_BPS }, 'svc-p2p ready');

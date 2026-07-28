@@ -1,0 +1,177 @@
+import { describe, expect, it } from 'vitest';
+import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
+import { verifyForwardedPrincipal, EDGE_PRINCIPAL_HEADER, EDGE_SIGNATURE_HEADER } from '@intafaced/contracts';
+import { exchangePrincipal, stripReserved } from './principal-exchange.js';
+
+const tokens: TokenConfig = {
+  secret: 'edge-test-jwt-signing-secret-32-chars',
+  issuer: 'intafaced',
+  audience: 'intafaced',
+  accessTtlSeconds: 900,
+};
+
+const EDGE_SECRET = 'edge-test-principal-secret-32-chars!';
+const USER = '11111111-1111-4111-8111-111111111111';
+const SESSION = '22222222-2222-4222-8222-222222222222';
+
+const options = { tokens, edgeSecret: EDGE_SECRET, region: 'GB' };
+
+async function bearer(overrides: Partial<Parameters<typeof issueAccessToken>[0]> = {}) {
+  const { token } = await issueAccessToken(
+    { userId: USER, sessionId: SESSION, scopes: ['trade:read', 'trade:write'], tier: 'basic', mfa: false, ...overrides },
+    tokens,
+  );
+  return { authorization: `Bearer ${token}` };
+}
+
+describe('the exchange — a bearer token becomes a signed principal', () => {
+  it('produces a principal the services will actually accept', async () => {
+    const result = await exchangePrincipal(await bearer(), options);
+
+    expect(result.principal?.userId).toBe(USER);
+    expect(result.rejected).toBeNull();
+
+    // The real assertion: verify with the SAME function every mounted service
+    // uses. A header this test invents but `createEdgeContext` rejects would be
+    // worse than no edge at all.
+    const verified = verifyForwardedPrincipal(result.headers[EDGE_PRINCIPAL_HEADER], result.headers[EDGE_SIGNATURE_HEADER], EDGE_SECRET);
+    expect(verified.rejected).toBeNull();
+    expect(verified.principal?.userId).toBe(USER);
+    expect(verified.principal?.scopes).toEqual(['trade:read', 'trade:write']);
+    expect(verified.principal?.tier).toBe('basic');
+  });
+
+  it('carries mfa through, because INTERACTIVE_ONLY_SCOPES depends on it', async () => {
+    const result = await exchangePrincipal(await bearer({ mfa: true, scopes: ['trade:withdraw'] }), options);
+    const verified = verifyForwardedPrincipal(result.headers[EDGE_PRINCIPAL_HEADER], result.headers[EDGE_SIGNATURE_HEADER], EDGE_SECRET);
+
+    expect(verified.principal?.mfa).toBe(true);
+  });
+});
+
+describe('reserved headers are stripped, not overwritten', () => {
+  /**
+   * The attack this exists to stop. A client sends its own principal header
+   * with `admin:treasury` and `mfa: true`. If the edge merely overwrote on
+   * success, an ANONYMOUS request would sail through with the client's own.
+   */
+  it('drops a client-supplied principal on an anonymous request', async () => {
+    const forged = JSON.stringify({
+      sub: USER,
+      userId: USER,
+      sid: SESSION,
+      scopes: ['admin:treasury', 'trade:withdraw'],
+      tier: 'institutional',
+      mfa: true,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const result = await exchangePrincipal({ [EDGE_PRINCIPAL_HEADER]: forged, [EDGE_SIGNATURE_HEADER]: 'f'.repeat(64) }, options);
+
+    expect(result.principal).toBeNull();
+    expect(result.headers[EDGE_PRINCIPAL_HEADER]).toBeUndefined();
+    expect(result.headers[EDGE_SIGNATURE_HEADER]).toBeUndefined();
+  });
+
+  it('drops a client-supplied principal even when a valid token is also present', async () => {
+    const forged = JSON.stringify({ userId: 'someone-else', scopes: ['admin:treasury'] });
+    const result = await exchangePrincipal({ ...(await bearer()), [EDGE_PRINCIPAL_HEADER]: forged }, options);
+
+    const verified = verifyForwardedPrincipal(result.headers[EDGE_PRINCIPAL_HEADER], result.headers[EDGE_SIGNATURE_HEADER], EDGE_SECRET);
+    expect(verified.principal?.userId).toBe(USER);
+    expect(verified.principal?.scopes).not.toContain('admin:treasury');
+  });
+
+  /**
+   * Region drives the jurisdiction matrix — which modules a caller may reach.
+   * A client that sets its own region selects its own regulator.
+   */
+  it('refuses a client-supplied region and substitutes the resolved one', async () => {
+    const result = await exchangePrincipal({ ...(await bearer()), 'x-intafaced-region': 'XX' }, options);
+    expect(result.headers['x-intafaced-region']).toBe('GB');
+  });
+
+  it('drops a client-supplied SERVICE credential', async () => {
+    // Service identity is for service-to-service calls (#50). A browser must
+    // never be able to claim it and reach `ledger.post`.
+    const result = await exchangePrincipal(
+      { ...(await bearer()), 'x-intafaced-service': 'svc-trade', 'x-intafaced-service-sig': 'a'.repeat(64) },
+      options,
+    );
+
+    expect(result.headers['x-intafaced-service']).toBeUndefined();
+    expect(result.headers['x-intafaced-service-sig']).toBeUndefined();
+  });
+
+  it('strips every reserved header regardless of case', () => {
+    const out = stripReserved({
+      'X-Intafaced-Principal': 'forged',
+      'X-INTAFACED-REGION': 'XX',
+      'x-intafaced-anything-future': 'v',
+      'content-type': 'application/json',
+    });
+
+    expect(Object.keys(out)).toEqual(['content-type']);
+  });
+
+  it('never forwards the bearer token upstream', async () => {
+    // A service that can read a token is a service that can replay it.
+    const result = await exchangePrincipal(await bearer(), options);
+    expect(result.headers.authorization).toBeUndefined();
+  });
+
+  it('does not proxy hop-by-hop headers or the client host', () => {
+    const out = stripReserved({ host: 'evil.test', connection: 'keep-alive', 'content-length': '10', accept: '*/*' });
+    expect(Object.keys(out)).toEqual(['accept']);
+  });
+});
+
+describe('bad credentials land as anonymous, never as an error', () => {
+  it('treats a garbage token as anonymous rather than throwing', async () => {
+    const result = await exchangePrincipal({ authorization: 'Bearer not-a-jwt' }, options);
+
+    // `invalid`, not `malformed`: in packages/auth, `token.malformed` means the
+    // signature verified but the payload shape did not. A string that fails
+    // verification outright is `token.invalid`. The distinction is worth
+    // keeping — one means "not from us", the other means "from us and wrong".
+    expect(result.rejected).toBe('invalid');
+
+    // These two are what actually matter, whichever code came back.
+    expect(result.principal).toBeNull();
+    expect(result.headers[EDGE_PRINCIPAL_HEADER]).toBeUndefined();
+  });
+
+  it('refuses a token signed with the wrong secret', async () => {
+    const { token } = await issueAccessToken(
+      { userId: USER, sessionId: SESSION, scopes: [], tier: 'basic', mfa: false },
+      { ...tokens, secret: 'a-completely-different-signing-secret' },
+    );
+
+    const result = await exchangePrincipal({ authorization: `Bearer ${token}` }, options);
+    expect(result.principal).toBeNull();
+    expect(result.headers[EDGE_PRINCIPAL_HEADER]).toBeUndefined();
+  });
+
+  it('refuses an expired principal at the edge, not only at the service', async () => {
+    const result = await exchangePrincipal(await bearer(), options, new Date(Date.now() + 3_600_000));
+
+    expect(result.rejected).toBe('expired');
+    expect(result.headers[EDGE_PRINCIPAL_HEADER]).toBeUndefined();
+  });
+
+  it('ignores a non-Bearer authorization scheme', async () => {
+    const result = await exchangePrincipal({ authorization: 'Basic dXNlcjpwYXNz' }, options);
+    expect(result.principal).toBeNull();
+    expect(result.rejected).toBeNull();
+  });
+
+  it('passes an anonymous request through so public procedures still work', async () => {
+    // register and login are publicProcedure. If the edge rejected anonymous
+    // requests, nobody could ever obtain a token in the first place.
+    const result = await exchangePrincipal({ 'content-type': 'application/json' }, options);
+
+    expect(result.principal).toBeNull();
+    expect(result.rejected).toBeNull();
+    expect(result.headers['content-type']).toBe('application/json');
+  });
+});

@@ -1,38 +1,76 @@
 /**
- * DESIGN TOKENS — LOCKED (§3 Phase 0 deliverable).
+ * DESIGN TOKENS — the brand (§3 Phase 0 deliverable).
  *
- * Black glass / phosphor green. These values are the brand; components read
- * them and nothing hard-codes a hex outside this file. A colour that is not
- * here does not exist in the product.
+ * Black and orange. These values are the brand; components read them and
+ * nothing hard-codes a hex outside this file. A colour that is not here does
+ * not exist in the product.
  *
  * The CSS custom properties in tokens.css are generated from these same values
  * — see tokens.test.ts, which fails if the two ever drift apart.
+ *
+ * ── Why black, and why orange ───────────────────────────────────────────────
+ *
+ * True black, not a tinted near-black. A trading screen is mostly numbers on a
+ * background, and any hue in that background competes with the only two colours
+ * that carry meaning — the green and the red. Neutral greys keep the surface
+ * out of the way; the ramp gives depth without borders, which is what stops a
+ * dense screen reading as a spreadsheet.
+ *
+ * Orange is the single accent: primary actions, active nav, focus, live state.
+ * It sits far enough from both green and red in hue that it never reads as
+ * direction, which matters more than it sounds — see the test.
  */
 
 export const color = {
-  /** Pure black. Not near-black. The whole surface treatment depends on it. */
-  black: '#000000',
+  /**
+   * Surface ramp. Pure black at the base, neutral greys above it. No blue
+   * cast: a tinted background makes every red look slightly wrong.
+   */
+  base: '#000000',
+  surface: '#0C0C0E',
+  surfaceRaised: '#16161A',
+  surfaceOverlay: '#232329',
 
-  /** Phosphor green — the single accent. CRT terminal, not neon mint. */
-  phosphor: '#00FF41',
-  phosphorDim: '#00B32D',
-  phosphorGlow: 'rgba(0, 255, 65, 0.35)',
+  /**
+   * Orange. The single accent.
+   *
+   * Deliberately NOT used for market direction. An accent that also means "up"
+   * leaves nothing to mean "this is the button" on a falling market — the
+   * primary action disappears into the price movement exactly when a user most
+   * needs to find it.
+   */
+  accent: '#FF6B00',
+  accentBright: '#FF8A2B',
+  accentDim: '#C24F00',
+  accentGlow: 'rgba(255, 107, 0, 0.30)',
 
-  /** Glass surfaces: translucent white over black, never grey fills. */
-  glass: 'rgba(255, 255, 255, 0.03)',
-  glassRaised: 'rgba(255, 255, 255, 0.06)',
-  glassBorder: 'rgba(0, 255, 65, 0.15)',
-  glassBorderStrong: 'rgba(0, 255, 65, 0.35)',
+  /** Secondary — links, informational chips, chart axes. */
+  azure: '#3BB3E4',
+  azureDim: '#049DDC',
 
-  text: '#E8FFE8',
-  textMuted: 'rgba(232, 255, 232, 0.55)',
-  textFaint: 'rgba(232, 255, 232, 0.32)',
+  /** Borders as alpha over the surface, so they hold on every ramp step. */
+  border: 'rgba(255, 255, 255, 0.09)',
+  borderStrong: 'rgba(255, 255, 255, 0.18)',
+  borderAccent: 'rgba(255, 107, 0, 0.50)',
 
-  /** Market semantics. Long is the brand green; short is its opposite. */
-  long: '#00FF41',
+  text: '#F7F7F8',
+  textMuted: '#A2A2AC',
+  textFaint: 'rgba(247, 247, 248, 0.40)',
+  /** For use ON the orange accent, where white smears and fails contrast. */
+  textOnAccent: '#1A0A00',
+
+  /**
+   * Market semantics. Load-bearing: these two are the only way a trader reads
+   * direction at a glance, so nothing else in the palette may claim them.
+   */
+  long: '#00C46A',
+  longDim: '#00994F',
   short: '#FF3B5C',
-  warn: '#FFB300',
-  info: '#39C0ED',
+  shortDim: '#D42B47',
+
+  warn: '#FFB020',
+  danger: '#FF3B5C',
+  info: '#3BB3E4',
 } as const;
 
 export const font = {
@@ -69,20 +107,23 @@ export const radius = {
 } as const;
 
 export const border = {
-  hairline: `1px solid ${color.glassBorder}`,
-  strong: `1px solid ${color.glassBorderStrong}`,
+  hairline: `1px solid ${color.border}`,
+  strong: `1px solid ${color.borderStrong}`,
+  accent: `1px solid ${color.borderAccent}`,
 } as const;
 
 export const blur = {
-  glass: 'blur(12px)',
+  panel: 'blur(12px)',
   heavy: 'blur(24px)',
 } as const;
 
 export const shadow = {
-  /** Phosphor bloom — used on active/live states only, never decoratively. */
-  glow: `0 0 12px ${color.phosphorGlow}`,
-  glowStrong: `0 0 24px ${color.phosphorGlow}`,
-  panel: '0 8px 32px rgba(0, 0, 0, 0.6)',
+  /** Accent bloom — focus and live states only, never decoration. */
+  glow: `0 0 12px ${color.accentGlow}`,
+  glowStrong: `0 0 24px ${color.accentGlow}`,
+  /** Elevation. Two steps only: a panel is raised or it is not. */
+  panel: '0 4px 16px rgba(0, 0, 0, 0.4)',
+  modal: '0 16px 48px rgba(0, 0, 0, 0.6)',
 } as const;
 
 export const motion = {
@@ -106,28 +147,38 @@ export const tokens = { color, font, space, radius, border, blur, shadow, motion
  * can assert that every declared token is actually emitted in tokens.css.
  */
 export const CSS_VARS = {
-  '--if-black': color.black,
-  '--if-phosphor': color.phosphor,
-  '--if-phosphor-dim': color.phosphorDim,
-  '--if-phosphor-glow': color.phosphorGlow,
-  '--if-glass': color.glass,
-  '--if-glass-raised': color.glassRaised,
-  '--if-glass-border': color.glassBorder,
-  '--if-glass-border-strong': color.glassBorderStrong,
+  '--if-base': color.base,
+  '--if-surface': color.surface,
+  '--if-surface-raised': color.surfaceRaised,
+  '--if-surface-overlay': color.surfaceOverlay,
+  '--if-accent': color.accent,
+  '--if-accent-bright': color.accentBright,
+  '--if-accent-dim': color.accentDim,
+  '--if-accent-glow': color.accentGlow,
+  '--if-azure': color.azure,
+  '--if-azure-dim': color.azureDim,
+  '--if-border': color.border,
+  '--if-border-strong': color.borderStrong,
+  '--if-border-accent': color.borderAccent,
   '--if-text': color.text,
   '--if-text-muted': color.textMuted,
   '--if-text-faint': color.textFaint,
+  '--if-text-on-accent': color.textOnAccent,
   '--if-long': color.long,
+  '--if-long-dim': color.longDim,
   '--if-short': color.short,
+  '--if-short-dim': color.shortDim,
   '--if-warn': color.warn,
+  '--if-danger': color.danger,
   '--if-info': color.info,
   '--if-font-display': font.display,
   '--if-font-body': font.body,
   '--if-font-mono': font.mono,
   '--if-radius-md': radius.md,
   '--if-radius-lg': radius.lg,
-  '--if-blur-glass': blur.glass,
+  '--if-blur-panel': blur.panel,
   '--if-shadow-glow': shadow.glow,
   '--if-shadow-panel': shadow.panel,
+  '--if-shadow-modal': shadow.modal,
   '--if-motion-base': motion.base,
 } as const;

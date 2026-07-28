@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 // app hardcodes a colour.
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: color.black,
+  themeColor: color.base,
 };
 
 /**

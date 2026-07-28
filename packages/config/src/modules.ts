@@ -48,6 +48,7 @@ export const MODULE_IDS = [
   'mining-pool',
   'agents',
   'core-ops',
+  'edge',
   // Protocol Plane (v1.1 §17.5)
   'chain',
   'indexer',
@@ -58,6 +59,10 @@ export const MODULE_IDS = [
 export type ModuleId = (typeof MODULE_IDS)[number];
 
 export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
+  // Infrastructure, not a product. Non-custodial by definition: it holds no
+  // balance and no service secret, and it enforces no jurisdiction of its own —
+  // it forwards to modules that do. See services/svc-edge/README.md.
+  edge: { id: 'edge', service: 'svc-edge', planes: ['fiat', 'protocol'], phase: '1', custodial: false },
   identity: { id: 'identity', service: 'svc-identity', planes: ['fiat', 'protocol'], phase: '1', custodial: false },
   ledger: { id: 'ledger', service: 'svc-ledger', planes: ['fiat'], phase: '1', custodial: true },
   token: { id: 'token', service: 'svc-token', planes: ['fiat', 'protocol'], phase: '1', custodial: true },
