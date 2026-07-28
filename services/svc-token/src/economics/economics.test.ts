@@ -8,6 +8,9 @@
  * float implementation too.
  */
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { type Amount, ZERO, formatAmount, parseAmount as amt, sum } from '@intafaced/ledger-client';
 import {
@@ -21,13 +24,15 @@ import {
 } from './emission.js';
 import {
   ACCESS_TIERS,
-  FEE_DISCOUNT_SCHEDULE,
+  DEFAULT_FEE_DISCOUNT_SCHEDULE,
   MAX_FEE_DISCOUNT_BPS,
   STAKE_TIERS,
+  type FeeDiscountSchedule,
   type StakeTier,
   accessTierFor,
   feeDiscountBps,
   isUnlocked,
+  parseFeeDiscountSchedule,
   stakeWeight,
   unlockDate,
 } from './staking.js';
@@ -427,32 +432,77 @@ describe('staking — access tiers (§4.3 gates)', () => {
   });
 });
 
+/**
+ * THE SCHEDULE, WRITTEN OUT.
+ *
+ * Hardcoded on purpose. The previous version of these tests asserted
+ * `feeDiscountBps(step.minStake) === step.discountBps` by reading the expectation back out of
+ * the same array it was testing, so it passed for ANY set of numbers — and it did, while the
+ * TS table and the seeded row disagreed on every non-zero step. An expectation that is
+ * derived from the thing under test cannot fail, and a test that cannot fail is not a test.
+ *
+ * Change a number in `staking.ts` and this table must be changed to match, deliberately, by
+ * hand. That friction is the feature.
+ */
+const PUBLISHED_FEE_DISCOUNTS: ReadonlyArray<readonly [minStake: string, discountBps: number]> = [
+  ['0', 0],
+  ['1000', 1_000],
+  ['10000', 2_000],
+  ['100000', 3_500],
+  ['1000000', 5_000],
+];
+
+/** The seed, named for what it is at every call site below. It is never the authority. */
+const SEED = DEFAULT_FEE_DISCOUNT_SCHEDULE;
+
 describe('staking — fee discount schedule', () => {
   it('gives no discount to an unstaked user', () => {
-    expect(feeDiscountBps(ZERO)).toBe(0);
-    expect(feeDiscountBps(WEI)).toBe(0);
+    expect(feeDiscountBps(ZERO, SEED)).toBe(0);
+    expect(feeDiscountBps(WEI, SEED)).toBe(0);
+  });
+
+  it('publishes exactly the steps written down here — nothing added, nothing re-tuned quietly', () => {
+    expect(SEED.basis).toBe('staked');
+    expect(SEED.tiers.map((s) => [formatAmount(s.minStake), s.discountBps])).toEqual(
+      PUBLISHED_FEE_DISCOUNTS.map(([minStake, bps]) => [minStake, bps]),
+    );
   });
 
   it('applies each published step at its exact threshold', () => {
-    for (const step of FEE_DISCOUNT_SCHEDULE) {
-      expect(feeDiscountBps(step.minStake)).toBe(Math.min(step.discountBps, MAX_FEE_DISCOUNT_BPS));
+    for (const [minStake, expected] of PUBLISHED_FEE_DISCOUNTS) {
+      expect(feeDiscountBps(amt(minStake), SEED)).toBe(expected);
     }
   });
 
   it('withholds a step one wei below its threshold', () => {
-    for (let i = 1; i < FEE_DISCOUNT_SCHEDULE.length; i++) {
-      const step = FEE_DISCOUNT_SCHEDULE[i];
-      const below = FEE_DISCOUNT_SCHEDULE[i - 1];
-      if (!step || !below) continue;
-      expect(feeDiscountBps(step.minStake - WEI)).toBe(Math.min(below.discountBps, MAX_FEE_DISCOUNT_BPS));
+    for (let i = 1; i < PUBLISHED_FEE_DISCOUNTS.length; i++) {
+      const [minStake] = PUBLISHED_FEE_DISCOUNTS[i]!;
+      const [, belowBps] = PUBLISHED_FEE_DISCOUNTS[i - 1]!;
+      expect(feeDiscountBps(amt(minStake) - WEI, SEED)).toBe(belowBps);
     }
   });
 
+  it('reads the schedule it is handed, not the compiled-in seed', () => {
+    // The whole point of the fix: `token_params` is the authority, so a caller passing a
+    // loaded row must get that row's numbers even where they contradict the seed.
+    const governed: FeeDiscountSchedule = {
+      basis: 'staked',
+      tiers: [
+        { minStake: amt('0'), discountBps: 0 },
+        { minStake: amt('1000'), discountBps: 4_200 },
+      ],
+    };
+    expect(feeDiscountBps(amt('1000'), governed)).toBe(4_200);
+    expect(feeDiscountBps(amt('1000000'), governed)).toBe(4_200);
+    // …and the seed is untouched by having passed one.
+    expect(feeDiscountBps(amt('1000'), SEED)).toBe(1_000);
+  });
+
   it('is monotonically non-decreasing in stake', () => {
-    let previous = feeDiscountBps(ZERO);
+    let previous = feeDiscountBps(ZERO, SEED);
     let stake = WEI;
     for (let i = 0; i < 400; i++) {
-      const discount = feeDiscountBps(stake);
+      const discount = feeDiscountBps(stake, SEED);
       expect(discount).toBeGreaterThanOrEqual(previous);
       previous = discount;
       stake = stake * 3n + 7n;
@@ -462,18 +512,143 @@ describe('staking — fee discount schedule', () => {
   it('NEVER reaches 10000 bps — a 100% discount means the house pays the user to trade', () => {
     const probes: Amount[] = [ZERO, WEI, amt('1'), amt('999.999999999999999999'), amt('1000'), amt('1000000'), amt('10000000000000')];
     for (const stake of probes) {
-      expect(feeDiscountBps(stake)).toBeLessThan(10_000);
-      expect(feeDiscountBps(stake)).toBeLessThanOrEqual(MAX_FEE_DISCOUNT_BPS);
+      expect(feeDiscountBps(stake, SEED)).toBeLessThan(10_000);
+      expect(feeDiscountBps(stake, SEED)).toBeLessThanOrEqual(MAX_FEE_DISCOUNT_BPS);
     }
     expect(MAX_FEE_DISCOUNT_BPS).toBeLessThan(10_000);
   });
 
   it('caps an absurd stake at the policy ceiling', () => {
-    expect(feeDiscountBps(amt('100000000000000000000'))).toBeLessThanOrEqual(MAX_FEE_DISCOUNT_BPS);
+    expect(feeDiscountBps(amt('100000000000000000000'), SEED)).toBeLessThanOrEqual(MAX_FEE_DISCOUNT_BPS);
   });
 
   it('rejects a negative stake', () => {
-    expect(() => feeDiscountBps(-WEI)).toThrow(RangeError);
+    expect(() => feeDiscountBps(-WEI, SEED)).toThrow(RangeError);
+  });
+});
+
+/**
+ * THE TEST WHOSE ABSENCE ALLOWED THE BUG.
+ *
+ * `staking.ts` seeds `token_params.fee_discount_schedule` and the migration writes it; two
+ * copies of one economic parameter, in two languages, with nothing comparing them. They drifted
+ * — every non-zero step disagreed — and the service shipped for as long as it took someone to
+ * read both files side by side.
+ *
+ * This lives in the pure suite rather than in `token-service.test.ts` on purpose: that file
+ * skips itself when Postgres is unreachable, and an agreement check that silently does not run
+ * is the same as no agreement check. Reading the migration off disk needs no database.
+ */
+const migrationSql = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'drizzle', '0000_token_init.sql'), 'utf8');
+
+describe('fee discount schedule — code and migration seed agree (§4.3)', () => {
+  /** The seeded jsonb literal, straight out of the INSERT. */
+  function seededScheduleJson(): string {
+    const match = /'(\{"basis":.*?\})'::jsonb/s.exec(migrationSql);
+    // A miss means the seed was reshaped or removed — which is exactly the change that must
+    // not pass unnoticed, so failing to FIND it fails the test rather than skipping it.
+    expect(match, 'no fee_discount_schedule jsonb literal found in 0000_token_init.sql').not.toBeNull();
+    return match![1]!;
+  }
+
+  it('seeds the migration with the schedule the code publishes', () => {
+    const seeded = parseFeeDiscountSchedule(JSON.parse(seededScheduleJson()));
+
+    expect(seeded.basis).toBe(DEFAULT_FEE_DISCOUNT_SCHEDULE.basis);
+    expect(seeded.tiers.map((s) => [formatAmount(s.minStake), s.discountBps])).toEqual(
+      DEFAULT_FEE_DISCOUNT_SCHEDULE.tiers.map((s) => [formatAmount(s.minStake), s.discountBps]),
+    );
+  });
+
+  it('seeds the migration with the numbers written out at the top of this file', () => {
+    // Closes the triangle. The assertion above compares SQL against the TS constant, so a
+    // change to BOTH would pass it; this one compares SQL against the hand-written table, so
+    // the SQL cannot be re-tuned without a human editing an expectation in this file too.
+    const seeded = parseFeeDiscountSchedule(JSON.parse(seededScheduleJson()));
+    expect(seeded.tiers.map((s) => [formatAmount(s.minStake), s.discountBps])).toEqual(
+      PUBLISHED_FEE_DISCOUNTS.map(([minStake, bps]) => [minStake, bps]),
+    );
+  });
+
+  it('gives the same discount from the seeded row as from the default, at every threshold', () => {
+    const seeded = parseFeeDiscountSchedule(JSON.parse(seededScheduleJson()));
+    for (const [minStake] of PUBLISHED_FEE_DISCOUNTS) {
+      const stake = amt(minStake);
+      expect(feeDiscountBps(stake, seeded)).toBe(feeDiscountBps(stake, DEFAULT_FEE_DISCOUNT_SCHEDULE));
+      expect(feeDiscountBps(stake - WEI < ZERO ? ZERO : stake - WEI, seeded)).toBe(
+        feeDiscountBps(stake - WEI < ZERO ? ZERO : stake - WEI, DEFAULT_FEE_DISCOUNT_SCHEDULE),
+      );
+    }
+  });
+
+  it('seeds thresholds as decimal STRINGS — a JSON number cannot hold 1e21 exactly', () => {
+    // 1_000_000 IFC scaled by 10^18 is past Number.MAX_SAFE_INTEGER. If the seed ever grows a
+    // threshold written as a bare JSON number, the parser must reject it rather than round it.
+    expect(seededScheduleJson()).toMatch(/"minStake":\s*"/);
+    expect(seededScheduleJson()).not.toMatch(/"minStake":\s*\d/);
+  });
+});
+
+describe('fee discount schedule — parsing a governed row (§4.3)', () => {
+  const ok = { basis: 'staked', tiers: [{ minStake: '0', discountBps: 0 }] };
+
+  it('parses thresholds into scaled bigints, never numbers', () => {
+    const parsed = parseFeeDiscountSchedule({ basis: 'staked', tiers: [{ minStake: '1000.5', discountBps: 250 }, ...ok.tiers] });
+    const step = parsed.tiers[0]!;
+    expect(typeof step.minStake).toBe('bigint');
+    expect(step.minStake).toBe(amt('1000.5'));
+  });
+
+  it('refuses a basis this code does not implement rather than mis-applying it', () => {
+    // §4.3 says the discount keys on BALANCE; this code keys on STAKE. Loading a
+    // balance-keyed ladder into stake-keyed maths would hand out a wrong discount silently.
+    expect(() => parseFeeDiscountSchedule({ ...ok, basis: 'balance' })).toThrow(/not implemented/);
+    expect(() => parseFeeDiscountSchedule({ ...ok, basis: undefined })).toThrow(RangeError);
+  });
+
+  it('refuses a threshold written as a JSON number', () => {
+    expect(() => parseFeeDiscountSchedule({ basis: 'staked', tiers: [{ minStake: 1000, discountBps: 0 }] })).toThrow(/decimal string/);
+  });
+
+  it('refuses a discount above the policy ceiling instead of clamping it', () => {
+    // A clamp would let a row reading 9000 behave as 5000 forever, with nothing to audit.
+    expect(() =>
+      parseFeeDiscountSchedule({ basis: 'staked', tiers: [...ok.tiers, { minStake: '1', discountBps: MAX_FEE_DISCOUNT_BPS + 1 }] }),
+    ).toThrow(/policy ceiling/);
+    expect(
+      parseFeeDiscountSchedule({ basis: 'staked', tiers: [...ok.tiers, { minStake: '1', discountBps: MAX_FEE_DISCOUNT_BPS }] }).tiers,
+    ).toHaveLength(2);
+  });
+
+  it('refuses a schedule with no zero-threshold base step', () => {
+    expect(() => parseFeeDiscountSchedule({ basis: 'staked', tiers: [{ minStake: '1000', discountBps: 100 }] })).toThrow(/minStake "0"/);
+  });
+
+  it('refuses negative thresholds, fractional bps, and empty or non-object rows', () => {
+    expect(() => parseFeeDiscountSchedule({ basis: 'staked', tiers: [{ minStake: '-1', discountBps: 0 }] })).toThrow(RangeError);
+    expect(() => parseFeeDiscountSchedule({ basis: 'staked', tiers: [{ minStake: '0', discountBps: 1.5 }] })).toThrow(RangeError);
+    expect(() => parseFeeDiscountSchedule({ basis: 'staked', tiers: [] })).toThrow(RangeError);
+    expect(() => parseFeeDiscountSchedule([])).toThrow(RangeError);
+    expect(() => parseFeeDiscountSchedule(null)).toThrow(RangeError);
+  });
+
+  it('cannot produce a discount that falls as stake rises, even from an unsorted row', () => {
+    const unsorted = parseFeeDiscountSchedule({
+      basis: 'staked',
+      tiers: [
+        { minStake: '1000000', discountBps: 5_000 },
+        { minStake: '0', discountBps: 0 },
+        { minStake: '1000', discountBps: 1_000 },
+      ],
+    });
+    let previous = 0;
+    let stake = ZERO;
+    for (let i = 0; i < 200; i++) {
+      const discount = feeDiscountBps(stake, unsorted);
+      expect(discount).toBeGreaterThanOrEqual(previous);
+      previous = discount;
+      stake = stake * 3n + 7n;
+    }
   });
 });
 

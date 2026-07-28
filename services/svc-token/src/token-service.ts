@@ -2,7 +2,17 @@ import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import type { EventBus } from '@intafaced/events';
 import { formatAmount, parseAmount, recipes, rewardsEngine, burnAccount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
-import { STAKE_TIERS, accessTierFor, feeDiscountBps, isUnlocked, stakeWeight, unlockDate, type StakeTier } from './economics/staking.js';
+import {
+  STAKE_TIERS,
+  accessTierFor,
+  feeDiscountBps,
+  isUnlocked,
+  parseFeeDiscountSchedule,
+  stakeWeight,
+  unlockDate,
+  type FeeDiscountSchedule,
+  type StakeTier,
+} from './economics/staking.js';
 import { distributeYield, splitBuyback, type BuybackParams } from './economics/buyback.js';
 import { cumulativeEmission, epochReward, type EmissionParams } from './economics/emission.js';
 import { withMoneySpan } from './tracing.js';
@@ -26,7 +36,8 @@ export class TokenError extends Error {
       | 'token.stake_closed'
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
-      | 'token.nothing_to_distribute',
+      | 'token.nothing_to_distribute'
+      | 'token.params_missing',
   ) {
     super(message);
     this.name = 'TokenError';
@@ -37,6 +48,15 @@ export interface TokenServiceOptions {
   assetId?: string;
   emission: EmissionParams;
   buyback: BuybackParams;
+  /**
+   * How long a loaded fee-discount schedule stays good, in ms (default 60s).
+   *
+   * The schedule is a governed row that changes on the order of months, and `accessOf` is on
+   * every gate in the OS — re-reading it per call would be a query per gate. A minute is the
+   * lag a `fee_param` proposal takes to reach traffic, which is well inside the window
+   * governance already operates on. 0 disables the cache, which is what the tests use.
+   */
+  feeScheduleTtlMs?: number;
 }
 
 export interface StakeRecord {
@@ -51,6 +71,8 @@ export interface StakeRecord {
 
 export class TokenService {
   private readonly assetId: string;
+  private readonly feeScheduleTtlMs: number;
+  private feeScheduleCache: { schedule: FeeDiscountSchedule; loadedAt: number } | null = null;
 
   constructor(
     private readonly sql: Sql,
@@ -59,6 +81,7 @@ export class TokenService {
     private readonly options: TokenServiceOptions,
   ) {
     this.assetId = options.assetId ?? 'IFC';
+    this.feeScheduleTtlMs = options.feeScheduleTtlMs ?? 60_000;
   }
 
   // ── Staking (§4.3) ─────────────────────────────────────────────────────────
@@ -182,9 +205,37 @@ export class TokenService {
     return parseAmount(rows[0]?.total ?? '0');
   }
 
+  /**
+   * The published fee-decay schedule (§4.3), read from `token_params`.
+   *
+   * The row is the authority, not `DEFAULT_FEE_DISCOUNT_SCHEDULE` — §4.3 hands parameter
+   * control to governance (`proposal_kind = 'fee_param'`), and a constant compiled into the
+   * service is a parameter governance cannot reach. The constant is only what seeded this row.
+   *
+   * There is deliberately NO fallback to the constant when the row is unreadable. Falling back
+   * would mean charging a discount the database does not hold and doing it silently, which is
+   * exactly the divergence this method was added to close; a missing params row is a
+   * misconfigured deployment and should say so.
+   */
+  async feeDiscountSchedule(now: number = Date.now()): Promise<FeeDiscountSchedule> {
+    const cached = this.feeScheduleCache;
+    if (cached && this.feeScheduleTtlMs > 0 && now - cached.loadedAt < this.feeScheduleTtlMs) return cached.schedule;
+
+    const rows = await this.sql<Array<{ fee_discount_schedule: unknown }>>`
+      SELECT fee_discount_schedule FROM token.token_params WHERE id = true
+    `;
+
+    const raw = rows[0]?.fee_discount_schedule;
+    if (raw === undefined) throw new TokenError('token_params singleton row is missing — run migrations', 'token.params_missing');
+
+    const schedule = parseFeeDiscountSchedule(raw);
+    this.feeScheduleCache = { schedule, loadedAt: now };
+    return schedule;
+  }
+
   async accessOf(userId: string) {
-    const staked = await this.stakeOf(userId);
-    return { staked, tier: accessTierFor(staked), feeDiscountBps: feeDiscountBps(staked) };
+    const [staked, schedule] = await Promise.all([this.stakeOf(userId), this.feeDiscountSchedule()]);
+    return { staked, tier: accessTierFor(staked), feeDiscountBps: feeDiscountBps(staked, schedule) };
   }
 
   // ── Real yield (§4.3) ──────────────────────────────────────────────────────
