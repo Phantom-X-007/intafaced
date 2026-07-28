@@ -7,6 +7,7 @@ import {
   type LedgerTx,
   type PostRequest,
 } from '@intafaced/ledger-client';
+import { serviceAuthHeaders } from '@intafaced/contracts';
 import type { HistoryRange, LedgerEntryRecord, LedgerHistory } from './analytics/ledger-history.js';
 
 /**
@@ -20,7 +21,20 @@ import type { HistoryRange, LedgerEntryRecord, LedgerHistory } from './analytics
  * the Postgres engine implement, so the money paths in this service are written
  * once and tested against the reference without a network.
  */
-export function createLedgerClient(baseUrl: string): LedgerClient {
+export function createLedgerClient(baseUrl: string, internalSecret: string): LedgerClient {
+  /**
+   * Service credentials, per call (§2).
+   *
+   * svc-ledger's `post` is a `serviceProcedure` now, so this client must prove
+   * which service it is. It previously sent `content-type` and nothing else —
+   * there was no credential to check even before `post` began checking.
+   *
+   * Signed per request rather than once at construction, because the signature
+   * covers a timestamp: a captured header stops working after the skew window
+   * instead of being a permanent bearer token.
+   */
+  const authHeaders = () => serviceAuthHeaders('svc-bank', internalSecret);
+
   const url = baseUrl.replace(/\/$/, '');
 
   return {
@@ -40,7 +54,7 @@ export function createLedgerClient(baseUrl: string): LedgerClient {
         })),
       };
 
-      const result = await call<{ txId: string; hash: string; postedAt: string }>(url, '/trpc/post', wire);
+      const result = await call<{ txId: string; hash: string; postedAt: string }>(url, '/trpc/post', wire, authHeaders);
 
       return {
         id: result.txId,
@@ -56,15 +70,17 @@ export function createLedgerClient(baseUrl: string): LedgerClient {
     },
 
     async balance(ref: AccountRef): Promise<Balance> {
-      const result = await call<{ accountId: string; amount: string }>(url, '/trpc/balance', ref);
+      const result = await call<{ accountId: string; amount: string }>(url, '/trpc/balance', ref, authHeaders);
       return { account: ref, accountId: result.accountId, amount: parseAmount(result.amount) };
     },
 
     async balances(ownerType: AccountRef['ownerType'], ownerId: string): Promise<Balance[]> {
-      const result = await call<Array<{ accountId: string; assetId: string; kind: string; amount: string }>>(url, '/trpc/balances', {
-        ownerType,
-        ownerId,
-      });
+      const result = await call<Array<{ accountId: string; assetId: string; kind: string; amount: string }>>(
+        url,
+        '/trpc/balances',
+        { ownerType, ownerId },
+        authHeaders,
+      );
 
       return result.map((b) => ({
         account: { ownerType, ownerId, assetId: b.assetId, kind: b.kind as AccountRef['kind'] },
@@ -95,14 +111,18 @@ export function createLedgerClient(baseUrl: string): LedgerClient {
  * silently reports zero is worse than one that is unavailable, because the user
  * cannot tell the difference between "you spent nothing" and "we could not ask".
  */
-export function createLedgerHistory(baseUrl: string): LedgerHistory {
+export function createLedgerHistory(baseUrl: string, internalSecret: string): LedgerHistory {
   const url = baseUrl.replace(/\/$/, '');
+  // Reads are service-to-service too. `/trpc/history` is not a `serviceProcedure`
+  // yet — it does not exist yet — but a read client that cannot identify itself
+  // would need changing again the moment it becomes one.
+  const authHeaders = () => serviceAuthHeaders('svc-bank', internalSecret);
 
   return {
     async entriesFor(account: AccountRef, range: HistoryRange): Promise<LedgerEntryRecord[]> {
       const result = await call<
         Array<{ txId: string; module: string; reason: string; direction: 'debit' | 'credit'; amount: string; postedAt: string }>
-      >(url, '/trpc/history', { account, from: range.from.toISOString(), to: range.to.toISOString() });
+      >(url, '/trpc/history', { account, from: range.from.toISOString(), to: range.to.toISOString() }, authHeaders);
 
       return result.map((e) => ({
         txId: e.txId,
@@ -116,10 +136,10 @@ export function createLedgerHistory(baseUrl: string): LedgerHistory {
   };
 }
 
-async function call<T>(base: string, path: string, body: unknown): Promise<T> {
+async function call<T>(base: string, path: string, body: unknown, auth: () => Record<string, string>): Promise<T> {
   const response = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...auth() },
     body: JSON.stringify(body),
   });
 

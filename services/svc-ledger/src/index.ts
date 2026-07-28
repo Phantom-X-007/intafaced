@@ -46,7 +46,7 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true };
 });
 
-registerS2sHttp(app, ledger);
+registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET);
 
 const reconcileTimer = setInterval(() => {
   void (async () => {

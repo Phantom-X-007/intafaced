@@ -67,6 +67,18 @@ export const edgeEnvSchema = z.object({
   EDGE_PRINCIPAL_SECRET: z.string().min(32),
 });
 
+/**
+ * Shared secret for service-to-service calls (§2).
+ *
+ * Required by BOTH sides: a service exposing a `serviceProcedure` (svc-ledger)
+ * and every service that calls one. No default — an unauthenticated
+ * `ledger.post` accepts anyone who can reach the port, and the only safe
+ * failure for that is refusing to start.
+ */
+export const internalServiceEnvSchema = z.object({
+  INTERNAL_SERVICE_SECRET: z.string().min(32),
+});
+
 export const authEnvSchema = z.object({
   /** Short-lived access token signing key. Rotated via vault (§9). */
   JWT_ACCESS_SECRET: z.string().min(32),

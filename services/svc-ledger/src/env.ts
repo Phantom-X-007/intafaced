@@ -1,7 +1,10 @@
 import { z } from 'zod';
-import { loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
-const schema = serviceEnvSchema.merge(
+// svc-ledger SERVES the internal money plane, so it must be able to
+// authenticate the services calling it. No default: a ledger that cannot tell
+// a caller from a stranger must refuse to boot (#50).
+const schema = serviceEnvSchema.merge(internalServiceEnvSchema).merge(
   z.object({
     SERVICE_NAME: z.string().default('svc-ledger'),
     HTTP_PORT: z.coerce.number().int().default(4001),

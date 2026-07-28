@@ -78,7 +78,7 @@ const bus = await JetStreamEventBus.connect({
 
 // Metered usage moves value, and value moves through svc-ledger — never
 // through this service's own tables (Doctrine §0.6).
-const ledger = createLedgerClient(env.LEDGER_URL);
+const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
 const meter = new UsageMeter(sql, ledger, {
   assetId: env.AGENTS_FEE_ASSET_ID,

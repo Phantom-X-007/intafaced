@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { edgeEnvSchema, loadEnv, serviceEnvSchema, internalServiceEnvSchema } from '@intafaced/config';
 
 /**
  * svc-agents environment.
@@ -56,61 +56,64 @@ const bool = z
 // Only mounting services merge this — a service reached solely through the
 // gateway has no edge header to verify, and demanding the secret there would
 // make it boilerplate people copy without meaning it.
-const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
-  z.object({
-    SERVICE_NAME: z.string().default('svc-agents'),
-    HTTP_PORT: z.coerce.number().int().default(4008),
+const schema = serviceEnvSchema
+  .merge(edgeEnvSchema)
+  .merge(internalServiceEnvSchema)
+  .merge(
+    z.object({
+      SERVICE_NAME: z.string().default('svc-agents'),
+      HTTP_PORT: z.coerce.number().int().default(4008),
 
-    /** svc-ledger's internal address. Metered usage is billed through it. */
-    LEDGER_URL: z.string().url().default('http://localhost:4001'),
+      /** svc-ledger's internal address. Metered usage is billed through it. */
+      LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
-    /** Asset premium agent tiers are billed in (§8.2). */
-    AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
+      /** Asset premium agent tiers are billed in (§8.2). */
+      AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
 
-    /**
-     * Billing window length. Must divide 1440 so a window never straddles
-     * midnight — a window that spans two days has an ambiguous id, and the id
-     * is half of the ledger idempotency key.
-     */
-    AGENTS_USAGE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
+      /**
+       * Billing window length. Must divide 1440 so a window never straddles
+       * midnight — a window that spans two days has an ambiguous id, and the id
+       * is half of the ledger idempotency key.
+       */
+      AGENTS_USAGE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
 
-    /**
-     * Kill-switch for billing (§14 admin controls). Usage is still RECORDED
-     * when this is off: turning metering off must not also destroy the ability
-     * to find out what the fleet cost while it was off.
-     */
-    AGENTS_METERING_ENABLED: bool.default(true),
+      /**
+       * Kill-switch for billing (§14 admin controls). Usage is still RECORDED
+       * when this is off: turning metering off must not also destroy the ability
+       * to find out what the fleet cost while it was off.
+       */
+      AGENTS_METERING_ENABLED: bool.default(true),
 
-    /**
-     * Which registered provider serves the logical id `primary` in the routing
-     * table. `mock` is the default so a developer can run the fleet with no
-     * upstream credential — and, more usefully, so starting this service by
-     * accident cannot spend money.
-     */
-    AGENTS_PROVIDER: z.enum(['mock', 'upstream']).default('mock'),
+      /**
+       * Which registered provider serves the logical id `primary` in the routing
+       * table. `mock` is the default so a developer can run the fleet with no
+       * upstream credential — and, more usefully, so starting this service by
+       * accident cannot spend money.
+       */
+      AGENTS_PROVIDER: z.enum(['mock', 'upstream']).default('mock'),
 
-    // ── Upstream shape ───────────────────────────────────────────────────────
-    AGENTS_UPSTREAM_BASE_URL: z.string().url().optional(),
-    AGENTS_UPSTREAM_API_KEY: z.string().min(1).optional(),
-    AGENTS_UPSTREAM_AUTH_HEADER: z.string().default('x-api-key'),
-    AGENTS_UPSTREAM_AUTH_PREFIX: z.string().default(''),
-    /** Static headers — protocol version pins, tenant ids. JSON object. */
-    AGENTS_UPSTREAM_HEADERS: jsonRecord('AGENTS_UPSTREAM_HEADERS'),
-    AGENTS_UPSTREAM_COMPLETIONS_PATH: z.string().default('/v1/messages'),
-    /** Set only when the upstream serves embeddings; gates the capability. */
-    AGENTS_UPSTREAM_EMBEDDINGS_PATH: z.string().optional(),
-    /** Routing alias → concrete upstream model id. JSON object. */
-    AGENTS_UPSTREAM_MODELS: jsonRecord('AGENTS_UPSTREAM_MODELS'),
-    AGENTS_UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(60_000),
+      // ── Upstream shape ───────────────────────────────────────────────────────
+      AGENTS_UPSTREAM_BASE_URL: z.string().url().optional(),
+      AGENTS_UPSTREAM_API_KEY: z.string().min(1).optional(),
+      AGENTS_UPSTREAM_AUTH_HEADER: z.string().default('x-api-key'),
+      AGENTS_UPSTREAM_AUTH_PREFIX: z.string().default(''),
+      /** Static headers — protocol version pins, tenant ids. JSON object. */
+      AGENTS_UPSTREAM_HEADERS: jsonRecord('AGENTS_UPSTREAM_HEADERS'),
+      AGENTS_UPSTREAM_COMPLETIONS_PATH: z.string().default('/v1/messages'),
+      /** Set only when the upstream serves embeddings; gates the capability. */
+      AGENTS_UPSTREAM_EMBEDDINGS_PATH: z.string().optional(),
+      /** Routing alias → concrete upstream model id. JSON object. */
+      AGENTS_UPSTREAM_MODELS: jsonRecord('AGENTS_UPSTREAM_MODELS'),
+      AGENTS_UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(60_000),
 
-    /**
-     * Full routing table as JSON, overriding the built-in default (§8.2
-     * "per-task model routing table"). Absent = the default table in
-     * `gateway/routing.ts`, which is priced for development, not production.
-     */
-    AGENTS_ROUTING_TABLE: z.string().optional(),
-  }),
-);
+      /**
+       * Full routing table as JSON, overriding the built-in default (§8.2
+       * "per-task model routing table"). Absent = the default table in
+       * `gateway/routing.ts`, which is priced for development, not production.
+       */
+      AGENTS_ROUTING_TABLE: z.string().optional(),
+    }),
+  );
 
 export const env = loadEnv(schema);
 export type Env = typeof env;
