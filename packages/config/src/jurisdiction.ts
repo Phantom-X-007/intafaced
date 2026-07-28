@@ -85,6 +85,12 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   token: OPEN_BASIC,
   matching: { status: 'open', minTier: 'none' },
   trade: OPEN_BASIC,
+  // Public market data. There is no user, no account and no asset behind a
+  // depth frame, so there is nobody for a tier to be about — the same reasoning
+  // that leaves `matching` at `none`. The jurisdiction STATUS still applies: a
+  // blocked region is a legal constraint on serving the region at all, which is
+  // a separate question from custody.
+  ws: { status: 'open', minTier: 'none' },
   pay: OPEN_FULL,
   p2p: OPEN_BASIC,
   blueprint: { status: 'open', minTier: 'none' },

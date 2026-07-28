@@ -1,0 +1,434 @@
+import { formatAmount } from '@intafaced/ledger-client/money';
+import { bookFromSnapshot, diffDepth, type DepthBook, type DepthDelta, type DepthSnapshot, type WireLevel } from '@intafaced/market-data';
+import type { DepthSource } from './source.js';
+
+/**
+ * THE FAN-OUT (§5.2 ws.gateway).
+ *
+ * One book per subscribed market, one snapshot per connection, one delta per
+ * sequence advance, to everyone watching. No I/O of its own beyond the
+ * `DepthSource` port and no timer — the caller drives the clock, so every
+ * behaviour below is reachable from a test without waiting for one.
+ *
+ * ── The contract this must not break ────────────────────────────────────────
+ *
+ * The wire format is `DepthMessage` from `@intafaced/market-data`, unchanged and
+ * not extended. Deltas are computed by `diffDepth`, which the browser's
+ * `applyDelta` is the exact inverse of, and both come from the same package —
+ * so a client that misses a frame does not have to be told, it can tell. A
+ * delta whose `fromSequence` does not match the book it lands on is REFUSED by
+ * the client and it resnapshots. Every drop policy below leans on that, which
+ * is why none of them is allowed to renumber anything.
+ *
+ * ── Backpressure: degrade, then disconnect ──────────────────────────────────
+ *
+ * A market-data server dies from one of two things: an unbounded per-client
+ * queue, or a slow client holding up the fan-out. This keeps **no per-client
+ * queue at all** once a subscription is live. When a socket's own outbound
+ * buffer is over the high-water mark:
+ *
+ *   1. the delta is DROPPED, not queued. Dropping is safe here and only here,
+ *      because the next frame the client accepts will not line up and its own
+ *      gap check fires. Silence is never the failure mode — see (2).
+ *   2. the client is marked lagging. On the first tick where its buffer has
+ *      drained, it gets a full SNAPSHOT rather than the deltas it missed. The
+ *      lag sweep runs on every tick, including ticks where nothing changed, so
+ *      a client that lagged into a quiet market still gets repaired instead of
+ *      sitting on a book it believes is current.
+ *   3. a client that is still over the mark after `maxLagTicks` consecutive
+ *      ticks cannot absorb a top-N book in several seconds. That is not a
+ *      trading client, and it is disconnected. Coalescing forever would let one
+ *      dead TCP connection pin a book snapshot per tick indefinitely.
+ *
+ * Replaying missed deltas was the alternative and it is the wrong trade: the
+ * replay buffer is unbounded in exactly the case you need it (a client that is
+ * slow *because* the market is fast), while a snapshot is bounded by
+ * `WS_DEPTH_LIMIT` and repairs any amount of lag in one frame.
+ *
+ * ── Snapshot-then-delta ordering ────────────────────────────────────────────
+ *
+ * A connection is registered BEFORE its snapshot is produced, because the other
+ * order loses every delta that lands in the gap. Between registration and the
+ * first frame, deltas are buffered rather than sent — if one went out first the
+ * client would have no book to apply it to and would drop it, which is the
+ * classic bug. The snapshot is then taken from the hub's CURRENT book at flush
+ * time, not from whatever was current when the connection opened, so the
+ * buffered deltas are normally already inside it and are discarded by
+ * sequence. The replay loop still exists and still runs; it is a guard on an
+ * invariant, not decoration, and there is a test that drives frames through
+ * `applyDelta` to prove the client can rebuild the server's exact book.
+ */
+
+/** What the hub needs from a socket. Real sockets and fakes both satisfy it. */
+export interface DepthSink {
+  /** Bytes handed to the socket and not yet flushed to the peer. */
+  readonly bufferedBytes: number;
+  send(frame: string): void;
+  close(code: number, reason: string): void;
+}
+
+/** RFC 6455 close codes, used for their actual meanings. */
+export const CLOSE_POLICY = 1008;
+export const CLOSE_TRY_LATER = 1013;
+export const CLOSE_GOING_AWAY = 1001;
+
+export interface DepthHubOptions {
+  readonly depthLimit: number;
+  readonly highWaterBytes: number;
+  readonly maxLagTicks: number;
+  readonly maxConnections: number;
+  /** How long a cached market list is trusted before a miss may refetch it. */
+  readonly marketsRefreshMs: number;
+  /**
+   * Deltas that may pile up between registration and the first frame. They are
+   * normally all subsumed by the snapshot, so overflowing this is a symptom
+   * (an upstream stalled mid-connect), not a loss — the buffer is cleared and
+   * the snapshot still carries the truth.
+   */
+  readonly maxPendingDeltas?: number;
+  /** Injected in tests, so the market-list cache window is not wall-clock. */
+  readonly clock?: () => number;
+}
+
+export interface HubLogger {
+  info(obj: Record<string, unknown>, msg: string): void;
+  warn(obj: Record<string, unknown>, msg: string): void;
+}
+
+interface Subscription {
+  readonly marketId: string;
+  readonly sink: DepthSink;
+  /** Non-null until the snapshot has been sent. Deltas queue here, in order. */
+  pending: DepthDelta[] | null;
+  /** Consecutive ticks spent above the high-water mark. */
+  lagTicks: number;
+  /** True when at least one delta has been dropped and not yet repaired. */
+  lagging: boolean;
+  closed: boolean;
+}
+
+/** A book back onto the wire. Prices are map keys, so they pass through verbatim. */
+export function toSnapshot(book: DepthBook): DepthSnapshot {
+  const side = (levels: DepthBook['bids']): WireLevel[] => [...levels].map(([price, qty]) => [price, formatAmount(qty)] as WireLevel);
+  return { type: 'snapshot', marketId: book.marketId, sequence: book.sequence, bids: side(book.bids), asks: side(book.asks) };
+}
+
+const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
+
+export class DepthHub {
+  readonly #source: DepthSource;
+  readonly #options: Required<DepthHubOptions>;
+  readonly #log: HubLogger;
+
+  readonly #subscriptions = new Set<Subscription>();
+  readonly #books = new Map<string, DepthBook>();
+  /** In-flight cold-start fetches, so N simultaneous connections cost one GET. */
+  readonly #seeding = new Map<string, Promise<void>>();
+
+  #knownMarkets: ReadonlySet<string> = new Set();
+  #marketsFetchedAt = 0;
+  #marketsInFlight: Promise<void> | null = null;
+
+  /** Counters, surfaced on `/ready` so a flaky client is visible to an operator. */
+  #droppedFrames = 0;
+  #evictions = 0;
+  #repairs = 0;
+
+  constructor(source: DepthSource, options: DepthHubOptions, log: HubLogger = NO_LOG) {
+    this.#source = source;
+    this.#options = { maxPendingDeltas: 512, clock: Date.now, ...options };
+    this.#log = log;
+  }
+
+  get connections(): number {
+    return this.#subscriptions.size;
+  }
+
+  /** Markets with at least one subscriber — exactly what the poller should poll. */
+  get activeMarkets(): string[] {
+    const active = new Set<string>();
+    for (const sub of this.#subscriptions) if (!sub.closed) active.add(sub.marketId);
+    return [...active];
+  }
+
+  get stats(): { connections: number; books: number; droppedFrames: number; evictions: number; repairs: number } {
+    return {
+      connections: this.#subscriptions.size,
+      books: this.#books.size,
+      droppedFrames: this.#droppedFrames,
+      evictions: this.#evictions,
+      repairs: this.#repairs,
+    };
+  }
+
+  get knownMarkets(): readonly string[] {
+    return [...this.#knownMarkets].sort();
+  }
+
+  // ── Subscription ──────────────────────────────────────────────────────────
+
+  /**
+   * Register a sink for a market. Returns its own detach.
+   *
+   * Synchronous on purpose: the caller is a socket `connection` handler and must
+   * not have to await anything before it can wire up `close`. The snapshot is
+   * produced on a later turn, and the buffering above is what makes that safe.
+   */
+  attach(marketId: string, sink: DepthSink): () => void {
+    if (this.#subscriptions.size >= this.#options.maxConnections) {
+      sink.close(CLOSE_TRY_LATER, 'gateway at capacity');
+      return () => undefined;
+    }
+
+    const sub: Subscription = { marketId, sink, pending: [], lagTicks: 0, lagging: false, closed: false };
+    this.#subscriptions.add(sub);
+    void this.#open(sub);
+
+    return () => {
+      sub.closed = true;
+      this.#subscriptions.delete(sub);
+      this.#forgetIdleBook(marketId);
+    };
+  }
+
+  async #open(sub: Subscription): Promise<void> {
+    try {
+      if (!(await this.ensureKnownMarket(sub.marketId))) {
+        // Never call depth for an id the engine has no book for: that call would
+        // CREATE the book upstream. See `DepthSource.markets`.
+        this.#evict(sub, CLOSE_POLICY, `unknown market "${sub.marketId}"`);
+        return;
+      }
+      if (sub.closed) return;
+
+      if (!this.#books.has(sub.marketId)) await this.#seed(sub.marketId);
+      if (sub.closed) {
+        // Gave up during the round trip. The seed still landed a book, and a
+        // book nobody is watching must not be left behind to go stale.
+        this.#forgetIdleBook(sub.marketId);
+        return;
+      }
+
+      this.#flush(sub);
+    } catch (err) {
+      this.#evict(sub, CLOSE_TRY_LATER, err instanceof Error ? err.message : 'depth unavailable');
+    }
+  }
+
+  /**
+   * Is this a market the engine knows about?
+   *
+   * The cached list is refreshed lazily on a miss, at most once per refresh
+   * window, so a market listed a moment ago works without waiting for the timer
+   * and a flood of junk ids costs at most one upstream call per window.
+   */
+  async ensureKnownMarket(marketId: string): Promise<boolean> {
+    if (this.#knownMarkets.has(marketId)) return true;
+
+    const now = this.#options.clock();
+    if (this.#marketsFetchedAt !== 0 && now - this.#marketsFetchedAt < this.#options.marketsRefreshMs) return false;
+
+    await this.refreshMarkets();
+    return this.#knownMarkets.has(marketId);
+  }
+
+  async refreshMarkets(): Promise<void> {
+    // Deduped: a burst of connections for a new market must not become a burst
+    // of `GET /markets`.
+    const inFlight = this.#marketsInFlight;
+    if (inFlight) return inFlight;
+
+    const run = (async () => {
+      try {
+        const markets = await this.#source.markets();
+        this.#knownMarkets = new Set(markets);
+        this.#marketsFetchedAt = this.#options.clock();
+      } finally {
+        this.#marketsInFlight = null;
+      }
+    })();
+    this.#marketsInFlight = run;
+    return run;
+  }
+
+  async #seed(marketId: string): Promise<void> {
+    const inFlight = this.#seeding.get(marketId);
+    if (inFlight) return inFlight;
+
+    const run = (async () => {
+      try {
+        const snapshot = await this.#source.snapshot(marketId, this.#options.depthLimit);
+        this.ingest(snapshot);
+      } finally {
+        this.#seeding.delete(marketId);
+      }
+    })();
+    this.#seeding.set(marketId, run);
+    return run;
+  }
+
+  /** Nothing is watching this market any more, so its book stops being truth. */
+  #forgetIdleBook(marketId: string): void {
+    for (const sub of this.#subscriptions) if (!sub.closed && sub.marketId === marketId) return;
+    // Kept only while someone is watching. A book left behind goes stale, and a
+    // stale book handed to the next connection as a "snapshot" is a lie with a
+    // sequence number on it.
+    this.#books.delete(marketId);
+  }
+
+  // ── The tick ──────────────────────────────────────────────────────────────
+
+  /**
+   * Take a fresh upstream snapshot as the new truth and tell everyone what
+   * changed. Call this on every poll tick, even when nothing has changed — the
+   * lag repair sweep rides on it.
+   *
+   * Returns the delta that was broadcast, or `null` when there was none.
+   */
+  ingest(snapshot: DepthSnapshot): DepthDelta | null {
+    const previous = this.#books.get(snapshot.marketId);
+    const next = bookFromSnapshot(snapshot);
+    this.#books.set(snapshot.marketId, next);
+
+    if (!previous) {
+      this.#fanOut(next, null);
+      return null;
+    }
+
+    if (next.sequence < previous.sequence) {
+      // The engine went backwards. A sequence cannot un-happen, so this is a
+      // replica behind its peers or an engine that lost its journal — either
+      // way our book is no longer derived from anything. Everyone gets a
+      // snapshot; nobody gets a delta computed across the discontinuity, which
+      // would carry a `fromSequence` no client could ever be at.
+      this.#log.warn({ marketId: snapshot.marketId, was: previous.sequence, now: next.sequence }, 'ws: upstream sequence went backwards');
+      this.#fanOut(next, null, true);
+      return null;
+    }
+
+    // A sequence that advanced with no visible level change still gets a delta.
+    // Skipping it would leave every client behind the engine, and the NEXT real
+    // delta would then gap and cost everyone a resnapshot. An empty delta is a
+    // few bytes; a fleet-wide resnapshot is not.
+    const delta = next.sequence > previous.sequence ? diffDepth(previous, next) : null;
+    this.#fanOut(next, delta);
+    return delta;
+  }
+
+  #fanOut(book: DepthBook, delta: DepthDelta | null, forceRepair = false): void {
+    let snapshotFrame: string | null = null;
+    const snapshot = (): string => (snapshotFrame ??= JSON.stringify(toSnapshot(book)));
+    const deltaFrame = delta === null ? null : JSON.stringify(delta);
+
+    for (const sub of [...this.#subscriptions]) {
+      if (sub.closed || sub.marketId !== book.marketId) continue;
+
+      if (sub.pending !== null) {
+        if (delta !== null) this.#queue(sub, delta);
+        continue;
+      }
+
+      if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
+        sub.lagging = true;
+        sub.lagTicks += 1;
+        if (delta !== null) this.#droppedFrames += 1;
+        if (sub.lagTicks >= this.#options.maxLagTicks) {
+          this.#evictions += 1;
+          this.#evict(
+            sub,
+            CLOSE_TRY_LATER,
+            `slow consumer: outbound buffer over ${this.#options.highWaterBytes} bytes for ${sub.lagTicks} ticks`,
+          );
+        }
+        continue;
+      }
+
+      sub.lagTicks = 0;
+
+      if (sub.lagging || forceRepair) {
+        // It missed frames (or the whole stream discontinued). A snapshot
+        // repairs any amount of lag in one message; the deltas it missed are
+        // gone and will never be sent, because they are already in this.
+        sub.lagging = false;
+        this.#repairs += 1;
+        this.#write(sub, snapshot());
+        continue;
+      }
+
+      if (deltaFrame !== null) this.#write(sub, deltaFrame);
+    }
+  }
+
+  #queue(sub: Subscription, delta: DepthDelta): void {
+    const pending = sub.pending;
+    if (pending === null) return;
+    pending.push(delta);
+    if (pending.length <= this.#options.maxPendingDeltas) return;
+
+    // Safe to discard: the snapshot sent at flush time is taken from the book
+    // these deltas were derived from, so it already contains every one of them.
+    // Clearing bounds the memory a stalled connect can cost.
+    sub.pending = [];
+    this.#log.warn({ marketId: sub.marketId }, 'ws: pending delta buffer overflowed during connect — snapshot still carries them');
+  }
+
+  /** Send the snapshot, then whatever the stream sent while we were producing it. */
+  #flush(sub: Subscription): void {
+    const book = this.#books.get(sub.marketId);
+    if (!book) {
+      this.#evict(sub, CLOSE_TRY_LATER, 'no book for this market');
+      return;
+    }
+
+    const buffered = (sub.pending ?? []).slice().sort((a, b) => a.sequence - b.sequence);
+    sub.pending = null;
+
+    this.#write(sub, JSON.stringify(toSnapshot(book)));
+
+    let cursor = book.sequence;
+    for (const delta of buffered) {
+      // Already inside the snapshot — the normal case, because the snapshot is
+      // taken from the book after every one of these was applied to it.
+      if (delta.sequence <= cursor) continue;
+      // Does not continue the snapshot. Stop: sending it would be a frame the
+      // client must refuse anyway, and the next broadcast delta will trip its
+      // gap check and resnapshot it properly.
+      if (delta.fromSequence !== cursor) break;
+      this.#write(sub, JSON.stringify(delta));
+      cursor = delta.sequence;
+    }
+  }
+
+  #write(sub: Subscription, frame: string): void {
+    try {
+      sub.sink.send(frame);
+    } catch (err) {
+      // A send that throws is a socket that is already gone. Dropping the
+      // subscription here keeps one dead peer from being re-tried every tick.
+      this.#evict(sub, CLOSE_GOING_AWAY, err instanceof Error ? err.message : 'send failed');
+    }
+  }
+
+  #evict(sub: Subscription, code: number, reason: string): void {
+    if (sub.closed) return;
+    sub.closed = true;
+    this.#subscriptions.delete(sub);
+    try {
+      sub.sink.close(code, reason);
+    } catch {
+      /* already gone */
+    }
+    this.#forgetIdleBook(sub.marketId);
+  }
+
+  /** Kill-switch, and shutdown. Every socket is told why. */
+  closeAll(code: number, reason: string): void {
+    for (const sub of [...this.#subscriptions]) this.#evict(sub, code, reason);
+    this.#books.clear();
+  }
+
+  /** The current book for a market, if one is being maintained. */
+  bookFor(marketId: string): DepthBook | undefined {
+    return this.#books.get(marketId);
+  }
+}

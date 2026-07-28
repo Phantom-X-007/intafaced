@@ -1,0 +1,287 @@
+# svc-ws
+
+**The live depth stream (§5.2 `ws.gateway`).** One snapshot, then sequenced deltas, to any browser that asks.
+
+**What this service is not:** it has no users, no balances, no database, no bus, and **no credential of any kind**. It
+reads a public endpoint on svc-matching, diffs the result with `@intafaced/market-data`, and re-broadcasts it. That
+is the entire job, and the entire authority.
+
+---
+
+## Why it is its own service
+
+The task was "put a websocket fan-out somewhere". Both obvious homes fail the same test.
+
+**svc-matching** owns the book, which is the argument for it. It also holds `INTERNAL_SERVICE_SECRET`, because it
+authenticates order writes — an unauthenticated order submission would let anyone put an unfunded order into the
+engine, and the engine's whole design rests on never seeing one. Opening a browser-facing socket there would put the
+public internet on the same process as that credential, and would mean adding svc-matching to svc-edge's route
+table — a table whose comment says in as many words that svc-matching is deliberately absent.
+
+**svc-trade** is already mounted and already consumes `orderFilled`, which is the better argument. But it **cannot
+build a book from those events.** `intafaced.matching.order.accepted` carries `{orderId, marketId, sequence}` and
+nothing else (`packages/events/src/catalog.ts`) — no side, no price, no quantity. Widening that payload is a
+`packages/events` PR that has to land on its own first (§15.2). So svc-trade would have to poll svc-matching exactly
+as this service does, while holding `INTERNAL_SERVICE_SECRET` for both the ledger and the engine and calling
+`ledger.hold` on the money path. Attaching an unauthenticated public socket to that process trades the entire
+custodial blast radius for one saved container.
+
+So: a process that holds nothing.
+
+| Holds                                        | svc-edge | svc-trade | svc-matching | **svc-ws** |
+| -------------------------------------------- | -------- | --------- | ------------ | ---------- |
+| `INTERNAL_SERVICE_SECRET`                    | no       | **yes**   | **yes**      | **no**     |
+| `EDGE_PRINCIPAL_SECRET`                      | yes      | yes       | no           | **no**     |
+| `DATABASE_URL`                               | no       | yes       | no           | **no**     |
+| Event bus connection                         | no       | yes       | yes          | **no**     |
+| A ledger client                              | no       | yes       | no           | **no**     |
+| Accepts anonymous connections from a browser | yes      | no        | no           | **yes**    |
+
+The last two rows are the point. This is the second internet-facing process in the fleet, and it is the one with the
+least to steal.
+
+**It is not behind svc-edge.** The edge proxy buffers with `response.text()` and its README lists streaming under
+"Not built yet", so it cannot carry a socket. Teaching it to would grow the one component whose design goal is the
+smallest blast radius in the fleet. A second public origin on a process that holds nothing is the cheaper trade.
+
+---
+
+## API
+
+HTTP + JSON, plus one websocket. Amounts in and out are **decimal strings**, never JSON numbers. The only JSON
+numbers anywhere in this service's output are integer sequences.
+
+| Route                               | Input | Output                                                       |
+| ----------------------------------- | ----- | ------------------------------------------------------------ |
+| `GET /stream?market=<id>` (upgrade) | —     | `DepthSnapshot`, then `DepthDelta` frames                    |
+| `GET /markets/:marketId/depth`      | —     | `DepthSnapshot` · `404` unknown market · `502` upstream down |
+| `GET /markets`                      | —     | `{ markets: string[] }`                                      |
+| `GET /health`                       | —     | `{ ok, service, enabled, connections }`                      |
+| `GET /ready`                        | —     | counters + market list · `503` when the kill-switch is off   |
+
+### The wire format is not ours
+
+Frames are exactly `DepthSnapshot | DepthDelta` from `@intafaced/market-data`, unchanged and unextended:
+
+```jsonc
+{ "type": "snapshot", "marketId": "BTC-USDT", "sequence": 812, "bids": [["30000.5", "1.25"]], "asks": [] }
+{ "type": "delta", "marketId": "BTC-USDT", "fromSequence": 812, "sequence": 813, "bids": [["30000.5", "0"]], "asks": [] }
+```
+
+The server computes deltas with `diffDepth`; the browser applies them with `applyDelta`, which **refuses** any delta
+whose `fromSequence` does not match the book it lands on. That refusal is the entire safety property of this
+service: a client that misses a frame does not have to be told, it can tell. Every drop policy below leans on it,
+which is why none of them may renumber anything.
+
+`quantity: "0"` removes a level. An absent price means unchanged. Those are different statements and conflating them
+is how a book grows phantom liquidity.
+
+**A delta is emitted whenever the sequence advances, even when no level changed.** Skipping the empty one would
+leave every client behind the engine, and the next real delta would gap and cost the whole fleet a resnapshot.
+
+### The subscription vocabulary is one query parameter
+
+The market is on the upgrade URL and **inbound frames are never parsed**. There is no subscribe verb, no command
+set, no JSON parser on the read side, and `maxPayload` is 1 KiB. One market per socket; a terminal that wants two
+opens two. On an unauthenticated public port, the smallest possible inbound surface is worth more than multiplexing.
+
+### The snapshot is a separate GET, on purpose
+
+`DepthController` in `apps/web` resnapshots on a gap and must do it **without** tearing down the socket — a
+reconnect would lose the deltas that arrive during it, which is the bug its buffer exists to prevent. So the
+snapshot is an ordinary `GET`, served from the same book the deltas are diffed against, and the two cannot disagree.
+`Access-Control-Allow-Origin: *` with no `Allow-Credentials`: the response carries nothing about the caller, so
+"any origin may read this" is a true statement rather than a relaxation, and `*` makes the browser refuse to send
+credentials.
+
+---
+
+## The thing that would have been a vulnerability
+
+`svc-matching`'s `engine.depth(marketId)` goes through `engine.book(marketId)`, which **creates the book if it does
+not exist**. A depth read for an arbitrary string is therefore not a 404 — it is an allocation in the engine's map.
+
+An unauthenticated public socket that passed its `?market=` straight through would be a memory-growth primitive
+against the matching engine, driven from any browser. So **every subscription and every snapshot request is checked
+against `GET /markets` first**, and no depth call is made for an id that is not on it. The list is cached, refreshed
+on a timer, and refetched at most once per window on a miss so a newly listed market works without a restart.
+
+There are tests asserting the depth endpoint is never called for an unknown market, on both the socket and the HTTP
+path. `depth/source.ts` carries the reasoning next to the code.
+
+There is deliberately **no Origin check**. An origin allow-list is an authorisation control and there is nothing here
+to authorise; it would inconvenience a bot without protecting anything, since the same bytes are a `curl` away.
+Cross-site WebSocket hijacking is a risk to endpoints carrying ambient credentials. This one carries none.
+
+---
+
+## Backpressure: degrade, then disconnect
+
+A market-data server dies of one of two things — an unbounded per-client queue, or a slow client holding up the
+fan-out. **This service keeps no per-client queue at all** once a subscription is live. When a socket's own outbound
+buffer is over `WS_HIGH_WATER_BYTES`:
+
+1. **the delta is dropped, not queued.** Dropping is safe here and only here, because the next frame the client
+   accepts will not line up and its own gap check fires.
+2. **the client is marked lagging.** On the first tick where its buffer has drained it gets a full **snapshot**
+   rather than the deltas it missed. The lag sweep runs on **every tick, including ticks where nothing changed**, so
+   a client that lagged into a market that then went quiet is still repaired instead of sitting on a book it believes
+   is current. That is a specific bug with a specific test.
+3. **a client still over the mark after `WS_MAX_LAG_TICKS` consecutive ticks is disconnected** with close code
+   `1013` and a reason. At the default cadence that is about five seconds of a socket that cannot absorb a
+   fifty-level book. That is not a trading client.
+
+Replaying missed deltas was the alternative and it is the wrong trade: a replay buffer is unbounded in exactly the
+case you need it — a client that is slow _because_ the market is fast — while a snapshot is bounded by
+`WS_DEPTH_LIMIT` and repairs any amount of lag in one frame.
+
+The only bounded buffer in the service is the handful of deltas that can arrive between a connection being
+registered and its first snapshot being written. It exists for **ordering**, not for loss: without it a delta could
+reach the wire before the snapshot and the client would drop it as having no book to apply to.
+
+---
+
+## Snapshot-then-delta ordering
+
+A connection is registered **before** its snapshot is produced. The other order loses every delta that lands in the
+gap, and that gap is real — the snapshot is at minimum a turn of the event loop away, and for a cold market it is a
+round trip to svc-matching.
+
+Between registration and the first frame, deltas are buffered rather than sent. The snapshot is then taken from the
+hub's **current** book at flush time — not from whatever was current when the connection opened — so the buffered
+deltas are already inside it and are discarded by sequence. The replay loop after it is a guard on that invariant;
+given the current ordering it does not fire, and the test asserts the property (nothing lost, nothing out of order)
+rather than the mechanism, by rebuilding the client's book from the frames alone.
+
+The same hazard on the **client** side — an HTTP snapshot in flight while the socket pushes — is genuinely
+reachable, and is tested in `apps/web/src/lib/market/ws-transport.test.ts` against a deliberately deferred fetch.
+
+---
+
+## Depth is a top-N window
+
+`WS_DEPTH_LIMIT` (default 50) per side. The snapshot **and** every delta describe the same window, so a level pushed
+out of it by deeper liquidity arrives as a removal and the client's book stays exactly this deep. A client that
+wants more depth than this is asking for a different product, not a bigger number.
+
+---
+
+## Why it polls
+
+§5.1 gives the engine no outbound depth feed, and the events it does publish cannot rebuild a book (see "Why it is
+its own service"). Adding one is a change to svc-matching — the `SnapshotSink` port in its README is where it would
+land — and a change to `packages/events`, which is a separate PR by §15.2.
+
+So: one `GET` per **subscribed** market per tick. A market nobody is watching is not polled, and its book is dropped
+when the last subscriber leaves — a book nobody watches goes stale, and a stale book handed to the next connection
+as a "snapshot" is a lie with a sequence number on it.
+
+> **SOCKET §13 — push instead of poll.** When svc-matching grows an outbound depth feed (its `SnapshotSink` port, or
+> a widened `order.accepted` payload on the bus), `DepthSource` is the seam: two methods, and `DepthHub.ingest` does
+> not change. The polling loop in `depth/poller.ts` is the only thing that is deleted.
+
+---
+
+## Events
+
+**Publishes** — nothing. `intafaced.ws.*` does not exist in `packages/events/src/catalog.ts` and this service does
+not connect to NATS at all.
+
+**Consumes** — nothing, and it could not: `intafaced.matching.order.accepted` carries no side, price or quantity, so
+a book cannot be reconstructed from the bus today.
+
+| Subject | Direction | Notes                   |
+| ------- | --------- | ----------------------- |
+| _none_  | —         | this service has no bus |
+
+---
+
+## Ledger
+
+**This service posts no ledger transactions and holds no balances.**
+
+| Recipe | Reason code | Accounts |
+| ------ | ----------- | -------- |
+| _none_ | —           | —        |
+
+`@intafaced/ledger-client` **is** a dependency, but only its `/money` subpath — `formatAmount`. That is the money
+_representation_, not the money _path_: quantities are scaled bigints in memory so this service and the engine agree
+to eighteen decimal places, and decimal strings on the wire. The tracing helper sets `intafaced.money_path=false`
+explicitly rather than leaving it unset, so a trace reader can tell "not a money path" from "someone forgot".
+
+If a future change here imports a write recipe, delete the import, not the boundary.
+
+---
+
+## Kill-switch
+
+`ws.gateway` in the admin console, or `WS_GATEWAY_ENABLED=false`.
+
+**Effect when off:** upgrades are refused with `503`, every open socket is closed with a reason, and `/ready`
+returns `503` so the load balancer takes the instance out of rotation. `/health` keeps answering, so an operator can
+still see the process is alive. The terminal renders the book as unavailable with the reason on screen — never as
+stale numbers.
+
+---
+
+## Configuration
+
+| Variable                | Default                 | Notes                                                   |
+| ----------------------- | ----------------------- | ------------------------------------------------------- |
+| `HTTP_PORT`             | `4014`                  | every port 4000–4013 is taken                           |
+| `MATCHING_URL`          | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent  |
+| `WS_DEPTH_LIMIT`        | `50`                    | levels per side, for both snapshot and delta            |
+| `WS_POLL_INTERVAL_MS`   | `250`                   | one GET per subscribed market per tick                  |
+| `WS_MARKETS_REFRESH_MS` | `30000`                 | market-list cache window                                |
+| `WS_HIGH_WATER_BYTES`   | `1048576`               | socket buffer above which a client is lagging           |
+| `WS_MAX_LAG_TICKS`      | `20`                    | consecutive lagging ticks before disconnect             |
+| `WS_MAX_CONNECTIONS`    | `5000`                  | sockets per replica                                     |
+| `WS_HEARTBEAT_MS`       | `30000`                 | ping cadence; a socket that misses a pong is terminated |
+| `WS_GATEWAY_ENABLED`    | `true`                  | kill-switch                                             |
+
+`apps/web` reaches this at `NEXT_PUBLIC_WS_URL` (`apps/web/src/app/layout.tsx`, beside `NEXT_PUBLIC_EDGE_URL`).
+
+---
+
+## Not built
+
+- **Trades, orders and positions.** `ws.gateway`'s title in the tracker names four streams; this ships **depth**.
+  A trade tape needs `orderFilled` off the bus and a message shape `packages/market-data` does not define; orders
+  and positions need a principal, which is a different security posture from this port's and probably a different
+  port.
+- **Rate limiting.** There is none anywhere in the platform (svc-edge's README says so too). `WS_MAX_CONNECTIONS` is
+  a ceiling, not a rate limit. A failing `GET /markets` is also not rate-limited, so a reconnect storm against a
+  down svc-matching costs one upstream call per connection attempt.
+- **Horizontal scale.** Each replica keeps its own book per subscribed market and polls independently, so N replicas
+  are N times the upstream read load. Fine at this cadence; a shared snapshot sink is the answer when it is not.
+- **Compression.** `perMessageDeflate` is off deliberately: a zlib context per socket (~300 KiB at default windows)
+  turns "many idle subscribers" — the normal state of a market-data server — into a memory problem, and depth frames
+  are small and mostly digits.
+
+---
+
+## Running it
+
+```bash
+pnpm --filter @intafaced/svc-ws build
+pnpm --filter @intafaced/svc-ws test
+pnpm --filter @intafaced/svc-ws dev
+pnpm gate svc-ws
+```
+
+## Tests
+
+`depth/hub.test.ts` is the one that matters. Almost every assertion goes through a `rebuild()` helper that does
+exactly what the browser does — take the snapshot, apply every delta with `applyDelta`, refuse anything that does
+not continue — and compares the result to the server's own book. A `fromSequence` that does not line up makes the
+rebuild throw. That is deliberate: a test asserting `delta.fromSequence === previous` would pass on a server that
+renumbered consistently and shipped a book nobody could rebuild. It covers a 200-tick seeded stream, the connect
+window, both backpressure stages, lag repair on a quiet tick, capacity, an engine sequence going backwards, market
+isolation, and a scan for JSON numbers where amounts belong.
+
+`ws/gateway.test.ts` runs the same contract over a real TCP socket: snapshot on connect, deltas after, unknown
+markets closed with `1008` before any depth call, inbound frames ignored, `400`/`404`/`503` on a refused upgrade,
+detach on close, and the HTTP half including CORS and the `502`-not-`500` rule.
+
+`depth/source.test.ts` covers refusing a JSON number where a price belongs, refusing a response with no engine
+sequence, and asserting no credential is ever attached to an upstream request.

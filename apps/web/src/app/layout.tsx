@@ -25,6 +25,25 @@ import { TerminalProviders } from '@/lib/providers';
 const EDGE_URL = process.env.NEXT_PUBLIC_EDGE_URL ?? 'http://localhost:4000';
 
 /**
+ * Where the depth stream is — svc-ws, not svc-edge.
+ *
+ * A second public origin, because the edge proxy buffers with `response.text()`
+ * and cannot carry a socket (`services/svc-edge/README.md`, "Not built yet").
+ * svc-ws holds no database, no bus and no service secret, so pointing a browser
+ * straight at it opens a door onto public prices and nothing else — the trade
+ * is argued in `services/svc-ws/README.md`.
+ *
+ * Resolved here, next to the edge URL, so there is exactly ONE place a
+ * deployment is pointed at a front door. `lib/market/depth-source.ts` takes it
+ * as an argument and reads no environment of its own; if it did, any component
+ * could point the order book at a host whose provenance the app cannot state.
+ *
+ * Unset means the book renders as unavailable with that reason on screen — not
+ * as a plausible ladder of numbers.
+ */
+const DEPTH_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:4014';
+
+/**
  * §3 typography: Orbitron for display/HUD, Inter for body, JetBrains Mono for
  * every numeric surface. Loaded as CSS variables rather than class names so the
  * design tokens stay the single place a font is chosen.
@@ -74,7 +93,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${orbitron.variable} ${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <TerminalProviders edgeUrl={EDGE_URL}>
+        <TerminalProviders edgeUrl={EDGE_URL} depthUrl={DEPTH_URL}>
           <AppShell>{children}</AppShell>
         </TerminalProviders>
       </body>

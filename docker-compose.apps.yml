@@ -270,6 +270,40 @@ services:
       svc-ledger:
         condition: service_healthy # every fill settles through it
 
+  # THE ONLY OTHER PUBLIC PORT IN THE FLEET, AND THE ONE WITH LEAST TO STEAL.
+  #
+  # Note the environment block: no `*edge-secret`, no `*internal-secret`, no
+  # DATABASE_URL, and it is not gated on `migrate` or `nats` because it uses
+  # neither. It reads svc-matching's UNAUTHENTICATED depth endpoint and
+  # re-broadcasts it, and that is the whole of its authority — which is the
+  # argument for it being its own process rather than a socket bolted onto
+  # svc-trade. services/svc-ws/README.md makes the case in full.
+  #
+  # Not behind svc-edge: the edge proxy buffers with `response.text()` and
+  # cannot carry a websocket, so this is a second origin the browser reaches
+  # directly (`NEXT_PUBLIC_WS_URL` on the web container below).
+  svc-ws:
+    <<: *app
+    container_name: intafaced-svc-ws
+    command: ['node', 'services/svc-ws/dist/index.js']
+    environment:
+      <<: *service-env
+      SERVICE_NAME: svc-ws
+      # 4014: 4013 is svc-indexer, and everything below it is taken.
+      HTTP_PORT: '4014'
+      MATCHING_URL: http://svc-matching:4005
+      WS_DEPTH_LIMIT: ${WS_DEPTH_LIMIT:-50}
+      WS_POLL_INTERVAL_MS: ${WS_POLL_INTERVAL_MS:-250}
+      WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
+    ports: ['4014:4014']
+    healthcheck: *healthcheck
+    depends_on:
+      # The market list is read at boot so a subscription can be validated
+      # against it. A miss is not fatal — it retries on the timer — but starting
+      # after the engine means the first browser to connect does not have to.
+      svc-matching:
+        condition: service_healthy
+
   # ── Phase 3 · PAY + P2P ────────────────────────────────────────────────────
 
   svc-pay:
@@ -457,11 +491,15 @@ services:
   #
   # Both are Next 15, both are served by `next start` from the build already in
   # the image. Neither declares a `depends_on` on a service, and that is not an
-  # oversight: apps/web reads no environment at all and apps/admin reads only
-  # LAUNCH_DROP and the INTAFACED_FLAG_* overrides (apps/src/lib/operator-env.ts).
-  # Nothing in either app calls a service over HTTP today. Adding a dependency
-  # we do not have would make the platform slower to start and would lie about
-  # the coupling.
+  # oversight: these are BROWSER-side URLs. The container never calls them, so
+  # ordering the container behind a service would buy nothing — a browser that
+  # loads the page before svc-ws is up sees the panel say so and recovers on the
+  # next render, which is the behaviour we want anyway.
+  #
+  # `NEXT_PUBLIC_*` values are inlined at BUILD time by Next, so these take
+  # effect only for a build that saw them. They are here so a deployment has one
+  # place to look, and so the defaults in `app/layout.tsx` are visible next to
+  # the services they point at.
 
   web:
     <<: *app
@@ -473,6 +511,10 @@ services:
       HOSTNAME: 0.0.0.0
       HEALTHCHECK_PORT: '3000'
       HEALTHCHECK_PATH: /
+      # The front door, and the depth stream. Two origins, because svc-edge
+      # buffers and cannot proxy a socket (services/svc-ws/README.md).
+      NEXT_PUBLIC_EDGE_URL: ${NEXT_PUBLIC_EDGE_URL:-http://localhost:4000}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:4014}
     ports: ['3000:3000']
     healthcheck: *healthcheck
 

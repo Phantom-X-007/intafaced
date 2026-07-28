@@ -1,0 +1,103 @@
+import { withWsSpan } from '../tracing.js';
+import type { DepthHub, HubLogger } from './hub.js';
+import type { DepthSource } from './source.js';
+
+/**
+ * THE CLOCK.
+ *
+ * Everything with a timer in it lives here, so `DepthHub` has none and every
+ * one of its behaviours is reachable from a test in a single tick.
+ *
+ * ── Why this polls ──────────────────────────────────────────────────────────
+ *
+ * §5.1 gives the engine no outbound depth feed, and the events it does publish
+ * cannot rebuild a book: `intafaced.matching.order.accepted` carries
+ * `{orderId, marketId, sequence}` — no side, no price, no quantity
+ * (packages/events/src/catalog.ts). Deriving depth from the bus would need a
+ * wider payload, which is a `packages/events` PR that must land on its own
+ * first (§15.2). Until it does, the only complete and correctly-sequenced
+ * source of depth in the platform is `GET /markets/:id/depth`.
+ *
+ * So: poll it, diff it, and let the sequence do the rest. The cost is bounded
+ * and legible — one GET per SUBSCRIBED market per tick. A market nobody is
+ * watching is not polled, which is what keeps this from becoming a recorder.
+ *
+ * ── Why a tick with no change still calls `ingest` ──────────────────────────
+ *
+ * The hub's lag repair rides on the tick, not on the delta. A client that
+ * dropped a frame and then watched the market go quiet must still be repaired,
+ * and it can only be repaired on a tick that happens.
+ */
+
+export interface DepthPollerOptions {
+  readonly intervalMs: number;
+  readonly depthLimit: number;
+  readonly marketsRefreshMs: number;
+}
+
+export class DepthPoller {
+  readonly #source: DepthSource;
+  readonly #hub: DepthHub;
+  readonly #options: DepthPollerOptions;
+  readonly #log: HubLogger;
+
+  #timer: ReturnType<typeof setInterval> | null = null;
+  #marketsTimer: ReturnType<typeof setInterval> | null = null;
+  /** One tick at a time: a slow upstream must not stack overlapping sweeps. */
+  #ticking = false;
+
+  constructor(source: DepthSource, hub: DepthHub, options: DepthPollerOptions, log: HubLogger) {
+    this.#source = source;
+    this.#hub = hub;
+    this.#options = options;
+    this.#log = log;
+  }
+
+  start(): void {
+    if (this.#timer) return;
+    this.#timer = setInterval(() => void this.tick(), this.#options.intervalMs);
+    this.#marketsTimer = setInterval(() => {
+      void this.#hub.refreshMarkets().catch((err: unknown) => {
+        this.#log.warn({ err: String(err) }, 'ws: market list refresh failed — serving the last known list');
+      });
+    }, this.#options.marketsRefreshMs);
+    // Neither timer should hold the process open on its own.
+    this.#timer.unref?.();
+    this.#marketsTimer.unref?.();
+  }
+
+  stop(): void {
+    if (this.#timer) clearInterval(this.#timer);
+    if (this.#marketsTimer) clearInterval(this.#marketsTimer);
+    this.#timer = null;
+    this.#marketsTimer = null;
+  }
+
+  /** One sweep across every subscribed market. Exposed so tests drive the clock. */
+  async tick(): Promise<void> {
+    if (this.#ticking) return;
+    this.#ticking = true;
+    try {
+      const markets = this.#hub.activeMarkets;
+      // Concurrent, not sequential: with N markets a sequential sweep makes the
+      // last book's latency N round trips, and depth latency is the product.
+      await Promise.all(
+        markets.map(async (marketId) => {
+          try {
+            await withWsSpan('ws.depth.poll', { marketId, connections: this.#hub.connections }, async () => {
+              const snapshot = await this.#source.snapshot(marketId, this.#options.depthLimit);
+              this.#hub.ingest(snapshot);
+            });
+          } catch (err) {
+            // One failed read is not a reason to tear down subscriptions: the
+            // clients' books are still valid as of the last sequence, and the
+            // next tick either repairs them or the socket dies on its own.
+            this.#log.warn({ marketId, err: String(err) }, 'ws: depth poll failed');
+          }
+        }),
+      );
+    } finally {
+      this.#ticking = false;
+    }
+  }
+}
