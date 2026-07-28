@@ -77,6 +77,7 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   // Drop III · Soft launch
   def('identity.rankedWaves', 'identity', 'III', 'Ranked onboarding waves'),
   def('launch.memeFactory', 'launch', 'III', 'Meme factory one-click launches'),
+  def('edge.gateway', 'edge', 'I', 'Public API gateway accepts traffic'),
   def('trade.spot', 'trade', 'III', 'Spot order book live'),
 
   // Drop IV · Public drop
