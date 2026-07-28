@@ -2,7 +2,7 @@
   "name": "intafaced",
   "private": true,
   "version": "0.0.0",
-  "description": "INTAFACED Sovereign OS — monorepo root. Law: INTAFACED_DEFINITIVE_BUILD.md",
+  "description": "INTAFACED Sovereign OS \u2014 monorepo root. Law: INTAFACED_DEFINITIVE_BUILD.md",
   "packageManager": "pnpm@10.25.0",
   "engines": {
     "node": ">=20.0.0"
@@ -30,7 +30,7 @@
     "wt:rm": "node tooling/scripts/worktree.mjs remove",
     "tracker": "node tooling/scripts/tracker.mjs",
     "tracker:check": "node tooling/scripts/tracker.mjs --check",
-    "verify": "turbo run build typecheck test && node tooling/ci/dod-gate.mjs",
+    "verify": "turbo run build typecheck test && pnpm scan:workspace && node tooling/ci/dod-gate.mjs",
     "gate": "node tooling/ci/dod-gate.mjs",
     "scan:brand": "node tooling/ci/brand-scan.mjs",
     "scan:custody": "node tooling/ci/custody-scan.mjs",
@@ -39,7 +39,8 @@
     "db:migrate": "turbo run db:migrate",
     "db:check": "node tooling/ci/migration-check.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,yml,yaml}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,yml,yaml}\""
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,yml,yaml}\"",
+    "scan:workspace": "node tooling/ci/workspace-sync.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
