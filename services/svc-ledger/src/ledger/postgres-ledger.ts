@@ -17,6 +17,7 @@ import {
   type PostRequest,
   type PostedEntry,
 } from '@intafaced/ledger-client';
+import { frozenMessage } from './freeze.js';
 
 /**
  * THE LEDGER, on Postgres.
@@ -33,6 +34,9 @@ import {
  * is what totally orders posts, makes the hash chain a chain, and makes
  * concurrent spends impossible to interleave into an overdraft. See the
  * isolation note at the end of `post()` for why READ COMMITTED is correct here.
+ *
+ * The kill-switch is read under that same lock, not above it — a freeze that a
+ * post already in flight can outrun would not be one. See `post()`.
  *
  * Schema: SQL is search_path-relative (not hard-coded `ledger.*`). Production
  * connects with `search_path = ledger,public` (see `src/index.ts`). Tests use
@@ -60,17 +64,49 @@ export class PostgresLedger implements LedgerClient {
         // establishes a total order over posts by itself — which is exactly why
         // READ COMMITTED is sufficient here (see the isolation note below) and
         // why the hash chain can be a chain at all.
-        const tipRows = await tx<Array<{ hash: string | null; seq: string }>>`
-          SELECT hash, seq FROM chain_tip WHERE id = true FOR UPDATE
+        //
+        // THE FREEZE IS READ IN THIS QUERY, and that placement is the point.
+        //
+        // Cost first, because it is the easy half: joining the singleton
+        // `posting_freeze` row here costs no extra round trip, so consulting
+        // durable state instead of a process field is free on the hot path.
+        //
+        // Correctness second, because it is the half that matters. Read
+        // anywhere earlier — in the service layer, before the transaction — and
+        // there is a window between "not frozen" and COMMIT in which an
+        // operator freeze can land while this post sails through it. A freeze a
+        // post in flight can outrun is not a freeze. Inside the lock, freeze
+        // and post are ordered against each other by the same mechanism that
+        // orders posts against each other, so every post either sees the freeze
+        // or committed strictly before it.
+        //
+        // `FOR UPDATE OF t` locks only the tip: `posting_freeze` is read, never
+        // written here, and taking a row lock on the kill-switch would make the
+        // operator's freeze queue behind every post it is trying to stop.
+        const tipRows = await tx<Array<{ hash: string | null; seq: string; frozen: boolean; reason: string | null }>>`
+          SELECT t.hash, t.seq, f.frozen, f.reason
+            FROM chain_tip t, posting_freeze f
+           WHERE t.id = true AND f.id = true
+             FOR UPDATE OF t
         `;
+
+        const tip = tipRows[0];
+        if (!tip) {
+          throw new LedgerError('chain_tip / posting_freeze row is missing — the ledger is not initialised', 'ledger.uninitialised');
+        }
 
         // Re-check inside the lock: two retries of the same key can both get
         // past the fast path above.
+        //
+        // Ahead of the freeze check, matching that fast path. A retry of a
+        // transaction that ALREADY COMMITTED returns the original even while
+        // frozen: the value moved, and telling a caller otherwise would have it
+        // retry a movement that already happened. The freeze stops new writes,
+        // not the truth about old ones.
         const inTx = await this.loadTxByKey(tx, request.idempotencyKey);
         if (inTx) return inTx;
 
-        const tip = tipRows[0];
-        if (!tip) throw new LedgerError('chain_tip row is missing — the ledger is not initialised', 'ledger.uninitialised');
+        if (tip.frozen) throw new LedgerError(frozenMessage(tip.reason), 'ledger.frozen');
 
         const previousHash = tip.hash;
 

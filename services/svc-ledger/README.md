@@ -17,8 +17,8 @@ Internal tRPC. Note there is no user-facing write path, and `packages/auth` has 
 | `balance`   | `ledger:read`       | `AccountRef`                           | `{ accountId, assetId, kind, amount }`                   |
 | `balances`  | `ledger:read`       | `{ ownerType, ownerId }`               | `Balance[]` — own account only                           |
 | `reconcile` | `admin:treasury`    | —                                      | `{ ok, accountsChecked, chainLength, unbalancedAssets }` |
-| `freeze`    | `admin:treasury`    | `{ reason }`                           | `{ postingEnabled: false }`                              |
-| `unfreeze`  | `admin:treasury`    | —                                      | `{ postingEnabled: true }`                               |
+| `freeze`    | `admin:treasury`    | `{ reason }`                           | `{ postingEnabled, frozenReason, frozenBy }`             |
+| `unfreeze`  | `admin:treasury`    | —                                      | `{ postingEnabled, frozenReason, frozenBy }`             |
 
 HTTP: `GET /health` (liveness) · `GET /ready` — returns **503 when frozen**, so a frozen ledger leaves the load balancer rotation instead of refusing posts one by one.
 
@@ -32,6 +32,9 @@ HTTP: `GET /health` (liveness) · `GET /ready` — returns **503 when frozen**, 
 | ---------------------------------------- | ----------------------------- | --------------------------------------------------- |
 | `intafaced.ledger.tx.posted`             | after every commit            | tx id, module, reason, hash chain link, all entries |
 | `intafaced.ledger.reconciliation.failed` | drift or chain break detected | account, cached vs replayed balance, difference     |
+| `intafaced.ledger.freeze.updated`        | posting frozen or thawed      | `frozen`, `reason`, `actor`, `changedAt`            |
+
+`freeze.updated` carries **both** directions on one subject. `VERBS` holds no honest past tense for un-freezing, and more to the point: a consumer subscribed to a freeze-only subject would raise the alarm and never learn it was cleared. Idempotency key is `ledger.freeze:<changedAt>`, and `changedAt` comes from the database's `now()` — two replicas disagreeing about the wall clock must not be able to disagree about the order the platform was halted and resumed in.
 
 `tx.posted` is emitted **after** commit, never inside the transaction. A consumer must never observe a transaction that could still roll back: at-least-once delivery of a fact that happened beats at-most-once delivery of one that might not have. Idempotency key is `ledger.tx:<txId>`.
 
@@ -51,6 +54,7 @@ This service _is_ the ledger, so rather than recipes it invokes, here is what it
 | Entry amounts strictly positive                     | `assertBalanced` **+** `ledger_entries_positive_ck`           |
 | Idempotency — a retry returns the original          | `ledger_tx_idempotency_idx` unique index                      |
 | Hash chain unbroken                                 | `chain_tip` `FOR UPDATE` + `verifyChain`                      |
+| A frozen ledger accepts no new posts                | `posting_freeze` read under that same `FOR UPDATE`            |
 
 Enforced in three layers on purpose: shared pure validation, the transaction, and database CHECK constraints. **A bug in this service still cannot create money.** There is a test that proves it, by trying to write a negative balance with raw SQL.
 
@@ -103,6 +107,30 @@ On failure the service **freezes itself** and emits `reconciliation.failed`. Tha
 
 `ledger.reconciliation` disables the scheduled job only. It does not disable the freeze-on-failure behaviour.
 
+### The switch is durable
+
+It lives in `ledger.posting_freeze` — one row, like `chain_tip`, holding `frozen`, `reason`, `actor` and `changed_at`. It is not a field on a service object, because a freeze is a fact about **the ledger**, not about a server. In memory it lost three ways: a restart resumed posting on a book reconciliation had halted, a second replica never heard about the freeze at all, and the operator's reason was written nowhere.
+
+`post()` reads that row **inside the same `chain_tip … FOR UPDATE` transaction it already takes** — a join on the singleton, so no extra round trip. Placement is not an optimisation: read it any earlier and there is a window between "not frozen" and `COMMIT` in which an operator freeze lands while a post sails through it. Under the lock, freeze and post are ordered by the same mechanism that orders posts against each other. `FOR UPDATE OF t` locks only the tip — taking a row lock on the kill-switch would make the operator's freeze queue behind the posts it is trying to stop.
+
+A retry of a transaction that **already committed** still returns the original while frozen. The value moved; telling the caller otherwise would have it retry a movement that already happened.
+
+Every freeze and thaw is attributed. The database refuses `frozen = true` with neither reason nor actor (`posting_freeze_attributed_ck`) — whoever finds the platform halted must be able to find out why and by whom.
+
+### `LEDGER_POSTING_ENABLED` vs the database
+
+**The database wins, in one direction only.** The asymmetry is the safety property:
+
+| Flag                           | Database says | Result                                                   |
+| ------------------------------ | ------------- | -------------------------------------------------------- |
+| `LEDGER_POSTING_ENABLED=false` | not frozen    | **freezes**, durably, actor `env:LEDGER_POSTING_ENABLED` |
+| `LEDGER_POSTING_ENABLED=false` | frozen        | left alone — the existing reason is the one that matters |
+| `LEDGER_POSTING_ENABLED=true`  | frozen        | **stays frozen** — the flag can never thaw               |
+
+The flag defaults to `true`. If a restart honoured it, every deploy, OOM kill and autoscaler event would silently resume posting on a book that reconciliation halted — which is exactly the bug this design removes, arriving back through the front door. An unfreeze is a deliberate act with a named actor; a default-valued environment variable is not one, and must never be able to impersonate one.
+
+Applied once at boot (`LedgerService.applyStartupPolicy`), never per request.
+
 ---
 
 ## Running it
@@ -121,3 +149,7 @@ Migrations run as the schema's **owner**, not an admin role — this role delibe
 `postgres-ledger.test.ts` runs `runLedgerConformance` from `@intafaced/ledger-client/testing` — **the same suite the in-memory reference runs.** If the two ever disagree, one is wrong and the suite decides which (§4.4).
 
 Beyond conformance it proves what only a real database can: CHECK constraints rejecting direct SQL, 18-decimal round trips, tamper detection, drift detection, and 50 concurrent posts leaving the chain intact. Skips cleanly when Postgres is unreachable.
+
+`service.freeze.test.ts` builds **two `LedgerService` instances over separate connection pools** against one database and asserts that a freeze on one refuses a post on the other, survives a third instance starting cold, and is attributed to `reconciliation` when the reconciliation job sets it. A test that only asserted `freeze()` set a field would pass against the bug it exists to catch.
+
+Freeze is a `LedgerService` method and deliberately **not** on the `LedgerClient` interface, so it is not in the conformance suite. `LedgerClient` is what every calling service codes against — widening it would hand svc-trade a method to halt the platform, and promise the in-memory reference a durability guarantee it cannot honour.

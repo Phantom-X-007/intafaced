@@ -1,15 +1,8 @@
 import type { Sql } from 'postgres';
-import {
-  formatAmount,
-  LedgerError,
-  type AccountRef,
-  type Balance,
-  type LedgerClient,
-  type LedgerTx,
-  type PostRequest,
-} from '@intafaced/ledger-client';
+import { formatAmount, type AccountRef, type Balance, type LedgerClient, type LedgerTx, type PostRequest } from '@intafaced/ledger-client';
 import type { EventBus } from '@intafaced/events';
 import { PostgresLedger } from './ledger/postgres-ledger.js';
+import { readFreeze, writeFreeze, type FreezeState } from './ledger/freeze.js';
 import { runReconciliation, type ReconciliationReport } from './ledger/reconcile.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
@@ -17,11 +10,16 @@ import { withMoneySpan, withSpan } from './tracing.js';
  * The service layer: the ledger engine plus the three things wrapping every
  * post — the freeze switch, tracing, and the event emission that lets the rest
  * of the OS react to money moving.
+ *
+ * The freeze switch OWNS no state. It reads and writes `posting_freeze`, and
+ * `post()` is gated inside the engine's chain-tip transaction rather than here
+ * (see postgres-ledger.ts). This class holds no cached copy on purpose: a cache
+ * would be right until the moment a second replica moved the switch, which is
+ * exactly the moment it matters.
  */
 export class LedgerService implements LedgerClient {
   private readonly engine: PostgresLedger;
-  private postingEnabled: boolean;
-  private frozenReason: string | null = null;
+  private readonly bootPostingEnabled: boolean;
 
   constructor(
     private readonly sql: Sql,
@@ -29,14 +27,10 @@ export class LedgerService implements LedgerClient {
     options: { postingEnabled?: boolean } = {},
   ) {
     this.engine = new PostgresLedger(sql);
-    this.postingEnabled = options.postingEnabled ?? true;
+    this.bootPostingEnabled = options.postingEnabled ?? true;
   }
 
   async post(request: PostRequest): Promise<LedgerTx> {
-    if (!this.postingEnabled) {
-      throw new LedgerError(`Ledger posting is frozen${this.frozenReason ? `: ${this.frozenReason}` : ''}`, 'ledger.frozen');
-    }
-
     return withMoneySpan(
       'ledger.post',
       {
@@ -97,19 +91,88 @@ export class LedgerService implements LedgerClient {
   }
 
   // ── Operator controls (§14 admin) ──────────────────────────────────────────
+  //
+  // Deliberately NOT on the `LedgerClient` interface, and so not in the
+  // conformance suite. `LedgerClient` is the contract every calling service
+  // codes against; widening it would give svc-trade a method to halt the
+  // platform, and the in-memory reference a durability guarantee it cannot
+  // honour. Freezing is an operator action against THE ledger, not a thing a
+  // ledger client does.
 
-  freeze(reason: string): void {
-    this.postingEnabled = false;
-    this.frozenReason = reason;
+  /**
+   * Halt posting, durably.
+   *
+   * `actor` is required and unvalidated on purpose: an operator's principal id,
+   * `reconciliation`, or `env:LEDGER_POSTING_ENABLED`. The database refuses a
+   * freeze with neither reason nor actor (`posting_freeze_attributed_ck`) —
+   * whoever finds the platform halted must be able to find out why and by whom.
+   */
+  async freeze(reason: string, actor: string): Promise<FreezeState> {
+    const state = await writeFreeze(this.sql, { frozen: true, reason, actor });
+    await this.publishFreeze(state);
+    return state;
   }
 
-  unfreeze(): void {
-    this.postingEnabled = true;
-    this.frozenReason = null;
+  async unfreeze(actor: string): Promise<FreezeState> {
+    const state = await writeFreeze(this.sql, { frozen: false, actor });
+    await this.publishFreeze(state);
+    return state;
   }
 
-  status(): { postingEnabled: boolean; frozenReason: string | null } {
-    return { postingEnabled: this.postingEnabled, frozenReason: this.frozenReason };
+  /**
+   * What the DATABASE says, every time — no cached field.
+   *
+   * A round trip per `/health` and `/ready` call, accepted: a single-row
+   * primary-key read is cheap, and the alternative is a replica reporting
+   * itself ready while the book it writes to is frozen. That is the exact
+   * failure this change exists to remove.
+   */
+  async status(): Promise<{ postingEnabled: boolean; frozenReason: string | null; frozenBy: string | null }> {
+    const state = await readFreeze(this.sql);
+    return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+  }
+
+  /**
+   * Reconcile `LEDGER_POSTING_ENABLED` with the database at boot. Call once,
+   * before serving traffic.
+   *
+   * THE DATABASE WINS — but only in one direction, and the asymmetry is the
+   * whole safety property:
+   *
+   *   · `LEDGER_POSTING_ENABLED=false` FREEZES. The flag is a legitimate way to
+   *     bring the platform up halted, and making it durable means that decision
+   *     also reaches the replica whose config nobody edited.
+   *
+   *   · `LEDGER_POSTING_ENABLED=true` NEVER THAWS. It defaults to true, so
+   *     honouring it would mean any restart of any replica — a deploy, an OOM
+   *     kill, an autoscaler — silently resumes posting on a book that
+   *     reconciliation halted. That is precisely the bug this change removes,
+   *     and it would come straight back through the front door.
+   *
+   * An unfreeze is a deliberate act with a named actor. A default-valued
+   * environment variable is not one, and must never be able to impersonate one.
+   */
+  async applyStartupPolicy(): Promise<FreezeState> {
+    const state = await readFreeze(this.sql);
+    if (this.bootPostingEnabled || state.frozen) return state;
+
+    return this.freeze('LEDGER_POSTING_ENABLED=false at startup', 'env:LEDGER_POSTING_ENABLED');
+  }
+
+  private async publishFreeze(state: FreezeState): Promise<void> {
+    // After the durable write, like `tx.posted` after commit. If this publish
+    // throws, the switch has still moved — the caller learns the notification
+    // failed, never that the freeze did.
+    await this.bus.publish(
+      'ledgerFreezeUpdated',
+      {
+        frozen: state.frozen,
+        reason: state.reason,
+        actor: state.actor ?? 'unknown',
+        changedAt: state.changedAt.toISOString(),
+      },
+      { idempotencyKey: `ledger.freeze:${state.changedAt.toISOString()}` },
+    );
   }
 
   /**
@@ -117,13 +180,18 @@ export class LedgerService implements LedgerClient {
    * alarm — §4.2: "mismatch = page the operator, freeze the module that
    * diverged". Freezing is automatic because a book we cannot verify must not
    * accept more writes while someone decides what to do about it.
+   *
+   * The freeze is written BEFORE either publish, and awaited. If the bus is
+   * down, the alarm fails to send and this throws — with the book already
+   * halted. An alarm nobody receives is bad; a book still accepting writes
+   * because the alarm failed would be the actual disaster.
    */
   async reconcile(): Promise<ReconciliationReport> {
     return withSpan('ledger.reconcile', async () => {
       const report = await runReconciliation(this.sql);
 
       if (!report.ok) {
-        this.freeze('reconciliation mismatch');
+        await this.freeze('reconciliation mismatch', 'reconciliation');
 
         const firstDrift = report.balances.ok ? null : report.balances.drift[0];
         await this.bus.publish('ledgerReconciliationFailed', {

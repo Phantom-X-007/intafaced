@@ -33,15 +33,22 @@ const bus = await JetStreamEventBus.connect({
 });
 
 const ledger = new LedgerService(sql, bus, { postingEnabled: env.LEDGER_POSTING_ENABLED });
+
+// Before the first request, never after: a frozen database stays frozen, and
+// LEDGER_POSTING_ENABLED=false becomes a durable freeze that also reaches the
+// replicas nobody reconfigured. See LedgerService.applyStartupPolicy — the
+// flag can freeze, and can never thaw.
+const freezeAtBoot = await ledger.applyStartupPolicy();
+
 export const appRouter = createLedgerRouter(ledger);
 export type AppRouter = typeof appRouter;
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, ...ledger.status() }));
+app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, ...(await ledger.status()) }));
 
 app.get('/ready', async (_req, reply) => {
-  const status = ledger.status();
+  const status = await ledger.status();
   if (!status.postingEnabled) return reply.code(503).send({ ready: false, reason: status.frozenReason });
   return { ready: true };
 });
@@ -64,7 +71,16 @@ const reconcileTimer = setInterval(() => {
 reconcileTimer.unref();
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, chainSeq: tip.seq, s2sTrpcPaths: true }, 'svc-ledger ready');
+app.log.info(
+  { port: env.HTTP_PORT, chainSeq: tip.seq, s2sTrpcPaths: true, frozen: freezeAtBoot.frozen, frozenBy: freezeAtBoot.actor },
+  'svc-ledger ready',
+);
+
+// Loud, at the top level, because a process that came up frozen looks identical
+// to a healthy one in every graph except the one nobody is watching.
+if (freezeAtBoot.frozen) {
+  app.log.fatal({ reason: freezeAtBoot.reason, actor: freezeAtBoot.actor }, 'LEDGER POSTING IS FROZEN — no value can move');
+}
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
