@@ -196,6 +196,26 @@ export class TransferService {
     return toSchedule(rows[0]!);
   }
 
+  /**
+   * One standing order, by id, WITHOUT filtering on a user.
+   *
+   * Deliberately unfiltered: the caller is the router, and what it needs is the
+   * owner so it can decide. A `getSchedule(scheduleId, userId)` that quietly
+   * returned nothing for someone else's row would fold "does not exist" and
+   * "is not yours" into one answer here, where only the router knows which of
+   * those the caller should be told.
+   */
+  async getSchedule(scheduleId: string): Promise<ScheduleRecord> {
+    const rows = await this.sql<ScheduleRow[]>`
+      SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
+             starts_at, ends_at, next_run_at, status
+        FROM bank.scheduled_transfers WHERE id = ${scheduleId}
+    `;
+    const row = rows[0];
+    if (!row) throw new BankError(`Schedule ${scheduleId} not found`, 'bank.schedule_not_found');
+    return toSchedule(row);
+  }
+
   async listSchedules(userId: string): Promise<ScheduleRecord[]> {
     const rows = await this.sql<ScheduleRow[]>`
       SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,

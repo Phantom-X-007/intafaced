@@ -24,6 +24,13 @@ import type { BankServices } from './bank-service.js';
 const amountString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amount must be an unsigned decimal string (max 18dp)');
 
 function toTrpcError(err: unknown): TRPCError {
+  // An answer that has already been decided. Ownership refusals are thrown as
+  // TRPCError from inside `guard`, and without this line every one of them was
+  // re-wrapped as INTERNAL_SERVER_ERROR — a 500 that tells the caller to retry
+  // something that can never succeed, and hides the refusal from any dashboard
+  // grouping on status. That applied to the four `assertSelf` calls that were
+  // already here, not only to the two added with this change.
+  if (err instanceof TRPCError) return err;
   if (err instanceof InsufficientFundsError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
@@ -58,7 +65,30 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** A principal may only ever act on its own money, whatever its scopes say. */
+/**
+ * A principal may only ever act on its own money, whatever its scopes say.
+ *
+ * WHY FORBIDDEN AND NOT NOT_FOUND. The trade-off is real and goes the other
+ * way on the first reading: NOT_FOUND leaks strictly less, because it never
+ * confirms that the id exists. We take FORBIDDEN anyway.
+ *
+ *   · It is the truth. Every id this guards is a v4 uuid the client already
+ *     holds, so the overwhelmingly common way to reach this line is a user or
+ *     an integration passing the wrong one. Telling them "no such schedule"
+ *     sends them hunting for a record that is alive and well, and it is a lie
+ *     we would have to keep telling in the logs too.
+ *
+ *   · The oracle it opens is worth almost nothing here. 122 bits of entropy
+ *     means the id space is not enumerable, so FORBIDDEN discloses exactly one
+ *     fact: a uuid the caller ALREADY OBTAINED belongs to someone else. An
+ *     attacker who has the id has, by construction, already been somewhere they
+ *     could see it.
+ *
+ * svc-agents' `ownedSession` makes the opposite call and returns NOT_FOUND for
+ * both cases. That is a defensible reading of the same trade-off. What is not
+ * defensible is doing both inside one service, so every ownership refusal in
+ * svc-bank goes through this function and every one of them is FORBIDDEN.
+ */
 function assertSelf(principalUserId: string | undefined, ownerId: string): void {
   if (principalUserId !== ownerId) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'This account belongs to another user' });
@@ -243,13 +273,28 @@ export function createBankRouter(bank: BankServices) {
           }),
         ),
       )
-      .query(async ({ input }) => guard(async () => bank.transfers.executions(input.scheduleId))),
+      .query(async ({ ctx, input }) =>
+        guard(async () => {
+          // `bank:read` answers "may this principal read bank data". It never
+          // answered "whose", and without the next two lines this returned
+          // another user's transfer history, amounts and rejection codes
+          // included, to anyone holding the scope and a schedule id.
+          const schedule = await bank.transfers.getSchedule(input.scheduleId);
+          assertSelf(ctx.principal.userId, schedule.userId);
+          return bank.transfers.executions(input.scheduleId);
+        }),
+      ),
 
     cancel: scopedProcedure('bank:write', { module: 'bank' })
       .input(z.object({ scheduleId: z.string().uuid() }))
       .output(z.object({ cancelled: z.literal(true) }))
-      .mutation(async ({ input }) =>
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          // The ownership check runs BEFORE the cancel, not as a filter on its
+          // result: `cancelSchedule` is an UPDATE, and a check made afterwards
+          // would refuse a caller whose write had already landed.
+          const schedule = await bank.transfers.getSchedule(input.scheduleId);
+          assertSelf(ctx.principal.userId, schedule.userId);
           await bank.transfers.cancelSchedule(input.scheduleId);
           return { cancelled: true as const };
         }),

@@ -100,11 +100,14 @@ interface Stub {
   calls: Array<{ method: string; args: unknown[] }>;
   /** Make the next service call throw this. */
   fail(err: unknown): void;
+  /** Whose merchant every payment and settlement in this stub belongs to. */
+  ownedBy(userId: string): void;
 }
 
 function stubService(): Stub {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   let nextError: unknown = null;
+  let merchantOwner = USER;
 
   const record = <T>(method: string, result: (...args: never[]) => T) =>
     ((...args: never[]) => {
@@ -117,17 +120,20 @@ function stubService(): Stub {
       return Promise.resolve(result(...args));
     }) as never;
 
+  const merchant = () => ({
+    id: MERCHANT,
+    userId: merchantOwner,
+    mode: 'gateway' as const,
+    tier: 0,
+    kybStatus: 'none' as const,
+    status: 'active' as const,
+    pricing: { feeBps: 250 },
+    settlementPrefs: {},
+  });
+
   const service = {
-    createMerchant: record('createMerchant', () => ({
-      id: MERCHANT,
-      userId: USER,
-      mode: 'gateway' as const,
-      tier: 0,
-      kybStatus: 'none' as const,
-      status: 'active' as const,
-      pricing: { feeBps: 250 },
-      settlementPrefs: {},
-    })),
+    createMerchant: record('createMerchant', merchant),
+    getMerchant: record('getMerchant', merchant),
     createProfile: record('createProfile', () => ({ id: SETTLEMENT, merchantId: MERCHANT })),
     clearingBalance: record('clearingBalance', () => amt('100.5')),
     merchantBalance: record('merchantBalance', () => amt('97.5')),
@@ -151,6 +157,9 @@ function stubService(): Stub {
     calls,
     fail: (err) => {
       nextError = err;
+    },
+    ownedBy: (userId) => {
+      merchantOwner = userId;
     },
   };
 }
@@ -428,6 +437,91 @@ describe('authority', () => {
     await expect(api.payment.get({ paymentId: 'not-a-uuid' })).rejects.toThrow();
     await expect(api.merchant.balances({ merchantId: MERCHANT, assetId: '' })).rejects.toThrow();
     expect(stub.calls).toHaveLength(0);
+  });
+});
+
+// ── Ownership ────────────────────────────────────────────────────────────────
+
+/**
+ * A scope answers "may this principal do this KIND of thing". It has never
+ * answered "may they do it to THIS row", and `pay:read` is held by every
+ * merchant on the platform.
+ *
+ * Each procedure gets two tests, and the second is the one that catches the
+ * worse bug: a check tight enough to lock the owner out of their own payments
+ * is a self-inflicted outage, where the IDOR is at least only a breach of one
+ * record at a time.
+ */
+describe('a merchant reaches their own rows and nobody else’s', () => {
+  /** A second merchant, owned by a different user, with the same MERCHANT id. */
+  const ANOTHER_USER = '88888888-8888-4888-8888-888888888888';
+
+  const codeOf = (err: unknown) => (err as { code?: string }).code;
+
+  it('refuses payment.get on another merchant’s payment', async () => {
+    stub.ownedBy(ANOTHER_USER);
+    const api = await caller(['pay:read']);
+
+    const err = await api.payment.get({ paymentId: PAYMENT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+  });
+
+  it('still serves payment.get to the merchant who owns it', async () => {
+    const api = await caller(['pay:read']);
+    await expect(api.payment.get({ paymentId: PAYMENT })).resolves.toMatchObject({ id: PAYMENT, merchantId: MERCHANT });
+  });
+
+  it('refuses payment.history on another merchant’s payment, and never reads the log', async () => {
+    stub.ownedBy(ANOTHER_USER);
+    const api = await caller(['pay:read']);
+
+    const err = await api.payment.history({ paymentId: PAYMENT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    // Refused before the read, not after it. `payment_events` carries
+    // instrument metadata and customer references; not returning it is not the
+    // same as not fetching it.
+    expect(stub.calls.filter((c) => c.method === 'history')).toHaveLength(0);
+  });
+
+  it('still serves payment.history to the merchant who owns it', async () => {
+    const api = await caller(['pay:read']);
+    const history = await api.payment.history({ paymentId: PAYMENT });
+    expect(history).toHaveLength(1);
+    expect(stub.calls.filter((c) => c.method === 'history')).toHaveLength(1);
+  });
+
+  it('refuses settlement.get on another merchant’s settlement', async () => {
+    stub.ownedBy(ANOTHER_USER);
+    const api = await caller(['pay:read']);
+
+    const err = await api.settlement.get({ settlementId: SETTLEMENT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+  });
+
+  it('still serves settlement.get to the merchant who owns it', async () => {
+    const api = await caller(['pay:read']);
+    await expect(api.settlement.get({ settlementId: SETTLEMENT })).resolves.toMatchObject({
+      id: SETTLEMENT,
+      gross: '100',
+      net: '97.5',
+    });
+  });
+
+  it('refuses with FORBIDDEN rather than NOT_FOUND, consistently, on all three', async () => {
+    stub.ownedBy(ANOTHER_USER);
+    const api = await caller(['pay:read']);
+
+    // Stated as its own test because the value here is the CONSISTENCY: a
+    // client that learns to branch on one of these must be able to branch on
+    // all of them. See `assertMerchantOwner` for why this direction was chosen.
+    const codes = await Promise.all(
+      [
+        api.payment.get({ paymentId: PAYMENT }),
+        api.payment.history({ paymentId: PAYMENT }),
+        api.settlement.get({ settlementId: SETTLEMENT }),
+      ].map((p) => p.catch((e: unknown) => codeOf(e))),
+    );
+    expect(codes).toEqual(['FORBIDDEN', 'FORBIDDEN', 'FORBIDDEN']);
   });
 });
 
