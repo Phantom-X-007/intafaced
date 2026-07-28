@@ -1426,12 +1426,8 @@ if (!available) {
       // this service from anything grouping on status.
       const schedule = await firedStandingOrder(USER_A);
 
-      const read = await (await caller(USER_B, ['bank:read'])).transfers
-        .executions({ scheduleId: schedule.id })
-        .catch((e: unknown) => e);
-      const write = await (await caller(USER_B, ['bank:write'])).transfers
-        .cancel({ scheduleId: schedule.id })
-        .catch((e: unknown) => e);
+      const read = await (await caller(USER_B, ['bank:read'])).transfers.executions({ scheduleId: schedule.id }).catch((e: unknown) => e);
+      const write = await (await caller(USER_B, ['bank:write'])).transfers.cancel({ scheduleId: schedule.id }).catch((e: unknown) => e);
 
       expect([codeOf(read), codeOf(write)]).toEqual(['FORBIDDEN', 'FORBIDDEN']);
     });
