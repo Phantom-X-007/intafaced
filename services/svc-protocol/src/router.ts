@@ -403,3 +403,5 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
       }),
   });
 }
+
+export type ProtocolRouter = ReturnType<typeof createProtocolRouter>;

@@ -128,14 +128,14 @@ export const FEATURES = [
   f('pay.subscriptions', 'Recurring — card and crypto', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', { module: 'pay', phase: '3', plane: 'B', dependsOn: ['pay.gateway', 'identity.apikeys'] }),
-  f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-p2p'], note: 'svc-p2p on main; router not mounted at boot yet' }),
+  f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-p2p'], note: 'svc-p2p on main; self-mounts /trpc with an edge-verified principal' }),
   f('p2p.escrow', 'Ledger escrow — lock, release, refund', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.offers'], requires: ['services/svc-p2p'], note: 'Escrow flows in svc-p2p; not a separate service' }),
   f('p2p.disputes', 'Moderated dispute resolution', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.escrow'], requires: ['services/svc-p2p'], note: 'Dispute paths in svc-p2p core' }),
   f('p2p.reputation', 'Reputation feeding the same XP graph', { module: 'p2p', phase: '3', status: 'done', dependsOn: ['p2p.offers', 'identity.rank'], requires: ['services/svc-p2p/src/reputation.ts'], note: 'Reputation module on main' }),
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', { module: 'p2p', phase: '3', dependsOn: ['p2p.reputation'] }),
 
   // ── PHASE 3P · PROTOCOL PLANE P0 ─────────────────────────────────────────
-  f('protocol.smart-accounts', 'Passkey smart accounts, session keys (§17.4)', { module: 'protocol', phase: '3P', plane: 'P', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-protocol'], note: 'svc-protocol on main; open contract sockets remain elsewhere' }),
+  f('protocol.smart-accounts', 'Passkey smart accounts, session keys (§17.4)', { module: 'protocol', phase: '3P', plane: 'P', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-protocol'], note: 'svc-protocol on main; self-mounts /trpc with an edge-verified principal; open contract sockets remain elsewhere' }),
   f('protocol.amm', 'AMM pools from audited templates', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.amm'] }),
   f('protocol.escrow', 'Non-custodial P2P escrow contracts', { module: 'protocol', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
@@ -144,7 +144,7 @@ export const FEATURES = [
   f('indexer.readmodels', 'Chain → Postgres read models', { module: 'indexer', phase: '3P', plane: 'P', dependsOn: ['protocol.smart-accounts'] }),
 
   // ── PHASE 4 · BLUEPRINT ──────────────────────────────────────────────────
-  f('blueprint.onboarding', 'Blueprint session → profile JSON', { module: 'blueprint', phase: '4', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-blueprint'], note: 'svc-blueprint on main; router not wired at boot yet' }),
+  f('blueprint.onboarding', 'Blueprint session → profile JSON', { module: 'blueprint', phase: '4', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-blueprint'], note: 'svc-blueprint on main; self-mounts /trpc with an edge-verified principal' }),
   f('blueprint.card', 'Share card render (1080×1350, 1200×630)', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
   f('blueprint.crews', 'Crew matching + mentor shortlist', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
   f('blueprint.ownership', 'Export + hard delete, cascading', { module: 'blueprint', phase: '4', dependsOn: ['blueprint.onboarding'] }),
@@ -156,13 +156,13 @@ export const FEATURES = [
   f('bridge.canonical', 'Canonical IFC bridge + attestations', { module: 'bridge', phase: '4P', plane: 'B', dependsOn: ['chain.mainnet', 'token.emissions'] }),
 
   // ── PHASE 5 · SURFACES ───────────────────────────────────────────────────
-  f('bank.accounts', 'Multi-currency account UX over the ledger', { module: 'bank', phase: '5', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-bank'], note: 'svc-bank on main; tRPC not mounted; UX product may expand' }),
+  f('bank.accounts', 'Multi-currency account UX over the ledger', { module: 'bank', phase: '5', status: 'done', dependsOn: ['ledger.double-entry'], requires: ['services/svc-bank'], note: 'svc-bank on main; self-mounts /trpc with an edge-verified principal; UX product may expand' }),
   f('bank.loans', 'Collateralised loans, LTV, margin calls, liquidation', { module: 'bank', phase: '5', dependsOn: ['bank.accounts', 'trade.spot'] }),
   f('bank.earn', 'Flexible + fixed yield pools', { module: 'bank', phase: '5', dependsOn: ['bank.accounts', 'token.staking'] }),
   f('bank.cards', 'CardIssuerAdapter + card-sim, <2s auth decision', { module: 'bank', phase: '5', dependsOn: ['bank.accounts'] }),
   f('bank.sovereign-card', 'Self-custody funded card, JIT conversion (§18)', { module: 'bank', phase: '5', plane: 'P', dependsOn: ['bank.cards', 'protocol.smart-accounts'] }),
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', { module: 'bank', phase: '5', dependsOn: ['pay.rails'] }),
-  f('agents.gateway', 'Model-agnostic gateway, per-user metering', { module: 'agents', phase: '5', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-agents'], note: 'Only service that already mounts /trpc' }),
+  f('agents.gateway', 'Model-agnostic gateway, per-user metering', { module: 'agents', phase: '5', status: 'done', dependsOn: ['identity.accounts'], requires: ['services/svc-agents'], note: 'Reference mount — the /trpc + createEdgeContext recipe every other service copies' }),
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
   f('agents.support', 'Support agent — KB + account-state grounded', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', { module: 'agents', phase: '5', dependsOn: ['agents.gateway', 'trade.spot'] }),

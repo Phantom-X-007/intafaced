@@ -1,9 +1,11 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createEdgeContext } from '@intafaced/contracts';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
-import { createBankRouter } from './router.js';
+import { createBankRouter, type BankRouter } from './router.js';
 import { withSpan } from './tracing.js';
 
 /**
@@ -36,7 +38,11 @@ const bank = createBankServices(sql, ledger, history, { nativeAssetId: env.TOKEN
 export const appRouter = createBankRouter(bank);
 export type AppRouter = typeof appRouter;
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+// Built before the listener opens: a service that cannot authenticate the edge
+// must fail to start, not start and serve every request as anonymous.
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
@@ -70,6 +76,18 @@ app.post('/internal/jobs/accrue-interest', async (_req, reply) => {
     const results = await bank.earn.accrueAll();
     return results.map((r) => ({ poolId: r.poolId, date: r.date, recipients: r.recipients, alreadyAccrued: r.alreadyAccrued }));
   });
+});
+
+await app.register(fastifyTRPCPlugin, {
+  prefix: '/trpc',
+  trpcOptions: {
+    router: appRouter,
+    // The edge terminates auth and forwards the resolved principal; this
+    // service never parses a token itself (§4.1 owns that). It does verify the
+    // edge's signature over that principal — see packages/contracts/src/edge.ts
+    // for why an unsigned header makes every scope check decorative.
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  } satisfies FastifyTRPCPluginOptions<BankRouter>['trpcOptions'],
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });

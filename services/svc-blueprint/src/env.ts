@@ -1,7 +1,11 @@
 import { z } from 'zod';
-import { loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
-const schema = serviceEnvSchema.merge(
+// This service self-mounts /trpc, so it must be able to authenticate the edge.
+// `export` and `erase` act on `ctx.principal.userId` and nothing else, which is
+// only a privacy guarantee if that userId cannot be asserted by the caller
+// (docs/decisions/mount-boundary.md).
+const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
   z.object({
     SERVICE_NAME: z.string().default('svc-blueprint'),
     HTTP_PORT: z.coerce.number().int().default(4008),
