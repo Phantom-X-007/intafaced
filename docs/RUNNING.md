@@ -110,6 +110,12 @@ stack (5506 / 6381 / 57017 / 9094 / 7000 / 6001).
 | **4009** | `svc-bank`      | multi-currency accounts (§8.1)                          |
 | **4011** | `svc-blueprint` | Identity Blueprint (§7.1)                               |
 | **4012** | `svc-protocol`  | smart accounts, non-custodial (§17.4)                   |
+| **4014** | `svc-ws`        | live depth stream (§5.2); the browser connects directly |
+
+`svc-ws` is the second port a browser touches, and the only one besides svc-edge.
+It has to be: the edge proxy buffers with `response.text()` and cannot carry a
+websocket. It holds no database, no bus and no service secret, which is what
+makes a second door acceptable — `services/svc-ws/README.md` argues it in full.
 
 Four of these differ from the service's own default, because three services
 independently chose `4004` and two chose `4008`. The compose file sets

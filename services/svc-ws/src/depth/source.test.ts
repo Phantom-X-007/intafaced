@@ -1,0 +1,89 @@
+import { describe, expect, it } from 'vitest';
+import { DepthSourceError, HttpDepthSource } from './source.js';
+
+/**
+ * The wire between two of our own services is still a wire.
+ *
+ * Everything here is about refusing a response rather than coercing one. A
+ * depth response with a JSON number in it would become a float the moment it
+ * was parsed, and a float in an order book is wrong in a way that shows up
+ * eighteen decimal places later — long after anyone would look here.
+ */
+
+function respondWith(body: unknown, status = 200): typeof globalThis.fetch {
+  return (async () =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })) as typeof globalThis.fetch;
+}
+
+const source = (fetchImpl: typeof globalThis.fetch) => new HttpDepthSource({ baseUrl: 'http://matching.test/', fetch: fetchImpl });
+
+describe('HttpDepthSource', () => {
+  it('reads a depth response into a DepthSnapshot', async () => {
+    const s = source(respondWith({ marketId: 'BTC-USDT', bids: [['100.5', '2']], asks: [['101', '1.5']], sequence: 42 }));
+
+    await expect(s.snapshot('BTC-USDT', 50)).resolves.toEqual({
+      type: 'snapshot',
+      marketId: 'BTC-USDT',
+      sequence: 42,
+      bids: [['100.5', '2']],
+      asks: [['101', '1.5']],
+    });
+  });
+
+  it('refuses a level carrying a JSON number instead of a decimal string', async () => {
+    const s = source(respondWith({ bids: [[100.5, 2]], asks: [], sequence: 1 }));
+    await expect(s.snapshot('BTC-USDT', 50)).rejects.toThrow(/decimal strings/);
+  });
+
+  it('refuses a response with no integer sequence', async () => {
+    // Without the engine's sequence there is no safe delta stream at all, and
+    // inventing one would produce a book that drifts silently.
+    const s = source(respondWith({ bids: [], asks: [] }));
+    await expect(s.snapshot('BTC-USDT', 50)).rejects.toThrow(/integer sequence/);
+  });
+
+  it('carries the upstream status on a failure so a caller can tell 404 from 500', async () => {
+    const s = source(respondWith({ error: 'nope' }, 503));
+    await expect(s.snapshot('BTC-USDT', 50)).rejects.toMatchObject({ name: 'DepthSourceError', status: 503 });
+  });
+
+  it('reports an unreachable upstream as unreachable, not as a bad response', async () => {
+    const s = source((async () => {
+      throw new TypeError('fetch failed');
+    }) as typeof globalThis.fetch);
+
+    await expect(s.snapshot('BTC-USDT', 50)).rejects.toThrow(/svc-matching unreachable/);
+  });
+
+  it('sends no credential of any kind', async () => {
+    const seen: RequestInit[] = [];
+    const s = source((async (_url: unknown, init?: RequestInit) => {
+      seen.push(init ?? {});
+      return new Response(JSON.stringify({ markets: ['BTC-USDT'] }), { status: 200 });
+    }) as unknown as typeof globalThis.fetch);
+
+    await s.markets();
+
+    // The whole security argument for this service is that it holds nothing.
+    // A header added here later would quietly undo it.
+    const headers = seen[0]?.headers;
+    expect(headers).toBeUndefined();
+  });
+
+  it('percent-encodes the market id into the path', async () => {
+    const urls: string[] = [];
+    const s = source((async (url: unknown) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify({ bids: [], asks: [], sequence: 0 }), { status: 200 });
+    }) as unknown as typeof globalThis.fetch);
+
+    await s.snapshot('BTC/USDT', 25);
+
+    expect(urls[0]).toBe('http://matching.test/markets/BTC%2FUSDT/depth?limit=25');
+  });
+
+  it('refuses a market list that is not a list of strings', async () => {
+    const s = source(respondWith({ markets: [1, 2] }));
+    await expect(s.markets()).rejects.toThrow(DepthSourceError);
+  });
+});

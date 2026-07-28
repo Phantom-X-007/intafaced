@@ -32,14 +32,15 @@ import styles from './terminal.module.css';
  *   · Protocol Plane status and smart-account derivation (`protocol.health`,
  *     `protocol.predictAddress`)
  *
+ *   · the order book — snapshot + sequenced deltas from svc-ws
+ *
  * Sockets, each with the reason on screen:
- *   · the order book — there is no depth feed a browser can reach
- *   · the chart — no candle source exists behind the edge
+ *   · the chart — no candle or trade-tape source exists anywhere yet
  *   · account equity — svc-ledger is deliberately absent from the edge route
  *     table, and no other service exposes a balance read
  *   · everything on the Protocol Plane that needs a chain
  *
- * The count is deliberate. Five real panels and four honest holes is a truthful
+ * The count is deliberate. Six real panels and three honest holes is a truthful
  * terminal; nine panels of plausible numbers is a demo that gets somebody hurt.
  */
 
@@ -49,8 +50,8 @@ const copy = {
   noMarkets: 'svc-trade has no listed markets',
   chartTitle: 'Chart',
   chartReason:
-    'No candle or trade-tape source is reachable through svc-edge. svc-trade publishes markets, orders and fills, and nothing that carries a price series; the ws-gateway streams §5.3 names (`trades.<market>`) are not built.',
-  chartBlocked: 'ws.gateway · trade.candles',
+    'No candle or trade-tape source exists. svc-trade publishes markets, orders and fills, and nothing that carries a price series; svc-ws streams depth and only depth — the `trades.<market>` stream §5.3 names is not built, and neither is a candle store.',
+  chartBlocked: 'ws.gateway (trades) · trade.candles',
   equityTitle: 'Account equity',
   equityReason:
     'Balances live in svc-ledger, which svc-edge deliberately does not route — `ledger.post` moves value on a module’s own authority, so no browser token carries a ledger scope. A balance read for users has to be a procedure on a mounted service, and there is not one.',

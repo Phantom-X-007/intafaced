@@ -220,24 +220,49 @@ describe('DepthController — the book only ever shows what it can prove', () =>
   });
 });
 
-describe('the depth socket is declared, not faked', () => {
+describe('the depth transport is resolved, never conjured', () => {
   /**
-   * If a transport ever becomes available this test fails, which is the point:
-   * it forces whoever wires it to also delete the socket copy in the UI rather
-   * than leave the terminal telling users the book is unavailable when it is
-   * not.
+   * This block used to assert that NO transport existed, and to fail the day one
+   * appeared — deliberately, so that whoever wired it had to delete the §13
+   * socket copy in the UI rather than leave the terminal telling users the book
+   * was unavailable when it was not. `services/svc-ws` is that day. The socket
+   * copy is gone from `depth-source.ts` and the assertions below are its
+   * replacement.
+   *
+   * What is kept, unchanged, is the property that mattered underneath: this
+   * function reads no environment. The origin is an argument, resolved once in
+   * `app/layout.tsx`, so no component can point the order book at a host whose
+   * provenance the app cannot state.
    */
-  it('reports no live transport, with a reason a user can read', () => {
-    const availability = resolveDepthTransport();
+  it('returns a live transport for a configured origin, and names it', () => {
+    const availability = resolveDepthTransport('http://localhost:4014');
+    expect(availability.available).toBe(true);
+    if (!availability.available) throw new Error('unreachable');
+    expect(availability.origin).toBe('http://localhost:4014');
+    expect(typeof availability.transport.subscribe).toBe('function');
+  });
+
+  it('reports unavailable, with a reason a user can read, when no origin is configured', () => {
+    const availability = resolveDepthTransport(null);
     expect(availability.available).toBe(false);
     if (availability.available) throw new Error('unreachable');
-    expect(availability.reason).toMatch(/svc-matching/);
-    expect(availability.blockedBy).toContain('ws.gateway');
+    expect(availability.reason).toMatch(/svc-ws/);
+    expect(availability.blockedBy).toContain('NEXT_PUBLIC_WS_URL');
+  });
+
+  it('refuses an origin it could not open a stream to, rather than failing later', () => {
+    for (const bad of ['not-a-url', 'ftp://localhost:4014']) {
+      const availability = resolveDepthTransport(bad);
+      expect(availability.available).toBe(false);
+      if (availability.available) throw new Error('unreachable');
+      expect(availability.reason).toContain(bad);
+    }
   });
 
   it('does not read an environment variable to conjure one', () => {
     const spy = vi.spyOn(process, 'env', 'get');
-    resolveDepthTransport();
+    resolveDepthTransport('http://localhost:4014');
+    resolveDepthTransport(null);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });

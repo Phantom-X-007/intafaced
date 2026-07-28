@@ -60,6 +60,15 @@ interface TerminalContextValue {
    * `health` need no authority, so they are sent with none.
    */
   readonly anonymousEdge: EdgeClient;
+  /**
+   * svc-ws's public origin, or null when this deployment has none.
+   *
+   * Carried through context rather than read where it is used, for the same
+   * reason `edge` is: there is one place a deployment is pointed at a front
+   * door (`app/layout.tsx`), and a component that could reach into the
+   * environment for its own could point the order book anywhere.
+   */
+  readonly depthOrigin: string | null;
   readonly session: SessionApi;
   readonly plane: PlaneDefinition;
   setPlane(id: PlaneId): void;
@@ -67,7 +76,7 @@ interface TerminalContextValue {
 
 const TerminalContext = createContext<TerminalContextValue | null>(null);
 
-export function TerminalProviders({ children, edgeUrl }: { children: ReactNode; edgeUrl?: string }) {
+export function TerminalProviders({ children, edgeUrl, depthUrl }: { children: ReactNode; edgeUrl?: string; depthUrl?: string }) {
   const accessToken = useRef<string | null>(null);
   const refreshToken = useRef<string | null>(null);
   const [session, setSession] = useState<SessionState>(ANONYMOUS);
@@ -120,11 +129,12 @@ export function TerminalProviders({ children, edgeUrl }: { children: ReactNode; 
     () => ({
       edge,
       anonymousEdge,
+      depthOrigin: depthUrl ?? null,
       session: { ...session, signIn, signOut },
       plane: planeById(planeId),
       setPlane: setPlaneId,
     }),
-    [edge, anonymousEdge, session, signIn, signOut, planeId],
+    [edge, anonymousEdge, depthUrl, session, signIn, signOut, planeId],
   );
 
   return <TerminalContext.Provider value={value}>{children}</TerminalContext.Provider>;
@@ -143,6 +153,11 @@ export function useEdge(): EdgeClient {
 /** For permissionless calls only. Sends no bearer, ever. */
 export function useAnonymousEdge(): EdgeClient {
   return useTerminal().anonymousEdge;
+}
+
+/** svc-ws's origin for this deployment, or null when it has none. */
+export function useDepthOrigin(): string | null {
+  return useTerminal().depthOrigin;
 }
 
 export function useSession(): SessionApi {

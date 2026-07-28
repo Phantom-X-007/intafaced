@@ -1,0 +1,117 @@
+import Fastify from 'fastify';
+import { env } from './env.js';
+import { DepthHub } from './depth/hub.js';
+import { DepthPoller } from './depth/poller.js';
+import { HttpDepthSource } from './depth/source.js';
+import { registerRoutes } from './routes.js';
+import { createWebSocketGateway } from './ws/gateway.js';
+
+/**
+ * svc-ws — the live depth stream (§5.2 ws.gateway).
+ *
+ * ── Why this is its own service ─────────────────────────────────────────────
+ *
+ * The two other candidates both fail the same test.
+ *
+ * **svc-matching** has the book, and holds `INTERNAL_SERVICE_SECRET` because it
+ * authenticates order writes. Opening a browser-facing socket there would put
+ * the public internet on the same port as the engine that takes orders, and
+ * would mean adding svc-matching to the edge's route table — a table whose
+ * comment says in as many words that svc-matching is deliberately absent.
+ *
+ * **svc-trade** is already mounted and already consumes `orderFilled`, which is
+ * the argument for it. But it cannot build a book from those events —
+ * `intafaced.matching.order.accepted` carries no side, price or quantity — so
+ * it would have to poll svc-matching exactly as this does, while holding
+ * `INTERNAL_SERVICE_SECRET` for both the ledger and the engine and calling
+ * `ledger.hold` on the money path. Attaching an unauthenticated public socket
+ * to that process trades the entire custodial blast radius for one saved
+ * container.
+ *
+ * So: a process that holds nothing. No database, no bus, no ledger client, no
+ * service secret, no principal key. Its whole authority is "GET a public
+ * endpoint and re-broadcast it", which is exactly the authority a public
+ * market-data feed should have. See README.md.
+ */
+
+const source = new HttpDepthSource({ baseUrl: env.MATCHING_URL });
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+
+const hub = new DepthHub(
+  source,
+  {
+    depthLimit: env.WS_DEPTH_LIMIT,
+    highWaterBytes: env.WS_HIGH_WATER_BYTES,
+    maxLagTicks: env.WS_MAX_LAG_TICKS,
+    maxConnections: env.WS_MAX_CONNECTIONS,
+    marketsRefreshMs: env.WS_MARKETS_REFRESH_MS,
+  },
+  app.log,
+);
+
+let enabled = env.WS_GATEWAY_ENABLED;
+const isEnabled = () => enabled;
+
+const poller = new DepthPoller(
+  source,
+  hub,
+  { intervalMs: env.WS_POLL_INTERVAL_MS, depthLimit: env.WS_DEPTH_LIMIT, marketsRefreshMs: env.WS_MARKETS_REFRESH_MS },
+  app.log,
+);
+
+registerRoutes(app, {
+  hub,
+  source,
+  depthLimit: env.WS_DEPTH_LIMIT,
+  serviceName: env.SERVICE_NAME,
+  upstream: env.MATCHING_URL,
+  enabled: isEnabled,
+});
+
+/**
+ * The market list is fetched before the port opens, not lazily on the first
+ * connection. A subscription is refused unless the market is on it, so a
+ * gateway that has never fetched it would refuse every client and look like a
+ * bug in the terminal rather than a boot ordering problem.
+ *
+ * A failure here is not fatal: svc-matching may simply be starting. The list
+ * refreshes on a timer and a connection that misses triggers one refetch.
+ */
+await hub.refreshMarkets().catch((err: unknown) => {
+  app.log.warn(
+    { err: String(err), upstream: env.MATCHING_URL },
+    'svc-ws: could not read the market list at boot — will retry on the timer',
+  );
+});
+
+await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
+
+const gateway = createWebSocketGateway({
+  server: app.server,
+  hub,
+  heartbeatMs: env.WS_HEARTBEAT_MS,
+  log: app.log,
+  enabled: isEnabled,
+});
+
+poller.start();
+
+app.log.info(
+  { port: env.HTTP_PORT, upstream: env.MATCHING_URL, depthLimit: env.WS_DEPTH_LIMIT, pollMs: env.WS_POLL_INTERVAL_MS, enabled },
+  'svc-ws ready — depth fan-out',
+);
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => {
+    void (async () => {
+      // Stop producing before closing sockets, so nothing is written to a
+      // socket that is mid-close, and tell every client why it is going.
+      enabled = false;
+      poller.stop();
+      await gateway.close('gateway shutting down');
+      await app.close();
+      process.exit(0);
+    })();
+  });
+}

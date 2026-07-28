@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**29 of 106 shipped (27%)** · 0 in progress · 39 ready to claim · 38 blocked · 15 deliberate §13 sockets
+**30 of 107 shipped (28%)** · 0 in progress · 40 ready to claim · 37 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -39,6 +39,7 @@ pnpm wt feat/<the-thing>
 | CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
 | Internal market-maker seeding books at launch | `trade` | 2 | `trade.mm-bot` |
 | External venue adapters via CCXT (cross-venue) | `trade` | 2 | `venue.aggregation` |
+| Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
 | WebSocket fan-out: depth, trades, orders, positions | `trade` | 2 | `ws.gateway` |
 | Branded gateway, hosted checkout, payment links | `pay` | 3 | `pay.gateway` |
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
@@ -119,7 +120,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Buyback & burn split <br/>_Downgraded 2026-07-28: `recordBuyback` and `burnedSupply` are called only by token-service.test.ts. Same shape as token.yield — the maths is tested, the trigger does not exist._ | F |  | `token.buyback` |
 | ⛔ | Proposals + IFC-weighted voting (§4.3) | F | `token.staking` | `token.governance` |
 
-### Phase 2 — Trade (4/16)
+### Phase 2 — Trade (5/17)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -136,9 +137,10 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | CCXT-compatible public API (bots + terminals connect) <br/>_contract already built in packages/exchange-contract_ | F |  | `trade.ccxt-api` |
 | 🟢 | Internal market-maker seeding books at launch | F |  | `trade.mm-bot` |
 | 🟢 | External venue adapters via CCXT (cross-venue) <br/>_Downgraded 2026-07-28: `@intafaced/venue-adapter` is imported by zero files outside its own package. There is no adapter for any real venue — `LiquiditySource` is an interface with no implementation, so nothing is aggregated._ | F |  | `venue.aggregation` |
-| ⛔ | Pro terminal — depth, charts, hotkeys, sub-accounts <br/>_Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. The four words in this title are not: DEPTH has no browser-reachable feed (svc-matching is deliberately off the edge route table and ws.gateway is not built), CHARTS have no price-series source behind the edge, and HOTKEYS and SUB-ACCOUNTS are not started. All four render as §13 sockets with the reason on screen. `ws.gateway` added to dependsOn — depth is the load-bearing half of this feature and it is blocked, not merely unfinished._ | F | `ws.gateway` | `web.terminal` |
+| 🟢 | Pro terminal — depth, charts, hotkeys, sub-accounts <br/>_Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. DEPTH is now live too: the terminal streams snapshot+deltas from services/svc-ws and withholds the book on a gap rather than drawing a stale one. Still missing from the four words in the title: CHARTS (no candle or trade-tape source exists anywhere), HOTKEYS and SUB-ACCOUNTS (not started). Those render as §13 sockets with the reason on screen. `dependsOn` moved from `ws.gateway` to `ws.depth`: the book needs depth, not positions, and depending on the umbrella would keep this blocked on streams it does not use._ | F |  | `web.terminal` |
 | ✅ | apps/web scaffold on the design system <br/>_Re-upgraded: apps/web now has a typed tRPC client against svc-edge (auth header, zod-validated responses, `Result` instead of throws), a tested depth state machine that resnapshots on a gap, and 45 tests. Every hardcoded price literal is gone — what cannot be fetched renders as a socket with a reason. The masthead status is a real `trade.health` probe rather than the constant "Systems nominal". Known limit, stated in the UI: the session is in-memory only, so a reload signs the user out; httpOnly refresh-cookie persistence is not built._ | F |  | `web.shell` |
-| 🟢 | WebSocket fan-out: depth, trades, orders, positions | F |  | `ws.gateway` |
+| ✅ | Live order book — snapshot + sequenced deltas to the browser <br/>_services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; apps/web applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them._ | F |  | `ws.depth` |
+| 🟢 | WebSocket fan-out: depth, trades, orders, positions <br/>_Depth shipped as `ws.depth` (services/svc-ws). The other three streams have not: a TRADE tape needs `orderFilled` off the bus plus a message shape `packages/market-data` does not define; ORDERS and POSITIONS are per-principal, which is a different security posture from svc-ws’s deliberately credential-free public port and probably a different port. Left `ready` rather than `done` so the title keeps meaning what it says._ | F |  | `ws.gateway` |
 
 ### Phase 3 — Pay + P2P (4/16)
 

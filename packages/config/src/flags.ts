@@ -80,6 +80,10 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   def('edge.gateway', 'edge', 'I', 'Public API gateway accepts traffic'),
   def('dex.routing', 'dex', 'V', 'Protocol Plane DEX — smart order routing'),
   def('trade.spot', 'trade', 'III', 'Spot order book live'),
+  // Same drop as `trade.spot`: a live book with no way to watch it is not a
+  // launched market. OFF stops the fan-out and closes every open socket, and
+  // the terminal renders the book as unavailable rather than as stale numbers.
+  def('ws.gateway', 'ws', 'III', 'Public market-data websocket fan-out (depth)'),
 
   // Drop IV · Public drop
   def('platform.open', 'identity', 'IV', 'Fully open registration'),

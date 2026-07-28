@@ -5,6 +5,7 @@ import { Panel } from '@intafaced/ui';
 import { bookTop, ladder, type DepthBook } from '@intafaced/market-data';
 import { DepthController, type DepthState } from '@/lib/market/depth-controller';
 import { resolveDepthTransport } from '@/lib/market/depth-source';
+import { useDepthOrigin } from '@/lib/providers';
 import { decimalsOf, displayAmount, ratio } from '@/lib/money';
 import { DepthLadder, type DepthLevel } from '@/components/depth-ladder';
 import { SocketPanel } from './socket-panel';
@@ -20,9 +21,10 @@ import styles from './terminal.module.css';
  * says `resnapshotting`, because the whole point of that state is that the
  * numbers are behind the engine.
  *
- * Today `resolveDepthTransport()` returns unavailable, so this renders the
- * socket. The rendering path below is live code, not a sketch: it runs the
- * moment a transport exists.
+ * The transport is `svc-ws` (`lib/market/ws-transport.ts`): a snapshot over
+ * HTTP and sequenced deltas over a websocket, both from the same server-side
+ * book. When a deployment has no depth origin configured, `resolveDepthTransport`
+ * returns unavailable and this renders that reason instead of a ladder.
  */
 
 const copy = {
@@ -54,7 +56,8 @@ function toLevels(book: DepthBook, side: 'bids' | 'asks', priceDp: number, sizeD
 }
 
 export function LiveOrderBook({ marketId, tickSize, lotSize }: { marketId: string | null; tickSize: string; lotSize: string }) {
-  const availability = useMemo(() => resolveDepthTransport(), []);
+  const depthOrigin = useDepthOrigin();
+  const availability = useMemo(() => resolveDepthTransport(depthOrigin), [depthOrigin]);
   const [state, setState] = useState<DepthState>({ status: 'idle' });
 
   useEffect(() => {

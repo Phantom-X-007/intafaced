@@ -35,6 +35,7 @@ export const MODULE_IDS = [
   // Phase 2 · TRADE
   'matching',
   'trade',
+  'ws',
   // Phase 3 · PAY + P2P
   'pay',
   'p2p',
@@ -75,6 +76,12 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
 
   matching: { id: 'matching', service: 'svc-matching', planes: ['fiat'], phase: '2', custodial: false },
   trade: { id: 'trade', service: 'svc-trade', planes: ['fiat'], phase: '2', custodial: true },
+  // Infrastructure, like `edge`. It re-broadcasts public market data and holds
+  // nothing: no database, no bus, no INTERNAL_SERVICE_SECRET, no ledger client.
+  // `custodial: false` is not an aspiration here — there is no code path in the
+  // service that could take custody, because there is no credential in the
+  // process that would let it call anything that moves value.
+  ws: { id: 'ws', service: 'svc-ws', planes: ['fiat'], phase: '2', custodial: false },
 
   pay: { id: 'pay', service: 'svc-pay', planes: ['fiat'], phase: '3', custodial: true },
   p2p: { id: 'p2p', service: 'svc-p2p', planes: ['fiat', 'protocol'], phase: '3', custodial: true },
