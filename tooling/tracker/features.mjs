@@ -197,14 +197,19 @@ export const FEATURES = [
     requires: ['packages/venue-adapter'],
     note: 'Downgraded 2026-07-28: `@intafaced/venue-adapter` is imported by zero files outside its own package. There is no adapter for any real venue — `LiquiditySource` is an interface with no implementation, so nothing is aggregated.',
   }),
-  f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', { module: 'trade', phase: '2', dependsOn: ['trade.spot', 'infra.ui-tokens'] }),
+  f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
+    module: 'trade',
+    phase: '2',
+    dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.gateway'],
+    note: 'Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. The four words in this title are not: DEPTH has no browser-reachable feed (svc-matching is deliberately off the edge route table and ws.gateway is not built), CHARTS have no price-series source behind the edge, and HOTKEYS and SUB-ACCOUNTS are not started. All four render as §13 sockets with the reason on screen. `ws.gateway` added to dependsOn — depth is the load-bearing half of this feature and it is blocked, not merely unfinished.',
+  }),
   f('web.shell', 'apps/web scaffold on the design system', {
     module: 'core-ops',
     phase: '2',
-    status: 'ready',
+    status: 'done',
     dependsOn: ['infra.ui-tokens'],
     requires: ['apps/web'],
-    note: 'Downgraded 2026-07-28: apps/web has ZERO test files, no `use client`, no state, no fetch and no websocket across all 7 tsx files. Every number on the page is a hardcoded string literal. It is a picture of the product, not the product.',
+    note: 'Re-upgraded: apps/web now has a typed tRPC client against svc-edge (auth header, zod-validated responses, `Result` instead of throws), a tested depth state machine that resnapshots on a gap, and 45 tests. Every hardcoded price literal is gone — what cannot be fetched renders as a socket with a reason. The masthead status is a real `trade.health` probe rather than the constant "Systems nominal". Known limit, stated in the UI: the session is in-memory only, so a reload signs the user out; httpOnly refresh-cookie persistence is not built.',
   }),
   f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', { module: 'trade', phase: '2', dependsOn: ['matching.engine'] }),
 

@@ -1,0 +1,511 @@
+/**
+ * Terminal chrome.
+ *
+ * Every colour is a `--if-*` token from packages/ui. No hex is written here —
+ * `packages/ui/src/tokens.test.ts` is the reason, and the reason for the reason
+ * is that a one-off shade in one app is how a design system stops being one.
+ *
+ * The accent (orange) is used for the primary action, focus and live state, and
+ * NEVER for direction: long and short own green and red exclusively, so a
+ * falling market cannot swallow the submit button.
+ */
+
+.terminal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-3);
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: var(--if-space-4) var(--if-space-4) var(--if-space-8);
+}
+
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--if-space-4);
+  padding: var(--if-space-3) var(--if-space-4);
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-lg);
+  background: var(--if-surface);
+  backdrop-filter: var(--if-blur-panel);
+  -webkit-backdrop-filter: var(--if-blur-panel);
+}
+
+/* ── The plane switch ─────────────────────────────────────────────────────── */
+
+.planeSwitch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: var(--if-space-1);
+  padding: var(--if-space-1);
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-md);
+  background: var(--if-base);
+}
+
+.planeOption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--if-space-2) var(--if-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--if-radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--if-motion-fast),
+    background var(--if-motion-fast);
+}
+
+.planeOption[data-active='true'] {
+  border-color: var(--if-border-strong);
+  background: var(--if-surface-raised);
+}
+
+/*
+ * The two options must never look interchangeable. The sovereign plane carries
+ * the accent when selected; the custodial one carries the warn colour, which is
+ * the only place in the app it appears — a user glancing at the header can tell
+ * which one they are on without reading a word.
+ */
+.planeOption[data-active='true'][data-custodial='false'] {
+  border-color: var(--if-border-accent);
+  box-shadow: var(--if-shadow-glow);
+}
+
+.planeOption[data-active='true'][data-custodial='true'] {
+  border-color: var(--if-warn);
+}
+
+.planeVenue {
+  font-family: var(--if-font-display);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  color: var(--if-text);
+}
+
+.planeOption[data-active='true'][data-custodial='false'] .planeVenue {
+  color: var(--if-accent);
+}
+
+.planeOption[data-active='true'][data-custodial='true'] .planeVenue {
+  color: var(--if-warn);
+}
+
+.planeTitle {
+  font-size: 11px;
+  color: var(--if-text-muted);
+}
+
+.planeCustody {
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--if-text-faint);
+}
+
+/* ── The custody band ─────────────────────────────────────────────────────── */
+
+.custodyBanner {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--if-space-3);
+  min-width: 280px;
+  padding: var(--if-space-2) var(--if-space-3);
+  border: 1px solid var(--if-border);
+  border-left-width: 3px;
+  border-radius: var(--if-radius-md);
+  background: var(--if-base);
+}
+
+.custodyBanner[data-custodial='true'] {
+  border-left-color: var(--if-warn);
+}
+
+.custodyBanner[data-custodial='false'] {
+  border-left-color: var(--if-accent);
+}
+
+.custodyMark {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--if-radius-pill);
+  flex: none;
+}
+
+.custodyBanner[data-custodial='true'] .custodyMark {
+  background: var(--if-warn);
+}
+
+.custodyBanner[data-custodial='false'] .custodyMark {
+  background: var(--if-accent);
+  box-shadow: var(--if-shadow-glow);
+}
+
+.custodyText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.custodyStatement {
+  margin: 0;
+  font-size: 13px;
+  color: var(--if-text);
+}
+
+.custodyAccess {
+  margin: 0;
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--if-text-faint);
+}
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 320px;
+  gap: var(--if-space-3);
+  align-items: start;
+}
+
+.protocolGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--if-space-3);
+  align-items: start;
+}
+
+.bookColumn,
+.chartColumn,
+.ticketColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-3);
+  min-width: 0;
+}
+
+/* ── Sockets and failures ─────────────────────────────────────────────────── */
+
+.socket {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-2);
+  padding: var(--if-space-3);
+  border: 1px dashed var(--if-border-strong);
+  border-radius: var(--if-radius-md);
+  background: var(--if-base);
+}
+
+.socket[data-kind='failure'] {
+  border-style: solid;
+  border-color: var(--if-danger);
+}
+
+.socket[data-kind='loading'],
+.socket[data-kind='gated'] {
+  border-style: dashed;
+  border-color: var(--if-border);
+}
+
+.socketBadge {
+  align-self: flex-start;
+  padding: 2px var(--if-space-2);
+  border: 1px solid var(--if-border-accent);
+  border-radius: var(--if-radius-pill);
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--if-accent);
+}
+
+.socketBadge[data-kind='failure'] {
+  border-color: var(--if-danger);
+  color: var(--if-danger);
+}
+
+.socketReason {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--if-text-muted);
+}
+
+.socketBlocked {
+  margin: 0;
+  font-family: var(--if-font-mono);
+  font-size: 10px;
+  color: var(--if-text-faint);
+}
+
+.socketBlockedLabel {
+  font-family: var(--if-font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* ── Markets rail ─────────────────────────────────────────────────────────── */
+
+.marketList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.marketRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--if-space-2);
+  width: 100%;
+  padding: var(--if-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--if-radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--if-motion-fast),
+    background var(--if-motion-fast);
+}
+
+.marketRow:hover {
+  background: var(--if-surface-raised);
+}
+
+.marketRow[data-active='true'] {
+  border-color: var(--if-border-accent);
+  background: var(--if-surface-raised);
+}
+
+.marketSymbol {
+  font-family: var(--if-font-mono);
+  font-size: 12px;
+  color: var(--if-text);
+}
+
+.marketMeta {
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--if-text-faint);
+}
+
+.marketMeta[data-status='active'] {
+  color: var(--if-long);
+}
+
+.marketMeta[data-status='halted'],
+.marketMeta[data-status='delisted'] {
+  color: var(--if-short);
+}
+
+.marketTick {
+  font-size: 10px;
+  color: var(--if-text-faint);
+}
+
+/* ── Forms ────────────────────────────────────────────────────────────────── */
+
+.ticket,
+.sessionBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-3);
+}
+
+.sideToggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--if-space-1);
+}
+
+.sideButton {
+  padding: var(--if-space-2);
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-md);
+  background: var(--if-surface);
+  font-family: var(--if-font-display);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--if-text-muted);
+  cursor: pointer;
+  transition:
+    border-color var(--if-motion-fast),
+    color var(--if-motion-fast),
+    background var(--if-motion-fast);
+}
+
+.sideButton[data-side='long'][aria-pressed='true'] {
+  border-color: var(--if-long);
+  color: var(--if-long);
+  background: var(--if-surface-raised);
+}
+
+.sideButton[data-side='short'][aria-pressed='true'] {
+  border-color: var(--if-short);
+  color: var(--if-short);
+  background: var(--if-surface-raised);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--if-space-1);
+}
+
+.fieldLabel {
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--if-text-faint);
+}
+
+.input,
+.select {
+  width: 100%;
+  padding: var(--if-space-2);
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-md);
+  background: var(--if-surface);
+  font-size: 13px;
+  color: var(--if-text);
+  transition: border-color var(--if-motion-fast);
+}
+
+.input:hover,
+.select:hover {
+  border-color: var(--if-border-strong);
+}
+
+.select {
+  font-family: var(--if-font-body);
+}
+
+.summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--if-space-3);
+  padding: var(--if-space-1) 0;
+  border-bottom: 1px solid var(--if-border);
+  font-size: 13px;
+  color: var(--if-text);
+}
+
+.wrapValue {
+  font-size: 11px;
+  word-break: break-all;
+  text-align: right;
+}
+
+.submit {
+  padding: var(--if-space-3);
+  border: 1px solid var(--if-border-accent);
+  border-radius: var(--if-radius-md);
+  background: var(--if-surface-raised);
+  font-family: var(--if-font-display);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--if-accent);
+  cursor: pointer;
+  transition:
+    box-shadow var(--if-motion-base),
+    opacity var(--if-motion-base);
+}
+
+.submit:hover:not(:disabled) {
+  box-shadow: var(--if-shadow-glow);
+}
+
+/*
+ * A disabled primary action must read as "not yet", not as "broken". It loses
+ * the accent entirely — the accent means "this works" everywhere else in the
+ * OS, and a glowing button that refuses the click is the worst of both.
+ */
+.submit:disabled {
+  border-color: var(--if-border);
+  color: var(--if-text-faint);
+  cursor: not-allowed;
+}
+
+.pending {
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.6;
+  color: var(--if-text-faint);
+}
+
+.ticketFailure {
+  padding: var(--if-space-2);
+  border: 1px solid var(--if-danger);
+  border-radius: var(--if-radius-sm);
+  font-size: 12px;
+  color: var(--if-danger);
+}
+
+.ticketPlaced {
+  padding: var(--if-space-2);
+  border: 1px solid var(--if-long);
+  border-radius: var(--if-radius-sm);
+  font-size: 12px;
+  color: var(--if-long);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--if-space-4);
+}
+
+/* ── Reflow ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 1400px) {
+  .grid {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .ticketColumn {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .ticketColumn > * {
+    flex: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ticketColumn {
+    flex-direction: column;
+  }
+
+  .planeSwitch {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

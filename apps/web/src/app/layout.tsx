@@ -11,6 +11,18 @@ import '@intafaced/ui/tokens.css';
 import './globals.css';
 
 import { AppShell } from '@/components/app-shell';
+import { TerminalProviders } from '@/lib/providers';
+
+/**
+ * Where the edge is, resolved once and handed to the client tree.
+ *
+ * `NEXT_PUBLIC_` because the browser makes the calls: it is a public URL and
+ * carries no secret. Read here rather than deep inside a component so there is
+ * one place to look when a deployment is pointed at the wrong front door — and
+ * so the fallback (svc-edge's dev port, `services/svc-edge/src/env.ts`) sits
+ * next to it instead of being buried.
+ */
+const EDGE_URL = process.env.NEXT_PUBLIC_EDGE_URL ?? 'http://localhost:4000';
 
 /**
  * §3 typography: Orbitron for display/HUD, Inter for body, JetBrains Mono for
@@ -62,7 +74,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${orbitron.variable} ${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <AppShell>{children}</AppShell>
+        <TerminalProviders edgeUrl={EDGE_URL}>
+          <AppShell>{children}</AppShell>
+        </TerminalProviders>
       </body>
     </html>
   );

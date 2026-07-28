@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**28 of 106 shipped (26%)** · 0 in progress · 41 ready to claim · 37 blocked · 13 deliberate §13 sockets
+**29 of 106 shipped (27%)** · 0 in progress · 39 ready to claim · 38 blocked · 13 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -39,8 +39,6 @@ pnpm wt feat/<the-thing>
 | CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
 | Internal market-maker seeding books at launch | `trade` | 2 | `trade.mm-bot` |
 | External venue adapters via CCXT (cross-venue) | `trade` | 2 | `venue.aggregation` |
-| Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
-| apps/web scaffold on the design system | `core-ops` | 2 | `web.shell` |
 | WebSocket fan-out: depth, trades, orders, positions | `trade` | 2 | `ws.gateway` |
 | Branded gateway, hosted checkout, payment links | `pay` | 3 | `pay.gateway` |
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
@@ -121,7 +119,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Buyback & burn split <br/>_Downgraded 2026-07-28: `recordBuyback` and `burnedSupply` are called only by token-service.test.ts. Same shape as token.yield — the maths is tested, the trigger does not exist._ | F |  | `token.buyback` |
 | ⛔ | Proposals + IFC-weighted voting (§4.3) | F | `token.staking` | `token.governance` |
 
-### Phase 2 — Trade (3/16)
+### Phase 2 — Trade (4/16)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -138,8 +136,8 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | CCXT-compatible public API (bots + terminals connect) <br/>_contract already built in packages/exchange-contract_ | F |  | `trade.ccxt-api` |
 | 🟢 | Internal market-maker seeding books at launch | F |  | `trade.mm-bot` |
 | 🟢 | External venue adapters via CCXT (cross-venue) <br/>_Downgraded 2026-07-28: `@intafaced/venue-adapter` is imported by zero files outside its own package. There is no adapter for any real venue — `LiquiditySource` is an interface with no implementation, so nothing is aggregated._ | F |  | `venue.aggregation` |
-| 🟢 | Pro terminal — depth, charts, hotkeys, sub-accounts | F |  | `web.terminal` |
-| 🟢 | apps/web scaffold on the design system <br/>_Downgraded 2026-07-28: apps/web has ZERO test files, no `use client`, no state, no fetch and no websocket across all 7 tsx files. Every number on the page is a hardcoded string literal. It is a picture of the product, not the product._ | F |  | `web.shell` |
+| ⛔ | Pro terminal — depth, charts, hotkeys, sub-accounts <br/>_Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. The four words in this title are not: DEPTH has no browser-reachable feed (svc-matching is deliberately off the edge route table and ws.gateway is not built), CHARTS have no price-series source behind the edge, and HOTKEYS and SUB-ACCOUNTS are not started. All four render as §13 sockets with the reason on screen. `ws.gateway` added to dependsOn — depth is the load-bearing half of this feature and it is blocked, not merely unfinished._ | F | `ws.gateway` | `web.terminal` |
+| ✅ | apps/web scaffold on the design system <br/>_Re-upgraded: apps/web now has a typed tRPC client against svc-edge (auth header, zod-validated responses, `Result` instead of throws), a tested depth state machine that resnapshots on a gap, and 45 tests. Every hardcoded price literal is gone — what cannot be fetched renders as a socket with a reason. The masthead status is a real `trade.health` probe rather than the constant "Systems nominal". Known limit, stated in the UI: the session is in-memory only, so a reload signs the user out; httpOnly refresh-cookie persistence is not built._ | F |  | `web.shell` |
 | 🟢 | WebSocket fan-out: depth, trades, orders, positions | F |  | `ws.gateway` |
 
 ### Phase 3 — Pay + P2P (4/16)
