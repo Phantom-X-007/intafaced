@@ -377,6 +377,34 @@ services:
     depends_on:
       <<: [*needs-schema, *needs-bus]
 
+  # The read path for the Protocol Plane: chain → Postgres → apps/web.
+  #
+  # No `nats` dependency: this service publishes no subject and consumes none.
+  # It reads a chain and writes its own schema, and that is the whole coupling.
+  #
+  # It boots with `NullChainSource` (SOCKET §13 `socket.evm-rpc`) — there is no
+  # EVM RPC in this stack, so the honest wiring is a source that reports no
+  # chain rather than a fabricated one. Reads are served from whatever is in
+  # Postgres and `indexer.status` says `chainSource: "null"` out loud.
+  svc-indexer:
+    <<: *app
+    container_name: intafaced-svc-indexer
+    command: ['node', 'services/svc-indexer/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-indexer
+      # 4013: every port from 4000 to 4012 is already taken above.
+      HTTP_PORT: '4013'
+      DATABASE_URL: postgres://svc_indexer:svc_indexer@postgres:5432/intafaced
+      # Matches PROTOCOL_CHAIN_ID — the two services describe one chain.
+      INDEXER_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-31337}
+      INDEXER_FINALITY_DEPTH: ${INDEXER_FINALITY_DEPTH:-64}
+      INDEXER_INGEST_ENABLED: ${INDEXER_INGEST_ENABLED:-true}
+    ports: ['4013:4013']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: *needs-schema
+
   # ── Apps ───────────────────────────────────────────────────────────────────
   #
   # Both are Next 15, both are served by `next start` from the build already in
