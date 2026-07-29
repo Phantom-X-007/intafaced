@@ -52,6 +52,14 @@ export interface ExchangeOptions {
    * does not get a vote.
    */
   region: string;
+  /**
+   * Base URL of svc-identity (no trailing slash). Used only when the bearer
+   * is a long-lived API key (`ifc_…`) so we can call public `apiKeys.exchange`
+   * without giving the edge `INTERNAL_SERVICE_SECRET`.
+   */
+  identityUrl?: string;
+  /** Injected in tests. */
+  fetch?: typeof globalThis.fetch;
 }
 
 /** Strip every reserved header, whatever its case. */
@@ -80,6 +88,54 @@ function bearerFrom(headers: Record<string, string | string[] | undefined>): str
 }
 
 /**
+ * Platform API keys are `ifc_` + base64url and never contain `.`.
+ * Access JWTs are three base64 segments separated by dots — never confuse them.
+ */
+export function looksLikeApiKey(token: string): boolean {
+  return token.startsWith('ifc_') && !token.includes('.');
+}
+
+/**
+ * Call identity's public `apiKeys.exchange` and return the short-lived JWT.
+ * Returns null on any failure (wrong key, network, unexpected body).
+ */
+export async function exchangeApiKeyForAccessToken(
+  key: string,
+  identityUrl: string,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): Promise<string | null> {
+  const base = identityUrl.replace(/\/$/, '');
+  let response: Response;
+  try {
+    response = await fetchFn(`${base}/trpc/apiKeys.exchange`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      // tRPC HTTP RPC + superjson-shaped body (works with plain json too).
+      body: JSON.stringify({ json: { key } }),
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return null;
+  }
+
+  // Prefer tRPC envelope; fall back to bare { accessToken }.
+  const envelope = body as {
+    result?: { data?: { json?: { accessToken?: string }; accessToken?: string } };
+    accessToken?: string;
+  };
+  const token = envelope.result?.data?.json?.accessToken ?? envelope.result?.data?.accessToken ?? envelope.accessToken;
+  return typeof token === 'string' && token.length > 0 ? token : null;
+}
+
+/**
  * Exchange an inbound request's credentials for forwardable headers.
  *
  * Never throws on a bad token. A caller presenting a forged or expired token is
@@ -98,8 +154,22 @@ export async function exchangePrincipal(
   const forward = stripReserved(headers);
   forward['x-intafaced-region'] = options.region;
 
-  const token = bearerFrom(headers);
+  let token = bearerFrom(headers);
   if (!token) return { headers: forward, principal: null, rejected: null };
+
+  // Long-lived API key → short-lived JWT via identity (public exchange).
+  // Edge still has no INTERNAL_SERVICE_SECRET; this is the only allowed call
+  // shape to identity for credentials.
+  if (looksLikeApiKey(token)) {
+    if (!options.identityUrl) {
+      return { headers: forward, principal: null, rejected: 'invalid' };
+    }
+    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch);
+    if (!exchanged) {
+      return { headers: forward, principal: null, rejected: 'invalid' };
+    }
+    token = exchanged;
+  }
 
   let principal: Principal;
   try {

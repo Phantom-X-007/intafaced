@@ -81,6 +81,8 @@ app.all('/api/*', async (req, reply) => {
     // jurisdiction matrix, so a caller who could set it would choose its own
     // regulator. A single configured value today; geo-IP replaces this line.
     region: env.DEFAULT_REGION,
+    // Direct to identity for `ifc_…` API keys — never via this edge (loop).
+    identityUrl: env.IDENTITY_URL,
   });
 
   // A refused token is logged and the request continues as ANONYMOUS. The

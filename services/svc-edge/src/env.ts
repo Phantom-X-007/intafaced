@@ -47,6 +47,13 @@ const schema = baseEnvSchema
 
       /** Upstream timeout. A hung service must not hold an edge connection open. */
       UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15_000),
+
+      /**
+       * Where to exchange long-lived API keys (`ifc_…`) for short-lived JWTs.
+       * Direct to svc-identity — never loop back through this edge (recursion).
+       * Matches routes.ts IDENTITY_URL default.
+       */
+      IDENTITY_URL: z.string().url().default('http://localhost:4002'),
     }),
   );
 
