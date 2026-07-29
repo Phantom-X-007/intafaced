@@ -67,7 +67,13 @@ const relay = new SessionRelay(chain);
 
 let relayEnabled = env.PROTOCOL_RELAY_ENABLED;
 
-export const appRouter = createProtocolRouter({ chain, registry, relay, relayEnabled: () => relayEnabled });
+export const appRouter = createProtocolRouter({
+  chain,
+  registry,
+  relay,
+  relayEnabled: () => relayEnabled,
+  ammFactoryAddress: () => env.PROTOCOL_AMM_FACTORY_ADDRESS as `0x${string}`,
+});
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge

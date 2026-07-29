@@ -8,6 +8,8 @@ import type { ProtocolChain } from './chain/client.js';
 import { RelayRefusedError, SessionRelay } from './session/relay.js';
 import { createSessionSpec, evaluateSessionCall, hashSessionSpec, sessionSpecInputSchema, SessionScopeError } from './session/spec.js';
 import type { UserOperation } from './chain/userop.js';
+import { AmmMathError } from './amm/math.js';
+import { buildCreatePool, buildMintLiquidity, buildSwapExactIn, quoteExactIn } from './amm/build.js';
 
 /**
  * svc-protocol's API.
@@ -97,6 +99,9 @@ function toTrpcError(err: unknown): TRPCError {
   if (err instanceof AddressDerivationError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
+  if (err instanceof AmmMathError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
   return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Protocol request failed', cause: err });
 }
 
@@ -106,6 +111,8 @@ export interface ProtocolRouterDeps {
   relay: SessionRelay;
   /** Mirrors the `protocol.smartAccounts` kill-switch (§14). */
   relayEnabled: () => boolean;
+  /** Pool factory address on PROTOCOL_CHAIN_ID (0x0 = not deployed yet). */
+  ammFactoryAddress: () => Address;
 }
 
 export function createProtocolRouter(deps: ProtocolRouterDeps) {
@@ -401,6 +408,101 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         const records = await registry.accountsOf(ctx.principal.userId);
         return records.map((r) => ({ id: r.id, address: r.address, owner: r.owner, deployed: r.deployed }));
       }),
+
+    /**
+     * AMM (`protocol.amm`) — constant-product pools on the Protocol Plane.
+     *
+     * Permissionless quotes and unsigned calldata only. The platform never
+     * holds LP keys and never posts to the ledger here.
+     */
+    amm: router({
+      quoteExactIn: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(
+          z.object({
+            amountIn: z.string().regex(/^\d+$/),
+            reserveIn: z.string().regex(/^\d+$/),
+            reserveOut: z.string().regex(/^\d+$/),
+            feeBps: z.number().int().min(0).max(1000).default(30),
+          }),
+        )
+        .output(z.object({ amountOut: z.string(), priceImpactBps: z.number().int() }))
+        .query(({ input }) => {
+          try {
+            const q = quoteExactIn({
+              amountIn: BigInt(input.amountIn),
+              reserveIn: BigInt(input.reserveIn),
+              reserveOut: BigInt(input.reserveOut),
+              feeBps: input.feeBps,
+            });
+            return { amountOut: q.amountOut.toString(), priceImpactBps: q.priceImpactBps };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      buildCreatePool: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(
+          z.object({
+            tokenA: addressSchema,
+            tokenB: addressSchema,
+            feeBps: z.number().int().min(0).max(1000).default(30),
+          }),
+        )
+        .output(unsignedCallOutput)
+        .query(({ input }) => {
+          const factory = deps.ammFactoryAddress();
+          if (factory === '0x0000000000000000000000000000000000000000') {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: 'AMM factory is not configured (PROTOCOL_AMM_FACTORY_ADDRESS). Contracts are in-repo under contracts/amm/.',
+            });
+          }
+          const call = buildCreatePool(factory, input.tokenA as Address, input.tokenB as Address, input.feeBps);
+          return { to: call.to, data: call.data, value: call.value, summary: call.summary };
+        }),
+
+      buildSwapExactIn: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(
+          z.object({
+            pool: addressSchema,
+            tokenIn: addressSchema,
+            amountIn: z.string().regex(/^\d+$/),
+            minAmountOut: z.string().regex(/^\d+$/),
+            to: addressSchema,
+          }),
+        )
+        .output(unsignedCallOutput)
+        .query(({ input }) => {
+          const call = buildSwapExactIn(
+            input.pool as Address,
+            input.tokenIn as Address,
+            BigInt(input.amountIn),
+            BigInt(input.minAmountOut),
+            input.to as Address,
+          );
+          return { to: call.to, data: call.data, value: call.value, summary: call.summary };
+        }),
+
+      buildMintLiquidity: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(
+          z.object({
+            pool: addressSchema,
+            to: addressSchema,
+            amount0Desired: z.string().regex(/^\d+$/),
+            amount1Desired: z.string().regex(/^\d+$/),
+          }),
+        )
+        .output(unsignedCallOutput)
+        .query(({ input }) => {
+          const call = buildMintLiquidity(
+            input.pool as Address,
+            input.to as Address,
+            BigInt(input.amount0Desired),
+            BigInt(input.amount1Desired),
+          );
+          return { to: call.to, data: call.data, value: call.value, summary: call.summary };
+        }),
+    }),
   });
 }
 

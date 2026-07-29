@@ -204,3 +204,7 @@ pnpm --filter @intafaced/svc-protocol dev
 ```
 
 Configuration lives in `src/env.ts`: chain id, RPC, EntryPoint, factory, implementation, and an optional bundler URL. A missing bundler degrades convenience, never access — the user submits the operation themselves. There is no key to configure, and there never should be.
+
+## AMM (`protocol.amm`)
+
+Constant-product pools under `contracts/amm/`. Permissionless tRPC: `amm.quoteExactIn`, `amm.buildCreatePool`, `amm.buildSwapExactIn`, `amm.buildMintLiquidity`. Platform never holds LP keys. Factory address: `PROTOCOL_AMM_FACTORY_ADDRESS`.
