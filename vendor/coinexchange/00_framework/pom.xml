@@ -43,6 +43,7 @@
 		<!-- 数据库连接 -->
 		<druid_version>1.1.9</druid_version>
 		<mysql.version>8.0.11</mysql.version>
+		<mongodb-driver.version>3.12.14</mongodb-driver.version>
 		<!-- commons包 -->
 		<commons-codec_version>1.10</commons-codec_version>
 		<commons-fileupload_version>1.3</commons-fileupload_version>
@@ -65,6 +66,42 @@
 	</properties>
 	<dependencyManagement>
 		<dependencies>
+			<!--
+			  MongoDB driver, pinned forward off the 3.4.3 that
+			  spring-data-mongodb 1.10.9 declares.
+
+			  3.4.x talks OP_QUERY. MongoDB 5 removed that opcode, so against the
+			  MongoDB 6 this stack actually runs, every read fails with
+
+			    error code 352, 'Unsupported OP_QUERY command: find.
+			     The client driver may require an upgrade'
+
+			  and the service dies during startup. The failure is total, not
+			  partial. 3.12.x is the last of the 3.x line and speaks OP_MSG, so
+			  it is the smallest step that works without moving to the 4.x API.
+
+			  This was previously supplied as an ad-hoc flag on an mvn command
+			  line: present in the deployed jars, present in no committed file,
+			  so a clean rebuild silently produced a service that cannot start.
+			  Recorded here for the same reason mysql.version is. driver-core
+			  and bson are pinned alongside it because spring-data-mongodb pulls
+			  all three at the same depth.
+			-->
+			<dependency>
+				<groupId>org.mongodb</groupId>
+				<artifactId>mongodb-driver</artifactId>
+				<version>${mongodb-driver.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.mongodb</groupId>
+				<artifactId>mongodb-driver-core</artifactId>
+				<version>${mongodb-driver.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.mongodb</groupId>
+				<artifactId>bson</artifactId>
+				<version>${mongodb-driver.version}</version>
+			</dependency>
 			<dependency>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-starter-cache</artifactId>
