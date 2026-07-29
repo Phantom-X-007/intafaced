@@ -48,11 +48,11 @@ Routing is greedy over per-venue quotes. **Not provably optimal** — a true opt
 
 A price now enters this service by exactly one road: a `QuoteVenue`, which has to have really fetched a book from something, and has to say when. `QuoteVenue` **extends `LiquiditySource`** from `packages/venue-adapter` — the §27 venue fabric, our own CCXT-class layer — adding only the two things the Fiat Plane router does not model: `settlementCost` (gas) and `depth()` (the book _with_ the moment we read it).
 
-| Venue             | `kind`         | Plane      | Source                | Status today                                                   |
-| ----------------- | -------------- | ---------- | --------------------- | -------------------------------------------------------------- |
-| `intachain-clob`  | `external-dex` | `protocol` | svc-indexer read models | **refuses** — nothing projected (SOCKET §13 `socket.evm-rpc`) |
-| `internal-book`   | `internal`     | `fiat`     | svc-matching depth    | live wherever the engine has the market                         |
-| operator-configured | `external-cex` etc. | `external` | public depth endpoints | live once `DEX_EXTERNAL_VENUES` has a row                  |
+| Venue               | `kind`              | Plane      | Source                  | Status today                                                  |
+| ------------------- | ------------------- | ---------- | ----------------------- | ------------------------------------------------------------- |
+| `intachain-clob`    | `external-dex`      | `protocol` | svc-indexer read models | **refuses** — nothing projected (SOCKET §13 `socket.evm-rpc`) |
+| `internal-book`     | `internal`          | `fiat`     | svc-matching depth      | live wherever the engine has the market                       |
+| operator-configured | `external-cex` etc. | `external` | public depth endpoints  | live once `DEX_EXTERNAL_VENUES` has a row                     |
 
 **No venue is named in shipped code** (Doctrine §0.4 adapters-not-integrations, §0.7 no vendor names). Adding one is a row of `DEX_EXTERNAL_VENUES` config, and the default set is empty — a service with no outbound egress does not silently acquire it.
 
@@ -66,12 +66,12 @@ The internal book implements the same interface as everyone else, so **the route
 
 There is no cache, no last-known value and no fallback venue. Every exit is a route built from fresh books, or a refusal carrying a machine-readable code:
 
-| Code                             | HTTP                  | Meaning                                              |
-| -------------------------------- | --------------------- | ---------------------------------------------------- |
-| `dex.quote.no_venue_configured`  | `SERVICE_UNAVAILABLE` | nothing wired — an operator problem                  |
-| `dex.quote.no_venue_available`   | `SERVICE_UNAVAILABLE` | no venue answered; the market may be fine, we cannot see it |
-| `dex.quote.stale`                | `SERVICE_UNAVAILABLE` | answered, but past the freshness ceiling             |
-| `dex.quote.no_liquidity`         | `NOT_FOUND`           | fresh books, nothing resting on the side asked for   |
+| Code                            | HTTP                  | Meaning                                                     |
+| ------------------------------- | --------------------- | ----------------------------------------------------------- |
+| `dex.quote.no_venue_configured` | `SERVICE_UNAVAILABLE` | nothing wired — an operator problem                         |
+| `dex.quote.no_venue_available`  | `SERVICE_UNAVAILABLE` | no venue answered; the market may be fine, we cannot see it |
+| `dex.quote.stale`               | `SERVICE_UNAVAILABLE` | answered, but past the freshness ceiling                    |
+| `dex.quote.no_liquidity`        | `NOT_FOUND`           | fresh books, nothing resting on the side asked for          |
 
 ### "Best of N" must not mean "the only one that answered"
 

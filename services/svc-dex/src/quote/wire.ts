@@ -126,7 +126,11 @@ export async function getJson(
   try {
     return await response.json();
   } catch (err) {
-    throw new VenueUnavailableError(venueId, 'malformed', `${venueId} returned unparseable JSON: ${err instanceof Error ? err.message : String(err)}`);
+    throw new VenueUnavailableError(
+      venueId,
+      'malformed',
+      `${venueId} returned unparseable JSON: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 

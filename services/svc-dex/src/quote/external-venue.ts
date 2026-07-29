@@ -192,11 +192,7 @@ export class ExternalQuoteVenue extends MarketDataSource {
 
     const book = at(body, this.#config.bookPath);
     if (book === null || typeof book !== 'object') {
-      throw new VenueUnavailableError(
-        this.id,
-        'malformed',
-        `${this.id}: no book object at path "${this.#config.bookPath ?? '<root>'}"`,
-      );
+      throw new VenueUnavailableError(this.id, 'malformed', `${this.id}: no book object at path "${this.#config.bookPath ?? '<root>'}"`);
     }
 
     const container = book as Record<string, unknown>;

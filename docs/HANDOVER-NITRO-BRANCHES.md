@@ -9,11 +9,11 @@ survived a crash, not because it is finished.
 **PR from `release/2026-07-29-verified`** — three verified branches merged
 together, `pnpm verify` **83/83**, all four gates clean, **DoD gate passes**.
 
-| what | why it matters |
-| --- | --- |
-| market seeder | every price was `0`; BTC/USDT now ~118,450 with real volume |
-| `dex.quote` venue sourcing | it was a calculator with no inputs; now refuses rather than invents |
-| screening guard | a service can no longer boot unable to screen and report itself clear |
+| what                       | why it matters                                                        |
+| -------------------------- | --------------------------------------------------------------------- |
+| market seeder              | every price was `0`; BTC/USDT now ~118,450 with real volume           |
+| `dex.quote` venue sourcing | it was a calculator with no inputs; now refuses rather than invents   |
+| screening guard            | a service can no longer boot unable to screen and report itself clear |
 
 ---
 
@@ -23,25 +23,25 @@ together, `pnpm verify` **83/83**, all four gates clean, **DoD gate passes**.
 **WIP** means the process crashed mid-task and I committed whatever was on disk.
 A WIP branch may not compile. Read it before trusting any of it.
 
-| branch | status | notes |
-| --- | --- | --- |
-| `feat/spine-market-seeder` | **VERIFIED** | merged into the release branch |
-| `feat/spine-dex-quotes` | **VERIFIED** | merged; 87 tests |
-| `feat/spine-screening-guard` | **VERIFIED** | merged; 28 new tests |
-| `feat/spine-trading-hours` | **VERIFIED** | 76/76. **Money — owner merges.** Adds the instrument model (asset class, schedules) and refuses orders into a closed venue |
-| `feat/multi-asset-instruments` | **VERIFIED** | same work, older ref. **Money — owner merges** |
-| `feat/spine-dod-gate` | WIP | e2e harness, kill-switch client, Grafana dashboards, edge metrics |
-| `feat/spine-academy-launch` | WIP | two new services **plus a new ledger recipe — money, needs real scrutiny** |
-| `feat/spine-market-stability` | WIP | 7 money-through-`double` bugs in the Java FX rates |
-| `feat/spine-java-rename` | WIP | **do not run blind** — see the hazards below |
-| `feat/app-i18n-keys` | WIP | 38+ files mid-sweep; re-verify compile and the CJK scan |
-| `feat/spine-amm-reserves` | WIP | the prerequisite the DEX agent refused to fake |
-| `feat/spine-bank-card` | WIP | Genesis-style no-KYC card research |
-| `feat/app-admin-rebrand` | WIP | 59 files; admin console still had 2,668 lines of Chinese |
-| `feat/spine-otc-desk` | WIP | two OTC implementations, ownership question open |
-| `feat/spine-derivatives` | WIP | barely started |
-| `feat/spine-venue-fabric` | WIP | barely started |
-| `feat/spine-agent-fleet` | WIP | barely started |
+| branch                         | status       | notes                                                                                                                      |
+| ------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `feat/spine-market-seeder`     | **VERIFIED** | merged into the release branch                                                                                             |
+| `feat/spine-dex-quotes`        | **VERIFIED** | merged; 87 tests                                                                                                           |
+| `feat/spine-screening-guard`   | **VERIFIED** | merged; 28 new tests                                                                                                       |
+| `feat/spine-trading-hours`     | **VERIFIED** | 76/76. **Money — owner merges.** Adds the instrument model (asset class, schedules) and refuses orders into a closed venue |
+| `feat/multi-asset-instruments` | **VERIFIED** | same work, older ref. **Money — owner merges**                                                                             |
+| `feat/spine-dod-gate`          | WIP          | e2e harness, kill-switch client, Grafana dashboards, edge metrics                                                          |
+| `feat/spine-academy-launch`    | WIP          | two new services **plus a new ledger recipe — money, needs real scrutiny**                                                 |
+| `feat/spine-market-stability`  | WIP          | 7 money-through-`double` bugs in the Java FX rates                                                                         |
+| `feat/spine-java-rename`       | WIP          | **do not run blind** — see the hazards below                                                                               |
+| `feat/app-i18n-keys`           | WIP          | 38+ files mid-sweep; re-verify compile and the CJK scan                                                                    |
+| `feat/spine-amm-reserves`      | WIP          | the prerequisite the DEX agent refused to fake                                                                             |
+| `feat/spine-bank-card`         | WIP          | Genesis-style no-KYC card research                                                                                         |
+| `feat/app-admin-rebrand`       | WIP          | 59 files; admin console still had 2,668 lines of Chinese                                                                   |
+| `feat/spine-otc-desk`          | WIP          | two OTC implementations, ownership question open                                                                           |
+| `feat/spine-derivatives`       | WIP          | barely started                                                                                                             |
+| `feat/spine-venue-fabric`      | WIP          | barely started                                                                                                             |
+| `feat/spine-agent-fleet`       | WIP          | barely started                                                                                                             |
 
 ---
 
@@ -51,7 +51,7 @@ A WIP branch may not compile. Read it before trusting any of it.
 root. **1,420 MongoDB documents across 60 collections carry the vendor package
 name in a `_class` discriminator** — including the K-line history behind the
 chart that currently shows real prices. Renaming without the `_class` migration
-in the *same* change orphans all of it. The vendor names are also the live MySQL
+in the _same_ change orphans all of it. The vendor names are also the live MySQL
 schema and Mongo database names, so a blanket replace points every app at a
 schema that does not exist and `ddl-auto=update` builds 64 empty tables beside
 the real ones. Full analysis in `docs/SPLIT-BOARD.md` §5 item 7.

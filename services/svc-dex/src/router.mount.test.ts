@@ -123,8 +123,7 @@ class FakeVenue extends MarketDataSource {
 }
 
 /** A venue with real depth on both sides, read just now. */
-const liveVenue = (id = 'intachain-clob', ageMs = 0) =>
-  new FakeVenue({ id, ageMs, bids: [level('99', '10')], asks: [level('101', '10')] });
+const liveVenue = (id = 'intachain-clob', ageMs = 0) => new FakeVenue({ id, ageMs, bids: [level('99', '10')], asks: [level('101', '10')] });
 
 function routerWith(venues: (region: string) => FakeVenue[]) {
   return createDexRouter({ venues, maxAgeMs: 2_000, depth: 50, now: () => NOW });
@@ -255,9 +254,7 @@ describe('svc-dex mount — a live quote', () => {
     expect(quoted.venues).toHaveLength(1);
     expect(quoted.degraded).toBe(true);
     expect(quoted.singleVenue).toBe(true);
-    expect(quoted.unavailable).toEqual([
-      expect.objectContaining({ venueId: 'venue-down', reason: 'unreachable' }),
-    ]);
+    expect(quoted.unavailable).toEqual([expect.objectContaining({ venueId: 'venue-down', reason: 'unreachable' })]);
   });
 
   /**
@@ -300,7 +297,9 @@ describe('svc-dex mount — a quote it cannot source is refused, never guessed',
 
   it('refuses an unavailable venue rather than guessing a price', async () => {
     await expect(
-      routerWith(() => [new FakeVenue({ id: 'venue-down', fails: new VenueUnavailableError('venue-down', 'unreachable', 'connection refused') })])
+      routerWith(() => [
+        new FakeVenue({ id: 'venue-down', fails: new VenueUnavailableError('venue-down', 'unreachable', 'connection refused') }),
+      ])
         .createCaller(anonymous())
         .quote(buy),
     ).rejects.toMatchObject({
@@ -338,7 +337,9 @@ describe('svc-dex mount — a quote it cannot source is refused, never guessed',
    */
   it('names the venue and the reason in the refusal', async () => {
     await expect(
-      routerWith(() => [new FakeVenue({ id: 'venue-down', fails: new VenueUnavailableError('venue-down', 'not_ready', 'projected no chain state') })])
+      routerWith(() => [
+        new FakeVenue({ id: 'venue-down', fails: new VenueUnavailableError('venue-down', 'not_ready', 'projected no chain state') }),
+      ])
         .createCaller(anonymous())
         .quote(buy),
     ).rejects.toMatchObject({

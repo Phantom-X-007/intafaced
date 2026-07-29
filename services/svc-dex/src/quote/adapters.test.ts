@@ -61,15 +61,40 @@ describe('a book is read off a wire suspiciously', () => {
   it('sorts asks ascending and bids descending, whatever order they arrived in', () => {
     // A sweep walks in order and stops when filled. Out-of-order levels produce
     // a cost that is confidently wrong, with no error anywhere.
-    const asks = parseLevels(levels([['102', '1'], ['100', '1'], ['101', '1']]), 'asks', 'v');
-    const bids = parseLevels(levels([['98', '1'], ['100', '1'], ['99', '1']]), 'bids', 'v');
+    const asks = parseLevels(
+      levels([
+        ['102', '1'],
+        ['100', '1'],
+        ['101', '1'],
+      ]),
+      'asks',
+      'v',
+    );
+    const bids = parseLevels(
+      levels([
+        ['98', '1'],
+        ['100', '1'],
+        ['99', '1'],
+      ]),
+      'bids',
+      'v',
+    );
 
     expect(asks.map((l) => formatAmount(l[0]))).toEqual(['100', '101', '102']);
     expect(bids.map((l) => formatAmount(l[0]))).toEqual(['100', '99', '98']);
   });
 
   it('drops empty levels, because a level with nothing on it is not depth', () => {
-    expect(parseLevels(levels([['100', '0'], ['101', '2']]), 'asks', 'v')).toHaveLength(1);
+    expect(
+      parseLevels(
+        levels([
+          ['100', '0'],
+          ['101', '2'],
+        ]),
+        'asks',
+        'v',
+      ),
+    ).toHaveLength(1);
   });
 });
 
@@ -117,7 +142,9 @@ describe('svc-indexer — the sovereign venue', () => {
    */
   it('REFUSES an empty index rather than reporting no-liquidity on a chain that is not there', async () => {
     const { venue } = indexerVenue((url) =>
-      url.includes('/trpc/status') ? trpc({ halted: null, indexedHeight: null }) : trpc({ asOfHeight: null, asOfHash: null, bids: [], asks: [] }),
+      url.includes('/trpc/status')
+        ? trpc({ halted: null, indexedHeight: null })
+        : trpc({ asOfHeight: null, asOfHash: null, bids: [], asks: [] }),
     );
 
     const err = await refusal(venue.depth('IFC-USD', 50));
@@ -219,9 +246,7 @@ describe('external venues — configured, never hardcoded, never credentialled',
   });
 
   it('reads a book nested under a venue-specific path, with venue-specific field names', async () => {
-    const { calls, fetchImpl } = recorder(() =>
-      ok({ result: { b: [['99.5', '2']], a: [['100.5', '3']], seq: 9 } }),
-    );
+    const { calls, fetchImpl } = recorder(() => ok({ result: { b: [['99.5', '2']], a: [['100.5', '3']], seq: 9 } }));
     const venue = new ExternalQuoteVenue({
       config: {
         id: 'venue-a',
