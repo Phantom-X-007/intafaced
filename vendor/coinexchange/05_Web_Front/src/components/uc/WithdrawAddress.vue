@@ -21,7 +21,7 @@
                 </div>
               </div>
               <div class="mt25">
-                <p class="describe">{{$t('uc.finance.withdraw.remark')}} / Memo</p>
+                <p class="describe">{{$t('uc.finance.withdraw.remark')}} / {{$t('uc.finance.withdraw.remarkmemo')}}</p>
                 <div class="title">
                   <Input v-model="remark" style="width:100%;margin-top:10px;" size="large"></Input>
                 </div>

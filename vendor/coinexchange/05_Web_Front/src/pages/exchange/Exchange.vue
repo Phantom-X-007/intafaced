@@ -8,7 +8,7 @@
           class="ix-star"
           :class="{ 'is-on': currentCoinIsFavor }"
           @click="toggleFavorite"
-          :title="currentCoinIsFavor ? 'Remove from favourites' : 'Add to favourites'"
+          :title="currentCoinIsFavor ? $t('exchange.terminal.favoriteRemove') : $t('exchange.terminal.favoriteAdd')"
         >
           <Icon :type="currentCoinIsFavor ? 'ios-star' : 'ios-star-outline'" size="18" />
         </button>
@@ -28,7 +28,7 @@
           <div slot="content">
             <p class="ix-coin-info">{{ coinInfo.information }}</p>
             <p class="ix-coin-link" v-if="coinInfo.infolink">
-              <a :href="coinInfo.infolink" target="_blank" rel="noopener">More detail</a>
+              <a :href="coinInfo.infolink" target="_blank" rel="noopener">{{ $t('exchange.terminal.moreDetail') }}</a>
             </p>
           </div>
         </Poptip>
@@ -40,24 +40,24 @@
       </div>
 
       <dl class="ix-stat">
-        <dt>24h Change</dt>
+        <dt>{{ $t('exchange.terminal.change24h') }}</dt>
         <dd :class="trendClass">{{ marketStat(currentCoin.rose) }}</dd>
       </dl>
       <dl class="ix-stat">
-        <dt>24h High</dt>
+        <dt>{{ $t('exchange.terminal.high24h') }}</dt>
         <dd>{{ marketNum(currentCoin.high, baseCoinScale) }}</dd>
       </dl>
       <dl class="ix-stat">
-        <dt>24h Low</dt>
+        <dt>{{ $t('exchange.terminal.low24h') }}</dt>
         <dd>{{ marketNum(currentCoin.low, baseCoinScale) }}</dd>
       </dl>
       <dl class="ix-stat ix-stat-wide">
-        <dt>24h Volume</dt>
+        <dt>{{ $t('exchange.terminal.volume24h') }}</dt>
         <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || num(currentCoin.volume) > 0">{{ currentCoin.coin }}</em></dd>
       </dl>
 
-      <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="feedLive ? 'Market feed connected' : 'Market feed is down — numbers are not live'">
-        <i class="ix-dot"></i>{{ feedLive ? 'Live' : 'No feed · not live prices' }}
+      <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="feedLive ? $t('exchange.terminal.feedConnected') : $t('exchange.terminal.feedDownTitle')">
+        <i class="ix-dot"></i>{{ feedLive ? $t('exchange.terminal.feedLive') : $t('exchange.terminal.feedDown') }}
       </div>
     </header>
 
@@ -69,7 +69,7 @@
           <input
             type="text"
             v-model="searchKey"
-            placeholder="Search market"
+            :placeholder="$t('exchange.terminal.searchMarket')"
             spellcheck="false"
           />
         </div>
@@ -89,12 +89,12 @@
           >{{ base }}</button>
         </nav>
         <div class="ix-thead ix-thead-markets">
-          <span>Pair</span>
-          <span class="ix-num">Last</span>
-          <span class="ix-num">24h</span>
+          <span>{{ $t('exchange.terminal.colPair') }}</span>
+          <span class="ix-num">{{ $t('exchange.terminal.colLast') }}</span>
+          <span class="ix-num">{{ $t('exchange.terminal.col24h') }}</span>
         </div>
         <div class="ix-scroll">
-          <p class="ix-empty" v-if="visibleMarkets.length === 0">No markets</p>
+          <p class="ix-empty" v-if="visibleMarkets.length === 0">{{ $t('exchange.terminal.noMarkets') }}</p>
           <button
             type="button"
             class="ix-market-row"
@@ -147,10 +147,10 @@
                  fills it at 100% because `fullscreen` is off. -->
             <div id="ix_kline" class="ix-kline" v-show="mainTab === 'chart'"></div>
             <p class="ix-empty ix-empty-abs" v-if="mainTab === 'chart' && chartFailed">
-              Chart unavailable
+              {{ $t('exchange.terminal.chartUnavailable') }}
             </p>
             <p class="ix-empty ix-empty-abs" v-else-if="mainTab === 'chart' && !feedLive">
-              No market feed — chart has no live history to show
+              {{ $t('exchange.terminal.chartNoFeed') }}
             </p>
 
             <div class="ix-depth-host" v-show="mainTab === 'depth'">
@@ -160,12 +160,12 @@
             <div class="ix-book-full" v-show="mainTab === 'book'">
               <div class="ix-book-col">
                 <div class="ix-thead ix-thead-book">
-                  <span class="ix-num">Price ({{ currentCoin.base }})</span>
-                  <span class="ix-num">Amount ({{ currentCoin.coin }})</span>
-                  <span class="ix-num">Total</span>
+                  <span class="ix-num">{{ $t('exchange.terminal.colPriceIn', { unit: currentCoin.base }) }}</span>
+                  <span class="ix-num">{{ $t('exchange.terminal.colAmountIn', { unit: currentCoin.coin }) }}</span>
+                  <span class="ix-num">{{ $t('exchange.terminal.colTotal') }}</span>
                 </div>
                 <div class="ix-scroll">
-                  <p class="ix-empty" v-if="bids.length === 0">No bids</p>
+                  <p class="ix-empty" v-if="bids.length === 0">{{ $t('exchange.terminal.noBids') }}</p>
                   <button
                     type="button"
                     class="ix-book-row is-bid"
@@ -182,12 +182,12 @@
               </div>
               <div class="ix-book-col">
                 <div class="ix-thead ix-thead-book">
-                  <span class="ix-num">Price ({{ currentCoin.base }})</span>
-                  <span class="ix-num">Amount ({{ currentCoin.coin }})</span>
-                  <span class="ix-num">Total</span>
+                  <span class="ix-num">{{ $t('exchange.terminal.colPriceIn', { unit: currentCoin.base }) }}</span>
+                  <span class="ix-num">{{ $t('exchange.terminal.colAmountIn', { unit: currentCoin.coin }) }}</span>
+                  <span class="ix-num">{{ $t('exchange.terminal.colTotal') }}</span>
                 </div>
                 <div class="ix-scroll">
-                  <p class="ix-empty" v-if="asksAscending.length === 0">No asks</p>
+                  <p class="ix-empty" v-if="asksAscending.length === 0">{{ $t('exchange.terminal.noAsks') }}</p>
                   <button
                     type="button"
                     class="ix-book-row is-ask"
@@ -206,13 +206,13 @@
 
             <div class="ix-trades-full" v-show="mainTab === 'trades'">
               <div class="ix-thead ix-thead-trades-full">
-                <span>Time</span>
-                <span class="ix-num">Price ({{ currentCoin.base }})</span>
-                <span class="ix-num">Amount ({{ currentCoin.coin }})</span>
-                <span class="ix-num">Value</span>
+                <span>{{ $t('exchange.terminal.colTime') }}</span>
+                <span class="ix-num">{{ $t('exchange.terminal.colPriceIn', { unit: currentCoin.base }) }}</span>
+                <span class="ix-num">{{ $t('exchange.terminal.colAmountIn', { unit: currentCoin.coin }) }}</span>
+                <span class="ix-num">{{ $t('exchange.terminal.colValue') }}</span>
               </div>
               <div class="ix-scroll">
-                <p class="ix-empty" v-if="trades.length === 0">No trades yet</p>
+                <p class="ix-empty" v-if="trades.length === 0">{{ $t('exchange.terminal.noTrades') }}</p>
                 <div class="ix-trade-row is-wide" v-for="(row, i) in trades" :key="'ft' + i">
                   <span class="ix-dim">{{ time(row.time) }}</span>
                   <span class="ix-num" :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
@@ -241,11 +241,11 @@
 
           <div class="ix-account-body">
             <p class="ix-empty" v-if="!isLogin">
-              <router-link to="/login">Sign in</router-link> to see your balances and orders.
+              <router-link to="/login">{{ $t('exchange.terminal.signIn') }}</router-link> {{ $t('exchange.terminal.signInToSeeAccount') }}
             </p>
 
             <p class="ix-empty" v-else-if="accountLoading">
-              Loading account…
+              {{ $t('exchange.terminal.accountLoading') }}
             </p>
 
             <p class="ix-empty" v-else-if="accountError">
@@ -255,14 +255,14 @@
             <!-- Balances — exchange venue wallet only; not the TypeScript ledger books -->
             <div v-else-if="accountTab === 'balances'">
               <p class="ix-empty ix-empty-note">
-                Exchange wallet on this venue · not the platform ledger books
+                {{ $t('exchange.terminal.walletNote') }}
               </p>
               <table class="ix-table">
                 <thead>
                   <tr>
-                    <th>Asset</th>
-                    <th class="ix-num">Available</th>
-                    <th class="ix-num">Value</th>
+                    <th>{{ $t('exchange.terminal.colAsset') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colAvailable') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -272,7 +272,7 @@
                     <td class="ix-num">{{ fmt(row.balance, row.scale) }}</td>
                     <td class="ix-num ix-dim">{{ row.valueLabel }}</td>
                     <td class="ix-num">
-                      <router-link class="ix-link" :to="'/uc/recharge?name=' + row.unit">Deposit</router-link>
+                      <router-link class="ix-link" :to="'/uc/recharge?name=' + row.unit">{{ $t('exchange.terminal.deposit') }}</router-link>
                     </td>
                   </tr>
                 </tbody>
@@ -281,21 +281,21 @@
 
             <!-- Positions -->
             <p class="ix-empty" v-else-if="accountTab === 'positions'">
-              Spot markets do not carry positions. Your holdings are under Balances.
+              {{ $t('exchange.terminal.noPositions') }}
             </p>
 
             <!-- Open orders -->
             <table class="ix-table" v-else-if="accountTab === 'open'">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Market</th>
-                  <th>Type</th>
-                  <th>Side</th>
-                  <th class="ix-num">Price</th>
-                  <th class="ix-num">Amount</th>
-                  <th class="ix-num">Filled</th>
-                  <th class="ix-num">Value</th>
+                  <th>{{ $t('exchange.terminal.colTime') }}</th>
+                  <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                  <th>{{ $t('exchange.terminal.colType') }}</th>
+                  <th>{{ $t('exchange.terminal.colSide') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colPrice') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colAmount') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colFilled') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
                   <th class="ix-num"></th>
                 </tr>
               </thead>
@@ -303,16 +303,16 @@
                 <tr v-for="(row, i) in openOrders" :key="row.orderId || i">
                   <td class="ix-dim">{{ date(row.time) }}</td>
                   <td>{{ row.symbol }}</td>
-                  <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? 'Market' : 'Limit' }}</td>
+                  <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? $t('exchange.terminal.typeMarket') : $t('exchange.terminal.typeLimit') }}</td>
                   <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                    {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
+                    {{ row.direction === 'BUY' ? $t('exchange.terminal.buy') : $t('exchange.terminal.sell') }}
                   </td>
                   <td class="ix-num">{{ priceLabel(row) }}</td>
                   <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
                   <td class="ix-num">{{ fmt(row.tradedAmount, coinScale) }}</td>
                   <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
                   <td class="ix-num">
-                    <button type="button" class="ix-cancel" @click="cancelOrder(row)">Cancel</button>
+                    <button type="button" class="ix-cancel" @click="cancelOrder(row)">{{ $t('exchange.terminal.cancel') }}</button>
                   </td>
                 </tr>
               </tbody>
@@ -322,13 +322,13 @@
             <table class="ix-table" v-else-if="accountTab === 'fills'">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Market</th>
-                  <th>Side</th>
-                  <th class="ix-num">Price</th>
-                  <th class="ix-num">Amount</th>
-                  <th class="ix-num">Value</th>
-                  <th class="ix-num">Fee</th>
+                  <th>{{ $t('exchange.terminal.colTime') }}</th>
+                  <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                  <th>{{ $t('exchange.terminal.colSide') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colPrice') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colAmount') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colFee') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -336,7 +336,7 @@
                   <td class="ix-dim">{{ date(row.time) }}</td>
                   <td>{{ row.symbol }}</td>
                   <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                    {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
+                    {{ row.direction === 'BUY' ? $t('exchange.terminal.buy') : $t('exchange.terminal.sell') }}
                   </td>
                   <td class="ix-num">{{ fmt(row.price, baseCoinScale) }}</td>
                   <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
@@ -350,24 +350,24 @@
             <table class="ix-table" v-else>
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Market</th>
-                  <th>Type</th>
-                  <th>Side</th>
-                  <th class="ix-num">Price</th>
-                  <th class="ix-num">Amount</th>
-                  <th class="ix-num">Filled</th>
-                  <th class="ix-num">Value</th>
-                  <th>Status</th>
+                  <th>{{ $t('exchange.terminal.colTime') }}</th>
+                  <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                  <th>{{ $t('exchange.terminal.colType') }}</th>
+                  <th>{{ $t('exchange.terminal.colSide') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colPrice') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colAmount') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colFilled') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
+                  <th>{{ $t('exchange.terminal.colStatus') }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(row, i) in historyOrders" :key="row.orderId || 'h' + i">
                   <td class="ix-dim">{{ date(row.time) }}</td>
                   <td>{{ row.symbol }}</td>
-                  <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? 'Market' : 'Limit' }}</td>
+                  <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? $t('exchange.terminal.typeMarket') : $t('exchange.terminal.typeLimit') }}</td>
                   <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                    {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
+                    {{ row.direction === 'BUY' ? $t('exchange.terminal.buy') : $t('exchange.terminal.sell') }}
                   </td>
                   <td class="ix-num">{{ priceLabel(row) }}</td>
                   <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
@@ -378,7 +378,7 @@
               </tbody>
             </table>
 
-            <p class="ix-empty" v-if="isLogin && accountTabEmpty">Nothing here yet</p>
+            <p class="ix-empty" v-if="isLogin && accountTabEmpty">{{ $t('exchange.terminal.nothingYet') }}</p>
           </div>
         </section>
       </main>
@@ -390,12 +390,12 @@
             type="button"
             :class="{ 'is-active': railTab === 'book' }"
             @click="railTab = 'book'"
-          >Order Book</button>
+          >{{ $t('exchange.terminal.tabBook') }}</button>
           <button
             type="button"
             :class="{ 'is-active': railTab === 'trades' }"
             @click="railTab = 'trades'"
-          >Trades</button>
+          >{{ $t('exchange.terminal.tabTrades') }}</button>
           <div class="ix-book-modes" v-show="railTab === 'book'">
             <button
               type="button"
@@ -410,13 +410,13 @@
 
         <div class="ix-rail-body" v-show="railTab === 'book'">
           <div class="ix-thead ix-thead-book">
-            <span class="ix-num">Price</span>
-            <span class="ix-num">Amount</span>
-            <span class="ix-num">Total</span>
+            <span class="ix-num">{{ $t('exchange.terminal.colPrice') }}</span>
+            <span class="ix-num">{{ $t('exchange.terminal.colAmount') }}</span>
+            <span class="ix-num">{{ $t('exchange.terminal.colTotal') }}</span>
           </div>
 
           <div class="ix-book-side ix-book-asks" v-show="bookMode !== 'bids'">
-            <p class="ix-empty" v-if="asks.length === 0">No asks</p>
+            <p class="ix-empty" v-if="asks.length === 0">{{ $t('exchange.terminal.noAsks') }}</p>
             <button
               type="button"
               class="ix-book-row is-ask"
@@ -435,11 +435,11 @@
             <span class="ix-book-price" :class="trendClass">{{ lastPriceLabel }}</span>
             <Icon v-if="trend > 0" type="md-arrow-up" class="ix-up" size="14" />
             <Icon v-else-if="trend < 0" type="md-arrow-down" class="ix-down" size="14" />
-            <span class="ix-book-spread" v-if="spread !== null">Spread {{ spread }}</span>
+            <span class="ix-book-spread" v-if="spread !== null">{{ $t('exchange.terminal.spread') }} {{ spread }}</span>
           </div>
 
           <div class="ix-book-side ix-book-bids" v-show="bookMode !== 'asks'">
-            <p class="ix-empty" v-if="bids.length === 0">No bids</p>
+            <p class="ix-empty" v-if="bids.length === 0">{{ $t('exchange.terminal.noBids') }}</p>
             <button
               type="button"
               class="ix-book-row is-bid"
@@ -457,12 +457,12 @@
 
         <div class="ix-rail-body" v-show="railTab === 'trades'">
           <div class="ix-thead ix-thead-trades">
-            <span>Time</span>
-            <span class="ix-num">Price</span>
-            <span class="ix-num">Amount</span>
+            <span>{{ $t('exchange.terminal.colTime') }}</span>
+            <span class="ix-num">{{ $t('exchange.terminal.colPrice') }}</span>
+            <span class="ix-num">{{ $t('exchange.terminal.colAmount') }}</span>
           </div>
           <div class="ix-scroll">
-            <p class="ix-empty" v-if="trades.length === 0">No trades yet</p>
+            <p class="ix-empty" v-if="trades.length === 0">{{ $t('exchange.terminal.noTrades') }}</p>
             <div class="ix-trade-row" v-for="(row, i) in trades" :key="'t' + i">
               <span class="ix-dim">{{ time(row.time) }}</span>
               <span class="ix-num" :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
@@ -481,12 +481,12 @@
             type="button"
             :class="{ 'is-active': side === 'BUY' }"
             @click="setSide('BUY')"
-          >Buy</button>
+          >{{ $t('exchange.terminal.buy') }}</button>
           <button
             type="button"
             :class="{ 'is-active': side === 'SELL' }"
             @click="setSide('SELL')"
-          >Sell</button>
+          >{{ $t('exchange.terminal.sell') }}</button>
         </div>
 
         <nav class="ix-tabs ix-tabs-sm ix-type-tabs">
@@ -494,24 +494,24 @@
             type="button"
             :class="{ 'is-active': orderType === 'LIMIT_PRICE' }"
             @click="setOrderType('LIMIT_PRICE')"
-          >Limit</button>
+          >{{ $t('exchange.terminal.typeLimit') }}</button>
           <button
             type="button"
             :class="{ 'is-active': orderType === 'MARKET_PRICE' }"
             @click="setOrderType('MARKET_PRICE')"
-          >Market</button>
+          >{{ $t('exchange.terminal.typeMarket') }}</button>
         </nav>
 
         <div class="ix-order-body">
           <div class="ix-field">
-            <label>Price</label>
+            <label>{{ $t('exchange.terminal.fieldPrice') }}</label>
             <div class="ix-input" :class="{ 'is-disabled': orderType === 'MARKET_PRICE' }">
               <input
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
                 :disabled="orderType === 'MARKET_PRICE'"
-                :placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : '0.00'"
+                :placeholder="orderType === 'MARKET_PRICE' ? $t('exchange.terminal.bestAvailable') : '0.00'"
                 v-model="form.price"
                 @input="onPriceInput"
               />
@@ -558,17 +558,17 @@
 
           <dl class="ix-meta">
             <div>
-              <dt>Available</dt>
+              <dt>{{ $t('exchange.terminal.available') }}</dt>
               <dd>{{ fmt(availableBalance, side === 'BUY' ? baseCoinScale : coinScale) }}
                 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }}</em>
               </dd>
             </div>
             <div v-if="orderType === 'LIMIT_PRICE'">
-              <dt>Order value</dt>
+              <dt>{{ $t('exchange.terminal.orderValue') }}</dt>
               <dd>{{ fmt(orderValue, baseCoinScale) }} <em>{{ currentCoin.base }}</em></dd>
             </div>
             <div>
-              <dt>Fee (est.)</dt>
+              <dt>{{ $t('exchange.terminal.feeEst') }}</dt>
               <dd>{{ feeLabel }}</dd>
             </div>
           </dl>
@@ -580,19 +580,19 @@
             :disabled="!tradable || submitting"
             @click="submitOrder"
           >
-            {{ submitting ? 'Placing…' : submitLabel }}
+            {{ submitting ? $t('exchange.terminal.placing') : submitLabel }}
           </button>
 
           <p class="ix-order-note" v-if="!isLogin">
-            <router-link to="/login">Sign in</router-link> or
-            <router-link to="/register">register</router-link> to trade.
+            <router-link to="/login">{{ $t('exchange.terminal.signIn') }}</router-link> {{ $t('exchange.terminal.or') }}
+            <router-link to="/register">{{ $t('exchange.terminal.register') }}</router-link> {{ $t('exchange.terminal.toTrade') }}
           </p>
-          <p class="ix-order-note" v-else-if="exchangeable != 1">This market is halted.</p>
+          <p class="ix-order-note" v-else-if="exchangeable != 1">{{ $t('exchange.terminal.halted') }}</p>
           <p class="ix-order-note" v-else-if="orderType === 'MARKET_PRICE' && !marketAllowed">
-            Market {{ side === 'BUY' ? 'buy' : 'sell' }} is disabled for this pair.
+            {{ $t('exchange.terminal.marketDisabled', { side: side === 'BUY' ? $t('exchange.terminal.buyLower') : $t('exchange.terminal.sellLower') }) }}
           </p>
           <p class="ix-order-note" v-else-if="!feedLive">
-            Market feed is down — double-check size before confirming any order.
+            {{ $t('exchange.terminal.feedDownWarning') }}
           </p>
         </div>
       </aside>
@@ -676,19 +676,8 @@ export default {
       searchKey: '',
 
       mainTab: 'chart',
-      mainTabs: [
-        { id: 'chart', label: 'Chart' },
-        { id: 'depth', label: 'Depth' },
-        { id: 'book', label: 'Order Book' },
-        { id: 'trades', label: 'Trades' }
-      ],
       railTab: 'book',
       bookMode: 'all',
-      bookModes: [
-        { id: 'all', label: 'Bids and asks' },
-        { id: 'bids', label: 'Bids only' },
-        { id: 'asks', label: 'Asks only' }
-      ],
       accountTab: 'balances',
 
       interval: '60',
@@ -813,13 +802,30 @@ export default {
       });
       return out;
     },
+    /* Tab labels resolve through $t in `computed`, not as literals in `data`:
+       a locale change has to re-render them with the rest of the screen. */
+    mainTabs() {
+      return [
+        { id: 'chart', label: this.$t('exchange.terminal.tabChart') },
+        { id: 'depth', label: this.$t('exchange.terminal.tabDepth') },
+        { id: 'book', label: this.$t('exchange.terminal.tabBook') },
+        { id: 'trades', label: this.$t('exchange.terminal.tabTrades') }
+      ];
+    },
+    bookModes() {
+      return [
+        { id: 'all', label: this.$t('exchange.terminal.bookAll') },
+        { id: 'bids', label: this.$t('exchange.terminal.bookBids') },
+        { id: 'asks', label: this.$t('exchange.terminal.bookAsks') }
+      ];
+    },
     accountTabs() {
       return [
-        { id: 'balances', label: 'Balances' },
-        { id: 'positions', label: 'Positions' },
-        { id: 'open', label: 'Open Orders', count: this.openOrders.length },
-        { id: 'fills', label: 'Trade History' },
-        { id: 'history', label: 'Order History' }
+        { id: 'balances', label: this.$t('exchange.terminal.tabBalances') },
+        { id: 'positions', label: this.$t('exchange.terminal.tabPositions') },
+        { id: 'open', label: this.$t('exchange.terminal.tabOpenOrders'), count: this.openOrders.length },
+        { id: 'fills', label: this.$t('exchange.terminal.tabTradeHistory') },
+        { id: 'history', label: this.$t('exchange.terminal.tabOrderHistory') }
       ];
     },
     accountTabEmpty() {
@@ -836,7 +842,7 @@ export default {
       return this.orderType === 'MARKET_PRICE' && this.side === 'BUY';
     },
     amountLabel() {
-      return this.quoteSized ? 'Total' : 'Amount';
+      return this.quoteSized ? this.$t('exchange.terminal.colTotal') : this.$t('exchange.terminal.colAmount');
     },
     amountUnit() {
       return this.quoteSized ? this.currentCoin.base : this.currentCoin.coin;
@@ -861,7 +867,7 @@ export default {
       return true;
     },
     submitLabel() {
-      const verb = this.side === 'BUY' ? 'Buy' : 'Sell';
+      const verb = this.side === 'BUY' ? this.$t('exchange.terminal.buy') : this.$t('exchange.terminal.sell');
       return this.currentCoin.coin ? verb + ' ' + this.currentCoin.coin : verb;
     },
     /* Last / 24h stats: never present a cold zero as a live market print. */
@@ -1520,8 +1526,7 @@ export default {
       Promise.all([this.getWallet(), this.getOpenOrders(), this.getHistoryOrders()]).then(() => {
         this.accountLoading = false;
         if (!this.walletReachable && !this.ordersReachable) {
-          this.accountError =
-            'Account services did not respond. Balances and orders are not shown as zero — they are unknown.';
+          this.accountError = this.$t('exchange.terminal.accountUnreachable');
         }
       });
     },
@@ -1651,34 +1656,39 @@ export default {
       const price = this.num(this.form.price);
 
       if (amount <= 0) {
-        return this.warn('Enter an amount.');
+        return this.warn(this.$t('exchange.terminal.enterAmount'));
       }
       if (this.orderType === 'LIMIT_PRICE' && price <= 0) {
-        return this.warn('Enter a price.');
+        return this.warn(this.$t('exchange.terminal.enterPrice'));
       }
 
       const cost = this.quoteSized ? amount : this.side === 'BUY' ? price * amount : amount;
       if (this.isLogin && this.walletReachable && cost > this.availableBalance) {
-        return this.warn('Insufficient balance. Available ' + this.fmt(this.availableBalance, 8) + '.');
+        return this.warn(this.$t('exchange.terminal.insufficientBalance', { available: this.fmt(this.availableBalance, 8) }));
       }
 
-      const side = this.side === 'BUY' ? 'Buy' : 'Sell';
-      const type = this.orderType === 'MARKET_PRICE' ? 'Market' : 'Limit';
+      const side = this.side === 'BUY' ? this.$t('exchange.terminal.buy') : this.$t('exchange.terminal.sell');
+      const type = this.orderType === 'MARKET_PRICE' ? this.$t('exchange.terminal.typeMarket') : this.$t('exchange.terminal.typeLimit');
       const priceLine =
         this.orderType === 'MARKET_PRICE'
-          ? 'Price: best available'
-          : 'Price: ' + this.fmt(price, this.baseCoinScale) + ' ' + (this.currentCoin.base || '');
+          ? this.$t('exchange.terminal.confirmPriceBest')
+          : this.$t('exchange.terminal.confirmPriceLine', {
+              price: this.fmt(price, this.baseCoinScale) + ' ' + (this.currentCoin.base || '')
+            });
       const amountLine =
         this.amountLabel +
         ': ' +
         this.fmt(amount, this.quoteSized ? this.baseCoinScale : this.coinScale) +
         ' ' +
         (this.amountUnit || '');
-      const feeLine = 'Fee (est.): ' + this.feeLabel;
+      const feeLine = this.$t('exchange.terminal.feeEst') + ': ' + this.feeLabel;
       const pair = (this.currentCoin.coin || '') + '/' + (this.currentCoin.base || '');
 
       this.$Modal.confirm({
-        title: 'Confirm ' + side.toLowerCase() + ' order',
+        title: this.$t('exchange.terminal.confirmTitle', { side: side.toLowerCase() }),
+        // Every readable part of this body is a keyed line built above:
+        // side/type/pair, priceLine, amountLine, feeLine, confirmDisclaimer.
+        // i18n-exempt: what is left is the markup that joins them.
         content:
           '<p><strong>' +
           side +
@@ -1692,9 +1702,11 @@ export default {
           amountLine +
           '</p><p>' +
           feeLine +
-          '</p><p style="margin-top:8px;opacity:0.75;">Orders only succeed if the exchange accepts them. No response means not placed.</p>',
+          '</p><p style="margin-top:8px;opacity:0.75;">' +
+          this.$t('exchange.terminal.confirmDisclaimer') +
+          '</p>',
         okText: side,
-        cancelText: 'Cancel',
+        cancelText: this.$t('exchange.terminal.cancel'),
         onOk: () => this.placeOrder(amount, price)
       });
     },
@@ -1711,33 +1723,36 @@ export default {
       }).then(body => {
         this.submitting = false;
         if (!body) {
-          return this.warn('The exchange did not respond. Your order was not placed.');
+          return this.warn(this.$t('exchange.terminal.placeNoResponse'));
         }
         if (body.code == 0) {
-          this.$Notice.success({ title: 'Order placed', desc: this.submitLabel });
+          this.$Notice.success({ title: this.$t('exchange.terminal.orderPlaced'), desc: this.submitLabel });
           this.form.amount = '';
           this.percent = 0;
           this.accountTab = 'open';
           this.loadAccount();
         } else {
-          this.$Notice.error({ title: 'Order rejected', desc: body.message || 'Unknown error' });
+          this.$Notice.error({
+            title: this.$t('exchange.terminal.orderRejected'),
+            desc: body.message || this.$t('exchange.terminal.unknownError')
+          });
         }
       });
     },
 
     cancelOrder(order) {
       this.$Modal.confirm({
-        title: 'Cancel order',
-        content: 'Cancel this order?',
+        title: this.$t('exchange.terminal.cancelOrderTitle'),
+        content: this.$t('exchange.terminal.cancelOrderConfirm'),
         onOk: () => {
           this.request(this.api.exchange.orderCancel + '/' + order.orderId).then(body => {
             if (body && body.code == 0) {
-              this.$Notice.success({ title: 'Order cancelled', desc: order.symbol });
+              this.$Notice.success({ title: this.$t('exchange.terminal.orderCancelled'), desc: order.symbol });
               this.loadAccount();
             } else {
               this.$Notice.error({
-                title: 'Cancel failed',
-                desc: (body && body.message) || 'The exchange did not respond.'
+                title: this.$t('exchange.terminal.cancelFailed'),
+                desc: (body && body.message) || this.$t('exchange.terminal.exchangeNoResponse')
               });
             }
           });
@@ -1747,7 +1762,7 @@ export default {
 
     toggleFavorite() {
       if (!this.isLogin) {
-        return this.warn('Sign in first.');
+        return this.warn(this.$t('exchange.terminal.signInFirst'));
       }
       const symbol = this.currentCoin.symbol;
       const path = this.currentCoinIsFavor ? this.api.exchange.favorDelete : this.api.exchange.favorAdd;
@@ -1766,7 +1781,7 @@ export default {
 
     toggleRowFavorite(row) {
       if (!this.isLogin) {
-        return this.warn('Sign in first.');
+        return this.warn(this.$t('exchange.terminal.signInFirst'));
       }
       const path = row.isFavor ? this.api.exchange.favorDelete : this.api.exchange.favorAdd;
       const next = !row.isFavor;
@@ -1868,13 +1883,13 @@ export default {
     },
 
     priceLabel(row) {
-      return row.type === 'MARKET_PRICE' ? 'Market' : this.fmt(row.price, this.baseCoinScale);
+      return row.type === 'MARKET_PRICE' ? this.$t('exchange.terminal.typeMarket') : this.fmt(row.price, this.baseCoinScale);
     },
 
     statusLabel(status) {
-      if (status === 'COMPLETED') return 'Filled';
-      if (status === 'CANCELED') return 'Cancelled';
-      if (status === 'TRADING') return 'Open';
+      if (status === 'COMPLETED') return this.$t('exchange.terminal.statusFilled');
+      if (status === 'CANCELED') return this.$t('exchange.terminal.statusCancelled');
+      if (status === 'TRADING') return this.$t('exchange.terminal.statusOpen');
       return status || '—';
     },
 

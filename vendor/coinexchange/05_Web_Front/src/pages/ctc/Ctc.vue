@@ -143,45 +143,45 @@
         </FormItem>
       </Form>
       <div slot="footer">
-        <span style="margin-right:50px" @click="cancel">Cancel</span>
-        <span style="background:#ff8534;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">Confirm</span>
+        <span style="margin-right:50px" @click="cancel">{{$t('common.cancel')}}</span>
+        <span style="background:#ff8534;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">{{$t('common.confirm')}}</span>
       </div>
     </Modal>
 
     <Modal
         v-model="detailModal"
-        title="Order details"
+        :title="$t('ctc.order.detailTitle')"
         @on-ok="ok">
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 0">Order status: waiting for a merchant to accept…</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 1">Order status: merchant accepted — awaiting your payment</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 2">Order status: paid — awaiting release</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 3">Order status: Completed</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 4">Order status: Cancelled({{detailOrder.cancelReason}})</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 0">Order status: waiting for a merchant to accept…</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 1">Order status: merchant accepted — payment in progress</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 2">Order status: merchant paid — confirming release</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 3">Order status: Completed</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 4">Order status: Cancelled({{detailOrder.cancelReason}})</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 0">{{$t('ctc.order.statusBuyPending')}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 1">{{$t('ctc.order.statusBuyAccepted')}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 2">{{$t('ctc.order.statusBuyPaid')}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 3">{{$t('ctc.order.statusBuyCompleted')}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 4">{{$t('ctc.order.statusBuyCancelled', { reason: detailOrder.cancelReason })}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 0">{{$t('ctc.order.statusSellPending')}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 1">{{$t('ctc.order.statusSellAccepted')}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 2">{{$t('ctc.order.statusSellPaid')}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 3">{{$t('ctc.order.statusSellCompleted')}}</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 4">{{$t('ctc.order.statusSellCancelled', { reason: detailOrder.cancelReason })}}</p>
           <Row style="background: #272727;padding: 10px 0px;border-radius: 5px;">
               <Col span="8">
-                <p v-if="detailOrder.direction == 0" class="item-title">Buy</p>
-                <p v-if="detailOrder.direction == 1" class="item-title">Sell</p>
-                <p class="item-desc">Order type</p>
+                <p v-if="detailOrder.direction == 0" class="item-title">{{$t('ctc.buyin')}}</p>
+                <p v-if="detailOrder.direction == 1" class="item-title">{{$t('ctc.sell')}}</p>
+                <p class="item-desc">{{$t('ctc.order.typeLabel')}}</p>
               </Col>
               <Col span="8">
                 <p v-if="detailOrder.direction == 0" class="item-title">{{detailOrder.amount | toFixed(2)}} <span class="unit">USDT</span></p>
                 <p v-if="detailOrder.direction == 1" class="item-title">{{detailOrder.amount | toFixed(2)}} <span class="unit">USDT</span></p>
-                <p class="item-desc">Amount</p>
+                <p class="item-desc">{{$t('ctc.order.amountLabel')}}</p>
               </Col>
               <Col span="8">
                 <p v-if="detailOrder.direction == 0" class="item-title green">{{detailOrder.money | toFixed(2)}} <span class="unit">CNY</span></p>
                 <p v-if="detailOrder.direction == 1" class="item-title red">{{detailOrder.money | toFixed(2)}} <span class="unit">CNY</span></p>
-                <p class="item-desc">Total</p>
+                <p class="item-desc">{{$t('ctc.order.totalLabel')}}</p>
               </Col>
           </Row>
 
           <div style="font-size: 12px;margin-top: 15px;" v-if="detailOrder.direction == 0">
-            <Icon type="md-information-circle" style="color:rgb(183, 183, 183);margin-right:5px;font-size:14px;"/>Transfer to the account below: <span class="green" style="font-size: 20px;font-weight:bold;">{{detailOrder.money | toFixed(2)}}</span> <span class="green">CNY</span>
+            <Icon type="md-information-circle" style="color:rgb(183, 183, 183);margin-right:5px;font-size:14px;"/>{{$t('ctc.order.transferTo')}} <span class="green" style="font-size: 20px;font-weight:bold;">{{detailOrder.money | toFixed(2)}}</span> <span class="green">CNY</span>
 
             <div style="float:right;padding: 2px 10px;color:#FF0000;" v-if="orderCountdown > 0 && (detailOrder.status == 0 || detailOrder.status == 1)">
               <Icon type="ios-clock-outline" style="font-weight:bold;font-size:18px;margin-top:-5px;margin-right: 3px;"/>
@@ -190,44 +190,44 @@
           </div>
 
           <div style="font-size: 12px;margin-top: 15px;" v-if="detailOrder.direction == 1">
-            <Icon type="md-information-circle" style="color:rgb(183, 183, 183);margin-right:5px;font-size:14px;"/>The account below will receive the transfer: <span class="red" style="font-size: 20px;font-weight:bold;">{{detailOrder.money | toFixed(2)}}</span> <span class="red">CNY</span>
+            <Icon type="md-information-circle" style="color:rgb(183, 183, 183);margin-right:5px;font-size:14px;"/>{{$t('ctc.order.receiveFrom')}} <span class="red" style="font-size: 20px;font-weight:bold;">{{detailOrder.money | toFixed(2)}}</span> <span class="red">CNY</span>
           </div>
 
           <Row style="margin-top: 5px;background: #272727;padding: 20px 0px;border-radius: 5px;">
               <Col span="24">
                 <div style="float:left;margin-left:20px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">Account name:</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.accountName')}}</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.realName}}</span>
                 </div>
                 <div style="float:right;margin-right: 20px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">Payment method:</span>
-                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'bank'">Bank card</span>
-                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'alipay'">Alipay</span>
-                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'wechatpay'">WeChat Pay</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.paymentMethod')}}</span>
+                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'bank'">{{$t('ctc.order.bankCard')}}</span>
+                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'alipay'">{{$t('ctc.order.alipay')}}</span>
+                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'wechatpay'">{{$t('ctc.order.wechatPay')}}</span>
                 </div>
               </Col>
               <Col span="24" v-if="detailOrder.payMode == 'bank'" style="margin-top: 10px;text-align:left;">
                 <div style="float:left;margin-left:20px;width: 100%;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">Bank:</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.bank')}}</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.bankInfo.bank}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">Branch:</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.branch')}}</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.bankInfo.branch}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">Account number:</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.accountNumber')}}</span>
                   <span style="font-size:16px;color:#FFF;letter-spacing: 3px;font-weight:bold;">{{detailOrder.bankInfo.cardNo}}</span>
                 </div>
               </Col>
 
               <Col span="24" v-if="detailOrder.payMode == 'alipay'" style="margin-top: 10px;text-align:left;">
                 <div style="float:left;margin-left:20px;width: 100%;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">Alipay ID:</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.alipayId')}}</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.alipay.aliNo}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">Payment QR:</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.paymentQr')}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;text-align:center;">
                   <img :src="detailOrder.alipay.qrCodeUrl" style="width: 300px;height:400px;"></img>
@@ -236,11 +236,11 @@
 
               <Col span="24" v-if="detailOrder.payMode == 'wechatpay'" style="margin-top: 10px;text-align:left;">
                 <div style="float:left;margin-left:20px;width: 100%;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">WeChat ID:</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.wechatId')}}</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.wechatPay.wechat}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">Payment QR:</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">{{$t('ctc.order.paymentQr')}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;text-align:center;">
                   <img :src="detailOrder.wechatPay.qrWeCodeUrl" style="width: 300px;height:400px;"></img>
@@ -249,9 +249,9 @@
           </Row>
 
           <div slot="footer">
-            <Button v-if="(detailOrder.direction==1 && detailOrder.status==0) || (detailOrder.direction==0 && detailOrder.status < 2)" type="error" size="large" @click="cancelOrderClick">Cancel order</Button>
-            <Button v-if="detailOrder.direction==0 && detailOrder.status == 1" type="success" size="large" @click="payOrderClick">Mark as paid</Button>
-            <Button type="default" size="large" @click="closeDetail">Close</Button>
+            <Button v-if="(detailOrder.direction==1 && detailOrder.status==0) || (detailOrder.direction==0 && detailOrder.status < 2)" type="error" size="large" @click="cancelOrderClick">{{$t('ctc.order.cancelOrder')}}</Button>
+            <Button v-if="detailOrder.direction==0 && detailOrder.status == 1" type="success" size="large" @click="payOrderClick">{{$t('ctc.order.markPaid')}}</Button>
+            <Button type="default" size="large" @click="closeDetail">{{$t('common.close')}}</Button>
           </div>
     </Modal>
   </div>
@@ -524,8 +524,8 @@ export default {
     },
     cancelOrderClick () {
         this.$Modal.confirm({
-            title: 'Cancel this order?',
-            content: '<p>Are you sure you want to cancel this order?</p>',
+            title: this.$t('ctc.order.cancelConfirmTitle'),
+            content: this.$t('ctc.order.cancelConfirmBody'),
             onOk: () => {
                 this.cancelOrder();
             },
@@ -536,8 +536,8 @@ export default {
     },
     payOrderClick () {
         this.$Modal.confirm({
-            title: 'Confirm that you have paid?',
-            content: '<p>Only mark as paid once payment has actually been sent.</p><p style="color:#FF0000;padding-top:10px;font-size:12px;">Accounts that falsely mark orders as paid may be frozen or restricted.</p>',
+            title: this.$t('ctc.order.payConfirmTitle'),
+            content: this.$t('ctc.order.payConfirmBody'),
             onOk: () => {
                 this.payOrder();
             },
@@ -762,7 +762,7 @@ export default {
     ok() {
       if (this.formInline.code == "") {
         this.modal = true;
-        this.$Message.error("Enter the SMS code");
+        this.$Message.error(this.$t('ctc.order.smsRequired'));
         return;
       }
       if (this.formInline.fundpwd == "") {
@@ -774,38 +774,38 @@ export default {
     },
     valid(type){
       if(!this.isLogin){
-        this.$Message.error("Please sign in first.");
+        this.$Message.error(this.$t('ctc.order.loginRequired'));
         return false;
       }
       if(this.user.realVerified!= 1){
-        this.$Message.error("Please complete identity verification first.");
+        this.$Message.error(this.$t('ctc.order.identityRequired'));
         return false;
       }
       if(this.user.fundsVerified!= 1){
-        this.$Message.error("Please set your fund password.");
+        this.$Message.error(this.$t('ctc.order.fundPwdRequired'));
         return false;
       }
       if(type == 0){
         if(this.buyAmount == "" || this.buyAmount == null || this.buyAmount == undefined){
-          this.$Message.error("Enter the amount to buy");
+          this.$Message.error(this.$t('ctc.order.amountRequired'));
           return false;
         }
         if(this.buyAmount < 50 || this.buyAmount > 50000) {
-          this.$Message.error("Enter a valid amount to buy");
+          this.$Message.error(this.$t('ctc.order.amountInvalid'));
           return false;
         }
         return true;
       }else{
         if(this.userAccount.bankVerified!= 1){
-          this.$Message.error("Please add a bank card first");
+          this.$Message.error(this.$t('ctc.order.bankRequired'));
           return false;
         }
         if(this.sellAmount == "" || this.sellAmount == null || this.sellAmount == undefined){
-          this.$Message.error("Enter the amount to buy");
+          this.$Message.error(this.$t('ctc.order.amountRequired'));
           return false;
         }
         if(this.sellAmount < 50 || this.sellAmount > 50000) {
-          this.$Message.error("Enter a valid amount to buy");
+          this.$Message.error(this.$t('ctc.order.amountInvalid'));
           return false;
         }
         return true;

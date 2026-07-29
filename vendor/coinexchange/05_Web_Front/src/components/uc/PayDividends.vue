@@ -187,10 +187,7 @@ export default {
       let rangedate = "";
 
       if (this.rangeDate.length == 0) {
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please select a search date range");
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Select a date range");
+        this.$Message.error(this.$t("uc.promotion.searchdaterangerequired"));
         return;
       } else {
         try {
@@ -208,10 +205,7 @@ export default {
             "-" +
             this.rangeDate[1].getDate();
         } catch (ex) {
-          this.$store.state.lang == "English" &&
-            this.$Message.error("Please select a search date range");
-          this.$store.state.lang!= "English" &&
-            this.$Message.error("Select a date range");
+          this.$Message.error(this.$t("uc.promotion.searchdaterangerequired"));
           return;
         }
       }

@@ -3,9 +3,9 @@
     <div class="containers" id="List">
       <div class="fiat">
         <div class="to_business">
-          <h3>Fiat Trading</h3>
-          <span>Buy and sell digital assets quickly and safely</span>
-          <a href="javascript:void(0)" @click="goBusiness">Become a merchant</a>
+          <h3>{{$t('otc.main.title')}}</h3>
+          <span>{{$t('otc.main.subtitle')}}</span>
+          <a href="javascript:void(0)" @click="goBusiness">{{$t('otc.main.becomemerchant')}}</a>
           <!-- <router-link to="/identbusiness">Become a merchant</router-link> -->
         </div>
       </div>
@@ -24,22 +24,22 @@
         <ul>
           <li>
             <div class="image"><img src="../../assets/images/price.png" alt=""></div>
-            <div class="title">One market price</div>
-            <div class="content1">Tracks the market in real time</div>
+            <div class="title">{{$t('otc.main.adv1')}}</div>
+            <div class="content1">{{$t('otc.main.adv1tip')}}</div>
           </li>
           <li>
             <div class="image"><img src="../../assets/images/poundage.png" alt=""></div>
-            <div class="title">No platform fee</div>
-            <div class="content1">What you see is what you pay — no fee beyond the quoted price</div>
+            <div class="title">{{$t('otc.main.adv2')}}</div>
+            <div class="content1">{{$t('otc.main.adv2tip')}}</div>
             <li>
               <div class="image"><img src="../../assets/images/instant.png" alt=""></div>
-              <div class="title">Instant settlement</div>
-              <div class="content1">Verified merchants are matched automatically — no waiting in a queue</div>
+              <div class="title">{{$t('otc.main.adv3')}}</div>
+              <div class="content1">{{$t('otc.main.adv3tip')}}</div>
             </li>
             <li>
               <div class="image"><img src="../../assets/images/platedanbao.png" alt=""></div>
-              <div class="title">Platform escrow</div>
-              <div class="content1">Verified merchants, escrowed funds and 24/7 support on every trade</div>
+              <div class="title">{{$t('otc.main.adv4')}}</div>
+              <div class="content1">{{$t('otc.main.adv4tip')}}</div>
             </li>
         </ul>
       </div>
@@ -208,7 +208,7 @@ export default {
           path: "/identbusiness"
         });
       } else {
-        this.$Message.warning("Please sign in first");
+        this.$Message.warning(this.$t("common.loginfirst"));
       }
     },
     menuSelected(menuName) {

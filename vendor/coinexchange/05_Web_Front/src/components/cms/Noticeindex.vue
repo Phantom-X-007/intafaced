@@ -4,7 +4,7 @@
             <div class="bill_box rightarea padding-right-clear">
                 <section class="trade-group merchant-top">
                     <i class="merchant-icon tips"></i>
-                    <span class="tips-word">Announcements</span>
+                    <span class="tips-word">{{$t('cms.announcements')}}</span>
                 </section>
                 <section class="noticeBox">
                     <Table :columns="tableColumnsAdv" :data="tableData1" :show-header="sasa"></Table>
@@ -68,7 +68,7 @@ export default {
                         })
                     }
                 } else if (resp.code == 4000) {
-                    this.$Message.success('Please sign in first');
+                    this.$Message.success(this.$t('common.loginfirst'));
                     this.$router.push('/login');
                 } else {
                     this.$Message.error(resp.message);

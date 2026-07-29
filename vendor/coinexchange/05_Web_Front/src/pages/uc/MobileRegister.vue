@@ -3,8 +3,8 @@
     <div class="login_right">
       <div style="color: #F90;margin-bottom: 60px;margin-top: 60px;">
         <h1 style="border-left: 5px solid #F90;padding-left: 10px;letter-spacing: 2px;line-height:30px;height:30px;">INTAFACED.COM</h1>
-        <p style="padding-left:15px;letter-spacing: 6px;">A curated set of global digital assets</p>
-        <div style="margin-left:5px;letter-spacing: 2px;margin-top: 10px;color: rgb(226, 226, 227);font-size:13px;padding: 5px 10px;">Secure ● Honest ● Fair ● Committed ● Open</div>
+        <p style="padding-left:15px;letter-spacing: 6px;">{{$t('uc.regist.slogan1')}}</p>
+        <div style="margin-left:5px;letter-spacing: 2px;margin-top: 10px;color: rgb(226, 226, 227);font-size:13px;padding: 5px 10px;">{{$t('uc.regist.slogan2')}}</div>
       </div>
       <Form v-if="allowRegister" ref="formInline" :model="formInline" :rules="ruleInline" inline>
         <FormItem prop="username" style="display:none;">
@@ -14,20 +14,20 @@
         <FormItem prop="user">
           <Input type="text" v-model="formInline.user" :placeholder="key">
             <Select v-model="country" slot="prepend" style="width: 65px;border-bottom: 1px solid #141414;">
-              <Option value="China" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">China</span></Option>
-              <Option value="Singapore" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">Singapore</span></Option>
-              <Option value="South Korea" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">South Korea</span></Option>
-              <Option value="Japan" label="+81"><span>+81</span><span style="margin-left:10px;color:#ccc">Japan</span></Option>
-              <Option value="Thailand" label="+66"><span>+66</span><span style="margin-left:10px;color:#ccc">Thailand</span></Option>
-              <Option value="Russia" label="+7"><span>+7</span><span style="margin-left:10px;color:#ccc">Russia</span></Option>
-              <Option value="United Kingdom" label="+44"><span>+44</span><span style="margin-left:10px;color:#ccc">United Kingdom</span></Option>
-              <Option value="Vietnam" label="+84"><span>+84</span><span style="margin-left:10px;color:#ccc">Vietnam</span></Option>
-              <Option value="India" label="+91"><span>+91</span><span style="margin-left:10px;color:#ccc">India</span></Option>
-              <Option value="Italy" label="+39"><span>+39</span><span style="margin-left:10px;color:#ccc">Italy</span></Option>
-              <Option value="Hong Kong" label="+852"><span>+852</span><span style="margin-left:10px;color:#ccc">Hong Kong</span></Option>
-              <Option value="Malaysia" label="+60"><span>+60</span><span style="margin-left:10px;color:#ccc">Malaysia</span></Option>
-              <Option value="Taiwan" label="+886"><span>+886</span><span style="margin-left:10px;color:#ccc">Taiwan</span></Option>
-              <Option value="Turkey" label="+90"><span>+90</span><span style="margin-left:10px;color:#ccc">Turkey</span></Option>
+              <Option value="China" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">{{$t('country.china')}}</span></Option>
+              <Option value="Singapore" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">{{$t('country.singapore')}}</span></Option>
+              <Option value="South Korea" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">{{$t('country.southkorea')}}</span></Option>
+              <Option value="Japan" label="+81"><span>+81</span><span style="margin-left:10px;color:#ccc">{{$t('country.japan')}}</span></Option>
+              <Option value="Thailand" label="+66"><span>+66</span><span style="margin-left:10px;color:#ccc">{{$t('country.thailand')}}</span></Option>
+              <Option value="Russia" label="+7"><span>+7</span><span style="margin-left:10px;color:#ccc">{{$t('country.russia')}}</span></Option>
+              <Option value="United Kingdom" label="+44"><span>+44</span><span style="margin-left:10px;color:#ccc">{{$t('country.unitedkingdom')}}</span></Option>
+              <Option value="Vietnam" label="+84"><span>+84</span><span style="margin-left:10px;color:#ccc">{{$t('country.vietnam')}}</span></Option>
+              <Option value="India" label="+91"><span>+91</span><span style="margin-left:10px;color:#ccc">{{$t('country.india')}}</span></Option>
+              <Option value="Italy" label="+39"><span>+39</span><span style="margin-left:10px;color:#ccc">{{$t('country.italy')}}</span></Option>
+              <Option value="Hong Kong" label="+852"><span>+852</span><span style="margin-left:10px;color:#ccc">{{$t('country.hongkong')}}</span></Option>
+              <Option value="Malaysia" label="+60"><span>+60</span><span style="margin-left:10px;color:#ccc">{{$t('country.malaysia')}}</span></Option>
+              <Option value="Taiwan" label="+886"><span>+886</span><span style="margin-left:10px;color:#ccc">{{$t('country.taiwan')}}</span></Option>
+              <Option value="Turkey" label="+90"><span>+90</span><span style="margin-left:10px;color:#ccc">{{$t('country.turkey')}}</span></Option>
             </Select>
           </Input>
         </FormItem>
@@ -388,7 +388,7 @@ export default {
       if (this.isLogin) {
         this.$router.push("/");
       }
-      window.document.title = "New Register - " + "INTAFACED | Sovereign Exchange";
+      window.document.title = this.$t("pageTitle.register") + " - " + this.$t("pageTitle.suffix");
       // this.getAreas();
       // this.initGtCaptcha();
     },
@@ -468,7 +468,7 @@ export default {
 ) {
                         this.$Notice.success({
                           title: this.$t("common.tip"),
-                          desc: "Registration complete"
+                          desc: this.$t("uc.regist.completemobile")
                         });
                         var that = this;
                         setTimeout(() => {
@@ -494,7 +494,7 @@ export default {
               } else {
                 this.$Notice.error({
                   title: this.$t("common.tip"),
-                  desc: "Enter a valid verification code"
+                  desc: this.$t("uc.regist.codeinvalid")
                 });
               }
             }

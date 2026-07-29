@@ -70,21 +70,12 @@
     <div class="wrapper">
       <div class="content_wrapper">
         <div class="content1">
-          <h5>Overview</h5>
-          <p>The INTAFACED token is the platform's rights certificate, capped at a fixed supply
-            that is never inflated. Holders share in trading-fee revenue and listing
-            distributions, and may stake toward a super node. Node operators carry governance
-            weight, early visibility on listings, listing priority, and a claim on future
-            distributions.
-          </p>
-          <p>The token is the single rights certificate across the whole INTAFACED ecosystem —
-            the protocol plane, the DEX, banking, the launchpad and the agent network. INTAFACED
-            is an open ecosystem: any credible project may build against it, and early
-            participants receive a development allocation.
-          </p>
+          <h5>{{$t('activity.bzb.overview')}}</h5>
+          <p>{{$t('activity.bzb.overview1')}}</p>
+          <p>{{$t('activity.bzb.overview2')}}</p>
         </div>
       </div>
-      <h2 class="title">Token Rights</h2>
+      <h2 class="title">{{$t('activity.bzb.rights')}}</h2>
       <div class="wrapper_logo">
         <ul>
           <li>
@@ -131,7 +122,7 @@
       </div>
       <div class="content_wrapper">
         <div class="content1">
-          <h5>Whitepaper</h5>
+          <h5>{{$t('activity.bzb.whitepaper')}}</h5>
           <p>INTAFACED-Whitepaper.pdf</p>
         </div>
       </div>

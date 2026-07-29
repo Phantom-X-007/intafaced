@@ -2,24 +2,24 @@
   <div class="envelope">
     <div v-if="hasInviteUser" style="width:80%;height: 35px;padding: 5px 0 5px 0px;border-radius: 35px;background-color:rgb(157, 0, 0);margin-left:10%;text-align:center;display: flex;flex-direction:row;justify-content:center;margin-bottom:10px;">
       <img style="width: 25px; height: 25px;margin-right: 10px;border-radius: 25px;" :src="inviteUserAvatar"></img>
-      <div style="height: 30px;line-height:30px;color: #EEE;">{{inviteUserId}} has sent you a gift!</div>
+      <div style="height: 30px;line-height:30px;color: #EEE;">{{inviteUserId}} {{$t('envelope.sender')}}</div>
     </div>
     <div style="position:absolute;top: 40px;width: 100%;text-align:center;padding-top: 50px;">
       <div v-if="hasInviteUser" style="width:100%;height:35px;"></div>
       <p style="text-align:center;padding: 15px 0px;font-size:14px;letter-spacing:1px;width:100%;color:#000;">{{envelopeInfo.name}}</p>
       <p style="text-align:center;padding: 15px 0px;font-size:36px;letter-spacing:1px;width:100%;color:#fb272a;font-weight:bold;">{{envelopeInfo.totalAmount}} {{envelopeInfo.unit}}</p>
-      <p style="text-align:center;padding: 15px 0px;font-size:14px;letter-spacing:1px;width:100%;color:rgb(227, 205, 187);">Claimed:{{envelopeInfo.receiveCount}}/{{envelopeInfo.count}}</p>
+      <p style="text-align:center;padding: 15px 0px;font-size:14px;letter-spacing:1px;width:100%;color:rgb(227, 205, 187);">{{$t('envelope.claimed')}}{{envelopeInfo.receiveCount}}/{{envelopeInfo.count}}</p>
       <p style="text-align:center;padding: 20px 0px;font-size:14px;letter-spacing:1px;width:100%;color:#555;margin-top: 40px;">
         <img style="width: 100%;height:60px;width:60px;border-radius:60px;" :src="envelopeInfo.logo"></img>
       </p>
     </div>
     <img style="width: 100%;" :src="envelopeInfo.bgImage"></img>
-    <p style="margin-top: -80px;margin-bottom: 80px;text-align:center;color: rgb(255, 136, 79);font-size:13px;">Sent via INTAFACED</p>
+    <p style="margin-top: -80px;margin-bottom: 80px;text-align:center;color: rgb(255, 136, 79);font-size:13px;">{{$t('envelope.sentvia')}}</p>
     <div class="input-panel" v-if="!hasReceived && envelopeInfo.state == 0">
       <div style="color: rgb(177, 177, 177);font-size: 16px;margin: 10px 0 20px 0;" v-html="envelopeInfo.detail"></div>
       <Form ref="formInline" inline>
         <FormItem prop="user">
-          <Input type="text" v-model="formInline.phone" placeholder="Enter your phone number"></Input>
+          <Input type="text" v-model="formInline.phone" :placeholder="$t('envelope.phonetip')"></Input>
         </FormItem>
 
         <FormItem prop="code">
@@ -29,39 +29,39 @@
           </input>
         </FormItem>
         <FormItem>
-          <Button class="register_btn" @click="handleSubmit()">Claim</Button>
+          <Button class="register_btn" @click="handleSubmit()">{{$t('envelope.claim')}}</Button>
         </FormItem>
       </Form>
     </div>
 
     <div class="envelope-result" v-if="hasReceived && envelopeInfo.state == 0">
-      <p style="font-size:14px;text-align:center;color: #999;margin-top: 5px;">Congratulations!</p>
+      <p style="font-size:14px;text-align:center;color: #999;margin-top: 5px;">{{$t('envelope.congratulations')}}</p>
       <p style="text-align:center;font-size: 30px;color: rgb(251, 39, 42);font-weight:bold;margin: 10px 0;">{{receiveAmount}} BTC</p>
-      <Button v-if="envelopeInfo.invite == 1" class="register_btn" @click="inviteMore()">Invite friends for more claims</Button>
-      <p v-if="envelopeInfo.invite ==1" style="font-size:14px;text-align:center;color: #999;margin-top:15px;">Each friend you invite adds one claim</p>
+      <Button v-if="envelopeInfo.invite == 1" class="register_btn" @click="inviteMore()">{{$t('envelope.invitemore')}}</Button>
+      <p v-if="envelopeInfo.invite ==1" style="font-size:14px;text-align:center;color: #999;margin-top:15px;">{{$t('envelope.invitemoretip')}}</p>
       <p style="text-align:center;">
-        <router-link style="font-size:14px;text-align:center;color: #3f3f3f;margin-top:15px;text-decoration:underline;" to="/app">Download the app | View balance</router-link>
+        <router-link style="font-size:14px;text-align:center;color: #3f3f3f;margin-top:15px;text-decoration:underline;" to="/app">{{$t('envelope.downloadapp')}}</router-link>
       </p>
     </div>
     <div class="envelope-result" v-if="envelopeInfo.state == 1">
-      <p style="font-size:20px;text-align:center;color: #999;margin-top: 5px;">All claimed.</p>
+      <p style="font-size:20px;text-align:center;color: #999;margin-top: 5px;">{{$t('envelope.allclaimed')}}</p>
     </div>
     <div class="envelope-result" v-if="envelopeInfo.state == 2">
-      <p style="font-size:20px;text-align:center;color: #999;margin-top: 5px;">This gift has expired.</p>
+      <p style="font-size:20px;text-align:center;color: #999;margin-top: 5px;">{{$t('envelope.expired')}}</p>
     </div>
 
     <div class="record-list">
-      <div class="title">Claim history</div>
+      <div class="title">{{$t('envelope.history')}}</div>
 
       <div class="content">
-        <p v-if="envelopeDetailList.length == 0" style="color: #999;margin: 20px 0;">No claims yet</p>
+        <p v-if="envelopeDetailList.length == 0" style="color: #999;margin: 20px 0;">{{$t('envelope.noclaims')}}</p>
         <div class="item clearfix" v-for="item in envelopeDetailList">
           <div class="phone">{{item.userIdentify}}</div><div class="amount">{{item.amount}} {{envelopeInfo.unit}}</div>
         </div>
       </div>
     </div>
     <p style="text-align:center;margin-top: 25px;margin-bottom: 20px;">
-    <router-link style="font-size:14px;text-align:center;color: #EEE;margin-top:15px;text-decoration:underline;" to="/app">© INTAFACED.COM | Download the app</router-link>
+    <router-link style="font-size:14px;text-align:center;color: #EEE;margin-top:15px;text-decoration:underline;" to="/app">{{$t('envelope.footer')}}</router-link>
     </p>
 
     <Spin size="large" fix v-if="spinShow"></Spin>
@@ -146,14 +146,14 @@ export default {
     sendCode(){
       var reg = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
       if(!reg.test(this.formInline.phone)) {
-        this.$Message.error("Enter a valid phone number");
+        this.$Message.error(this.$t('envelope.telinvalid'));
       }else{
         var params = {};
         params["phone"] = this.formInline.phone;
         params["country"] = "China";
         params["envelopeId"] = this.envelopeInfo.id;
         if(this.envelopeInfo.id == 0 || this.envelopeInfo.id == null || this.envelopeInfo.id == undefined){
-          this.$Message.error("Gift not found");
+          this.$Message.error(this.$t('envelope.notfound'));
           return;
         }
         this.$http.post(this.host + "/uc/redenvelope/code", params).then(response => {
@@ -181,7 +181,7 @@ export default {
     },
     handleSubmit(){
       if (this.formInline.verifyCode == "") {
-        this.$Message.error("Enter the verification code");
+        this.$Message.error(this.$t('envelope.coderequired'));
         return;
       }
 
@@ -199,8 +199,8 @@ export default {
     inviteMore(){
       this.$router.replace('/envelope/' + this.formInline.envelopeNo + "?code=" + this.promotionCode);
       this.$Modal.confirm({
-          title: 'redirect refresh notice',
-          content: '<p>Click"Confirm"to generate your personal invite page.</p><br><p>How it works: open your invite page, then share it with your contacts.</p>',
+          title: this.$t('envelope.invitetitle'),
+          content: this.$t('envelope.invitebody'),
           onOk: () => {
               this.formInline.promotionCode = this.promotionCode;
               this.hasReceived = false;
@@ -245,7 +245,12 @@ export default {
               this.envelopeInfo.bgImage = res.body.data.bgImage;
             }
 
-            window.document.title = "[" + this.envelopeInfo.totalAmount + " " + this.envelopeInfo.unit + "]" + this.envelopeInfo.name + " — INTAFACED(INTAFACED.COM)Exchange"
+            window.document.title =
+              "[" +
+              this.$t('pageTitle.envelope', { amount: this.envelopeInfo.totalAmount, unit: this.envelopeInfo.unit }) +
+              "]" +
+              this.envelopeInfo.name +
+              " — INTAFACED(INTAFACED.COM)Exchange"
             this.getEnvelopeDetailList();
           } else {
               this.$Message.error(res.body.message);

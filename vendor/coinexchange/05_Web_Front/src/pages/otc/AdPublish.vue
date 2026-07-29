@@ -71,7 +71,7 @@
                   </div>
                 </div>
               </div>
-              <p class="msg">{{$t('otc.publishad.formual')}}: (Bitstamp+Bitfinex+Coinbase)/ 3 *{{gongshi.toFixed(4) }}</p>
+              <p class="msg">{{$t('otc.publishad.formual')}}: {{$t('otc.publishad.formualsource')}}{{gongshi.toFixed(4) }}</p>
               <FormItem :label="wantstyle+$t('otc.publishad.num')" prop="number">
                 <Input v-model="form.number" :placeholder="$t('otc.publishad.num_text1')+wantstyle+$t('otc.publishad.num_text2')"></Input>
               </FormItem>
@@ -536,7 +536,7 @@ export default {
         if (certifiedBusinessStatus == 2) {
           this.getAccount();
         } else {
-          this.$Message.warning("Apply for merchant verification first!");
+          this.$Message.warning(this.$t("otc.publishad.merchantfirst"));
           this.$router.push("/identbusiness");
         }
       });

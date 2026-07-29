@@ -93,8 +93,8 @@
                         <img class="lang-img" v-if="false" src="./assets/images/lang-zh.png"></img>
                         <img class="lang-img" v-if="lang=='English'" src="./assets/images/lang-en.png"></img>
                       </template>
-                      <MenuItem name="zh" class="lang-item"><img src="./assets/images/lang-zh.png"></img>Chinese</MenuItem>
-                      <MenuItem name="en" class="lang-item"><img src="./assets/images/lang-en.png"></img>ENGLISH</MenuItem>
+                      <MenuItem name="zh" class="lang-item"><img src="./assets/images/lang-zh.png"></img>{{$t("header.langChinese")}}</MenuItem>
+                      <MenuItem name="en" class="lang-item"><img src="./assets/images/lang-en.png"></img>{{$t("header.langEnglish")}}</MenuItem>
                   </Submenu>
               </Menu>
             </div>
@@ -233,8 +233,8 @@
                 <template slot="title" class="lang-title">
                   <span style="color:#bdc2ca;">{{languageValue}}</span>
                 </template>
-                <MenuItem name="zh" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-zh.png"></img>Chinese</MenuItem>
-                <MenuItem name="en" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-en.png"></img>ENGLISH</MenuItem>
+                <MenuItem name="zh" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-zh.png"></img>{{$t("header.langChinese")}}</MenuItem>
+                <MenuItem name="en" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-en.png"></img>{{$t("header.langEnglish")}}</MenuItem>
             </Submenu>
             <router-link to="/app">
               <MenuItem name="nav-appdownload"style="text-align:left;color:#bdc2ca;">{{$t("header.appdownlaod")}}</MenuItem>
@@ -247,9 +247,10 @@
           <img src="./assets/images/logo-bottom.svg" style="margin:0" ></img>
           <!-- <h3>Caymanex.Pro</h3> -->
           <p style="letter-spacing:2px;">{{$t("footer.gsmc")}}</p>
-          <p>Copyright © 2019 - INTAFACED.com All rights reserved.&nbsp;&nbsp;</p>
+          <p>{{$t("footer.copyright")}}&nbsp;&nbsp;</p>
           <div class="social-list">
             <ul>
+              <!-- i18n-exempt: platform brand names, not copy — same class as the Twitter and Reddit URLs below -->
               <Tooltip content="Wechat" theme="dark" placement="top">
                 <li>
                   <Icon custom="i-icon iconfont iconweixin" />
@@ -258,6 +259,7 @@
                     <img style="width: 130px;border-radius: 5px;" src="./assets/images/wechatqrcode.jpg"></img>
                 </div>
               </Tooltip>
+              <!-- i18n-exempt: platform brand name -->
               <Tooltip content="Biyong" theme="dark" placement="top">
                 <li>
                   <Icon custom="i-icon iconfont iconbiyonglogo" />
@@ -266,6 +268,7 @@
                     <img style="width: 130px;border-radius: 5px;" src="./assets/images/biyongqrcode.png"></img>
                 </div>
               </Tooltip>
+              <!-- i18n-exempt: platform brand name -->
               <Tooltip content="Telegram" theme="dark" placement="top">
                 <li>
                   <Icon custom="i-icon iconfont icontelegram1" />
@@ -309,15 +312,19 @@
               <span>{{$t("footer.yqlj")}}</span>
             </li>
             <li>
+              <!-- i18n-exempt: link label is the name of the site it points at, not copy -->
               <a target="_blank" href="https://www.feixiaohao.com/">Feixiaohao</a>
             </li>
             <li>
+              <!-- i18n-exempt: link label is the name of the site it points at, not copy -->
               <a target="_blank" href="https://www.8btc.com/">8BTC</a>
             </li>
             <li>
+              <!-- i18n-exempt: link label is the name of the site it points at, not copy -->
               <a target="_blank" href="https://www.chainnode.com/">ChainNode</a>
             </li>
             <li>
+              <!-- i18n-exempt: link label is the name of the site it points at, not copy -->
               <a target="_blank" href="https://www.jinse.com/">Jinse Finance</a>
             </li>
           </ul>
@@ -454,25 +461,25 @@ export default {
     activeNav: function() {
       switch (this.activeNav) {
         case "nav-exchange":
-          window.document.title = "Exchange" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.pageTitle("exchange");
           break;
         case "nav-service":
-          window.document.title = "Announcement" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.pageTitle("service");
           break;
         case "nav-about":
-          window.document.title = "About" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.pageTitle("about");
           break;
         case "nav-lab":
-          window.document.title = "Lab" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.pageTitle("lab");
           break;
         case "nav-invite":
-          window.document.title = "Promotion" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.pageTitle("invite");
           break;
         case "nav-platform":
-          window.document.title = "Platform" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.pageTitle("platform");
           break;
         default:
-          window.document.title = "INTAFACED | INTAFACED - Global digital asset exchange | Global digital asset exchange";
+          window.document.title = this.$t("pageTitle.site");
           break;
       }
     },
@@ -553,6 +560,14 @@ export default {
     }
   },
   methods: {
+    /**
+     * Browser tab title for a screen: its keyed name plus the keyed site
+     * suffix. One place to build it, so the suffix cannot drift between the
+     * seven screens that set a title.
+     */
+    pageTitle(name) {
+      return this.$t("pageTitle." + name) + " - " + this.$t("pageTitle.suffix");
+    },
     reload () {
       this.isRouterAlive = false;
       this.$nextTick(function () {

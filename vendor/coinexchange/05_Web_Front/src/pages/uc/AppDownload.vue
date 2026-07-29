@@ -4,11 +4,11 @@
       <div style="color: #000;margin-bottom: 60px;padding-top: 160px;width: 100%;text-align:center;z-index: 10;">
         <img src="../../assets/images/applogo.svg" style="width: 22%;border-radius: 15px;"></img>
         <p style="font-size:18px;">INTAFACED</p>
-        <p style="font-size:12px;margin-top: 10px;color:#888;">Latest version: v{{version}}</p>
-        <p style="font-size:10px;margin-top: 10px;color:#888;letter-spacing: 1px;">Released:{{publishTime}}</p>
+        <p style="font-size:12px;margin-top: 10px;color:#888;">{{$t('uc.appdownload.version')}}{{version}}</p>
+        <p style="font-size:10px;margin-top: 10px;color:#888;letter-spacing: 1px;">{{$t('uc.appdownload.released')}}{{publishTime}}</p>
         <p style="font-size:18px;margin-top: 45px;">
             <span style="border: 1px solid #F90; padding: 8px 30px;border-radius: 5px;background-color:#F90;color:#FFF;" @click="downloadClick">
-            <Icon custom="i-icon iconfont iconupload-demo" style="font-size: 24px;margin-right: 5px;" />Download</span>
+            <Icon custom="i-icon iconfont iconupload-demo" style="font-size: 24px;margin-right: 5px;" />{{$t('common.download')}}</span>
         </p>
         <p style="font-size:12px;margin-top: 20px;color:#888;"></p>
       </div>
@@ -18,28 +18,28 @@
       <ul>
         <li>
           <div><img src="/static/2019/download1.png" alt=""></div>
-          <p class="title">Built for speed</p>
-          <p>A carefully tuned interface with responsive controls</p>
+          <p class="title">{{$t('uc.appdownload.feature1')}}</p>
+          <p>{{$t('uc.appdownload.feature1desc')}}</p>
         </li>
         <li>
           <div><img src="/static/2019/download2.png" alt=""></div>
-          <p class="title">Markets</p>
-          <p>MACD, KDJ, RSI, BOLL and more</p>
+          <p class="title">{{$t('uc.appdownload.feature2')}}</p>
+          <p>{{$t('uc.appdownload.feature2desc')}}</p>
         </li>
         <li>
           <div><img src="/static/2019/download5.png" alt=""></div>
-          <p class="title">Spot Trading</p>
-          <p>Limit and market orders</p>
+          <p class="title">{{$t('uc.appdownload.feature3')}}</p>
+          <p>{{$t('uc.appdownload.feature3desc')}}</p>
         </li>
         <li>
           <div><img src="/static/2019/download3.png" alt=""></div>
-          <p class="title">Fiat Trading</p>
-          <p>Vetted merchants keep funding routes open</p>
+          <p class="title">{{$t('uc.appdownload.feature4')}}</p>
+          <p>{{$t('uc.appdownload.feature4desc')}}</p>
         </li>
         <li>
           <div><img src="/static/2019/download4.png" alt=""></div>
-          <p class="title">Assets</p>
-          <p>Track balances anywhere, with fast deposits and withdrawals</p>
+          <p class="title">{{$t('uc.appdownload.feature5')}}</p>
+          <p>{{$t('uc.appdownload.feature5desc')}}</p>
         </li>
       </ul>
     </div>
@@ -120,7 +120,7 @@ export default {
   },
   methods: {
     init() {
-      window.document.title = "APP Download - " + "INTAFACED | Sovereign Exchange";
+      window.document.title = this.$t("pageTitle.appdownload") + " - " + this.$t("pageTitle.suffix");
       this.getVersion();
     },
     downloadClick(){

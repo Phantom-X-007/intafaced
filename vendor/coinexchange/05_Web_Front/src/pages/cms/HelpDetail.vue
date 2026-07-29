@@ -108,7 +108,7 @@ export default {
           hsaInTop? "": returnTop.unshift(returnArticle);
           this.topList = returnTop;
           this.article = returnArticle;
-          window.document.title = "Help - " + this.article.title + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("pageTitle.help") + " - " + this.article.title + " - " + this.$t("pageTitle.suffix");
         } else {
           this.$message.error("Network error");
         }

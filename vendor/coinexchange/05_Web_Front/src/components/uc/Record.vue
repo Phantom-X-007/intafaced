@@ -149,14 +149,14 @@ export default {
     },
     queryOrder() {
       if (this.rangeDate.length == 0) {
-        this.$Message.error("Select a date range");
+        this.$Message.error(this.$t("uc.promotion.daterangerequired"));
         return;
       } else {
         try {
           this.page=1;
           this.getList(this.page);
         } catch (ex) {
-          this.$Message.error("Select a date range");
+          this.$Message.error(this.$t("uc.promotion.daterangerequired"));
           return;
         }
       }

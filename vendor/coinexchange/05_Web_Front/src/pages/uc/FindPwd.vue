@@ -174,7 +174,7 @@ export default {
       },
       ruleInline: {
         user: [{ validator: validateUser, trigger: "blur" }],
-        code: [{ required: true, message: "Enter the verification code", trigger: "blur" }],
+        code: [{ required: true, message: this.$t("uc.forget.codetip"), trigger: "blur" }],
         password: [
           {
             required: true,
@@ -292,7 +292,7 @@ export default {
         }).onSuccess(() => {
           let result = (this._captchaResult = captchaObj.getValidate());
           if (!result) {
-            this.$Message.error("Please complete the verification");
+            this.$Message.error(this.$t("uc.forget.captchafirst"));
           } else {
             this.afterValidate();
           }
@@ -302,7 +302,7 @@ export default {
          tel = this.formInline.user,
          flagtel = reg.test(tel);
          flagtel && captchaObj.verify();
-!flagtel && this.$Message.error("Enter a valid phone number");
+!flagtel && this.$Message.error(this.$t("uc.forget.telinvalid"));
       });
     },
     afterValidate() {
@@ -387,7 +387,7 @@ export default {
                 if (resp.code == 0) {
                   this.$Notice.success({
                     title: this.$t("common.tip"),
-                    desc:'Reset complete'
+                    desc: this.$t("uc.forget.resetdone")
                   });
                   this.$router.push("/login");
                 } else {

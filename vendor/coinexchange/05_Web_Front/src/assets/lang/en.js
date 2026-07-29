@@ -18,7 +18,13 @@ module.exports = {
         nodata: "No Records",
         pleaseselect: "Select",
         searchplaceholder: "Enter the coin symbol...",
-        loading: "Loading..."
+        loading: "Loading...",
+        cancel: "Cancel",
+        confirm: "Confirm",
+        close: "Close",
+        notice: "Notice",
+        loginfirst: "Please sign in first",
+        download: "Download"
     },
     header: {
         index: 'Home',
@@ -55,7 +61,56 @@ module.exports = {
         planeCex: "CEX",
         planeDex: "DEX",
         planeCexHint: "Custodial exchange — identity and verification rules apply",
-        planeDexHint: "Protocol plane — non-custodial; no KYC for the trade itself (region rules still apply)"
+        planeDexHint: "Protocol plane — non-custodial; no KYC for the trade itself (region rules still apply)",
+        // Language picker. English is the only catalogue that ships today; the
+        // menu is still rendered, so its labels are keyed like anything else.
+        langChinese: "Chinese",
+        langEnglish: "ENGLISH"
+    },
+
+    /**
+     * Browser tab titles. `window.document.title` is copy a user reads in their
+     * tab strip and in their history, so it is keyed the same as anything on
+     * the page. `suffix` is appended to every screen title.
+     */
+    pageTitle: {
+        suffix: "INTAFACED | Sovereign Exchange",
+        site: "INTAFACED | INTAFACED - Global digital asset exchange | Global digital asset exchange",
+        exchange: "Exchange",
+        service: "Announcement",
+        about: "About",
+        lab: "Lab",
+        invite: "Promotion",
+        platform: "Platform",
+        register: "New Register",
+        appdownload: "APP Download",
+        activity: "Activity",
+        notice: "Announcement",
+        help: "Help",
+        envelope: "{amount} {unit}"
+    },
+
+    /**
+     * Dialling-code picker on the sign-in and sign-up forms. The `value` bound
+     * to each Option is the country name the API expects and is NOT keyed —
+     * translating it would change what the backend receives. Only the label a
+     * human reads lives here.
+     */
+    country: {
+        china: "China",
+        singapore: "Singapore",
+        southkorea: "South Korea",
+        japan: "Japan",
+        thailand: "Thailand",
+        russia: "Russia",
+        unitedkingdom: "United Kingdom",
+        vietnam: "Vietnam",
+        india: "India",
+        italy: "Italy",
+        hongkong: "Hong Kong",
+        malaysia: "Malaysia",
+        taiwan: "Taiwan",
+        turkey: "Turkey"
     },
     /**
      * The INTAFACED platform surfaces — every feature area of the Sovereign OS,
@@ -397,7 +452,9 @@ module.exports = {
             price: 'price',
             amount: 'amount',
             fee: 'fee',
+            volume: 'Volume',
         },
+        nodepth: 'No depth data',
         realtime: 'realtime',
         kline: "KLine",
         depth: "Depth",
@@ -416,7 +473,120 @@ module.exports = {
         dateTimeHour: "H",
         dateTimeMinutes: "M",
         dateTimeSeconds: "S",
-        moredetail: "View More"
+        moredetail: "View More",
+        /**
+         * The INTAFACED trading terminal (pages/exchange/Exchange.vue).
+         *
+         * A self-contained surface with its own vocabulary, so it carries its
+         * own keys rather than borrowing the vendor exchange strings above —
+         * same posture as `expand`. A translator working on the terminal reads
+         * one contiguous block instead of hunting the flat list.
+         */
+        terminal: {
+            favoriteAdd: "Add to favourites",
+            favoriteRemove: "Remove from favourites",
+            moreDetail: "More detail",
+            change24h: "24h Change",
+            high24h: "24h High",
+            low24h: "24h Low",
+            volume24h: "24h Volume",
+            feedConnected: "Market feed connected",
+            feedDownTitle: "Market feed is down — numbers are not live",
+            feedLive: "Live",
+            feedDown: "No feed · not live prices",
+
+            searchMarket: "Search market",
+            colPair: "Pair",
+            colLast: "Last",
+            col24h: "24h",
+            noMarkets: "No markets",
+
+            tabChart: "Chart",
+            tabDepth: "Depth",
+            tabBook: "Order Book",
+            tabTrades: "Trades",
+            chartUnavailable: "Chart unavailable",
+            chartNoFeed: "No market feed — chart has no live history to show",
+
+            colPriceIn: "Price ({unit})",
+            colAmountIn: "Amount ({unit})",
+            colTotal: "Total",
+            colTime: "Time",
+            colValue: "Value",
+            colPrice: "Price",
+            colAmount: "Amount",
+            colMarket: "Market",
+            colType: "Type",
+            colSide: "Side",
+            colFilled: "Filled",
+            colStatus: "Status",
+            colFee: "Fee",
+            colAsset: "Asset",
+            colAvailable: "Available",
+            noBids: "No bids",
+            noAsks: "No asks",
+            noTrades: "No trades yet",
+
+            tabBalances: "Balances",
+            tabPositions: "Positions",
+            tabOpenOrders: "Open Orders",
+            tabTradeHistory: "Trade History",
+            tabOrderHistory: "Order History",
+            signIn: "Sign in",
+            signInToSeeAccount: "to see your balances and orders.",
+            accountLoading: "Loading account…",
+            accountUnreachable: "Account services did not respond. Balances and orders are not shown as zero — they are unknown.",
+            walletNote: "Exchange wallet on this venue · not the platform ledger books",
+            deposit: "Deposit",
+            noPositions: "Spot markets do not carry positions. Your holdings are under Balances.",
+            cancel: "Cancel",
+            nothingYet: "Nothing here yet",
+
+            bookAll: "Bids and asks",
+            bookBids: "Bids only",
+            bookAsks: "Asks only",
+            spread: "Spread",
+
+            buy: "Buy",
+            sell: "Sell",
+            buyLower: "buy",
+            sellLower: "sell",
+            typeLimit: "Limit",
+            typeMarket: "Market",
+            fieldPrice: "Price",
+            bestAvailable: "Best available",
+            available: "Available",
+            orderValue: "Order value",
+            feeEst: "Fee (est.)",
+            placing: "Placing…",
+            or: "or",
+            register: "register",
+            toTrade: "to trade.",
+            halted: "This market is halted.",
+            marketDisabled: "Market {side} is disabled for this pair.",
+            feedDownWarning: "Market feed is down — double-check size before confirming any order.",
+
+            enterAmount: "Enter an amount.",
+            enterPrice: "Enter a price.",
+            insufficientBalance: "Insufficient balance. Available {available}.",
+            signInFirst: "Sign in first.",
+            confirmTitle: "Confirm {side} order",
+            confirmPriceBest: "Price: best available",
+            confirmPriceLine: "Price: {price}",
+            confirmDisclaimer: "Orders only succeed if the exchange accepts them. No response means not placed.",
+            placeNoResponse: "The exchange did not respond. Your order was not placed.",
+            orderPlaced: "Order placed",
+            orderRejected: "Order rejected",
+            unknownError: "Unknown error",
+            cancelOrderTitle: "Cancel order",
+            cancelOrderConfirm: "Cancel this order?",
+            orderCancelled: "Order cancelled",
+            cancelFailed: "Cancel failed",
+            exchangeNoResponse: "The exchange did not respond.",
+            statusFilled: "Filled",
+            statusCancelled: "Cancelled",
+            statusOpen: "Open"
+        }
     },
     ctc: {
         title: "One-click Sale ● Platform Guarantee ● Security",
@@ -458,7 +628,52 @@ module.exports = {
         price: "Price(CNY)",
         status: "Status",
         operate: "Operate",
-        moredetail: "More details"
+        moredetail: "More details",
+        /** The order-detail drawer on the C2C screen. */
+        order: {
+            detailTitle: "Order details",
+            statusBuyPending: "Order status: waiting for a merchant to accept…",
+            statusBuyAccepted: "Order status: merchant accepted — awaiting your payment",
+            statusBuyPaid: "Order status: paid — awaiting release",
+            statusBuyCompleted: "Order status: Completed",
+            statusBuyCancelled: "Order status: Cancelled({reason})",
+            statusSellPending: "Order status: waiting for a merchant to accept…",
+            statusSellAccepted: "Order status: merchant accepted — payment in progress",
+            statusSellPaid: "Order status: merchant paid — confirming release",
+            statusSellCompleted: "Order status: Completed",
+            statusSellCancelled: "Order status: Cancelled({reason})",
+            typeLabel: "Order type",
+            amountLabel: "Amount",
+            totalLabel: "Total",
+            transferTo: "Transfer to the account below:",
+            receiveFrom: "The account below will receive the transfer:",
+            accountName: "Account name:",
+            paymentMethod: "Payment method:",
+            bankCard: "Bank card",
+            alipay: "Alipay",
+            wechatPay: "WeChat Pay",
+            bank: "Bank:",
+            branch: "Branch:",
+            accountNumber: "Account number:",
+            alipayId: "Alipay ID:",
+            paymentQr: "Payment QR:",
+            wechatId: "WeChat ID:",
+            cancelOrder: "Cancel order",
+            markPaid: "Mark as paid",
+            cancelConfirmTitle: "Cancel this order?",
+            cancelConfirmBody: "<p>Are you sure you want to cancel this order?</p>",
+            payConfirmTitle: "Confirm that you have paid?",
+            payConfirmBody: "<p>Only mark as paid once payment has actually been sent.</p><p style=\"color:#FF0000;padding-top:10px;font-size:12px;\">Accounts that falsely mark orders as paid may be frozen or restricted.</p>",
+            smsRequired: "Enter the SMS code",
+            loginRequired: "Please sign in first.",
+            identityRequired: "Please complete identity verification first.",
+            fundPwdRequired: "Please set your fund password.",
+            bankRequired: "Please add a bank card first",
+            // Used on the sell path too, where it reads wrong — moved verbatim,
+            // see the copy list in the sweep report rather than reworded here.
+            amountRequired: "Enter the amount to buy",
+            amountInvalid: "Enter a valid amount to buy"
+        }
     },
     otc: {
         ad: 'Advertising',
@@ -493,6 +708,7 @@ module.exports = {
             shelf: 'shelf',
             dropoff: 'dropoff',
             delete: 'delete',
+            offlinefirst: 'Take the ad offline before deleting it.',
         },
         myorder: 'My Order',
         chatline: {
@@ -505,6 +721,16 @@ module.exports = {
             warning: 'Anti-fraud alerts: In the recent past, fraudsters have repeatedly used bank transfer remittance information and fake remittance credentials for fraud, so please be sure to check your own payment account number. Ensure the safety of remittance funds and avoid the risk of bank cards being frozen!',
             contenttip: 'Please enter chat content Enter key to send',
             contentmsg: 'Message cannot be empty',
+            audiofallback: 'Your browser does not support the audio element.',
+            enablenotice: 'Enable desktop notifications',
+            enableaudio: 'Enable sound alerts',
+            noticeallow: 'Click Allow to enable!',
+            noticeblocked: 'You have blocked notifications. See Help to re-enable them.!',
+            noticeon: 'Desktop notifications enabled!',
+            noticeoff: 'Desktop notifications disabled!',
+            noticeunsupported: 'Your browser does not support this feature',
+            audioon: 'Sound alerts enabled!',
+            audiooff: 'Sound alerts disabled!',
         },
         chat: {
             seller: 'Seller',
@@ -557,6 +783,8 @@ module.exports = {
             result_5: 'Canceled',
             msg7: 'Fund Password',
             msg7tip: 'please enter fund password',
+            orderdetail: 'Order details',
+            disputewait: 'A dispute can be raised 30 minutes after payment!',
         },
         checkuser: {
             emaildone: 'Email certified',
@@ -699,6 +927,13 @@ module.exports = {
             submittip2: 'Please conduct a series of certifications such as mobile phones',
             submittip3: 'Please proceed with a series of certifications such as capital passwords',
             submittip4: 'Please bind at least one payment method',
+            merchantfirst: 'Apply for merchant verification first!',
+            formualsource: '(Bitstamp+Bitfinex+Coinbase)/ 3 *',
+        },
+        /** Column headings on the ad table (pages/otc/Trade.vue). */
+        trade: {
+            limit: 'Limit',
+            price: 'Price',
         },
         index: {
             title: 'Good advertising recommendation',
@@ -717,6 +952,20 @@ module.exports = {
             bot3_tip: 'Selection of mainstream digital asset transaction currencies\nMulti-asset trading experience',
             ibuy: 'I want buy',
             isell: 'I want sell',
+        },
+        /** The fiat landing page (pages/otc/Main.vue) that wraps the ad list. */
+        main: {
+            title: 'Fiat Trading',
+            subtitle: 'Buy and sell digital assets quickly and safely',
+            becomemerchant: 'Become a merchant',
+            adv1: 'One market price',
+            adv1tip: 'Tracks the market in real time',
+            adv2: 'No platform fee',
+            adv2tip: 'What you see is what you pay — no fee beyond the quoted price',
+            adv3: 'Instant settlement',
+            adv3tip: 'Verified merchants are matched automatically — no waiting in a queue',
+            adv4: 'Platform escrow',
+            adv4tip: 'Verified merchants, escrowed funds and 24/7 support on every trade',
         }
     },
     activity: {
@@ -775,7 +1024,27 @@ module.exports = {
         tipsmobile1: "You can enter PC web to attend this activity.",
         intvalue: "Please input int value",
         inputminingamount: "Input Buy Count",
-        moreactivity: "More Activities"
+        moreactivity: "More Activities",
+        /** pages/activity/Partner.vue — the partner-programme page. */
+        partner: {
+            title: "Partner benefits",
+            benefit1: "Platform dividends",
+            benefit1desc: "After operating costs, 80% of net profit is distributed to platform partners. Markets are not predictable and no level of profit is promised — a partner shares the downside as well as the upside.",
+            benefit2: "Airdrop rewards",
+            benefit2desc: "Where a listing project supplies marketing or campaign allocations, a share is negotiated on partners' behalf and distributed to them first.",
+            business: "Business:",
+            support: "Support:",
+            listings: "Listings:",
+            media: "Media:"
+        },
+        /** pages/activity/Bzb.vue — the token page. */
+        bzb: {
+            overview: "Overview",
+            overview1: "The INTAFACED token is the platform's rights certificate, capped at a fixed supply that is never inflated. Holders share in trading-fee revenue and listing distributions, and may stake toward a super node. Node operators carry governance weight, early visibility on listings, listing priority, and a claim on future distributions.",
+            overview2: "The token is the single rights certificate across the whole INTAFACED ecosystem — the protocol plane, the DEX, banking, the launchpad and the agent network. INTAFACED is an open ecosystem: any credible project may build against it, and early participants receive a development allocation.",
+            rights: "Token Rights",
+            whitepaper: "Whitepaper"
+        }
     },
     invite: {
         myinvitelink: "Promotion Link",
@@ -863,7 +1132,12 @@ module.exports = {
         colum_text1: "Member",
         colum_text2: "Promotion",
         colum_text3: "Commission(USDT)",
-        colum_text4: "Extra Reward"
+        colum_text4: "Extra Reward",
+        pt_card_reward: "0.001 BTC",
+        pt_redemption_code: "Partner redemption code",
+        pt_invite_drawer: "Invite image",
+        pt_invite_scan: "Scan to learn more",
+        pt_invite_code: "My invite code:"
     },
     uc: {
         verify: "Finish KYC First",
@@ -882,7 +1156,9 @@ module.exports = {
             pwdvalidate2: 'Password length not less than six',
             success: 'Success',
             goregister: "To Regist",
-            getlostpwd: "Forget Password"
+            getlostpwd: "Forget Password",
+            captchafirst: "Please complete the verification",
+            fillall: "Please complete every field"
         },
         forget: {
             hasaccount: 'Have a Account?To Log In',
@@ -907,6 +1183,10 @@ module.exports = {
             emailcodetip: 'Enter email verification code',
             resetpwdsuccess: 'Reset password success',
             smswarn: 'Please check for SMS',
+            captchafirst: 'Please complete the verification',
+            telinvalid: 'Enter a valid phone number',
+            codetip: 'Enter the verification code',
+            resetdone: 'Reset complete',
         },
         finance: {
             center: 'Finance center',
@@ -1096,7 +1376,9 @@ module.exports = {
                 amount: 'Amount',
                 gettingaddress: "Getting deposit address, Please wait...",
                 getaddress: "Get Deposit Address",
-                memotips: "Please enter this Memo when recharging, otherwise you will lose assets."
+                memotips: "Please enter this Memo when recharging, otherwise you will lose assets.",
+                memo: "Memo:",
+                memolabel: "Memo"
             },
             withdraw: {
                 pickup: 'Pick up',
@@ -1154,7 +1436,9 @@ module.exports = {
                 fundpwdtip: 'Please enter funds password',
                 click: 'click',
                 filtrate: 'can filtrate',
-                txid: "TxId"
+                txid: "TxId",
+                remarkmemo: "Memo",
+                smsrequired: "Enter the SMS code"
             }
         },
         member: {
@@ -1167,7 +1451,8 @@ module.exports = {
             exchange: "Exchange",
             curdelegate: "Current Delegate",
             hisdelegate: "History Delegate",
-            otc: "OTC"
+            otc: "OTC",
+            mobilemenu: "Account"
         },
         order: {
             ordercenter: 'Order center',
@@ -1206,7 +1491,14 @@ module.exports = {
             email: 'Email',
             agreementtip: 'Click to agree',
             modaltitle: 'Please verification',
-            promotion: 'Invite Code(Optional)'
+            promotion: 'Invite Code(Optional)',
+            slogan1: 'A curated set of global digital assets',
+            slogan2: 'Secure ● Honest ● Fair ● Committed ● Open',
+            closedtitle: 'Coming soon!',
+            closeddesc: 'INTAFACED.COM will open register soon',
+            complete: 'Registration complete!',
+            completemobile: 'Registration complete',
+            codeinvalid: 'Enter a valid verification code'
         },
         safe: {
             safelevel_low: 'Security Level: Low',
@@ -1270,7 +1562,11 @@ module.exports = {
             imgtip: 'Please upload your QRCode for receiver cash',
             idcard_verifymsg1: "1. The file is less than 8M.The information on the document should be clearly visible, no modifications in the document or cover by the foreign objects is allowed, and the document number and name should be visible.",
             idcard_verifymsg2: "2. The photograph should show you without a hat on. It is recommended that there is no make-up. The facial features of the hand-held document holders should be clear, and the arms should be completely exposed.",
-            idcard_verifymsg3: "3. Need to hold both hand-held documents and handwritten copy (name + application date), 'All my actions on this site are my own operations, and I understand the risks involved and willing to bear all the legal consequences of this account.'"
+            idcard_verifymsg3: "3. Need to hold both hand-held documents and handwritten copy (name + application date), 'All my actions on this site are my own operations, and I understand the risks involved and willing to bear all the legal consequences of this account.'",
+            rejectedretry: "Rejected{reason}, Please try again.",
+            forgotfundpwd: "Forgot password?",
+            imagetoolarge: "Image must be smaller than 2 MB",
+            clickedok: "Clicked ok"
         },
         account: {
             pagetitle: 'Bind real name account',
@@ -1388,6 +1684,14 @@ module.exports = {
             approve: 'Please agree to the certification merchant agreement',
             emailtip1: 'Please email the following materials to',
             emailtip2: 'We will review your application as soon as possible.',
+            mailplaceholder: 'Enter something...',
+            submitted: 'Submitted!',
+            agreefreeze: 'Please agree to freeze the corresponding amount of currency',
+            telrequired: 'Please fill in your cell phone number',
+            wechatrequired: 'Please fill in your cell wechat number',
+            qqrequired: 'Please fill in your cell qq number',
+            assetrequired: 'Please upload the asset certificate',
+            traderequired: 'Please upload the transaction certificate',
         },
         extension: {
             title1: 'Promotion links',
@@ -1430,7 +1734,9 @@ module.exports = {
             inputcardno: "Please input the card code",
             exchange: "Exchange",
             exchangesuccess: "Congratulations!You can check the asset in finance center!",
-            exchangewithcode: "Exchange With Code"
+            exchangewithcode: "Exchange With Code",
+            daterangerequired: "Select a date range",
+            searchdaterangerequired: "Please select a search date range"
         },
         activity: {
             navTitle: "Innovation ",
@@ -1475,6 +1781,21 @@ module.exports = {
             status0: "To be deployed",
             status1: "Deployed",
             status2: "Over"
+        },
+        /** pages/uc/AppDownload.vue — the mobile-app landing page. */
+        appdownload: {
+            version: "Latest version: v",
+            released: "Released:",
+            feature1: "Built for speed",
+            feature1desc: "A carefully tuned interface with responsive controls",
+            feature2: "Markets",
+            feature2desc: "MACD, KDJ, RSI, BOLL and more",
+            feature3: "Spot Trading",
+            feature3desc: "Limit and market orders",
+            feature4: "Fiat Trading",
+            feature4desc: "Vetted merchants keep funding routes open",
+            feature5: "Assets",
+            feature5desc: "Track balances anywhere, with fast deposits and withdrawals"
         }
     },
     cms: {
@@ -1501,7 +1822,9 @@ module.exports = {
         otherhelp: "Other In This Category",
         scanforshare: "Scan for share",
         download: "Download",
-        downloadslogan: "INTAFACED APP - Trade everywhere."
+        downloadslogan: "INTAFACED APP - Trade everywhere.",
+        latestnotice: "Latest announcements",
+        announcements: "Announcements"
     },
     description: {
         title1: 'Security',
@@ -1584,7 +1907,8 @@ module.exports = {
         bzzl: "Coin’s Info",
         tsjb: "Report",
         apidoc: "Api Doc",
-        zwkf: "come soon"
+        zwkf: "come soon",
+        copyright: "Copyright © 2019 - INTAFACED.com All rights reserved."
     },
     index: {
         circulation: 'Safety and development fund circulation',
@@ -1603,6 +1927,35 @@ module.exports = {
         jiangli_jihua: "Inviting the mining Award Scheme",
         friend_fanhuan: "Invite friends, earn extra fee and return"
     },
+
+    /**
+     * The shared-gift landing page (pages/envelope/Envelope.vue). Reached from
+     * a link a customer is sent, so it is often the first INTAFACED screen a
+     * person ever sees — and the one most likely to be opened in a locale we do
+     * not yet ship.
+     */
+    envelope: {
+        sender: "has sent you a gift!",
+        claimed: "Claimed:",
+        sentvia: "Sent via INTAFACED",
+        phonetip: "Enter your phone number",
+        claim: "Claim",
+        congratulations: "Congratulations!",
+        invitemore: "Invite friends for more claims",
+        invitemoretip: "Each friend you invite adds one claim",
+        downloadapp: "Download the app | View balance",
+        allclaimed: "All claimed.",
+        expired: "This gift has expired.",
+        history: "Claim history",
+        noclaims: "No claims yet",
+        footer: "© INTAFACED.COM | Download the app",
+        telinvalid: "Enter a valid phone number",
+        notfound: "Gift not found",
+        coderequired: "Enter the verification code",
+        invitetitle: "redirect refresh notice",
+        invitebody: "<p>Click\"Confirm\"to generate your personal invite page.</p><br><p>How it works: open your invite page, then share it with your contacts.</p>"
+    },
+
     plate: {
         title: "Platform income distribution scheme (BHB Holder's equity)",
         content1: "As described in the white paper, INTAFACED will take up 80% of the platform (after deduct Taxes and fees)The income is allocated to BHB holders, and 20% of revenue is used to support R & D and operation of the platform.",

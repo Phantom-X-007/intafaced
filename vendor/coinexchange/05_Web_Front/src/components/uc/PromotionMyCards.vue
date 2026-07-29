@@ -33,7 +33,7 @@
       <div style="position:relative;width: 318px;" id="promotionImage" ref="promotionImage">
         <img style="width:100%;display:block;" src="../../assets/images/promotion/promotionbg1.jpg"></img>
         <p style="position:absolute;top: 210px;text-align:center;width: 100%;text-align:center;font-size:26px;color:#F90;font-weight:bold;">{{promotionCode}}</p>
-        <p style="position:absolute;top: 250px;text-align:center;width: 100%;text-align:center;">Partner redemption code</p>
+        <p style="position:absolute;top: 250px;text-align:center;width: 100%;text-align:center;">{{$t('invite.pt_redemption_code')}}</p>
       </div>
       <p style="text-align:center;font-size:12px;color:#888;margin-top: 10px;">{{$t('invite.imagetips')}}</p>
       <Button type="error" size="large" :loading="saveImageLoading" long style="margin-top: 20px;" @click="saveImage">{{$t('invite.saveimage')}}</Button>

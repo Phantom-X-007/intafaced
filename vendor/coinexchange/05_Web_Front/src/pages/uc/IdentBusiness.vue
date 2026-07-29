@@ -132,8 +132,8 @@
       <!-- merchant end -->
       <!-- send email -->
       <div class="mail" v-show="isShowMailt">
-        <Input v-model="value" placeholder="Enter something..." style="width: 300px"></Input><br/>
-        <Input v-model="value" placeholder="Enter something..." style="width:202px"></Input>
+        <Input v-model="value" :placeholder="$t('uc.identity.mailplaceholder')" style="width: 300px"></Input><br/>
+        <Input v-model="value" :placeholder="$t('uc.identity.mailplaceholder')" style="width:202px"></Input>
         <Button type="info">{{$t('uc.identity.sendcode')}}</Button><br/>
         <Button type="info" style="margin-top: 25px; width: 297px;">{{$t('uc.identity.confirm')}}</Button>
       </div>
@@ -349,7 +349,7 @@ export default {
 .then(res => {
           let resp = res.body;
           if (resp.code == 0) {
-            this.$Message.success("Submitted!");
+            this.$Message.success(this.$t("uc.identity.submitted"));
             this.modal_return = false;
             this.getSetting();
           } else {
@@ -453,12 +453,7 @@ export default {
     apply2() {
       let agreeFrozen = this.agreeFrozen;
       if (agreeFrozen == false) {
-        this.$store.state.lang!= "English" &&
-          this.$Message.warning("Please agree to lock the required amount");
-        this.$store.state.lang == "English" &&
-          this.$Message.warning(
-            "Please agree to freeze the corresponding amount of currency"
-);
+        this.$Message.warning(this.$t("uc.identity.agreefreeze"));
         return;
       }
       this.modal_read = false;
@@ -466,38 +461,23 @@ export default {
     },
     apply3(form) {
       if (this.apply_form.telno == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Enter your phone number");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please fill in your cell phone number");
+        this.$Message.error(this.$t("uc.identity.telrequired"));
         return;
       }
       if (this.apply_form.wechat == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Enter your WeChat ID");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please fill in your cell wechat number");
+        this.$Message.error(this.$t("uc.identity.wechatrequired"));
         return;
       }
       if (this.apply_form.qq == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Enter your QQ ID");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please fill in your cell qq number");
+        this.$Message.error(this.$t("uc.identity.qqrequired"));
         return;
       }
       if (this.apply_form.assetData == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Upload proof of funds");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please upload the asset certificate");
+        this.$Message.error(this.$t("uc.identity.assetrequired"));
         return;
       }
       if (this.apply_form.tradeData == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Upload proof of trading");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please upload the transaction certificate");
+        this.$Message.error(this.$t("uc.identity.traderequired"));
         return;
       }
       var params = {};
@@ -510,7 +490,7 @@ export default {
 .then(res => {
           var resp = res.body;
           if (resp.code == 0) {
-            this.$Message.success("Submitted!");
+            this.$Message.success(this.$t("uc.identity.submitted"));
             this.modal_apply = false;
             this.certStatus = 1;
           } else {

@@ -901,14 +901,14 @@ export default {
             key: "remainAmount"
           },
           {
-            title:"Limit",
+            title: self.$t("otc.trade.limit"),
             align:'center',
             render:(h, params)=>{
               return h('div',{},params.row.minLimit + "-" + params.row.maxLimit + "CNY")
             }
           },
           {
-            title:"Price",
+            title: self.$t("otc.trade.price"),
             align:'center',
             render:(h, params)=>{
               return h('div',{},params.row.price + "CNY")

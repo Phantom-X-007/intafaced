@@ -36,6 +36,7 @@
     "scan:custody": "node tooling/ci/custody-scan.mjs",
     "scan:vendor-shell": "node tooling/ci/vendor-shell-scan.mjs",
     "scan:i18n": "node tooling/ci/i18n-scan.mjs",
+    "scan:shell-i18n": "node tooling/ci/shell-i18n-scan.mjs",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:check": "node tooling/ci/migration-check.mjs",

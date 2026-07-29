@@ -139,7 +139,7 @@
         <img class="card-img" src="/static/2019/promotioncard.png"></img>
         <div class="desc">
           <p class="title">{{$t('invite.pt_title')}}</p>
-          <p class="amount">{{$t('invite.pt_card_amount')}}: 0.001 BTC</p>
+          <p class="amount">{{$t('invite.pt_card_amount')}}: {{$t('invite.pt_card_reward')}}</p>
           <p class="deadline">{{$t('invite.pt_card_deadline')}}: 60{{$t('invite.pt_card_day')}}</p>
 
           <Button v-if="isLogin &&!hasCard" type="error" size="large" @click="getFreeCard">{{$t('invite.pt_card_btn')}}</Button>
@@ -163,20 +163,20 @@
       <div style="position:relative;width: 318px;" id="promotionImage" ref="promotionImage">
         <img style="width:100%;display:block;" src="../../assets/images/promotion/promotionbg1.jpg"></img>
         <p style="position:absolute;top: 210px;text-align:center;width: 100%;text-align:center;font-size:26px;color:#F90;font-weight:bold;">{{promotionCode}}</p>
-        <p style="position:absolute;top: 250px;text-align:center;width: 100%;text-align:center;">Partner redemption code</p>
+        <p style="position:absolute;top: 250px;text-align:center;width: 100%;text-align:center;">{{$t('invite.pt_redemption_code')}}</p>
       </div>
       <p style="text-align:center;font-size:12px;color:#888;margin-top: 10px;">{{$t('invite.imagetips')}}</p>
       <Button type="error" size="large" :loading="saveImageLoading" long style="margin-top: 20px;" @click="saveImage">{{$t('invite.saveimage')}}</Button>
     </Drawer>
 
-    <Drawer title="Invite image" :closable="false" v-model="showInviteImageModal" width="350" style="text-align:center;">
+    <Drawer :title="$t('invite.pt_invite_drawer')" :closable="false" v-model="showInviteImageModal" width="350" style="text-align:center;">
       <div style="position:relative;width: 318px;" id="inviteImage" ref="inviteImage">
         <img style="width:100%;display:block;" src="../../assets/images/promotion/invitebg1.jpg"></img>
         <div class="qr-code" style="background:#FFF;position:absolute;top: 260px;left:105px;border-radius: 5px;height: 100px;">
           <qriously :value="myInfo.inviteLink" :size="100" foreground="#000" />
         </div>
-        <p style="position:absolute;top: 375px;text-align:center;width: 100%;text-align:center;">Scan to learn more</p>
-        <p style="position:absolute;top: 395px;text-align:center;width: 100%;text-align:center;font-size:16px;">My invite code:{{inviteCode}}</p>
+        <p style="position:absolute;top: 375px;text-align:center;width: 100%;text-align:center;">{{$t('invite.pt_invite_scan')}}</p>
+        <p style="position:absolute;top: 395px;text-align:center;width: 100%;text-align:center;font-size:16px;">{{$t('invite.pt_invite_code')}}{{inviteCode}}</p>
       </div>
       <p style="text-align:center;font-size:12px;color:#888;margin-top: 10px;">{{$t('invite.imagetips')}}</p>
       <Button type="error" size="large" :loading="saveImageLoading" long style="margin-top: 20px;" @click="saveInviteImage">{{$t('invite.saveimage')}}</Button>

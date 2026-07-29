@@ -81,7 +81,7 @@
 
                                 <p class="value" v-if="activityDetail.minLimitAmout == 0 && activityDetail.maxLimitAmout > 0"> ≤ {{activityDetail.maxLimitAmout | fixedScale(activityDetail.amountScale)}}</p>
 
-                                <p class="value" v-if="activityDetail.minLimitAmout == 0 && activityDetail.maxLimitAmout == 0"> Unlimited </p>
+                                <p class="value" v-if="activityDetail.minLimitAmout == 0 && activityDetail.maxLimitAmout == 0"> {{$t('activity.unlimited')}} </p>
                             </div>
 
                             <div class="info-item" v-if="activityDetail.leveloneCount > 0">
@@ -365,7 +365,7 @@ export default {
         this.$http.post(this.host + "/uc/activity/detail", param).then(res => {
         if (res.status == 200 && res.body.code == 0) {
             this.activityDetail = res.body.data;
-            window.document.title = "Activity - " + this.activityDetail.title + " - INTAFACED | Sovereign Exchange";
+            window.document.title = this.$t("pageTitle.activity") + " - " + this.activityDetail.title + " - " + this.$t("pageTitle.suffix");
             // Holdings Split
             if(this.activityDetail.type == 3){
                 if(this.activityDetail.step == 1){

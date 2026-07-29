@@ -107,7 +107,7 @@
         <Input type="password" v-model="fundpwd" :placeholder="$t('otc.chat.msg7')"></Input>
       </p> -->
       <p slot="header">
-        Notice
+        {{$t('common.notice')}}
       </p>
       <Form class="withdraw-form-inline" ref="formInline" :model="formInline" inline>
         <!-- <FormItem>
@@ -124,8 +124,8 @@
         </FormItem>
       </Form>
       <div slot="footer">
-        <span style="margin-right:50px" @click="cancel">Cancel</span>
-        <span style="background:#ff8534;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">Confirm</span>
+        <span style="margin-right:50px" @click="cancel">{{$t('common.cancel')}}</span>
+        <span style="background:#ff8534;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">{{$t('common.confirm')}}</span>
       </div>
     </Modal>
   </div>
@@ -240,7 +240,7 @@ export default {
     ok() {
       if (this.formInline.code == "") {
         this.modal = true;
-        this.$Message.error("Enter the SMS code");
+        this.$Message.error(this.$t("uc.finance.withdraw.smsrequired"));
         return;
       }
       if (this.formInline.fundpwd == "") {

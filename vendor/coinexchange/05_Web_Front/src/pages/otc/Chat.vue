@@ -2,7 +2,7 @@
     <div class="content-wrap">
         <div class="container chat-in-box" id="List">
             <p style="padding: 10px 0 10px 20px;font-size: 16px;">
-              <router-link to="/uc/order" style="color:#ff6b00;">{{$t('otc.myorder')}}</router-link> ><span style="font-size:14px;">Order details</span>
+              <router-link to="/uc/order" style="color:#ff6b00;">{{$t('otc.myorder')}}</router-link> ><span style="font-size:14px;">{{$t('otc.chat.orderdetail')}}</span>
               </p>
             <Row class="chat-in">
                 <Col span="4">
@@ -324,7 +324,7 @@ export default {
       var payTime = new Date(this.msg.payTime).getTime();
       if (parseInt((nowTime - payTime) / 1000) < 1800) {
         // 30 min
-        this.$Message.info("A dispute can be raised 30 minutes after payment!");
+        this.$Message.info(this.$t("otc.chat.disputewait"));
         return;
       } else {
         this.modal4 = true;

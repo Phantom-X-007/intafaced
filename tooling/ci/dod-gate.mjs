@@ -190,7 +190,7 @@ console.log('\n══ DEFINITION OF DONE GATE (§14) ══\n');
 
 // Repo-wide gates first.
 let repoFailed = false;
-for (const script of ['brand-scan.mjs', 'custody-scan.mjs', 'migration-check.mjs']) {
+for (const script of ['brand-scan.mjs', 'custody-scan.mjs', 'migration-check.mjs', 'shell-i18n-scan.mjs']) {
   try {
     const out = execFileSync(process.execPath, [join(ROOT, 'tooling', 'ci', script)], { encoding: 'utf8' });
     process.stdout.write('  ' + out.trim() + '\n');
@@ -220,9 +220,14 @@ if (services.length === 0) {
 
 console.log('\n── Manual sign-off required (not automatable) ──');
 console.log('  □ e2e happy path + top-3 failure paths green in CI');
-console.log('  □ Every user-facing string i18n-keyed');
 console.log('  □ At least one SLO dashboard panel exists in Grafana');
 console.log('  □ Kill-switch verified reachable from apps/admin');
+console.log('');
+console.log('  "Every user-facing string i18n-keyed" is no longer on this list: shell-i18n-scan');
+console.log('  above blocks on it for the Vue shell, which is every screen a customer sees today.');
+console.log('  What the scan proves is that no copy reaches a screen without passing through a');
+console.log('  key — not that the keyed English is good, and not that a translation exists. Those');
+console.log('  are review and translation work, and no static check decides them.');
 console.log('');
 
 if (repoFailed || serviceFailed) {

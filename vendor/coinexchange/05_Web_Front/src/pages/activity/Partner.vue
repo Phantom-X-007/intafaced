@@ -70,21 +70,18 @@
 <template>
   <div class="about_us_container">
     <div class="wrapper">
-      <h2 class="title">Partner benefits</h2>
+      <h2 class="title">{{$t('activity.partner.title')}}</h2>
       <div class="wrapper_logo">
         <ul>
           <li>
             <img src="../../assets/images/feature_safe.png" alt="">
-            <h5>Platform dividends</h5>
-            <span>After operating costs, 80% of net profit is distributed to platform partners.
-              Markets are not predictable and no level of profit is promised — a partner shares
-              the downside as well as the upside.</span>
+            <h5>{{$t('activity.partner.benefit1')}}</h5>
+            <span>{{$t('activity.partner.benefit1desc')}}</span>
           </li>
           <li>
             <img src="../../assets/images/feature_fast.png" alt="">
-            <h5>Airdrop rewards</h5>
-            <span>Where a listing project supplies marketing or campaign allocations, a share is
-              negotiated on partners' behalf and distributed to them first.</span>
+            <h5>{{$t('activity.partner.benefit2')}}</h5>
+            <span>{{$t('activity.partner.benefit2desc')}}</span>
           </li>
           <li>
             <img src="../../assets/images/feature_global.png" alt="">
@@ -109,10 +106,10 @@
         </div>
         <div class="content1" style="border:none;">
           <h5>{{$t('cms.contactus')}}</h5>
-          <p>Business:</p>
-          <p>Support:</p>
-          <p>Listings:</p>
-          <p>Media:</p>
+          <p>{{$t('activity.partner.business')}}</p>
+          <p>{{$t('activity.partner.support')}}</p>
+          <p>{{$t('activity.partner.listings')}}</p>
+          <p>{{$t('activity.partner.media')}}</p>
         </div>
       </div>
     </div>

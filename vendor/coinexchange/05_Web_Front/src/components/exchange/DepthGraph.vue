@@ -2,7 +2,7 @@
   <div class="ix-depth" ref="host">
     <canvas class="ix-depth-canvas" ref="base"></canvas>
     <canvas class="ix-depth-canvas ix-depth-hit" ref="cover"></canvas>
-    <div class="ix-depth-empty" v-show="empty">No depth data</div>
+    <div class="ix-depth-empty" v-show="empty">{{ $t('exchange.nodepth') }}</div>
   </div>
 </template>
 

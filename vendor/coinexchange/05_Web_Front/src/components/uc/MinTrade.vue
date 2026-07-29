@@ -318,14 +318,14 @@ export default {
     queryOrder() {
       let rangedate = "";
       if (this.rangeDate.length == 0) {
-        this.$Message.error("Select a date range");
+        this.$Message.error(this.$t("uc.promotion.daterangerequired"));
         return;
       } else {
         try {
           this.page=1;
           this.init();
         } catch (ex) {
-          this.$Message.error("Select a date range");
+          this.$Message.error(this.$t("uc.promotion.daterangerequired"));
           return;
         }
       }

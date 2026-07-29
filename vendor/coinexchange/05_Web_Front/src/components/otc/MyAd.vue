@@ -198,7 +198,7 @@ export default {
                           }
                         });
                       } else {
-                        self.$Message.error("Take the ad offline before deleting it.");
+                        self.$Message.error(self.$t("otc.myad.offlinefirst"));
                       }
                     }
                   }

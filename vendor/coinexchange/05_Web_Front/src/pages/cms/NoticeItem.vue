@@ -50,7 +50,7 @@
       </Col>
     </Row>
     <div class="bottom-list">
-      <p style="font-size: 18px;margin: 15px 0;">Latest announcements</p>
+      <p style="font-size: 18px;margin: 15px 0;">{{$t('cms.latestnotice')}}</p>
       <div class="notice-item" v-for="item in FAQList" @click="noticedeail(item.id)">
         <span class="text">[{{item.createTime | subTime}}] {{item.title}}</span>
       </div>
@@ -150,7 +150,7 @@ export default {
             this.hasContent = true;
             this.spinShow = false;
 
-            window.document.title = "Announcement - " + this.data.info.title + " - INTAFACED | Sovereign Exchange";
+            window.document.title = this.$t("pageTitle.notice") + " - " + this.data.info.title + " - " + this.$t("pageTitle.suffix");
           }else{
             this.hasContent = false;
             this.spinShow = false;

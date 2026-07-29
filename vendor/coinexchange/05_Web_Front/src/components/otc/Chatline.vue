@@ -70,7 +70,7 @@
             </h5>
             <!---->
           <div class="audio-wrap">
-            <audio id="noticeMusic" :src="audioSrc">Your browser does not support the audio element.</audio>
+            <audio id="noticeMusic" :src="audioSrc">{{$t('otc.chatline.audiofallback')}}</audio>
           </div>
             <div class="send-msg-box">
                 <div class="img-btn" style="cursor: default;background-color:#000000;">
@@ -83,8 +83,8 @@
                 </button>
               <div class="msg-notice">
                 <!--<Checkbox @on-change="handleCheckClick" v-model="fOpenNotice">Enable desktop notifications so you never miss a message</Checkbox>-->
-                <Checkbox @on-change="handleNoticeClick" v-model="fOpenNotice">Enable desktop notifications</Checkbox>
-                <Checkbox @on-change="handleAudioClick" v-model="fOpenAudio">Enable sound alerts</Checkbox>
+                <Checkbox @on-change="handleNoticeClick" v-model="fOpenNotice">{{$t('otc.chatline.enablenotice')}}</Checkbox>
+                <Checkbox @on-change="handleAudioClick" v-model="fOpenAudio">{{$t('otc.chatline.enableaudio')}}</Checkbox>
               </div>
             </div>
 
@@ -150,28 +150,28 @@ export default {
             if (this.fOpenNotice) {
               if (window.Notification) {
                 if (Notification.permission == "default") {
-                  this.$Message.info('Click Allow to enable!');
+                  this.$Message.info(this.$t('otc.chatline.noticeallow'));
                   Notification.requestPermission().then(function(result) {
                     // resultgranted, denied, ordefault.
-                    if(result == "denied") this.$Message.info('You have blocked notifications. See Help to re-enable them.!');
+                    if(result == "denied") this.$Message.info(this.$t('otc.chatline.noticeblocked'));
                   });
                 }else if(Notification.permission == "denied") {
-                  this.$Message.info('You have blocked notifications. See Help to re-enable them.!');
+                  this.$Message.info(this.$t('otc.chatline.noticeblocked'));
                 }else {
-                  this.$Message.info("Desktop notifications enabled!");
+                  this.$Message.info(this.$t('otc.chatline.noticeon'));
                 }
               } else {
-                this.$Message.info('Your browser does not support this feature');
+                this.$Message.info(this.$t('otc.chatline.noticeunsupported'));
               }
             }else {
-              this.$Message.info("Desktop notifications disabled!");
+              this.$Message.info(this.$t('otc.chatline.noticeoff'));
             }
         },
         handleAudioClick:function () {
           if (this.fOpenAudio) {
-            this.$Message.info("Sound alerts enabled!");
+            this.$Message.info(this.$t('otc.chatline.audioon'));
           }else {
-            this.$Message.info("Sound alerts disabled!");
+            this.$Message.info(this.$t('otc.chatline.audiooff'));
           }
         },
         connect: function() {

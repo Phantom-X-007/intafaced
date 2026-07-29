@@ -41,7 +41,7 @@
                                 <span class="card-number">{{$t('uc.safe.verified')}}</span>
                                 <p v-if="user.realVerified==1" class="bankInfo" style="color: #fff;font-size: 13px;">{{user.realName}}</p>
                                 <p v-else-if="user.realVerified==0&&user.realAuditing==0&&user.realNameRejectReason!=null" class="bankInfo" style="color: #ff6b00;font-size: 13px;">
-                                    Rejected{{user.realNameRejectReason?": "+user.realNameRejectReason:""}}, Please try again. 
+                                    {{$t('uc.safe.rejectedretry', { reason: user.realNameRejectReason? ": "+user.realNameRejectReason: "" })}} 
                                 </p>
                                 <p v-else class="bankInfo" style="color: #8a8a8a;font-size: 13px;">
                                     {{$t('uc.safe.verifiedtip')}}
@@ -307,7 +307,7 @@
                                         <!--</Input>-->
                                         <!--</FormItem>-->
                                         <p style="text-align:right;">
-                                            <a @click="handleReset('formValidate8');fGetBackFundpwd=!fGetBackFundpwd" style="color:#ff8534;">Forgot password?</a>
+                                            <a @click="handleReset('formValidate8');fGetBackFundpwd=!fGetBackFundpwd" style="color:#ff8534;">{{$t('uc.safe.forgotfundpwd')}}</a>
                                         </p>
                                         <!-- Button -->
                                         <FormItem>
@@ -663,7 +663,7 @@ export default {
   methods: {
     beforeUpload(data) {
       if (data && data.size >= 1024000 * 2) {
-        this.$Message.error("Image must be smaller than 2 MB");
+        this.$Message.error(this.$t("uc.safe.imagetoolarge"));
         return false;
       }
     },
@@ -704,7 +704,7 @@ export default {
       this.$Modal.confirm({
         title: this.$t("uc.safe.resetfundpwd"),
         onOk: () => {
-          this.$Message.info("Clicked ok");
+          this.$Message.info(this.$t("uc.safe.clickedok"));
         },
         render: h => {
           return h("Input", {

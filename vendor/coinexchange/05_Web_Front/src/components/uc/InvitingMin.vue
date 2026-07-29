@@ -171,7 +171,7 @@
             queryOrder(){
                 let rangedate = "";
                 if (this.rangeDate.length == 0) {
-                    this.$Message.error("Select a date range");
+                    this.$Message.error(this.$t("uc.promotion.daterangerequired"));
                     return;
                 }else {
                     try {
@@ -179,7 +179,7 @@
                         rangedate += "~";
                         rangedate += this.rangeDate[1].getFullYear() + "-" + (this.rangeDate[1].getMonth() + 1) + "-" + this.rangeDate[1].getDate();
                     }catch(ex) {
-                        this.$Message.error("Select a date range");
+                        this.$Message.error(this.$t("uc.promotion.daterangerequired"));
                         return;
                     }
                 }

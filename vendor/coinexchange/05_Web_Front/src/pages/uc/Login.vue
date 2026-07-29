@@ -6,20 +6,20 @@
         <FormItem prop="user">
           <Input name="user" type="text" v-model="formInline.user" :placeholder="$t('uc.login.usertip')" class="user">
             <Select v-model="country" slot="prepend" style="width: 65px">
-              <Option value="+86" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">China</span></Option>
-              <Option value="+65" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">Singapore</span></Option>
-              <Option value="+82" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">South Korea</span></Option>
-              <Option value="+81" label="+81"><span>+81</span><span style="margin-left:10px;color:#ccc">Japan</span></Option>
-              <Option value="+66" label="+66"><span>+66</span><span style="margin-left:10px;color:#ccc">Thailand</span></Option>
-              <Option value="+7" label="+7"><span>+7</span><span style="margin-left:10px;color:#ccc">Russia</span></Option>
-              <Option value="+44" label="+44"><span>+44</span><span style="margin-left:10px;color:#ccc">United Kingdom</span></Option>
-              <Option value="+84" label="+84"><span>+84</span><span style="margin-left:10px;color:#ccc">Vietnam</span></Option>
-              <Option value="+91" label="+91"><span>+91</span><span style="margin-left:10px;color:#ccc">India</span></Option>
-              <Option value="+39" label="+39"><span>+39</span><span style="margin-left:10px;color:#ccc">Italy</span></Option>
-              <Option value="+852" label="+852"><span>+852</span><span style="margin-left:10px;color:#ccc">Hong Kong</span></Option>
-              <Option value="+60" label="+60"><span>+60</span><span style="margin-left:10px;color:#ccc">Malaysia</span></Option>
-              <Option value="+886" label="+886"><span>+886</span><span style="margin-left:10px;color:#ccc">Taiwan</span></Option>
-              <Option value="+90" label="+90"><span>+90</span><span style="margin-left:10px;color:#ccc">Turkey</span></Option>
+              <Option value="+86" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">{{$t('country.china')}}</span></Option>
+              <Option value="+65" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">{{$t('country.singapore')}}</span></Option>
+              <Option value="+82" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">{{$t('country.southkorea')}}</span></Option>
+              <Option value="+81" label="+81"><span>+81</span><span style="margin-left:10px;color:#ccc">{{$t('country.japan')}}</span></Option>
+              <Option value="+66" label="+66"><span>+66</span><span style="margin-left:10px;color:#ccc">{{$t('country.thailand')}}</span></Option>
+              <Option value="+7" label="+7"><span>+7</span><span style="margin-left:10px;color:#ccc">{{$t('country.russia')}}</span></Option>
+              <Option value="+44" label="+44"><span>+44</span><span style="margin-left:10px;color:#ccc">{{$t('country.unitedkingdom')}}</span></Option>
+              <Option value="+84" label="+84"><span>+84</span><span style="margin-left:10px;color:#ccc">{{$t('country.vietnam')}}</span></Option>
+              <Option value="+91" label="+91"><span>+91</span><span style="margin-left:10px;color:#ccc">{{$t('country.india')}}</span></Option>
+              <Option value="+39" label="+39"><span>+39</span><span style="margin-left:10px;color:#ccc">{{$t('country.italy')}}</span></Option>
+              <Option value="+852" label="+852"><span>+852</span><span style="margin-left:10px;color:#ccc">{{$t('country.hongkong')}}</span></Option>
+              <Option value="+60" label="+60"><span>+60</span><span style="margin-left:10px;color:#ccc">{{$t('country.malaysia')}}</span></Option>
+              <Option value="+886" label="+886"><span>+886</span><span style="margin-left:10px;color:#ccc">{{$t('country.taiwan')}}</span></Option>
+              <Option value="+90" label="+90"><span>+90</span><span style="margin-left:10px;color:#ccc">{{$t('country.turkey')}}</span></Option>
             </Select>
           </Input>
         </FormItem>
@@ -214,7 +214,7 @@ export default {
         }).onSuccess(() => {
           let result = (this._captchaResult = captchaObj.getValidate());
           if (!result) {
-            this.$Message.error("Please complete the verification");
+            this.$Message.error(this.$t("uc.login.captchafirst"));
           } else {
             this.handleSubmit("formInline");
           }
@@ -225,7 +225,7 @@ export default {
           flagtel = reg.test(tel),
           flagpass = this.formInline.password.length >= 6? true: false;
         flagtel && flagpass && captchaObj.verify();
-        (!flagtel ||!flagpass) && this.$Message.error("Please complete every field");
+        (!flagtel ||!flagpass) && this.$Message.error(this.$t("uc.login.fillall"));
       });
     },
     logout() {
