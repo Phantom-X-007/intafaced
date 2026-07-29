@@ -59,7 +59,7 @@ if (!available) {
     return {
       store,
       reset: async () => {
-        await db.sql`TRUNCATE positions, fills, book_levels, blocks RESTART IDENTITY CASCADE`;
+        await db.sql`TRUNCATE pool_reserves, positions, fills, book_levels, blocks RESTART IDENTITY CASCADE`;
       },
     };
   });
@@ -79,7 +79,7 @@ if (!available) {
      * ran the way it reads.
      */
     it('refuses two canonical blocks at the same height', async () => {
-      await db.sql`TRUNCATE positions, fills, book_levels, blocks RESTART IDENTITY CASCADE`;
+      await db.sql`TRUNCATE pool_reserves, positions, fills, book_levels, blocks RESTART IDENTITY CASCADE`;
       const insert = (hash: string) => db.sql`
         INSERT INTO blocks (chain_id, hash, parent_hash, height, status, block_time)
         VALUES (${CHAIN_ID}, ${hash}, ${`0x${'0'.repeat(64)}`}, 7, 'canonical', now())
@@ -121,7 +121,7 @@ if (!available) {
         ).map((r) => r.table_name);
 
       const before = await tableNames();
-      expect(before).toEqual(['blocks', 'book_levels', 'fills', 'positions']);
+      expect(before).toEqual(['blocks', 'book_levels', 'fills', 'pool_reserves', 'positions']);
 
       for (const body of [...downFiles].reverse()) {
         await db.sql.unsafe(rewriteSchemaSql(body, 'indexer', db.schema));

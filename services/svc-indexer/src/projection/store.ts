@@ -120,6 +120,73 @@ export interface PositionRecord {
   readonly blockHash: BlockHash;
 }
 
+/**
+ * An AMM pool's reserves as of a block, with everything needed to REFUSE them.
+ *
+ * ── Why this record exists ──────────────────────────────────────────────────
+ *
+ * `svc-protocol`'s `protocol.amm.quoteExactIn` is constant-product arithmetic
+ * that takes `reserveIn` / `reserveOut` as INPUT, and nothing in the platform
+ * produced them. That made the AMM a calculator with no inputs — the same shape
+ * `dex.quote` was in before it was given real venues. This is the source that
+ * makes wiring the AMM as a quote venue honest instead of invented.
+ *
+ * ── Provenance is not decoration here ───────────────────────────────────────
+ *
+ * **A reserve projection that lags is a wrong price**, and a wrong price is
+ * worse than no price: an outage stops a user, an invented number encourages
+ * one. So this carries not just the two reserves but everything a consumer
+ * needs to decide it is not allowed to use them. Three clocks, three different
+ * questions:
+ *
+ *   · `blockHeight` / `blockHash` — WHICH chain state this is. The sequence two
+ *     reads are compared on to know they describe one chain, and what an unwind
+ *     deletes above.
+ *   · `blockTime` — the chain's own clock on the block that wrote this row.
+ *     This is what measures how far behind the CHAIN a reserve is. A projection
+ *     that is up, unhalted and twenty blocks behind looks perfectly healthy
+ *     without it.
+ *   · `observedAt` — OUR clock, when this projection recorded the row. A source
+ *     that has silently stopped updating still answers and still looks healthy;
+ *     only our own clock at the moment of the write catches that. Never
+ *     synthesised from chain-supplied data.
+ *
+ * `svc-dex` enforces `QUOTE_MAX_AGE_MS` against `TimestampedBook.observedAt`.
+ * These fields are what let it enforce the same ceiling on the INPUTS to a pool
+ * quote rather than only on the quote it derived from them.
+ *
+ * ── Money, and the two fields that are not money ────────────────────────────
+ *
+ * `reserve0` / `reserve1` are `Amount` — scaled bigint, human token units,
+ * `numeric(38,18)` in Postgres, decimal strings on the wire. A reserve is
+ * money and is never a `number`. `feeBps` and `decimals*` are small integer
+ * protocol parameters, exactly as `svc-protocol` models `feeBps`; see
+ * `chain/source.ts` for why raw wei is the wrong storage unit and why
+ * `decimals` has to travel with the reserve.
+ */
+export interface PoolReservesRecord {
+  /** The symbol this pool prices. An adapter-assigned label, like `market`. */
+  readonly market: string;
+  /** The pool contract — THE identity of this row. A market may hold several. */
+  readonly pool: string;
+  readonly token0: string;
+  readonly token1: string;
+  readonly decimals0: number;
+  readonly decimals1: number;
+  /** Human units, scaled bigint. Never raw wei — see `chain/source.ts`. */
+  readonly reserve0: Amount;
+  readonly reserve1: Amount;
+  /** Which of `token0`/`token1` is the base of `market`. Carried, not guessed. */
+  readonly baseToken: string;
+  readonly feeBps: number;
+  readonly blockHeight: number;
+  readonly blockHash: BlockHash;
+  /** The writing block's own timestamp, from the chain. Not when we saw it. */
+  readonly blockTime: Date;
+  /** When THIS projection recorded the row. Our clock, not the chain's. */
+  readonly observedAt: Date;
+}
+
 export interface ApplyOutcome {
   /**
    * True when this block's hash was already recorded canonical.
@@ -139,6 +206,7 @@ export interface UnwindOutcome {
   readonly bookLevelsRemoved: number;
   readonly fillsRemoved: number;
   readonly positionsRemoved: number;
+  readonly poolReservesRemoved: number;
 }
 
 export interface ProjectionStore {
@@ -199,6 +267,28 @@ export interface ProjectionStore {
   fillsForAccount(account: string, limit: number): Promise<readonly FillRecord[]>;
   position(market: string, account: string): Promise<PositionRecord | null>;
   positionsOf(account: string): Promise<readonly PositionRecord[]>;
+
+  /**
+   * Current reserves for every pool projected against `market`.
+   *
+   * An ARRAY, and deliberately: a symbol can be served by several pools at
+   * different fee tiers, and collapsing them here would pick a venue on the
+   * caller's behalf using no information about the trade. Ordered by pool
+   * address so two identical reads return the same thing in the same order —
+   * a route that is a function of the SET, not of arrival order.
+   *
+   * Empty means "nothing projected", which is NOT "no liquidity". The read path
+   * refuses rather than presenting an empty list as a market state; a pool that
+   * genuinely holds nothing appears here with reserves of `0`, which is a fact
+   * the chain stated and `quoteExactIn` already refuses (`amm.no_liquidity`).
+   */
+  poolReservesFor(market: string): Promise<readonly PoolReservesRecord[]>;
+
+  /** Current reserves for one pool, by contract address. Case-insensitive. */
+  poolReserve(pool: string): Promise<PoolReservesRecord | null>;
+
+  /** Current reserves for every projected pool. Discovery, like `markets()`. */
+  pools(): Promise<readonly PoolReservesRecord[]>;
 
   /** Distinct markets with any projected state. Small, and it drives the UI. */
   markets(): Promise<readonly string[]>;

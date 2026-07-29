@@ -13,6 +13,7 @@ import type {
   BookLevel,
   BookView,
   FillRecord,
+  PoolReservesRecord,
   PositionRecord,
   ProjectionStore,
   StoredBlock,
@@ -53,11 +54,37 @@ interface PositionRow {
   blockHash: string;
 }
 
+/**
+ * Versioned by block height like a level or a position, and keyed on the POOL
+ * ADDRESS rather than the market symbol — one symbol can be served by several
+ * pools at different fee tiers, and keying on the symbol would let them
+ * overwrite each other.
+ */
+interface PoolReserveRow {
+  market: string;
+  /** Lower-cased pool address — the identity, compared one way only. */
+  poolKey: string;
+  pool: string;
+  token0: string;
+  token1: string;
+  decimals0: number;
+  decimals1: number;
+  reserve0: Amount;
+  reserve1: Amount;
+  baseToken: string;
+  feeBps: number;
+  blockHeight: number;
+  blockHash: string;
+  blockTime: Date;
+  observedAt: Date;
+}
+
 export class MemoryProjectionStore implements ProjectionStore {
   #blocks = new Map<string, StoredBlock>();
   #levels: LevelRow[] = [];
   #fills: FillRecord[] = [];
   #positions: PositionRow[] = [];
+  #reserves: PoolReserveRow[] = [];
 
   constructor(readonly chainId: number) {}
 
@@ -175,6 +202,50 @@ export class MemoryProjectionStore implements ProjectionStore {
           }
           break;
         }
+
+        case 'pool_reserves': {
+          const poolKey = event.pool.toLowerCase();
+          const row = this.#reserves.find((r) => r.poolKey === poolKey && r.blockHeight === block.height);
+          const reserve0 = nonNegativeAmountOf(event.reserve0, 'pool reserve0');
+          const reserve1 = nonNegativeAmountOf(event.reserve1, 'pool reserve1');
+          // Absolute state: last writer in the block wins, and re-applying the
+          // same block reaches the same value. `observedAt` is deliberately NOT
+          // refreshed — a replayed block is not a new observation, and
+          // refreshing it would make a stale reserve look freshly read to every
+          // staleness check downstream.
+          if (row) {
+            row.reserve0 = reserve0;
+            row.reserve1 = reserve1;
+            row.market = event.market;
+            row.token0 = event.token0;
+            row.token1 = event.token1;
+            row.decimals0 = event.decimals0;
+            row.decimals1 = event.decimals1;
+            row.baseToken = event.baseToken;
+            row.feeBps = event.feeBps;
+            row.blockHash = block.hash;
+            row.blockTime = new Date(block.timestamp * 1000);
+          } else {
+            this.#reserves.push({
+              market: event.market,
+              poolKey,
+              pool: event.pool,
+              token0: event.token0,
+              token1: event.token1,
+              decimals0: event.decimals0,
+              decimals1: event.decimals1,
+              reserve0,
+              reserve1,
+              baseToken: event.baseToken,
+              feeBps: event.feeBps,
+              blockHeight: block.height,
+              blockHash: block.hash,
+              blockTime: new Date(block.timestamp * 1000),
+              observedAt: new Date(),
+            });
+          }
+          break;
+        }
       }
     }
 
@@ -196,12 +267,15 @@ export class MemoryProjectionStore implements ProjectionStore {
     this.#fills = this.#fills.filter((f) => f.blockHeight < height);
     const positionsBefore = this.#positions.length;
     this.#positions = this.#positions.filter((p) => p.blockHeight < height);
+    const reservesBefore = this.#reserves.length;
+    this.#reserves = this.#reserves.filter((r) => r.blockHeight < height);
 
     return {
       blocksOrphaned,
       bookLevelsRemoved: levelsBefore - this.#levels.length,
       fillsRemoved: fillsBefore - this.#fills.length,
       positionsRemoved: positionsBefore - this.#positions.length,
+      poolReservesRemoved: reservesBefore - this.#reserves.length,
     };
   }
 
@@ -226,6 +300,10 @@ export class MemoryProjectionStore implements ProjectionStore {
     const positionsBefore = this.#positions.length;
     this.#positions = keepNewest(this.#positions, (p) => `${p.market}|${p.account}`);
     removed += positionsBefore - this.#positions.length;
+
+    const reservesBefore = this.#reserves.length;
+    this.#reserves = keepNewest(this.#reserves, (r) => r.poolKey);
+    removed += reservesBefore - this.#reserves.length;
 
     // Orphan records below the horizon have outlived their forensic value —
     // they describe a branch nothing can reorg back to.
@@ -310,11 +388,71 @@ export class MemoryProjectionStore implements ProjectionStore {
       .sort((a, b) => a.market.localeCompare(b.market));
   }
 
+  // ── Pool reserves ─────────────────────────────────────────────────────────
+
+  /**
+   * Newest version per pool, which is what "current" means in this design.
+   *
+   * Note what is NOT filtered: a pool whose current reserves are zero is
+   * returned. An empty pool is a real chain state — created and never seeded,
+   * or fully burned — and dropping it here would say "we have no data for this
+   * pool", which is a different and far more dangerous sentence. Turning
+   * "nothing projected" into a refusal is the router's job.
+   */
+  #currentReserves(): PoolReserveRow[] {
+    const newest = new Map<string, PoolReserveRow>();
+    for (const row of this.#reserves) {
+      const held = newest.get(row.poolKey);
+      if (!held || row.blockHeight > held.blockHeight) newest.set(row.poolKey, row);
+    }
+    return [...newest.values()];
+  }
+
+  async poolReservesFor(market: string): Promise<readonly PoolReservesRecord[]> {
+    return this.#currentReserves()
+      .filter((r) => r.market === market)
+      .sort((a, b) => a.poolKey.localeCompare(b.poolKey))
+      .map(toPoolReserves);
+  }
+
+  async poolReserve(pool: string): Promise<PoolReservesRecord | null> {
+    const key = pool.toLowerCase();
+    const row = this.#currentReserves().find((r) => r.poolKey === key);
+    return row ? toPoolReserves(row) : null;
+  }
+
+  async pools(): Promise<readonly PoolReservesRecord[]> {
+    return this.#currentReserves()
+      .sort((a, b) => a.market.localeCompare(b.market) || a.poolKey.localeCompare(b.poolKey))
+      .map(toPoolReserves);
+  }
+
   async markets(): Promise<readonly string[]> {
     const seen = new Set<string>();
     for (const row of this.#levels) seen.add(row.market);
     for (const row of this.#fills) seen.add(row.market);
     for (const row of this.#positions) seen.add(row.market);
+    for (const row of this.#reserves) seen.add(row.market);
     return [...seen].sort();
   }
+}
+
+/** Drops the internal `poolKey` so both stores return the same shape. */
+function toPoolReserves(row: PoolReserveRow): PoolReservesRecord {
+  return {
+    market: row.market,
+    pool: row.pool,
+    token0: row.token0,
+    token1: row.token1,
+    decimals0: row.decimals0,
+    decimals1: row.decimals1,
+    reserve0: row.reserve0,
+    reserve1: row.reserve1,
+    baseToken: row.baseToken,
+    feeBps: row.feeBps,
+    blockHeight: row.blockHeight,
+    blockHash: row.blockHash,
+    blockTime: row.blockTime,
+    observedAt: row.observedAt,
+  };
 }

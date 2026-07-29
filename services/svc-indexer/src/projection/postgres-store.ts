@@ -14,6 +14,7 @@ import type {
   BookLevel,
   BookView,
   FillRecord,
+  PoolReservesRecord,
   PositionRecord,
   ProjectionStore,
   StoredBlock,
@@ -155,6 +156,45 @@ export class PostgresProjectionStore implements ProjectionStore {
             `;
             break;
           }
+
+          case 'pool_reserves': {
+            // ABSOLUTE reserves, so the conflict update is an assignment — the
+            // same rule as a book level, and the reason re-applying a block is
+            // a no-op instead of a double count.
+            //
+            // `observed_at` is NOT in the update list, deliberately. It records
+            // when this value first entered the projection; a re-apply of the
+            // same block is not a new observation, and refreshing it there
+            // would make a replayed block look freshly read to every staleness
+            // check downstream.
+            await tx`
+              INSERT INTO pool_reserves (
+                chain_id, pool, block_height, block_hash, market,
+                token0, token1, decimals0, decimals1, reserve0, reserve1,
+                base_token, fee_bps, block_time
+              )
+              VALUES (
+                ${this.chainId}, ${event.pool}, ${block.height}, ${block.hash}, ${event.market},
+                ${event.token0}, ${event.token1}, ${event.decimals0}, ${event.decimals1},
+                ${formatAmount(nonNegativeAmountOf(event.reserve0, 'pool reserve0'))},
+                ${formatAmount(nonNegativeAmountOf(event.reserve1, 'pool reserve1'))},
+                ${event.baseToken}, ${event.feeBps}, ${blockTime}
+              )
+              ON CONFLICT (chain_id, pool, block_height) DO UPDATE
+                SET reserve0 = EXCLUDED.reserve0,
+                    reserve1 = EXCLUDED.reserve1,
+                    market = EXCLUDED.market,
+                    token0 = EXCLUDED.token0,
+                    token1 = EXCLUDED.token1,
+                    decimals0 = EXCLUDED.decimals0,
+                    decimals1 = EXCLUDED.decimals1,
+                    base_token = EXCLUDED.base_token,
+                    fee_bps = EXCLUDED.fee_bps,
+                    block_hash = EXCLUDED.block_hash,
+                    block_time = EXCLUDED.block_time
+            `;
+            break;
+          }
         }
       }
 
@@ -171,12 +211,14 @@ export class PostgresProjectionStore implements ProjectionStore {
       const levels = await tx`DELETE FROM book_levels WHERE chain_id = ${this.chainId} AND block_height >= ${height}`;
       const fills = await tx`DELETE FROM fills WHERE chain_id = ${this.chainId} AND block_height >= ${height}`;
       const positions = await tx`DELETE FROM positions WHERE chain_id = ${this.chainId} AND block_height >= ${height}`;
+      const reserves = await tx`DELETE FROM pool_reserves WHERE chain_id = ${this.chainId} AND block_height >= ${height}`;
 
       return {
         blocksOrphaned: orphaned.count,
         bookLevelsRemoved: levels.count,
         fillsRemoved: fills.count,
         positionsRemoved: positions.count,
+        poolReservesRemoved: reserves.count,
       };
     }) as Promise<UnwindOutcome>;
   }
@@ -211,12 +253,23 @@ export class PostgresProjectionStore implements ProjectionStore {
           )
       `;
 
+      const reserves = await tx`
+        DELETE FROM pool_reserves pr
+        WHERE pr.chain_id = ${this.chainId}
+          AND pr.block_height <= ${throughHeight}
+          AND EXISTS (
+            SELECT 1 FROM pool_reserves n
+            WHERE n.chain_id = pr.chain_id AND n.pool = pr.pool
+              AND n.block_height > pr.block_height AND n.block_height <= ${throughHeight}
+          )
+      `;
+
       const orphans = await tx`
         DELETE FROM blocks
         WHERE chain_id = ${this.chainId} AND status = 'orphaned' AND height <= ${throughHeight}
       `;
 
-      return levels.count + positions.count + orphans.count;
+      return levels.count + positions.count + reserves.count + orphans.count;
     }) as Promise<number>;
   }
 
@@ -314,6 +367,59 @@ export class PostgresProjectionStore implements ProjectionStore {
     return rows.map(toPosition);
   }
 
+  // ── Pool reserves ─────────────────────────────────────────────────────────
+  //
+  // `DISTINCT ON (pool)` resolves each pool to its newest version, exactly as
+  // the book does per price. Note what is NOT filtered out afterwards: a pool
+  // whose current reserves are zero is RETURNED. An empty pool is a real chain
+  // state — created and never seeded, or fully burned — and dropping it here
+  // would report "we have no data for this pool", which is a different and
+  // much more dangerous sentence. The read path in `router.ts` is what turns
+  // "nothing projected" into a refusal, and `quoteExactIn` already refuses a
+  // zero reserve with `amm.no_liquidity`.
+
+  async poolReservesFor(market: string): Promise<readonly PoolReservesRecord[]> {
+    const rows = await this.sql<PoolReserveRow[]>`
+      SELECT * FROM (
+        SELECT DISTINCT ON (pool)
+          pool, market, token0, token1, decimals0, decimals1, reserve0, reserve1,
+          base_token, fee_bps, block_height, block_hash, block_time, observed_at
+        FROM pool_reserves
+        WHERE chain_id = ${this.chainId} AND market = ${market}
+        ORDER BY pool, block_height DESC
+      ) current
+      ORDER BY pool
+    `;
+    return rows.map(toPoolReserves);
+  }
+
+  async poolReserve(pool: string): Promise<PoolReservesRecord | null> {
+    const [row] = await this.sql<PoolReserveRow[]>`
+      SELECT DISTINCT ON (pool)
+        pool, market, token0, token1, decimals0, decimals1, reserve0, reserve1,
+        base_token, fee_bps, block_height, block_hash, block_time, observed_at
+      FROM pool_reserves
+      WHERE chain_id = ${this.chainId} AND lower(pool) = lower(${pool})
+      ORDER BY pool, block_height DESC
+    `;
+    return row ? toPoolReserves(row) : null;
+  }
+
+  async pools(): Promise<readonly PoolReservesRecord[]> {
+    const rows = await this.sql<PoolReserveRow[]>`
+      SELECT * FROM (
+        SELECT DISTINCT ON (pool)
+          pool, market, token0, token1, decimals0, decimals1, reserve0, reserve1,
+          base_token, fee_bps, block_height, block_hash, block_time, observed_at
+        FROM pool_reserves
+        WHERE chain_id = ${this.chainId}
+        ORDER BY pool, block_height DESC
+      ) current
+      ORDER BY market, pool
+    `;
+    return rows.map(toPoolReserves);
+  }
+
   async markets(): Promise<readonly string[]> {
     const rows = await this.sql<Array<{ market: string }>>`
       SELECT market FROM book_levels WHERE chain_id = ${this.chainId}
@@ -321,6 +427,8 @@ export class PostgresProjectionStore implements ProjectionStore {
       SELECT market FROM fills WHERE chain_id = ${this.chainId}
       UNION
       SELECT market FROM positions WHERE chain_id = ${this.chainId}
+      UNION
+      SELECT market FROM pool_reserves WHERE chain_id = ${this.chainId}
       ORDER BY market
     `;
     return rows.map((r) => r.market);
@@ -366,6 +474,24 @@ interface PositionRow {
   block_hash: string;
 }
 
+interface PoolReserveRow {
+  pool: string;
+  market: string;
+  token0: string;
+  token1: string;
+  /** `smallint` comes back as a JS number, which is what it is: a decimal count. */
+  decimals0: number;
+  decimals1: number;
+  reserve0: string;
+  reserve1: string;
+  base_token: string;
+  fee_bps: number;
+  block_height: string;
+  block_hash: string;
+  block_time: Date;
+  observed_at: Date;
+}
+
 function toStoredBlock(row: BlockRow): StoredBlock {
   return {
     chainId: row.chain_id,
@@ -390,6 +516,31 @@ function toFill(row: FillRow): FillRecord {
     maker: row.maker,
     taker: row.taker,
     blockTime: row.block_time,
+  };
+}
+
+/**
+ * Reserves come back from `numeric(38,18)` as decimal STRINGS and go straight
+ * into `parseAmount`. They never pass through `Number`, which is the whole
+ * point — a reserve is money, and a float that has lost the last decimal place
+ * of a reserve prices every swap against that pool slightly wrong forever.
+ */
+function toPoolReserves(row: PoolReserveRow): PoolReservesRecord {
+  return {
+    market: row.market,
+    pool: row.pool,
+    token0: row.token0,
+    token1: row.token1,
+    decimals0: Number(row.decimals0),
+    decimals1: Number(row.decimals1),
+    reserve0: parseAmount(row.reserve0),
+    reserve1: parseAmount(row.reserve1),
+    baseToken: row.base_token,
+    feeBps: Number(row.fee_bps),
+    blockHeight: Number(row.block_height),
+    blockHash: row.block_hash,
+    blockTime: row.block_time,
+    observedAt: row.observed_at,
   };
 }
 

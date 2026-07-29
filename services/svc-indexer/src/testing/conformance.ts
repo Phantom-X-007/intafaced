@@ -28,6 +28,15 @@ export const CHAIN_ID = 31337;
 const ALICE = '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const BOB = '0xBBbBbBBbbBbBbbBbbbbbBBbBbbbbBbBbBbbBBbB0';
 
+/** Built rather than typed out, so a miscounted nibble cannot make a test lie. */
+const addr = (suffix: string): string => `0x${suffix.padStart(40, '0')}`;
+
+/** Two pools on one market — the fee-tier case that must not collapse. */
+const POOL_30 = addr('a30');
+const POOL_5 = addr('a05');
+const IFC = addr('1fc');
+const USD = addr('05d');
+
 export interface ProjectionHarness {
   readonly store: ProjectionStore;
   /** Empty the projection between tests. */
@@ -54,6 +63,42 @@ function fill(market: string, price: string, quantity: string, takerSide: 'buy' 
 }
 function position(market: string, account: string, size: string, entryPrice: string): ChainEvent {
   return { kind: 'position', logIndex: nextLog(), market, account, size, entryPrice };
+}
+
+/**
+ * A pool's ABSOLUTE reserves.
+ *
+ * The defaults are the ordinary case — an 18/18 pair, 30bps, base is token0 —
+ * so a test states only the part it is actually about.
+ */
+function reserves(
+  market: string,
+  pool: string,
+  reserve0: string,
+  reserve1: string,
+  overrides: Partial<{ token0: string; token1: string; decimals0: number; decimals1: number; baseToken: string; feeBps: number }> = {},
+): ChainEvent {
+  const token0 = overrides.token0 ?? IFC;
+  const token1 = overrides.token1 ?? USD;
+  return {
+    kind: 'pool_reserves',
+    logIndex: nextLog(),
+    market,
+    pool,
+    token0,
+    token1,
+    decimals0: overrides.decimals0 ?? 18,
+    decimals1: overrides.decimals1 ?? 18,
+    reserve0,
+    reserve1,
+    baseToken: overrides.baseToken ?? token0,
+    feeBps: overrides.feeBps ?? 30,
+  };
+}
+
+/** `[['<pool>','100','200']]` — pool, reserve0, reserve1. */
+function reserveRows(rows: readonly { pool: string; reserve0: bigint; reserve1: bigint }[]): string[][] {
+  return rows.map((r) => [r.pool, formatAmount(r.reserve0), formatAmount(r.reserve1)]);
 }
 
 /** `[['100','5']]` — the shape assertions read most cleanly against. */
@@ -446,6 +491,204 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
         ['A-USD', '5'],
         ['B-USD', '2'],
       ]);
+    });
+
+    // ── AMM pool reserves ─────────────────────────────────────────────────
+    //
+    // These are the inputs `svc-protocol`'s `quoteExactIn` takes and nothing
+    // produced. They are held to the same rules as a book level — absolute
+    // state, versioned by block, unwound on a reorg — plus two that only
+    // matter here: the reserve pair must survive as MONEY (never a float), and
+    // "we have no row" must never be representable as a reserve of zero.
+
+    it('projects a pool reserve pair with the block that wrote it', async () => {
+      source.append(block(reserves(MARKET, POOL_30, '1000', '2500000')));
+      await indexer.sync();
+
+      const rows = await store.poolReservesFor(MARKET);
+      expect(rows).toHaveLength(1);
+      const pool = rows[0]!;
+      expect(formatAmount(pool.reserve0)).toBe('1000');
+      expect(formatAmount(pool.reserve1)).toBe('2500000');
+      expect(pool.pool).toBe(POOL_30);
+      expect(pool.feeBps).toBe(30);
+      expect(pool.baseToken).toBe(IFC);
+      expect(pool.decimals0).toBe(18);
+
+      // Provenance, which is what makes refusing a stale one possible at all.
+      expect(pool.blockHeight).toBe(0);
+      expect(pool.blockHash).toBe((await source.blockAt(0))!.hash);
+      expect(pool.blockTime).toBeInstanceOf(Date);
+      expect(pool.observedAt).toBeInstanceOf(Date);
+      // The chain's clock and ours are different clocks and must not be aliased.
+      expect(pool.blockTime.getTime()).toBe((await source.blockAt(0))!.timestamp * 1000);
+    });
+
+    it('carries 18 decimal places of reserve without going through a float', async () => {
+      // A reserve is money. If anything on this path were a `number` the last
+      // digits would be gone, and every swap quoted against this pool would be
+      // priced slightly wrong forever.
+      source.append(block(reserves(MARKET, POOL_30, '123456789.123456789123456789', '0.000000000000000001')));
+      await indexer.sync();
+
+      const pool = (await store.poolReservesFor(MARKET))[0]!;
+      expect(formatAmount(pool.reserve0)).toBe('123456789.123456789123456789');
+      expect(formatAmount(pool.reserve1)).toBe('0.000000000000000001');
+    });
+
+    it('treats reserves as ABSOLUTE, not a delta', async () => {
+      source.append(block(reserves(MARKET, POOL_30, '1000', '2000')));
+      source.append(block(reserves(MARKET, POOL_30, '1500', '1400')));
+      await indexer.sync();
+
+      // A swap moves reserves in opposite directions. Accumulating would give
+      // 2500/3400 — a pool with more of both assets than anyone put in.
+      expect(reserveRows(await store.poolReservesFor(MARKET))).toEqual([[POOL_30, '1500', '1400']]);
+    });
+
+    it('keeps a pool whose reserves fall to zero, because that is a real state', async () => {
+      source.append(block(reserves(MARKET, POOL_30, '1000', '2000')));
+      source.append(block(reserves(MARKET, POOL_30, '0', '0')));
+      await indexer.sync();
+
+      // Fully burned is a fact the chain stated. Dropping the row would turn it
+      // into "we have no data", which is a different and more dangerous
+      // sentence — and it would silently fall back to the 1000/2000 version.
+      expect(reserveRows(await store.poolReservesFor(MARKET))).toEqual([[POOL_30, '0', '0']]);
+    });
+
+    it('keys on the POOL, so two fee tiers on one market do not collapse', async () => {
+      source.append(block(reserves(MARKET, POOL_30, '1000', '2000'), reserves(MARKET, POOL_5, '500', '1010', { feeBps: 5 })));
+      await indexer.sync();
+
+      const rows = await store.poolReservesFor(MARKET);
+      expect(rows).toHaveLength(2);
+      // Sorted by pool address, so two identical reads route identically.
+      expect(rows.map((r) => r.pool)).toEqual([POOL_5, POOL_30]);
+      expect(rows.map((r) => r.feeBps)).toEqual([5, 30]);
+    });
+
+    it('finds a pool by address, case-insensitively, and reports none for a stranger', async () => {
+      source.append(block(reserves(MARKET, POOL_30, '1000', '2000')));
+      await indexer.sync();
+
+      expect(await store.poolReserve(POOL_30.toUpperCase().replace('0X', '0x'))).not.toBeNull();
+      expect(await store.poolReserve(POOL_30.toLowerCase())).not.toBeNull();
+      expect(await store.poolReserve(addr('dead'))).toBeNull();
+    });
+
+    it('carries orientation, so a consumer never has to guess which token is base', async () => {
+      // token0 < token1 by address, but the market prices USD in IFC — the
+      // opposite of the pool's own ordering. Getting this backwards inverts
+      // every price derived from the row and looks entirely plausible.
+      source.append(block(reserves('USD-IFC', POOL_30, '1000', '2500000', { baseToken: USD })));
+      await indexer.sync();
+
+      const pool = (await store.poolReservesFor('USD-IFC'))[0]!;
+      expect(pool.baseToken).toBe(USD);
+      expect(pool.token0).toBe(IFC);
+      expect(formatAmount(pool.reserve0)).toBe('1000');
+    });
+
+    it('re-applying a block leaves the reserves and the observation time alone', async () => {
+      const b0 = source.append(block(reserves(MARKET, POOL_30, '1000', '2000')));
+      await indexer.sync();
+      const before = (await store.poolReservesFor(MARKET))[0]!;
+
+      await store.applyBlock(b0);
+      await store.applyBlock(b0);
+
+      const after = (await store.poolReservesFor(MARKET))[0]!;
+      expect(formatAmount(after.reserve0)).toBe(formatAmount(before.reserve0));
+      // A replayed block is not a new observation. Refreshing `observedAt` here
+      // would make a stale reserve look freshly read to every staleness check
+      // downstream — which is the failure the field exists to catch.
+      expect(after.observedAt.getTime()).toBe(before.observedAt.getTime());
+    });
+
+    it('restores the previous reserves when the new branch never mentions the pool', async () => {
+      source.append(block(reserves(MARKET, POOL_30, '1000', '2000')));
+      source.append(block(reserves(MARKET, POOL_30, '1500', '1400')));
+      source.append(block(reserves(MARKET, POOL_30, '1800', '1150')));
+      await indexer.sync();
+      expect(reserveRows(await store.poolReservesFor(MARKET))).toEqual([[POOL_30, '1800', '1150']]);
+
+      // The replacement height-2 block touches a fill and nothing else. A
+      // projection keeping only "the current value" keeps serving 1800/1150 —
+      // a reserve pair that was never on the canonical chain, and every swap
+      // priced against it is wrong with no error and no gap.
+      source.reorg(1, [block(fill(MARKET, '100', '1'))]);
+      await indexer.sync();
+
+      expect(reserveRows(await store.poolReservesFor(MARKET))).toEqual([[POOL_30, '1500', '1400']]);
+    });
+
+    it('drops a pool that only ever existed on the orphaned branch', async () => {
+      source.append(block(reserves(MARKET, POOL_30, '1000', '2000')));
+      source.append(block(reserves(MARKET, POOL_5, '500', '1010', { feeBps: 5 })));
+      await indexer.sync();
+      expect(await store.poolReservesFor(MARKET)).toHaveLength(2);
+
+      source.reorg(0, [block()]);
+      await indexer.sync();
+
+      expect(reserveRows(await store.poolReservesFor(MARKET))).toEqual([[POOL_30, '1000', '2000']]);
+      expect(await store.poolReserve(POOL_5)).toBeNull();
+    });
+
+    it('reports how many reserve rows an unwind removed', async () => {
+      source.append(block(reserves(MARKET, POOL_30, '1000', '2000')));
+      source.append(block(reserves(MARKET, POOL_30, '1500', '1400'), reserves(MARKET, POOL_5, '500', '1010', { feeBps: 5 })));
+      await indexer.sync();
+
+      const outcome = await store.unwindTo(1);
+      expect(outcome.poolReservesRemoved).toBe(2);
+      expect(reserveRows(await store.poolReservesFor(MARKET))).toEqual([[POOL_30, '1000', '2000']]);
+    });
+
+    it('prunes superseded reserve versions without changing what is served', async () => {
+      for (const r of ['1', '2', '3', '4', '5', '6']) source.append(block(reserves(MARKET, POOL_30, r, '100')));
+      await indexer.sync();
+
+      const before = reserveRows(await store.poolReservesFor(MARKET));
+      const removed = await store.prune(3);
+
+      expect(removed).toBeGreaterThan(0);
+      expect(reserveRows(await store.poolReservesFor(MARKET))).toEqual(before);
+    });
+
+    it('keeps enough reserve history after a prune to still unwind above the horizon', async () => {
+      for (const r of ['1', '2', '3', '4', '5', '6']) source.append(block(reserves(MARKET, POOL_30, r, '100')));
+      await indexer.sync();
+      await store.prune(3);
+
+      source.reorg(4, [block(fill(MARKET, '100', '1'))]);
+      await indexer.sync();
+
+      expect(reserveRows(await store.poolReservesFor(MARKET))).toEqual([[POOL_30, '5', '100']]);
+    });
+
+    it('lists every pool across markets, and counts an AMM-only market as a market', async () => {
+      source.append(block(reserves('B-USD', POOL_5, '5', '10'), reserves('A-USD', POOL_30, '1', '2')));
+      await indexer.sync();
+
+      expect((await store.pools()).map((p) => [p.market, p.pool])).toEqual([
+        ['A-USD', POOL_30],
+        ['B-USD', POOL_5],
+      ]);
+      // A market with a pool and no book is still a market. Leaving it out of
+      // `markets()` would hide sovereign AMM liquidity from every UI.
+      expect(await store.markets()).toEqual(['A-USD', 'B-USD']);
+    });
+
+    it('serves nothing rather than zeros for a market with no pool', async () => {
+      source.append(block(level(MARKET, 'bid', '100', '5')));
+      await indexer.sync();
+
+      // Empty, not `[{ reserve0: 0, reserve1: 0 }]`. A zero reserve is a real
+      // pool state; conflating it with "no data" is what would let a quote
+      // path price a swap against liquidity that was never there.
+      expect(await store.poolReservesFor(MARKET)).toEqual([]);
     });
   });
 }
