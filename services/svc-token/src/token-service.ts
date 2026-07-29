@@ -620,12 +620,7 @@ export class TokenService {
    * Zero weight is refused (not recorded as a free no-op): IFC-weighted means
    * unstaked accounts do not sit in the electorate.
    */
-  async castVote(input: {
-    proposalId: string;
-    userId: string;
-    choice: VoteChoice;
-    now?: Date;
-  }): Promise<VoteRecord> {
+  async castVote(input: { proposalId: string; userId: string; choice: VoteChoice; now?: Date }): Promise<VoteRecord> {
     const now = input.now ?? new Date();
 
     return transaction(
@@ -707,11 +702,13 @@ export class TokenService {
     );
   }
 
-  async listProposals(input: {
-    status?: ProposalStatus;
-    kind?: ProposalKind;
-    limit?: number;
-  } = {}): Promise<ProposalRecord[]> {
+  async listProposals(
+    input: {
+      status?: ProposalStatus;
+      kind?: ProposalKind;
+      limit?: number;
+    } = {},
+  ): Promise<ProposalRecord[]> {
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
 
     const rows = await this.sql<

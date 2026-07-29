@@ -136,8 +136,7 @@ export function createTokenRouter(token: TokenService) {
           const userId = ctx.principal.userId;
           if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
 
-          const asAdmin =
-            hasScope(ctx.principal.scopes, 'admin:write') || hasScope(ctx.principal.scopes, 'admin:treasury');
+          const asAdmin = hasScope(ctx.principal.scopes, 'admin:write') || hasScope(ctx.principal.scopes, 'admin:treasury');
           if (!asAdmin && !hasScope(ctx.principal.scopes, 'token:stake')) {
             throw new TRPCError({
               code: 'FORBIDDEN',
