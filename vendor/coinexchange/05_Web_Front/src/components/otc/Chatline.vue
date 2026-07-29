@@ -186,7 +186,11 @@ export default {
                     if(self.fOpenNotice && window.Notification && Notification.permission == "granted") {
                         var notification = new Notification(self.msg.otherSide+": ", {
                             body: self.otheritem.content,
-                            icon: 'https://bihuo-ex.oss-ap-southeast-1.aliyuncs.com/FAA55D97ED0370F08273C3A94F765C22.png'
+                            // Local. This was a remote object-store URL belonging to a
+                            // third party we do not control, fetched every time a desktop
+                            // notification fired — an outbound call on a user action, to a
+                            // bucket that can serve anything or nothing.
+                            icon: '/favicon.ico'
                         });
 
                         notification.onclick = function() {
