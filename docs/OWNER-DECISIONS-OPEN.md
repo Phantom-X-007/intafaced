@@ -12,7 +12,7 @@ Decisions taken to finish the Denon handover without inventing legal content.
 - Exchange chart mounts `lightweight-charts` against the same `/market/history` + STOMP feed
 - Remote OSS chart loads were already cut (#104)
 
-**Not done (history):** deleting the library from git history is a separate counsel/ops call if required for rediscovery risk.
+**History purge:** tree is gone on main (#106). ~8 MB of blobs may remain in git history. Script: `tooling/scripts/purge-charting-library-history.sh` (rewrites SHAs — force-push only in a coordinated window).
 
 ## 2. Sanctions blocklist — counsel only (closed for engineering)
 

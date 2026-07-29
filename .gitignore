@@ -34,3 +34,8 @@ Thumbs.db
 
 # infra volumes
 .docker-data/
+
+# Proprietary Charting Library — purged (#106); use lightweight-charts (Apache-2.0).
+# Do not re-add without a named TradingView licence on file.
+vendor/**/charting_library/
+**/charting_library/

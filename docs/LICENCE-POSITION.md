@@ -31,7 +31,7 @@ lists what was checked. `NOTICE` §10 indexes all 23 such entries.
 
 ### 1.1 · TradingView Charting Library is proprietary and we have no licence
 
-**DECISION 2026-07-29 — Path A.** Hold TERMINAL.md (lightweight-charts). Charting Library purged from the product shell; chart rewired to lightweight-charts. See `docs/OWNER-DECISIONS-OPEN.md`.
+**DECISION 2026-07-29 — Path A.** Hold TERMINAL.md (lightweight-charts). Charting Library purged from the product shell; chart rewired to lightweight-charts. See `docs/OWNER-DECISIONS-OPEN.md`. History rewrite (optional): `tooling/scripts/purge-charting-library-history.sh`.
 
 **What.** `vendor/coinexchange/05_Web_Front/src/assets/js/charting_library/` — 85 files, 5.4 MB, all
 git-tracked. Version string read from the artefact: `1.11 (internal id fe319232 @ 2017-11-14)`.
