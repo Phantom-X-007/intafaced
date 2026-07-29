@@ -307,7 +307,11 @@ Each slice: one PR, one concern, browser proof when shell runs.
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 2026-07-29 | Plan authored on `feat/app-phase1-plan` from `origin/main` `18c91c9`.                                                                                                                                                    |
 | 2026-07-29 | **S0:** Shell boots on this Mac with portable **Node 18** + host `npm run dev` on **:8090** (system Node 26 breaks old webpack; docker absent). Home + `/exchange` HTML 200. Java market backends not up → honest empty. |
-| 2026-07-29 | **S1 (in PR):** terminal honesty — no-feed labels, zero≠live print, fee “—” until symbol-info, dual-book balance footnote, chart no-feed copy.                                                                           |
+| 2026-07-29 | **S1:** terminal honesty — no-feed labels, zero≠live print, fee “—” until symbol-info, dual-book balance footnote, chart no-feed copy. Landed via **#98**.                                                                |
+| 2026-07-29 | **S3–S6 + S4/S5 core:** CEX/DEX plane toggle in shell nav; order confirm modal + placing state; account loading/error; mobile drawer routes + stop force-reg on exchange. Landed in **#98** squash (App + Exchange).     |
+| 2026-07-29 | **S5/S7 polish:** unknown ≠ empty/zero for wallet and order tabs; Available shows “—” when wallet unreachable; dead duplicate `loadAccount` removed. Follow-up PR after #98.                                              |
+| 2026-07-29 | **S2 still blocked** on market seed / external history (Stream B). **S8** = Nitro visual yes/no once demo path is open.                                                                                                   |
+| 2026-07-29 | **Reference exchange UI screenshots:** not required — plan done-when criteria are specific enough for Phase 1; beauty stays Phase 2.                                                                                      |
 
 ---
 

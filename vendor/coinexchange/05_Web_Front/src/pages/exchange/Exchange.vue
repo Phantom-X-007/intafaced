@@ -257,7 +257,10 @@
               <p class="ix-empty ix-empty-note">
                 Exchange wallet on this venue · not the platform ledger books
               </p>
-              <table class="ix-table">
+              <p class="ix-empty" v-if="!walletReachable">
+                Wallet service did not respond — available amounts are unknown, not zero.
+              </p>
+              <table class="ix-table" v-else>
                 <thead>
                   <tr>
                     <th>Asset</th>
@@ -285,6 +288,9 @@
             </p>
 
             <!-- Open orders -->
+            <p class="ix-empty" v-else-if="accountTab === 'open' && !ordersReachable">
+              Order service did not respond — open orders are unknown, not empty.
+            </p>
             <table class="ix-table" v-else-if="accountTab === 'open'">
               <thead>
                 <tr>
@@ -319,6 +325,9 @@
             </table>
 
             <!-- Trade history (fills) -->
+            <p class="ix-empty" v-else-if="accountTab === 'fills' && !ordersReachable">
+              Order service did not respond — trade history is unknown, not empty.
+            </p>
             <table class="ix-table" v-else-if="accountTab === 'fills'">
               <thead>
                 <tr>
@@ -347,7 +356,10 @@
             </table>
 
             <!-- Order history -->
-            <table class="ix-table" v-else>
+            <p class="ix-empty" v-else-if="accountTab === 'history' && !ordersReachable">
+              Order service did not respond — order history is unknown, not empty.
+            </p>
+            <table class="ix-table" v-else-if="accountTab === 'history'">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -378,7 +390,7 @@
               </tbody>
             </table>
 
-            <p class="ix-empty" v-if="isLogin && accountTabEmpty">Nothing here yet</p>
+            <p class="ix-empty" v-if="isLogin && !accountLoading && !accountError && accountTabEmpty">Nothing here yet</p>
           </div>
         </section>
       </main>
@@ -559,9 +571,11 @@
           <dl class="ix-meta">
             <div>
               <dt>Available</dt>
-              <dd>{{ fmt(availableBalance, side === 'BUY' ? baseCoinScale : coinScale) }}
+              <dd v-if="!isLogin || walletReachable">
+                {{ fmt(availableBalance, side === 'BUY' ? baseCoinScale : coinScale) }}
                 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }}</em>
               </dd>
+              <dd v-else class="ix-dim">— <em>unknown</em></dd>
             </div>
             <div v-if="orderType === 'LIMIT_PRICE'">
               <dt>Order value</dt>
@@ -823,6 +837,8 @@ export default {
       ];
     },
     accountTabEmpty() {
+      /* Only claim empty when the order service answered — unknown ≠ empty. */
+      if (!this.ordersReachable) return false;
       if (this.accountTab === 'open') return this.openOrders.length === 0;
       if (this.accountTab === 'fills') return this.fills.length === 0;
       if (this.accountTab === 'history') return this.historyOrders.length === 0;
@@ -987,12 +1003,6 @@ export default {
       clearTimeout(this.depthTimer);
       this.depthTimer = 0;
       this.depthPending = false;
-    },
-
-    loadAccount() {
-      this.getWallet();
-      this.getOpenOrders();
-      this.getHistoryOrders();
     },
 
     /* ── chart ─────────────────────────────────────────────────────────── */
