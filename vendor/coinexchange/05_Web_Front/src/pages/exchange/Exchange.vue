@@ -94,28 +94,34 @@
           <span class="ix-num">24h</span>
         </div>
         <div class="ix-scroll">
-          <p class="ix-empty" v-if="visibleMarkets.length === 0">No markets</p>
-          <button
-            type="button"
-            class="ix-market-row"
-            :class="{ 'is-current': row.symbol === currentCoin.symbol }"
-            v-for="row in visibleMarkets"
-            :key="row.symbol"
-            @click="openPair(row)"
-          >
-            <span class="ix-market-name">
-              <i
-                class="ix-star ix-star-inline"
-                :class="{ 'is-on': row.isFavor }"
-                @click.stop="toggleRowFavorite(row)"
-              >
-                <Icon :type="row.isFavor ? 'ios-star' : 'ios-star-outline'" size="12" />
-              </i>
-              {{ row.coin }}<em>/{{ row.base }}</em>
-            </span>
-            <span class="ix-num">{{ marketNum(row.close, 6) }}</span>
-            <span class="ix-num" :class="roseClass(row.rose)">{{ marketStat(row.rose) }}</span>
-          </button>
+          <p class="ix-empty" v-if="marketsLoading">Loading markets…</p>
+          <p class="ix-empty" v-else-if="!marketsReachable">
+            Market list unavailable — not empty
+          </p>
+          <template v-else>
+            <p class="ix-empty" v-if="visibleMarkets.length === 0">No markets</p>
+            <button
+              type="button"
+              class="ix-market-row"
+              :class="{ 'is-current': row.symbol === currentCoin.symbol }"
+              v-for="row in visibleMarkets"
+              :key="row.symbol"
+              @click="openPair(row)"
+            >
+              <span class="ix-market-name">
+                <i
+                  class="ix-star ix-star-inline"
+                  :class="{ 'is-on': row.isFavor }"
+                  @click.stop="toggleRowFavorite(row)"
+                >
+                  <Icon :type="row.isFavor ? 'ios-star' : 'ios-star-outline'" size="12" />
+                </i>
+                {{ row.coin }}<em>/{{ row.base }}</em>
+              </span>
+              <span class="ix-num">{{ marketNum(row.close, 6) }}</span>
+              <span class="ix-num" :class="roseClass(row.rose)">{{ marketStat(row.rose) }}</span>
+            </button>
+          </template>
         </div>
       </aside>
 
@@ -165,7 +171,7 @@
                   <span class="ix-num">Total</span>
                 </div>
                 <div class="ix-scroll">
-                  <p class="ix-empty" v-if="bids.length === 0">No bids</p>
+                  <p class="ix-empty" v-if="bids.length === 0">{{ bookSideEmpty('bids') }}</p>
                   <button
                     type="button"
                     class="ix-book-row is-bid"
@@ -187,7 +193,7 @@
                   <span class="ix-num">Total</span>
                 </div>
                 <div class="ix-scroll">
-                  <p class="ix-empty" v-if="asksAscending.length === 0">No asks</p>
+                  <p class="ix-empty" v-if="asksAscending.length === 0">{{ bookSideEmpty('asks') }}</p>
                   <button
                     type="button"
                     class="ix-book-row is-ask"
@@ -212,7 +218,7 @@
                 <span class="ix-num">Value</span>
               </div>
               <div class="ix-scroll">
-                <p class="ix-empty" v-if="trades.length === 0">No trades yet</p>
+                <p class="ix-empty" v-if="trades.length === 0">{{ tradesEmptyLabel }}</p>
                 <div class="ix-trade-row is-wide" v-for="(row, i) in trades" :key="'ft' + i">
                   <span class="ix-dim">{{ time(row.time) }}</span>
                   <span class="ix-num" :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
@@ -428,7 +434,7 @@
           </div>
 
           <div class="ix-book-side ix-book-asks" v-show="bookMode !== 'bids'">
-            <p class="ix-empty" v-if="asks.length === 0">No asks</p>
+            <p class="ix-empty" v-if="asks.length === 0">{{ bookSideEmpty('asks') }}</p>
             <button
               type="button"
               class="ix-book-row is-ask"
@@ -451,7 +457,7 @@
           </div>
 
           <div class="ix-book-side ix-book-bids" v-show="bookMode !== 'asks'">
-            <p class="ix-empty" v-if="bids.length === 0">No bids</p>
+            <p class="ix-empty" v-if="bids.length === 0">{{ bookSideEmpty('bids') }}</p>
             <button
               type="button"
               class="ix-book-row is-bid"
@@ -474,7 +480,7 @@
             <span class="ix-num">Amount</span>
           </div>
           <div class="ix-scroll">
-            <p class="ix-empty" v-if="trades.length === 0">No trades yet</p>
+            <p class="ix-empty" v-if="trades.length === 0">{{ tradesEmptyLabel }}</p>
             <div class="ix-trade-row" v-for="(row, i) in trades" :key="'t' + i">
               <span class="ix-dim">{{ time(row.time) }}</span>
               <span class="ix-num" :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
@@ -720,6 +726,11 @@ export default {
       /* True only after market symbol-info returns a fee field. Default is not free. */
       feeKnown: false,
 
+      marketsLoading: false,
+      marketsReachable: false,
+      bookReachable: false,
+      tradesReachable: false,
+
       plate: { asks: [], bids: [], askTotal: 0, bidTotal: 0 },
       trades: [],
       openOrders: [],
@@ -889,6 +900,15 @@ export default {
         return '—';
       }
       return (this.num(this.symbolFee) * 100).toFixed(2) + '%';
+    },
+    tradesEmptyLabel() {
+      if (!this.tradesReachable && !this.feedLive) {
+        return 'Trades unavailable — market did not respond';
+      }
+      if (!this.tradesReachable) {
+        return 'Trades unavailable — market did not respond';
+      }
+      return 'No trades yet';
     }
   },
 
@@ -971,6 +991,10 @@ export default {
       this.trend = 0;
       this.lastTick = 0;
       this.chartFailed = false;
+      this.marketsLoading = false;
+      this.marketsReachable = false;
+      this.bookReachable = false;
+      this.tradesReachable = false;
       this.plate = { asks: [], bids: [], askTotal: 0, bidTotal: 0 };
       this.trades = [];
       this.percent = 0;
@@ -1113,10 +1137,15 @@ export default {
     },
 
     getMarkets() {
+      this.marketsLoading = true;
+      this.marketsReachable = false;
       this.request(this.api.market.thumb).then(body => {
+        this.marketsLoading = false;
         if (!Array.isArray(body)) {
+          this.marketsReachable = false;
           return;
         }
+        this.marketsReachable = true;
         const map = {};
         const rows = body.map(item => {
           const coin = (item.symbol || '').split('/')[0];
@@ -1177,11 +1206,20 @@ export default {
     getPlate() {
       this.request(this.api.market.platemini, { symbol: this.currentCoin.symbol }).then(body => {
         if (!body) {
+          this.bookReachable = false;
           return;
         }
+        this.bookReachable = true;
         this.applyPlate('SELL', (body.ask && body.ask.items) || []);
         this.applyPlate('BUY', (body.bid && body.bid.items) || []);
       });
+    },
+
+    bookSideEmpty(side) {
+      if (!this.bookReachable) {
+        return 'Book unavailable — market did not respond';
+      }
+      return side === 'asks' ? 'No asks' : 'No bids';
     },
 
     /* One shape for both the REST snapshot and the websocket delta, so the
@@ -1232,6 +1270,12 @@ export default {
 
     getTrades() {
       this.request(this.api.market.trade, { symbol: this.currentCoin.symbol, size: TRADE_LIMIT }).then(body => {
+        if (body == null) {
+          this.tradesReachable = false;
+          this.trades = [];
+          return;
+        }
+        this.tradesReachable = true;
         this.trades = Array.isArray(body) ? body.slice(0, TRADE_LIMIT) : [];
       });
     },
@@ -1351,10 +1395,12 @@ export default {
         }
         /* Bounded list. The vendor pushed unbounded then trimmed; this keeps
            the DOM row count fixed so the panel never grows the page. */
+        self.tradesReachable = true;
         self.trades = resp.concat(self.trades).slice(0, TRADE_LIMIT);
       });
 
       on('/topic/market/trade-plate/' + symbol, resp => {
+        self.bookReachable = true;
         self.applyPlate(resp.direction, resp.items || []);
         self.getPlateFull();
       });
@@ -2633,13 +2679,23 @@ $radius-sm: var(--ix-radius-sm, 8px);
   .ix-body {
     grid-template-columns: minmax(0, 1fr);
   }
-  .ix-rail,
+  .ix-rail {
+    height: auto;
+    max-height: 420px;
+  }
+  /* Order form must stay fully usable on phone — do not clip the submit button. */
   .ix-order {
     height: auto;
-    max-height: 480px;
+    max-height: none;
+  }
+  .ix-order-body {
+    overflow: visible;
   }
   .ix-chart-panel {
-    height: 360px;
+    height: 320px;
+  }
+  .ix-account {
+    max-height: 360px;
   }
 }
 </style>
