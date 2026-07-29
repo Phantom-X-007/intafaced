@@ -1,10 +1,11 @@
 # svc-ws
 
-**The live depth stream (§5.2 `ws.gateway`).** One snapshot, then sequenced deltas, to any browser that asks.
+**The live public market-data stream (§5.2 `ws.gateway`).** Depth (snapshot + sequenced deltas) and a public trade
+tape, to any browser that asks.
 
-**What this service is not:** it has no users, no balances, no database, no bus, and **no credential of any kind**. It
-reads a public endpoint on svc-matching, diffs the result with `@intafaced/market-data`, and re-broadcasts it. That
-is the entire job, and the entire authority.
+**What this service is not:** it has no users, no balances, no database, and **no credential of any kind**. Depth
+reads a public endpoint on svc-matching and diffs it with `@intafaced/market-data`. Trades subscribe to the existing
+`orderFilled` bus event and re-broadcast a stripped public print. That is the entire job, and the entire authority.
 
 ---
 
@@ -33,9 +34,11 @@ So: a process that holds nothing.
 | `INTERNAL_SERVICE_SECRET`                    | no       | **yes**   | **yes**      | **no**     |
 | `EDGE_PRINCIPAL_SECRET`                      | yes      | yes       | no           | **no**     |
 | `DATABASE_URL`                               | no       | yes       | no           | **no**     |
-| Event bus connection                         | no       | yes       | yes          | **no**     |
+| Event bus connection                         | no       | yes       | yes          | **yes***   |
 | A ledger client                              | no       | yes       | no           | **no**     |
 | Accepts anonymous connections from a browser | yes      | no        | no           | **yes**    |
+
+\*NATS for `orderFilled` only — public print fan-out. Not a money path; order ids never leave the bus-side handler.
 
 The last two rows are the point. This is the second internet-facing process in the fleet, and it is the one with the
 least to steal.
@@ -51,13 +54,14 @@ smallest blast radius in the fleet. A second public origin on a process that hol
 HTTP + JSON, plus one websocket. Amounts in and out are **decimal strings**, never JSON numbers. The only JSON
 numbers anywhere in this service's output are integer sequences.
 
-| Route                               | Input | Output                                                       |
-| ----------------------------------- | ----- | ------------------------------------------------------------ |
-| `GET /stream?market=<id>` (upgrade) | —     | `DepthSnapshot`, then `DepthDelta` frames                    |
-| `GET /markets/:marketId/depth`      | —     | `DepthSnapshot` · `404` unknown market · `502` upstream down |
-| `GET /markets`                      | —     | `{ markets: string[] }`                                      |
-| `GET /health`                       | —     | `{ ok, service, enabled, connections }`                      |
-| `GET /ready`                        | —     | counters + market list · `503` when the kill-switch is off   |
+| Route                                              | Input | Output                                                       |
+| -------------------------------------------------- | ----- | ------------------------------------------------------------ |
+| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                    |
+| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                 |
+| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unknown market · `502` upstream down |
+| `GET /markets`                                     | —     | `{ markets: string[] }`                                      |
+| `GET /health`                                      | —     | `{ ok, service, enabled, connections, … }`                   |
+| `GET /ready`                                       | —     | depth + trade counters · `503` when the kill-switch is off   |
 
 ### The wire format is not ours
 
@@ -66,8 +70,12 @@ Frames are exactly `DepthSnapshot | DepthDelta` from `@intafaced/market-data`, u
 ```jsonc
 { "type": "snapshot", "marketId": "BTC-USDT", "sequence": 812, "bids": [["30000.5", "1.25"]], "asks": [] }
 { "type": "delta", "marketId": "BTC-USDT", "fromSequence": 812, "sequence": 813, "bids": [["30000.5", "0"]], "asks": [] }
+{ "type": "trade", "marketId": "BTC-USDT", "sequence": 812, "price": "30000.5", "quantity": "0.25", "ts": "2026-07-29T12:00:00.000Z" }
 ```
 
+Trade frames are `TradePrint` from `@intafaced/market-data`. They are built from `orderFilled` with **order ids
+stripped** — maker/taker UUIDs never reach this wire. Aggressor side is not on the event today, so it is not on the
+print either (widening `orderFilled` is a separate `packages/events` PR per §15.2).
 The server computes deltas with `diffDepth`; the browser applies them with `applyDelta`, which **refuses** any delta
 whose `fromSequence` does not match the book it lands on. That refusal is the entire safety property of this
 service: a client that misses a frame does not have to be told, it can tell. Every drop policy below leans on it,
@@ -184,15 +192,14 @@ as a "snapshot" is a lie with a sequence number on it.
 
 ## Events
 
-**Publishes** — nothing. `intafaced.ws.*` does not exist in `packages/events/src/catalog.ts` and this service does
-not connect to NATS at all.
+**Publishes** — nothing. `intafaced.ws.*` does not exist in `packages/events/src/catalog.ts`.
 
-**Consumes** — nothing, and it could not: `intafaced.matching.order.accepted` carries no side, price or quantity, so
-a book cannot be reconstructed from the bus today.
+**Consumes** — `orderFilled` for the public trade tape only. Depth still cannot be built from the bus
+(`order.accepted` carries no side/price/qty); that half still polls.
 
-| Subject | Direction | Notes                   |
-| ------- | --------- | ----------------------- |
-| _none_  | —         | this service has no bus |
+| Subject                           | Direction | Notes                                                               |
+| --------------------------------- | --------- | ------------------------------------------------------------------- |
+| `intafaced.matching.order.filled` | consume   | stripped to `TradePrint` and fan-out; order ids never leave the hub |
 
 ---
 
@@ -226,18 +233,21 @@ stale numbers.
 
 ## Configuration
 
-| Variable                | Default                 | Notes                                                   |
-| ----------------------- | ----------------------- | ------------------------------------------------------- |
-| `HTTP_PORT`             | `4014`                  | every port 4000–4013 is taken                           |
-| `MATCHING_URL`          | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent  |
-| `WS_DEPTH_LIMIT`        | `50`                    | levels per side, for both snapshot and delta            |
-| `WS_POLL_INTERVAL_MS`   | `250`                   | one GET per subscribed market per tick                  |
-| `WS_MARKETS_REFRESH_MS` | `30000`                 | market-list cache window                                |
-| `WS_HIGH_WATER_BYTES`   | `1048576`               | socket buffer above which a client is lagging           |
-| `WS_MAX_LAG_TICKS`      | `20`                    | consecutive lagging ticks before disconnect             |
-| `WS_MAX_CONNECTIONS`    | `5000`                  | sockets per replica                                     |
-| `WS_HEARTBEAT_MS`       | `30000`                 | ping cadence; a socket that misses a pong is terminated |
-| `WS_GATEWAY_ENABLED`    | `true`                  | kill-switch                                             |
+| Variable                | Default                 | Notes                                                    |
+| ----------------------- | ----------------------- | -------------------------------------------------------- |
+| `HTTP_PORT`             | `4014`                  | every port 4000–4013 is taken                            |
+| `MATCHING_URL`          | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent   |
+| `NATS_URL`              | `nats://localhost:4222` | bus for `orderFilled` trade tape only                    |
+| `WS_DEPTH_LIMIT`        | `50`                    | levels per side, for both snapshot and delta             |
+| `WS_POLL_INTERVAL_MS`   | `250`                   | one GET per subscribed market per tick                   |
+| `WS_MARKETS_REFRESH_MS` | `30000`                 | market-list cache window                                 |
+| `WS_HIGH_WATER_BYTES`   | `1048576`               | socket buffer above which a client is lagging            |
+| `WS_MAX_LAG_TICKS`      | `20`                    | consecutive lagging ticks before disconnect              |
+| `WS_MAX_CONNECTIONS`    | `5000`                  | sockets per replica                                      |
+| `WS_HEARTBEAT_MS`       | `30000`                 | ping cadence; a socket that misses a pong is terminated  |
+| `WS_TRADE_RECENT_LIMIT` | `50`                    | recent prints kept per market and replayed on connect    |
+| `WS_TRADES_DURABLE`     | `ws-trade-tape`         | JetStream durable; unique per replica for multi-instance |
+| `WS_GATEWAY_ENABLED`    | `true`                  | kill-switch                                              |
 
 `apps/web` reaches this at `NEXT_PUBLIC_WS_URL` (`apps/web/src/app/layout.tsx`, beside `NEXT_PUBLIC_EDGE_URL`).
 
@@ -245,10 +255,11 @@ stale numbers.
 
 ## Not built
 
-- **Trades, orders and positions.** `ws.gateway`'s title in the tracker names four streams; this ships **depth**.
-  A trade tape needs `orderFilled` off the bus and a message shape `packages/market-data` does not define; orders
-  and positions need a principal, which is a different security posture from this port's and probably a different
-  port.
+- **Orders and positions.** `ws.gateway`'s title in the tracker names four streams; this ships **depth** and the
+  public **trade tape**. Orders and positions need a principal, which is a different security posture from this
+  port's and probably a different port — leave them off the unauthenticated socket.
+- **Aggressor side on the tape.** `orderFilled` has no side field today. Adding one is a `packages/events` PR
+  (§15.2), not a silent invention here.
 - **Rate limiting.** There is none anywhere in the platform (svc-edge's README says so too). `WS_MAX_CONNECTIONS` is
   a ceiling, not a rate limit. A failing `GET /markets` is also not rate-limited, so a reconnect storm against a
   down svc-matching costs one upstream call per connection attempt.

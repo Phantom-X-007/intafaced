@@ -302,8 +302,11 @@ export const FEATURES = [
   f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', {
     module: 'trade',
     phase: '2',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['matching.engine', 'ws.depth'],
-    note: 'Depth shipped as `ws.depth` (services/svc-ws). The other three streams have not: a TRADE tape needs `orderFilled` off the bus plus a message shape `packages/market-data` does not define; ORDERS and POSITIONS are per-principal, which is a different security posture from svc-ws’s deliberately credential-free public port and probably a different port. Left `ready` rather than `done` so the title keeps meaning what it says.',
+    requires: ['services/svc-ws', 'packages/market-data'],
+    note: 'Depth + public TRADE tape on svc-ws (PR #91). Orders/positions still missing.',
   }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────

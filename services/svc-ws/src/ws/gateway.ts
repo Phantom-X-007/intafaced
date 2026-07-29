@@ -2,6 +2,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type HubLogger } from '../depth/hub.js';
+import type { TradeHub } from '../trade/hub.js';
 
 /**
  * THE SOCKET.
@@ -25,13 +26,22 @@ import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type Hub
  *     is that check and `depth/source.ts` explains it at length.
  *   · **The process holds no credential.** Not `INTERNAL_SERVICE_SECRET`, not
  *     `EDGE_PRINCIPAL_SECRET`, no database URL. Compromising this service gets
- *     an attacker the ability to read public depth, which they already had.
+ *     an attacker the ability to read public depth and public trade prints,
+ *     which they already had. Connecting to NATS for `orderFilled` does not
+ *     change that — the bus is not a money path and the public wire strips
+ *     order ids before fan-out.
  *
  * There is deliberately no Origin check. An origin allow-list is an
  * authorisation control, and there is nothing here to authorise — it would
  * inconvenience a bot without protecting anything, since the same data is a
  * `curl` away. Cross-site WebSocket hijacking is a risk to endpoints that
  * carry ambient credentials; this one carries none.
+ *
+ * ── Channels ────────────────────────────────────────────────────────────────
+ *
+ * `?market=<id>` alone is depth (snapshot + deltas), unchanged. Pass
+ * `channel=trades` for the public trade tape. Orders and positions are
+ * per-principal and are deliberately not on this port.
  *
  * ── Why not through svc-edge ────────────────────────────────────────────────
  *
@@ -47,9 +57,12 @@ const MARKET_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 
 export const STREAM_PATH = '/stream';
 
+export type StreamChannel = 'depth' | 'trades';
+
 export interface WebSocketGatewayOptions {
   readonly server: Server;
   readonly hub: DepthHub;
+  readonly tradeHub: TradeHub;
   readonly heartbeatMs: number;
   readonly log: HubLogger;
   /** Reads the kill-switch at connection time, so flipping it needs no restart. */
@@ -87,8 +100,14 @@ function reject(socket: Duplex, status: number, message: string): void {
   socket.destroy();
 }
 
+function parseChannel(raw: string | null): StreamChannel | null {
+  if (raw === null || raw === '' || raw === 'depth') return 'depth';
+  if (raw === 'trades') return 'trades';
+  return null;
+}
+
 export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSocketGateway {
-  const { server, hub, heartbeatMs, log, enabled } = options;
+  const { server, hub, tradeHub, heartbeatMs, log, enabled } = options;
 
   const wss = new WebSocketServer({
     noServer: true,
@@ -114,6 +133,9 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
     const marketId = url.searchParams.get('market');
     if (!marketId || !MARKET_ID.test(marketId)) return reject(socket, 400, 'Bad Request');
 
+    const channel = parseChannel(url.searchParams.get('channel'));
+    if (channel === null) return reject(socket, 400, 'Bad Request');
+
     wss.handleUpgrade(request, socket, head, (ws) => {
       alive.add(ws);
       ws.on('pong', () => alive.add(ws));
@@ -121,7 +143,7 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
       ws.on('message', () => undefined);
       ws.on('error', () => ws.terminate());
 
-      const detach = hub.attach(marketId, sinkFor(ws));
+      const detach = channel === 'trades' ? tradeHub.attach(marketId, sinkFor(ws)) : hub.attach(marketId, sinkFor(ws));
       ws.on('close', detach);
     });
   };
@@ -158,6 +180,7 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
       // Say why, rather than dropping the TCP connection: a client that is told
       // reconnects with backoff, and one that is not reconnects immediately.
       hub.closeAll(CLOSE_GOING_AWAY, reason);
+      tradeHub.closeAll(CLOSE_GOING_AWAY, reason);
       for (const ws of wss.clients) ws.close(CLOSE_GOING_AWAY, closeReason(reason));
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       log.info({ reason }, 'ws: gateway closed');

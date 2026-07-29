@@ -14,9 +14,9 @@
 
 Phases: **0** 10/11 · **1** 7/14 · **2** 5/17 · **3** 4/16 · **3P** 0/7 · **4** 1/5 · **4P** 0/3 · **5** 2/32 · **5P** 0/2
 
-**In progress:** One-tap Convert — the retail on-ramp (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
+**In progress:** One-tap Convert — the retail on-ramp (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
 
-**🟢 33 ready to claim** — nothing blocks these:
+**🟢 32 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `identity.apikeys` — Scoped API keys, sub-accounts
@@ -26,7 +26,7 @@ Phases: **0** 10/11 · **1** 7/14 · **2** 5/17 · **3** 4/16 · **3P** 0/7 · *
 - `token.yield` — Real-yield distribution from platform fees
 - `token.buyback` — Buyback & burn split
 - `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
-- …and 25 more
+- …and 24 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

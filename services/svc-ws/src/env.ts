@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { baseEnvSchema, httpEnvSchema, loadEnv, otelEnvSchema } from '@intafaced/config';
+import { baseEnvSchema, httpEnvSchema, loadEnv, natsEnvSchema, otelEnvSchema } from '@intafaced/config';
 
 /**
  * svc-ws environment.
@@ -16,21 +16,21 @@ import { baseEnvSchema, httpEnvSchema, loadEnv, otelEnvSchema } from '@intafaced
  *   · **no `EDGE_PRINCIPAL_SECRET`.** Nothing here is scoped to a principal.
  *     A key that verifies "who is calling" is dead weight on a surface where
  *     the answer is always "anyone".
- *   · **no `DATABASE_URL`.** Depth is derived, never stored. The engine's book
- *     is the truth; a table here would be a second one.
- *   · **no `NATS_URL`.** This service publishes no subject and consumes none.
- *     It could not reconstruct a book from the bus if it wanted to —
- *     `intafaced.matching.order.accepted` carries `{orderId, marketId,
- *     sequence}` and no side, price or quantity (packages/events/src/catalog.ts).
- *     Widening that payload is a contracts PR (§15.2) and belongs in its own
- *     review, not smuggled into a service PR.
+ *   · **no `DATABASE_URL`.** Depth and the trade tape are derived, never
+ *     stored. The engine's book and the bus are the truth.
  *   · **no `REDIS_URL`.** One replica holds one book per subscribed market, in
  *     memory, and drops it when the last subscriber leaves. Sharing that across
  *     replicas would be a cache of a cache of the engine.
+ *
+ * `NATS_URL` is present for the public trade tape only: this process
+ * subscribes to `orderFilled` and re-broadcasts a stripped print. That is not
+ * a money path and not a principal path — order ids never leave the bus-side
+ * handler. Depth still works if the bus is down; trades degrade.
  */
 const schema = baseEnvSchema
   .merge(otelEnvSchema)
   .merge(httpEnvSchema)
+  .merge(natsEnvSchema)
   .merge(
     z.object({
       SERVICE_NAME: z.string().default('svc-ws'),
@@ -91,6 +91,20 @@ const schema = baseEnvSchema
 
       /** Ping cadence. A socket that misses a pong is dead and is terminated. */
       WS_HEARTBEAT_MS: z.coerce.number().int().min(1_000).default(30_000),
+
+      /**
+       * How many recent public prints to keep per market and replay on a new
+       * tape subscription. Bound is memory, not correctness — a client that
+       * wants history longer than this asks a different product.
+       */
+      WS_TRADE_RECENT_LIMIT: z.coerce.number().int().min(0).max(1_000).default(50),
+
+      /**
+       * JetStream durable for the `orderFilled` consumer. Must be unique per
+       * replica when more than one svc-ws instance should each receive every
+       * fill (JetStream durables are exclusive).
+       */
+      WS_TRADES_DURABLE: z.string().min(1).max(128).default('ws-trade-tape'),
 
       /**
        * Kill-switch, mirroring the `ws.gateway` flag. When false the service

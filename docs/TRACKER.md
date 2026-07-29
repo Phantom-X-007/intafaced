@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**29 of 107 shipped (27%)** · 2 in progress · 33 ready to claim · 43 blocked · 15 deliberate §13 sockets
+**29 of 107 shipped (27%)** · 3 in progress · 32 ready to claim · 43 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -39,7 +39,6 @@ pnpm wt feat/<the-thing>
 | Internal market-maker seeding books at launch | `trade` | 2 | `trade.mm-bot` |
 | External venue adapters via CCXT (cross-venue) | `trade` | 2 | `venue.aggregation` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
-| WebSocket fan-out: depth, trades, orders, positions | `trade` | 2 | `ws.gateway` |
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | Share card render (1080×1350, 1200×630) | `blueprint` | 4 | `blueprint.card` |
@@ -79,6 +78,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Feature | Owner | Module |
 |---|---|---|
 | One-tap Convert — the retail on-ramp | **Nitro** | `trade` |
+| WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
 | Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
 
 ---
@@ -140,7 +140,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Pro terminal — depth, charts, hotkeys, sub-accounts <br/>_Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. DEPTH is now live too: the terminal streams snapshot+deltas from services/svc-ws and withholds the book on a gap rather than drawing a stale one. Still missing from the four words in the title: CHARTS (no candle or trade-tape source exists anywhere), HOTKEYS and SUB-ACCOUNTS (not started). Those render as §13 sockets with the reason on screen. `dependsOn` moved from `ws.gateway` to `ws.depth`: the book needs depth, not positions, and depending on the umbrella would keep this blocked on streams it does not use._ | F |  | `web.terminal` |
 | ✅ | apps/web scaffold on the design system <br/>_Re-upgraded: apps/web now has a typed tRPC client against svc-edge (auth header, zod-validated responses, `Result` instead of throws), a tested depth state machine that resnapshots on a gap, and 45 tests. Every hardcoded price literal is gone — what cannot be fetched renders as a socket with a reason. The masthead status is a real `trade.health` probe rather than the constant "Systems nominal". Known limit, stated in the UI: the session is in-memory only, so a reload signs the user out; httpOnly refresh-cookie persistence is not built._ | F |  | `web.shell` |
 | ✅ | Live order book — snapshot + sequenced deltas to the browser <br/>_services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; apps/web applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them._ | F |  | `ws.depth` |
-| 🟢 | WebSocket fan-out: depth, trades, orders, positions <br/>_Depth shipped as `ws.depth` (services/svc-ws). The other three streams have not: a TRADE tape needs `orderFilled` off the bus plus a message shape `packages/market-data` does not define; ORDERS and POSITIONS are per-principal, which is a different security posture from svc-ws’s deliberately credential-free public port and probably a different port. Left `ready` rather than `done` so the title keeps meaning what it says._ | F |  | `ws.gateway` |
+| 🔨 | WebSocket fan-out: depth, trades, orders, positions <br/>_Depth + public TRADE tape on svc-ws (PR #91). Orders/positions still missing._ | F |  | `ws.gateway` |
 
 ### Phase 3 — Pay + P2P (4/16)
 
