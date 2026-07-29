@@ -57,6 +57,7 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Security when-to:** [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) · tooling floor: [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md)
 - **After Denon ships:** [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — full audit program is **closed**
 - **Next product gates:** dual-book discipline + real rails/chain → not another full audit
+- **Denon handover (2026-07-29):** [`HANDOVER-NITRO-BRANCHES.md`](HANDOVER-NITRO-BRANCHES.md) · owner-only calls: [`OWNER-DECISIONS-OPEN.md`](OWNER-DECISIONS-OPEN.md)
 - - **Denon return board (2026-07-29):** [`DENON-RETURN-GITHUB-STATE-2026-07-29.md`](DENON-RETURN-GITHUB-STATE-2026-07-29.md) — what Nitro agents landed; do not rebuild
 - **Nitro’s product lane (Stream A):** app surface only — claim + ordered checklist in [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md) · GitHub issue **#83** · Phase 1 execution plan [`STREAM-A-PHASE1-PLAN.md`](STREAM-A-PHASE1-PLAN.md). Denon owns spine (services, edge, proxy, compose). Do not edit Stream B files; open `[cross-stream]` issues instead.
 - **#86 landed on main** (shell rebrand + custody locks). Multi-asset remains Denon-only money. Re-check with `gh pr list`.

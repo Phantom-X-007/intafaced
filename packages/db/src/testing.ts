@@ -32,7 +32,7 @@ let counter = 0;
 const SAFE_IDENT = /^[a-z][a-z0-9_]*$/i;
 
 export async function createTestDb(options: TestDbOptions): Promise<TestDb> {
-  const url = options.url ?? process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced';
+  const url = options.url ?? process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
   const schema = `test_${options.service}_${process.pid}_${++counter}`;
   if (!SAFE_IDENT.test(schema)) {
@@ -115,7 +115,7 @@ export function resolveTestDatabaseUrl(serviceEnvKey: string | undefined, localD
  * On CI / REQUIRE_POSTGRES, unreachable Postgres is a hard failure (no silent green).
  */
 export async function postgresAvailable(url?: string): Promise<boolean> {
-  const target = url ?? process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced';
+  const target = url ?? process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
   const sql = postgres(target, { max: 1, connect_timeout: 2, onnotice: () => undefined });
   try {
     await sql`SELECT 1`;

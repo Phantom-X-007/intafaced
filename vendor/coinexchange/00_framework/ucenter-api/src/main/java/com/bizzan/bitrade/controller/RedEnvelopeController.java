@@ -451,7 +451,7 @@ public class RedEnvelopeController extends BaseController{
 	        member1.setPassword(password);
 	        member1.setMobilePhone(phone);
 	        member1.setSalt(credentialsSalt);
-	        member1.setAvatar("https://bizzan.oss-cn-hangzhou.aliyuncs.com/defaultavatar.png");
+	        member1.setAvatar("/static/defaultavatar.png");
 	        member = memberService.save(member1);
 	        if (member != null) {
 	        	// Member为@entity注解类，与数据库直接映射，因此，此处setPromotionCode会直接同步到数据库
