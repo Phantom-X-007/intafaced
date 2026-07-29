@@ -23,13 +23,7 @@ export function buildCreatePool(factory: Address, tokenA: Address, tokenB: Addre
   };
 }
 
-export function buildSwapExactIn(
-  pool: Address,
-  tokenIn: Address,
-  amountIn: bigint,
-  minAmountOut: bigint,
-  to: Address,
-): UnsignedAmmCall {
+export function buildSwapExactIn(pool: Address, tokenIn: Address, amountIn: bigint, minAmountOut: bigint, to: Address): UnsignedAmmCall {
   return {
     to: pool,
     data: encodeFunctionData({
@@ -42,12 +36,7 @@ export function buildSwapExactIn(
   };
 }
 
-export function buildMintLiquidity(
-  pool: Address,
-  to: Address,
-  amount0Desired: bigint,
-  amount1Desired: bigint,
-): UnsignedAmmCall {
+export function buildMintLiquidity(pool: Address, to: Address, amount0Desired: bigint, amount1Desired: bigint): UnsignedAmmCall {
   return {
     to: pool,
     data: encodeFunctionData({
@@ -60,12 +49,10 @@ export function buildMintLiquidity(
   };
 }
 
-export function quoteExactIn(input: {
-  amountIn: bigint;
-  reserveIn: bigint;
-  reserveOut: bigint;
-  feeBps: number;
-}): { amountOut: bigint; priceImpactBps: number } {
+export function quoteExactIn(input: { amountIn: bigint; reserveIn: bigint; reserveOut: bigint; feeBps: number }): {
+  amountOut: bigint;
+  priceImpactBps: number;
+} {
   const amountOut = getAmountOut(input.amountIn, input.reserveIn, input.reserveOut, input.feeBps);
   return {
     amountOut,
