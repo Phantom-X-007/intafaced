@@ -1,6 +1,6 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
-import { assertKeyScopesAllowed, issueAccessToken, type Scope, type TokenConfig } from '@intafaced/auth';
+import { assertDelegatableScopes, issueAccessToken, SESSION_SCOPES, type Scope, type TokenConfig } from '@intafaced/auth';
 import type { EventBus } from '@intafaced/events';
 import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashToken, needsRehash, verifyPassword } from './passwords.js';
 import { generateRecoveryCodes, generateSecret, totpUri, verifyTotp } from './totp.js';
@@ -365,15 +365,30 @@ export class AuthService {
 
   // ── API keys ───────────────────────────────────────────────────────────────
 
+  /**
+   * Mint an API key on behalf of the session that asked for one.
+   *
+   * `grantorScopes` is required, and that is the whole point of this signature.
+   * The scope array arrives from the request body, and before this it was only
+   * checked against INTERACTIVE_ONLY_SCOPES and then stored verbatim — so any
+   * logged-in account could ask for a key bearing `admin:compliance`, use it to
+   * approve its own KYC record to `institutional`, and clear the tier gate on
+   * every custodial module in the OS. Self-verification does not move value off
+   * the platform, so the only check in the path had no reason to object.
+   *
+   * A key is a delegation. It cannot carry authority its grantor never held.
+   */
   async createApiKey(input: {
     userId: string;
     name: string;
     scopes: string[];
+    grantorScopes: readonly string[];
     domainWhitelist?: string[];
     expiresAt?: Date;
   }): Promise<{ id: string; key: string; prefix: string }> {
-    // §9: a long-lived key must never be able to move value off the platform.
-    assertKeyScopesAllowed(input.scopes);
+    // §9: a long-lived key must never move value off the platform, must name
+    // real scopes, and must never exceed the session that created it.
+    assertDelegatableScopes(input.scopes, input.grantorScopes);
 
     const { key, hash, prefix } = generateApiKey();
     const rows = await this.sql<Array<{ id: string }>>`
@@ -674,23 +689,19 @@ export class AuthService {
   /**
    * Scopes granted to a normal interactive session.
    *
-   * Note `trade:withdraw` is absent by default even here — it is added only
-   * after a step-up challenge, so an XSS-stolen access token cannot drain an
-   * account (§9 withdrawal allow-lists + delay tiers).
+   * The list itself is SESSION_SCOPES in `@intafaced/auth`, next to the scope
+   * definitions and to the table of what is withheld and why. It moved there
+   * because it had drifted here, unread: `bank:*` and `blueprint:*` existed as
+   * scopes, were required by every procedure in svc-bank and svc-blueprint, and
+   * were issued to nobody — so both modules answered 403 to every user on the
+   * platform. A list of what a session may do belongs beside the list of what
+   * there is to do, where the gap is visible.
+   *
+   * `trade:withdraw` is still absent, as before: it is added only after a
+   * step-up challenge, so an XSS-stolen access token cannot drain an account
+   * (§9 withdrawal allow-lists + delay tiers).
    */
   private defaultScopes(): Scope[] {
-    return [
-      'identity:read',
-      'identity:write',
-      'ledger:read',
-      'trade:read',
-      'trade:write',
-      'p2p:read',
-      'p2p:write',
-      'token:read',
-      'token:stake',
-      'academy:read',
-      'agents:read',
-    ];
+    return [...SESSION_SCOPES];
   }
 }

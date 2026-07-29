@@ -147,3 +147,165 @@ export function assertKeyScopesAllowed(scopes: readonly string[]): void {
     );
   }
 }
+
+// ── What a session is issued ─────────────────────────────────────────────────
+
+/**
+ * THE SCOPES A NORMAL INTERACTIVE SESSION CARRIES.
+ *
+ * This list is the platform's answer to "what may a logged-in account do", and
+ * it lives here rather than inside svc-identity so the services enforcing the
+ * scopes and the service issuing them read from one file.
+ *
+ * ── The rule, stated once ───────────────────────────────────────────────────
+ *
+ * A scope answers "is this account entitled to this class of action, at all".
+ * The JURISDICTION_MATRIX answers "may this caller do it here, today, at this
+ * verification tier". Different questions, different answers, checked at
+ * different times:
+ *
+ *   - A scope is minted into a token that outlives the request that made it.
+ *     Making issuance region-dependent would bind a token to the region it was
+ *     issued in, and a user who travelled would lose access until it rotated.
+ *   - The matrix is evaluated per request against `ctx.region` — resolved by the
+ *     edge, never by the caller — and `principal.tier`. Both can change between
+ *     a token being issued and being used.
+ *
+ * So: issue the scope, and let the matrix rule on tier and region.
+ *
+ * The alternative — withholding `bank:write` until a user is verified — sounds
+ * safer and is worse. It is not a real constraint, because every bank procedure
+ * is matrix-gated at tier `full` whatever scopes the caller holds. What it does
+ * change is the refusal: "you lack a scope" instead of "you need verification
+ * tier full", which is a dead end the UI cannot turn into an action.
+ *
+ * ── What that rule does NOT license ─────────────────────────────────────────
+ *
+ * Everything absent from this list is absent for a stated reason, in
+ * WITHHELD_FROM_SESSION below. The compiler enforces that the two together
+ * cover SCOPES exactly, so a new scope cannot reach a token — or fail to —
+ * without someone deciding, in writing, who gets it.
+ */
+const SESSION_SCOPE_LIST = [
+  'identity:read',
+  'identity:write',
+  'ledger:read',
+  'trade:read',
+  'trade:write',
+  'p2p:read',
+  'p2p:write',
+  'token:read',
+  'token:stake',
+  'academy:read',
+  'agents:read',
+  // Non-custodial, `minTier: 'none'`. §22 makes this the easy case: the
+  // platform never holds a Blueprint, so there is nothing to verify anyone
+  // against. `:write` runs an onboarding session or ERASES a Blueprint — both
+  // act only on the caller's own row, and gating erasure behind a KYC file
+  // would be exactly the wrong way round.
+  'blueprint:read',
+  'blueprint:write',
+  // Custodial, Fiat Plane, `minTier: 'full'`, and blocked outright in US. The
+  // scope says a user account may operate a bank space at all; the matrix says
+  // not until tier `full`, and not from there. Both are issued so the refusal a
+  // user actually meets is the one that tells them what to do about it.
+  // `bank:card` is deliberately NOT here — see below.
+  'bank:read',
+  'bank:write',
+  // Read-only by construction, on a plane that has no write scope to hold:
+  // svc-protocol's own suite asserts `SCOPES` contains no `protocol:write`.
+  // Non-custodial and `minTier: 'none'`, so §22 says permissionless — and a
+  // scope issued to nobody left the smart-account claim flow unreachable.
+  'protocol:read',
+] as const;
+
+export type SessionScope = (typeof SESSION_SCOPE_LIST)[number];
+
+export const SESSION_SCOPES: readonly SessionScope[] = SESSION_SCOPE_LIST;
+
+/**
+ * Every scope a session does NOT get, and why.
+ *
+ * The type is the point. `Exclude<Scope, SessionScope>` means adding a scope to
+ * SCOPES without either issuing it or writing down why it is withheld does not
+ * compile. A scope nobody can be issued is an outage with a comment; a scope
+ * quietly issued to everybody is a custody hole. This table is how neither
+ * happens by accident.
+ */
+export const WITHHELD_FROM_SESSION: Readonly<Record<Exclude<Scope, SessionScope>, string>> = {
+  // Step-up only, so an XSS-stolen access token cannot drain an account.
+  // `auth.stepUp` adds it for five minutes against a fresh TOTP code (§9).
+  'trade:withdraw': 'Issued only by auth.stepUp, against a second factor',
+
+  // Merchant surface, not user surface. A user's own money entering and leaving
+  // the book runs on `trade:withdraw` / `trade:read` / `ledger:read` — see the
+  // user-money router in svc-pay. `pay:*` is acquiring: third-party card money
+  // moving through a merchant we onboarded. Granted by merchant onboarding, not
+  // by holding an account.
+  'pay:read': 'Merchant acquiring surface — granted by merchant onboarding',
+  'pay:write': 'Merchant acquiring surface — granted by merchant onboarding',
+  'pay:refund': 'Merchant acquiring surface — refunds another party’s payment',
+  'pay:payout': 'Merchant acquiring surface, and interactive-only (§9)',
+
+  // §18 card issuance. In INTERACTIVE_ONLY_SCOPES: it authorises spend from a
+  // funded card, so it needs a 2FA session and must never sit on a long-lived
+  // key. `bank:read` and `bank:write` are issued; this one is not.
+  'bank:card': 'Card spend authority — interactive-only step-up surface (§9, §18)',
+
+  // Running an agent spends real money: svc-agents meters model cost and
+  // settles it against the user's balance. Whether every account may burn agent
+  // budget by default is a pricing decision, not an authorisation one, and it
+  // belongs to the owner. Left withheld rather than guessed at.
+  'agents:execute': 'Metered spend — issuance is a pricing decision, not an auth one (OWNER)',
+
+  // No service exists yet (§12 Phase 5). A scope for a router that cannot be
+  // called is noise in every token in the platform; these get issued by the PR
+  // that ships the service.
+  'launch:read': 'svc-launch not built',
+  'launch:write': 'svc-launch not built',
+  'market:read': 'svc-market not built',
+  'market:write': 'svc-market not built',
+  'academy:write': 'svc-academy not built — academy:read is already issued',
+
+  // Operator scopes. Never on a user session, whatever the account.
+  // `admin:compliance` is the sharp one: it approves KYC records, so a session
+  // carrying it could verify itself to `institutional` and walk into every
+  // custodial module in the OS.
+  'admin:read': 'Operator scope',
+  'admin:write': 'Operator scope',
+  'admin:treasury': 'Operator scope, and interactive-only (§9)',
+  'admin:compliance': 'Operator scope — approving your own KYC is self-verification',
+};
+
+/**
+ * Scopes a principal may delegate to something acting on its behalf.
+ *
+ * An API key is a delegation, and a delegation cannot create authority the
+ * delegator never had. Without this check, `apiKeys.create` took an arbitrary
+ * scope array from the request and stored it verbatim: any logged-in account
+ * could mint a key bearing `admin:compliance`, approve its own KYC record to
+ * `institutional`, and unlock every custodial module in the platform.
+ *
+ * `assertKeyScopesAllowed` did not catch that, and was never meant to — it asks
+ * "does this move value off the platform", and self-verification does not.
+ *
+ * Unknown strings are refused rather than skipped. A key requesting `bank:admin`
+ * has either a bug or an intent behind it, and storing it silently leaves an
+ * audit trail claiming the key holds a scope no guard will ever recognise.
+ */
+export function assertDelegatableScopes(requested: readonly string[], grantorScopes: readonly string[]): void {
+  const unknown = requested.filter((s) => !isScope(s));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown scopes: ${unknown.join(', ')}`);
+  }
+
+  // Checked first: a long-lived credential may never carry these even from a
+  // session that legitimately holds them, and that message is the clearer one.
+  assertKeyScopesAllowed(requested);
+
+  const held = expandScopes(grantorScopes);
+  const notHeld = requested.filter((s) => !held.has(s as Scope));
+  if (notHeld.length > 0) {
+    throw new Error(`Cannot grant scopes the granting session does not hold: ${notHeld.join(', ')}`);
+  }
+}
