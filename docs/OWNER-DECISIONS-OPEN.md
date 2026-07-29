@@ -10,7 +10,7 @@ Engineering cannot close these. Mechanism is ready; content/choice is yours (or 
 | --- | --- | --- |
 | **A — Hold TERMINAL.md (recommended default)** | Drop Charting Library path; build charts on lightweight-charts | Product + app work; lawful |
 | **B — Keep Advanced Charts** | Apply to TradingView as named licensee | Days+ commercial; gates launch |
-| **Eng already (no decision):** cut remote `bizzan.oss-cn-hangzhou.aliyuncs.com` chart loads — that was arbitrary remote JS in users' browsers | security floor | separate PR |
+| **Eng already (no decision):** cut remote OSS chart loads (third-party Alibaba Cloud bucket) — that was arbitrary remote JS in users' browsers | security floor | separate PR |
 
 **You decide A or B.** Until then do not ship the shell publicly with the vendored library.
 
