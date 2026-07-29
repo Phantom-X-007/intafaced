@@ -38,15 +38,30 @@ const bus = await JetStreamEventBus.connect({
 const rank = new RankService(sql, bus);
 await rank.seedTiers();
 
-const auth = new AuthService(sql, bus, rank, {
-  secret: env.JWT_ACCESS_SECRET,
-  issuer: env.JWT_ISSUER,
-  audience: env.JWT_AUDIENCE,
-  accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
-  refreshTtlSeconds: env.JWT_REFRESH_TTL_SECONDS,
-});
+const auth = new AuthService(
+  sql,
+  bus,
+  rank,
+  {
+    secret: env.JWT_ACCESS_SECRET,
+    issuer: env.JWT_ISSUER,
+    audience: env.JWT_AUDIENCE,
+    accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
+    refreshTtlSeconds: env.JWT_REFRESH_TTL_SECONDS,
+  },
+  {
+    rpID: env.WEBAUTHN_RP_ID,
+    rpName: env.WEBAUTHN_RP_NAME,
+    origin: env.WEBAUTHN_ORIGIN.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+);
 
-export const appRouter = createIdentityRouter(auth, rank, { registrationOpen: env.REGISTRATION_OPEN });
+export const appRouter = createIdentityRouter(auth, rank, {
+  registrationOpen: env.REGISTRATION_OPEN,
+  webauthnEnabled: env.WEBAUTHN_ENABLED,
+});
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({

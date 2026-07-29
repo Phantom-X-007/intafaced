@@ -4,6 +4,25 @@ import { assertDelegatableScopes, issueAccessToken, SESSION_SCOPES, type Scope, 
 import type { EventBus } from '@intafaced/events';
 import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashToken, needsRehash, verifyPassword } from './passwords.js';
 import { generateRecoveryCodes, generateSecret, totpUri, verifyTotp } from './totp.js';
+import {
+  b64urlDecode,
+  b64urlEncode,
+  ChallengeStore,
+  createAuthenticationOptions,
+  createRegistrationOptions,
+  generateChallenge,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+  WebAuthnError,
+} from './webauthn.js';
+import type {
+  AuthenticationOptionsJSON,
+  AuthenticationResponseJSON,
+  RegistrationOptionsJSON,
+  RegistrationResponseJSON,
+  StoredWebAuthnCredential,
+  WebAuthnConfig,
+} from './webauthn.js';
 import type { RankService } from '../rank/rank-service.js';
 
 /**
@@ -30,12 +49,18 @@ export class AuthError extends Error {
       /** A KYC record exists but is not in a state an operator can act on. */
       | 'auth.kyc_not_pending'
       /** Step-up asked for on an account with no second factor to step up with. */
-      | 'auth.mfa_not_enrolled',
+      | 'auth.mfa_not_enrolled'
+      /** WebAuthn ceremony failed (bad signature, origin, challenge, counter). */
+      | 'auth.webauthn_invalid'
+      /** Account has no registered WebAuthn credential for assertion. */
+      | 'auth.webauthn_not_enrolled',
   ) {
     super(message);
     this.name = 'AuthError';
   }
 }
+
+export type { WebAuthnConfig, StoredWebAuthnCredential };
 
 export type KycTier = 'none' | 'basic' | 'full' | 'institutional';
 export type SubmittableKycTier = Exclude<KycTier, 'none'>;
@@ -115,13 +140,25 @@ export interface SessionTokens {
   mfaRequired: boolean;
 }
 
+const DEFAULT_WEBAUTHN: WebAuthnConfig = {
+  rpID: 'localhost',
+  rpName: 'INTAFACED',
+  origin: 'http://localhost:3000',
+};
+
 export class AuthService {
+  private readonly challenges = new ChallengeStore();
+  private readonly webauthn: WebAuthnConfig;
+
   constructor(
     private readonly sql: Sql,
     private readonly bus: EventBus,
     private readonly rank: RankService,
     private readonly tokens: TokenConfig & { refreshTtlSeconds: number },
-  ) {}
+    webauthn: WebAuthnConfig = DEFAULT_WEBAUTHN,
+  ) {
+    this.webauthn = webauthn;
+  }
 
   // ── Registration ───────────────────────────────────────────────────────────
 
@@ -361,6 +398,171 @@ export class AuthService {
       xpDelta: 100,
       idempotencyKey: `identity.totp.enrolled:${userId}`,
     });
+  }
+
+  // ── WebAuthn ───────────────────────────────────────────────────────────────
+
+  /**
+   * Step 1 of enrolment: options for `navigator.credentials.create()`.
+   *
+   * The challenge is held in-process until `confirmWebauthnRegistration`
+   * consumes it. Mirrors TOTP — nothing is persisted until the ceremony proves
+   * the authenticator holds the private key.
+   */
+  async startWebauthnRegistration(userId: string): Promise<RegistrationOptionsJSON> {
+    const rows = await this.sql<Array<{ email: string; handle: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT email, handle, webauthn_creds FROM identity.users WHERE id = ${userId}
+    `;
+    const user = rows[0];
+    if (!user) throw new AuthError('User not found', 'auth.not_found');
+
+    const existing = asCredentialList(user.webauthn_creds);
+    const challenge = generateChallenge();
+    this.challenges.put('registration', challenge, userId);
+
+    return createRegistrationOptions(this.webauthn, { id: userId, name: user.email, displayName: user.handle }, existing, challenge);
+  }
+
+  /**
+   * Step 2 of enrolment: verify the authenticator attestation and persist the
+   * public key. Attestation format is restricted to `none` (see webauthn.ts).
+   */
+  async confirmWebauthnRegistration(userId: string, response: RegistrationResponseJSON): Promise<{ credentialId: string }> {
+    const rows = await this.sql<Array<{ webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT webauthn_creds FROM identity.users WHERE id = ${userId}
+    `;
+    const user = rows[0];
+    if (!user) throw new AuthError('User not found', 'auth.not_found');
+
+    const clientChallenge = readClientChallenge(response.response.clientDataJSON);
+    if (!clientChallenge) throw new AuthError('Invalid WebAuthn response', 'auth.webauthn_invalid');
+
+    const held = this.challenges.take(clientChallenge, 'registration');
+    if (!held || held.userId !== userId) {
+      throw new AuthError('WebAuthn challenge expired or already used', 'auth.webauthn_invalid');
+    }
+
+    let stored: StoredWebAuthnCredential;
+    try {
+      stored = verifyRegistrationResponse(this.webauthn, held.challenge, response);
+    } catch (err) {
+      throw mapWebAuthnError(err);
+    }
+
+    const existing = asCredentialList(user.webauthn_creds);
+    if (existing.some((c) => c.credentialId === stored.credentialId)) {
+      throw new AuthError('That authenticator is already registered', 'auth.webauthn_invalid');
+    }
+
+    const next = [...existing, stored];
+    await this.sql`
+      UPDATE identity.users
+         SET webauthn_creds = ${this.sql.json(next as never)}, updated_at = now()
+       WHERE id = ${userId}
+    `;
+
+    // First credential only — re-enrolling a second key must not re-pay XP.
+    if (existing.length === 0) {
+      await this.rank.awardXp({
+        userId,
+        sourceModule: 'identity',
+        action: 'identity.webauthn.enrolled',
+        xpDelta: 100,
+        idempotencyKey: `identity.webauthn.enrolled:${userId}`,
+      });
+    }
+
+    return { credentialId: stored.credentialId };
+  }
+
+  /**
+   * Step 1 of passwordless login: options for `navigator.credentials.get()`.
+   *
+   * Always returns options (with an empty allow list when the account has no
+   * credentials) so the shape of the response does not enumerate who is
+   * enrolled. The matching challenge is only redeemable for the user we found.
+   */
+  async startWebauthnAuthentication(identifier: string): Promise<AuthenticationOptionsJSON> {
+    const rows = await this.sql<Array<{ id: string; status: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT id, status, webauthn_creds FROM identity.users
+       WHERE handle = ${identifier} OR email = ${identifier}
+    `;
+    const user = rows[0];
+    const challenge = generateChallenge();
+    const creds = user && user.status === 'active' ? asCredentialList(user.webauthn_creds) : [];
+
+    // Challenge is bound to the user when we found one; otherwise it is stored
+    // against null and can never issue a session.
+    this.challenges.put('authentication', challenge, user?.status === 'active' ? user.id : null);
+
+    return createAuthenticationOptions(this.webauthn, creds, challenge);
+  }
+
+  /**
+   * Step 2 of passwordless login: verify the assertion and issue a session.
+   *
+   * A successful assertion is treated as MFA — the authenticator is the second
+   * factor (and, when used passwordlessly, the only factor that mattered).
+   */
+  async confirmWebauthnAuthentication(
+    identifier: string,
+    response: AuthenticationResponseJSON,
+    options: { device?: string; ip?: string } = {},
+  ): Promise<SessionTokens> {
+    const rows = await this.sql<Array<{ id: string; status: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT id, status, webauthn_creds FROM identity.users
+       WHERE handle = ${identifier} OR email = ${identifier}
+    `;
+    const user = rows[0];
+    if (!user) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
+    if (user.status !== 'active') throw new AuthError(`Account is ${user.status}`, 'auth.account_frozen');
+
+    const clientChallenge = readClientChallenge(response.response.clientDataJSON);
+    if (!clientChallenge) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
+
+    const held = this.challenges.take(clientChallenge, 'authentication');
+    if (!held || held.userId !== user.id) {
+      throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
+    }
+
+    const creds = asCredentialList(user.webauthn_creds);
+    if (creds.length === 0) throw new AuthError('No security key enrolled', 'auth.webauthn_not_enrolled');
+
+    const responseId = normalizeCredId(response.id);
+    const credential = creds.find((c) => c.credentialId === responseId);
+    if (!credential) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
+
+    let newCounter: number;
+    try {
+      ({ newCounter } = verifyAuthenticationResponse(this.webauthn, held.challenge, credential, response));
+    } catch (err) {
+      // Do not distinguish signature failures from unknown credentials on the
+      // login path — same reason a wrong password and an unknown account share
+      // one error code.
+      if (err instanceof WebAuthnError) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
+      throw err;
+    }
+
+    const next = creds.map((c) => (c.credentialId === credential.credentialId ? { ...c, counter: newCounter } : c));
+    await this.sql`
+      UPDATE identity.users
+         SET webauthn_creds = ${this.sql.json(next as never)}, updated_at = now()
+       WHERE id = ${user.id}
+    `;
+
+    return this.issueSession(user.id, { device: options.device, ip: options.ip, mfa: true });
+  }
+
+  async listWebauthnCredentials(userId: string): Promise<Array<{ credentialId: string; createdAt: string; transports?: string[] }>> {
+    const rows = await this.sql<Array<{ webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT webauthn_creds FROM identity.users WHERE id = ${userId}
+    `;
+    if (!rows[0]) throw new AuthError('User not found', 'auth.not_found');
+    return asCredentialList(rows[0].webauthn_creds).map((c) => ({
+      credentialId: c.credentialId,
+      createdAt: c.createdAt,
+      ...(c.transports ? { transports: c.transports } : {}),
+    }));
   }
 
   // ── API keys ───────────────────────────────────────────────────────────────
@@ -704,4 +906,40 @@ export class AuthService {
   private defaultScopes(): Scope[] {
     return [...SESSION_SCOPES];
   }
+}
+
+function asCredentialList(raw: unknown): StoredWebAuthnCredential[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (c): c is StoredWebAuthnCredential =>
+      !!c &&
+      typeof c === 'object' &&
+      typeof (c as StoredWebAuthnCredential).credentialId === 'string' &&
+      typeof (c as StoredWebAuthnCredential).publicKey === 'string' &&
+      typeof (c as StoredWebAuthnCredential).counter === 'number',
+  );
+}
+
+function normalizeCredId(id: string): string {
+  try {
+    return b64urlEncode(b64urlDecode(id));
+  } catch {
+    return id;
+  }
+}
+
+function readClientChallenge(clientDataJSONB64: string): string | null {
+  try {
+    const parsed = JSON.parse(b64urlDecode(clientDataJSONB64).toString('utf8')) as { challenge?: string };
+    return typeof parsed.challenge === 'string' ? parsed.challenge : null;
+  } catch {
+    return null;
+  }
+}
+
+function mapWebAuthnError(err: unknown): AuthError {
+  if (err instanceof WebAuthnError) {
+    return new AuthError(err.message, 'auth.webauthn_invalid');
+  }
+  return new AuthError('Invalid WebAuthn response', 'auth.webauthn_invalid');
 }

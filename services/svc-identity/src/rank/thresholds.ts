@@ -139,6 +139,7 @@ export const XP_AWARDS: Readonly<Record<string, number>> = {
   'identity.registered': 50,
   'identity.kyc.approved': 200,
   'identity.totp.enrolled': 100,
+  'identity.webauthn.enrolled': 100,
 
   'trade.order.filled': 5,
   'trade.first.trade': 100,

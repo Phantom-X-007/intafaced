@@ -1,0 +1,486 @@
+import { createHash, createPublicKey, randomBytes, verify as cryptoVerify, type KeyObject } from 'node:crypto';
+import { decodeCbor, encodeCbor, mapGet, type CborValue } from './cbor.js';
+
+/**
+ * WebAuthn (W3C Level 2) — registration + assertion, ES256 only.
+ *
+ * Implemented here rather than imported for the same reason as TOTP: this is
+ * the authentication path, and a dependency we cannot check against the spec is
+ * a dependency we are trusting blind. ES256 (P-256) is the algorithm every
+ * platform authenticator and security key must support; that is enough for
+ * enrolment and assertion. Other algs are refused, deliberately — better to
+ * reject than to accept a signature algorithm we have not verified.
+ *
+ * §9: TOTP + WebAuthn are both required. This is the WebAuthn half.
+ */
+
+export interface WebAuthnConfig {
+  /** Relying Party ID — usually the registrable domain, e.g. `intafaced.com`. */
+  rpID: string;
+  rpName: string;
+  /** Expected origin(s) on clientDataJSON, e.g. `https://app.intafaced.com`. */
+  origin: string | readonly string[];
+  /** Challenge lifetime. Default 5 minutes. */
+  challengeTtlMs?: number;
+}
+
+export interface StoredWebAuthnCredential {
+  /** Base64url credential id. */
+  credentialId: string;
+  /** Base64url COSE public key bytes. */
+  publicKey: string;
+  /** Signature counter from the authenticator. Cloned devices reset this. */
+  counter: number;
+  transports?: string[];
+  createdAt: string;
+}
+
+export interface RegistrationOptionsJSON {
+  challenge: string;
+  rp: { name: string; id: string };
+  user: { id: string; name: string; displayName: string };
+  pubKeyCredParams: Array<{ type: 'public-key'; alg: number }>;
+  timeout: number;
+  excludeCredentials: Array<{ type: 'public-key'; id: string; transports?: string[] }>;
+  authenticatorSelection: {
+    residentKey: 'preferred';
+    userVerification: 'preferred';
+    requireResidentKey: false;
+  };
+  attestation: 'none';
+}
+
+export interface AuthenticationOptionsJSON {
+  challenge: string;
+  timeout: number;
+  rpId: string;
+  allowCredentials: Array<{ type: 'public-key'; id: string; transports?: string[] }>;
+  userVerification: 'preferred';
+}
+
+/** Wire shape from `navigator.credentials.create()`. */
+export interface RegistrationResponseJSON {
+  id: string;
+  rawId: string;
+  type: 'public-key';
+  response: {
+    clientDataJSON: string;
+    attestationObject: string;
+    transports?: string[];
+  };
+  clientExtensionResults?: Record<string, unknown>;
+}
+
+/** Wire shape from `navigator.credentials.get()`. */
+export interface AuthenticationResponseJSON {
+  id: string;
+  rawId: string;
+  type: 'public-key';
+  response: {
+    clientDataJSON: string;
+    authenticatorData: string;
+    signature: string;
+    userHandle?: string | null;
+  };
+  clientExtensionResults?: Record<string, unknown>;
+}
+
+const ES256 = -7;
+const CHALLENGE_BYTES = 32;
+const DEFAULT_TTL_MS = 5 * 60 * 1000;
+const TIMEOUT_MS = 60_000;
+
+// ── base64url ────────────────────────────────────────────────────────────────
+
+export function b64urlEncode(buf: Uint8Array | Buffer): string {
+  return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+export function b64urlDecode(input: string): Buffer {
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4));
+  return Buffer.from(padded + pad, 'base64');
+}
+
+// ── challenge store ──────────────────────────────────────────────────────────
+
+interface ChallengeEntry {
+  challenge: string;
+  userId: string | null;
+  kind: 'registration' | 'authentication';
+  expiresAt: number;
+}
+
+/**
+ * In-process challenge store.
+ *
+ * A multi-instance deploy needs a shared store (Redis). That is a later
+ * wiring job, not a reason to leave WebAuthn unshipped — the ceremony is
+ * correct either way, and a single-instance identity pod is the current shape.
+ */
+export class ChallengeStore {
+  private readonly entries = new Map<string, ChallengeEntry>();
+
+  constructor(private readonly ttlMs: number = DEFAULT_TTL_MS) {}
+
+  put(kind: ChallengeEntry['kind'], challenge: string, userId: string | null): void {
+    this.prune();
+    this.entries.set(challenge, {
+      challenge,
+      userId,
+      kind,
+      expiresAt: Date.now() + this.ttlMs,
+    });
+  }
+
+  take(challenge: string, kind: ChallengeEntry['kind']): ChallengeEntry | null {
+    this.prune();
+    const entry = this.entries.get(challenge);
+    if (!entry) return null;
+    this.entries.delete(challenge);
+    if (entry.kind !== kind) return null;
+    if (entry.expiresAt < Date.now()) return null;
+    return entry;
+  }
+
+  /** Test helper — current size after prune. */
+  get size(): number {
+    this.prune();
+    return this.entries.size;
+  }
+
+  private prune(): void {
+    const now = Date.now();
+    for (const [k, v] of this.entries) {
+      if (v.expiresAt < now) this.entries.delete(k);
+    }
+  }
+}
+
+// ── options ──────────────────────────────────────────────────────────────────
+
+export function generateChallenge(): string {
+  return b64urlEncode(randomBytes(CHALLENGE_BYTES));
+}
+
+export function createRegistrationOptions(
+  config: WebAuthnConfig,
+  user: { id: string; name: string; displayName: string },
+  existing: readonly StoredWebAuthnCredential[],
+  challenge: string,
+): RegistrationOptionsJSON {
+  return {
+    challenge,
+    rp: { name: config.rpName, id: config.rpID },
+    user: {
+      // WebAuthn wants an opaque user handle — we use the uuid as utf8 bytes, base64url'd.
+      id: b64urlEncode(Buffer.from(user.id, 'utf8')),
+      name: user.name,
+      displayName: user.displayName,
+    },
+    pubKeyCredParams: [{ type: 'public-key', alg: ES256 }],
+    timeout: TIMEOUT_MS,
+    excludeCredentials: existing.map((c) => ({
+      type: 'public-key' as const,
+      id: c.credentialId,
+      ...(c.transports ? { transports: c.transports } : {}),
+    })),
+    authenticatorSelection: {
+      residentKey: 'preferred',
+      userVerification: 'preferred',
+      requireResidentKey: false,
+    },
+    attestation: 'none',
+  };
+}
+
+export function createAuthenticationOptions(
+  config: WebAuthnConfig,
+  allow: readonly StoredWebAuthnCredential[],
+  challenge: string,
+): AuthenticationOptionsJSON {
+  return {
+    challenge,
+    timeout: TIMEOUT_MS,
+    rpId: config.rpID,
+    allowCredentials: allow.map((c) => ({
+      type: 'public-key' as const,
+      id: c.credentialId,
+      ...(c.transports ? { transports: c.transports } : {}),
+    })),
+    userVerification: 'preferred',
+  };
+}
+
+// ── verification ─────────────────────────────────────────────────────────────
+
+export class WebAuthnError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'webauthn.invalid' | 'webauthn.challenge' | 'webauthn.origin' | 'webauthn.counter',
+  ) {
+    super(message);
+    this.name = 'WebAuthnError';
+  }
+}
+
+function expectedOrigins(config: WebAuthnConfig): Set<string> {
+  return new Set(Array.isArray(config.origin) ? config.origin : [config.origin]);
+}
+
+function parseClientData(
+  clientDataJSONB64: string,
+  expected: { type: 'webauthn.create' | 'webauthn.get'; challenge: string; origins: Set<string> },
+): void {
+  let parsed: { type?: string; challenge?: string; origin?: string };
+  try {
+    parsed = JSON.parse(b64urlDecode(clientDataJSONB64).toString('utf8')) as typeof parsed;
+  } catch {
+    throw new WebAuthnError('clientDataJSON is not valid JSON', 'webauthn.invalid');
+  }
+  if (parsed.type !== expected.type) {
+    throw new WebAuthnError(`clientData type was ${parsed.type}, expected ${expected.type}`, 'webauthn.invalid');
+  }
+  if (parsed.challenge !== expected.challenge) {
+    throw new WebAuthnError('challenge mismatch', 'webauthn.challenge');
+  }
+  if (!parsed.origin || !expected.origins.has(parsed.origin)) {
+    throw new WebAuthnError(`origin ${parsed.origin ?? '(missing)'} is not allowed`, 'webauthn.origin');
+  }
+}
+
+function rpIdHash(rpID: string): Buffer {
+  return createHash('sha256').update(rpID).digest();
+}
+
+interface AuthData {
+  flags: number;
+  counter: number;
+  credentialId?: Buffer;
+  publicKeyCose?: Buffer;
+}
+
+function parseAuthData(authData: Buffer, expectAttested: boolean): AuthData {
+  if (authData.length < 37) throw new WebAuthnError('authenticatorData too short', 'webauthn.invalid');
+
+  const flags = authData[32]!;
+  const counter = authData.readUInt32BE(33);
+  const up = (flags & 0x01) !== 0;
+  const at = (flags & 0x40) !== 0;
+
+  if (!up) throw new WebAuthnError('user presence flag not set', 'webauthn.invalid');
+
+  if (expectAttested) {
+    if (!at) throw new WebAuthnError('attested credential data missing', 'webauthn.invalid');
+    // aaguid (16) + credIdLen (2) + credId + cose key
+    if (authData.length < 37 + 18) throw new WebAuthnError('attested credential data truncated', 'webauthn.invalid');
+    const credIdLen = authData.readUInt16BE(37 + 16);
+    const credIdStart = 37 + 18;
+    const credIdEnd = credIdStart + credIdLen;
+    if (authData.length < credIdEnd + 1) throw new WebAuthnError('credential id truncated', 'webauthn.invalid');
+    const credentialId = authData.subarray(credIdStart, credIdEnd);
+    const publicKeyCose = authData.subarray(credIdEnd);
+    return { flags, counter, credentialId, publicKeyCose };
+  }
+
+  return { flags, counter };
+}
+
+function coseEc2ToKey(coseBytes: Buffer): { key: KeyObject; alg: number } {
+  let decoded: CborValue;
+  try {
+    decoded = decodeCbor(coseBytes);
+  } catch (err) {
+    throw new WebAuthnError(`COSE key is not valid CBOR: ${(err as Error).message}`, 'webauthn.invalid');
+  }
+  if (!(decoded instanceof Map)) throw new WebAuthnError('COSE key is not a map', 'webauthn.invalid');
+
+  const kty = mapGet(decoded, 1);
+  const alg = mapGet(decoded, 3);
+  const crv = mapGet(decoded, -1);
+  const x = mapGet(decoded, -2);
+  const y = mapGet(decoded, -3);
+
+  if (kty !== 2) throw new WebAuthnError(`unsupported COSE kty ${String(kty)}`, 'webauthn.invalid');
+  if (alg !== ES256) throw new WebAuthnError(`unsupported COSE alg ${String(alg)}; only ES256 is accepted`, 'webauthn.invalid');
+  if (crv !== 1) throw new WebAuthnError(`unsupported COSE crv ${String(crv)}; only P-256 is accepted`, 'webauthn.invalid');
+  if (!(x instanceof Uint8Array) || !(y instanceof Uint8Array)) {
+    throw new WebAuthnError('COSE EC2 key missing x/y', 'webauthn.invalid');
+  }
+  if (x.length !== 32 || y.length !== 32) {
+    throw new WebAuthnError('COSE EC2 coordinates must be 32 bytes', 'webauthn.invalid');
+  }
+
+  const key = createPublicKey({
+    key: {
+      kty: 'EC',
+      crv: 'P-256',
+      x: b64urlEncode(x),
+      y: b64urlEncode(y),
+    },
+    format: 'jwk',
+  });
+
+  return { key, alg: ES256 };
+}
+
+export function verifyRegistrationResponse(
+  config: WebAuthnConfig,
+  expectedChallenge: string,
+  response: RegistrationResponseJSON,
+): StoredWebAuthnCredential {
+  if (response.type !== 'public-key') throw new WebAuthnError('credential type must be public-key', 'webauthn.invalid');
+
+  parseClientData(response.response.clientDataJSON, {
+    type: 'webauthn.create',
+    challenge: expectedChallenge,
+    origins: expectedOrigins(config),
+  });
+
+  let attestation: CborValue;
+  try {
+    attestation = decodeCbor(b64urlDecode(response.response.attestationObject));
+  } catch (err) {
+    throw new WebAuthnError(`attestationObject is not valid CBOR: ${(err as Error).message}`, 'webauthn.invalid');
+  }
+  if (!(attestation instanceof Map)) throw new WebAuthnError('attestationObject is not a map', 'webauthn.invalid');
+
+  const fmt = mapGet(attestation, 'fmt');
+  // We request attestation: 'none'. Accept only that — packed/tpm/etc. would
+  // need a trust store we do not maintain yet.
+  if (fmt !== 'none') throw new WebAuthnError(`attestation fmt ${String(fmt)} is not accepted`, 'webauthn.invalid');
+
+  const authDataRaw = mapGet(attestation, 'authData');
+  if (!(authDataRaw instanceof Uint8Array)) throw new WebAuthnError('authData missing', 'webauthn.invalid');
+  const authData = Buffer.from(authDataRaw);
+
+  const expectedRpHash = rpIdHash(config.rpID);
+  if (!authData.subarray(0, 32).equals(expectedRpHash)) {
+    throw new WebAuthnError('rpIdHash mismatch', 'webauthn.invalid');
+  }
+
+  const parsed = parseAuthData(authData, true);
+  if (!parsed.credentialId || !parsed.publicKeyCose) {
+    throw new WebAuthnError('credential missing from authData', 'webauthn.invalid');
+  }
+
+  // Validate the public key is ES256 and importable.
+  coseEc2ToKey(Buffer.from(parsed.publicKeyCose));
+
+  const credentialId = b64urlEncode(parsed.credentialId);
+  if (credentialId !== response.id && credentialId !== response.rawId) {
+    // Some clients send id as base64url of rawId — both should match the authData id.
+    // Accept if either wire field matches; reject otherwise.
+    const rawMatch = b64urlEncode(b64urlDecode(response.rawId)) === credentialId;
+    const idMatch = b64urlEncode(b64urlDecode(response.id)) === credentialId;
+    if (!rawMatch && !idMatch) {
+      throw new WebAuthnError('credential id does not match authenticatorData', 'webauthn.invalid');
+    }
+  }
+
+  return {
+    credentialId,
+    publicKey: b64urlEncode(parsed.publicKeyCose),
+    counter: parsed.counter,
+    transports: response.response.transports,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export function verifyAuthenticationResponse(
+  config: WebAuthnConfig,
+  expectedChallenge: string,
+  credential: StoredWebAuthnCredential,
+  response: AuthenticationResponseJSON,
+): { newCounter: number } {
+  if (response.type !== 'public-key') throw new WebAuthnError('credential type must be public-key', 'webauthn.invalid');
+
+  const responseId = b64urlEncode(b64urlDecode(response.id));
+  if (responseId !== credential.credentialId) {
+    throw new WebAuthnError('credential id does not match stored credential', 'webauthn.invalid');
+  }
+
+  parseClientData(response.response.clientDataJSON, {
+    type: 'webauthn.get',
+    challenge: expectedChallenge,
+    origins: expectedOrigins(config),
+  });
+
+  const authData = b64urlDecode(response.response.authenticatorData);
+  const expectedRpHash = rpIdHash(config.rpID);
+  if (!authData.subarray(0, 32).equals(expectedRpHash)) {
+    throw new WebAuthnError('rpIdHash mismatch', 'webauthn.invalid');
+  }
+
+  const parsed = parseAuthData(authData, false);
+
+  // Counter must advance when the authenticator tracks one. A zero that stays
+  // zero is allowed (some platform authenticators never increment); a decrease
+  // is a cloned authenticator.
+  if (credential.counter > 0 && parsed.counter > 0 && parsed.counter <= credential.counter) {
+    throw new WebAuthnError('authenticator counter did not advance', 'webauthn.counter');
+  }
+
+  const clientDataHash = createHash('sha256').update(b64urlDecode(response.response.clientDataJSON)).digest();
+  const signed = Buffer.concat([authData, clientDataHash]);
+  const signature = b64urlDecode(response.response.signature);
+
+  const { key } = coseEc2ToKey(b64urlDecode(credential.publicKey));
+  const ok = cryptoVerify('SHA256', signed, { key, dsaEncoding: 'ieee-p1363' }, signature);
+  if (!ok) throw new WebAuthnError('signature verification failed', 'webauthn.invalid');
+
+  return { newCounter: parsed.counter };
+}
+
+// ── test/authenticator helpers (also used by the service tests) ──────────────
+
+/** Build a COSE_Key for an ES256 P-256 public JWK. */
+export function coseKeyFromJwk(jwk: { x: string; y: string }): Buffer {
+  const map = new Map<CborValue, CborValue>([
+    [1, 2],
+    [3, ES256],
+    [-1, 1],
+    [-2, new Uint8Array(b64urlDecode(jwk.x!))],
+    [-3, new Uint8Array(b64urlDecode(jwk.y!))],
+  ]);
+  return Buffer.from(encodeCbor(map));
+}
+
+export function buildAuthenticatorData(opts: {
+  rpID: string;
+  counter: number;
+  /** When set, AT flag is set and credential data is included. */
+  credential?: { id: Buffer; publicKeyCose: Buffer };
+  userPresent?: boolean;
+  userVerified?: boolean;
+}): Buffer {
+  const rpHash = rpIdHash(opts.rpID);
+  let flags = 0;
+  if (opts.userPresent !== false) flags |= 0x01;
+  if (opts.userVerified !== false) flags |= 0x04;
+  if (opts.credential) flags |= 0x40;
+
+  const header = Buffer.alloc(37);
+  rpHash.copy(header, 0);
+  header[32] = flags;
+  header.writeUInt32BE(opts.counter >>> 0, 33);
+
+  if (!opts.credential) return header;
+
+  const aaguid = Buffer.alloc(16);
+  const idLen = Buffer.alloc(2);
+  idLen.writeUInt16BE(opts.credential.id.length);
+  return Buffer.concat([header, aaguid, idLen, opts.credential.id, opts.credential.publicKeyCose]);
+}
+
+export function buildClientDataJSON(opts: { type: 'webauthn.create' | 'webauthn.get'; challenge: string; origin: string }): Buffer {
+  return Buffer.from(
+    JSON.stringify({
+      type: opts.type,
+      challenge: opts.challenge,
+      origin: opts.origin,
+      crossOrigin: false,
+    }),
+    'utf8',
+  );
+}

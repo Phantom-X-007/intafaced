@@ -98,6 +98,37 @@ function stubServices(): Stub {
       scopes: ['trade:withdraw'],
     })),
     createApiKey: record('createApiKey', () => ({ id: 'key-1', key: 'ifc_secret', prefix: 'ifc_abc' })),
+    startWebauthnRegistration: record('startWebauthnRegistration', () => ({
+      challenge: 'chal-reg',
+      rp: { name: 'INTAFACED', id: 'localhost' },
+      user: { id: 'dXNlcg', name: 'u@example.com', displayName: 'user' },
+      pubKeyCredParams: [{ type: 'public-key' as const, alg: -7 }],
+      timeout: 60_000,
+      excludeCredentials: [],
+      authenticatorSelection: {
+        residentKey: 'preferred' as const,
+        userVerification: 'preferred' as const,
+        requireResidentKey: false as const,
+      },
+      attestation: 'none' as const,
+    })),
+    confirmWebauthnRegistration: record('confirmWebauthnRegistration', () => ({ credentialId: 'cred-1' })),
+    startWebauthnAuthentication: record('startWebauthnAuthentication', () => ({
+      challenge: 'chal-auth',
+      timeout: 60_000,
+      rpId: 'localhost',
+      allowCredentials: [{ type: 'public-key' as const, id: 'cred-1' }],
+      userVerification: 'preferred' as const,
+    })),
+    confirmWebauthnAuthentication: record('confirmWebauthnAuthentication', () => ({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      expiresAt: new Date('2026-07-28T09:15:00.000Z'),
+      sessionId: SESSION,
+      userId: USER,
+      mfaRequired: false,
+    })),
+    listWebauthnCredentials: record('listWebauthnCredentials', () => [{ credentialId: 'cred-1', createdAt: '2026-07-28T09:00:00.000Z' }]),
   } as unknown as AuthService;
 
   const rank = {
@@ -376,6 +407,72 @@ describe('auth.stepUp is what makes a withdrawal reachable at all', () => {
     stub.fail(new AuthError('Session is no longer valid', 'auth.session_invalid'));
     const api = await caller(['identity:read']);
     expect(codeOf(await api.auth.stepUp({ totpCode: '123456' }).catch((e: unknown) => e))).toBe('UNAUTHORIZED');
+  });
+});
+
+// ── WebAuthn ─────────────────────────────────────────────────────────────────
+
+describe('webauthn registration requires a live session; auth is public', () => {
+  const registrationBody = {
+    id: 'cred-1',
+    rawId: 'cred-1',
+    type: 'public-key' as const,
+    response: {
+      clientDataJSON: 'eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0',
+      attestationObject: 'o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YQ',
+    },
+  };
+
+  const assertionBody = {
+    identifier: 'alice',
+    credential: {
+      id: 'cred-1',
+      rawId: 'cred-1',
+      type: 'public-key' as const,
+      response: {
+        clientDataJSON: 'eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0',
+        authenticatorData: 'authdata',
+        signature: 'sig',
+      },
+    },
+  };
+
+  it('registerOptions is protected', async () => {
+    await expect(caller([]).then((api) => api.webauthn.registerOptions())).rejects.toThrow(/Authentication required/);
+    const api = await caller(['identity:read']);
+    await expect(api.webauthn.registerOptions()).resolves.toMatchObject({ challenge: 'chal-reg' });
+    expect(stub.calls.some((c) => c.method === 'startWebauthnRegistration')).toBe(true);
+  });
+
+  it('registerVerify binds the principal userId, never a body field', async () => {
+    const api = await caller(['identity:write']);
+    await expect(api.webauthn.registerVerify(registrationBody)).resolves.toEqual({ credentialId: 'cred-1' });
+    const call = stub.calls.find((c) => c.method === 'confirmWebauthnRegistration')!;
+    expect(call.args[0]).toBe(USER);
+  });
+
+  it('authOptions and authVerify are public and return a session', async () => {
+    const anon = await caller([]);
+    await expect(anon.webauthn.authOptions({ identifier: 'alice' })).resolves.toMatchObject({ challenge: 'chal-auth' });
+    await expect(anon.webauthn.authVerify(assertionBody)).resolves.toMatchObject({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      userId: USER,
+    });
+  });
+
+  it('maps a bad ceremony to UNAUTHORIZED', async () => {
+    stub.fail(new AuthError('signature verification failed', 'auth.webauthn_invalid'));
+    const api = await caller(['identity:read']);
+    expect(codeOf(await api.webauthn.registerVerify(registrationBody).catch((e: unknown) => e))).toBe('UNAUTHORIZED');
+  });
+
+  it('refuses every procedure when WebAuthn is disabled', async () => {
+    router = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, webauthnEnabled: false });
+    const api = await caller(['identity:read']);
+    expect(codeOf(await api.webauthn.registerOptions().catch((e: unknown) => e))).toBe('FORBIDDEN');
+    expect(codeOf(await api.webauthn.authOptions({ identifier: 'alice' }).catch((e: unknown) => e))).toBe('FORBIDDEN');
+    expect(stub.calls.filter((c) => c.method.startsWith('startWebauthn') || c.method.startsWith('confirmWebauthn'))).toHaveLength(0);
   });
 });
 

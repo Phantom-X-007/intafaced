@@ -10,23 +10,26 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 
 ## API
 
-| Procedure                            | Scope                     | Notes                                                |
-| ------------------------------------ | ------------------------- | ---------------------------------------------------- |
-| `auth.register`                      | —                         | Creates user, profile, rank row; awards 50 XP        |
-| `auth.login`                         | —                         | Handle or email; requires TOTP once enrolled         |
-| `auth.refresh`                       | —                         | Rotates the refresh token                            |
-| `auth.logout` / `auth.logoutAll`     | — / session               | Revokes one or all sessions                          |
-| `auth.stepUp`                        | session                   | **TOTP → 5-minute token carrying `trade:withdraw`**  |
-| `totp.enrol` / `totp.confirm`        | session                   | Two-step; secret persists only on confirm            |
-| `kyc.submit`                         | `identity:write`          | Own record only; **grants nothing**                  |
-| `kyc.status`                         | `identity:read`           | Own records + effective tier                         |
-| `kyc.pending`                        | `admin:compliance`        | Operator review queue, oldest first                  |
-| `kyc.approve` / `kyc.reject`         | `admin:compliance` + MFA  | **Approval grants custodial access**                 |
-| `rank.get`                           | `identity:read`           | Rank, XP, XP to next tier                            |
-| `rank.perks`                         | `identity:read`           | **The hot path** — every module calls this           |
-| `rank.awardXp`                       | service                   | Modules award XP here, never by writing `rank_state` |
-| `apiKeys.create` / `list` / `revoke` | `identity:write` / `read` | Key returned once, never retrievable                 |
-| `subAccounts.create`                 | `identity:write`          | Ledger-visible; real separate balances               |
+| Procedure                                     | Scope                     | Notes                                                       |
+| --------------------------------------------- | ------------------------- | ----------------------------------------------------------- |
+| `auth.register`                               | —                         | Creates user, profile, rank row; awards 50 XP               |
+| `auth.login`                                  | —                         | Handle or email; requires TOTP once enrolled                |
+| `auth.refresh`                                | —                         | Rotates the refresh token                                   |
+| `auth.logout` / `auth.logoutAll`              | — / session               | Revokes one or all sessions                                 |
+| `auth.stepUp`                                 | session                   | **TOTP → 5-minute token carrying `trade:withdraw`**         |
+| `totp.enrol` / `totp.confirm`                 | session                   | Two-step; secret persists only on confirm                   |
+| `webauthn.registerOptions` / `registerVerify` | session                   | Enrol a passkey/security key; ES256, attestation `none`     |
+| `webauthn.authOptions` / `authVerify`         | —                         | Passwordless login; issues same session tokens, `mfa: true` |
+| `webauthn.list`                               | session                   | Credential ids only — public keys never leave the server    |
+| `kyc.submit`                                  | `identity:write`          | Own record only; **grants nothing**                         |
+| `kyc.status`                                  | `identity:read`           | Own records + effective tier                                |
+| `kyc.pending`                                 | `admin:compliance`        | Operator review queue, oldest first                         |
+| `kyc.approve` / `kyc.reject`                  | `admin:compliance` + MFA  | **Approval grants custodial access**                        |
+| `rank.get`                                    | `identity:read`           | Rank, XP, XP to next tier                                   |
+| `rank.perks`                                  | `identity:read`           | **The hot path** — every module calls this                  |
+| `rank.awardXp`                                | service                   | Modules award XP here, never by writing `rank_state`        |
+| `apiKeys.create` / `list` / `revoke`          | `identity:write` / `read` | Key returned once, never retrievable                        |
+| `subAccounts.create`                          | `identity:write`          | Ledger-visible; real separate balances                      |
 
 HTTP: `GET /health` · `GET /ready` (reports whether argon2id is active).
 
@@ -96,6 +99,10 @@ It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ 
 
 **Enrolment is two-step.** The secret is not persisted until a valid code proves the user actually scanned it — otherwise abandoning enrolment halfway locks you out.
 
+**WebAuthn — ES256 only, attestation `none`, implemented here.** Same rationale as TOTP: the authentication path is not a place for an opaque dependency. Registration stores `{credentialId, publicKey, counter, transports}` in `users.webauthn_creds`. Assertion verifies the signature, advances the counter (cloned-authenticator detection), and issues a normal session with `mfa: true`. Challenges live in-process with a five-minute TTL — multi-instance identity needs a shared store later; the ceremony does not.
+
+Kill-switch: `WEBAUTHN_ENABLED=false`. Relying party: `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ORIGIN` (comma-separated origins).
+
 **Refresh rotation with reuse detection.** Every refresh issues a new token and revokes the old. If a rotated token is presented again, two parties hold it and we cannot tell which is the owner — so **every session for that user is revoked**. Losing a login beats an undetected takeover.
 
 > The revocation is committed in a _separate_ statement, outside the transaction that detected it. Throwing from inside would roll it back, and the thief's replay would revoke nothing. There is a test for exactly this.
@@ -131,9 +138,10 @@ pnpm --filter @intafaced/svc-identity dev
 
 ## Tests
 
-93 tests. TOTP is verified against **RFC 4226 Appendix D and RFC 6238 Appendix B** vectors. The Postgres suite carries the **§4.4 Phase 1 exit criteria**:
+Unit + integration tests. TOTP is verified against **RFC 4226 Appendix D and RFC 6238 Appendix B** vectors. WebAuthn is verified with a soft authenticator (real P-256 keys, real CBOR/authData). The Postgres suite carries the **§4.4 Phase 1 exit criteria**:
 
 - full auth lifecycle — register → TOTP enrol → login with 2FA → refresh → scoped API key call
+- WebAuthn enrol → passwordless assertion → MFA session
 - XP event → rank recalculation → perks visible to a second service
 - a verified user passing the jurisdiction matrix that an unverified one fails
 
