@@ -314,6 +314,24 @@ export class UserMoneyService {
       // the money is gone and asking the rail again would send it twice.
       if (claimed.status === 'sent') return claimed;
 
+      // L3-1 recovery: reverse began (failure_code stamped while still `held`)
+      // but the process died before status became `failed`. Finish the reverse
+      // — never re-ask the rail.
+      if (claimed.status === 'held' && claimed.failureCode) {
+        await this.finalizeRailRefusal(claimed, claimed.failureCode);
+        throw new PayError('Rail refused the withdrawal', 'pay.rail_failed', {
+          failureCode: claimed.failureCode,
+          withdrawalId: claimed.id,
+        });
+      }
+
+      if (claimed.status === 'failed') {
+        throw new PayError('Withdrawal already failed — use a new clientRef to try again', 'pay.withdrawal_failed', {
+          withdrawalId: claimed.id,
+          failureCode: claimed.failureCode,
+        });
+      }
+
       const attempt = claimed.attempts;
       const ledgerInput = {
         userId: claimed.userId,
@@ -372,22 +390,22 @@ export class UserMoneyService {
         }),
       );
 
-      // ── Phase 3a: the rail refused. Put the money back, in the same call.
+      // ── Phase 3a: the rail refused. Put the money back, durably.
       //
-      // `attempts` advances HERE and only here. The reversal released this
-      // attempt's hold, so the next attempt must not reuse its key — it would
-      // find the original hold, move nothing, and then settle out of a hold
-      // that is no longer there.
+      // L3-1: stamp failure_code WHILE still `held` before reverse, so a crash
+      // between reverse and the final status update is recoverable: retry
+      // re-enters finalizeRailRefusal (idempotent reverse) and marks failed.
+      // `attempts` advances only on finalization.
       if (!result.ok) {
-        await this.ledger.post(recipes.withdrawReverse(ledgerInput));
+        const code = result.failureCode ?? 'rail.failed';
         await this.sql`
             UPDATE pay.withdrawals
-               SET status = 'failed', attempts = attempts + 1,
-                   failure_code = ${result.failureCode ?? 'rail.failed'}, updated_at = now()
-             WHERE id = ${claimed.id}
+               SET failure_code = ${code}, updated_at = now()
+             WHERE id = ${claimed.id} AND status = 'held'
           `;
+        await this.finalizeRailRefusal({ ...claimed, failureCode: code }, code);
         throw new PayError(result.failureReason ?? 'Rail refused the withdrawal', 'pay.rail_failed', {
-          failureCode: result.failureCode,
+          failureCode: code,
           withdrawalId: claimed.id,
         });
       }
@@ -467,6 +485,32 @@ export class UserMoneyService {
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
+  }
+
+  /**
+   * Complete a rail-refusal reverse. Idempotent on the attempt key.
+   *
+   * Preconditions: row is `held` with `failure_code` set (intent to reverse).
+   * Steps: reverse hold → status `failed` + attempts++. Either step may be
+   * re-run after a crash; reverse is ledger-idempotent and the final UPDATE
+   * is guarded on `status = 'held'`.
+   */
+  private async finalizeRailRefusal(claimed: WithdrawalRecord, failureCode: string): Promise<void> {
+    const attempt = claimed.attempts;
+    const ledgerInput = {
+      userId: claimed.userId,
+      assetId: claimed.assetId,
+      amount: claimed.amount,
+      rail: claimed.rail,
+      withdrawalId: `${claimed.id}:${attempt}`,
+    };
+    await this.ledger.post(recipes.withdrawReverse(ledgerInput));
+    await this.sql`
+        UPDATE pay.withdrawals
+           SET status = 'failed', attempts = attempts + 1,
+               failure_code = ${failureCode}, updated_at = now()
+         WHERE id = ${claimed.id} AND status = 'held'
+      `;
   }
 
   // ── Reads ──────────────────────────────────────────────────────────────────

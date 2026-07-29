@@ -119,11 +119,22 @@ if (sovereignty.code !== 'allowed.permissionless') {
   );
 }
 
+// Mount the public API. Built router + edgeContext without this registration is
+// a healthy empty door: edge routes /api/protocol here, web calls /trpc, and
+// nothing answers (full audit L6-1, 2026-07-29).
+await app.register(fastifyTRPCPlugin, {
+  prefix: '/trpc',
+  trpcOptions: {
+    router: appRouter,
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  } satisfies FastifyTRPCPluginOptions<AppRouter>['trpcOptions'],
+});
+
 observer.start();
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
-  { port: env.HTTP_PORT, chainId: env.PROTOCOL_CHAIN_ID, factory: env.PROTOCOL_FACTORY_ADDRESS },
+  { port: env.HTTP_PORT, chainId: env.PROTOCOL_CHAIN_ID, factory: env.PROTOCOL_FACTORY_ADDRESS, trpc: true },
   'svc-protocol ready — non-custodial, permissionless',
 );
 

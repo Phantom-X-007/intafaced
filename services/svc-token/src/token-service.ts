@@ -89,10 +89,15 @@ export class TokenService {
   /**
    * Open a stake.
    *
-   * Ledger first, then the record. If the ledger post fails the row is never
-   * written; if the row write fails the ledger post is idempotent and the
-   * retry reconciles. The reverse order would let a `stakes` row exist with no
-   * value behind it — a stake we would owe yield on that nobody ever funded.
+   * L3-2 ordering: **claim `pending` row → ledger post → activate**.
+   *
+   * - `pending` is not counted by `stakeOf` and is not yield-eligible, so a
+   *   claim without funding cannot create an unfunded obligation.
+   * - Ledger post is idempotent on `stakeId`; retry after a crash mid-flight
+   *   re-posts (no-op) and activates.
+   * - If the ledger refuses (insufficient funds), the pending row is deleted
+   *   so we leave no stake record behind — same guarantee the old ledger-first
+   *   path advertised, without the crash window of "money moved, no row".
    */
   async stake(input: { userId: string; amount: Amount; tier: StakeTier; stakeId?: string }): Promise<StakeRecord> {
     const stakeId = input.stakeId ?? crypto.randomUUID();
@@ -104,17 +109,28 @@ export class TokenService {
         const startedAt = new Date();
         const unlocksAt = unlockDate(input.tier, startedAt);
 
-        await this.ledger.post(
-          recipes.stake({ stakeId, userId: input.userId, assetId: this.assetId, amount: input.amount, tier: input.tier }),
-        );
-
         await this.sql`
           INSERT INTO token.stakes (id, user_id, amount, tier, multiplier_bps, started_at, unlocks_at, status)
           VALUES (
             ${stakeId}, ${input.userId}, ${formatAmount(input.amount)}::numeric, ${input.tier},
-            ${STAKE_TIERS[input.tier].multiplierBps}, ${startedAt}, ${unlocksAt}, 'active'
+            ${STAKE_TIERS[input.tier].multiplierBps}, ${startedAt}, ${unlocksAt}, 'pending'
           )
           ON CONFLICT (id) DO NOTHING
+        `;
+
+        try {
+          await this.ledger.post(
+            recipes.stake({ stakeId, userId: input.userId, assetId: this.assetId, amount: input.amount, tier: input.tier }),
+          );
+        } catch (err) {
+          await this.sql`
+            DELETE FROM token.stakes WHERE id = ${stakeId} AND status = 'pending'
+          `;
+          throw err;
+        }
+
+        await this.sql`
+          UPDATE token.stakes SET status = 'active' WHERE id = ${stakeId} AND status = 'pending'
         `;
 
         await this.bus.publish(

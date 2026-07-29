@@ -605,6 +605,32 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     );
     expect(codes).toEqual(['FORBIDDEN', 'FORBIDDEN', 'FORBIDDEN']);
   });
+
+  it('refuses payment.capture on another merchant’s payment before the rail runs', async () => {
+    stub.ownedBy(ANOTHER_USER);
+    const api = await caller(['pay:write']);
+    const err = await api.payment.capture({ paymentId: PAYMENT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect(stub.calls.filter((c) => c.method === 'capture')).toHaveLength(0);
+  });
+
+  it('refuses settlement.payout on another merchant’s settlement before the rail runs', async () => {
+    stub.ownedBy(ANOTHER_USER);
+    const api = await caller(['pay:payout'], { mfa: true });
+    const err = await api.settlement
+      .payout({ settlementId: SETTLEMENT, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'X' } })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect(stub.calls.filter((c) => c.method === 'payoutSettlement')).toHaveLength(0);
+  });
+
+  it('binds merchant.create to the principal, not a body userId', async () => {
+    const api = await caller(['pay:write']);
+    await api.merchant.create({ mode: 'gateway', pricing: { feeBps: 250 } });
+    const call = stub.calls.find((c) => c.method === 'createMerchant');
+    expect(call).toBeDefined();
+    expect((call!.args[0] as { userId: string }).userId).toBe(USER);
+  });
 });
 
 // ── Read surfaces ────────────────────────────────────────────────────────────

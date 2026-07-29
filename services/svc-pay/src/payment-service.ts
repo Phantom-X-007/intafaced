@@ -92,7 +92,9 @@ export type PayErrorCode =
   | 'pay.deposit_conflict'
   | 'pay.withdrawal_not_found'
   /** A client reference already names a different withdrawal. */
-  | 'pay.withdrawal_conflict';
+  | 'pay.withdrawal_conflict'
+  /** Row already terminal-failed; caller must open a new clientRef. */
+  | 'pay.withdrawal_failed';
 
 export class PayError extends Error {
   constructor(

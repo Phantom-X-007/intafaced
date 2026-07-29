@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext } from '@intafaced/contracts';
+import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { TokenService } from './token-service.js';
@@ -54,7 +54,10 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, emissionsEnabled: env.EMISSIONS_ENABLED }));
 
-app.get<{ Params: { userId: string } }>('/internal/stake/:userId', async (req) => {
+app.get<{ Params: { userId: string } }>('/internal/stake/:userId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'token.unauthenticated' });
+  }
   const access = await token.accessOf(req.params.userId);
   return { staked: access.staked.toString(), tier: access.tier, feeDiscountBps: access.feeDiscountBps };
 });

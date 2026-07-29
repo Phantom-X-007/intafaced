@@ -47,6 +47,7 @@ import { BankError } from './errors.js';
 const URL = process.env.TEST_DATABASE_URL_BANK ?? 'postgres://svc_bank:svc_bank@localhost:5433/intafaced';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_bank_init.sql'), 'utf8');
+const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -80,6 +81,7 @@ if (!available) {
   });
 
   await sql.unsafe(migration);
+  await sql.unsafe(migrationPending);
 
   let ledger: MemoryLedger;
   let bank: BankServices;

@@ -365,6 +365,46 @@ if (!available) {
       expect(await holdOf(record.id, 0)).toBe('0');
     });
 
+    it('L3-1 recovers when failure_code is stamped on held before reverse finishes', async () => {
+      // Simulate: hold posted, rail refused intent stamped on the row, process
+      // died before finalizeRailRefusal ran. Money still in the hold.
+      const clientRef = 'w-l3-1';
+      const rows = await sql<Array<{ id: string }>>`
+        INSERT INTO pay.withdrawals (user_id, asset_id, amount, rail, destination, client_ref, status, attempts)
+        VALUES (
+          ${USER}, 'USDT', ${'40'}::numeric, 'card',
+          ${sql.json({ kind: 'bank_account', ref: 'x' })}, ${clientRef}, 'held', 0
+        )
+        RETURNING id
+      `;
+      const id = rows[0]!.id;
+      await ledger.post(
+        recipes.withdrawHold({
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('40'),
+          rail: 'card',
+          withdrawalId: `${id}:0`,
+        }),
+      );
+      await sql`
+        UPDATE pay.withdrawals SET failure_code = 'bank.rejected', updated_at = now() WHERE id = ${id}
+      `;
+      expect(await holdOf(id, 0)).toBe('40');
+      expect(await availableOf()).toBe('60');
+
+      await expect(withdraw({ amount: amt('40'), clientRef })).rejects.toMatchObject({
+        code: 'pay.rail_failed',
+      });
+
+      const recovered = (await money.listWithdrawals(USER))[0]!;
+      expect(recovered.status).toBe('failed');
+      expect(recovered.failureCode).toBe('bank.rejected');
+      expect(recovered.attempts).toBe(1);
+      expect(await holdOf(id, 0)).toBe('0');
+      expect(await availableOf()).toBe('100');
+    });
+
     it('advances the attempt counter on refusal, so the retry does not reuse a released hold', async () => {
       card.failNext('bank.rejected', 'Beneficiary account closed');
       await expect(withdraw()).rejects.toMatchObject({ code: 'pay.rail_failed' });

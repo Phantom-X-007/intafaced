@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**30 of 107 shipped (28%)** · 0 in progress · 40 ready to claim · 37 blocked · 15 deliberate §13 sockets
+**29 of 107 shipped (27%)** · 0 in progress · 35 ready to claim · 43 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -43,14 +43,10 @@ pnpm wt feat/<the-thing>
 | WebSocket fan-out: depth, trades, orders, positions | `trade` | 2 | `ws.gateway` |
 | Branded gateway, hosted checkout, payment links | `pay` | 3 | `pay.gateway` |
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
-| AMM pools from audited templates | `protocol` | 3P | `protocol.amm` |
-| Non-custodial P2P escrow contracts | `protocol` | 3P | `protocol.escrow` |
-| Lane A merchant contracts — zero KYB (§24) | `protocol` | 3P | `protocol.merchant` |
-| Chain → Postgres read models | `indexer` | 3P | `indexer.readmodels` |
+| Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | Share card render (1080×1350, 1200×630) | `blueprint` | 4 | `blueprint.card` |
 | Crew matching + mentor shortlist | `blueprint` | 4 | `blueprint.crews` |
 | Export + hard delete, cascading | `blueprint` | 4 | `blueprint.ownership` |
-| On-chain rank attestations, zero PII (§19) | `blueprint` | 4 | `blueprint.attestations` |
 | Collateralised loans, LTV, margin calls, liquidation | `bank` | 5 | `bank.loans` |
 | CardIssuerAdapter + card-sim, <2s auth decision | `bank` | 5 | `bank.cards` |
 | Navigator — tool-calling inside user guardrails | `agents` | 5 | `agents.navigator` |
@@ -58,7 +54,6 @@ pnpm wt feat/<the-thing>
 | Market Scanner — ranked signals by tier | `agents` | 5 | `agents.scanner` |
 | Live lobbies, LiveKit SFU, capacity tiers | `academy` | 5 | `academy.lobbies` |
 | Paper-trading market flag for workbooks | `academy` | 5 | `academy.paper-trading` |
-| ERC-20 deploy from audited templates | `launch` | 5 | `launch.token-factory` |
 | Support desk, tickets, KB | `core-ops` | 5 | `ops.support` |
 | Multi-tier affiliate / IB trees, payout automation | `core-ops` | 5 | `ops.affiliates` |
 | Screening queues, geo-block, VPN/Tor detection | `core-ops` | 5 | `ops.compliance` |
@@ -72,14 +67,14 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
+| **27** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
 | **14** | Branded gateway, hosted checkout, payment links | 🟢 ready | `pay.gateway` |
-| **9** | AMM pools from audited templates | 🟢 ready | `protocol.amm` |
+| **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
 | **8** | Stake tiers, locks, access gating | 🟢 ready | `token.staking` |
 | **7** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
 | **6** | Live lobbies, LiveKit SFU, capacity tiers | 🟢 ready | `academy.lobbies` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
-| **4** | ERC-20 deploy from audited templates | 🟢 ready | `launch.token-factory` |
-| **2** | Emission curve, halving, single-minter guarantee | 🟢 ready | `token.emissions` |
+| **4** | ERC-20 deploy from audited templates | ⛔ blocked | `launch.token-factory` |
 
 ---
 
@@ -163,17 +158,17 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Reputation feeding the same XP graph <br/>_Reputation module on main_ | F |  | `p2p.reputation` |
 | 🟢 | P2P merchant programme — badges, limits, API | F |  | `p2p.merchants` |
 
-### Phase 3P — Protocol P0 (1/7)
+### Phase 3P — Protocol P0 (0/7)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| ✅ | Passkey smart accounts, session keys (§17.4) <br/>_svc-protocol on main; self-mounts /trpc with an edge-verified principal; open contract sockets remain elsewhere_ | P |  | `protocol.smart-accounts` |
-| 🟢 | AMM pools from audited templates | P |  | `protocol.amm` |
+| 🟢 | Passkey smart accounts, session keys (§17.4) <br/>_Core + contracts on main. /trpc mount fixed in full-audit branch (was healthy-empty door L6-1). Remains ready not done until chain RPC + factory are non-propped and edge path is product-verified._ | P |  | `protocol.smart-accounts` |
+| ⛔ | AMM pools from audited templates | P | `protocol.smart-accounts` | `protocol.amm` |
 | ⛔ | On-chain lending markets, keeper liquidations | P | `protocol.amm` | `protocol.lending` |
-| 🟢 | Non-custodial P2P escrow contracts | P |  | `protocol.escrow` |
+| ⛔ | Non-custodial P2P escrow contracts | P | `protocol.smart-accounts` | `protocol.escrow` |
 | ⛔ | Sovereign router — book vs pool best execution | P | `protocol.amm` | `protocol.router` |
-| 🟢 | Lane A merchant contracts — zero KYB (§24) | P |  | `protocol.merchant` |
-| 🟢 | Chain → Postgres read models <br/>_Everything downstream of the chain is on main and mounted: schema-per-service read models (books, fills, positions), block-versioned rows with reorg unwind, idempotent projection, and a permissionless /trpc read API. 81 tests, 27 against real Postgres, reorg handling mutation-tested. NOT `done` because the "chain →" half is propped: `NullChainSource` is what boots, since there is no EVM RPC in this stack and no deployed CLOB to read — socket.evm-rpc. Also not yet routed at svc-edge._ | P |  | `indexer.readmodels` |
+| ⛔ | Lane A merchant contracts — zero KYB (§24) | P | `protocol.smart-accounts` | `protocol.merchant` |
+| ⛔ | Chain → Postgres read models <br/>_Everything downstream of the chain is on main and mounted: schema-per-service read models (books, fills, positions), block-versioned rows with reorg unwind, idempotent projection, and a permissionless /trpc read API. 81 tests, 27 against real Postgres, reorg handling mutation-tested. NOT `done` because the "chain →" half is propped: `NullChainSource` is what boots, since there is no EVM RPC in this stack and no deployed CLOB to read — socket.evm-rpc. Also not yet routed at svc-edge._ | P | `protocol.smart-accounts` | `indexer.readmodels` |
 | 🔌 | Foundry + contract test suite in CI <br/>_Solidity is written and cross-checked from TypeScript, but never executed. Blocks any mainnet deploy._ | P |  | `socket.contract-toolchain` |
 | 🔌 | External audit of the account + factory suite | P |  | `socket.contract-audit` |
 | 🔌 | getUserOperationHash checked against a live EntryPoint | P |  | `socket.userop-differential-test` |
@@ -189,7 +184,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Share card render (1080×1350, 1200×630) | F |  | `blueprint.card` |
 | 🟢 | Crew matching + mentor shortlist | F |  | `blueprint.crews` |
 | 🟢 | Export + hard delete, cascading | F |  | `blueprint.ownership` |
-| 🟢 | On-chain rank attestations, zero PII (§19) | B |  | `blueprint.attestations` |
+| ⛔ | On-chain rank attestations, zero PII (§19) | B | `protocol.smart-accounts` | `blueprint.attestations` |
 
 ### Phase 4P — INTACHAIN (0/3)
 
@@ -207,7 +202,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Collateralised loans, LTV, margin calls, liquidation | F |  | `bank.loans` |
 | ⛔ | Flexible + fixed yield pools | F | `token.staking` | `bank.earn` |
 | 🟢 | CardIssuerAdapter + card-sim, <2s auth decision | F |  | `bank.cards` |
-| ⛔ | Self-custody funded card, JIT conversion (§18) | P | `bank.cards` | `bank.sovereign-card` |
+| ⛔ | Self-custody funded card, JIT conversion (§18) | P | `bank.cards`, `protocol.smart-accounts` | `bank.sovereign-card` |
 | ⛔ | Fiat on/off ramp reusing svc-pay adapters | F | `pay.rails` | `bank.ramps` |
 | ✅ | Model-agnostic gateway, per-user metering <br/>_Reference mount — the /trpc + createEdgeContext recipe every other service copies_ | F |  | `agents.gateway` |
 | 🟢 | Navigator — tool-calling inside user guardrails | F |  | `agents.navigator` |
@@ -222,7 +217,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | Residencies, IFC pay, revenue share | F | `academy.lobbies`, `token.staking` | `academy.ambassadors` |
 | ⛔ | Seasonal ladders, IFC prize pools | F | `academy.lobbies` | `academy.tournaments` |
 | 🟢 | Paper-trading market flag for workbooks | F |  | `academy.paper-trading` |
-| 🟢 | ERC-20 deploy from audited templates | B |  | `launch.token-factory` |
+| ⛔ | ERC-20 deploy from audited templates | B | `protocol.smart-accounts` | `launch.token-factory` |
 | ⛔ | One-click meme launch + instant market + LP | P | `launch.token-factory`, `protocol.amm` | `launch.meme-factory` |
 | ⛔ | Presale / fair launch, vesting, staked allocation tiers | F | `launch.token-factory`, `token.staking` | `launch.launchpad` |
 | ⛔ | NFT mint / list / auction, on-chain royalties | P | `launch.token-factory` | `launch.nft` |

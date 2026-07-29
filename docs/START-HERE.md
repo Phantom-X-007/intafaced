@@ -42,18 +42,21 @@ If two docs disagree: **law + tracker win** over memory or Telegram.
 ```
 Phase 0 Foundations ████████░░ mostly done
 Phase 1 THE CORE     ████████░░ ledger + identity + token on main
-Phase 2 Trade+       ████████░░ services on main; routers NOT mounted
-Phase 3+ Pay/P2P/…   ████░░░░░░ code on main; same — not a live product
+Phase 2 Trade+       ████████░░ mounted behind edge; terminal wired
+Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox still not live product
 ```
 
-**Snapshot date:** 2026-07-27 · main tip `7f8beec` · **0 open service PRs** (Denon #31–#39 merged).
+**Snapshot date:** 2026-07-29 · re-check live with `git log origin/main -1` + `gh pr list` — numbers go stale.
 
-- **On main today:** shared packages + **Phase 1–2 services** (identity, ledger, token, matching, trade, pay, p2p, bank, blueprint, agents, protocol) + apps web/admin. Tests/gates when the machine is set up.
-- **Not a running product:** service **routers are not mounted** — logic and tests exist; there is no live API/product surface yet (**P0-1**).
-- **Do not rebuild** matching, trade, pay, p2p, bank, blueprint, agents, protocol, web, admin, or i18n from scratch — they are on main.
-- **Next product gates:** mount routers (P0-1) → purpose-keyed holds before deploy (P0-3, **decision A approved**) → Phase 2 feature slices via tracker.
+- **On main:** full fleet (15 services including edge, dex, indexer, ws) + apps web/admin + packages. **Routers are mounted** behind `svc-edge`. Purpose-keyed holds shipped. `pnpm platform:up` exists.
+- **Not a live money product:** rails/sandbox, chain indexer propped (`NullChainSource`), remaining money crash-window fixes on the residual queue.
+- **Do not rebuild** services already on main.
+- **Trust floor:** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · after Denon waves: [`WAVE-AUDIT.md`](WAVE-AUDIT.md).
+- **Wave-1 audit PR:** [#80](https://github.com/Phantom-X-007/intafaced/pull/80) (open doors fixed; residual money still queued).
+- **Next audit chat:** paste [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md) · program [`AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md`](AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md).
+- **Next product gates:** residual P1 money crash windows → real rails/chain → tracker-ready slices.
 
-Live floor: [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md) · older plan (may lag): [`PHASE2-NITRO-PLAN-2026-07-27.md`](PHASE2-NITRO-PLAN-2026-07-27.md).
+Older snapshot (may lag): [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md).
 
 ---
 
@@ -92,10 +95,10 @@ Collab deep dive: [`COLLAB-AUDIT-2026-07-27.md`](COLLAB-AUDIT-2026-07-27.md) · 
 
 ## Do you need a “big audit” before coding?
 
-**No.** Orientation + collab audit + health check already ran (2026-07-27); service PRs are on main.  
-Next useful product work is **P0-1 mount routers**, then **P0-3 holds** (shape approved — decision A), then **claim tracker-ready Phase 2 slices** — not another full-repo archaeology pass.
+**Full A–E program:** done 2026-07-29 — see [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md).  
+**After a Denon merge wave:** run [`WAVE-AUDIT.md`](WAVE-AUDIT.md) (delta), not full archaeology.
 
-Re-audit only if: `main` goes red, law version changes, or tracker and reality violently disagree.
+Re-run full program only if: main doctrine/money tests go red, law version changes, or peace-of-mind and reality violently disagree.
 
 ---
 

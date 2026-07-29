@@ -37,7 +37,10 @@ const ROOT = process.cwd();
 const FORBIDDEN = [
   { pattern: /\bGMaster\b/i, reason: 'engine vendor name — say "Neural Engine"' },
   { pattern: /\bG-?Master\s*Neural\b/i, reason: 'engine vendor name' },
-  { pattern: /\bFincept\b/i, reason: 'licensed terminal vendor — the desktop client ships fully rebranded (docs/TERMINAL_INTEGRATION.md §8)' },
+  {
+    pattern: /\bFincept\b/i,
+    reason: 'licensed terminal vendor — the desktop client ships fully rebranded (docs/TERMINAL_INTEGRATION.md §8)',
+  },
   { pattern: /\bSettleTX\b/i, reason: 'rail partner name' },
   { pattern: /\bPayKwik\b/i, reason: 'rail partner name' },
   { pattern: /\bNTG\b/, reason: 'rail partner name' },
@@ -98,6 +101,15 @@ const ALLOWLIST = [
   {
     path: join('docs', 'TERMINAL_INTEGRATION.md'),
     reason: 'internal architecture + licensing record; names the vendor deliberately so the rebrand scope is auditable',
+  },
+  {
+    path: join('docs', 'adr'),
+    reason:
+      'internal architecture decision records — must be free to name upstream vendors so quarantine and rebrand scope stay auditable (same rationale as TERMINAL_INTEGRATION.md)',
+  },
+  {
+    path: join('docs', 'audit'),
+    reason: 'internal audit work product; may cite vendor paths when describing CI/brand failures',
   },
   { path: 'CLAUDE.md', reason: 'internal agent instructions' },
   { path: '.claude', reason: 'internal tooling config' },

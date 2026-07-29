@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext } from '@intafaced/contracts';
+import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
@@ -49,7 +49,11 @@ const auth = new AuthService(sql, bus, rank, {
 export const appRouter = createIdentityRouter(auth, rank, { registrationOpen: env.REGISTRATION_OPEN });
 export type AppRouter = typeof appRouter;
 
-const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+const edgeContext = createEdgeContext({
+  secret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+});
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
@@ -58,9 +62,13 @@ app.get('/ready', async () => ({ ready: true, argon2: await argon2Available() })
 
 /**
  * Service-to-service rank perks (svc-trade reads at order accept).
- * Not edge-principal: internal network only; no scopes to elevate.
+ * Authenticated by the shared service secret — same control as bank jobs (#62).
+ * Previously unauthenticated (full audit L2-3).
  */
-app.get<{ Params: { userId: string } }>('/internal/rank/:userId/perks', async (req) => {
+app.get<{ Params: { userId: string } }>('/internal/rank/:userId/perks', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
+  }
   return rank.perks(req.params.userId);
 });
 

@@ -11,3 +11,8 @@ INTAFACED_DEFINITIVE_BUILD.md
 # tables, `tracker:check` would then see a mismatch, and CI would go red
 # depending on which command someone happened to run last.
 docs/TRACKER.md
+
+# Third-party exchange source (vendored). Not our product code — formatting it
+# only turns CI red (main after #73) without improving trust. Brand-scan already
+# skips vendor/; format must match.
+vendor/
