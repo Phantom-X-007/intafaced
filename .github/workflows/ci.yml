@@ -31,6 +31,8 @@ jobs:
         run: pnpm scan:brand
       - name: Custody scan (Doctrine §16.10)
         run: pnpm scan:custody
+      - name: Vendor shell residue (mass-credit / CORS *)
+        run: pnpm scan:vendor-shell
       - name: Workspace sync
         run: pnpm scan:workspace
       - name: Migration check (§14)

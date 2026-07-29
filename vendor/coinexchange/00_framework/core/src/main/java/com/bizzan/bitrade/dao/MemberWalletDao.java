@@ -88,10 +88,12 @@ public interface MemberWalletDao extends BaseDao<MemberWallet> {
     BigDecimal getWalletBalanceAmount(@Param("coinName")String coinName,@Param("weekDay")int weekDay);
     
     
-    //定时任务，筛选小于500的直接累加
+    // INTAFACED residual (2026-07-29): mass-credit jobs disabled.
+    // Upstream credited balance in bulk (+to_released / +500). Shell is not the books.
+    // Queries are no-ops (0 rows) so a stray caller cannot mint; service also throws.
     @Transactional
     @Modifying
-    @Query(value = "UPDATE member_wallet SET balance=balance+to_released,to_released=0 WHERE to_released<=500 AND to_released<>0",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int unfreezeLess();
 
     /**
@@ -105,25 +107,25 @@ public interface MemberWalletDao extends BaseDao<MemberWallet> {
      */
     @Query(value = "select * from member_wallet WHERE to_released>500",nativeQuery = true)
     List<MemberWallet> findUnfreezeGTE();
-    
-    //定时任务，筛选大于500的逐步释放
+
+    // INTAFACED residual: unfreezeMore mass +500 credit — permanently no-op.
     @Transactional
     @Modifying
-    @Query(value = "UPDATE member_wallet SET balance=balance+500,to_released=to_released-500 WHERE to_released>500",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int unfreezeMore();
 
 
-    //删除快照表
+    // INTAFACED residual: TRUNCATE snapshot helper — permanently no-op (no TRUNCATE).
     @Transactional
     @Modifying
-    @Query(value = "TRUNCATE TABLE member_wallet_:weekDay",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int dropWeekTable(@Param("weekDay")int weekDay);
 
 
-    //新增快照表
+    // INTAFACED residual: snapshot table create from live wallets — permanently no-op.
     @Transactional
     @Modifying
-    @Query(value = "insert INTO member_wallet_:weekDay SELECT * FROM member_wallet",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int createWeekTable(@Param("weekDay")int weekDay);
 
 

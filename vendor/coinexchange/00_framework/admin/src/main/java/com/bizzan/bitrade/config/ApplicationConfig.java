@@ -16,6 +16,7 @@ import com.bizzan.bitrade.ext.OrdinalToEnumConverterFactory;
 import com.bizzan.bitrade.interceptor.LogInterceptor;
 import com.bizzan.bitrade.interceptor.OutExcelInterceptor;
 import com.bizzan.bitrade.interceptor.SessionInterceptor;
+import com.bizzan.bitrade.util.CorsAllowlist;
 
 /**
  * @author Administrator
@@ -36,10 +37,8 @@ public class ApplicationConfig extends WebMvcConfigurerAdapter {
     public FilterRegistrationBean corsFilter() {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOrigin("*");
-        config.setAllowCredentials(true);
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
+        // INTAFACED residual: no wildcard origin with credentials
+        CorsAllowlist.apply(config);
         source.registerCorsConfiguration("/**", config);
         FilterRegistrationBean bean = new FilterRegistrationBean(new CorsFilter(source));
         bean.setOrder(0);
