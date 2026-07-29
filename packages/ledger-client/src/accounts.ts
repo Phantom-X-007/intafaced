@@ -39,6 +39,24 @@ export function withdrawalHoldAccount(userId: string, assetId: string, withdrawa
 }
 
 /**
+ * ISOLATED MARGIN FOR ONE PERP POSITION (§5.2 "ledger.hold funds — margin for
+ * futures").
+ *
+ * Per POSITION, not per user and not per market, and that is what makes
+ * "isolated" mean something in the books rather than in a policy document. The
+ * balance of this account is the entire downside of that position: a liquidation
+ * that exhausts it cannot reach into the same user's other positions, because
+ * the value it would have to reach for is in a different account.
+ *
+ * It is deliberately NOT `collateral`. `collateral` is unpurposed (see the note
+ * on `assertPurposedHolds`) and would put every position a user holds into one
+ * pot — which is cross margin, silently, with no code saying so.
+ */
+export function perpMarginAccount(userId: string, assetId: string, positionId: string): AccountRef {
+  return userHold(userId, assetId, `perp:${positionId}`);
+}
+
+/**
  * Seller escrow FOR ONE TRADE (L3-4). Same failure class as unpurposed holds:
  * one pot per (user, asset) lets trade B fund trade A's release.
  */
@@ -91,6 +109,30 @@ export function houseFees(module: string, assetId: string): AccountRef {
 /** Futures insurance fund backstop (§5.2). */
 export function insuranceFund(assetId: string): AccountRef {
   return { ownerType: 'house', ownerId: 'insurance-fund', assetId, kind: 'available' };
+}
+
+/**
+ * THE PERP SETTLEMENT POOL for one market (§5.2 futures).
+ *
+ * A perpetual is zero-sum between longs and shorts: every position is created
+ * by a match, so `Σ long size == Σ short size` on a market at all times, and
+ * therefore `Σ PnL == 0` at any mark. This account is where that sum lives
+ * while it is unrealised — losers pay into it, winners are paid out of it, and
+ * a market with every position closed leaves it at exactly zero.
+ *
+ * PER MARKET, deliberately. Pooling every market into one account would let a
+ * blow-up on a thin book be paid for by the open interest of an unrelated one,
+ * and nothing in the books would record that it had happened.
+ *
+ * It is a `module` account, so it is hard non-negative. That is not an
+ * inconvenience to work around — it is the control. Winners can close before
+ * losers are liquidated, and when they do the pool would go short; the ledger
+ * refuses, and the service must first `perpInsuranceDraw` the difference. An
+ * exhausted insurance fund then fails the payout loudly instead of quietly
+ * inventing value. See `recipes/perp.ts`.
+ */
+export function perpPool(marketId: string, assetId: string): AccountRef {
+  return moduleAccount('trade', `perp:${marketId}`, assetId);
 }
 
 /** Rewards engine — the pot real-yield and cashback are paid from. */
