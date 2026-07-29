@@ -12,6 +12,7 @@
 | #112 | **token yield + buyback live `/trpc`** | Phase 1 flywheel no longer test-only |
 | #113 | **`apiKeys.exchange`** | Keys open the platform (JWT for edge) |
 | #114 | **edge accepts `ifc_…` bearers** | Bots use raw keys at the front door |
+| #116 | **subAccounts.list** | Parent can list bot/sub books |
 
 Main tip after night block: see `git log origin/main` (includes #114).
 
