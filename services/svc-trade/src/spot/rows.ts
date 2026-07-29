@@ -27,6 +27,8 @@ export interface MarketRow {
   maker_bps: string;
   taker_bps: string;
   listed_at: Date | null;
+  asset_class: Market['assetClass'];
+  schedule: Market['schedule'];
 }
 
 export function toMarket(row: MarketRow): Market {
@@ -45,6 +47,8 @@ export function toMarket(row: MarketRow): Market {
     makerBps: Number(row.maker_bps),
     takerBps: Number(row.taker_bps),
     listedAt: row.listed_at,
+    assetClass: row.asset_class,
+    schedule: row.schedule,
   };
 }
 

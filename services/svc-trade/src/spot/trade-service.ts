@@ -6,7 +6,16 @@ import { formatAmount, mul, mulBps, parseAmount, recipes, sub, type Amount, type
 import { withMoneySpan } from '../tracing.js';
 import { ratesForFill } from './fees.js';
 import { fillIdFor, fillLegIdFor, orderIdFor } from './ids.js';
-import { assertNotional, assertPrice, assertQty, assertTradable, holdFor, protectionPriceFor, requireSupportedType } from './risk.js';
+import {
+  assertMarketOpen,
+  assertNotional,
+  assertPrice,
+  assertQty,
+  assertTradable,
+  holdFor,
+  protectionPriceFor,
+  requireSupportedType,
+} from './risk.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
 import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from './matching-client.js';
@@ -113,6 +122,16 @@ export interface ListMarketInput {
   makerBps: number;
   takerBps: number;
   status?: Market['status'];
+  /**
+   * Default to a continuous crypto listing, because that is what every existing
+   * caller means. A commodity or forex listing must name its schedule — the
+   * database CHECK refuses a non-crypto class on `crypto-24x7`, so a listing
+   * that forgets is rejected at insert rather than accepting weekend orders.
+   */
+  assetClass?: Market['assetClass'];
+  schedule?: Market['schedule'];
+  /** Falls back to the symbol; the column carries a NOT-NULL, length > 0 check. */
+  displayName?: string;
 }
 
 export class TradeService {
@@ -151,18 +170,22 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       INSERT INTO trade.markets (
         symbol, base_asset, quote_asset, kind, tick_size, lot_size,
-        min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at
+        min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+        asset_class, schedule, display_name
       ) VALUES (
         ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, 'spot',
         ${formatAmount(input.tickSize)}::numeric, ${formatAmount(input.lotSize)}::numeric,
         ${formatAmount(input.minQty)}::numeric,
         ${input.maxQty == null ? null : formatAmount(input.maxQty)}::numeric,
         ${formatAmount(input.minNotional)}::numeric,
-        ${input.status ?? 'active'}, ${input.makerBps}, ${input.takerBps}, now()
+        ${input.status ?? 'active'}, ${input.makerBps}, ${input.takerBps}, now(),
+        ${input.assetClass ?? 'crypto'}, ${input.schedule ?? 'crypto-24x7'},
+        ${input.displayName ?? input.symbol}
       )
       ON CONFLICT (symbol) DO UPDATE SET updated_at = now()
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
-                min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at
+                min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+                asset_class, schedule
     `;
     return toMarket(rows[0] as MarketRow);
   }
@@ -179,7 +202,8 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       UPDATE trade.markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
-                min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at
+                min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+                asset_class, schedule
     `;
     const row = rows[0];
     if (!row) throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
@@ -189,7 +213,8 @@ export class TradeService {
   async markets(): Promise<Market[]> {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
-             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at
+             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+                asset_class, schedule
         FROM trade.markets ORDER BY symbol ASC
     `;
     return rows.map(toMarket);
@@ -343,6 +368,10 @@ export class TradeService {
     // ── 2 · RISK CHECKS ─────────────────────────────────────────────────────
     const market = await this.requireMarket(input);
     assertTradable(market);
+    // Before any hold is taken. A closed venue cannot fill, so funding an order
+    // into one locks the user's balance behind a book nobody is matching until
+    // the session reopens.
+    assertMarketOpen(market, new Date());
     const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
 
@@ -945,7 +974,8 @@ export class TradeService {
   async marketById(marketId: string): Promise<Market | null> {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
-             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at
+             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+                asset_class, schedule
         FROM trade.markets WHERE id = ${marketId}
     `;
     const row = rows[0];
@@ -955,7 +985,8 @@ export class TradeService {
   async marketBySymbol(symbol: string): Promise<Market | null> {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
-             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at
+             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+                asset_class, schedule
         FROM trade.markets WHERE symbol = ${symbol}
     `;
     const row = rows[0];
