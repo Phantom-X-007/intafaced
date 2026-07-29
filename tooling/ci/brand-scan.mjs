@@ -111,25 +111,25 @@ const ALLOWLIST = [
     path: join('docs', 'audit'),
     reason: 'internal audit work product; may cite vendor paths when describing CI/brand failures',
   },
-  {
-    path: join('docs', 'HANDOVER-2026-07-29.md'),
-    reason:
-      'internal handover; quotes real on-disk paths and package roots verbatim, which a developer needs in order to act on it. Remove this entry once the vendor directory and Java package root are renamed.',
-  },
-  {
-    path: join('docs', 'STATUS-2026-07-29-EVENING.md'),
-    reason:
-      'internal status handover; its whole purpose is telling a developer which directory the product lives in, so it must name that path verbatim. Remove this entry once the vendor directory and Java package root are renamed.',
-  },
-  {
-    path: join('docs', 'SPLIT-BOARD.md'),
-    reason:
-      'internal work split; quotes real worktree paths and the Java package root verbatim. Remove this entry once the vendor directory and Java package root are renamed.',
-  },
+  // docs/HANDOVER-2026-07-29.md, docs/STATUS-2026-07-29-EVENING.md and
+  // docs/SPLIT-BOARD.md were allowlisted here until 29 July 2026. Every one of
+  // those entries stated the same removal condition in its own `reason`: once
+  // the vendor directory and the Java package root are renamed. Both are now
+  // done — `vendor/exchange/` and `com.intafaced` — the three docs were
+  // scrubbed to match, and the entries are deleted. They are scanned like
+  // anything else from here on. Do not re-add them; fix the doc instead.
+  //
+  // docs/LICENCE-POSITION.md carried the same sentence and is deliberately NOT
+  // deleted. Its rationale is not "the paths are stale", it is the same one
+  // that keeps NOTICE on this list: a licence audit that cannot name the exact
+  // path and Maven groupId an unlicensed component sits at is not actionable,
+  // and a legal record that omits what it describes is worse than none. The
+  // removal sentence in its reason was wrong to be there; the paths it quotes
+  // have been updated instead.
   {
     path: join('docs', 'LICENCE-POSITION.md'),
     reason:
-      'internal licence audit; must name the exact vendor paths and Maven groupIds an unlicensed component sits at, or an engineer cannot act on it without first asking which path was meant. Same rationale as TERMINAL_INTEGRATION.md and docs/adr. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+      'internal licence audit; must name the exact vendor paths and Maven groupIds an unlicensed component sits at, or an engineer cannot act on it without first asking which path was meant. Same rationale as TERMINAL_INTEGRATION.md, docs/adr and NOTICE — a legal record has to name what it describes. Not shipped to users.',
   },
   {
     path: 'NOTICE',

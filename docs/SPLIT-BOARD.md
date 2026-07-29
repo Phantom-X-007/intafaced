@@ -15,24 +15,31 @@
 ## WHERE THE APP ACTUALLY IS — read this before you open an editor
 
 **We are building on top of the vendored exchange, and it lives in
-`vendor/coinexchange/`.** That tree IS the product. It is not a reference copy,
+`vendor/exchange/`.** That tree IS the product. It is not a reference copy,
 not a sample to crib from, and not something to port screens out of.
 
 | what                    | where                                                                         |
 | ----------------------- | ----------------------------------------------------------------------------- |
-| **the app you open**    | `vendor/coinexchange/05_Web_Front/` → http://localhost:8090                   |
-| the Java backend        | `vendor/coinexchange/00_framework/` (15 Maven modules)                        |
-| the admin console       | `vendor/coinexchange/04_Web_Admin/`                                           |
-| the wallet RPC          | `vendor/coinexchange/01_wallet_rpc/`                                          |
+| **the app you open**    | `vendor/exchange/05_Web_Front/` → http://localhost:8090                       |
+| the Java backend        | `vendor/exchange/00_framework/` (14 Maven modules)                            |
+| the admin console       | `vendor/exchange/04_Web_Admin/`                                               |
+| the wallet RPC          | `vendor/exchange/01_wallet_rpc/`                                              |
 | our TypeScript platform | `services/`, `packages/` — reached from the app through `svc-edge` on `:4000` |
 
-Provenance, so nobody wastes time wondering: the tree is a fork of the
-open-source `CoinExchange_CryptoExchange_Java` project (Apache-2.0, attributed in
-`vendor/coinexchange/NOTICE`). Upstream identifiers were `com.bizzan.bitrade`.
-**That name is scrubbed from everything a user or the wider team sees, and
-`brand-scan` enforces it** — but you will still meet it in Java package roots,
-the MySQL schema name and the Mongo database name, because renaming those is a
-live-data migration that has not happened yet (see §5 item 7).
+Provenance, so nobody wastes time wondering: the tree is a fork of an
+open-source exchange under Apache-2.0. The upstream project, its author and the
+retrieval date are recorded in `vendor/exchange/NOTICE` and in
+`docs/adr/2026-07-28-vendored-exchange-integration.md`. **Those two files name
+the upstream deliberately and must keep doing so** — an attribution that omits
+what it attributes is a false legal statement, so they are exempt from
+`brand-scan` for that reason and no other. Nowhere else in the repo may name it.
+
+The Java package root is `com.intafaced` and the Maven groupId matches it
+(§5 item 7 — done). What still carries upstream spelling, on purpose, is the
+**MySQL schema name and the Mongo database name**. Those are live datastore
+identifiers rather than branding: renaming them is a data migration with nothing
+behind it, and a careless find-and-replace over them points every service at a
+schema that does not exist.
 
 `apps/web` (Next.js) is NOT the product. It is a small static shell that predates
 the fork. Do not build features there.
@@ -101,8 +108,8 @@ person blows away the other person's in-progress state for ~90 seconds.
 # Stream B gets its own worktree and its own container:
 pnpm wt feat/spine-work
 docker run -d --name intafaced-shell-b \
-  -v "C:/Users/User/plug-x-inta-worktrees/feat-spine-work/vendor/coinexchange/05_Web_Front:/app" \
-  -v "C:/Users/User/plug-x-inta-worktrees/feat-coinexchange-integration/vendor/coinexchange/05_Web_Front/node_modules:/app/node_modules" \
+  -v "C:/Users/User/plug-x-inta-worktrees/feat-spine-work/vendor/exchange/05_Web_Front:/app" \
+  -v "<vendor-integration-worktree>/vendor/exchange/05_Web_Front/node_modules:/app/node_modules" \
   -w /app -p 127.0.0.1:8091:8080 -e HOST=0.0.0.0 node:16 sh -c "npm run dev"
 ```
 
@@ -177,55 +184,66 @@ any new edge route, anything in `main.js`.
    proxy because it buffers, so the browser reaches it directly; its snapshot
    carries no cookie, no token and no per-caller content. Not the
    unmounted-router bug. Written down here so it does not get re-raised.
-7. **The Java rebrand — 666 files.** Investigated 29 July; **not started, on
-   purpose.** The Java build baseline is green (14 modules, `BUILD SUCCESS`,
-   Maven 3.8.6 / JDK 1.8.0_342), so the blocker is not the build. It is this:
+7. ~~**The Java rebrand — 666 files.**~~ **Done — `feat/spine-java-rename`.**
+   The package root is `com.intafaced`, the groupId matches, `*-parent` and
+   `*-job` are renamed, the module directory is renamed, and the vendor
+   directory is `vendor/exchange/`. Build after: 14/14 `BUILD SUCCESS`, the same
+   14 modules as the baseline. Kept here because the three findings that shaped
+   it are worth not re-deriving:
 
-   **MongoDB is the real hazard, not Hibernate.** Spring Data stamps a `_class`
-   discriminator into every document. The live `bitrade` database holds **1,420
-   documents across 60 collections, every one carrying
-   `_class: "com.<vendor>.bitrade.entity.KLine"`.** Rename the package and every
-   historical K-line becomes unmappable — including the ones feeding
-   `symbol-thumb`, i.e. the chart. The rename must ship in lockstep with a
-   `_class` migration, and the vendor tree has no migration framework to carry
-   that to another environment.
+   **MongoDB, not Hibernate, was the thing to be careful about.** Spring Data
+   stamps a `_class` discriminator into every document. At migration time the
+   live database held **261,240 documents across 110 collections** — far more
+   than the 1,420/60 first counted, because the market service kept writing —
+   every one naming the old package. The migration shipped with the rename as
+   `vendor/exchange/00_framework/sql/mongo/2026-07-29-class-discriminator-rename.js`:
+   idempotent, `DRY_RUN=1`-able, and it asserts its own residual count rather
+   than trusting the operator. It rewrote all 261,240 and verified 0 left.
 
-   **The vendor names are also live datastore names.** The MySQL schema is
-   `bizzan` (8 JDBC URLs plus compose `MYSQL_DATABASE`) and the Mongo database is
-   `bitrade`. A blanket replace points every app at a schema that does not exist,
-   and `ddl-auto=update` then cheerfully builds 64 empty tables next to the real
-   ones. So this cannot be a single-pattern sweep — those strings must be
-   excluded explicitly.
+   **But the orphaning fear was wrong, and that is worth knowing.** Spring Data
+   does *not* break on a `_class` it cannot load: `SimpleTypeInformationMapper`
+   catches the `ClassNotFoundException` and falls back to the target type. This
+   was confirmed both ways — old jars read migrated documents fine, and the
+   market service was fully restarted afterwards so `initializeThumb()` re-read
+   Mongo from scratch, returning real prices (BTC/USDT 118,450). So the rename
+   and the migration do **not** have to ship in the same deploy. Ship the
+   migration anyway — `_class` should name the class that actually ships — but
+   it is a tidiness fix, not a lockstep requirement.
 
-   **Do NOT pin `@Table` annotations first.** That was in an earlier version of
-   this item and it was wrong. JPA implicit naming derives from the _entity
-   name_, never the package: all 27 entities lacking `@Table` were verified to
-   map to exact snake_case renderings of their class names, across all 64 live
-   tables, zero exceptions. Renaming packages without renaming classes cannot
-   change a table or column name. Hand-adding 27 annotations would be 27 chances
-   to typo a table name into precisely the catastrophe the pinning was meant to
-   prevent.
+   **The vendor names are also live datastore names**, and those were excluded
+   explicitly. MySQL schema (8 JDBC URLs plus compose `MYSQL_DATABASE`), the
+   Mongo database name, a Mongo credential, an Aliyun OSS bucket, the Eureka
+   registration `*-market` and its 5 lookups, and the protobuf wire descriptors
+   in `QuoteMessage.java`. A blanket sweep would have pointed every app at a
+   schema that does not exist, with `ddl-auto=update` then building 64 empty
+   tables next to the real ones.
 
-   **Sequence — custody first, rename second.** The rename rewrites the `package`
-   line and every import in 666 files, so it conflicts with everything. It is
-   also script-regenerable in minutes, and custody work is not. Landing the
-   rename first maximises the other stream's pain for no gain.
+   **No `@Table` pinning, and that was right.** JPA implicit naming derives from
+   the _entity name_, never the package. Re-verified before the move: the tree
+   contains **zero** `@ComponentScan` / `@EntityScan` / `@EnableJpaRepositories`
+   / `@MapperScan` annotations, so a consistent move of every package needed no
+   annotation edits at all. Renaming packages without renaming classes cannot
+   change a table or a column name.
 
-   Then: exclude the datastore names, rename only the package coords, the
-   groupId, the `*-parent` / `*-job` artifactIds and the one vendor-named module
-   directory. No `@ComponentScan` / `@EntityScan` / `@EnableJpaRepositories`
-   declares an explicit base package, so a consistent move needs no annotation
-   edits at all.
+   **Still open, deliberately left:**
 
-   The `vendor/` directory rename has a surprisingly small blast radius outside
-   the vendor tree — four lines, and neither the root compose files nor the
-   `Dockerfile` reference it. Only after **both** the directory and the package
-   root are renamed may the two brand-scan allowlist entries be deleted; each
-   names that condition itself.
-
-   Also found in passing: the coinex Redis password in config does not match the
-   running container, and the vendor root `pom.xml` description plus
-   `sql/db_patch.sql` still carry Chinese text. Both belong in this pass.
+   - `01_wallet_rpc` keeps its own upstream package root. It does not build even
+     at baseline — its `pom.xml` lists an `xrp` module that is not in the tree —
+     so renaming it would be an unverifiable change. Fix the build first.
+   - `sql/db_patch.sql` still carries Chinese in ~256 of 667 lines. It is *data*
+     (coin display names, country names, ~150 admin permission labels), not
+     comments, so it is a translation job rather than a rename. The file is also
+     destructive (`DROP TABLE`) and is not applied to the live database.
+   - The coinex Redis password in config does not match the running container.
+   - **`main` cannot boot the Java market service against MongoDB 6 at all.**
+     Driver 3.4.3, which `spring-boot-starter-parent` 1.5.9 pins, speaks only
+     the legacy `OP_QUERY` opcode that MongoDB removed in 5.1, so every read
+     fails with error 352. The one-line fix (`<mongodb.version>3.12.14</...>`)
+     exists on the unmerged vendor-integration branch — find it with
+     `git branch -a --list '*integration*'` — and that branch is what the
+     currently-running containers are built from. This predates the rename
+     and is unrelated to it — it was confirmed by reproducing the identical
+     failure with the pre-rename baseline jars.
 
 8. **Java custody hardening** — unauthenticated withdrawal `GET`s, empty-string
    ETH keystore passwords, and a hardcoded `987654321asdf` trading backdoor.
