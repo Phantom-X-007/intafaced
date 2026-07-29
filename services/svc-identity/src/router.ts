@@ -33,10 +33,13 @@ function toTrpcError(err: unknown): TRPCError {
     case 'auth.mfa_required':
       return new TRPCError({ code: 'UNAUTHORIZED', message: 'Two-factor code required', cause: err });
     case 'auth.mfa_not_enrolled':
+    case 'auth.webauthn_not_enrolled':
       // FORBIDDEN, not UNAUTHORIZED: retrying with a code cannot help. The
-      // client has to send the user through TOTP enrolment first, and the two
+      // client has to send the user through enrolment first, and the two
       // need different UI.
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+    case 'auth.webauthn_invalid':
+      return new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials', cause: err });
     case 'auth.kyc_not_pending':
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
     case 'auth.session_invalid':
@@ -95,7 +98,13 @@ function presentKyc(record: KycRecordView) {
   };
 }
 
-export function createIdentityRouter(auth: AuthService, rank: RankService, options: { registrationOpen: boolean }) {
+export function createIdentityRouter(
+  auth: AuthService,
+  rank: RankService,
+  options: { registrationOpen: boolean; webauthnEnabled?: boolean },
+) {
+  const webauthnEnabled = options.webauthnEnabled !== false;
+
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-identity') }))
@@ -208,6 +217,105 @@ export function createIdentityRouter(auth: AuthService, rank: RankService, optio
           try {
             await auth.confirmTotpEnrolment(ctx.principal.userId, input.secret, input.code);
             return { ok: true as const };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+    }),
+
+    /**
+     * WebAuthn (§4.1 `webauthn.enroll`, §9).
+     *
+     * Registration is two-step under a live session (options → verify), same
+     * shape as TOTP. Authentication is passwordless: options → verify issues
+     * the same session tokens as password login, with `mfa: true`.
+     */
+    webauthn: router({
+      registerOptions: protectedProcedure.mutation(async ({ ctx }) => {
+        if (!webauthnEnabled) throw new TRPCError({ code: 'FORBIDDEN', message: 'WebAuthn is disabled' });
+        try {
+          return await auth.startWebauthnRegistration(ctx.principal.userId);
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+      registerVerify: protectedProcedure
+        .input(
+          z.object({
+            id: z.string().min(1),
+            rawId: z.string().min(1),
+            type: z.literal('public-key'),
+            response: z.object({
+              clientDataJSON: z.string().min(1),
+              attestationObject: z.string().min(1),
+              transports: z.array(z.string()).optional(),
+            }),
+            clientExtensionResults: z.record(z.unknown()).optional(),
+          }),
+        )
+        .output(z.object({ credentialId: z.string() }))
+        .mutation(async ({ ctx, input }) => {
+          if (!webauthnEnabled) throw new TRPCError({ code: 'FORBIDDEN', message: 'WebAuthn is disabled' });
+          try {
+            return await auth.confirmWebauthnRegistration(ctx.principal.userId, input);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      authOptions: publicProcedure.input(z.object({ identifier: z.string().min(1) })).mutation(async ({ input }) => {
+        if (!webauthnEnabled) throw new TRPCError({ code: 'FORBIDDEN', message: 'WebAuthn is disabled' });
+        try {
+          return await auth.startWebauthnAuthentication(input.identifier);
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+      authVerify: publicProcedure
+        .input(
+          z.object({
+            identifier: z.string().min(1),
+            credential: z.object({
+              id: z.string().min(1),
+              rawId: z.string().min(1),
+              type: z.literal('public-key'),
+              response: z.object({
+                clientDataJSON: z.string().min(1),
+                authenticatorData: z.string().min(1),
+                signature: z.string().min(1),
+                userHandle: z.string().nullish(),
+              }),
+              clientExtensionResults: z.record(z.unknown()).optional(),
+            }),
+          }),
+        )
+        .output(sessionOutput)
+        .mutation(async ({ input }) => {
+          if (!webauthnEnabled) throw new TRPCError({ code: 'FORBIDDEN', message: 'WebAuthn is disabled' });
+          try {
+            const session = await auth.confirmWebauthnAuthentication(input.identifier, input.credential);
+            return { ...session, expiresAt: session.expiresAt.toISOString() };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      list: protectedProcedure
+        .output(
+          z.array(
+            z.object({
+              credentialId: z.string(),
+              createdAt: z.string(),
+              transports: z.array(z.string()).optional(),
+            }),
+          ),
+        )
+        .query(async ({ ctx }) => {
+          if (!webauthnEnabled) throw new TRPCError({ code: 'FORBIDDEN', message: 'WebAuthn is disabled' });
+          try {
+            return await auth.listWebauthnCredentials(ctx.principal.userId);
           } catch (err) {
             throw toTrpcError(err);
           }

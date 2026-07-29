@@ -178,13 +178,14 @@ export const FEATURES = [
     requires: ['services/svc-identity'],
     note: 'defaultScopes() withheld trade:withdraw "until a step-up challenge" that did not exist, so no session could reach any withdrawal. Reachable on the mounted router. Known limit, platform-wide and not introduced here: a TOTP code is replayable inside its validity window.',
   }),
-  f('identity.webauthn', 'WebAuthn registration + assertion (§9)', { module: 'identity', phase: '1', dependsOn: ['identity.accounts'] }),
-  f('token.emissions', 'Emission curve, halving, single-minter guarantee', {
-    module: 'token',
+    f('identity.webauthn', 'WebAuthn registration + assertion (§9)', {
+    module: 'identity',
     phase: '1',
-    status: 'ready',
-    requires: ['services/svc-token'],
-    note: 'Downgraded 2026-07-28: `mintEpoch` is called by token-service.test.ts and nothing else. svc-token/src/router.ts exposes exactly three procedures (health, stakeOf, accessOf) and index.ts starts no scheduler. No epoch can ever be minted on a running system.',
+    status: 'wip',
+    owner: 'Nitro',
+    dependsOn: ['identity.accounts'],
+    requires: ['services/svc-identity'],
+    note: 'PR #93: register/assert ceremonies; session after assertion.',
   }),
   f('token.staking', 'Stake tiers, locks, access gating', {
     module: 'token',

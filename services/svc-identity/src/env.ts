@@ -4,6 +4,11 @@ import { authEnvSchema, edgeEnvSchema, internalServiceEnvSchema, loadEnv, servic
 // Self-mounts /trpc — must authenticate the edge principal (see packages/contracts/src/edge.ts).
 // INTERNAL_SERVICE_SECRET is required because rank.awardXp is a serviceProcedure
 // (user sessions carry identity:write and must never mint rank).
+const boolish = z
+  .union([z.boolean(), z.string()])
+  .default(true)
+  .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
+
 const schema = serviceEnvSchema
   .merge(authEnvSchema)
   .merge(edgeEnvSchema)
@@ -13,10 +18,17 @@ const schema = serviceEnvSchema
       SERVICE_NAME: z.string().default('svc-identity'),
       HTTP_PORT: z.coerce.number().int().default(4002),
       /** Registration open? §11 gates this behind the drop sequence. */
-      REGISTRATION_OPEN: z
-        .union([z.boolean(), z.string()])
-        .default(true)
-        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+      REGISTRATION_OPEN: boolish,
+      /**
+       * WebAuthn relying party. Defaults suit local dev; production must set
+       * the real registrable domain and HTTPS origin.
+       */
+      WEBAUTHN_RP_ID: z.string().min(1).default('localhost'),
+      WEBAUTHN_RP_NAME: z.string().min(1).default('INTAFACED'),
+      /** Comma-separated allowed origins for clientDataJSON.origin. */
+      WEBAUTHN_ORIGIN: z.string().min(1).default('http://localhost:3000'),
+      /** Kill-switch for the WebAuthn procedures without a redeploy of TOTP. */
+      WEBAUTHN_ENABLED: boolish,
     }),
   );
 

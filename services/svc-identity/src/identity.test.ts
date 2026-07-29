@@ -6,9 +6,19 @@ import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { verifyAccessToken, hasScope, SESSION_SCOPES } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
+import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type KeyObject } from 'node:crypto';
 import { AuthService, AuthError } from './auth/auth-service.js';
 import { RankService } from './rank/rank-service.js';
 import { totp } from './auth/totp.js';
+import { encodeCbor } from './auth/cbor.js';
+import {
+  b64urlEncode,
+  buildAuthenticatorData,
+  buildClientDataJSON,
+  coseKeyFromJwk,
+  type RegistrationResponseJSON,
+  type AuthenticationResponseJSON,
+} from './auth/webauthn.js';
 
 /**
  * svc-identity against real Postgres.
@@ -34,6 +44,80 @@ const tokenConfig = {
   accessTtlSeconds: 900,
   refreshTtlSeconds: 2_592_000,
 };
+
+const webauthnConfig = {
+  rpID: 'localhost',
+  rpName: 'INTAFACED',
+  origin: 'http://localhost:3000',
+};
+
+function softAuthenticator() {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const jwk = publicKey.export({ format: 'jwk' }) as { x: string; y: string };
+  const cose = coseKeyFromJwk(jwk);
+  const credId = randomBytes(16);
+  let counter = 0;
+
+  const sign = (authData: Buffer, clientDataJSON: Buffer, key: KeyObject = privateKey) => {
+    const clientDataHash = createHash('sha256').update(clientDataJSON).digest();
+    return cryptoSign('SHA256', Buffer.concat([authData, clientDataHash]), { key, dsaEncoding: 'ieee-p1363' });
+  };
+
+  return {
+    credId,
+    registrationResponse(challenge: string): RegistrationResponseJSON {
+      const clientDataJSON = buildClientDataJSON({
+        type: 'webauthn.create',
+        challenge,
+        origin: webauthnConfig.origin,
+      });
+      const authData = buildAuthenticatorData({
+        rpID: webauthnConfig.rpID,
+        counter: 0,
+        credential: { id: credId, publicKeyCose: cose },
+      });
+      const attestationObject = Buffer.from(
+        encodeCbor(
+          new Map<string | number, unknown>([
+            ['fmt', 'none'],
+            ['attStmt', new Map()],
+            ['authData', new Uint8Array(authData)],
+          ]) as never,
+        ),
+      );
+      return {
+        id: b64urlEncode(credId),
+        rawId: b64urlEncode(credId),
+        type: 'public-key',
+        response: {
+          clientDataJSON: b64urlEncode(clientDataJSON),
+          attestationObject: b64urlEncode(attestationObject),
+          transports: ['internal'],
+        },
+      };
+    },
+    assertionResponse(challenge: string): AuthenticationResponseJSON {
+      counter += 1;
+      const clientDataJSON = buildClientDataJSON({
+        type: 'webauthn.get',
+        challenge,
+        origin: webauthnConfig.origin,
+      });
+      const authData = buildAuthenticatorData({ rpID: webauthnConfig.rpID, counter });
+      const signature = sign(authData, clientDataJSON);
+      return {
+        id: b64urlEncode(credId),
+        rawId: b64urlEncode(credId),
+        type: 'public-key',
+        response: {
+          clientDataJSON: b64urlEncode(clientDataJSON),
+          authenticatorData: b64urlEncode(authData),
+          signature: b64urlEncode(signature),
+        },
+      };
+    },
+  };
+}
 
 async function reachable(): Promise<boolean> {
   const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
@@ -64,7 +148,7 @@ if (!available) {
 
   const bus = new MemoryEventBus('svc-identity');
   const rank = new RankService(sql, bus);
-  const auth = new AuthService(sql, bus, rank, tokenConfig);
+  const auth = new AuthService(sql, bus, rank, tokenConfig, webauthnConfig);
   await rank.seedTiers();
 
   let counter = 0;
@@ -221,6 +305,72 @@ if (!available) {
       const withMfa = await auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: totp(secret) });
       const principal = await verifyAccessToken(withMfa.accessToken, tokenConfig);
       expect(principal.mfa).toBe(true);
+    });
+  });
+
+  describe('WebAuthn registration + assertion', () => {
+    it('enrols a credential and issues an MFA session on assertion', async () => {
+      const handle = unique();
+      const session = await auth.register({
+        handle,
+        email: `${handle}@example.com`,
+        password: 'correct horse battery staple',
+      });
+      const authenticator = softAuthenticator();
+
+      const options = await auth.startWebauthnRegistration(session.userId);
+      expect(options.challenge).toBeTruthy();
+      expect(options.rp.id).toBe('localhost');
+
+      const enrolled = await auth.confirmWebauthnRegistration(session.userId, authenticator.registrationResponse(options.challenge));
+      expect(enrolled.credentialId).toBe(b64urlEncode(authenticator.credId));
+
+      const stored = await sql<Array<{ webauthn_creds: unknown }>>`
+        SELECT webauthn_creds FROM identity.users WHERE id = ${session.userId}
+      `;
+      expect(Array.isArray(stored[0]!.webauthn_creds)).toBe(true);
+      expect((stored[0]!.webauthn_creds as unknown[]).length).toBe(1);
+
+      const authOptions = await auth.startWebauthnAuthentication(handle);
+      expect(authOptions.allowCredentials).toHaveLength(1);
+
+      const tokens = await auth.confirmWebauthnAuthentication(handle, authenticator.assertionResponse(authOptions.challenge));
+      expect(tokens.userId).toBe(session.userId);
+      const principal = await verifyAccessToken(tokens.accessToken, tokenConfig);
+      expect(principal.mfa).toBe(true);
+    });
+
+    it('does not persist a credential when the challenge is wrong', async () => {
+      const session = await register();
+      const authenticator = softAuthenticator();
+      const options = await auth.startWebauthnRegistration(session.userId);
+      // Consume the real challenge by never using it; present a different one.
+      await expect(
+        auth.confirmWebauthnRegistration(session.userId, authenticator.registrationResponse('not-the-challenge')),
+      ).rejects.toMatchObject({ code: 'auth.webauthn_invalid' });
+
+      const stored = await sql<Array<{ webauthn_creds: unknown }>>`
+        SELECT webauthn_creds FROM identity.users WHERE id = ${session.userId}
+      `;
+      expect(stored[0]!.webauthn_creds).toEqual([]);
+      // Real challenge must still be single-use only after a successful take —
+      // a failed verify with a foreign challenge leaves the real one intact, so
+      // a second attempt with the real challenge still works.
+      await expect(
+        auth.confirmWebauthnRegistration(session.userId, authenticator.registrationResponse(options.challenge)),
+      ).resolves.toMatchObject({ credentialId: b64urlEncode(authenticator.credId) });
+    });
+
+    it('refuses assertion for an account with no credential without revealing it via authOptions', async () => {
+      const handle = unique();
+      await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      const options = await auth.startWebauthnAuthentication(handle);
+      expect(options.allowCredentials).toEqual([]);
+
+      const authenticator = softAuthenticator();
+      await expect(auth.confirmWebauthnAuthentication(handle, authenticator.assertionResponse(options.challenge))).rejects.toMatchObject({
+        code: 'auth.webauthn_not_enrolled',
+      });
     });
   });
 
