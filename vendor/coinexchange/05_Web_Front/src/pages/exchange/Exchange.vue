@@ -1036,27 +1036,51 @@ export default {
         client_id: 'intafaced',
         user_id: 'public',
         custom_css_url: 'bundles/common.css',
+        /* Dark chrome for the library's own toolbars. The chart canvas is
+           themed by `overrides` below and `custom_css_url`; this covers the
+           header, the drawing toolbar and the dialogs, which the overrides do
+           not reach. Older builds ignore an unknown key rather than failing. */
+        theme: 'Dark',
+        /* WHAT A TRADER EXPECTS TO BE THERE.
+           This list was previously much longer, which left a chart you could
+           look at but not work with: no drawing tools, no indicators, no
+           resolution switcher, no timeframe bar. A terminal without a trend
+           line is a picture of a market, not an instrument for reading one.
+           What stays off is only what our own UI already provides or what has
+           no backend behind it. */
         disabled_features: [
-          'header_resolutions',
-          'timeframes_toolbar',
+          // The pair selector lives in our own header; two of them is confusing.
           'header_symbol_search',
+          'symbol_search_hot_key',
+          // Comparison needs a second symbol feed we do not serve yet.
           'header_compare',
-          'header_undo_redo',
-          'header_screenshot',
+          // Saving a layout needs somewhere to save it. Until there is a
+          // chart-storage backend this button can only disappoint.
           'header_saveload',
-          'use_localstorage_for_settings',
-          'left_toolbar',
           'volume_force_overlay',
-          'border_around_the_chart',
-          'control_bar'
+          'border_around_the_chart'
         ],
-        enabled_features: ['hide_last_na_study_output', 'move_logo_to_main_pane'],
+        enabled_features: [
+          'hide_last_na_study_output',
+          'move_logo_to_main_pane',
+          // Drawings and study setups survive a reload. Traders re-draw the
+          // same levels every session otherwise.
+          'use_localstorage_for_settings',
+          'keep_left_toolbar_visible_on_small_screens'
+        ],
         overrides: {
           'paneProperties.background': '#000000',
           'paneProperties.vertGridProperties.color': 'rgba(255,255,255,0.035)',
           'paneProperties.horzGridProperties.color': 'rgba(255,255,255,0.035)',
           'paneProperties.crossHairProperties.color': '#ff6b00',
-          'paneProperties.legendProperties.showLegend': false,
+          /* The legend is the OHLC readout at the top-left. It was off, which
+             meant hovering a candle told you nothing — the one piece of the
+             chart a trader reads constantly. */
+          'paneProperties.legendProperties.showLegend': true,
+          'paneProperties.legendProperties.showSeriesOHLC': true,
+          'paneProperties.legendProperties.showStudyValues': true,
+          'paneProperties.legendProperties.showSeriesTitle': true,
+          'paneProperties.legendProperties.showStudyTitles': true,
           'paneProperties.topMargin': 12,
           'paneProperties.bottomMargin': 8,
 
@@ -1093,7 +1117,19 @@ export default {
           'volume.volume.color.1': 'rgba(0,178,117,0.45)',
           'volume.volume.transparency': 55
         },
-        time_frames: []
+        /* The bottom timeframe bar. `[]` disabled it entirely; these are the
+           ranges a trader actually reaches for, each paired with the
+           resolution that renders it at a sensible bar count rather than one
+           candle per pixel. */
+        time_frames: [
+          { text: '5y', resolution: '1W', description: '5 years' },
+          { text: '1y', resolution: '1D', description: '1 year' },
+          { text: '6m', resolution: '240', description: '6 months' },
+          { text: '3m', resolution: '120', description: '3 months' },
+          { text: '1m', resolution: '60', description: '1 month' },
+          { text: '5d', resolution: '15', description: '5 days' },
+          { text: '1d', resolution: '5', description: '1 day' }
+        ]
       };
     },
 
