@@ -2,7 +2,7 @@
 
 **One page.** Read this when confused. Agents: load this _after_ `AGENTS.md` if the human needs orientation, not instead of the law.
 
-**Snapshot date:** 2026-07-27 · re-check live with `pnpm tracker` + `gh pr list` — numbers go stale; the _map_ does not.
+**Snapshot date:** 2026-07-29 · re-check live with `pnpm tracker` + `gh pr list` — numbers go stale; the _map_ does not.
 
 ---
 

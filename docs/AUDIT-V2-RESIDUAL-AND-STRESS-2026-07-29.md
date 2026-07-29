@@ -1,3 +1,5 @@
+> **CLOSED 2026-07-29** — residual P1 shipped in #80; P2 in #81. Remaining deferral L2-6 only (see PEACE-OF-MIND).
+
 # Audit V2 — residual money + proof upgrades (post wave-1)
 
 **Status:** READY TO RUN — wave-1 (PR #80) finished A→E skeleton + fixed open doors  
