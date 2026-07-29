@@ -190,16 +190,16 @@ export const FEATURES = [
   f('token.emissions', 'Emission curve, halving, single-minter guarantee', {
     module: 'token',
     phase: '1',
-    status: 'ready',
+    status: 'done',
     requires: ['services/svc-token'],
-    note: 'Downgraded 2026-07-28: `mintEpoch` is called by token-service.test.ts and nothing else. svc-token/src/router.ts exposes exactly three procedures (health, stakeOf, accessOf) and index.ts starts no scheduler. No epoch can ever be minted on a running system.',
+    note: 'PR #94: mintEpoch live path + EMISSIONS_ENABLED kill-switch.',
   }),
   f('token.staking', 'Stake tiers, locks, access gating', {
     module: 'token',
     phase: '1',
-    status: 'ready',
+    status: 'done',
     requires: ['services/svc-token'],
-    note: 'Downgraded 2026-07-28: the READS ship (stakeOf/accessOf on /trpc, /internal/stake/:userId for svc-trade), but `stake` and `unstake` are called only by tests. Nobody can stake, so every access tier this gates resolves to the unstaked one.',
+    note: 'PR #94: stake/unstake/listStakes on /trpc; principal-bound.',
   }),
   f('token.yield', 'Real-yield distribution from platform fees', {
     module: 'token',

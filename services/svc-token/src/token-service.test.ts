@@ -179,6 +179,37 @@ if (!available) {
       await token.unstake(second.id);
       expect(formatAmount(await token.stakeOf(USER_A))).toBe('1000');
     });
+
+    it("listStakes returns only the caller's active stakes by default", async () => {
+      await fund(USER_A, '5000');
+      await fund(USER_B, '5000');
+      const a1 = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const a2 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'm3' });
+      await token.stake({ userId: USER_B, amount: amt('5000'), tier: 'flex' });
+      await token.unstake(a1.id);
+
+      const active = await token.listStakes(USER_A);
+      expect(active).toHaveLength(1);
+      expect(active[0]?.id).toBe(a2.id);
+      expect(formatAmount(active[0]!.amount)).toBe('2000');
+
+      const all = await token.listStakes(USER_A, 'all');
+      expect(all.map((s) => s.id).sort()).toEqual([a1.id, a2.id].sort());
+
+      const closed = await token.listStakes(USER_A, 'closed');
+      expect(closed).toHaveLength(1);
+      expect(closed[0]?.id).toBe(a1.id);
+    });
+
+    it('getStake returns null for unknown or still-pending ids', async () => {
+      expect(await token.getStake('44444444-4444-4444-8444-444444444444')).toBeNull();
+
+      await fund(USER_A, '1000');
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const got = await token.getStake(stake.id);
+      expect(got?.userId).toBe(USER_A);
+      expect(formatAmount(got!.amount)).toBe('1000');
+    });
   });
 
   describe('unstaking and lock enforcement', () => {
@@ -533,6 +564,33 @@ if (!available) {
     it('refuses to mint once the schedule is exhausted', async () => {
       // Far enough out that the reward has halved below one unit of precision.
       await expect(token.mintEpoch(10_000_000)).rejects.toBeInstanceOf(TokenError);
+    });
+
+    it('mintNextEpoch walks the sequence and nextEmissionEpoch advances', async () => {
+      expect(await token.nextEmissionEpoch()).toBe(0);
+
+      const first = await token.mintNextEpoch();
+      expect(first.epoch).toBe(0);
+      expect(first.minted).toBeGreaterThan(0n);
+      expect(await token.nextEmissionEpoch()).toBe(1);
+
+      const second = await token.mintNextEpoch();
+      expect(second.epoch).toBe(1);
+      expect(await token.nextEmissionEpoch()).toBe(2);
+
+      // Both epochs closed exactly once; books still close.
+      const rows = await sql<Array<{ epoch: number }>>`SELECT epoch FROM token.emission_epochs ORDER BY epoch`;
+      expect(rows.map((r) => r.epoch)).toEqual([0, 1]);
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('mintNextEpoch fails closed when the current epoch was already closed by mintEpoch', async () => {
+      await token.mintEpoch(0);
+      // next is 1 — not a re-mint of 0.
+      const next = await token.mintNextEpoch();
+      expect(next.epoch).toBe(1);
+      await expect(token.mintEpoch(1)).rejects.toMatchObject({ code: 'token.epoch_closed' });
     });
   });
 
