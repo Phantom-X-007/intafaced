@@ -1,8 +1,10 @@
 # Peace of mind — current floor (Nitro)
 
 **Date:** 2026-07-29  
-**Main tip:** `60031cf` (includes audit #80 + #81 + consolidated #86) — re-check `git rev-parse origin/main`  
+**Main tip:** `f27db87` (includes #80 + #81 + #86 + Stream A claim #84) — re-check `git rev-parse origin/main`  
 **Claim tags:** `[VERIFIED 2026-07-29]` audit program closed; #86 custody + shell on main
+
+**Stream A claim:** GitHub issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83) · [](NITRO-STREAM-A-CLAIM.md)
 
 **Orient:** [`START-HERE.md`](START-HERE.md) · **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md) · **Security tooling floor:** [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md) · plain when-to: [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md)
 
