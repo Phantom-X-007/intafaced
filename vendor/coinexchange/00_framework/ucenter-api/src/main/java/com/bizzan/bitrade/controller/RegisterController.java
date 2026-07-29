@@ -337,7 +337,7 @@ public class RegisterController {
         member.setPassword(password);
         member.setMobilePhone(phone);
         member.setSalt(credentialsSalt);
-        member.setAvatar("https://bizzan.oss-cn-hangzhou.aliyuncs.com/defaultavatar.png"); // 默认用户头像
+        member.setAvatar("/static/defaultavatar.png"); // 默认用户头像
         Member member1 = memberService.save(member);
         if (member1 != null) {
         	// Member为@entity注解类，与数据库直接映射，因此，此处setPromotionCode会直接同步到数据库
