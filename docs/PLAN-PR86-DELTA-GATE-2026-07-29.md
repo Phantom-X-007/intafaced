@@ -19,7 +19,7 @@
 | 2 | Land real security fixes (open wallet RPC, API-key escalate, trading backdoor) | Merge when **CI green + delta P0 clean** — do not hold security fixes for theatre |
 | 3 | Control without coding | You decide merge / go-live / licence forks; agents run format, wave, fixes |
 | 4 | Not rubber-stamp “it’s green” | Verify **GitHub CI**, not Denon’s local gate story |
-| 5 | Vendor map without gutting money doctrine | UI = `vendor/coinexchange` @ :8090; **books still TS ledger**; vendor-as-sole-money still forbidden |
+| 5 | Vendor map without gutting money doctrine | UI = `vendor/<exchange-tree>` @ :8090; **books still TS ledger**; vendor-as-sole-money still forbidden |
 | 6 | Licence landmines not silently “done” | Merge can ship code + honest blockers; **chart + MySQL connector wait for Denon** |
 | 7 | Fast + quality tooling | L0 machine → parallel risk layers → maker-checker on P0 → format fix → merge → update PEACE |
 
@@ -146,7 +146,7 @@ MISSION: PR #86 delta gate + land when clean. Nitro operator mode.
 UNSPOKEN BAR
 - Denon is fast and leaves mistakes — catch them on THIS delta, not full archaeology.
 - Security holes in #86 should ship; format red must die first.
-- UI product = vendor/coinexchange :8090; books = TS ledger; no multi-asset merge.
+- UI product = vendor/<exchange-tree> :8090; books = TS ledger; no multi-asset merge.
 - Licence blockers stay named for Denon — do not invent.
 
 DO
