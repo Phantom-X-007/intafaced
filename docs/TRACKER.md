@@ -27,7 +27,6 @@ pnpm wt feat/<the-thing>
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | Scoped API keys, sub-accounts | `identity` | 1 | `identity.apikeys` |
-| WebAuthn registration + assertion (§9) | `identity` | 1 | `identity.webauthn` |
 | Emission curve, halving, single-minter guarantee | `token` | 1 | `token.emissions` |
 | Stake tiers, locks, access gating | `token` | 1 | `token.staking` |
 | Real-yield distribution from platform fees | `token` | 1 | `token.yield` |
@@ -77,6 +76,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Feature | Owner | Module |
 |---|---|---|
+| WebAuthn registration + assertion (§9) | **Nitro** | `identity` |
 | One-tap Convert — the retail on-ramp | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
 | Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
@@ -113,7 +113,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | KYC tiers wired to JURISDICTION_MATRIX <br/>_Restored to done 2026-07-28: the write side the audit called out now exists. `kyc.submit` / `kyc.approve` / `kyc.reject` / `kyc.pending` / `kyc.status` are served from svc-identity's mounted /trpc, so identity.kyc_records is writable and a real user can leave tier `none`. See identity.kyc-review._ | F |  | `identity.kyc` |
 | ✅ | Routed KYC — submit, operator approve/reject, review queue <br/>_Reachable on svc-identity's mounted /trpc; tested in router.test.ts + identity.test.ts; nothing propped up — approval is an operator action against kyc_records, no provider stub. Custodial side only: §22 permissionless surfaces read no tier (docs/decisions/kyc-posture.md)._ | F |  | `identity.kyc-review` |
 | ✅ | Step-up challenge minting trade:withdraw for five minutes <br/>_defaultScopes() withheld trade:withdraw "until a step-up challenge" that did not exist, so no session could reach any withdrawal. Reachable on the mounted router. Known limit, platform-wide and not introduced here: a TOTP code is replayable inside its validity window._ | F |  | `identity.step-up` |
-| 🟢 | WebAuthn registration + assertion (§9) | F |  | `identity.webauthn` |
+| 🔨 | WebAuthn registration + assertion (§9) <br/>_PR #93: register/assert ceremonies; session after assertion._ | F |  | `identity.webauthn` |
 | 🟢 | Emission curve, halving, single-minter guarantee <br/>_Downgraded 2026-07-28: `mintEpoch` is called by token-service.test.ts and nothing else. svc-token/src/router.ts exposes exactly three procedures (health, stakeOf, accessOf) and index.ts starts no scheduler. No epoch can ever be minted on a running system._ | F |  | `token.emissions` |
 | 🟢 | Stake tiers, locks, access gating <br/>_Downgraded 2026-07-28: the READS ship (stakeOf/accessOf on /trpc, /internal/stake/:userId for svc-trade), but `stake` and `unstake` are called only by tests. Nobody can stake, so every access tier this gates resolves to the unstaked one._ | F |  | `token.staking` |
 | 🟢 | Real-yield distribution from platform fees <br/>_Downgraded 2026-07-28: `distributeRevenue` is called only by token-service.test.ts. No route, no consumer, no schedule — fees accrue nowhere and no yield is ever distributed._ | F |  | `token.yield` |
