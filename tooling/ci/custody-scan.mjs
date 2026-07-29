@@ -36,7 +36,8 @@ const WRITE_SURFACE = [
   { pattern: /\bledger\s*\.\s*post\s*\(/, reason: 'calls ledger.post() — that is custody' },
   { pattern: /from\s+['"]@intafaced\/ledger-client\/recipes['"]/, reason: 'imports ledger write recipes' },
   {
-    pattern: /import\s*\{[^}]*\b(recipes|deposit|withdrawHold|withdrawSettle|tradeFill|escrowLock|escrowRelease|stake|feeCharge|rewardPay|mintEmission|collateralLock)\b[^}]*\}\s*from\s*['"]@intafaced\/ledger-client['"]/s,
+    pattern:
+      /import\s*\{[^}]*\b(recipes|deposit|withdrawHold|withdrawSettle|tradeFill|escrowLock|escrowRelease|stake|feeCharge|rewardPay|mintEmission|collateralLock)\b[^}]*\}\s*from\s*['"]@intafaced\/ledger-client['"]/s,
     reason: 'imports a ledger write recipe',
   },
   {
@@ -47,7 +48,10 @@ const WRITE_SURFACE = [
 
 /** Solidity patterns that would hand the platform withdrawal power. */
 const CONTRACT_RISKS = [
-  { pattern: /function\s+\w*(withdraw|sweep|drain|rescue|emergencyWithdraw)\w*\s*\([^)]*\)[^{]*\bonlyOwner\b/i, reason: 'owner-callable withdrawal' },
+  {
+    pattern: /function\s+\w*(withdraw|sweep|drain|rescue|emergencyWithdraw)\w*\s*\([^)]*\)[^{]*\bonlyOwner\b/i,
+    reason: 'owner-callable withdrawal',
+  },
   { pattern: /function\s+\w*(withdraw|sweep|drain|rescue)\w*\s*\([^)]*\)[^{]*\bonlyAdmin\b/i, reason: 'admin-callable withdrawal' },
   { pattern: /\btransferFrom\s*\([^)]*\bmsg\.sender\s*!=/i, reason: 'transferFrom on behalf of a non-caller' },
   { pattern: /\bselfdestruct\s*\(/i, reason: 'selfdestruct can strand or redirect user funds' },

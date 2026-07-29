@@ -185,7 +185,7 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, rails: rails.ids() }, 'svc-pay ready');
+app.log.info({ port: env.HTTP_PORT, rails: rails.ids(), trpc: true }, 'svc-pay ready');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
