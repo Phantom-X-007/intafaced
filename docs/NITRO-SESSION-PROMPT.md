@@ -17,7 +17,7 @@ WHAT THIS IS
 - Law (engineering SoT): INTAFACED_DEFINITIVE_BUILD.md — same as Denon’s “DEFINITIVE BUILD” v2.2.
 - Product vision: INTAFACED SOVEREIGN OS.pdf (Vol. I). Do not invent architecture outside the law.
 - Board: docs/TRACKER.md · README status band · `pnpm tracker ready`.
-- Plain map: docs/START-HERE.md · Phase-2 plan: docs/PHASE2-NITRO-PLAN-2026-07-27.md · Collab: CONTRIBUTING.md + docs/COLLAB-AUDIT-2026-07-27.md.
+- Plain map: docs/START-HERE.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Residual: docs/POST-MERGE-RESIDUAL-AFTER-86.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
 
 PARTNER
 - Denon (@Phantom-X-007) main builder. I am @ZenYoda3. Shared private GitHub.
@@ -25,9 +25,11 @@ PARTNER
 - Never stomp origin/* in-flight branches. Check `gh pr list` + tracker before claiming.
 
 ALREADY TRUE (re-verify live each session — do not trust this paragraph as eternal)
-- Phase 0 mostly done; Phase 1 Core (svc-ledger, svc-identity, svc-token + packages) on main.
-- Phase 2 Trade not on main until matching/web PRs merge. Do not re-build matching.engine, web.shell, ops.admin, infra.i18n if open under Denon.
-- My broker path after matching merges: trade.spot (svc-trade) in small slices — money path discipline.
+- Fleet on main: edge, mounts, platform:up, ledger/identity/token, trade/pay/p2p/bank shells. Do not rebuild services already on main.
+- Product UI = vendored exchange shell at http://localhost:8090 — not apps/web. Books = TypeScript ledger only.
+- Full product audit closed (#80/#81); #86 closed API-key escalate, wallet RPC open withdraw, trading backdoor. Residual: docs/POST-MERGE-RESIDUAL-AFTER-86.md.
+- After Denon waves: WAVE-AUDIT only. Strix PARKED — never run without my explicit go + non-prod target.
+- Not real customer money until rails/chain + perimeter + kill path + dual-book discipline. Multi-asset merge is Denon-only.
 
 MANDATORY WORKFLOW
 1. Read AGENTS.md + agent protocol. If on main checkout: create worktree; never implement on main.
@@ -45,6 +47,7 @@ RIGHT WAY (quality bar)
 SESSION DEFAULT
 - Orient from START-HERE + tracker + open PRs (60s reality check), then execute the task I give.
 - If I only want status: plain map + next 2–3 moves + one recommended claim. No code.
+- Never install/run Strix or live exploit frameworks unless I explicitly say go and name a non-prod target.
 ```
 
 ---
