@@ -1168,9 +1168,12 @@ export default {
         this.baseCoinScale = body.baseCoinScale != null ? body.baseCoinScale : this.baseCoinScale;
         this.coinScale = body.coinScale != null ? body.coinScale : this.coinScale;
         this.symbolFee = body.fee != null ? body.fee : this.symbolFee;
-        this.enableMarketBuy = body.enableMarketBuy;
-        this.enableMarketSell = body.enableMarketSell;
-        this.exchangeable = body.exchangeable;
+        /* Default to permitted when the field is absent. Reading a missing
+           key straight through gives undefined, and `undefined != 1` would
+           silently lock the order form with "This market is halted". */
+        this.enableMarketBuy = body.enableMarketBuy != null ? body.enableMarketBuy : 1;
+        this.enableMarketSell = body.enableMarketSell != null ? body.enableMarketSell : 1;
+        this.exchangeable = body.exchangeable != null ? body.exchangeable : 1;
       });
     },
 
