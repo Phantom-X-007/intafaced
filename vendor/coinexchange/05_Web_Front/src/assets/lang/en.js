@@ -49,7 +49,13 @@ module.exports = {
         whitepaper: "White Paper",
         scandownload: "Download App",
         innovationmanage: "Innovation",
-        platform: "Platform"
+        platform: "Platform",
+        // stream A — plane switch copy
+        planeLabel: "Trading plane",
+        planeCex: "CEX",
+        planeDex: "DEX",
+        planeCexHint: "Custodial exchange — identity and verification rules apply",
+        planeDexHint: "Protocol plane — non-custodial; no KYC for the trade itself (region rules still apply)"
     },
     /**
      * The INTAFACED platform surfaces — every feature area of the Sovereign OS,

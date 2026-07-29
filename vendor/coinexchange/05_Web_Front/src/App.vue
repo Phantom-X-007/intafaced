@@ -24,6 +24,23 @@
                   <router-link to="/exchange">
                     <MenuItem name="nav-exchange">{{$t("header.exchange")}}</MenuItem>
                   </router-link>
+                  <!-- Plane switch: custodial Exchange (CEX) vs protocol DEX.
+                       Backend access rules already differ by plane; this only
+                       surfaces the choice. Not a second design system. -->
+                  <span class="ix-plane" role="group" :aria-label="$t('header.planeLabel')">
+                    <router-link
+                      to="/exchange"
+                      class="ix-plane-btn"
+                      :class="{ 'is-active': planeIsCex }"
+                      :title="$t('header.planeCexHint')"
+                    >{{$t("header.planeCex")}}</router-link>
+                    <router-link
+                      to="/dex"
+                      class="ix-plane-btn"
+                      :class="{ 'is-active': planeIsDex }"
+                      :title="$t('header.planeDexHint')"
+                    >{{$t("header.planeDex")}}</router-link>
+                  </span>
                   <router-link to="/ctc">
                     <MenuItem name="nav-ctc">{{$t("header.ctc")}}</MenuItem>
                   </router-link>
@@ -154,9 +171,10 @@
       <!-- </div> -->
     </div>
     <Drawer :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
-        <Menu :active-name="activeNav" width="auto" @on-select="changelanguage">
+        <Menu :active-name="activeNav" width="auto" @on-select="onMobileSelect">
             <MenuItem name="nav-index" style="text-align:left;">{{$t("header.index")}}</MenuItem>
-            <MenuItem name="nav-exchange" style="text-align:left;">{{$t("header.exchange")}}</MenuItem>
+            <MenuItem name="nav-exchange" style="text-align:left;">{{$t("header.exchange")}} · {{$t("header.planeCex")}}</MenuItem>
+            <MenuItem name="nav-dex" style="text-align:left;">{{$t("header.planeDex")}}</MenuItem>
             <MenuItem name="nav-ctc" style="text-align:left;">{{$t("header.ctc")}}</MenuItem>
             <router-link to="/otc/trade/usdt" style="display:none;">
               <MenuItem name="nav-otc" style="text-align:left;">{{$t("header.otc")}}</MenuItem>
@@ -471,10 +489,11 @@ export default {
         }
       }
 
-      if(to.path == "/" || to.path == "/index" || to.path == "/ctc" || to.path == "/exchange") {
-        if(this.isMobile()){
-          this.$router.replace('/reg');
-        }
+      /* Stream A: mobile must reach the trading terminal and platform modules.
+         Forcing /reg here was an old app-download funnel that blanked the product
+         on phones. Keep funnel only on the dedicated /app download page if needed. */
+      if (to.path == "/" || to.path == "/index") {
+        /* Home still usable on mobile — do not bounce to register. */
       }
 
       if (to.path == "/app") {
@@ -509,6 +528,14 @@ export default {
     },
     exchangeSkin() {
       return this.$store.state.exchangeSkin;
+    },
+    planeIsCex() {
+      var p = (this.$route && this.$route.path) || "";
+      return p === "/exchange" || p.indexOf("/exchange/") === 0;
+    },
+    planeIsDex() {
+      var p = (this.$route && this.$route.path) || "";
+      return p === "/dex" || p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0;
     }
   },
   created: function() {
@@ -542,6 +569,40 @@ export default {
     /** DropdownItem `name` is the route, so this stays a one-liner as modules move. */
     goModule(route) {
       if (route && this.$route.path !== route) this.$router.push(route);
+    },
+    /** Mobile drawer: lang items still hit changelanguage; everything else routes. */
+    onMobileSelect(name) {
+      if (name === "zh" || name === "en") {
+        this.changelanguage(name);
+        return;
+      }
+      var map = {
+        "nav-index": "/",
+        "nav-exchange": "/exchange",
+        "nav-dex": "/dex",
+        "nav-ctc": "/ctc",
+        "nav-invite": "/invite",
+        "nav-platform": "/platform",
+        "nav-appdownload": "/app",
+        "nav_safe": "/uc/safe",
+        "nav_assets": "/uc/money",
+        "nav_innnovationmanage": "/uc/innovation/myminings",
+        "1-1": "/login",
+        "1-2": "/register"
+      };
+      if (name && name.indexOf("nav-ix-") === 0) {
+        var key = name.slice(7);
+        var mod = (this.ixModules || []).find(function (m) { return m.key === key; });
+        if (mod && mod.route) {
+          this.$router.push(mod.route);
+          this.navDrawerModal = false;
+          return;
+        }
+      }
+      if (map[name]) {
+        this.$router.push(map[name]);
+        this.navDrawerModal = false;
+      }
     },
     strpo(str) {
       if (str.length > 4) {
@@ -653,6 +714,38 @@ export default {
   }
 .router-link-active.ix-nav-title {
     color: #ff6b00;
+  }
+}
+/* CEX / DEX plane switch — compact pill matching shell chrome, not a new kit. */
+.ix-plane {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0 8px 0 12px;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  overflow: hidden;
+  height: 28px;
+  line-height: 26px;
+}
+.ix-plane-btn {
+  display: inline-block;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #8a8a8a;
+  background: transparent;
+  text-decoration: none;
+  white-space: nowrap;
+  &:hover {
+    color: #ff6b00;
+  }
+  &.is-active {
+    color: #fff;
+    background: #ff6b00;
+  }
+}
+@media screen and (max-width: 1100px) {
+  .ix-plane {
+    display: none;
   }
 }
 .page-view2.nav-pdf {

@@ -244,6 +244,14 @@
               <router-link to="/login">Sign in</router-link> to see your balances and orders.
             </p>
 
+            <p class="ix-empty" v-else-if="accountLoading">
+              Loading account…
+            </p>
+
+            <p class="ix-empty" v-else-if="accountError">
+              {{ accountError }}
+            </p>
+
             <!-- Balances — exchange venue wallet only; not the TypeScript ledger books -->
             <div v-else-if="accountTab === 'balances'">
               <p class="ix-empty ix-empty-note">
@@ -569,10 +577,10 @@
             type="button"
             class="ix-submit"
             :class="side === 'BUY' ? 'is-buy' : 'is-sell'"
-            :disabled="!tradable"
+            :disabled="!tradable || submitting"
             @click="submitOrder"
           >
-            {{ submitLabel }}
+            {{ submitting ? 'Placing…' : submitLabel }}
           </button>
 
           <p class="ix-order-note" v-if="!isLogin">
@@ -582,6 +590,9 @@
           <p class="ix-order-note" v-else-if="exchangeable != 1">This market is halted.</p>
           <p class="ix-order-note" v-else-if="orderType === 'MARKET_PRICE' && !marketAllowed">
             Market {{ side === 'BUY' ? 'buy' : 'sell' }} is disabled for this pair.
+          </p>
+          <p class="ix-order-note" v-else-if="!feedLive">
+            Market feed is down — double-check size before confirming any order.
           </p>
         </div>
       </aside>
@@ -700,6 +711,10 @@ export default {
       openOrders: [],
       historyOrders: [],
       wallet: { base: 0, coin: 0 },
+      accountLoading: false,
+      accountError: '',
+      walletReachable: false,
+      ordersReachable: false,
 
       side: 'BUY',
       orderType: 'LIMIT_PRICE',
@@ -872,6 +887,10 @@ export default {
         this.openOrders = [];
         this.historyOrders = [];
         this.wallet = { base: 0, coin: 0 };
+        this.accountError = '';
+        this.accountLoading = false;
+        this.walletReachable = false;
+        this.ordersReachable = false;
       }
     },
     'currentCoin.close': function (value) {
@@ -1490,36 +1509,69 @@ export default {
 
     /* ── account ───────────────────────────────────────────────────────── */
 
-    getWallet() {
-      this.request(this.api.uc.wallet + this.currentCoin.base).then(body => {
-        if (body && body.data) {
-          this.wallet.base = body.data.balance || 0;
-        }
-      });
-      this.request(this.api.uc.wallet + this.currentCoin.coin).then(body => {
-        if (body && body.data) {
-          this.wallet.coin = body.data.balance || 0;
+    loadAccount() {
+      if (!this.isLogin) {
+        return;
+      }
+      this.accountLoading = true;
+      this.accountError = '';
+      this.walletReachable = false;
+      this.ordersReachable = false;
+      Promise.all([this.getWallet(), this.getOpenOrders(), this.getHistoryOrders()]).then(() => {
+        this.accountLoading = false;
+        if (!this.walletReachable && !this.ordersReachable) {
+          this.accountError =
+            'Account services did not respond. Balances and orders are not shown as zero — they are unknown.';
         }
       });
     },
 
+    getWallet() {
+      const baseP = this.request(this.api.uc.wallet + this.currentCoin.base).then(body => {
+        if (body && body.data) {
+          this.wallet.base = body.data.balance || 0;
+          this.walletReachable = true;
+        }
+      });
+      const coinP = this.request(this.api.uc.wallet + this.currentCoin.coin).then(body => {
+        if (body && body.data) {
+          this.wallet.coin = body.data.balance || 0;
+          this.walletReachable = true;
+        }
+      });
+      return Promise.all([baseP, coinP]);
+    },
+
     getOpenOrders() {
-      this.request(this.api.exchange.current, {
+      return this.request(this.api.exchange.current, {
         pageNo: 0,
         pageSize: 100,
         symbol: this.currentCoin.symbol
       }).then(body => {
-        this.openOrders = (body && body.content) || [];
+        if (body && Array.isArray(body.content)) {
+          this.openOrders = body.content;
+          this.ordersReachable = true;
+        } else if (body && body.content == null && body.code != null) {
+          /* Answered but empty list shape — still reachable. */
+          this.openOrders = [];
+          this.ordersReachable = true;
+        }
       });
     },
 
     getHistoryOrders() {
-      this.request(this.api.exchange.history, {
+      return this.request(this.api.exchange.history, {
         pageNo: 0,
         pageSize: 30,
         symbol: this.currentCoin.symbol
       }).then(body => {
-        this.historyOrders = (body && body.content) || [];
+        if (body && Array.isArray(body.content)) {
+          this.historyOrders = body.content;
+          this.ordersReachable = true;
+        } else if (body && body.content == null && body.code != null) {
+          this.historyOrders = [];
+          this.ordersReachable = true;
+        }
       });
     },
 
@@ -1592,7 +1644,7 @@ export default {
     },
 
     submitOrder() {
-      if (!this.tradable) {
+      if (!this.tradable || this.submitting) {
         return;
       }
       const amount = this.num(this.form.amount);
@@ -1606,12 +1658,50 @@ export default {
       }
 
       const cost = this.quoteSized ? amount : this.side === 'BUY' ? price * amount : amount;
-      if (cost > this.availableBalance) {
+      if (this.isLogin && this.walletReachable && cost > this.availableBalance) {
         return this.warn('Insufficient balance. Available ' + this.fmt(this.availableBalance, 8) + '.');
       }
 
+      const side = this.side === 'BUY' ? 'Buy' : 'Sell';
+      const type = this.orderType === 'MARKET_PRICE' ? 'Market' : 'Limit';
+      const priceLine =
+        this.orderType === 'MARKET_PRICE'
+          ? 'Price: best available'
+          : 'Price: ' + this.fmt(price, this.baseCoinScale) + ' ' + (this.currentCoin.base || '');
+      const amountLine =
+        this.amountLabel +
+        ': ' +
+        this.fmt(amount, this.quoteSized ? this.baseCoinScale : this.coinScale) +
+        ' ' +
+        (this.amountUnit || '');
+      const feeLine = 'Fee (est.): ' + this.feeLabel;
+      const pair = (this.currentCoin.coin || '') + '/' + (this.currentCoin.base || '');
+
+      this.$Modal.confirm({
+        title: 'Confirm ' + side.toLowerCase() + ' order',
+        content:
+          '<p><strong>' +
+          side +
+          ' · ' +
+          type +
+          '</strong> · ' +
+          pair +
+          '</p><p>' +
+          priceLine +
+          '</p><p>' +
+          amountLine +
+          '</p><p>' +
+          feeLine +
+          '</p><p style="margin-top:8px;opacity:0.75;">Orders only succeed if the exchange accepts them. No response means not placed.</p>',
+        okText: side,
+        cancelText: 'Cancel',
+        onOk: () => this.placeOrder(amount, price)
+      });
+    },
+
+    placeOrder(amount, price) {
       this.submitting = true;
-      this.request(this.api.exchange.orderAdd, {
+      return this.request(this.api.exchange.orderAdd, {
         symbol: this.currentCoin.symbol,
         price: this.orderType === 'MARKET_PRICE' ? 0 : price,
         amount,
