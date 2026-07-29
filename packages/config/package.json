@@ -26,6 +26,10 @@
       "types": "./dist/jurisdiction.d.ts",
       "default": "./dist/jurisdiction.js"
     },
+    "./screening": {
+      "types": "./dist/screening.d.ts",
+      "default": "./dist/screening.js"
+    },
     "./fiat": {
       "types": "./dist/fiat.d.ts",
       "default": "./dist/fiat.js"

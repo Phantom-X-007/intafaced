@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { assertScreeningConfigured } from '@intafaced/config';
 import { env } from './env.js';
 import { exchangePrincipal } from './principal-exchange.js';
 import { resolve, UPSTREAMS } from './routes.js';
@@ -19,6 +20,24 @@ import { withEdgeSpan } from './tracing.js';
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, disableRequestLogging: false });
 
+/**
+ * §24 Lane A, asserted at boot rather than assumed.
+ *
+ * The edge is where region screening applies — it is the hosted front end, and
+ * it is the component that resolves `region` server-side for every request in
+ * the platform. So it is the component that must not start up unable to screen.
+ *
+ * Modelled on svc-protocol's §22 sovereignty assertion: throw rather than boot
+ * into a state that quietly misleads users. Without a list, `checkAccess`
+ * clears every region and calls it screened. In `dev` and `test` this returns
+ * instead of throwing, and the warning below is the control's visibility.
+ */
+const screening = assertScreeningConfigured();
+app.log[screening.configured ? 'info' : 'warn'](
+  { appEnv: env.APP_ENV, configured: screening.configured, blocked: screening.blockedRegions.length, source: screening.source },
+  screening.summary,
+);
+
 const upstreamUrl = (envVar: string, devUrl: string): string => (process.env[envVar] ?? devUrl).replace(/\/$/, '');
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
@@ -28,6 +47,10 @@ app.get('/ready', async () => ({
   // The route table, so an operator can see what the edge will forward without
   // reading the source. Deliberately no secrets, no upstream URLs.
   routes: UPSTREAMS.map((u) => u.prefix),
+  // Whether screening is armed, and how many regions it refuses — a count, not
+  // the codes. An operator needs to see the control is on; an unauthenticated
+  // caller does not need our exact configuration read back to them.
+  screening: { configured: screening.configured, blockedRegions: screening.blockedRegions.length },
 }));
 
 /**
