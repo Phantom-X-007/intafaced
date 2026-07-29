@@ -6,11 +6,11 @@ Engineering cannot close these. Mechanism is ready; content/choice is yours (or 
 
 **Facts:** 85 vendored files, no licence/NOTICE/EULA. Spec already names **lightweight-charts** (Apache-2.0) in `docs/TERMINAL.md`. Full audit: `docs/LICENCE-POSITION.md` §1.1.
 
-| Path | What it means | Effort |
-| --- | --- | --- |
-| **A — Hold TERMINAL.md (recommended default)** | Drop Charting Library path; build charts on lightweight-charts | Product + app work; lawful |
-| **B — Keep Advanced Charts** | Apply to TradingView as named licensee | Days+ commercial; gates launch |
-| **Eng already (no decision):** cut remote OSS chart loads (third-party Alibaba Cloud bucket) — that was arbitrary remote JS in users' browsers | security floor | separate PR |
+| Path                                                                                                                                           | What it means                                                  | Effort                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------ |
+| **A — Hold TERMINAL.md (recommended default)**                                                                                                 | Drop Charting Library path; build charts on lightweight-charts | Product + app work; lawful     |
+| **B — Keep Advanced Charts**                                                                                                                   | Apply to TradingView as named licensee                         | Days+ commercial; gates launch |
+| **Eng already (no decision):** cut remote OSS chart loads (third-party Alibaba Cloud bucket) — that was arbitrary remote JS in users' browsers | security floor                                                 | separate PR                    |
 
 **You decide A or B.** Until then do not ship the shell publicly with the vendored library.
 
@@ -47,7 +47,7 @@ WIP branches from crash recovery (see `docs/HANDOVER-NITRO-BRANCHES.md`). Especi
 
 ## Verified money already on the merge path
 
-| PR / branch | Status |
-| --- | --- |
-| #101 release verified (history, dex quotes, screening) | merge first |
+| PR / branch                                                  | Status                              |
+| ------------------------------------------------------------ | ----------------------------------- |
+| #101 release verified (history, dex quotes, screening)       | merge first                         |
 | #102 `feat/spine-trading-hours` (incl. multi-asset ancestor) | money — owner merges after green CI |
