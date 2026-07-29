@@ -2,7 +2,7 @@
 
 **One page.** Read this when confused. Agents: load this _after_ `AGENTS.md` if the human needs orientation, not instead of the law.
 
-**Snapshot date:** 2026-07-29 · main tip includes audit **#80 + #81** and consolidated **#86** (re-check `git rev-parse origin/main`).
+**Snapshot date:** 2026-07-29 evening · trust floor = mega-wave after #86 (re-check `git rev-parse origin/main` + [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md)).
 
 ---
 
@@ -55,7 +55,8 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Product UI:** vendored exchange shell → http://localhost:8090 (`vendor/<exchange-tree>/05_Web_Front`). `apps/web` is **not** the product.
 - **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
 - **Security when-to:** [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) · tooling floor: [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md)
-- **After Denon ships:** [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — full audit program is **closed**
+- **After a big ship wave:** [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md) or [`WAVE-AUDIT.md`](WAVE-AUDIT.md) — full A–E is **closed**
+- **Latest wave archive:** [`audit/2026-07-29-wave/`](audit/2026-07-29-wave/)
 - **Next product gates:** dual-book discipline + real rails/chain → not another full audit
 - - **Denon return board (2026-07-29):** [`DENON-RETURN-GITHUB-STATE-2026-07-29.md`](DENON-RETURN-GITHUB-STATE-2026-07-29.md) — what Nitro agents landed; do not rebuild
 - **Nitro’s product lane (Stream A):** app surface only — claim + ordered checklist in [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md) · GitHub issue **#83** · Phase 1 execution plan [`STREAM-A-PHASE1-PLAN.md`](STREAM-A-PHASE1-PLAN.md). Denon owns spine (services, edge, proxy, compose). Do not edit Stream B files; open `[cross-stream]` issues instead.

@@ -112,6 +112,24 @@ describe('svc-token mount — authorisation', () => {
     expect(token.stake).toHaveBeenCalledWith(expect.objectContaining({ userId: USER, amount: amt('1000'), tier: 'flex' }));
   });
 
+  it('refuses stake when KYC tier is none (jurisdiction matrix on token)', async () => {
+    const token = stubToken();
+    await expect(
+      createTokenRouter(token)
+        .createCaller(signed(principal({ tier: 'none' })))
+        .stake({ amount: '1000', tier: 'flex' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(token.stake).not.toHaveBeenCalled();
+  });
+
+  it('stakeOf/accessOf bind to the principal — no free userId', async () => {
+    const token = stubToken();
+    await createTokenRouter(token).createCaller(signed()).stakeOf();
+    expect(token.stakeOf).toHaveBeenCalledWith(USER);
+    await createTokenRouter(token).createCaller(signed()).accessOf();
+    expect(token.accessOf).toHaveBeenCalledWith(USER);
+  });
+
   it('stakes as the principal — never as a userId from the client', async () => {
     const token = stubToken();
     // Input has no userId field; if someone smuggled it, zod would strip it.

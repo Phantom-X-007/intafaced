@@ -34,6 +34,7 @@ export class TokenError extends Error {
       | 'token.stake_not_found'
       | 'token.stake_locked'
       | 'token.stake_closed'
+      | 'token.stake_conflict'
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
@@ -117,7 +118,8 @@ export interface StakeRecord {
   tier: StakeTier;
   startedAt: Date;
   unlocksAt: Date | null;
-  status: 'active' | 'unstaking' | 'closed';
+  /** `pending` = claim row not yet funded; shown so clients can retry the same stakeId. */
+  status: 'pending' | 'active' | 'unstaking' | 'closed';
 }
 
 export class TokenService {
@@ -160,53 +162,134 @@ export class TokenService {
         const startedAt = new Date();
         const unlocksAt = unlockDate(input.tier, startedAt);
 
-        await this.sql`
-          INSERT INTO token.stakes (id, user_id, amount, tier, multiplier_bps, started_at, unlocks_at, status)
-          VALUES (
-            ${stakeId}, ${input.userId}, ${formatAmount(input.amount)}::numeric, ${input.tier},
-            ${STAKE_TIERS[input.tier].multiplierBps}, ${startedAt}, ${unlocksAt}, 'pending'
-          )
-          ON CONFLICT (id) DO NOTHING
-        `;
-
-        try {
-          await this.ledger.post(
-            recipes.stake({ stakeId, userId: input.userId, assetId: this.assetId, amount: input.amount, tier: input.tier }),
-          );
-        } catch (err) {
-          await this.sql`
-            DELETE FROM token.stakes WHERE id = ${stakeId} AND status = 'pending'
-          `;
-          throw err;
-        }
-
-        await this.sql`
-          UPDATE token.stakes SET status = 'active' WHERE id = ${stakeId} AND status = 'pending'
-        `;
-
-        await this.bus.publish(
-          'stakeCreated',
-          {
-            stakeId,
-            userId: input.userId,
-            amount: formatAmount(input.amount),
-            tier: input.tier,
-            unlocksAt: unlocksAt?.toISOString() ?? null,
-          },
-          { idempotencyKey: `token.stake:${stakeId}` },
-        );
-
-        return {
-          id: stakeId,
+        // Claim-before-post: insert pending, or on conflict re-load and refuse
+        // amount/user/tier mismatches (same class as pay.deposit_conflict).
+        // Never post the caller's amount against another row's identity.
+        const claimed = await this.claimStakePending({
+          stakeId,
           userId: input.userId,
           amount: input.amount,
           tier: input.tier,
           startedAt,
           unlocksAt,
+        });
+
+        if (claimed.status === 'active' || claimed.status === 'unstaking' || claimed.status === 'closed') {
+          // Exact retry of an already-finished stake — return the book row, do not re-post.
+          return claimed;
+        }
+
+        try {
+          await this.ledger.post(
+            recipes.stake({
+              stakeId: claimed.id,
+              userId: claimed.userId,
+              assetId: this.assetId,
+              amount: claimed.amount,
+              tier: claimed.tier,
+            }),
+          );
+        } catch (err) {
+          await this.sql`
+            DELETE FROM token.stakes WHERE id = ${claimed.id} AND status = 'pending'
+          `;
+          throw err;
+        }
+
+        await this.sql`
+          UPDATE token.stakes SET status = 'active' WHERE id = ${claimed.id} AND status = 'pending'
+        `;
+
+        await this.bus.publish(
+          'stakeCreated',
+          {
+            stakeId: claimed.id,
+            userId: claimed.userId,
+            amount: formatAmount(claimed.amount),
+            tier: claimed.tier,
+            unlocksAt: claimed.unlocksAt?.toISOString() ?? null,
+          },
+          { idempotencyKey: `token.stake:${claimed.id}` },
+        );
+
+        return {
+          id: claimed.id,
+          userId: claimed.userId,
+          amount: claimed.amount,
+          tier: claimed.tier,
+          startedAt: claimed.startedAt,
+          unlocksAt: claimed.unlocksAt,
           status: 'active' as const,
         };
       },
     );
+  }
+
+  /**
+   * Insert a pending stake claim, or load the existing row on retry.
+   * Mismatched user/amount/tier on the same stakeId is a hard conflict.
+   */
+  private async claimStakePending(input: {
+    stakeId: string;
+    userId: string;
+    amount: Amount;
+    tier: StakeTier;
+    startedAt: Date;
+    unlocksAt: Date | null;
+  }): Promise<StakeRecord> {
+    const inserted = await this.sql<
+      Array<{ id: string; user_id: string; amount: string; tier: StakeTier; started_at: Date; unlocks_at: Date | null; status: string }>
+    >`
+      INSERT INTO token.stakes (id, user_id, amount, tier, multiplier_bps, started_at, unlocks_at, status)
+      VALUES (
+        ${input.stakeId}, ${input.userId}, ${formatAmount(input.amount)}::numeric, ${input.tier},
+        ${STAKE_TIERS[input.tier].multiplierBps}, ${input.startedAt}, ${input.unlocksAt}, 'pending'
+      )
+      ON CONFLICT (id) DO NOTHING
+      RETURNING id, user_id, amount, tier, started_at, unlocks_at, status
+    `;
+    if (inserted[0]) {
+      const row = inserted[0];
+      return {
+        id: row.id,
+        userId: row.user_id,
+        amount: parseAmount(row.amount),
+        tier: row.tier,
+        startedAt: row.started_at,
+        unlocksAt: row.unlocks_at,
+        status: row.status as StakeRecord['status'],
+      };
+    }
+
+    const rows = await this.sql<
+      Array<{ id: string; user_id: string; amount: string; tier: StakeTier; started_at: Date; unlocks_at: Date | null; status: string }>
+    >`
+      SELECT id, user_id, amount, tier, started_at, unlocks_at, status
+        FROM token.stakes WHERE id = ${input.stakeId} FOR UPDATE
+    `;
+    const existing = rows[0];
+    if (!existing) {
+      throw new TokenError(`Stake ${input.stakeId} disappeared after conflict`, 'token.stake_not_found');
+    }
+
+    const amount = parseAmount(existing.amount);
+    const mismatch = existing.user_id !== input.userId || amount !== input.amount || existing.tier !== input.tier;
+    if (mismatch) {
+      throw new TokenError(
+        `Stake ${input.stakeId} was already claimed as ${formatAmount(amount)} ${existing.tier} by ${existing.user_id}`,
+        'token.stake_conflict',
+      );
+    }
+
+    return {
+      id: existing.id,
+      userId: existing.user_id,
+      amount,
+      tier: existing.tier,
+      startedAt: existing.started_at,
+      unlocksAt: existing.unlocks_at,
+      status: existing.status as StakeRecord['status'],
+    };
   }
 
   /**
@@ -282,8 +365,9 @@ export class TokenService {
     `;
     const row = rows[0];
     if (!row) return null;
-    if (row.status !== 'active' && row.status !== 'unstaking' && row.status !== 'closed') {
-      // `pending` is an in-flight claim — not a stake the user can act on yet.
+    // Include `pending` so a client can discover an in-flight claim and retry
+    // the same stakeId (M-02 recovery). Unstake still refuses non-active rows.
+    if (row.status !== 'active' && row.status !== 'unstaking' && row.status !== 'closed' && row.status !== 'pending') {
       return null;
     }
     return {
@@ -298,10 +382,10 @@ export class TokenService {
   }
 
   /**
-   * Stakes owned by a user. Defaults to active only — closed stakes are history
-   * and pending is never shown (it is not yet funded).
+   * Stakes owned by a user. Defaults to active only.
+   * `all` includes pending so a crash mid-stake is visible for retry (M-02).
    */
-  async listStakes(userId: string, status: 'active' | 'closed' | 'all' = 'active'): Promise<StakeRecord[]> {
+  async listStakes(userId: string, status: 'active' | 'closed' | 'pending' | 'all' = 'active'): Promise<StakeRecord[]> {
     const rows =
       status === 'all'
         ? await this.sql<
@@ -317,7 +401,7 @@ export class TokenService {
           >`
             SELECT id, user_id, amount, tier, started_at, unlocks_at, status
               FROM token.stakes
-             WHERE user_id = ${userId} AND status IN ('active', 'unstaking', 'closed')
+             WHERE user_id = ${userId} AND status IN ('pending', 'active', 'unstaking', 'closed')
              ORDER BY started_at DESC, id ASC
           `
         : await this.sql<

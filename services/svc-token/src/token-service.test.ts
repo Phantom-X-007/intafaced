@@ -152,6 +152,22 @@ if (!available) {
       expect(rows[0]?.status).toBe('active');
     });
 
+    it('M-01 refuses stakeId reuse with a different amount or user', async () => {
+      await fund(USER_A, '5000');
+      await fund(USER_B, '5000');
+      const stakeId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId });
+
+      await expect(token.stake({ userId: USER_A, amount: amt('2000'), tier: 'flex', stakeId })).rejects.toMatchObject({
+        code: 'token.stake_conflict',
+      });
+      await expect(token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex', stakeId })).rejects.toMatchObject({
+        code: 'token.stake_conflict',
+      });
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await stakedOf(USER_B)).toBe('0');
+    });
+
     it('never records a stake the ledger did not fund', async () => {
       await fund(USER_A, '50');
       await expect(token.stake({ userId: USER_A, amount: amt('999'), tier: 'm3' })).rejects.toThrow();
@@ -201,7 +217,7 @@ if (!available) {
       expect(closed[0]?.id).toBe(a1.id);
     });
 
-    it('getStake returns null for unknown or still-pending ids', async () => {
+    it('getStake returns null for unknown ids and returns active stakes', async () => {
       expect(await token.getStake('44444444-4444-4444-8444-444444444444')).toBeNull();
 
       await fund(USER_A, '1000');

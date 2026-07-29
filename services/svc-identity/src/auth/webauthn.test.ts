@@ -212,6 +212,29 @@ describe('authentication ceremony', () => {
     expect(result.newCounter).toBe(2);
   });
 
+  it('rejects presence-only assertions (userVerification required)', () => {
+    const { keys, credential, credId } = enrolled();
+    const challenge = generateChallenge();
+    const clientDataJSON = buildClientDataJSON({
+      type: 'webauthn.get',
+      challenge,
+      origin: config.origin,
+    });
+    const authData = buildAuthenticatorData({ rpID: config.rpID, counter: 2, userVerified: false });
+    const signature = signAssertion(keys.privateKey, authData, clientDataJSON);
+    const response: AuthenticationResponseJSON = {
+      id: b64urlEncode(credId),
+      rawId: b64urlEncode(credId),
+      type: 'public-key',
+      response: {
+        clientDataJSON: b64urlEncode(clientDataJSON),
+        authenticatorData: b64urlEncode(authData),
+        signature: b64urlEncode(signature),
+      },
+    };
+    expect(() => verifyAuthenticationResponse(config, challenge, credential, response)).toThrow(/user verification/i);
+  });
+
   it('rejects a signature from a different key', () => {
     const { credential, credId } = enrolled();
     const impostor = makeKeyPair();

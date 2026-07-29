@@ -107,7 +107,7 @@ function stubServices(): Stub {
       excludeCredentials: [],
       authenticatorSelection: {
         residentKey: 'preferred' as const,
-        userVerification: 'preferred' as const,
+        userVerification: 'required' as const,
         requireResidentKey: false as const,
       },
       attestation: 'none' as const,
@@ -118,7 +118,7 @@ function stubServices(): Stub {
       timeout: 60_000,
       rpId: 'localhost',
       allowCredentials: [{ type: 'public-key' as const, id: 'cred-1' }],
-      userVerification: 'preferred' as const,
+      userVerification: 'required' as const,
     })),
     confirmWebauthnAuthentication: record('confirmWebauthnAuthentication', () => ({
       accessToken: 'access',
