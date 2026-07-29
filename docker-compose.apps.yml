@@ -162,6 +162,22 @@ services:
       INDEXER_URL: http://svc-indexer:4013
       MATCHING_URL: http://svc-matching:4005
       QUOTE_MAX_AGE_MS: ${QUOTE_MAX_AGE_MS:-2000}
+      # Book levels pulled from each venue when pricing a size.
+      DEX_QUOTE_DEPTH: ${DEX_QUOTE_DEPTH:-50}
+      # Quote the Fiat Plane internal book alongside the on-chain one (§8.6).
+      # Set false to make this front door quote nothing custodial. Either way the
+      # venue is DISCLOSED as `custodial: true` in the response, never hidden.
+      DEX_INTERNAL_BOOK_ENABLED: ${DEX_INTERNAL_BOOK_ENABLED:-true}
+      # Venue cost parameters (SOCKET §13 — socket.dex-fee-source). CONFIGURED,
+      # not sourced: every response discloses the exact figures it applied, so
+      # the arithmetic can be checked against a venue's real schedule.
+      DEX_CLOB_FEE_BPS: ${DEX_CLOB_FEE_BPS:-0}
+      DEX_CLOB_SETTLEMENT_COST: '${DEX_CLOB_SETTLEMENT_COST:-0}'
+      DEX_INTERNAL_BOOK_FEE_BPS: ${DEX_INTERNAL_BOOK_FEE_BPS:-20}
+      # The §27 multi-venue fabric, as configuration. EMPTY BY DEFAULT — a
+      # service with no outbound egress does not silently acquire it. Public
+      # depth needs no credentials, so a venue quotes the moment a row is added.
+      DEX_EXTERNAL_VENUES: '${DEX_EXTERNAL_VENUES:-[]}'
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4010']
     healthcheck: *healthcheck

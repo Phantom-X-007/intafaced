@@ -554,9 +554,15 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@intafaced/exchange-contract':
+        specifier: workspace:*
+        version: link:../../packages/exchange-contract
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
+      '@intafaced/venue-adapter':
+        specifier: workspace:*
+        version: link:../../packages/venue-adapter
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
