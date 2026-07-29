@@ -23,18 +23,18 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 ## Scoreboard
 
-| System                   | Risk now                                             | Status                               |
-| ------------------------ | ---------------------------------------------------- | ------------------------------------ |
-| Ledger                   | Low if perimeter holds                               | OK to build                          |
-| Identity                 | Open XP mint fixed; API-key escalate closed (#86)    | OK                                   |
-| Pay                      | IDOR + withdraw crash fixed; retry contract residual | OK to build · residual               |
-| Token / bank earn        | Claim-order + purpose pots fixed; scopes issued      | OK                                   |
-| P2P                      | Purpose escrow + party-only reads fixed              | OK                                   |
-| Edge                     | Region bound into principal HMAC                     | OK for dev                           |
-| Protocol / DEX / indexer | Mounted shells; chain propped                        | Not product-complete                 |
-| Deploy                   | One-command platform; S2S not host-published         | Usable with care                     |
-| **Vendor (shell)**       | **Product UI** OK; **high if used as books**         | **UI shell · quarantined as ledger** |
-| CI doctrine              | Brand/custody + vendor-shell + money PG required     | OK                                   |
+| System                   | Risk now                                           | Status                               |
+| ------------------------ | -------------------------------------------------- | ------------------------------------ |
+| Ledger                   | Low if perimeter holds                             | OK to build                          |
+| Identity                 | Open XP mint fixed; API-key escalate closed (#86)  | OK                                   |
+| Pay                      | IDOR + withdraw crash fixed; retry contract closed | OK to build                          |
+| Token / bank earn        | Claim-order + purpose pots fixed; scopes issued    | OK                                   |
+| P2P                      | Purpose escrow + party-only reads fixed            | OK                                   |
+| Edge                     | Region bound into principal HMAC                   | OK for dev                           |
+| Protocol / DEX / indexer | Mounted shells; chain propped                      | Not product-complete                 |
+| Deploy                   | One-command platform; S2S not host-published       | Usable with care                     |
+| **Vendor (shell)**       | **Product UI** OK; **high if used as books**       | **UI shell · quarantined as ledger** |
+| CI doctrine              | Brand/custody + vendor-shell + money PG required   | OK                                   |
 
 ---
 
