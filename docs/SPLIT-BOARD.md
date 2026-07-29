@@ -147,17 +147,55 @@ any new edge route, anything in `main.js`.
    proxy because it buffers, so the browser reaches it directly; its snapshot
    carries no cookie, no token and no per-caller content. Not the
    unmounted-router bug. Written down here so it does not get re-raised.
-7. **The Java rebrand — 666 files** still under the vendor's package root.
-   Completely isolated from everything else, so it is the safest possible
-   parallel work. Note the trade-off `brand-scan.mjs` records: package names,
-   groupIds and entity→table mappings are load-bearing, so this is a real
-   refactor with a real chance of breaking the build. Do it on its own branch
-   with the Java build green before and after.
+7. **The Java rebrand — 666 files.** Investigated 29 July; **not started, on
+   purpose.** The Java build baseline is green (14 modules, `BUILD SUCCESS`,
+   Maven 3.8.6 / JDK 1.8.0_342), so the blocker is not the build. It is this:
 
-   The same branch should rename the `vendor/` directory itself. Two docs are
-   currently on the brand-scan allowlist purely because they quote that path
-   verbatim; when the rename lands, **delete both allowlist entries** — they name
-   themselves in `tooling/ci/brand-scan.mjs` for exactly this reason.
+   **MongoDB is the real hazard, not Hibernate.** Spring Data stamps a `_class`
+   discriminator into every document. The live `bitrade` database holds **1,420
+   documents across 60 collections, every one carrying
+   `_class: "com.<vendor>.bitrade.entity.KLine"`.** Rename the package and every
+   historical K-line becomes unmappable — including the ones feeding
+   `symbol-thumb`, i.e. the chart. The rename must ship in lockstep with a
+   `_class` migration, and the vendor tree has no migration framework to carry
+   that to another environment.
+
+   **The vendor names are also live datastore names.** The MySQL schema is
+   `bizzan` (8 JDBC URLs plus compose `MYSQL_DATABASE`) and the Mongo database is
+   `bitrade`. A blanket replace points every app at a schema that does not exist,
+   and `ddl-auto=update` then cheerfully builds 64 empty tables next to the real
+   ones. So this cannot be a single-pattern sweep — those strings must be
+   excluded explicitly.
+
+   **Do NOT pin `@Table` annotations first.** That was in an earlier version of
+   this item and it was wrong. JPA implicit naming derives from the *entity
+   name*, never the package: all 27 entities lacking `@Table` were verified to
+   map to exact snake_case renderings of their class names, across all 64 live
+   tables, zero exceptions. Renaming packages without renaming classes cannot
+   change a table or column name. Hand-adding 27 annotations would be 27 chances
+   to typo a table name into precisely the catastrophe the pinning was meant to
+   prevent.
+
+   **Sequence — custody first, rename second.** The rename rewrites the `package`
+   line and every import in 666 files, so it conflicts with everything. It is
+   also script-regenerable in minutes, and custody work is not. Landing the
+   rename first maximises the other stream's pain for no gain.
+
+   Then: exclude the datastore names, rename only the package coords, the
+   groupId, the `*-parent` / `*-job` artifactIds and the one vendor-named module
+   directory. No `@ComponentScan` / `@EntityScan` / `@EnableJpaRepositories`
+   declares an explicit base package, so a consistent move needs no annotation
+   edits at all.
+
+   The `vendor/` directory rename has a surprisingly small blast radius outside
+   the vendor tree — four lines, and neither the root compose files nor the
+   `Dockerfile` reference it. Only after **both** the directory and the package
+   root are renamed may the two brand-scan allowlist entries be deleted; each
+   names that condition itself.
+
+   Also found in passing: the coinex Redis password in config does not match the
+   running container, and the vendor root `pom.xml` description plus
+   `sql/db_patch.sql` still carry Chinese text. Both belong in this pass.
 8. **Java custody hardening** — unauthenticated withdrawal `GET`s, empty-string
    ETH keystore passwords, and a hardcoded `987654321asdf` trading backdoor.
    These are line items in the fork, not blockers, but they must not reach
