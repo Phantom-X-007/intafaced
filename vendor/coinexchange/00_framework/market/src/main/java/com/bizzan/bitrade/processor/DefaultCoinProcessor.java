@@ -51,10 +51,15 @@ public class DefaultCoinProcessor implements CoinProcessor {
         return symbol;
     }
 
+    /**
+     * Rebuild the 24h summary from today's stored 1min candles. Called once at
+     * startup, so whatever this produces is what /market/symbol-thumb serves
+     * until a trade arrives.
+     */
     @Override
     public void initializeThumb() {
         Calendar calendar = Calendar.getInstance();
-        //将秒、微秒字段置为0
+        // zero the seconds and milliseconds
         calendar.set(Calendar.SECOND, 0);
         calendar.set(Calendar.MILLISECOND, 0);
         long nowTime = calendar.getTimeInMillis();
@@ -77,8 +82,18 @@ public class DefaultCoinProcessor implements CoinProcessor {
                 if (coinThumb.getHigh().compareTo(kline.getHighestPrice()) < 0) {
                     coinThumb.setHigh(kline.getHighestPrice());
                 }
-                if (kline.getLowestPrice().compareTo(BigDecimal.ZERO) > 0 && coinThumb.getLow().compareTo(kline.getLowestPrice()) > 0) {
-                    coinThumb.setLow(kline.getLowestPrice());
+                // CoinThumb.low starts at ZERO, so the original
+                //     if (candleLow > 0 && thumb.low > candleLow)
+                // could never fire: nothing is greater than the zero it starts
+                // at. The low - and therefore chg, which is derived from it -
+                // stayed at 0 for every pair no matter what the candles held.
+                // handleThumb() already gets this right for the live path; this
+                // is the same guard, so both paths agree.
+                BigDecimal candleLow = kline.getLowestPrice();
+                if (candleLow.compareTo(BigDecimal.ZERO) > 0
+                        && (coinThumb.getLow().compareTo(BigDecimal.ZERO) == 0
+                            || coinThumb.getLow().compareTo(candleLow) > 0)) {
+                    coinThumb.setLow(candleLow);
                 }
                 if (kline.getClosePrice().compareTo(BigDecimal.ZERO) > 0) {
                     coinThumb.setClose(kline.getClosePrice());
@@ -87,7 +102,10 @@ public class DefaultCoinProcessor implements CoinProcessor {
                 coinThumb.setTurnover(coinThumb.getTurnover().add(kline.getTurnover()));
             }
             coinThumb.setChange(coinThumb.getClose().subtract(coinThumb.getOpen()));
-            // 此处计算涨幅并没有以开盘价为标准，而是以最低价
+            // Note: chg is change over the LOW, not over the open. That is the
+            // upstream definition and handleThumb() uses the same one, so it is
+            // kept here rather than "corrected" into a value that would jump the
+            // moment the first live trade replaced it.
             if (coinThumb.getLow().compareTo(BigDecimal.ZERO) > 0) {
                 coinThumb.setChg(coinThumb.getChange().divide(coinThumb.getLow(), 4, RoundingMode.UP));
             }
