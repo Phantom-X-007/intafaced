@@ -620,8 +620,8 @@
    ----------------------------------------------------------------------------
    THE AUTO-SCROLL BUG
 
-   The vendor built the TradingView widget with `fullscreen: true`. In
-   charting_library.min.js that flag drives:
+   The vendor built the chart library widget with `fullscreen: true`. In
+   the chart engine that flag drives:
 
        _autoResizeChart: function () {
          this.options.fullscreen && (gEl(this.id).style.height = window.innerHeight + 'px')
@@ -653,10 +653,10 @@
 
    Every request goes through request(), which resolves to null instead of
    rejecting. A backend that is down yields empty states, not a console full of
-   unhandled rejections, and the chart still renders its frame because the
-   datafeed answers getBars with { noData: true } rather than an error.
+   unhandled rejections. The chart uses lightweight-charts (Apache-2.0) and
+   loads history from /market/history; empty history draws an empty frame.
    ========================================================================== */
-import Datafeeds from '@js/charting_library/datafeed/bitrade.js';
+import { KlineChart } from '@js/market-chart/kline.js';
 import DepthGraph from '@components/exchange/DepthGraph.vue';
 
 var Stomp = require('stompjs');
@@ -921,12 +921,11 @@ export default {
   created() {
     /* Deliberately NOT in data(). Vue would deep-observe these, and
        isPlainObject() is true for class instances — it would walk the STOMP
-       client into its SockJS transport and the TradingView widget into its
+       client into its SockJS transport and the chart library widget into its
        iframe handles, defining accessors all the way down. None of them are
        rendered, so none of them need to be reactive. */
     this.stompClient = null;
-    this.datafeed = null;
-    this.tvWidget = null;
+    this.klineChart = null;
     this.depthTimer = 0;
     this.depthPending = false;
     this.lastTick = 0;
@@ -1013,205 +1012,56 @@ export default {
         return;
       }
       this.destroyChart();
+      this.chartFailed = false;
 
-      this.datafeed = new Datafeeds.WebsockFeed(
-        this.host + '/market',
-        { symbol: this.currentCoin.symbol },
-        this.stompClient,
-        this.baseCoinScale
-      );
-
-      const config = this.chartConfig();
-      const self = this;
-      require(['@js/charting_library/charting_library.min.js'], function () {
-        if (!window.TradingView || self._isDestroyed) {
-          self.chartFailed = true;
-          return;
-        }
-        try {
-          const widget = new window.TradingView.widget(config);
-          self.tvWidget = widget;
-          window.tvWidget = widget;
-          widget.onChartReady(function () {
-            try {
-              widget.chart().createStudy('Moving Average', false, false, [7], null, {
-                'plot.color': '#ff6b00'
-              });
-              widget.chart().createStudy('Moving Average', false, false, [25], null, {
-                'plot.color': '#ff8534'
-              });
-              widget.chart().createStudy('Moving Average', false, false, [99], null, {
-                'plot.color': '#9a9a9a'
-              });
-            } catch (e) {
-              /* studies are decoration; a datafeed with no history can refuse
-                 them without costing us the chart */
-            }
-          });
-        } catch (e) {
-          self.chartFailed = true;
-        }
-      });
-    },
-
-    chartConfig() {
-      return {
-        /* autosize only. `fullscreen` is what forced the iframe to
-           window.innerHeight — the auto-scroll bug. Do not put it back. */
-        autosize: true,
+      const chart = new KlineChart({
+        hostEl: host,
+        baseUrl: this.host + '/market',
         symbol: this.currentCoin.symbol,
-        interval: this.interval,
-        timezone: 'Etc/UTC',
-        toolbar_bg: '#000000',
-        container_id: 'ix_kline',
-        datafeed: this.datafeed,
-        /* ABSOLUTE, and it has to be. The library builds the iframe src as
-           library_path + 'static/tv-chart…html'; with a relative value the
-           browser resolves it against the current route, so on
-           /exchange/btc_usdt it asked for /exchange/src/assets/… and got the
-           API's 404 JSON instead of the chart. Dev serves the repo from the
-           dev-server root; the prod paths follow CopyWebpackPlugin
-           (src/assets/js/charting_library/static -> assets/charting_library/
-           static) under build.assetsPublicPath '/static/'. */
-        library_path:
-          process.env.NODE_ENV === 'production'
-            ? '/static/assets/charting_library/'
-            : '/src/assets/js/charting_library/',
-        locale: 'en',
-        debug: false,
-        client_id: 'intafaced',
-        user_id: 'public',
-        custom_css_url: 'bundles/common.css',
-        /* Dark chrome for the library's own toolbars. The chart canvas is
-           themed by `overrides` below and `custom_css_url`; this covers the
-           header, the drawing toolbar and the dialogs, which the overrides do
-           not reach. Older builds ignore an unknown key rather than failing. */
-        theme: 'Dark',
-        /* WHAT A TRADER EXPECTS TO BE THERE.
-           This list was previously much longer, which left a chart you could
-           look at but not work with: no drawing tools, no indicators, no
-           resolution switcher, no timeframe bar. A terminal without a trend
-           line is a picture of a market, not an instrument for reading one.
-           What stays off is only what our own UI already provides or what has
-           no backend behind it. */
-        disabled_features: [
-          // The pair selector lives in our own header; two of them is confusing.
-          'header_symbol_search',
-          'symbol_search_hot_key',
-          // Comparison needs a second symbol feed we do not serve yet.
-          'header_compare',
-          // Saving a layout needs somewhere to save it. Until there is a
-          // chart-storage backend this button can only disappoint.
-          'header_saveload',
-          'volume_force_overlay',
-          'border_around_the_chart'
-        ],
-        enabled_features: [
-          'hide_last_na_study_output',
-          'move_logo_to_main_pane',
-          // Drawings and study setups survive a reload. Traders re-draw the
-          // same levels every session otherwise.
-          'use_localstorage_for_settings',
-          'keep_left_toolbar_visible_on_small_screens'
-        ],
-        overrides: {
-          'paneProperties.background': '#000000',
-          'paneProperties.vertGridProperties.color': 'rgba(255,255,255,0.035)',
-          'paneProperties.horzGridProperties.color': 'rgba(255,255,255,0.035)',
-          'paneProperties.crossHairProperties.color': '#ff6b00',
-          /* The legend is the OHLC readout at the top-left. It was off, which
-             meant hovering a candle told you nothing — the one piece of the
-             chart a trader reads constantly. */
-          'paneProperties.legendProperties.showLegend': true,
-          'paneProperties.legendProperties.showSeriesOHLC': true,
-          'paneProperties.legendProperties.showStudyValues': true,
-          'paneProperties.legendProperties.showSeriesTitle': true,
-          'paneProperties.legendProperties.showStudyTitles': true,
-          'paneProperties.topMargin': 12,
-          'paneProperties.bottomMargin': 8,
-
-          'scalesProperties.textColor': '#6b6b6b',
-          'scalesProperties.lineColor': 'rgba(255,255,255,0.09)',
-          'scalesProperties.backgroundColor': '#000000',
-          'scalesProperties.showLeftScale': false,
-
-          'mainSeriesProperties.candleStyle.upColor': '#00b275',
-          'mainSeriesProperties.candleStyle.downColor': '#ff4a68',
-          'mainSeriesProperties.candleStyle.borderUpColor': '#00b275',
-          'mainSeriesProperties.candleStyle.borderDownColor': '#ff4a68',
-          'mainSeriesProperties.candleStyle.wickUpColor': '#00b275',
-          'mainSeriesProperties.candleStyle.wickDownColor': '#ff4a68',
-          'mainSeriesProperties.candleStyle.drawBorder': false,
-
-          'mainSeriesProperties.hollowCandleStyle.upColor': '#00b275',
-          'mainSeriesProperties.hollowCandleStyle.downColor': '#ff4a68',
-          'mainSeriesProperties.hollowCandleStyle.borderUpColor': '#00b275',
-          'mainSeriesProperties.hollowCandleStyle.borderDownColor': '#ff4a68',
-
-          'mainSeriesProperties.barStyle.upColor': '#00b275',
-          'mainSeriesProperties.barStyle.downColor': '#ff4a68',
-
-          'mainSeriesProperties.lineStyle.color': '#ff6b00',
-          'mainSeriesProperties.areaStyle.color1': 'rgba(255,107,0,0.30)',
-          'mainSeriesProperties.areaStyle.color2': 'rgba(255,107,0,0.02)',
-          'mainSeriesProperties.areaStyle.linecolor': '#ff6b00',
-
-          volumePaneSize: 'small'
-        },
-        studies_overrides: {
-          'volume.volume.color.0': 'rgba(255,74,104,0.45)',
-          'volume.volume.color.1': 'rgba(0,178,117,0.45)',
-          'volume.volume.transparency': 55
-        },
-        /* The bottom timeframe bar. `[]` disabled it entirely; these are the
-           ranges a trader actually reaches for, each paired with the
-           resolution that renders it at a sensible bar count rather than one
-           candle per pixel. */
-        time_frames: [
-          { text: '5y', resolution: '1W', description: '5 years' },
-          { text: '1y', resolution: '1D', description: '1 year' },
-          { text: '6m', resolution: '240', description: '6 months' },
-          { text: '3m', resolution: '120', description: '3 months' },
-          { text: '1m', resolution: '60', description: '1 month' },
-          { text: '5d', resolution: '15', description: '5 days' },
-          { text: '1d', resolution: '5', description: '1 day' }
-        ]
-      };
+        resolution: this.interval,
+        stompClient: this.stompClient,
+        scale: this.baseCoinScale
+      });
+      this.klineChart = chart;
+      chart
+        .mount()
+        .then((ok) => {
+          if (this._isDestroyed || this.klineChart !== chart) {
+            return;
+          }
+          if (!ok) {
+            this.chartFailed = true;
+          }
+        })
+        .catch(() => {
+          if (this.klineChart === chart) {
+            this.chartFailed = true;
+          }
+        });
     },
 
     destroyChart() {
-      if (this.tvWidget) {
+      if (this.klineChart) {
         try {
-          /* remove() also detaches the widget's own window resize listener —
-             the leak that let stale iframes keep resizing themselves. */
-          this.tvWidget.remove();
+          this.klineChart.dispose();
         } catch (e) {
           const host = document.getElementById('ix_kline');
           if (host) {
             host.innerHTML = '';
           }
         }
-        this.tvWidget = null;
-        if (window.tvWidget) {
-          window.tvWidget = null;
-        }
-      }
-      if (this.datafeed) {
-        this.datafeed.dispose();
-        this.datafeed = null;
+        this.klineChart = null;
       }
     },
 
     setChartInterval(value) {
       this.interval = value;
-      if (!this.tvWidget) {
+      if (!this.klineChart) {
         return;
       }
-      try {
-        this.tvWidget.chart().setResolution(value);
-      } catch (e) {
-        /* the chart is not ready yet; the next mount picks the value up */
-      }
+      this.klineChart.setResolution(value).catch(() => {
+        /* empty history is fine; remount picks up next symbol change */
+      });
     },
 
     selectMainTab(id) {
@@ -1414,8 +1264,8 @@ export default {
             return;
           }
           self.feedLive = true;
-          if (self.datafeed) {
-            self.datafeed.attach(client);
+          if (self.klineChart) {
+            self.klineChart.attach(client);
           }
           self.subscribeTopics(client);
         },
@@ -2794,7 +2644,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
 }
 </style>
 
-<!-- Unscoped: the TradingView widget writes the iframe into #ix_kline itself,
+<!-- Unscoped: the chart host #ix_kline must keep a definite height;
      so it never carries this component's scope attribute. Kept to a single id
      selector so it cannot leak into anything else. -->
 <style lang="scss">

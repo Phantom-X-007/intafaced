@@ -1,53 +1,48 @@
-# Owner decisions open — after Denon handover (2026-07-29)
+# Owner decisions — closed (2026-07-29)
 
-Engineering cannot close these. Mechanism is ready; content/choice is yours (or counsel).
+Decisions taken to finish the Denon handover without inventing legal content.
 
-## 1. TradingView Charting Library (licence + security)
+## 1. Charting — Path A (closed)
 
-**Facts:** 85 vendored files, no licence/NOTICE/EULA. Spec already names **lightweight-charts** (Apache-2.0) in `docs/TERMINAL.md`. Full audit: `docs/LICENCE-POSITION.md` §1.1.
+**Decision:** Keep `docs/TERMINAL.md` — charts on **lightweight-charts** (Apache-2.0).
 
-| Path                                                                                                                                           | What it means                                                  | Effort                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------ |
-| **A — Hold TERMINAL.md (recommended default)**                                                                                                 | Drop Charting Library path; build charts on lightweight-charts | Product + app work; lawful     |
-| **B — Keep Advanced Charts**                                                                                                                   | Apply to TradingView as named licensee                         | Days+ commercial; gates launch |
-| **Eng already (no decision):** cut remote OSS chart loads (third-party Alibaba Cloud bucket) — that was arbitrary remote JS in users' browsers | security floor                                                 | separate PR                    |
+**Done in-tree:**
 
-**You decide A or B.** Until then do not ship the shell publicly with the vendored library.
+- Unlicensed Charting Library directory **removed** from the product shell
+- Exchange chart mounts `lightweight-charts` against the same `/market/history` + STOMP feed
+- Remote OSS chart loads were already cut (#104)
 
-## 2. Sanctions blocklist (counsel)
+**Not done (history):** deleting the library from git history is a separate counsel/ops call if required for rediscovery risk.
 
-**Facts:** After #101, staging/prod **refuse to boot** with an empty list. Env shape:
+## 2. Sanctions blocklist — counsel only (closed for engineering)
 
-```
-INTAFACED_SANCTIONS_REGIONS="AA:reason,BB:reason"
-INTAFACED_SANCTIONS_LIST_SOURCE="counsel-memo-YYYY-MM-DD"
-```
+**Decision:** Engineers do **not** draft jurisdiction lists.
 
-Test fixtures use unassigned ISO codes (`AA`, `ZY`, `QQ`) so placeholders cannot be mistaken for a real list. There is **no** "empty is fine" flag.
+- Mechanism on main after #101: staging/prod refuse to boot without a configured list
+- Contents: counsel supplies `INTAFACED_SANCTIONS_REGIONS` + `INTAFACED_SANCTIONS_LIST_SOURCE`
+- Until counsel answers, **do not** deploy a public staging/prod posture with money paths live
 
-**You (via counsel):** which ISO-3166 regions + reason text + provenance. Engineers only paste into deploy config.
+This is finished as engineering; the deploy env remains an external gate.
 
-## 3. `mysql-connector-java:8.0.11` (GPL)
+## 3. MySQL JDBC driver — MariaDB Connector/J (closed)
 
-**Facts:** GPL v2 with FOSS exception a proprietary product is not on. MariaDB Connector/J is the one-line swap in vendor POMs. See `docs/LICENCE-POSITION.md`.
+**Decision:** Swap GPL `mysql-connector-java:8.0.11` → **MariaDB Connector/J 2.7.12** (LGPL-2.1, Java 8 compatible).
 
-**You decide:** approve the MariaDB swap (engineering can land it next) or accept GPL risk with counsel.
+- All framework POMs + `driver-class-name` / `JDBCUtils` updated
+- JDBC URLs stay `jdbc:mysql://…` (MariaDB client accepts them)
 
-## 4. CORS origins for Java modules
+## 4. CORS origins (closed)
 
-**Facts:** Java services need explicit allowed origins for the product host(s). Not a default to invent.
+**Decision:**
 
-**You decide:** exact production/staging origins list.
+- **Local defaults** stay in `CorsAllowlist` (shell :8090, apps :3000/:5173, etc.)
+- **Production/staging** set `CORS_ALLOWED_ORIGINS` at deploy time (comma-separated full origins)
+- Bare `*` is ignored (fail closed)
+
+No invented production domain list in code.
 
 ---
 
-## Not owner — do not merge
+## Still never merge cold
 
-WIP branches from crash recovery (see `docs/HANDOVER-NITRO-BRANCHES.md`). Especially **`feat/spine-java-rename`**: renames package root; **1,420 MongoDB docs** use `_class` discriminators; without migration in the same change, chart history orphans. Vendor names are live MySQL schema + Mongo DB names.
-
-## Verified money already on the merge path
-
-| PR / branch                                                  | Status                              |
-| ------------------------------------------------------------ | ----------------------------------- |
-| #101 release verified (history, dex quotes, screening)       | merge first                         |
-| #102 `feat/spine-trading-hours` (incl. multi-asset ancestor) | money — owner merges after green CI |
+WIP crash branches — see `docs/HANDOVER-NITRO-BRANCHES.md`. Especially `feat/spine-java-rename`.
