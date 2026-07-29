@@ -313,6 +313,18 @@ Each slice: one PR, one concern, browser proof when shell runs.
 | 2026-07-29 | **S2 still blocked** on market seed / external history (Stream B). **S8** only when Nitro chooses look tour — not a mid-loop gate.                                                                                       |
 | 2026-07-29 | **Reference exchange UI screenshots:** not required — plan done-when criteria are specific enough for Phase 1; beauty stays Phase 2.                                                                                     |
 | 2026-07-29 | **S7 continuous:** markets list / book / trades unknown≠empty; phone order form not clipped. Agent work — no Nitro eyes required.                                                                                        |
+| 2026-07-29 | **Agent floor closed:** home market table unavailable≠empty; mobile drawer routes complete; fee reset on pair change; scoreboard + claim updated. Remaining: **S2 seed (#109)** · **S8 look tour (Nitro-only)**.         |
+
+---
+
+## Agent-complete floor (no Nitro eyes)
+
+Phase 1 **agent surface work is done** when S0–S1 + S3–S7 are on main and continuous honesty holds. Not agent-closable:
+
+| Item                                | Why                                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| **S2** non-zero prices / chart bars | Needs Stream B seed — [#109](https://github.com/Phantom-X-007/intafaced/issues/109) |
+| **S8** visual sign-off              | Nitro product call only                                                             |
 
 ---
 

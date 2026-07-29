@@ -18,7 +18,9 @@ module.exports = {
         nodata: "No Records",
         pleaseselect: "Select",
         searchplaceholder: "Enter the coin symbol...",
-        loading: "Loading..."
+        loading: "Loading...",
+        // stream A — home board honesty when market thumb is down
+        marketsUnavailable: "Market list unavailable — not empty"
     },
     header: {
         index: 'Home',
