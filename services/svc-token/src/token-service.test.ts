@@ -13,7 +13,6 @@ import {
   houseFees,
   rewardsEngine,
   userAvailable,
-
 } from '@intafaced/ledger-client';
 import { TokenService, TokenError } from './token-service.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
@@ -100,9 +99,7 @@ if (!available) {
   const balanceOf = async (userId: string) => formatAmount((await ledger.balance(userAvailable(userId, 'IFC'))).amount);
   const stakedOf = async (userId: string) => {
     const all = await ledger.balances('user', userId);
-    const total = all
-      .filter((b) => b.account.kind === 'stake' && b.account.assetId === 'IFC')
-      .reduce((acc, b) => acc + b.amount, 0n);
+    const total = all.filter((b) => b.account.kind === 'stake' && b.account.assetId === 'IFC').reduce((acc, b) => acc + b.amount, 0n);
     return formatAmount(total);
   };
 

@@ -96,9 +96,7 @@ if (!available) {
   const availableOf = async (userId: string) => formatAmount((await ledger.balance(userAvailable(userId, ASSET))).amount);
   const escrowOf = async (userId: string) => {
     const all = await ledger.balances('user', userId);
-    const total = all
-      .filter((b) => b.account.kind === 'escrow' && b.account.assetId === ASSET)
-      .reduce((acc, b) => acc + b.amount, 0n);
+    const total = all.filter((b) => b.account.kind === 'escrow' && b.account.assetId === ASSET).reduce((acc, b) => acc + b.amount, 0n);
     return formatAmount(total);
   };
   const houseOf = async () => formatAmount((await ledger.balance(houseFees('p2p', ASSET))).amount);

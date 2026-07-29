@@ -114,9 +114,7 @@ if (!available) {
     formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
   const stakedOf = async (userId: string, assetId: string) => {
     const all = await ledger.balances('user', userId);
-    const total = all
-      .filter((b) => b.account.kind === 'stake' && b.account.assetId === assetId)
-      .reduce((acc, b) => acc + b.amount, 0n);
+    const total = all.filter((b) => b.account.kind === 'stake' && b.account.assetId === assetId).reduce((acc, b) => acc + b.amount, 0n);
     return formatAmount(total);
   };
 
@@ -602,8 +600,7 @@ if (!available) {
 
       expect(formatAmount(await bank.earn.poolSize(pool.id))).toBe('900');
 
-      const fromLedger =
-        amt(await stakedOf(USER_A, 'USDT')) + amt(await stakedOf(USER_B, 'USDT')) + amt(await stakedOf(USER_C, 'USDT'));
+      const fromLedger = amt(await stakedOf(USER_A, 'USDT')) + amt(await stakedOf(USER_B, 'USDT')) + amt(await stakedOf(USER_C, 'USDT'));
       expect(formatAmount(fromLedger)).toBe('900');
     });
   });
