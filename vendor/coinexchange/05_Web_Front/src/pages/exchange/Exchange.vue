@@ -35,29 +35,29 @@
       </div>
 
       <div class="ix-head-last">
-        <span class="ix-last" :class="trendClass">{{ fmt(lastPrice, baseCoinScale) }}</span>
+        <span class="ix-last" :class="trendClass">{{ lastPriceLabel }}</span>
         <span class="ix-last-alt" v-if="fiatValue">&asymp; {{ fiatValue }} CNY</span>
       </div>
 
       <dl class="ix-stat">
         <dt>24h Change</dt>
-        <dd :class="trendClass">{{ currentCoin.rose || '—' }}</dd>
+        <dd :class="trendClass">{{ marketStat(currentCoin.rose) }}</dd>
       </dl>
       <dl class="ix-stat">
         <dt>24h High</dt>
-        <dd>{{ fmt(currentCoin.high, baseCoinScale) }}</dd>
+        <dd>{{ marketNum(currentCoin.high, baseCoinScale) }}</dd>
       </dl>
       <dl class="ix-stat">
         <dt>24h Low</dt>
-        <dd>{{ fmt(currentCoin.low, baseCoinScale) }}</dd>
+        <dd>{{ marketNum(currentCoin.low, baseCoinScale) }}</dd>
       </dl>
       <dl class="ix-stat ix-stat-wide">
         <dt>24h Volume</dt>
-        <dd>{{ fmt(currentCoin.volume, 2) }} <em>{{ currentCoin.coin }}</em></dd>
+        <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || num(currentCoin.volume) > 0">{{ currentCoin.coin }}</em></dd>
       </dl>
 
-      <div class="ix-head-status" :class="{ 'is-down': !feedLive }">
-        <i class="ix-dot"></i>{{ feedLive ? 'Live' : 'No feed' }}
+      <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="feedLive ? 'Market feed connected' : 'Market feed is down — numbers are not live'">
+        <i class="ix-dot"></i>{{ feedLive ? 'Live' : 'No feed · not live prices' }}
       </div>
     </header>
 
@@ -113,8 +113,8 @@
               </i>
               {{ row.coin }}<em>/{{ row.base }}</em>
             </span>
-            <span class="ix-num">{{ fmt(row.close, 6) }}</span>
-            <span class="ix-num" :class="roseClass(row.rose)">{{ row.rose }}</span>
+            <span class="ix-num">{{ marketNum(row.close, 6) }}</span>
+            <span class="ix-num" :class="roseClass(row.rose)">{{ marketStat(row.rose) }}</span>
           </button>
         </div>
       </aside>
@@ -148,6 +148,9 @@
             <div id="ix_kline" class="ix-kline" v-show="mainTab === 'chart'"></div>
             <p class="ix-empty ix-empty-abs" v-if="mainTab === 'chart' && chartFailed">
               Chart unavailable
+            </p>
+            <p class="ix-empty ix-empty-abs" v-else-if="mainTab === 'chart' && !feedLive">
+              No market feed — chart has no live history to show
             </p>
 
             <div class="ix-depth-host" v-show="mainTab === 'depth'">
@@ -241,27 +244,32 @@
               <router-link to="/login">Sign in</router-link> to see your balances and orders.
             </p>
 
-            <!-- Balances -->
-            <table class="ix-table" v-else-if="accountTab === 'balances'">
-              <thead>
-                <tr>
-                  <th>Asset</th>
-                  <th class="ix-num">Available</th>
-                  <th class="ix-num">Value</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in balanceRows" :key="row.unit">
-                  <td class="ix-strong">{{ row.unit }}</td>
-                  <td class="ix-num">{{ fmt(row.balance, row.scale) }}</td>
-                  <td class="ix-num ix-dim">{{ row.valueLabel }}</td>
-                  <td class="ix-num">
-                    <router-link class="ix-link" :to="'/uc/recharge?name=' + row.unit">Deposit</router-link>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <!-- Balances — exchange venue wallet only; not the TypeScript ledger books -->
+            <div v-else-if="accountTab === 'balances'">
+              <p class="ix-empty ix-empty-note">
+                Exchange wallet on this venue · not the platform ledger books
+              </p>
+              <table class="ix-table">
+                <thead>
+                  <tr>
+                    <th>Asset</th>
+                    <th class="ix-num">Available</th>
+                    <th class="ix-num">Value</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in balanceRows" :key="row.unit">
+                    <td class="ix-strong">{{ row.unit }}</td>
+                    <td class="ix-num">{{ fmt(row.balance, row.scale) }}</td>
+                    <td class="ix-num ix-dim">{{ row.valueLabel }}</td>
+                    <td class="ix-num">
+                      <router-link class="ix-link" :to="'/uc/recharge?name=' + row.unit">Deposit</router-link>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
             <!-- Positions -->
             <p class="ix-empty" v-else-if="accountTab === 'positions'">
@@ -416,7 +424,7 @@
           </div>
 
           <div class="ix-book-mid">
-            <span class="ix-book-price" :class="trendClass">{{ fmt(lastPrice, baseCoinScale) }}</span>
+            <span class="ix-book-price" :class="trendClass">{{ lastPriceLabel }}</span>
             <Icon v-if="trend > 0" type="md-arrow-up" class="ix-up" size="14" />
             <Icon v-else-if="trend < 0" type="md-arrow-down" class="ix-down" size="14" />
             <span class="ix-book-spread" v-if="spread !== null">Spread {{ spread }}</span>
@@ -552,7 +560,7 @@
               <dd>{{ fmt(orderValue, baseCoinScale) }} <em>{{ currentCoin.base }}</em></dd>
             </div>
             <div>
-              <dt>Fee</dt>
+              <dt>Fee (est.)</dt>
               <dd>{{ feeLabel }}</dd>
             </div>
           </dl>
@@ -684,6 +692,8 @@ export default {
       ],
       chartFailed: false,
       feedLive: false,
+      /* True only after market symbol-info returns a fee field. Default is not free. */
+      feeKnown: false,
 
       plate: { asks: [], bids: [], askTotal: 0, bidTotal: 0 },
       trades: [],
@@ -839,7 +849,14 @@ export default {
       const verb = this.side === 'BUY' ? 'Buy' : 'Sell';
       return this.currentCoin.coin ? verb + ' ' + this.currentCoin.coin : verb;
     },
+    /* Last / 24h stats: never present a cold zero as a live market print. */
+    lastPriceLabel() {
+      return this.marketNum(this.lastPrice, this.baseCoinScale);
+    },
     feeLabel() {
+      if (!this.feeKnown) {
+        return '—';
+      }
       return (this.num(this.symbolFee) * 100).toFixed(2) + '%';
     }
   },
@@ -1203,7 +1220,10 @@ export default {
         }
         this.baseCoinScale = body.baseCoinScale != null ? body.baseCoinScale : this.baseCoinScale;
         this.coinScale = body.coinScale != null ? body.coinScale : this.coinScale;
-        this.symbolFee = body.fee != null ? body.fee : this.symbolFee;
+        if (body.fee != null) {
+          this.symbolFee = body.fee;
+          this.feeKnown = true;
+        }
         /* Default to permitted when the field is absent. Reading a missing
            key straight through gives undefined, and `undefined != 1` would
            silently lock the order form with "This market is halted". */
@@ -1690,6 +1710,29 @@ export default {
       return n.toFixed(scale == null ? 2 : scale);
     },
 
+    /* Market headline numbers: if the feed is down and the value is zero/empty,
+       show a dash so "0.000000" cannot be read as a real print. */
+    marketNum(value, scale) {
+      if (typeof value === 'string' && value.trim() !== '' && isNaN(parseFloat(value))) {
+        return this.feedLive ? value : (value || '—');
+      }
+      const n = parseFloat(value);
+      if (!isFinite(n) || (!this.feedLive && n === 0)) {
+        return '—';
+      }
+      return this.fmt(n, scale);
+    },
+
+    marketStat(value) {
+      if (value == null || value === '' || value === '—') {
+        return '—';
+      }
+      if (!this.feedLive && (value === '0' || value === '0%' || value === '+0%' || value === '-0%')) {
+        return '—';
+      }
+      return value;
+    },
+
     /* Book rows are padded with zero-price placeholders so the ladder keeps a
        constant height; those render as a dash, not as 0.000000. */
     zero(value, scale) {
@@ -2110,6 +2153,13 @@ $radius-sm: var(--ix-radius-sm, 8px);
   text-align: center;
   color: $faint;
   font-size: 11px;
+}
+.ix-empty-note {
+  padding: 8px 12px 0;
+  text-align: left;
+  color: $faint;
+  font-size: 10px;
+  line-height: 1.35;
 }
 .ix-empty-abs {
   position: absolute;
