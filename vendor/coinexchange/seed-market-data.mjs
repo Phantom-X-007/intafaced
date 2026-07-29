@@ -18,6 +18,13 @@
  * that. Seeding candles under a running service leaves the chart correct and
  * every thumbnail still at zero until it is restarted.
  *
+ * KNOWN LIMIT - this seeds history, it does not simulate a live market.
+ * With no matching engine traffic the service keeps appending flat 1min candles
+ * at the last seeded close, and at 00:00 UTC `resetThumb()` clears open/high/low
+ * for the new day and nothing refills them, so the thumbnails drift back toward
+ * zero. Re-running this script (and restarting the market service) restores a
+ * full day. Until real fills exist, run it daily.
+ *
  * Environment:
  *   COINEX_MONGO_CONTAINER  default intafaced-coinex-mongo
  *   COINEX_MONGO_DB         default bitrade
