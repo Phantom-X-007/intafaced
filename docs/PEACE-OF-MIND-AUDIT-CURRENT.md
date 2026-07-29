@@ -112,6 +112,19 @@ Denon shipped a real **startable platform** (edge, mounts, money path, deploy, t
 
 ---
 
+## What wave-1 did *not* fully prove (honesty)
+
+Wave-1 found and fixed **real open doors**. It was **not** a full multi-tool stress campaign. Named gaps (method, not mystery):
+
+- Cross-family critic not mandatory on every finding  
+- No property-test invariants yet for residual crash windows  
+- No structural “AI false-done” cheat scan on fix diffs  
+- No concurrent load smoke on withdraw/stake races  
+
+**Next program:** [`AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md`](AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md) · paste: [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md)
+
+---
+
 ## After Denon unpauses
 
 Use [`WAVE-AUDIT.md`](WAVE-AUDIT.md) — delta only, not full archaeology.
@@ -120,10 +133,14 @@ Use [`WAVE-AUDIT.md`](WAVE-AUDIT.md) — delta only, not full archaeology.
 
 ## Links
 
-| Doc                                                                    | Role                    |
-| ---------------------------------------------------------------------- | ----------------------- |
-| [`audit/2026-07-29/00-BASELINE.md`](audit/2026-07-29/00-BASELINE.md)   | Machine truth at freeze |
-| [`audit/2026-07-29/01-INVENTORY.md`](audit/2026-07-29/01-INVENTORY.md) | Every system named      |
-| [`audit/2026-07-29/02-FINDINGS.md`](audit/2026-07-29/02-FINDINGS.md)   | Full finding table      |
-| [`FULL-AUDIT-PROGRAM-2026-07-29.md`](FULL-AUDIT-PROGRAM-2026-07-29.md) | Method law for this run |
-| [`WAVE-AUDIT.md`](WAVE-AUDIT.md)                                       | Standing loop           |
+| Doc | Role |
+| --- | --- |
+| [`audit/2026-07-29/00-BASELINE.md`](audit/2026-07-29/00-BASELINE.md) | Machine truth at freeze |
+| [`audit/2026-07-29/01-INVENTORY.md`](audit/2026-07-29/01-INVENTORY.md) | Every system named |
+| [`audit/2026-07-29/02-FINDINGS.md`](audit/2026-07-29/02-FINDINGS.md) | Full finding table |
+| [`audit/2026-07-29/03-ADVERSARIAL-PASS.md`](audit/2026-07-29/03-ADVERSARIAL-PASS.md) | What was / wasn’t dual-proofed |
+| [`FULL-AUDIT-PROGRAM-2026-07-29.md`](FULL-AUDIT-PROGRAM-2026-07-29.md) | Method law for wave-1 |
+| [`AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md`](AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md) | Residual P1 + stress upgrades |
+| [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md) | New-chat paste |
+| [`WAVE-AUDIT.md`](WAVE-AUDIT.md) | Standing loop after Denon |
+| [`PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md`](PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md) | Plan methods meta-audit |

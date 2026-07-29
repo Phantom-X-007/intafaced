@@ -1,11 +1,12 @@
 # Full Audit Program — A through E (Nitro green-light gate)
 
-**Status:** PLANNED — awaiting Nitro green light before any execution  
+**Status:** WAVE-1 **EXECUTED** 2026-07-29 — baseline `a19e337` · findings + P0 fixes on [PR #80](https://github.com/Phantom-X-007/intafaced/pull/80) · scoreboard `PEACE-OF-MIND-AUDIT-CURRENT.md`  
+**Next:** residual + proof upgrades → [`AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md`](AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md) · paste [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md)  
 **Date:** 2026-07-29  
 **Audience:** Nitro (control) · executing agents (law)  
-**Claim tags:** `[VERIFIED 2026-07-29]` observed this prep session · `[PLANNED]` not yet run
+**Claim tags:** `[VERIFIED 2026-07-29]` wave-1 ran · residual still open
 
-**Plan meta-audit (methods upgrade, not a code audit):** [`PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md`](PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md) — verdict **PATCH-THEN-RUN**; inject section 8 prompt into live execution without restarting.
+**Plan meta-audit (methods):** [`PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md`](PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md) — **PATCH-THEN-RUN** absorbed into V2 (not a restart of wave-1).
 
 ---
 
@@ -15,67 +16,13 @@ Make the repo **trustworthy under Denon’s speed**: map what exists, adversaria
 
 ---
 
-## 1 · Enhanced prompt (canonical brief — paste into future chats)
+## 1 · Enhanced prompts (canonical)
 
-```
-FULL AUDIT PROGRAM — INTAFACED / Sovereign (Nitro operator mode)
+**Wave-1 (historical — already run):** original A→E brief that produced PR #80.  
+**Wave-2 (use this):** paste [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md) — residual P1 money + proof upgrades (maker-checker, L0 machine, property tests, cheat-diff).  
+**After Denon ships again:** [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only.
 
-You have full autonomous control. I am non-technical and cannot judge code.
-Do not hand me git/CI homework. Do not ask technical multiple-choice.
-Escalate ONLY when doctrine does not decide AND the choice is irreversible
-product/jurisdiction/custody strategy (see Escalation whitelist below).
-
-GOAL: Run the Full Audit Program A→E on GitHub main as of program start,
-then install a standing post-Denon-wave delta audit. Denon is paused for now;
-do not message him unless I ask.
-
-SCOPE:
-- A Ground truth · B Adversarial multi-layer audit · C Peace-of-mind package
-- D Fix sprint for confirmed P0/P1 · E Standing wave-audit process
-- Entire main that can lose money or trust (not “last 34 commits only”)
-- Vendor blob in scope for risk/wiring/brand; do not line-audit 200k of UI assets
-
-NON-GOALS:
-- Product redesign, new features, rebrand, production deploy
-- Rebuilding services that already exist
-- Waiting for me to Approve Denon’s historical merges
-
-LAW (in order):
-1. INTAFACED_DEFINITIVE_BUILD.md doctrine §0
-2. tooling/agent-protocol/AGENT_PROTOCOL.md
-3. AGENTS.md Nitro operator mode
-4. This program doc
-
-METHOD:
-- Worktree only — never edit the main checkout
-- Machine proof before claims (pnpm verify, CI, optional platform:up smoke)
-- Parallel subagents + dynamic workflows for independent risk zones
-- Adversarial second pass on every money/auth finding (fail closed)
-- Durable docs with claim-tags; chat = decision altitude only
-- Auto-decide technical forks; default to the safer doctrine-aligned option
-
-ESCALATION WHITELIST (only these pause for Nitro):
-- Keep vs strip vs quarantine the third-party exchange vendor as product surface
-- Any choice that would put real user custody money at risk in a live deploy
-  (we are not deploying; if audit implies “never go live until X”, state X)
-- Jurisdiction / licensed-product posture changes beyond what doctrine already says
-- Anything that spends real money or touches production credentials
-
-DEFAULT AUTONOMY (do without asking):
-- Create worktrees, branches, run verify, open fix PRs, self-audit
-- Fix auth holes, money-path doctrine violations, deploy wiring bugs, CI red
-  that blocks trust (brand scan, format, false-green gates)
-- Update START-HERE / STATUS to match verified reality
-- Rank and ship P0 then P1; park P2+ with proof they are non-blocking
-- Install standing wave-audit workflow for future Denon merges
-
-DONE means:
-1. Peace-of-mind doc with full scoreboard (risk · proof · status)
-2. P0 money/auth/doctrine findings fixed or explicitly blocked with reason
-3. pnpm verify green on the fix branch (or honest failure report)
-4. Standing wave-audit recipe saved and documented
-5. Nitro can open one file and know: safe enough / not yet / what remains
-```
+Patched full-program method upgrades live in meta-audit section 8 of [`PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md`](PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md); V2 absorbs them without re-archaeology.
 
 ---
 

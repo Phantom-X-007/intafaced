@@ -52,6 +52,8 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Not a live money product:** rails/sandbox, chain indexer propped (`NullChainSource`), remaining money crash-window fixes on the residual queue.
 - **Do not rebuild** services already on main.
 - **Trust floor:** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · after Denon waves: [`WAVE-AUDIT.md`](WAVE-AUDIT.md).
+- **Wave-1 audit PR:** [#80](https://github.com/Phantom-X-007/intafaced/pull/80) (open doors fixed; residual money still queued).
+- **Next audit chat:** paste [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md) · program [`AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md`](AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md).
 - **Next product gates:** residual P1 money crash windows → real rails/chain → tracker-ready slices.
 
 Older snapshot (may lag): [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md).
