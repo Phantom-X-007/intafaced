@@ -10,4 +10,13 @@
 export * from './columns.js';
 export * from './connection.js';
 export * from './migrate.js';
-export { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb, type TestDbOptions, type TestMigration } from './testing.js';
+export {
+  createTestDb,
+  postgresAvailable,
+  postgresRequired,
+  resolveTestDatabaseUrl,
+  rewriteSchemaSql,
+  type TestDb,
+  type TestDbOptions,
+  type TestMigration,
+} from './testing.js';

@@ -88,14 +88,46 @@ export function rewriteSchemaSql(sql: string, fromSchema: string, toSchema: stri
   return sql.replaceAll(`"${fromSchema}"`, `"${toSchema}"`).replace(new RegExp(`\\b${fromSchema}\\.`, 'g'), `${toSchema}.`);
 }
 
-/** True when a live Postgres is reachable — lets suites skip rather than fail. */
+/**
+ * True when CI (or REQUIRE_POSTGRES=1) demands a live database.
+ * Residual #9: money suites must not silently `describe.skip` on CI.
+ */
+export function postgresRequired(): boolean {
+  return process.env.CI === 'true' || process.env.CI === '1' || process.env.REQUIRE_POSTGRES === '1';
+}
+
+/**
+ * Resolve a service test DB URL.
+ * Prefers a service-specific env, then TEST_DATABASE_URL, then the local compose default.
+ */
+export function resolveTestDatabaseUrl(serviceEnvKey: string | undefined, localDefault: string): string {
+  if (serviceEnvKey) {
+    const specific = process.env[serviceEnvKey];
+    if (specific && specific.trim() !== '') return specific;
+  }
+  const shared = process.env.TEST_DATABASE_URL;
+  if (shared && shared.trim() !== '') return shared;
+  return localDefault;
+}
+
+/**
+ * True when a live Postgres is reachable — lets *local* suites skip rather than fail.
+ * On CI / REQUIRE_POSTGRES, unreachable Postgres is a hard failure (no silent green).
+ */
 export async function postgresAvailable(url?: string): Promise<boolean> {
   const target = url ?? process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced';
   const sql = postgres(target, { max: 1, connect_timeout: 2, onnotice: () => undefined });
   try {
     await sql`SELECT 1`;
     return true;
-  } catch {
+  } catch (err) {
+    if (postgresRequired()) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Postgres required in CI (residual #9) but unreachable at ${target}: ${msg}. ` +
+          `Bootstrap service roles and set TEST_DATABASE_URL_* (see .github/workflows/ci.yml).`,
+      );
+    }
     return false;
   } finally {
     await sql.end({ timeout: 1 }).catch(() => undefined);

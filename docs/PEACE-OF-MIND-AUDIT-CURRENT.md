@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-29  
 **Main tip:** re-check `git rev-parse origin/main` (this file updates with residual hygiene; tip moves)  
-**Claim tags:** `[VERIFIED 2026-07-29]` audit program closed; #86 custody + shell on main; residual wallet mass-credit + CORS `*` closed on this PR
+**Claim tags:** `[VERIFIED 2026-07-29]` audit program closed; #86 custody + shell; #96 shell residue; residual #9 CI money Postgres honesty
 
 **Stream A claim:** GitHub issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83) · [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md)
 
@@ -34,7 +34,7 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 | Protocol / DEX / indexer | Mounted shells; chain propped                        | Not product-complete                 |
 | Deploy                   | One-command platform; S2S not host-published         | Usable with care                     |
 | **Vendor (shell)**       | **Product UI** OK; **high if used as books**         | **UI shell · quarantined as ledger** |
-| CI doctrine              | Brand/custody + vendor-shell residue scan            | OK                                   |
+| CI doctrine              | Brand/custody + vendor-shell + money PG required     | OK                                   |
 
 ---
 
@@ -56,14 +56,15 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 - Bank + blueprint scopes issued to sessions
 - Licence inventory named · `workspace-sync` widened
 
-**Residual hygiene (this wave)**
+**Residual hygiene**
 
-- `unfreezeMore` / `unfreezeLess` mass balance credit disabled (service throw + DAO no-op)
-- `dropWeekTable` TRUNCATE / `createWeekTable` snapshot helpers disabled
-- CORS `*` + credentials replaced with explicit allowlist (`CORS_ALLOWED_ORIGINS`)
-- `pnpm scan:vendor-shell` CI gate so these cannot silently return
+- `unfreezeMore` / `unfreezeLess` mass balance credit disabled (service throw + DAO no-op) — **#96**
+- `dropWeekTable` TRUNCATE / `createWeekTable` snapshot helpers disabled — **#96**
+- CORS `*` + credentials → explicit allowlist (`CORS_ALLOWED_ORIGINS`) — **#96**
+- `pnpm scan:vendor-shell` CI gate — **#96**
+- CI money suites no longer silent-skip without Postgres — residual **#9**
 
-**PR proof:** [#80](https://github.com/Phantom-X-007/intafaced/pull/80) · [#81](https://github.com/Phantom-X-007/intafaced/pull/81) · [#86](https://github.com/Phantom-X-007/intafaced/pull/86)
+**PR proof:** [#80](https://github.com/Phantom-X-007/intafaced/pull/80) · [#81](https://github.com/Phantom-X-007/intafaced/pull/81) · [#86](https://github.com/Phantom-X-007/intafaced/pull/86) · [#96](https://github.com/Phantom-X-007/intafaced/pull/96)
 
 ---
 
@@ -71,16 +72,16 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 Full residual + owners: [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
 
-| Item                                                                            | When it matters                       |
-| ------------------------------------------------------------------------------- | ------------------------------------- |
-| **Dual-book** — vendored exchange shell ≠ money books (TS ledger remains books) | **Now** · hard before real money      |
-| Production **CORS origins** env (`CORS_ALLOWED_ORIGINS`) for real domains       | Before public shell                   |
-| **L2-6** S2S body-bind (raw-body design)                                        | Before hard multi-service prod        |
-| Real **rails / live chain**                                                     | Before real user money                |
-| Operator freeze / **kill drill** proven end-to-end                              | Before go-live                        |
-| **Licences** Priority-1 (chart path · MySQL connector)                          | Before public product — Denon decides |
-| **Pay withdraw retry** — test vs service contract                               | Soon · before real money              |
-| Wallet secrets / host perimeter                                                 | Denon ops · before real money         |
+| Item                                                                      | When it matters                       |
+| ------------------------------------------------------------------------- | ------------------------------------- |
+| **Dual-book** — shell ≠ books (standing policy, not a missing PR)         | Always · hard before real money       |
+| Production **CORS origins** env (`CORS_ALLOWED_ORIGINS`) for real domains | Before public shell                   |
+| **L2-6** S2S body-bind (raw-body design)                                  | Before hard multi-service prod        |
+| Real **rails / live chain**                                               | Before real user money                |
+| Operator freeze / **kill drill** proven end-to-end                        | Before go-live                        |
+| **Licences** Priority-1 (chart path · MySQL connector)                    | Before public product — Denon decides |
+| **Pay withdraw retry** — after open pay feature PR lands                  | Soon · before real money              |
+| Wallet secrets / host perimeter                                           | Denon ops · before real money         |
 
 ---
 

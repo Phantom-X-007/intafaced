@@ -42,6 +42,11 @@ const FORBIDDEN = [
     re: /addAllowedOrigin\s*\(\s*"\*"\s*\)/,
     reason: 'CORS wildcard origin (must use CorsAllowlist / explicit origins)',
   },
+  {
+    id: 'jdbc-mass-to-released',
+    re: /to_released\s*=\s*to_released\s*-\s*/,
+    reason: 'bulk to_released debit via string SQL (JDBCUtils class)',
+  },
 ];
 
 function walk(dir, out = []) {
