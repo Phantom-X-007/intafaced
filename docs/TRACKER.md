@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**31 of 107 shipped (29%)** · 5 in progress · 33 ready to claim · 38 blocked · 15 deliberate §13 sockets
+**35 of 107 shipped (33%)** · 3 in progress · 31 ready to claim · 38 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -27,8 +27,6 @@ pnpm wt feat/<the-thing>
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | Scoped API keys, sub-accounts | `identity` | 1 | `identity.apikeys` |
-| Real-yield distribution from platform fees | `token` | 1 | `token.yield` |
-| Buyback & burn split | `token` | 1 | `token.buyback` |
 | Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
 | OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
@@ -78,8 +76,6 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Feature | Owner | Module |
 |---|---|---|
-| WebAuthn registration + assertion (§9) | **Nitro** | `identity` |
-| Proposals + IFC-weighted voting (§4.3) | **Nitro** | `token` |
 | One-tap Convert — the retail on-ramp | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
 | Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
@@ -104,7 +100,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Worktree tooling + GitHub Flow | F |  | `infra.worktrees` |
 | 🟢 | 100+ languages — keyed from day one (§9) <br/>_Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface._ | F |  | `infra.i18n` |
 
-### Phase 1 — THE CORE (9/14)
+### Phase 1 — THE CORE (13/14)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -116,12 +112,12 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | KYC tiers wired to JURISDICTION_MATRIX <br/>_Restored to done 2026-07-28: the write side the audit called out now exists. `kyc.submit` / `kyc.approve` / `kyc.reject` / `kyc.pending` / `kyc.status` are served from svc-identity's mounted /trpc, so identity.kyc_records is writable and a real user can leave tier `none`. See identity.kyc-review._ | F |  | `identity.kyc` |
 | ✅ | Routed KYC — submit, operator approve/reject, review queue <br/>_Reachable on svc-identity's mounted /trpc; tested in router.test.ts + identity.test.ts; nothing propped up — approval is an operator action against kyc_records, no provider stub. Custodial side only: §22 permissionless surfaces read no tier (docs/decisions/kyc-posture.md)._ | F |  | `identity.kyc-review` |
 | ✅ | Step-up challenge minting trade:withdraw for five minutes <br/>_defaultScopes() withheld trade:withdraw "until a step-up challenge" that did not exist, so no session could reach any withdrawal. Reachable on the mounted router. Known limit, platform-wide and not introduced here: a TOTP code is replayable inside its validity window._ | F |  | `identity.step-up` |
-| 🔨 | WebAuthn registration + assertion (§9) <br/>_PR #93: register/assert ceremonies; session after assertion._ | F |  | `identity.webauthn` |
+| ✅ | WebAuthn registration + assertion (§9) <br/>_PR #93: register/assert on mounted /trpc; soft-authenticator tests; session after assertion._ | F |  | `identity.webauthn` |
 | ✅ | Emission curve, halving, single-minter guarantee <br/>_PR #94: mintEpoch live path + EMISSIONS_ENABLED kill-switch._ | F |  | `token.emissions` |
 | ✅ | Stake tiers, locks, access gating <br/>_PR #94: stake/unstake/listStakes on /trpc; principal-bound._ | F |  | `token.staking` |
-| 🟢 | Real-yield distribution from platform fees <br/>_Downgraded 2026-07-28: `distributeRevenue` is called only by token-service.test.ts. No route, no consumer, no schedule — fees accrue nowhere and no yield is ever distributed._ | F |  | `token.yield` |
-| 🟢 | Buyback & burn split <br/>_Downgraded 2026-07-28: `recordBuyback` and `burnedSupply` are called only by token-service.test.ts. Same shape as token.yield — the maths is tested, the trigger does not exist._ | F |  | `token.buyback` |
-| 🔨 | Proposals + IFC-weighted voting (§4.3) <br/>_WIP 2026-07-29: createProposal / castVote / listProposals / getProposal on svc-token (weight = stakeOf snapshot)._ | F |  | `token.governance` |
+| ✅ | Real-yield distribution from platform fees <br/>_Live path: tRPC distributeRevenue (admin:treasury + MFA). Operator supplies fee window + sources until Phase 2 auto-consumes trade fills. Service maths + ledger recipes unchanged; mount tests cover scope/MFA._ | F |  | `token.yield` |
+| ✅ | Buyback & burn split <br/>_Live path: tRPC recordBuyback + burnedSupply. tokensBought supplied by operator (pricing is svc-trade — §13 auto market-buy later). admin:treasury + MFA on the mutation._ | F |  | `token.buyback` |
+| ✅ | Proposals + IFC-weighted voting (§4.3) <br/>_PR #97: createProposal / castVote / listProposals / getProposal on mounted /trpc (weight = stakeOf snapshot)._ | F |  | `token.governance` |
 
 ### Phase 2 — Trade (5/17)
 
@@ -251,7 +247,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 |---|---|---|---|---|
 | 🔌 | Rust CLOB execution engine | P |  | `chain.rust-core` |
 | ⛔ | Validator set opening, published schedule | P | `chain.mainnet` | `chain.validators` |
-| ⛔ | Governance parameter handover | P | `chain.validators`, `token.governance` | `chain.governance` |
+| ⛔ | Governance parameter handover | P | `chain.validators` | `chain.governance` |
 | 🔌 | MPC custody for self-custody wallets | P |  | `socket.mpc-custody` |
 | 🔌 | Guardian-based account recovery <br/>_Deliberately absent: a guardian is a second party who can take the account, and the platform must never be one._ | P |  | `socket.social-recovery` |
 

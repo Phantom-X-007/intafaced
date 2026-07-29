@@ -181,11 +181,10 @@ export const FEATURES = [
   f('identity.webauthn', 'WebAuthn registration + assertion (§9)', {
     module: 'identity',
     phase: '1',
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'done',
     dependsOn: ['identity.accounts'],
     requires: ['services/svc-identity'],
-    note: 'PR #93: register/assert ceremonies; session after assertion.',
+    note: 'PR #93: register/assert on mounted /trpc; soft-authenticator tests; session after assertion.',
   }),
   f('token.emissions', 'Emission curve, halving, single-minter guarantee', {
     module: 'token',
@@ -204,25 +203,24 @@ export const FEATURES = [
   f('token.yield', 'Real-yield distribution from platform fees', {
     module: 'token',
     phase: '1',
-    status: 'ready',
+    status: 'done',
     requires: ['services/svc-token'],
-    note: 'Downgraded 2026-07-28: `distributeRevenue` is called only by token-service.test.ts. No route, no consumer, no schedule — fees accrue nowhere and no yield is ever distributed.',
+    note: 'Live path: tRPC distributeRevenue (admin:treasury + MFA). Operator supplies fee window + sources until Phase 2 auto-consumes trade fills. Service maths + ledger recipes unchanged; mount tests cover scope/MFA.',
   }),
   f('token.buyback', 'Buyback & burn split', {
     module: 'token',
     phase: '1',
-    status: 'ready',
+    status: 'done',
     requires: ['services/svc-token'],
-    note: 'Downgraded 2026-07-28: `recordBuyback` and `burnedSupply` are called only by token-service.test.ts. Same shape as token.yield — the maths is tested, the trigger does not exist.',
+    note: 'Live path: tRPC recordBuyback + burnedSupply. tokensBought supplied by operator (pricing is svc-trade — §13 auto market-buy later). admin:treasury + MFA on the mutation.',
   }),
   f('token.governance', 'Proposals + IFC-weighted voting (§4.3)', {
     module: 'token',
     phase: '1',
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'done',
     dependsOn: ['token.staking'],
     requires: ['services/svc-token'],
-    note: 'WIP 2026-07-29: createProposal / castVote / listProposals / getProposal on svc-token (weight = stakeOf snapshot).',
+    note: 'PR #97: createProposal / castVote / listProposals / getProposal on mounted /trpc (weight = stakeOf snapshot).',
   }),
 
   // ── PHASE 2 · TRADE ──────────────────────────────────────────────────────

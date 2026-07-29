@@ -10,23 +10,23 @@
 
 <!-- tracker:start -->
 
-`██████░░░░░░░░░░░░░░` **29%** — 31 of 107 features shipped
+`███████░░░░░░░░░░░░░` **33%** — 35 of 107 features shipped
 
-Phases: **0** 10/11 · **1** 9/14 · **2** 5/17 · **3** 4/16 · **3P** 0/7 · **4** 1/5 · **4P** 0/3 · **5** 2/32 · **5P** 0/2
+Phases: **0** 10/11 · **1** 13/14 · **2** 5/17 · **3** 4/16 · **3P** 0/7 · **4** 1/5 · **4P** 0/3 · **5** 2/32 · **5P** 0/2
 
-**In progress:** WebAuthn registration + assertion (§9) (Nitro) · Proposals + IFC-weighted voting (§4.3) (Nitro) · One-tap Convert — the retail on-ramp (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
+**In progress:** One-tap Convert — the retail on-ramp (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
 
-**🟢 33 ready to claim** — nothing blocks these:
+**🟢 31 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `identity.apikeys` — Scoped API keys, sub-accounts
-- `token.yield` — Real-yield distribution from platform fees
-- `token.buyback` — Buyback & burn split
 - `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
 - `trade.otc` — OTC RFQ desk, staked-tier gate
 - `trade.copy` — Copy trading, audited leaders, profit share
 - `trade.algo` — TWAP / VWAP / POV execution
-- …and 25 more
+- `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
+- `trade.mm-bot` — Internal market-maker seeding books at launch
+- …and 23 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
