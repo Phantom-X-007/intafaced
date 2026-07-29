@@ -95,10 +95,15 @@ module.exports = {
         // Various Dev Server settings
         host: 'localhost', // can be overwritten by process.env.HOST
         port: 8080, // can be overwritten by process.env.PORT, if port is in use, a free one will be determined
-        autoOpenBrowser: true,
+        // The dev server runs in a container while the source lives on the
+        // Windows host. inotify does not cross that bind mount, so with
+        // `poll: false` the watcher never fires and every single edit needs a
+        // `docker restart` — about ninety seconds each time, and it wipes the
+        // other developer's in-progress state if they share the container.
+        autoOpenBrowser: false,
         errorOverlay: true,
         notifyOnErrors: true,
-        poll: false, // https://webpack.js.org/configuration/dev-server/#devserver-watchoptions-
+        poll: 1000, // https://webpack.js.org/configuration/dev-server/#devserver-watchoptions-
 
         // Use Eslint Loader?
         // If true, your code will be linted during bundling and
