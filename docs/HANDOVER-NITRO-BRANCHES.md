@@ -77,7 +77,7 @@ missing workspace symlink after a dependency was added in an earlier PR. Run
   `docs/TERMINAL.md` already specifies lightweight-charts (Apache-2.0) for the
   same job. Two coherent paths, different work. See `docs/LICENCE-POSITION.md`.
 - **`mysql-connector-java:8.0.11`** is GPL v2 with a FOSS exception a proprietary
-  product is not on. MariaDB Connector/J is a one-line swap in the money path.
+  product is not on. **DONE (#106):** swapped to MariaDB Connector/J 2.7.12.
 - **What goes in the sanctions blocklist.** The mechanism now exists and refuses
   to boot without a list in staging or prod. The list itself is counsel's.
 - **CORS origins** for the Java modules.
