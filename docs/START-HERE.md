@@ -46,12 +46,13 @@ Phase 2 Trade+       ████████░░ mounted behind edge; termina
 Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox still not live product
 ```
 
-**Snapshot date:** 2026-07-29 · main tip includes audit **#80 + #81** (`88e5e33`).
+**Snapshot date:** 2026-07-29 · main tip includes audit **#80 + #81 + #82** (re-check `git rev-parse origin/main`).
 
 - **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists.
 - **Not a live money product:** rails/sandbox, chain feed propped — see trust floor.
 - **Do not rebuild** services already on main.
 - **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md)
+- **Security when-to / floor:** [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) · [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md) — Track A partial; Strix parked
 - **After Denon ships:** [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — full audit program is **closed**
 - **Next product gates:** real rails/chain → tracker-ready slices — not another full audit
 

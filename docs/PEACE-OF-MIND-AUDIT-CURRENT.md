@@ -1,8 +1,10 @@
 # Peace of mind — current floor (Nitro)
 
 **Date:** 2026-07-29  
-**Main tip:** `88e5e33` (includes audit #80 + #81)  
+**Main tip:** `4311cff` (audit #80 + #81 + floor docs #82; re-check `origin/main`)  
 **Claim tags:** `[VERIFIED 2026-07-29]` audit program closed on main
+
+**Security tooling floor (Track A partial):** [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md) · plain when-to: [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md)
 
 Older July-27 peace/status docs are **history** — this file is the trust floor.
 

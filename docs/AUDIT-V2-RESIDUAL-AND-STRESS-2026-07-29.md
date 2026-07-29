@@ -2,9 +2,9 @@
 
 # Audit V2 — residual money + proof upgrades (post wave-1)
 
-**Status:** READY TO RUN — wave-1 (PR #80) finished A→E skeleton + fixed open doors  
+**Status:** **CLOSED** 2026-07-29 — residual P1 in #80; P2 structural in #81; living floor PEACE + SECURITY-FLOOR-AFTER-AUDIT  
 **Date:** 2026-07-29  
-**Does not restart** full archaeology unless PR #80 is abandoned  
+**Does not restart** full archaeology — use WAVE-AUDIT after Denon only  
 **Law:** doctrine §0 · AGENT_PROTOCOL · AGENTS.md · this doc · plan meta-audit
 
 ---

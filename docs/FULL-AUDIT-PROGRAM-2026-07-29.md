@@ -1,7 +1,7 @@
 # Full Audit Program — A through E (Nitro green-light gate)
 
 **Status:** **CLOSED on main** 2026-07-29 — #80 + #81 merged (`88e5e33`).  
-**Living floor:** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · next Denon waves: [`WAVE-AUDIT.md`](WAVE-AUDIT.md)  
+**Living floor:** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · security tooling: [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md) · next Denon waves: [`WAVE-AUDIT.md`](WAVE-AUDIT.md)  
 **Date:** 2026-07-29  
 **Audience:** Nitro (control) · executing agents (law)  
 **Claim tags:** `[VERIFIED 2026-07-29]` program complete; do not re-open A→E unless main is on fire

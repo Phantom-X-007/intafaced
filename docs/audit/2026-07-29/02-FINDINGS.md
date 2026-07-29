@@ -27,7 +27,9 @@ Severity: **P0** money/trust open door · **P1** serious · **P2** structural ·
 | L3-2 | P1  | Token stake ledger-first without claim row     | **FIXED** — `pending` claim → ledger → `active`           |
 | L3-3 | P1  | Earn deposit same claim gap                    | **FIXED** — same pending pattern                          |
 
-## Confirmed P2 (parked)
+## Confirmed P2 (historical queue)
+
+> **POST-#81 NOTE:** Most rows below were **closed on main in #81** (purpose escrow/stake, region HMAC, P2P party reads, S2S host ports, RUNNING.md, protocol UI, tracker done evidence). Living open residual is **L2-6** (+ go-live list in PEACE-OF-MIND). Keep this table as audit snapshot; do not re-open fixed IDs without regression evidence.
 
 | ID          | Title                                              |
 | ----------- | -------------------------------------------------- |
