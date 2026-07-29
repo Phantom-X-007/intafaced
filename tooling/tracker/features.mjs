@@ -151,9 +151,9 @@ export const FEATURES = [
   f('identity.apikeys', 'Scoped API keys, sub-accounts', {
     module: 'identity',
     phase: '1',
-    status: 'ready',
+    status: 'done',
     requires: ['services/svc-identity'],
-    note: 'Downgraded 2026-07-28: create/list/revoke are reachable on the mounted router, but `verifyApiKey` (auth-service.ts:328) is called by nothing outside identity.test.ts. A key can be issued and never opens anything — no service accepts one.',
+    note: 'create/list/revoke on /trpc + public apiKeys.exchange → short-lived access JWT the edge already verifies. Key scopes only; no refresh; interactive-only scopes stay off keys. Sub-accounts still thin (create only).',
   }),
   f('identity.kyc', 'KYC tiers wired to JURISDICTION_MATRIX', {
     module: 'identity',
