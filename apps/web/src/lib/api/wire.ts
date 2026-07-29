@@ -109,6 +109,114 @@ export const fillSchema = z.object({
 });
 export type Fill = z.infer<typeof fillSchema>;
 
+// ── svc-p2p (the OTC desk) ───────────────────────────────────────────────────
+
+/**
+ * Mirrors `services/svc-p2p/src/router.ts`.
+ *
+ * The OTC desk is the platform's fiat on/off ramp: two humans, one escrowed
+ * asset, one bank transfer the platform never touches. Every amount below is a
+ * decimal string for the usual reason, and the fiat leg is not an exception —
+ * a rounding error on the fiat side is a payment the counterparty can refuse,
+ * which is a dispute rather than a display bug.
+ */
+
+export const otcSideSchema = z.enum(['buy', 'sell']);
+export type OtcSide = z.infer<typeof otcSideSchema>;
+
+export const otcOfferSchema = z.object({
+  id: z.string().uuid(),
+  makerId: z.string(),
+  side: otcSideSchema,
+  asset: z.string(),
+  fiatCurrency: z.string(),
+  priceType: z.enum(['fixed', 'float']),
+  price: decimal,
+  minAmount: decimal,
+  maxAmount: decimal,
+  remainingAmount: decimal,
+  methods: z.array(z.unknown()),
+  terms: z.string(),
+  status: z.enum(['active', 'paused', 'closed']),
+  createdAt: z.string(),
+});
+export type OtcOffer = z.infer<typeof otcOfferSchema>;
+
+/**
+ * The six trade states, exactly as `services/svc-p2p/src/state.ts` enumerates
+ * them. Kept as an exported tuple because the desk's action table is proven
+ * total over it — a seventh state added upstream fails the parse here rather
+ * than rendering a trade with no buttons and no explanation.
+ */
+export const OTC_TRADE_STATUSES = ['created', 'escrowed', 'fiat_sent', 'released', 'cancelled', 'disputed'] as const;
+export const otcTradeStatusSchema = z.enum(OTC_TRADE_STATUSES);
+export type OtcTradeStatus = z.infer<typeof otcTradeStatusSchema>;
+
+export const otcResolutionSchema = z.enum(['released', 'refunded', 'voided']);
+export type OtcResolution = z.infer<typeof otcResolutionSchema>;
+
+export const otcTradeSchema = z.object({
+  id: z.string().uuid(),
+  offerId: z.string().uuid(),
+  sellerId: z.string(),
+  buyerId: z.string(),
+  asset: z.string(),
+  amount: decimal,
+  fiatCurrency: z.string(),
+  fiatAmount: decimal,
+  price: decimal,
+  method: z.string(),
+  status: otcTradeStatusSchema,
+  resolution: otcResolutionSchema.nullable(),
+  deadlineAt: z.string().nullable(),
+  createdAt: z.string(),
+  escrowedAt: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  settledAt: z.string().nullable(),
+});
+export type OtcTrade = z.infer<typeof otcTradeSchema>;
+
+export const otcDisputeSchema = z.object({
+  id: z.string().uuid(),
+  tradeId: z.string().uuid(),
+  openedBy: z.string(),
+  reason: z.string(),
+  status: z.enum(['open', 'resolved']),
+  moderatorId: z.string().nullable(),
+  resolution: z.enum(['release', 'refund']).nullable(),
+  deadlineAt: z.string(),
+  resolvedAt: z.string().nullable(),
+});
+export type OtcDispute = z.infer<typeof otcDisputeSchema>;
+
+export const otcDisputeOpenedSchema = z.object({
+  disputeId: z.string().uuid(),
+  tradeId: z.string().uuid(),
+  deadlineAt: z.string(),
+});
+export type OtcDisputeOpened = z.infer<typeof otcDisputeOpenedSchema>;
+
+/** §6.2: "100+ fiat currencies = config, not code." Public — no session needed. */
+export const fiatCurrencySchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  symbol: z.string(),
+  minorUnits: z.number().int(),
+});
+export type FiatCurrency = z.infer<typeof fiatCurrencySchema>;
+
+export const otcReputationSchema = z.object({
+  tradesTotal: z.number().int(),
+  completed: z.number().int(),
+  cancelled: z.number().int(),
+  disputed: z.number().int(),
+  disputesLost: z.number().int(),
+  completionRate: z.number(),
+  avgReleaseSecs: z.number().int(),
+  badges: z.array(z.string()),
+});
+export type OtcReputation = z.infer<typeof otcReputationSchema>;
+
 // ── svc-protocol (the Protocol Plane) ────────────────────────────────────────
 
 /**

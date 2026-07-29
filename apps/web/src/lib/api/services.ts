@@ -2,19 +2,32 @@ import { z } from 'zod';
 import type { EdgeClient } from './edge-client';
 import type { Result } from '../result';
 import {
+  fiatCurrencySchema,
   fillSchema,
   kycStatusSchema,
   marketSchema,
   orderSchema,
+  otcDisputeOpenedSchema,
+  otcDisputeSchema,
+  otcOfferSchema,
+  otcReputationSchema,
+  otcTradeSchema,
   predictedAccountSchema,
   protocolHealthSchema,
   serviceHealthSchema,
   sessionSchema,
+  type FiatCurrency,
   type Fill,
   type KycStatus,
   type Market,
   type Order,
   type OrderSide,
+  type OtcDispute,
+  type OtcDisputeOpened,
+  type OtcOffer,
+  type OtcReputation,
+  type OtcSide,
+  type OtcTrade,
   type PredictedAccount,
   type ProtocolHealth,
   type Session,
@@ -96,6 +109,129 @@ export function placeOrder(edge: EdgeClient, input: PlaceOrderInput): Promise<Re
 
 export function cancelOrder(edge: EdgeClient, orderId: string): Promise<Result<Order>> {
   return edge.mutate('trade', 'orders.cancel', orderSchema, { orderId });
+}
+
+// ── svc-p2p (the OTC desk) ───────────────────────────────────────────────────
+
+/**
+ * THE OTC DESK — the platform's fiat on/off ramp (§6.2).
+ *
+ * Every call here is `/api/p2p` through the edge, and every one that moves
+ * value ends in a ledger recipe inside svc-p2p: `escrowLock` on take,
+ * `escrowRelease` on confirm, `escrowRefund` on cancel or a moderator's refund.
+ * This app never sees a balance and never posts one — Doctrine §0.6 — which is
+ * why there is no `otcBalance()` on this list and never will be.
+ *
+ * The vendored Java OTC at `/otc/*` is NOT reachable from here on purpose. It
+ * settles by mutating `member_wallet` in place, which is a second set of books;
+ * see `docs/adr/2026-07-29-otc-desk-ownership.md`.
+ */
+
+/** Public. The currency registry is config, and reading it needs no session. */
+export function listFiat(edge: EdgeClient): Promise<Result<FiatCurrency[]>> {
+  return edge.query('p2p', 'fiat.list', z.array(fiatCurrencySchema));
+}
+
+/**
+ * The order book of the desk.
+ *
+ * `p2p:read` + the jurisdiction matrix, which requires verification tier
+ * `basic` for the `p2p` module. A caller short of it gets FORBIDDEN carrying
+ * `denied.kyc_required` and `requiredTier`, which `classify()` turns into
+ * `needs-verification` — the one refusal on the list a user can clear
+ * themselves. That is why browsing the desk is gated and reading the currency
+ * list above is not.
+ */
+export function listOtcOffers(
+  edge: EdgeClient,
+  filter: { asset?: string; fiatCurrency?: string; side?: OtcSide; limit?: number } = {},
+): Promise<Result<OtcOffer[]>> {
+  return edge.query('p2p', 'offers.list', z.array(otcOfferSchema), filter);
+}
+
+export function getOtcOffer(edge: EdgeClient, offerId: string): Promise<Result<OtcOffer>> {
+  return edge.query('p2p', 'offers.get', otcOfferSchema, { offerId });
+}
+
+export interface CreateOtcOfferInput {
+  readonly side: OtcSide;
+  readonly asset: string;
+  readonly fiatCurrency: string;
+  readonly priceType: 'fixed' | 'float';
+  /** Decimal strings, all of them. */
+  readonly price: string;
+  readonly minAmount: string;
+  readonly maxAmount: string;
+  readonly totalAmount?: string;
+  readonly methods?: readonly string[];
+  readonly terms?: string;
+}
+
+export function createOtcOffer(edge: EdgeClient, input: CreateOtcOfferInput): Promise<Result<OtcOffer>> {
+  return edge.mutate('p2p', 'offers.create', otcOfferSchema, input);
+}
+
+export function closeOtcOffer(edge: EdgeClient, offerId: string): Promise<Result<OtcOffer>> {
+  return edge.mutate('p2p', 'offers.close', otcOfferSchema, { offerId });
+}
+
+/**
+ * THE MONEY PATH. Taking an offer locks the seller's asset into the ledger's
+ * `escrow` account kind before this call returns.
+ *
+ * If it returns a failure, nothing is held: svc-p2p validates bounds, liquidity
+ * and pricing under a row lock BEFORE `escrowLock`, so every rejection here
+ * happens with the seller's balance untouched. If it times out rather than
+ * failing, the trade is either `created` (and the sweeper unwinds it within the
+ * escrow deadline) or `escrowed` (and it appears in `myOtcTrades`). There is no
+ * third outcome, which is why this function does not retry.
+ */
+export function takeOtcOffer(edge: EdgeClient, input: { offerId: string; amount: string; method: string }): Promise<Result<OtcTrade>> {
+  return edge.mutate('p2p', 'trades.take', otcTradeSchema, input);
+}
+
+/** Buyer: "I have sent the fiat." Moves `escrowed` → `fiat_sent`. Moves no value. */
+export function markOtcFiatSent(edge: EdgeClient, tradeId: string): Promise<Result<OtcTrade>> {
+  return edge.mutate('p2p', 'trades.markFiatSent', otcTradeSchema, { tradeId });
+}
+
+/** Seller: "the fiat landed." → `escrowRelease` to the buyer, minus fee. */
+export function confirmOtcReceived(edge: EdgeClient, tradeId: string): Promise<Result<OtcTrade>> {
+  return edge.mutate('p2p', 'trades.confirmReceived', otcTradeSchema, { tradeId });
+}
+
+/** → `escrowRefund`, in full, to the seller. */
+export function cancelOtcTrade(edge: EdgeClient, tradeId: string, reason?: string): Promise<Result<OtcTrade>> {
+  return edge.mutate('p2p', 'trades.cancel', otcTradeSchema, reason ? { tradeId, reason } : { tradeId });
+}
+
+export function getOtcTrade(edge: EdgeClient, tradeId: string): Promise<Result<OtcTrade>> {
+  return edge.query('p2p', 'trades.get', otcTradeSchema, { tradeId });
+}
+
+export function myOtcTrades(edge: EdgeClient, limit = 50): Promise<Result<OtcTrade[]>> {
+  return edge.query('p2p', 'trades.list', z.array(otcTradeSchema), { limit });
+}
+
+/**
+ * Escalate to a moderator. Freezes nothing extra — the asset is already in
+ * escrow — but replaces the release clock with the dispute clock, which the
+ * backstop resolves if no human ever rules.
+ */
+export function openOtcDispute(
+  edge: EdgeClient,
+  input: { tradeId: string; reason: string; evidence?: readonly unknown[] },
+): Promise<Result<OtcDisputeOpened>> {
+  return edge.mutate('p2p', 'disputes.open', otcDisputeOpenedSchema, input);
+}
+
+export function getOtcDispute(edge: EdgeClient, tradeId: string): Promise<Result<OtcDispute>> {
+  return edge.query('p2p', 'disputes.get', otcDisputeSchema, { tradeId });
+}
+
+/** What a counterparty is judged on before anyone trades with them (§6.2 → §4.1). */
+export function otcReputation(edge: EdgeClient, userId: string): Promise<Result<OtcReputation>> {
+  return edge.query('p2p', 'reputation.get', otcReputationSchema, { userId });
 }
 
 // ── svc-protocol (Protocol Plane) ────────────────────────────────────────────
