@@ -1,6 +1,6 @@
 import { createTRPCUntypedClient, httpLink, isTRPCClientError } from '@trpc/client';
 import type { z } from 'zod';
-import { failure, ok, type Failure, type FailureReason, type Result, type ServiceId } from '../result';
+import { failure, ok, type Failure, type FailureReason, type RequiredTier, type Result, type ServiceId } from '../result';
 
 /**
  * THE EDGE CLIENT (§9).
@@ -91,18 +91,26 @@ function classify(err: unknown, service: ServiceId, path: string): Failure {
       return failure(service, path, 'unreachable', err.message || 'no response from the edge');
     }
 
+    // Our own code, set by the services' error formatter. A 403 is three
+    // different answers — no scope, no verification, wrong region — and this is
+    // the only field that says which.
+    const data = err.data as { intafacedCode?: string; requiredTier?: RequiredTier } | undefined;
+    const needsVerification = code === 'FORBIDDEN' && data?.intafacedCode === 'denied.kyc_required';
+
     const reason: FailureReason =
       code === 'UNAUTHORIZED'
         ? 'unauthenticated'
         : code === 'FORBIDDEN'
-          ? 'forbidden'
+          ? needsVerification
+            ? 'needs-verification'
+            : 'forbidden'
           : code === 'NOT_FOUND'
             ? 'not-found'
             : code === 'BAD_REQUEST' || code === 'CONFLICT' || code === 'PRECONDITION_FAILED' || code === 'TOO_MANY_REQUESTS'
               ? 'rejected'
               : 'server-error';
 
-    return failure(service, path, reason, err.message);
+    return failure(service, path, reason, err.message, needsVerification ? data?.requiredTier : undefined);
   }
 
   if (err instanceof Error) return failure(service, path, 'unreachable', err.message);

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createEdgeClient } from './edge-client';
+import { describeFailure } from '../result';
 import { listMarkets, login, predictAccount } from './services';
 import { marketSchema } from './wire';
 
@@ -31,8 +32,8 @@ function trpcOk(data: unknown): Response {
 }
 
 /** A tRPC v11 error envelope, as a mounted router would send it. */
-function trpcError(code: string, httpStatus: number, message: string): Response {
-  return jsonResponse({ error: { message, code: -32001, data: { code, httpStatus } } }, httpStatus);
+function trpcError(code: string, httpStatus: number, message: string, extra: Record<string, unknown> = {}): Response {
+  return jsonResponse({ error: { message, code: -32001, data: { code, httpStatus, ...extra } } }, httpStatus);
 }
 
 function spyFetch(responder: (url: string, init: RequestInit | undefined) => Response | Promise<Response>) {
@@ -151,6 +152,44 @@ describe('an unreachable service is a state, not a crash', () => {
 
     expect(a.ok === false && a.reason).toBe('unauthenticated');
     expect(b.ok === false && b.reason).toBe('forbidden');
+  });
+
+  it('separates "you need to verify" from "you may never do this" — both are 403', async () => {
+    // The refusal a user can clear, and the one they cannot. Before the
+    // services carried `intafacedCode`, these were the same event here and the
+    // terminal offered the same dead end for both.
+    const needsKyc = createEdgeClient({
+      fetch: spyFetch(() =>
+        trpcError('FORBIDDEN', 403, 'Verification tier "full" required for bank in DE', {
+          intafacedCode: 'denied.kyc_required',
+          requiredTier: 'full',
+        }),
+      ).fetchImpl,
+    });
+    const noScope = createEdgeClient({
+      fetch: spyFetch(() => trpcError('FORBIDDEN', 403, 'Scope "admin:compliance" is required', { intafacedCode: 'scope.denied' }))
+        .fetchImpl,
+    });
+
+    const a = await listMarkets(needsKyc);
+    const b = await listMarkets(noScope);
+
+    expect(a.ok === false && a.reason).toBe('needs-verification');
+    expect(a.ok === false && a.requiredTier).toBe('full');
+    expect(a.ok === false && describeFailure(a)).toContain('full');
+
+    expect(b.ok === false && b.reason).toBe('forbidden');
+    expect(b.ok === false && b.requiredTier).toBeUndefined();
+  });
+
+  it('does not promise a tier it was not told — a blocked region is not a KYC problem', async () => {
+    const blocked = createEdgeClient({
+      fetch: spyFetch(() => trpcError('FORBIDDEN', 403, 'bank is not offered in US', { intafacedCode: 'denied.module_blocked' })).fetchImpl,
+    });
+
+    const result = await listMarkets(blocked);
+    expect(result.ok === false && result.reason).toBe('forbidden');
+    expect(result.ok === false && result.requiredTier).toBeUndefined();
   });
 
   it('reports a rejected order as rejected, carrying the service’s own message', async () => {

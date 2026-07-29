@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
-import { verifyAccessToken, hasScope } from '@intafaced/auth';
+import { verifyAccessToken, hasScope, SESSION_SCOPES } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { AuthService, AuthError } from './auth/auth-service.js';
 import { RankService } from './rank/rank-service.js';
@@ -263,7 +263,12 @@ if (!available) {
   describe('API keys', () => {
     it('returns the key once and stores only its hash', async () => {
       const session = await register();
-      const { key, prefix } = await auth.createApiKey({ userId: session.userId, name: 'bot', scopes: ['trade:read'] });
+      const { key, prefix } = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
 
       const stored = await sql<Array<{ key_hash: string; key_prefix: string }>>`
         SELECT key_hash, key_prefix FROM identity.api_keys WHERE user_id = ${session.userId}
@@ -274,7 +279,12 @@ if (!available) {
 
     it('verifies a valid key and rejects a wrong one', async () => {
       const session = await register();
-      const { key } = await auth.createApiKey({ userId: session.userId, name: 'bot', scopes: ['trade:read', 'trade:write'] });
+      const { key } = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bot',
+        scopes: ['trade:read', 'trade:write'],
+        grantorScopes: SESSION_SCOPES,
+      });
 
       const verified = await auth.verifyApiKey(key);
       expect(verified?.userId).toBe(session.userId);
@@ -287,7 +297,12 @@ if (!available) {
       const session = await register();
 
       await expect(
-        auth.createApiKey({ userId: session.userId, name: 'dangerous', scopes: ['trade:read', 'trade:withdraw'] }),
+        auth.createApiKey({
+          userId: session.userId,
+          name: 'dangerous',
+          scopes: ['trade:read', 'trade:withdraw'],
+          grantorScopes: SESSION_SCOPES,
+        }),
       ).rejects.toThrow(/interactive/);
 
       // The database is the backstop if that check is ever bypassed.
@@ -301,7 +316,12 @@ if (!available) {
 
     it('stops accepting a revoked or expired key', async () => {
       const session = await register();
-      const { key, id } = await auth.createApiKey({ userId: session.userId, name: 'bot', scopes: ['trade:read'] });
+      const { key, id } = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
       expect(await auth.verifyApiKey(key)).not.toBeNull();
 
       await auth.revokeApiKey(session.userId, id);
@@ -311,6 +331,7 @@ if (!available) {
         userId: session.userId,
         name: 'expiring',
         scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
         expiresAt: new Date(Date.now() - 1000),
       });
       expect(await auth.verifyApiKey(other.key)).toBeNull();
@@ -319,7 +340,7 @@ if (!available) {
     it('will not let one user revoke another user’s key', async () => {
       const owner = await register();
       const attacker = await register();
-      const { id } = await auth.createApiKey({ userId: owner.userId, name: 'mine', scopes: ['trade:read'] });
+      const { id } = await auth.createApiKey({ userId: owner.userId, name: 'mine', scopes: ['trade:read'], grantorScopes: SESSION_SCOPES });
 
       expect(await auth.revokeApiKey(attacker.userId, id)).toBe(false);
     });
@@ -755,7 +776,12 @@ if (!available) {
       expect(principal.userId).toBe(registered.userId);
 
       // 5 · scoped API key call
-      const { key } = await auth.createApiKey({ userId: registered.userId, name: 'trading-bot', scopes: ['trade:read', 'trade:write'] });
+      const { key } = await auth.createApiKey({
+        userId: registered.userId,
+        name: 'trading-bot',
+        scopes: ['trade:read', 'trade:write'],
+        grantorScopes: SESSION_SCOPES,
+      });
       const verified = await auth.verifyApiKey(key);
 
       expect(verified?.userId).toBe(registered.userId);

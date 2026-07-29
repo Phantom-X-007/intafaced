@@ -41,10 +41,31 @@ export interface Principal extends AccessClaims {
   readonly expiresAt: Date;
 }
 
+/**
+ * Why a call was refused, as a code a client can branch on.
+ *
+ * `scope.denied`, `tier.insufficient` and `ownership.denied` were one value
+ * until an audit asked what a UI could say when a screen went dark. All three
+ * arrive as HTTP 403 and mean completely different things to the person
+ * reading the screen:
+ *
+ *   scope.denied       this credential may never do this — nothing the user
+ *                      does to their own account changes it
+ *   tier.insufficient  this credential MAY do this, once verification catches
+ *                      up — an action the user can take, today
+ *   ownership.denied   the credential is fine and the thing belongs to someone
+ *                      else — never a prompt, always a bug or an attempt
+ *
+ * Collapsing them meant the terminal could only say "scope, verification tier
+ * or jurisdiction", which sends a verifiable user to support instead of to KYC.
+ */
+export type AuthErrorCode =
+  'token.expired' | 'token.invalid' | 'token.malformed' | 'scope.denied' | 'tier.insufficient' | 'ownership.denied' | 'mfa.required';
+
 export class AuthError extends Error {
   constructor(
     message: string,
-    readonly code: 'token.expired' | 'token.invalid' | 'token.malformed' | 'scope.denied' | 'mfa.required',
+    readonly code: AuthErrorCode,
   ) {
     super(message);
     this.name = 'AuthError';

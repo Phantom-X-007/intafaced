@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
+import { SESSION_SCOPES, issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { createIdentityRouter } from './router.js';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
@@ -97,6 +97,7 @@ function stubServices(): Stub {
       expiresAt: new Date('2026-07-28T09:05:00.000Z'),
       scopes: ['trade:withdraw'],
     })),
+    createApiKey: record('createApiKey', () => ({ id: 'key-1', key: 'ifc_secret', prefix: 'ifc_abc' })),
   } as unknown as AuthService;
 
   const rank = {
@@ -148,19 +149,7 @@ describe('rank.awardXp refuses user sessions, including defaultScopes()', () => 
   });
 
   it('refuses the full default session scope list', async () => {
-    const sessionScopes = [
-      'identity:read',
-      'identity:write',
-      'ledger:read',
-      'trade:read',
-      'trade:write',
-      'p2p:read',
-      'p2p:write',
-      'token:read',
-      'token:stake',
-      'academy:read',
-      'agents:read',
-    ];
+    const sessionScopes = [...SESSION_SCOPES];
     const api = await caller(sessionScopes);
     const err = await api.rank.awardXp(award).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('UNAUTHORIZED');
@@ -188,21 +177,11 @@ describe('kyc.approve is the operator action that grants custodial access', () =
   });
 
   it('REFUSES A NORMAL USER SESSION — every scope a session actually carries', async () => {
-    // The exact scope list `AuthService.defaultScopes()` issues. If approving
-    // ever becomes reachable from one of these, a user can verify themselves.
-    const sessionScopes = [
-      'identity:read',
-      'identity:write',
-      'ledger:read',
-      'trade:read',
-      'trade:write',
-      'p2p:read',
-      'p2p:write',
-      'token:read',
-      'token:stake',
-      'academy:read',
-      'agents:read',
-    ];
+    // Read from SESSION_SCOPES rather than copied from it. A hand-kept copy
+    // tests the list as it was on the day someone typed it out; this tests the
+    // list as it is. If approving ever becomes reachable from one of these, a
+    // user can verify themselves — including from a scope added next year.
+    const sessionScopes = [...SESSION_SCOPES];
 
     const api = await caller(sessionScopes);
     const err = await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e);
@@ -397,5 +376,42 @@ describe('auth.stepUp is what makes a withdrawal reachable at all', () => {
     stub.fail(new AuthError('Session is no longer valid', 'auth.session_invalid'));
     const api = await caller(['identity:read']);
     expect(codeOf(await api.auth.stepUp({ totpCode: '123456' }).catch((e: unknown) => e))).toBe('UNAUTHORIZED');
+  });
+});
+
+// ── API keys are a delegation, not a wish list ───────────────────────────────
+
+describe('apiKeys.create passes the GRANTING session as the ceiling', () => {
+  const argsOf = (method: string) => stub.calls.filter((c) => c.method === method).map((c) => c.args[0] as Record<string, unknown>);
+
+  it('reads the ceiling from the token, never from the request body', async () => {
+    // The enforcement lives in `assertDelegatableScopes` and is tested in
+    // packages/auth. What this asserts is the wiring, which is the half that
+    // can silently regress: if `grantorScopes` ever comes from `input` — or
+    // stops being passed at all — the check downstream has nothing to compare
+    // against and any account can mint any scope again.
+    const api = await caller(['identity:write', 'trade:read']);
+    await api.apiKeys.create({ name: 'bot', scopes: ['trade:read'] });
+
+    const [args] = argsOf('createApiKey');
+    expect(args!.grantorScopes).toEqual(['identity:write', 'trade:read']);
+    expect(args!.userId).toBe(USER);
+  });
+
+  it('cannot be widened by anything in the input', async () => {
+    // A body naming its own grantor must not reach the service. `grantorScopes`
+    // is spread AFTER `...input` in the router for exactly this reason.
+    const api = await caller(['identity:write']);
+    await api.apiKeys.create({ name: 'bot', scopes: ['identity:read'], grantorScopes: ['admin:compliance'] } as never);
+
+    const [args] = argsOf('createApiKey');
+    expect(args!.grantorScopes).toEqual(['identity:write']);
+  });
+
+  it('surfaces a refused delegation as BAD_REQUEST, not a 500', async () => {
+    stub.fail(new Error('Cannot grant scopes the granting session does not hold: admin:compliance'));
+    const api = await caller(['identity:write']);
+    const err = await api.apiKeys.create({ name: 'escalate', scopes: ['admin:compliance'] }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
   });
 });

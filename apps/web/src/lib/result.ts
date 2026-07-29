@@ -20,14 +20,27 @@ export type FailureReason =
   | 'unreachable'
   /** The service answered: you are not logged in, or the token expired. */
   | 'unauthenticated'
-  /** The service answered: logged in, but scope / KYC tier / jurisdiction says no. */
+  /** The service answered: logged in, and this credential may never do this. */
   | 'forbidden'
+  /**
+   * The service answered: you hold the authority and are short of verification.
+   *
+   * Split out of `forbidden` because it is the only refusal on this list that
+   * the user can clear themselves. Both arrive as HTTP 403, and only the
+   * service's `intafacedCode` tells them apart — while it did not, the best
+   * this terminal could say was "scope, verification tier or jurisdiction",
+   * which sends someone who needs to press "verify" to support instead.
+   */
+  | 'needs-verification'
   | 'not-found'
   /** The service answered and refused the request on its merits. */
   | 'rejected'
   /** The service answered, and the answer was not the shape the contract promises. */
   | 'invalid-response'
   | 'server-error';
+
+/** Verification tiers, as the jurisdiction matrix names them. */
+export type RequiredTier = 'none' | 'basic' | 'full' | 'institutional';
 
 export interface Failure {
   readonly ok: false;
@@ -37,6 +50,8 @@ export interface Failure {
   readonly service: ServiceId;
   /** tRPC procedure path, e.g. `markets.list`. */
   readonly path: string;
+  /** Only on `needs-verification` — the tier that would clear the refusal. */
+  readonly requiredTier?: RequiredTier;
 }
 
 export type Result<T> = { readonly ok: true; readonly value: T } | Failure;
@@ -45,8 +60,8 @@ export function ok<T>(value: T): Result<T> {
   return { ok: true, value };
 }
 
-export function failure(service: ServiceId, path: string, reason: FailureReason, message: string): Failure {
-  return { ok: false, reason, message, service, path };
+export function failure(service: ServiceId, path: string, reason: FailureReason, message: string, requiredTier?: RequiredTier): Failure {
+  return { ok: false, reason, message, service, path, ...(requiredTier ? { requiredTier } : {}) };
 }
 
 /**
@@ -62,7 +77,12 @@ export function describeFailure(f: Failure): string {
     case 'unauthenticated':
       return 'Sign in to load this';
     case 'forbidden':
-      return f.message || `svc-${f.service} refused: scope, verification tier or jurisdiction`;
+      return f.message || `svc-${f.service} refused this account`;
+    case 'needs-verification':
+      // The one refusal that names a next step. The tier comes from the
+      // jurisdiction matrix, so this says "full" for a bank space and "basic"
+      // for a P2P offer without the client knowing either rule.
+      return f.requiredTier ? `Verification tier "${f.requiredTier}" is required for this` : 'This needs identity verification';
     case 'not-found':
       return f.message || `svc-${f.service} has no ${f.path}`;
     case 'invalid-response':
