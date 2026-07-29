@@ -101,7 +101,83 @@ export interface PositionEvent extends EventBase {
   readonly entryPrice: string;
 }
 
-export type ChainEvent = BookLevelEvent | FillEvent | PositionEvent;
+/**
+ * AN AMM POOL'S ABSOLUTE RESERVES, as the pool contract holds them.
+ *
+ * ── Why this event exists ───────────────────────────────────────────────────
+ *
+ * `svc-protocol`'s `protocol.amm.quoteExactIn` is constant-product arithmetic
+ * that takes `reserveIn` / `reserveOut` as INPUT. Nothing in the platform
+ * produced them, so the AMM was a calculator with no inputs — the same shape
+ * `dex.quote` was in before it was given real venues. This is the source that
+ * makes wiring the AMM as a quote venue honest rather than invented.
+ *
+ * ── Units: human, 18 decimal places, never raw wei ──────────────────────────
+ *
+ * `reserve0` / `reserve1` are decimal strings in HUMAN token units, parsed to
+ * `Amount` (scaled bigint, 10^18) and stored `numeric(38,18)` — the same money
+ * rule as every other amount in this service. A pool contract holds raw uint256
+ * balances at the token's own decimals; converting is the ADAPTER's job,
+ * exactly as reducing deltas to absolute state is, and for the same reason: it
+ * is the part that needs the chain's own reads to be correct.
+ *
+ * Two things follow, and both are load-bearing for a consumer:
+ *
+ *   · `decimals0` / `decimals1` are carried so the raw uint256 the contract
+ *     holds can be reconstructed EXACTLY — `raw = Amount / 10^(18 - decimals)`,
+ *     which is exact because the adapter produced the Amount by scaling up from
+ *     that same raw integer. A consumer that needs the value the contract will
+ *     actually pay, to the last raw unit, converts back before quoting.
+ *   · constant-product `getAmountOut` is homogeneous: scaling `amountIn` and
+ *     `reserveIn` by the same factor leaves the answer unchanged, and the
+ *     answer scales with `reserveOut`. So feeding it three Amounts yields an
+ *     Amount, and for 18-decimal tokens that is bit-identical to the contract.
+ *     For a 6-decimal token the floor division happens at a finer granularity
+ *     than the chain's, so the result can differ by less than one raw unit —
+ *     which is why `decimals` is here rather than assumed to be 18.
+ *
+ * Storing raw wei instead would have been the other option and it is worse:
+ * `numeric(38,18)` leaves twenty digits before the point, and an 18-decimal
+ * token with a large supply overflows that in raw units while fitting
+ * comfortably in human ones.
+ *
+ * ── Orientation is carried, not guessed ─────────────────────────────────────
+ *
+ * A pool orders its tokens by address (`token0` < `token1`); a market symbol
+ * orders them by meaning (`IFC-USD` is IFC priced in USD). Those two orderings
+ * agree by coincidence half the time. `baseToken` says which of the pair the
+ * symbol's BASE is, so a consumer picks `reserveIn`/`reserveOut` from a fact
+ * rather than from a convention — getting it backwards inverts the price and
+ * produces a number that looks entirely plausible.
+ *
+ * ── The two `number` fields, and why they are allowed ───────────────────────
+ *
+ * `feeBps` and `decimals*` are `number`. Neither is money: they are small
+ * integer protocol parameters, exactly as `svc-protocol` models `feeBps`.
+ * `getAmountOut` already refuses a non-integer fee. No reserve, price or amount
+ * anywhere in this file is anything but a decimal string.
+ */
+export interface PoolReservesEvent extends EventBase {
+  readonly kind: 'pool_reserves';
+  /** The symbol this pool prices, e.g. `IFC-USD`. An adapter-assigned label. */
+  readonly market: string;
+  /** The pool contract. THE identity of this row — a market may hold several. */
+  readonly pool: string;
+  readonly token0: string;
+  readonly token1: string;
+  /** Token decimals, so raw uint256 can be reconstructed exactly. 0–18. */
+  readonly decimals0: number;
+  readonly decimals1: number;
+  /** ABSOLUTE reserves in human units. Decimal strings; `'0'` is legal. */
+  readonly reserve0: string;
+  readonly reserve1: string;
+  /** Which of `token0`/`token1` is the base of `market`. */
+  readonly baseToken: string;
+  /** Swap fee in basis points, as the pool reports it. */
+  readonly feeBps: number;
+}
+
+export type ChainEvent = BookLevelEvent | FillEvent | PositionEvent | PoolReservesEvent;
 
 export interface ChainBlock {
   readonly chainId: number;
@@ -184,6 +260,29 @@ export function nonNegativeAmountOf(value: string, what: string): Amount {
   return parsed;
 }
 
+/** Token decimals. Bounded at 18 because that is the ledger's own scale. */
+export function assertDecimals(value: number, what: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > 18) {
+    throw new ChainDataError(`${what} must be an integer 0–18, got ${value}`, 'indexer.bad_decimals');
+  }
+  return value;
+}
+
+/**
+ * Swap fee in basis points.
+ *
+ * The ceiling matches `svc-protocol`'s AMM math (`amm.bad_fee` above 1000).
+ * A projection that accepted a fee its own quote math refuses would store a
+ * pool nothing could ever price, and the failure would surface as an error from
+ * the quote path with no clue that the reserve row was where it went wrong.
+ */
+export function assertFeeBps(value: number, what: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > 1000) {
+    throw new ChainDataError(`${what} must be an integer 0–1000 bps, got ${value}`, 'indexer.bad_fee');
+  }
+  return value;
+}
+
 /**
  * Structural checks a block must pass before any of it is projected.
  *
@@ -234,6 +333,37 @@ export function assertValidBlock(block: ChainBlock): void {
         nonNegativeAmountOf(event.entryPrice, 'position entry price');
         assertAddress(event.account, 'position account');
         break;
+
+      case 'pool_reserves': {
+        assertAddress(event.pool, 'pool address');
+        assertAddress(event.token0, 'pool token0');
+        assertAddress(event.token1, 'pool token1');
+        assertAddress(event.baseToken, 'pool base token');
+        // A pool of a token against itself has no price, and the reserve pair
+        // would be one number counted twice.
+        if (event.token0.toLowerCase() === event.token1.toLowerCase()) {
+          throw new ChainDataError(`pool ${event.pool} pairs ${event.token0} with itself`, 'indexer.bad_pool');
+        }
+        // Orientation must name a token that is actually in the pool. A
+        // baseToken outside the pair silently inverts every price derived from
+        // it, and nothing downstream can detect that from the numbers alone.
+        const base = event.baseToken.toLowerCase();
+        if (base !== event.token0.toLowerCase() && base !== event.token1.toLowerCase()) {
+          throw new ChainDataError(
+            `pool ${event.pool} base token ${event.baseToken} is neither token0 (${event.token0}) nor token1 (${event.token1})`,
+            'indexer.bad_pool',
+          );
+        }
+        assertDecimals(event.decimals0, 'pool token0 decimals');
+        assertDecimals(event.decimals1, 'pool token1 decimals');
+        assertFeeBps(event.feeBps, 'pool fee');
+        // Zero is legal and meaningful — a pool that has been created but never
+        // seeded, or fully burned, really does hold nothing. It is NOT the same
+        // as "we have no reserve row", which the read path refuses outright.
+        nonNegativeAmountOf(event.reserve0, 'pool reserve0');
+        nonNegativeAmountOf(event.reserve1, 'pool reserve1');
+        break;
+      }
     }
   }
 }
