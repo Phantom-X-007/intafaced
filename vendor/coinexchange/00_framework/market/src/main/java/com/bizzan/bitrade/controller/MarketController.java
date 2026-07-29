@@ -284,24 +284,4 @@ public class MarketController {
         return (Map<String,JSONObject>) result.getBody();
     }
 
-    @GetMapping("add_dcitionary/{bond}/{value}")
-    public MessageResult addDcitionaryForAdmin(@PathVariable("bond") String bond,@PathVariable("value") String value){
-        log.info(">>>>字典表数据已修改>>>修改缓存中的数据>>>>>bond>"+bond+">>>>>value>>"+value);
-        String key = SysConstant.DATA_DICTIONARY_BOUND_KEY+bond;
-        ValueOperations valueOperations = redisTemplate.opsForValue();
-        Object bondvalue =valueOperations.get(key );
-        if(bondvalue==null){
-            log.info(">>>>>>缓存中无数据>>>>>");
-            valueOperations.set(key,value);
-        }else{
-           log.info(">>>>缓存中有数据>>>");
-           valueOperations.getOperations().delete(key);
-           valueOperations.set(key,value);
-        }
-        MessageResult re = new MessageResult();
-        re.setCode(0);
-        re.setMessage("success");
-        return re;
-    }
-
 }

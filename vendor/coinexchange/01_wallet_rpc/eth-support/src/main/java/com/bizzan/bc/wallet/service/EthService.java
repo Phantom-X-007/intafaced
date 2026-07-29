@@ -49,8 +49,15 @@ public class EthService {
     @Autowired(required = false)
     private Contract contract;
 
-    public String createNewWallet(String account, String password) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException, CipherException, IOException, CipherException {
+    /**
+     * Creates a deposit keystore file. The encryption password is always the
+     * configured coin.keystore-password: it is deliberately NOT accepted from
+     * the caller, because the sweep path below has to be able to unlock the
+     * file again and a caller-supplied password is not recoverable.
+     */
+    public String createNewWallet(String account) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException, CipherException, IOException, CipherException {
     	logger.info("====>  Generate new wallet file for ETH.");
+        String password = requireKeystorePassword();
         String fileName = WalletUtils.generateNewWalletFile(password, new File(coin.getKeystorePath()), true);
         Credentials credentials = WalletUtils.loadCredentials(password, coin.getKeystorePath() + "/" + fileName);
         String address = credentials.getAddress();
@@ -71,8 +78,33 @@ public class EthService {
     }
 
 
+    /**
+     * @return the configured deposit-keystore password, never blank.
+     * @throws IllegalStateException if it is missing. This is a second line of
+     *         defence: KeystorePasswordValidator already refuses to let the
+     *         service start without it.
+     */
+    private String requireKeystorePassword() {
+        String password = coin.getKeystorePassword();
+        if (StringUtils.isBlank(password)) {
+            throw new IllegalStateException("coin.keystore-password is not configured; refusing to touch a keystore with an empty password");
+        }
+        return password;
+    }
+
+    /**
+     * @return the configured withdraw (hot) wallet password, never blank.
+     */
+    private String requireWithdrawWalletPassword() {
+        String password = coin.getWithdrawWalletPassword();
+        if (StringUtils.isBlank(password)) {
+            throw new IllegalStateException("coin.withdraw-wallet-password is not configured; refusing to unlock the withdraw wallet with an empty password");
+        }
+        return password;
+    }
+
     public MessageResult transferFromWithdrawWallet(String toAddress, BigDecimal amount, boolean sync, String withdrawId) {
-        return transfer(coin.getKeystorePath() + "/" + coin.getWithdrawWallet(), coin.getWithdrawWalletPassword(), toAddress, amount, sync,withdrawId);
+        return transfer(coin.getKeystorePath() + "/" + coin.getWithdrawWallet(), requireWithdrawWalletPassword(), toAddress, amount, sync,withdrawId);
     }
 
     public MessageResult transfer(String walletFile, String password, String toAddress, BigDecimal amount,boolean sync,String withdrawId) {
@@ -120,7 +152,7 @@ public class EthService {
             if (realAmount.compareTo(amount.subtract(transferredAmount)) > 0) {
                 realAmount = amount.subtract(transferredAmount);
             }
-            MessageResult result = transfer(coin.getKeystorePath() + "/" + account.getWalletFile(), "", address, realAmount, true,"");
+            MessageResult result = transfer(coin.getKeystorePath() + "/" + account.getWalletFile(), requireKeystorePassword(), address, realAmount, true,"");
             if (result.getCode() == 0 && result.getData() != null) {
                 logger.info("transfer address={},amount={},txid={}", account.getAddress(), realAmount, result.getData());
                 transferredAmount = transferredAmount.add(realAmount);
@@ -143,7 +175,7 @@ public class EthService {
         Account account = accountService.findByAddress(fromAddress);
         Credentials credentials;
         try {
-            credentials = WalletUtils.loadCredentials("", coin.getKeystorePath() + "/" + account.getWalletFile());
+            credentials = WalletUtils.loadCredentials(requireKeystorePassword(), coin.getKeystorePath() + "/" + account.getWalletFile());
         } catch (IOException e) {
             e.printStackTrace();
             return new MessageResult(500, "私钥文件不存在");
@@ -164,7 +196,7 @@ public class EthService {
         Credentials credentials;
         try {
             //解锁提币钱包
-            credentials = WalletUtils.loadCredentials(coin.getWithdrawWalletPassword(), coin.getKeystorePath() + "/" + coin.getWithdrawWallet());
+            credentials = WalletUtils.loadCredentials(requireWithdrawWalletPassword(), coin.getKeystorePath() + "/" + coin.getWithdrawWallet());
         } catch (IOException e) {
             e.printStackTrace();
             return new MessageResult(500, "私钥文件不存在");
