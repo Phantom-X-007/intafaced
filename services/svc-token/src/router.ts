@@ -111,7 +111,7 @@ function stakeToWire(s: {
   tier: 'flex' | 'm3' | 'm12';
   startedAt: Date;
   unlocksAt: Date | null;
-  status: 'active' | 'unstaking' | 'closed';
+  status: 'pending' | 'active' | 'unstaking' | 'closed';
 }) {
   return {
     id: s.id,
