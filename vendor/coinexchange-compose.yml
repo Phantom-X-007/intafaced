@@ -19,11 +19,31 @@
 # the honest cost of the upgrade, and it is smaller than the cost of running the
 # originals. Anything that will not start here is recorded in
 # docs/adr/coinexchange-integration.md rather than fixed by downgrading.
+#
+# ── restart: unless-stopped, and why every service now carries it ────────────
+#
+# On 2026-07-29 `market` (the quote centre — every price the platform shows) was
+# down for three hours and forty minutes and nothing noticed. It did not crash:
+# the log shows a clean Spring shutdown on the main thread at 06:33:31 — Kafka
+# consumers stopped, Eureka deregistered with status 200, JPA closed — and the
+# container exited 0. Something outside it sent SIGTERM (a `docker stop`, a
+# `compose down`, or a Docker Desktop restart). It stayed down because these
+# services had NO restart policy, so Docker's default of `no` applied: the
+# container had RestartCount 0 and simply waited to be started by hand, which
+# happened at 10:14.
+#
+# `unless-stopped` restarts on any non-deliberate exit and survives a daemon
+# restart, while still honouring an explicit `docker stop`. It is not
+# monitoring, and it is not a substitute for it — a service that restart-loops
+# is still an outage nobody is being told about. It only removes the failure
+# mode where a single stray SIGTERM takes out the quote centre until a human
+# happens to look.
 
 services:
   coinex-mysql:
     image: mysql:8.0
     container_name: intafaced-coinex-mysql
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${COINEX_MYSQL_PASSWORD:-coinex_dev_only}
       MYSQL_DATABASE: bizzan
@@ -60,6 +80,7 @@ services:
   coinex-mongo:
     image: mongo:6
     container_name: intafaced-coinex-mongo
+    restart: unless-stopped
     ports:
       - '${COINEX_MONGO_PORT:-57017}:27017'
     volumes:
@@ -73,6 +94,7 @@ services:
   coinex-redis:
     image: redis:7-alpine
     container_name: intafaced-coinex-redis
+    restart: unless-stopped
     ports:
       - '${COINEX_REDIS_PORT:-6381}:6379'
     healthcheck:
@@ -88,6 +110,7 @@ services:
   coinex-kafka:
     image: apache/kafka:3.7.0
     container_name: intafaced-coinex-kafka
+    restart: unless-stopped
     environment:
       KAFKA_NODE_ID: '1'
       KAFKA_PROCESS_ROLES: broker,controller
@@ -122,6 +145,7 @@ services:
   coinex-cloud:
     image: eclipse-temurin:8-jre
     container_name: intafaced-coinex-cloud
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./coinexchange/00_framework:/app:ro
@@ -134,6 +158,7 @@ services:
   coinex-exchange:
     image: eclipse-temurin:8-jre
     container_name: intafaced-coinex-exchange
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./coinexchange/00_framework:/app:ro
@@ -148,6 +173,7 @@ services:
   coinex-market:
     image: eclipse-temurin:8-jre
     container_name: intafaced-coinex-market
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./coinexchange/00_framework:/app:ro
@@ -159,6 +185,7 @@ services:
   coinex-ucenter:
     image: eclipse-temurin:8-jre
     container_name: intafaced-coinex-ucenter
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./coinexchange/00_framework:/app:ro
