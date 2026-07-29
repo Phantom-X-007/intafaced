@@ -18,25 +18,28 @@ WHAT THIS IS
 - Product vision: INTAFACED SOVEREIGN OS.pdf (Vol. I). Do not invent architecture outside the law.
 - Board: docs/TRACKER.md · README status band · `pnpm tracker ready`.
 - Plain map: docs/START-HERE.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Residual: docs/POST-MERGE-RESIDUAL-AFTER-86.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
+- Stream A claim (Nitro app surface): docs/NITRO-STREAM-A-CLAIM.md · issue #83. After Denon waves: docs/WAVE-AUDIT.md only.
 
 PARTNER
 - Denon (@Phantom-X-007) main builder. I am @ZenYoda3. Shared private GitHub.
 - Review is asymmetric: he merges his PRs on green CI + self-audit; he (or his agent) reviews mine. I do not Approve his code.
 - Never stomp origin/* in-flight branches. Check `gh pr list` + tracker before claiming.
+- Split board: Nitro = Stream A (vendor shell pages/components/images, App.vue, routes.js; branches feat/app-*). Denon = Stream B (services, packages, tooling, edge, proxy, main.js, compose). Never edit Stream B; open issue `[cross-stream] <file> — <what>`. Do not rebase/force-push his feat/multi-asset-* (money). Rebrand/#86 is already on main.
 
 ALREADY TRUE (re-verify live each session — do not trust this paragraph as eternal)
 - Fleet on main: edge, mounts, platform:up, ledger/identity/token, trade/pay/p2p/bank shells. Do not rebuild services already on main.
-- Product UI = vendored exchange shell at http://localhost:8090 — not apps/web. Books = TypeScript ledger only.
+- Product UI = vendored exchange shell at http://localhost:8090 — not apps/web. Books = TypeScript ledger only. #86 shell rebrand is on main.
+- Stream A product work (browser look, prices/candles, DEX/CEX UI, order polish, account panes, mobile, empty states) is Nitro’s lane — see NITRO-STREAM-A-CLAIM.md.
 - Full product audit closed (#80/#81); #86 closed API-key escalate, wallet RPC open withdraw, trading backdoor. Residual: docs/POST-MERGE-RESIDUAL-AFTER-86.md.
 - After Denon waves: WAVE-AUDIT only. Strix PARKED — never run without my explicit go + non-prod target.
 - Not real customer money until rails/chain + perimeter + kill path + dual-book discipline. Multi-asset merge is Denon-only.
 
 MANDATORY WORKFLOW
-1. Read AGENTS.md + agent protocol. If on main checkout: create worktree; never implement on main.
+1. Read AGENTS.md + agent protocol + docs/NITRO-STREAM-A-CLAIM.md when doing app/UI work. If on main checkout: create worktree; never implement on main.
 2. GitHub for agents: export GH_TOKEN from ~/.grok/agent-auth/github_token (never print).
-3. Claim one tracker feature; one service per PR; contracts/events PR before service if cross-boundary.
-4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket.
-5. Before “done”: pnpm verify; report real output. Before money code: state risks (custody, stranding, floats, brand).
+3. Claim one tracker feature or Stream A checklist item; one concern per PR; contracts/events PR before service if cross-boundary.
+4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no Stream B edits.
+5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand).
 6. No commits/PRs unless I asked to ship. No random new architecture.
 
 RIGHT WAY (quality bar)
