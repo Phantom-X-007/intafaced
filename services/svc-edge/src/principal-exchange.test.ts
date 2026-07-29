@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { verifyForwardedPrincipal, EDGE_PRINCIPAL_HEADER, EDGE_SIGNATURE_HEADER } from '@intafaced/contracts';
-import { exchangePrincipal, stripReserved } from './principal-exchange.js';
+import { exchangePrincipal, looksLikeApiKey, stripReserved } from './principal-exchange.js';
 
 const tokens: TokenConfig = {
   secret: 'edge-test-jwt-signing-secret-32-chars',
@@ -204,5 +204,55 @@ describe('bad credentials land as anonymous, never as an error', () => {
     expect(result.principal).toBeNull();
     expect(result.rejected).toBeNull();
     expect(result.headers['content-type']).toBe('application/json');
+  });
+});
+
+describe('API key bearers (ifc_…) exchange into access JWTs', () => {
+  it('detects platform keys vs JWTs', () => {
+    expect(looksLikeApiKey('ifc_abc123')).toBe(true);
+    expect(looksLikeApiKey('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig')).toBe(false);
+    expect(looksLikeApiKey('not-a-key')).toBe(false);
+  });
+
+  it('calls identity exchange and signs a principal from the returned JWT', async () => {
+    const { token: accessToken } = await issueAccessToken(
+      { userId: USER, sessionId: SESSION, scopes: ['trade:read'], tier: 'basic', mfa: false },
+      tokens,
+    );
+
+    const fetchMock: typeof fetch = async (input, init) => {
+      expect(String(input)).toContain('/trpc/apiKeys.exchange');
+      expect(init?.method).toBe('POST');
+      const body = JSON.parse(String(init?.body));
+      expect(body).toEqual({ json: { key: 'ifc_live_secret_key' } });
+      return new Response(JSON.stringify({ result: { data: { json: { accessToken } } } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+
+    const result = await exchangePrincipal(
+      { authorization: 'Bearer ifc_live_secret_key' },
+      { ...options, identityUrl: 'http://identity.test', fetch: fetchMock },
+    );
+
+    expect(result.rejected).toBeNull();
+    expect(result.principal?.userId).toBe(USER);
+    expect(result.principal?.scopes).toEqual(['trade:read']);
+    expect(result.headers[EDGE_PRINCIPAL_HEADER]).toBeDefined();
+    expect(result.headers.authorization).toBeUndefined();
+  });
+
+  it('lands as anonymous when identity refuses the key', async () => {
+    const fetchMock: typeof fetch = async () => new Response(JSON.stringify({ error: { message: 'nope' } }), { status: 401 });
+
+    const result = await exchangePrincipal(
+      { authorization: 'Bearer ifc_wrong' },
+      { ...options, identityUrl: 'http://identity.test', fetch: fetchMock },
+    );
+
+    expect(result.principal).toBeNull();
+    expect(result.rejected).toBe('invalid');
+    expect(result.headers[EDGE_PRINCIPAL_HEADER]).toBeUndefined();
   });
 });
