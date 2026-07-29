@@ -28,7 +28,7 @@
               </div>
             </div>
             <div class="btnbox">
-              <Button id="addrSubmit" @click='addAddr' size="large" style="width:86px;color:#fff;background:#f0a70a;border:1px solid #f0a70a;">{{$t('uc.finance.withdraw.add')}}</Button>
+              <Button id="addrSubmit" @click='addAddr' size="large" style="width:86px;color:#fff;background:#ff6b00;border:1px solid #ff6b00;">{{$t('uc.finance.withdraw.add')}}</Button>
             </div>
             <div class="action-content">
               <div class="action-body">
@@ -50,36 +50,36 @@
     <!-- model -->
     <Modal v-model="modal2" width="360">
       <p slot="header" style="color:#f60;text-align:center">
-        <Icon type="ios-mail" size="20" color="#00b5f6;" />
+        <Icon type="ios-mail" size="20" color="#ff6b00;" />
         <span>{{$t('uc.finance.withdraw.safevalidate')}}</span>
       </p>
       <div style="text-align:center">
         <Form ref="formValidateAddr" :model="formValidateAddr" :rules="ruleValidate" :label-width="85">
-          <!-- 手机号 -->
+          <!-- phone -->
           <FormItem :label="$t('uc.finance.withdraw.telno')" prop="mobileNo" v-show="validPhone">
             <Input disabled size="large" v-model="formValidateAddr.mobileNo"></Input>
           </FormItem>
-          <!-- 手机验证码 -->
+          <!-- SMS code -->
           <FormItem :label="$t('uc.finance.withdraw.smscode')" prop="vailCode2" v-show="validPhone">
             <Input v-model="formValidateAddr.vailCode2" size="large">
-            <!-- <Button slot="append">点击获取</Button> -->
+            <!-- <Button slot="append">Get code</Button> -->
             <div class="timebox" slot="append">
               <Button @click="send(2)" :disabled="disbtn">
-                <!--sendMsgDisabled2为true 时间+秒    sendMsgDisabled2为false为，点击获取 -->
+                <!--sendMsgDisabled2true shows the countdown; sendMsgDisabled2 false shows Get code -->
                 <span v-if="sendMsgDisabled2">{{time2+$t('uc.finance.withdraw.second')}}</span>
                 <span v-if="!sendMsgDisabled2">{{$t('uc.finance.withdraw.clickget')}}</span>
               </Button>
             </div>
             </Input>
           </FormItem>
-          <!-- 邮箱 -->
+          <!-- email -->
           <FormItem :label="$t('uc.finance.withdraw.email')" prop="email" v-show="validEmail">
             <Input disabled v-model="formValidateAddr.email" size="large"></Input>
           </FormItem>
-          <!-- 邮箱验证码 -->
+          <!-- Email code -->
           <FormItem :label="$t('uc.finance.withdraw.emailcode')" prop="vailCode1" v-show="validEmail">
             <Input v-model="formValidateAddr.vailCode1" size="large">
-            <!-- <Button slot="append">点击获取</Button> -->
+            <!-- <Button slot="append">Get code</Button> -->
             <div class="timebox" slot="append">
               <Button @click="send(1)" :disabled="disbtn">
                 <span v-if="sendMsgDisabled1">{{time1+$t('uc.finance.withdraw.second')}}</span>
@@ -110,8 +110,8 @@ export default {
       //else
       sendMsgDisabled1: false,
       sendMsgDisabled2: false,
-      time1: 60, // 发送验证码倒计时
-      time2: 60, // 发送验证码倒计时
+      time1: 60, // verification-code resend countdown
+      time2: 60, // verification-code resend countdown
       modal2: false,
       modal_loading: false,
       withdrawAddr: "",
@@ -160,7 +160,7 @@ export default {
                   }
                 },
                 that.$t("uc.finance.withdraw.delete")
-              )
+)
             ]);
           }
         }
@@ -217,10 +217,10 @@ export default {
       this.getList(0, 10);
     },
     getMember() {
-      //获取个人安全信息
+      // Secure
       this.$http
-        .post(this.host + "/uc/approve/security/setting")
-        .then(response => {
+.post(this.host + "/uc/approve/security/setting")
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             if (resp.data.mobilePhone) {
@@ -238,10 +238,9 @@ export default {
         });
     },
     getCoin() {
-      //币种
       this.$http
-        .post(this.host + "/uc/withdraw/support/coin")
-        .then(response => {
+.post(this.host + "/uc/withdraw/support/coin")
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             for (let i = 0; i < resp.data.length; i++) {
@@ -253,13 +252,12 @@ export default {
         });
     },
     getList(pageNo, pageSize) {
-      //获取地址
       let params = {};
       params["pageNo"] = pageNo;
       params["pageSize"] = pageSize;
       this.$http
-        .post(this.host + "/uc/withdraw/address/page", params)
-        .then(response => {
+.post(this.host + "/uc/withdraw/address/page", params)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0 && resp.data.content) {
             this.dataRecharge = resp.data.content;
@@ -278,7 +276,7 @@ export default {
       this.disbtn = true;
       if (index == 1) {
         if (this.formValidateAddr.email) {
-          //获取邮箱code
+          // emailcode
           this.$http.post(this.host + "/uc/add/address/code").then(response => {
             var resp = response.body;
             if (resp.code == 0) {
@@ -303,10 +301,10 @@ export default {
         }
       } else if (index == 2) {
         if (this.formValidateAddr.mobileNo) {
-          //获取手机code
+          // phonecode
           this.$http
-            .post(this.host + "/uc/mobile/add/address/code")
-            .then(response => {
+.post(this.host + "/uc/mobile/add/address/code")
+.then(response => {
               var resp = response.body;
               if (resp.code == 0) {
                 this.$Message.success(resp.message);
@@ -361,8 +359,8 @@ export default {
           let params = {};
           params["id"] = id;
           this.$http
-            .post(this.host + "/uc/withdraw/address/delete", params)
-            .then(response => {
+.post(this.host + "/uc/withdraw/address/delete", params)
+.then(response => {
               var resp = response.body;
               if (resp.code == 0) {
                 this.$Message.success(resp.message);
@@ -399,8 +397,8 @@ export default {
       param["remark"] = this.remark;
 
       this.$http
-        .post(this.host + "/uc/withdraw/address/add", param)
-        .then(response => {
+.post(this.host + "/uc/withdraw/address/add", param)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.$Message.success(this.$t("uc.finance.withdraw.savemsg2"));
@@ -419,22 +417,22 @@ export default {
 
 <style scoped lang="scss">
 .nav-rights {
-  .nav-right {
-    .bill_box_address {
+.nav-right {
+.bill_box_address {
       section.trade-group.merchant-tops {
-        .tips-word1 {
+.tips-word1 {
           margin-bottom: 20px;
           text-align: left;
           font-weight: normal;
           margin-left: 30px;
         }
       }
-      .table-inner {
-        .action-inner {
+.table-inner {
+.action-inner {
           display: table;
           padding: 0 30px;
           width: 100%;
-          .inner-left {
+.inner-left {
             display: table-cell;
             width: 15%;
           }
@@ -449,7 +447,7 @@ export default {
 }
 
 .deposit-address {
-  width: 45% !important;
+  width: 45%!important;
 }
 
 .mt25 {
@@ -481,17 +479,17 @@ p.describe {
 </style>
 <style lang="scss">
 .nav-rights {
-  .nav-right {
-    .bill_box_address {
-      .table-inner {
-        .action-inner {
-          .inner-left {
-            .ivu-select-dropdown .ivu-select-item {
+.nav-right {
+.bill_box_address {
+.table-inner {
+.action-inner {
+.inner-left {
+.ivu-select-dropdown.ivu-select-item {
               padding: 6px 16px;
             }
           }
         }
-        .btnbox .ivu-btn {
+.btnbox.ivu-btn {
           &:focus {
             -moz-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
             -webkit-box-shadow: 2px 2px 5px transparent,

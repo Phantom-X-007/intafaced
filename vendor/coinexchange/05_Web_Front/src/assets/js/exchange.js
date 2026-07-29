@@ -11,7 +11,7 @@ exports = module.exports = {
             }
         });
         
-        $('.sidebar tbody .ivu-icon').click(function(){
+        $('.sidebar tbody.ivu-icon').click(function(){
                 if($(this).attr('class')=='ivu-icon ivu-icon-android-star-outline'){
                     $(this).attr('class','ivu-icon ivu-icon-android-star');
                 }else{

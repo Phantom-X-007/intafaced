@@ -2,9 +2,9 @@
   <div class="login_form mob-login">
     <div class="login_right">
       <div style="color: #F90;margin-bottom: 60px;margin-top: 60px;">
-        <h1 style="border-left: 5px solid #F90;padding-left: 10px;letter-spacing: 2px;line-height:30px;height:30px;">BIZZAN.COM</h1>
-        <p style="padding-left:15px;letter-spacing: 6px;">严选全球优质数字资产</p>
-        <div style="margin-left:5px;letter-spacing: 2px;margin-top: 10px;color: rgb(226, 226, 227);font-size:13px;padding: 5px 10px;">安全 ● 诚实 ● 公平 ● 热情 ● 开放</div>
+        <h1 style="border-left: 5px solid #F90;padding-left: 10px;letter-spacing: 2px;line-height:30px;height:30px;">INTAFACED.COM</h1>
+        <p style="padding-left:15px;letter-spacing: 6px;">A curated set of global digital assets</p>
+        <div style="margin-left:5px;letter-spacing: 2px;margin-top: 10px;color: rgb(226, 226, 227);font-size:13px;padding: 5px 10px;">Secure ● Honest ● Fair ● Committed ● Open</div>
       </div>
       <Form v-if="allowRegister" ref="formInline" :model="formInline" :rules="ruleInline" inline>
         <FormItem prop="username" style="display:none;">
@@ -13,21 +13,21 @@
         </FormItem>
         <FormItem prop="user">
           <Input type="text" v-model="formInline.user" :placeholder="key">
-            <Select v-model="country" slot="prepend" style="width: 65px;border-bottom: 1px solid #27313e;">
-              <Option value="中国" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">中国</span></Option>
-              <Option value="新加坡" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">新加坡</span></Option>
-              <Option value="韩国" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">韩国</span></Option>
-              <Option value="日本" label="+81"><span>+81</span><span style="margin-left:10px;color:#ccc">日本</span></Option>
-              <Option value="泰国" label="+66"><span>+66</span><span style="margin-left:10px;color:#ccc">泰国</span></Option>
-              <Option value="俄罗斯" label="+7"><span>+7</span><span style="margin-left:10px;color:#ccc">俄罗斯</span></Option>
-              <Option value="英国" label="+44"><span>+44</span><span style="margin-left:10px;color:#ccc">英国</span></Option>
-              <Option value="越南" label="+84"><span>+84</span><span style="margin-left:10px;color:#ccc">越南</span></Option>
-              <Option value="印度" label="+91"><span>+91</span><span style="margin-left:10px;color:#ccc">印度</span></Option>
-              <Option value="意大利" label="+39"><span>+39</span><span style="margin-left:10px;color:#ccc">意大利</span></Option>
-              <Option value="香港" label="+852"><span>+852</span><span style="margin-left:10px;color:#ccc">香港</span></Option>
-              <Option value="马来西亚" label="+60"><span>+60</span><span style="margin-left:10px;color:#ccc">马来西亚</span></Option>
-              <Option value="台湾省" label="+886"><span>+886</span><span style="margin-left:10px;color:#ccc">台湾省</span></Option>
-              <Option value="土耳其" label="+90"><span>+90</span><span style="margin-left:10px;color:#ccc">土耳其</span></Option>
+            <Select v-model="country" slot="prepend" style="width: 65px;border-bottom: 1px solid #141414;">
+              <Option value="China" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">China</span></Option>
+              <Option value="Singapore" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">Singapore</span></Option>
+              <Option value="South Korea" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">South Korea</span></Option>
+              <Option value="Japan" label="+81"><span>+81</span><span style="margin-left:10px;color:#ccc">Japan</span></Option>
+              <Option value="Thailand" label="+66"><span>+66</span><span style="margin-left:10px;color:#ccc">Thailand</span></Option>
+              <Option value="Russia" label="+7"><span>+7</span><span style="margin-left:10px;color:#ccc">Russia</span></Option>
+              <Option value="United Kingdom" label="+44"><span>+44</span><span style="margin-left:10px;color:#ccc">United Kingdom</span></Option>
+              <Option value="Vietnam" label="+84"><span>+84</span><span style="margin-left:10px;color:#ccc">Vietnam</span></Option>
+              <Option value="India" label="+91"><span>+91</span><span style="margin-left:10px;color:#ccc">India</span></Option>
+              <Option value="Italy" label="+39"><span>+39</span><span style="margin-left:10px;color:#ccc">Italy</span></Option>
+              <Option value="Hong Kong" label="+852"><span>+852</span><span style="margin-left:10px;color:#ccc">Hong Kong</span></Option>
+              <Option value="Malaysia" label="+60"><span>+60</span><span style="margin-left:10px;color:#ccc">Malaysia</span></Option>
+              <Option value="Taiwan" label="+886"><span>+886</span><span style="margin-left:10px;color:#ccc">Taiwan</span></Option>
+              <Option value="Turkey" label="+90"><span>+90</span><span style="margin-left:10px;color:#ccc">Turkey</span></Option>
             </Select>
           </Input>
         </FormItem>
@@ -38,25 +38,25 @@
           <input id="sendCode" @click="sendCode();" type="Button" shape="circle" :value="sendcodeValue" :disabled='codedisabled'>
           </input>
         </FormItem>
-        <FormItem prop="password"  class="password">
+        <FormItem prop="password" class="password">
           <Input type="password" v-model="formInline.password" :placeholder="$t('uc.regist.pwd')">
           </Input>
         </FormItem>
-        <FormItem prop="repassword"  class="password">
+        <FormItem prop="repassword" class="password">
           <Input type="password" v-model="formInline.repassword" :placeholder="$t('uc.regist.repwd')">
           </Input>
         </FormItem>
         <FormItem prop="promotion">
           <Input type="text" v-model="formInline.promotion">
-            <span slot="prepend">{{$t('uc.regist.promotion')}} :</span>
+            <span slot="prepend">{{$t('uc.regist.promotion')}}:</span>
           </Input>
         </FormItem>
         <div class="check-agree" style="">
           <label>
             <Checkbox v-model="agree">{{$t('uc.regist.agreement')}}</Checkbox>
           </label>
-          <a v-if="lang=='简体中文'" href="/helpdetail?cate=1&id=5&cateTitle=常见问题" target="_blank" style="">《{{$t('uc.regist.userprotocol')}}》</a>
-          <a v-if="lang=='English'" href="/helpdetail?cate=1&id=35&cateTitle=Privacy Policy" target="_blank" style="">《{{$t('uc.regist.userprotocol')}}》</a>
+          <a v-if="false" href="/helpdetail?cate=1&id=5&cateTitle=FAQ" target="_blank" style="">{{$t('uc.regist.userprotocol')}}</a>
+          <a v-if="lang=='English'" href="/helpdetail?cate=1&id=35&cateTitle=Privacy Policy" target="_blank" style="">{{$t('uc.regist.userprotocol')}}</a>
         </div>
         <FormItem>
           <Button class="register_btn" @click="handleSubmit('formInline')" :disabled="registing">{{$t('uc.regist.regist')}}</Button>
@@ -89,7 +89,7 @@
     </div>
     <div class="app_bottom_reg">
         <div class="left_logo">
-          <img style="float:left;" src="../../assets/images/applogo.png"></img>
+          <img style="float:left;" src="../../assets/images/applogo.svg"></img>
           <div style="float:left;height: 40px;line-height:40px;color:#000;">{{$t("cms.downloadslogan")}}</div>
         </div>
         <div class="right_btn_wrap"><router-link to="/app" class="right_btn">{{$t("cms.download")}}</router-link></div>
@@ -104,7 +104,7 @@
     width: 99%;
     margin: 0 auto;
     li {
-      flex: 0 0  25%;
+      flex: 0 0 25%;
       display: inline-block;
       width: 100%;
       padding: 0 15px;
@@ -124,7 +124,7 @@
         font-size: 14px;
         margin: 20px 0;
         text-align: center;
-        color: #828ea1;
+        color: #8a8a8a;
       }
       p.title {
         color: #fff;
@@ -136,25 +136,25 @@
 }
 .login_form {
   position: relative;
-  .login_right {
+.login_right {
     padding: 20px 30px;
     background: transparent;
     width: 100%;
     padding-top: 60px;
     border-radius: 5px;
-    .tel-title{
+.tel-title{
       color: #fff;
       text-align: left;
       margin-bottom: 30px;
     }
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
-      .ivu-form-item {
-        .ivu-form-item-content {
-          .register_btn.ivu-btn {
+.ivu-form-item {
+.ivu-form-item-content {
+.register_btn.ivu-btn {
             width: 100%;
-            background-color: #f0ac19;
+            background-color: #ff8534;
             outline: none;
-            border-color: #f0ac19;
+            border-color: #ff8534;
             color: #fff;
             border-radius: 5px;
             font-size: 18px;
@@ -165,39 +165,39 @@
               box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
             }
           }
-          .ivu-input-wrapper.ivu-input-type {
-            .ivu-input {
+.ivu-input-wrapper.ivu-input-type {
+.ivu-input {
               border: 1px solid red;
             }
           }
           #sendCode {
             position: absolute;
-            border: 1px solid #0b1520;
+            border: 1px solid #0e0e0e;
             background: transparent;
             top: -10px;
             outline: none;
             right: 0;
             width: 30%;
-            color: #f0ac19;
+            color: #ff8534;
             cursor: pointer;
           }
         }
       }
-      .check-agree {
+.check-agree {
         color: #979797;
         display: inline-block;
         line-height: 30px;
         font-size: 12px;
         cursor: default;
         a {
-          color: #f0ac19;
+          color: #ff8534;
           margin-left: -10px;
         }
-        .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
-          .ivu-checkbox.ivu-checkbox-checked {
-            .ivu-checkbox-inner {
-              border: 1px solid #f0ac19;
-              background-color: #f0ac19;
+.ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
+.ivu-checkbox.ivu-checkbox-checked {
+.ivu-checkbox-inner {
+              border: 1px solid #ff8534;
+              background-color: #ff8534;
             }
           }
         }
@@ -238,7 +238,7 @@
 }
 </style>
 <script>
-//   import gtInit from '../../assets/js/gt.js';
+// import gtInit from '../../assets/js/gt.js';
 import $ from "jquery";
 export default {
   data() {
@@ -267,14 +267,14 @@ export default {
     const validateRepassword = (rule, value, callback) => {
       if (value === "") {
         callback(new Error(this.$t("uc.regist.confirmpwdtip")));
-      } else if (value !== this.formInline.password) {
+      } else if (value!== this.formInline.password) {
         callback(new Error(this.$t("uc.regist.confirmpwderr")));
       } else {
         callback();
       }
     };
     return {
-      country: "中国",
+      country: "China",
       codedisabled:false,
       sendcodeValue: this.$t("uc.regist.sendcode"),
       isRegister: false,
@@ -359,7 +359,7 @@ export default {
     // oDiv && (oDiv.className = "navbar-collapse collapse");
     this.init();
     this.actives(this.changeActive);
-    if(this.$route.query.code != undefined && this.$route.query.code != "" && this.$route.query.code != null){
+    if(this.$route.query.code!= undefined && this.$route.query.code!= "" && this.$route.query.code!= null){
         this.formInline.promotion = this.$route.query.code;
     }else{
         this.formInline.promotion = "";
@@ -388,12 +388,11 @@ export default {
       if (this.isLogin) {
         this.$router.push("/");
       }
-      window.document.title = (this.lang == "简体中文" ? "新用户注册 - " : "New Register - ") + "币严 | 全球比特币交易平台 | 全球数字货币交易平台";
+      window.document.title = "New Register - " + "INTAFACED | Sovereign Exchange";
       // this.getAreas();
       // this.initGtCaptcha();
     },
     initGtCaptcha() {
-      // 直接生成一个验证码对象
       var self = this;
       var captcha1 = new TencentCaptcha("2031827463", function(res) {
         res.ret == 0 &&
@@ -402,7 +401,7 @@ export default {
           (self.randStr = res.randstr) &&
           self.success();
       });
-      captcha1.show(); // 显示验证码
+      captcha1.show(); // Show captcha
     },
     onAreaChange(value) {
       for (var i = 0; i < this.areas.length; i++) {
@@ -450,26 +449,26 @@ export default {
                 params["phone"] = this.formInline.user;
                 params["username"] = this.formInline.username + this.formInline.user;
                 params["password"] = this.formInline.password;
-                params["promotion"] = this.formInline.promotion; // 邀请码
+                params["promotion"] = this.formInline.promotion; // Invite code
                 params["code"] = this.formInline.code;
-                params["country"] = this.country;//"中国";
+                params["country"] = this.country;//"China";
                 params["superPartner"] = "";//this.formInline.superType;
                 params["ticket"] = this.ticket;
                 params["randStr"] = this.randStr;
 
                 this.$http
-                  .post(this.host + "/uc/register/phone", params)
-                  .then(response => {
+.post(this.host + "/uc/register/phone", params)
+.then(response => {
                     this.registing = false;
                     var resp = response.body;
                     if (resp.code == 0) {
                       if (
                         this.formInline.superType == "1" ||
                         this.formInline.superType == "2"
-                      ) {
+) {
                         this.$Notice.success({
                           title: this.$t("common.tip"),
-                          desc: "已注册成功"
+                          desc: "Registration complete"
                         });
                         var that = this;
                         setTimeout(() => {
@@ -495,7 +494,7 @@ export default {
               } else {
                 this.$Notice.error({
                   title: this.$t("common.tip"),
-                  desc: "请输入正确的验证码"
+                  desc: "Enter a valid verification code"
                 });
               }
             }
@@ -528,7 +527,7 @@ export default {
     sendCode() {
       var mobilePhone = this.formInline.user;
       let reg = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
-      if (mobilePhone == "" || !reg.test(mobilePhone)) {
+      if (mobilePhone == "" ||!reg.test(mobilePhone)) {
         this.$Message.error(this.$t("uc.regist.teltip"));
         return;
       } else {
@@ -538,37 +537,37 @@ export default {
     success() {
       var params = {};
       params["phone"] = this.formInline.user;
-      params["country"] = "中国";
+      params["country"] = "China";
       var reg = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
       reg.test(params["phone"]) && this.$http.post(this.host + "/uc/mobile/code", params).then(response => {
             var resp = response.body;
             resp.code == 0 && this.$Notice.success({title: this.$t("common.tip"),desc: resp.message});
             resp.code == 0 && this.settime();
-            resp.code != 0 && this.$Notice.error({title: this.$t("common.tip"),desc: resp.message});
+            resp.code!= 0 && this.$Notice.error({title: this.$t("common.tip"),desc: resp.message});
           });
-      !reg.test(params["phone"]) &&this.$Notice.error({title: this.$t("common.tip"),desc: this.$t("uc.finance.withdraw.telerr")});
+!reg.test(params["phone"]) &&this.$Notice.error({title: this.$t("common.tip"),desc: this.$t("uc.finance.withdraw.telerr")});
     }
   }
 };
 </script>
 <style lang="scss">
 .login_form {
-  .login_right {
+.login_right {
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
       text-align:center;
-      .ivu-form-item {
-        .ivu-form-item-content {
-          .ivu-input-wrapper.ivu-input-type {
-            .ivu-input {
+.ivu-form-item {
+.ivu-form-item-content {
+.ivu-input-wrapper.ivu-input-type {
+.ivu-input {
               border: none;
-              border-bottom: 1px solid #27313e;
+              border-bottom: 1px solid #141414;
               font-size: 14px;
               background:transparent;
               border-radius:0;
               // color:#fff;
               &:focus {
                 border: none;
-                border-bottom: 1px solid #27313e;
+                border-bottom: 1px solid #141414;
                 -moz-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
                 -webkit-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
                 box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
@@ -577,9 +576,9 @@ export default {
           }
         }
       }
-      .check-agree {
-        .ivu-checkbox-wrapper {
-          .ivu-checkbox-input {
+.check-agree {
+.ivu-checkbox-wrapper {
+.ivu-checkbox-input {
             &:focus {
               border: none;
               outline: none;
@@ -589,18 +588,18 @@ export default {
             }
           }
         }
-        .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
-          .ivu-checkbox.ivu-checkbox-checked {
-            .ivu-checkbox-inner {
-              border: 1px solid #f0ac19;
-              background-color: #f0ac19;
+.ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
+.ivu-checkbox.ivu-checkbox-checked {
+.ivu-checkbox-inner {
+              border: 1px solid #ff8534;
+              background-color: #ff8534;
             }
           }
 
         }
-        .ivu-checkbox-wrapper.ivu-checkbox-default{
-          .ivu-checkbox{
-            .ivu-checkbox-inner{
+.ivu-checkbox-wrapper.ivu-checkbox-default{
+.ivu-checkbox{
+.ivu-checkbox-inner{
               background:transparent;
             }
           }
@@ -611,47 +610,47 @@ export default {
 }
 </style>
 <style>
-  .ivu-select-single .ivu-select-selection .ivu-select-placeholder, .ivu-select-single .ivu-select-selection .ivu-select-selected-value{
+.ivu-select-single.ivu-select-selection.ivu-select-placeholder,.ivu-select-single.ivu-select-selection.ivu-select-selected-value{
     padding-right: 20px;
   }
-  .ivu-select-single .ivu-select-selection {
+.ivu-select-single.ivu-select-selection {
       background-color: transparent;
   }
-  .ivu-select-arrow{
+.ivu-select-arrow{
     right: 4px;
   }
-  .mob-login .ivu-form-item-error .ivu-input-group-append, .mob-login .ivu-form-item-error .ivu-input-group-prepend, .mob-login .ivu-input-group-append, .mob-login .ivu-input-group-prepend{
-    background-color: #0b1520!important;
+.mob-login.ivu-form-item-error.ivu-input-group-append,.mob-login.ivu-form-item-error.ivu-input-group-prepend,.mob-login.ivu-input-group-append,.mob-login.ivu-input-group-prepend{
+    background-color: #0e0e0e!important;
     border-top:none;
     border-left: none;
     border-right: none;
   }
 
-  .ivu-select-item span:first-child{
+.ivu-select-item span:first-child{
     display: inline-block;
     width: 30px;
     text-align: left;
   }
-  .ivu-input-group-append .ivu-select-selection, .ivu-input-group-prepend .ivu-select-selection{
+.ivu-input-group-append.ivu-select-selection,.ivu-input-group-prepend.ivu-select-selection{
     margin: 0;
   }
-  .app_bottom_reg{
+.app_bottom_reg{
     z-index: 999;
     position: fixed;
     bottom: 0;
     left: 0;
     width: 100%;
     height: 40px;
-    background: rgba(242,246,250,1) !important;
+    background: rgba(242,246,250,1)!important;
   }
-  .app_bottom_reg .left_logo img{
+.app_bottom_reg.left_logo img{
     height: 30px;margin-top:5px;border-radius: 5px;margin-left: 5px;margin-right: 5px;
   }
-  .app_bottom_reg .right_btn_wrap{
+.app_bottom_reg.right_btn_wrap{
     float: right;height: 40px;line-height: 40px;margin-right: 5px;
 
   }
-  .app_bottom_reg .right_btn{
+.app_bottom_reg.right_btn{
     color: #FFF;
     border-radius: 3px;
     padding: 0px 10px;

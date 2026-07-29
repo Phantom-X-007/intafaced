@@ -2,21 +2,21 @@
 .mymsg_wrapper {
   padding: 70px 8% 0;
   margin-bottom: 10px;
-  .wrapper {
+.wrapper {
     width: 100%;
-    background: #192330;
+    background: #000000;
     overflow: hidden;
-    padding: 30px 15px 30px 0 ;
+    padding: 30px 15px 30px 0;
     ul.ivu-menu.ivu-menu-light.ivu-menu-vertical {
       padding: 0 10px;
       text-align:left;
       float: left;
-      background: #192330;
+      background: #000000;
       min-height: 662px;
       position: static;
-      border-right: 1px solid #27313e;
+      border-right: 1px solid #141414;
       color: #fff;
-      .title {
+.title {
         text-align: center;
         font-size: 20px;
         line-height: 40px;
@@ -26,10 +26,10 @@
     }
     ul.ivu-menu.ivu-menu-light {
       &:after {
-        background-color: #192330;
+        background-color: #000000;
       }
     }
-    .nav-rights {
+.nav-rights {
       width: 100%;
       float: left;
       min-height: 600px;
@@ -39,47 +39,47 @@
 </style>
 <style lang="scss">
 .mymsg_wrapper {
-  .wrapper {
+.wrapper {
     ul.ivu-menu.ivu-menu-light.ivu-menu-vertical {
       li.ivu-menu-submenu {
-        .ivu-menu-submenu-title {
+.ivu-menu-submenu-title {
           height: 50px;
           padding: 15px 10px 15px 10px;
           &:hover {
-            background-color: #3c4553;
-            .isclick {
+            background-color: #313131;
+.isclick {
               background-color: #fff;
             }
-            .content,.ivu-icon {
+.content,.ivu-icon {
               color: #fff;
             }
           }
-          .isclick {
+.isclick {
             width: 6px;
             height: 6px;
-            background-color: #f0ac19;
+            background-color: #ff8534;
             display: inline-block;
             border-radius: 50%;
             margin-top: 16px;
             line-height: 50px;
             display:none;
           }
-          .content {
+.content {
             padding-left: 5px;
             padding-top: 5px;
             color:#fff;
           }
         }
-        .ivu-menu {
+.ivu-menu {
           li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-            color: #f0ac19;
+            color: #ff8534;
             a {
-              color: #f0ac19;
+              color: #ff8534;
             }
           }
           li.ivu-menu-item {
             color: #fff;
-            background: #27313e;
+            background: #141414;
             padding: 0;
             text-align: left;
             a {
@@ -93,13 +93,13 @@
         }
       }
       li.ivu-menu-submenu.ivu-menu-opened {
-        .ivu-menu-submenu-title {
-          background-color: #3c4553;
-          .isclick {
+.ivu-menu-submenu-title {
+          background-color: #313131;
+.isclick {
             background-color: #fff;
           }
-          .content,
-          .ivu-icon {
+.content,
+.ivu-icon {
             color: #fff;
           }
         }
@@ -113,53 +113,53 @@
 }
 
 @media screen and (max-width:768px){
-  .pc_menu{
+.pc_menu{
     display: none!important;
   }
-  .header_nav_mobile_triggle{
+.header_nav_mobile_triggle{
     display: block!important;
     text-align:left;
     padding-left: 20px;
   }
-  .mymsg_wrapper{
+.mymsg_wrapper{
     padding: 40px 0!important;
   }
-  .mymsg_wrapper .wrapper{
+.mymsg_wrapper.wrapper{
     padding: 0px 0px 30px 0px!important;
   }
-  .mymsg_wrapper .wrapper .nav-rights{
+.mymsg_wrapper.wrapper.nav-rights{
     width: 100%!important;
   }
 
-  .mymsg_wrapper .account-box .account-in .account-item .account-item-in{
+.mymsg_wrapper.account-box.account-in.account-item.account-item-in{
     padding: 15px 5px 15px 5px!important;
   }
-  .mymsg_wrapper .account-box .account-in .account-item .account-item-in .bankInfo{
+.mymsg_wrapper.account-box.account-in.account-item.account-item-in.bankInfo{
     width: 50%!important;
   }
-  .mymsg_wrapper .account-box .account-in .account-item .account-item-in .card-number{
+.mymsg_wrapper.account-box.account-in.account-item.account-item-in.card-number{
     width: 100px!important;
   }
-  .mymsg_wrapper .nav-right{
+.mymsg_wrapper.nav-right{
     padding-left: 0px!important;
   }
 }
 
-.uc_header_nav .ivu-menu-light.ivu-menu-vertical .ivu-menu-item-active:not(.ivu-menu-submenu){
+.uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu){
     text-align: left;
     padding-left: 20px!important;
 }
-.uc_header_nav .ivu-menu-light.ivu-menu-vertical .ivu-menu-item-active:not(.ivu-menu-submenu) a{
-  color: #f0a70a!important;
+.uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu) a{
+  color: #ff6b00!important;
 }
-.uc_header_nav .ivu-menu-light.ivu-menu-vertical .ivu-menu-item:not(.ivu-menu-submenu){
+.uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item:not(.ivu-menu-submenu){
     text-align: left;
     padding-left: 20px!important;
     color: #DDD;
 }
 
-.uc_header_nav .ivu-menu-light.ivu-menu-vertical .ivu-menu-item:not(.ivu-menu-submenu) a{
-    color: #828ea1;
+.uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item:not(.ivu-menu-submenu) a{
+    color: #8a8a8a;
 }
 </style>
 
@@ -169,7 +169,7 @@
       <Row :gutter="20" style="min-height: 600px;padding-top: 10px;">
         <Col :xs="24" :sm="24" :md="4" :lg="4">
           <div class="header_nav_mobile_triggle" @click="toggleMemu()">
-            <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/> 个人中心
+            <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/> Account
           </div>
           <Menu class="pc_menu" :active-name="activename" :open-names="opennames" @on-open-change="sss" ref="test" :accordion="true" style="width:100%;">
             <div class="title">{{$t('uc.member.usercenter')}}</div>
@@ -385,13 +385,13 @@ export default {
       this.$store.commit("navigate", "nav-other");
       this.$store.state.HeaderActiveName = "0";
       this.$store.state.HeaderActiveName = "1-6";
-      if (!localStorage.TOKEN || !localStorage.MEMBER) {
+      if (!localStorage.TOKEN ||!localStorage.MEMBER) {
         this.$Message.success(this.$t("common.logintip"));
         this.$router.push("/login");
       }
     },
     toggleMemu(){
-      this.ucNavDrawerModal = !this.ucNavDrawerModal;
+      this.ucNavDrawerModal =!this.ucNavDrawerModal;
     },
     sss(name) {
       let index = 1;

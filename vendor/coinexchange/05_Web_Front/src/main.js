@@ -12,6 +12,9 @@ import 'iview/dist/styles/iview.css';
 import util from './assets/js/util.js';
 import 'swiper/dist/css/swiper.css';
 import './assets/icons/iconfont.css';
+// Loaded last so the design layer wins on equal specificity against iView and
+// the vendor sheets above it.
+import './assets/css/intafaced.css';
 import App from './App.vue';
 import Api from './config/api';
 import $ from '@js/jquery.min.js';
@@ -23,8 +26,23 @@ Vue.use(VueRouter);
 Vue.use(vueResource);
 Vue.use(VueI18n);
 
-Vue.prototype.rootHost = "https://www.xxxx.com"; //BIZZAN
-Vue.prototype.host = "https://api.xxxx.com"; //BIZZAN
+// API base. Empty on purpose: every call site is `this.host + '/uc/...'`,
+// `this.host + '/market/...'` and so on, so an empty base makes them
+// same-origin relative paths that the dev-server proxy routes to the right
+// backend (see config/index.js proxyTable). Nothing about the backend topology
+// is baked into the bundle, and the session cookie stays first-party.
+//
+// For a build served behind its own reverse proxy, leave this empty and route
+// /uc, /market, /exchange and /otc there. Only set an absolute origin if the
+// API genuinely lives on a different host, and then the backend CORS filters
+// have to allow it.
+Vue.prototype.host = "";
+
+// Absolute public origin of the site itself, not the API. It is used only to
+// build shareable links and QR codes (announcements, help pages, activity
+// details), which have to resolve from a phone camera, so a relative path
+// would be wrong here.
+Vue.prototype.rootHost = process.env.SITE_ORIGIN || "http://127.0.0.1:8090";
 
 Vue.prototype.api = Api;
 Vue.http.options.credentials = true;
@@ -55,21 +73,25 @@ router.afterEach((to,from,next) => {
     iView.LoadingBar.finish();
 });
 
+// English is the only locale. The vendor shipped a Chinese default and a
+// switcher; both are removed rather than merely defaulted, so no stored
+// preference, query param or stray commit can put the product back into
+// Chinese in front of a customer.
 const i18n = new VueI18n({
-    locale: 'zh',
+    locale: 'en',
+    fallbackLocale: 'en',
     messages: {
-        'zh': require('./assets/lang/zh.js'),
         'en': require('./assets/lang/en.js')
     }
 });
 
 Vue.http.interceptors.push((request, next) => {
-    //登录成功后将后台返回的TOKEN在本地存下来,每次请求从sessionStorage中拿到存储的TOKEN值
+    // signed inTOKEN, timessessionStorageTOKEN
     request.headers.set('x-auth-token', localStorage.getItem('TOKEN'));
     next((response) => {
-        //登录极验证时需获取后台返回的TOKEN值
+        // signed in:TOKEN
         var xAuthToken = response.headers.get('x-auth-token');
-        if (xAuthToken != null && xAuthToken != '') {
+        if (xAuthToken!= null && xAuthToken!= '') {
             localStorage.setItem('TOKEN', xAuthToken);
         }
 

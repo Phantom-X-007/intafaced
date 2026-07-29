@@ -2,7 +2,7 @@
     <div class="content-wrap">
         <div class="container chat-in-box" id="List">
             <p style="padding: 10px 0 10px 20px;font-size: 16px;">
-              <router-link to="/uc/order" style="color:#f0a70a;">{{$t('otc.myorder')}}</router-link> ><span style="font-size:14px;">订单详情</span>
+              <router-link to="/uc/order" style="color:#ff6b00;">{{$t('otc.myorder')}}</router-link> ><span style="font-size:14px;">Order details</span>
               </p>
             <Row class="chat-in">
                 <Col span="4">
@@ -26,25 +26,25 @@
                         <div class="mt20" v-if="tradeType==0">
                             <h5>{{$t('otc.chat.operatetip')}}:</h5>
                             <div>
-                                <p>1、{{$t('otc.chat.operatetip_1')}}“
-                                    <em>{{$t('otc.chat.finishpayment')}}</em>”。{{$t('otc.chat.operatetip_1_1')}}。</p>
-                                <p>2、{{$t('otc.chat.operatetip_1_2')}}。</p>
+                                <p>1, {{$t('otc.chat.operatetip_1')}}“
+                                    <em>{{$t('otc.chat.finishpayment')}}</em>”. {{$t('otc.chat.operatetip_1_1')}}. </p>
+                                <p>2, {{$t('otc.chat.operatetip_1_2')}}. </p>
                             </div>
                             <span>
-                                <b>{{$t('otc.chat.note')}}：</b>
+                                <b>{{$t('otc.chat.note')}}: </b>
                             </span><br>
                             <span>{{$t('otc.chat.notetip')}}</span><br>
                         </div>
                         <div class="mt20" v-else>
                             <h5>{{$t('otc.chat.operatetip')}}:</h5>
                             <div>
-                                <p>1、{{$t('otc.chat.operatetip_2_1')}}“
-                                    <em>{{$t('otc.chat.confirmrelease')}}</em>”{{$t('otc.chat.paydigital')}}！</p>
-                                <p>2、{{$t('otc.chat.operatetip_2_2')}}</p>
-                                <p>3、{{$t('otc.chat.operatetip_2_3')}}</p>
+                                <p>1, {{$t('otc.chat.operatetip_2_1')}}“
+                                    <em>{{$t('otc.chat.confirmrelease')}}</em>”{{$t('otc.chat.paydigital')}}!</p>
+                                <p>2, {{$t('otc.chat.operatetip_2_2')}}</p>
+                                <p>3, {{$t('otc.chat.operatetip_2_3')}}</p>
                             </div>
                             <span>
-                                <b>{{$t('otc.chat.note')}}：</b>
+                                <b>{{$t('otc.chat.note')}}: </b>
                             </span><br>
                             <span>{{$t('otc.chat.notetip')}}</span><br>
                         </div>
@@ -108,7 +108,7 @@
                     <Row class="chat-top" type="flex" justify="space-between" v-show="statusBtn!=0">
                         <Col span="8" class="order-info" v-if="bankInfo&&bankInfo!=null">
                         <i class="icons bankfor"></i>
-                        <span>{{payInfo != null ? payInfo.realName : ""}} </span>
+                        <span>{{payInfo!= null? payInfo.realName: ""}} </span>
                         <p>{{bankInfo.branch}}</p>
                         <p>{{bankInfo.cardNo}}</p>
                         </Col>
@@ -231,7 +231,6 @@ export default {
   },
   computed: {},
   methods: {
-    //让浏览器滚动条保持在最低部
     scrollToBottom: function() {
       // window.scrollTo(0, 900000);
     },
@@ -249,7 +248,7 @@ export default {
             "/order-notice/" +
             self.$route.query.tradeId,
           function(response) {
-            if (self.reserveInteval != null) clearInterval(self.reserveInteval);
+            if (self.reserveInteval!= null) clearInterval(self.reserveInteval);
             var confirmPayMsg = JSON.parse(response.body);
             self.$Message.success(confirmPayMsg.content);
             self.statusBtn = confirmPayMsg.status;
@@ -266,16 +265,16 @@ export default {
               self.statusText = self.$t("otc.chat.result_5");
             }
           }
-        );
+);
       });
     },
     sendOrderStatusNotice: function(type) {
-      if (this.reserveInteval != null) clearInterval(this.reserveInteval);
+      if (this.reserveInteval!= null) clearInterval(this.reserveInteval);
       var content = "";
-      if (type == 1) content = "对方已付款，请查收并确认放行!";
-      else if (type == 3) content = "对方已取消订单!";
-      else if (type == 4) content = "对方已申诉!";
-      else if (type == 5) content = "对方已放行,请查收!";
+      if (type == 1) content = "The buyer has paid — verify receipt, then release!";
+      else if (type == 3) content = "The counterparty cancelled the order!";
+      else if (type == 4) content = "The counterparty raised a dispute!";
+      else if (type == 5) content = "Released — please check your balance!";
       var jsonParam = {
         uidTo: this.msg.hisId,
         uidFrom: this.msg.myId,
@@ -308,14 +307,14 @@ export default {
         parseInt(reserveSeconds / 60) +
         ":" +
         (parseInt(reserveSeconds % 60) >= 10
-          ? parseInt(reserveSeconds % 60)
-          : "0" + parseInt(reserveSeconds % 60));
+? parseInt(reserveSeconds % 60)
+: "0" + parseInt(reserveSeconds % 60));
       if (reserveSeconds <= 0) {
         this.resetStatus();
       }
     },
     resetStatus: function() {
-      //计时时间已到，重置状态
+      // ,
       clearInterval(this.reserveInteval);
       this.statusBtn = 5;
       this.ok3();
@@ -324,8 +323,8 @@ export default {
       var nowTime = new Date().getTime();
       var payTime = new Date(this.msg.payTime).getTime();
       if (parseInt((nowTime - payTime) / 1000) < 1800) {
-        //付款时间小于30分钟不允许申诉
-        this.$Message.info("付款完成30分钟后才允许申诉!");
+        // 30 min
+        this.$Message.info("A dispute can be raised 30 minutes after payment!");
         return;
       } else {
         this.modal4 = true;
@@ -333,10 +332,10 @@ export default {
     },
     ok1() {
       this.$http
-        .post(this.host + "/otc/order/pay", {
+.post(this.host + "/otc/order/pay", {
           orderSn: this.$route.query.tradeId
         })
-        .then(response => {
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.$Message.success(resp.message);
@@ -359,10 +358,10 @@ export default {
     },
     ok3() {
       this.$http
-        .post(this.host + "/otc/order/cancel", {
+.post(this.host + "/otc/order/cancel", {
           orderSn: this.$route.query.tradeId
         })
-        .then(response => {
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.$Message.success(resp.message);
@@ -374,16 +373,14 @@ export default {
         });
     },
     ok4() {
-      //订单申诉
-      //时间
       if (1 == 1) {
         var params = {};
         params["orderSn"] = this.$route.query.tradeId;
         params["remark"] = this.formItem.remark;
 
         this.$http
-          .post(this.host + "/otc/order/appeal", params)
-          .then(response => {
+.post(this.host + "/otc/order/appeal", params)
+.then(response => {
             var resp = response.body;
             if (resp.code == 0) {
               this.$Message.success(resp.message);
@@ -404,8 +401,8 @@ export default {
         return;
       }
       this.$http
-        .post(this.host + "/otc/order/release", params)
-        .then(response => {
+.post(this.host + "/otc/order/release", params)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.$Message.success(resp.message);
@@ -417,12 +414,11 @@ export default {
         });
     },
     getDetail() {
-      //获取个人广告
       this.$http
-        .post(this.host + "/otc/order/detail", {
+.post(this.host + "/otc/order/detail", {
           orderSn: this.$route.query.tradeId
         })
-        .then(response => {
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.msg = resp.data;
@@ -462,12 +458,12 @@ export default {
     strpro(str){
       let newStr = str;
       str = str.slice(1);
-      var re = /[\D\d]*/g;  
+      var re = /[\D\d]*/g; 
       var str2 = str.replace(re,function(str){
             var result = '';
             for(var i=0;i<str.length;i++){
                 result += '*';
-            }              
+            } 
             return result; 
         });
       return newStr.slice(0,1)+str2;
@@ -477,10 +473,10 @@ export default {
 </script>
 
 <style>
-.chat-in .ivu-col.ivu-col-span-4 .ivu-poptip-popper{
+.chat-in.ivu-col.ivu-col-span-4.ivu-poptip-popper{
   margin-top: 35px;
 }
-.chat-in .ivu-col.ivu-col-span-4 .ivu-poptip-title{
+.chat-in.ivu-col.ivu-col-span-4.ivu-poptip-title{
   display: none;
 }
 </style>
@@ -499,7 +495,7 @@ export default {
   width: 100%;
   height: 100%;
 }
-.chat-in-box .chat-in .chat-right .chat-right-in h6.h6-flex{
+.chat-in-box.chat-in.chat-right.chat-right-in h6.h6-flex{
   display: flex;
   overflow: auto;
   min-width:auto;
@@ -519,7 +515,7 @@ export default {
 }
 
 .rightbox {
-  background: #192330;
+  background: #000000;
   margin-left: 20px;
   padding-bottom: 20px;
   margin-bottom: 40px;
@@ -540,7 +536,7 @@ export default {
   font-size: 14px;
 }
 .order-info p a{
-  color: #f0a70a;
+  color: #ff6b00;
 }
 .icons.alipay {
   background-image: url(../../assets/img/alipay.png);
@@ -588,18 +584,18 @@ export default {
 
 .leftmenu {
   margin-bottom: 60px;
-  background-color: #192330;
+  background-color: #000000;
   position: relative;
   min-height: 1px;
   padding: 50px 15px 50px 15px;
   text-align: left;
 }
 
-.chat-in-box .chat-in .chat-right .chat-right-in {
+.chat-in-box.chat-in.chat-right.chat-right-in {
   /* background-color: white; */
 }
 
-.chat-in-box .chat-in .chat-right .chat-right-in h6 {
+.chat-in-box.chat-in.chat-right.chat-right-in h6 {
   font-size: 14px;
   font-weight: 500;
   color: #fff;
@@ -610,24 +606,24 @@ export default {
   margin-bottom: 8px;
 }
 
-.chat-in-box .chat-in .chat-right .chat-right-in .seller {
+.chat-in-box.chat-in.chat-right.chat-right-in.seller {
   margin-left: 6px;
 }
 
-.chat-in-box .chat-in .chat-right .chat-right-in h6 span {
+.chat-in-box.chat-in.chat-right.chat-right-in h6 span {
   margin-left: 6px;
 }
-.chat-in-box .chat-in .chat-right .chat-right-in h6 a{
-  color: #f0a70a;
+.chat-in-box.chat-in.chat-right.chat-right-in h6 a{
+  color: #ff6b00;
 }
-.chat-in-box .chat-in .chat-right .chat-right-in p {
+.chat-in-box.chat-in.chat-right.chat-right-in p {
   color: #ccc;
   font-size: 12px;
   margin-bottom: 8px;
   line-height: 1.5;
 }
 
-.chat-in-box .chat-in .chat-right .chat-right-in p em {
+.chat-in-box.chat-in.chat-right.chat-right-in p em {
   color: #f40a0a;
   font-style: normal;
 }

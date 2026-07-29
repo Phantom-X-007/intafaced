@@ -3,10 +3,10 @@
     <div class="containers" id="List">
       <div class="fiat">
         <div class="to_business">
-          <h3>法币交易</h3>
-          <span>便捷、安全、快速买卖数字货币</span>
-          <a href="javascript:void(0)" @click="goBusiness">成为商家</a>
-          <!-- <router-link to="/identbusiness">成为商家</router-link> -->
+          <h3>Fiat Trading</h3>
+          <span>Buy and sell digital assets quickly and safely</span>
+          <a href="javascript:void(0)" @click="goBusiness">Become a merchant</a>
+          <!-- <router-link to="/identbusiness">Become a merchant</router-link> -->
         </div>
       </div>
       <div class="content">
@@ -24,22 +24,22 @@
         <ul>
           <li>
             <div class="image"><img src="../../assets/images/price.png" alt=""></div>
-            <div class="title">市场一口价</div>
-            <div class="content1">根据市场价格实时波动</div>
+            <div class="title">One market price</div>
+            <div class="content1">Tracks the market in real time</div>
           </li>
           <li>
             <div class="image"><img src="../../assets/images/poundage.png" alt=""></div>
-            <div class="title">完全免手续费</div>
-            <div class="content1">用户所见即所得，买卖价格外，无需任何平台手续费</div>
+            <div class="title">No platform fee</div>
+            <div class="content1">What you see is what you pay — no fee beyond the quoted price</div>
             <li>
               <div class="image"><img src="../../assets/images/instant.png" alt=""></div>
-              <div class="title">即时成交</div>
-              <div class="content1">引入平台服务商家，智能匹配，成交订单，无须等待撮合</div>
+              <div class="title">Instant settlement</div>
+              <div class="content1">Verified merchants are matched automatically — no waiting in a queue</div>
             </li>
             <li>
               <div class="image"><img src="../../assets/images/platedanbao.png" alt=""></div>
-              <div class="title">平台担保</div>
-              <div class="content1">平台认证商家，安全有保障，24小时客服为交易保驾护航</div>
+              <div class="title">Platform escrow</div>
+              <div class="content1">Verified merchants, escrowed funds and 24/7 support on every trade</div>
             </li>
         </ul>
       </div>
@@ -52,18 +52,18 @@
   padding: 0 12%;
   // background-color: #fff;
   padding-top: 60px;
-  .containers {
+.containers {
     width: 100%;
     margin: 20px 0;
-    .fiat {
+.fiat {
       border-radius: 5px;
       height: 250px;
       background: url("../../assets/images/otc_bg.jpg") no-repeat center center;
       background-size: 100%;
-      display: flex; //flex布局
-      justify-content: center; //使子项目水平居中
-      align-items: center; //使子项目垂直居中
-      .to_business {
+      display: flex; //flexlayout
+      justify-content: center; //centre children horizontally
+      align-items: center; //centre children vertically
+.to_business {
         color: #fff;
         text-align: center;
         h3 {
@@ -88,14 +88,14 @@
         }
       }
     }
-    .content {
+.content {
       width: 100%;
       margin: 20px auto;
-      background-color: #192330;
+      background-color: #000000;
       border-radius: 4px;
     }
-    .advantage {
-      background-color: #192330;
+.advantage {
+      background-color: #000000;
       border-radius: 4px;
       ul {
         display: flex;
@@ -138,31 +138,31 @@
 </style>
 <style lang="scss">
 .content-wraps {
-  .containers {
-    .content {
+.containers {
+.content {
       ul.tradelist.ivu-menu.ivu-menu-light.ivu-menu-horizontal {
-        background-color: #192330;
+        background-color: #000000;
         border-radius: 4px;
         &:after {
           background: none;
         }
-        .ivu-menu-item-group {
+.ivu-menu-item-group {
           li.ivu-menu-item {
             border: none;
             &:hover {
-              color: #f0ac19;
+              color: #ff8534;
               border-bottom: 0;
             }
           }
           li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-            color: #f0ac19;
+            color: #ff8534;
             border-bottom: none;
           }
         }
       }
-      .nav-right.tradeCenter .list-content .ivu-tabs .ivu-tabs-tabpane {
-        .ivu-table-wrapper {
-          .ivu-spin.ivu-spin-large.ivu-spin-fix {
+.nav-right.tradeCenter.list-content.ivu-tabs.ivu-tabs-tabpane {
+.ivu-table-wrapper {
+.ivu-spin.ivu-spin-large.ivu-spin-fix {
             border-color: #fff;
           }
         }
@@ -208,7 +208,7 @@ export default {
           path: "/identbusiness"
         });
       } else {
-        this.$Message.warning("请先登录");
+        this.$Message.warning("Please sign in first");
       }
     },
     menuSelected(menuName) {
@@ -238,7 +238,7 @@ export default {
     this.init();
     // this.activeMenuName = "coin-1";
     // this.$nextTick(function() {
-    //   this.$refs.navMenu.updateActiveName();
+    // this.$refs.navMenu.updateActiveName();
     // });
   }
 };

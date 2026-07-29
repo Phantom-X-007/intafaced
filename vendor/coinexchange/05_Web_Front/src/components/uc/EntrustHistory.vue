@@ -13,7 +13,7 @@
 .table {
   border-radius: 4px;
 }
-.table .ivu-table-wrapper {
+.table.ivu-table-wrapper {
   position: relative;
   /* border: 1px solid #dddee1; */
   border-bottom: 0;
@@ -22,17 +22,17 @@
   border-radius: 4px;
   // overflow: hidden;
 }
-.form.ivu-form-inline .ivu-form-item {
+.form.ivu-form-inline.ivu-form-item {
   display: inline-block;
 }
 </style>
 <style lang="scss">
-.entrusthistory .ivu-table th,
-.entrusthistory .ivu-table td {
+.entrusthistory.ivu-table th,
+.entrusthistory.ivu-table td {
   text-align: center;
 }
-.table .ivu-table-cell-expand {
-  color: #f0a70a;
+.table.ivu-table-cell-expand {
+  color: #ff6b00;
 }
 </style>
 
@@ -116,7 +116,7 @@ export default {
           }
         },
         {
-          title:  self.$t("uc.finance.trade.symbol"),
+          title: self.$t("uc.finance.trade.symbol"),
           width: 130,
           key: "symbol"
         },
@@ -126,8 +126,8 @@ export default {
           render(h, params) {
             return h(
               "span",
-              params.row.type === "LIMIT_PRICE" ? self.$t("exchange.limited_price") : self.$t("exchange.market_price")
-            );
+              params.row.type === "LIMIT_PRICE"? self.$t("exchange.limited_price"): self.$t("exchange.market_price")
+);
           }
         },
         {
@@ -145,9 +145,9 @@ export default {
                 }
               },
               row.direction == "BUY"
-                ? self.$t("exchange.buyin")
-                : self.$t("exchange.sellout")
-            );
+? self.$t("exchange.buyin")
+: self.$t("exchange.sellout")
+);
           }
         },
         {
@@ -162,7 +162,7 @@ export default {
                 }
               },
               self.toFloor(params.row.price)
-            );
+);
           }
         },
         {
@@ -177,7 +177,7 @@ export default {
                 }
               },
               self.toFloor(params.row.amount)
-            );
+);
           }
         },
         {
@@ -192,7 +192,7 @@ export default {
                 }
               },
               self.toFloor(params.row.tradedAmount)
-            );
+);
           }
         },
         {
@@ -207,7 +207,7 @@ export default {
                 }
               },
               self.toFloor(params.row.turnover)
-            );
+);
           }
         },
         {
@@ -221,21 +221,21 @@ export default {
                 "span",
                 {
                   style: {
-                    color: "#f0a70a"
+                    color: "#ff6b00"
                   }
                 },
                 self.$t("exchange.finished")
-              );
+);
             } else if (status == "CANCELED") {
               return h(
                 "span",
                 {
                   style: {
-                    color: "#f0a70a"
+                    color: "#ff6b00"
                   }
                 },
                 self.$t("exchange.canceled")
-              );
+);
             } else {
               return h("span", {}, "--");
             }
@@ -280,7 +280,7 @@ export default {
       };
     },
     getHistoryOrder() {
-      //查询历史委托
+      // Order History
       this.loading = true;
       const { symbol, type, direction, date: rangeDate } = this.formItem,
         startTime = new Date(rangeDate[0]).getTime() || "",
@@ -296,8 +296,8 @@ export default {
       var that = this;
       this.orders = [];
       this.$http
-        .post(this.host + "/exchange/order/personal/history", params)
-        .then(response => {
+.post(this.host + "/exchange/order/personal/history", params)
+.then(response => {
           var resp = response.body;
           let rows = [];
           if (resp.content.length > 0) {
@@ -306,8 +306,8 @@ export default {
               var row = resp.content[i];
               row.price =
                 row.type == "MARKET_PRICE"
-                  ? that.$t("exchange.marketprice")
-                  : row.price;
+? that.$t("exchange.marketprice")
+: row.price;
               rows.push(row);
             }
             this.orders = rows;

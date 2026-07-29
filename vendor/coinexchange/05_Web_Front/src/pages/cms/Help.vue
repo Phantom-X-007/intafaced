@@ -16,8 +16,8 @@
             </router-link>
           </div>
           <div class="route-wrap">
-            <router-link v-if="langPram == 'CN'"  :to="{path:'helplist',query:{cate:section.cate, cateTitle:section.titleCN}}">{{$t("common.more")}}>></router-link>
-            <router-link v-if="langPram == 'EN'"  :to="{path:'helplist',query:{cate:section.cate, cateTitle:section.titleEN}}">{{$t("common.more")}}>></router-link>
+            <router-link v-if="langPram == 'CN'" :to="{path:'helplist',query:{cate:section.cate, cateTitle:section.titleCN}}">{{$t("common.more")}}>></router-link>
+            <router-link v-if="langPram == 'EN'" :to="{path:'helplist',query:{cate:section.cate, cateTitle:section.titleEN}}">{{$t("common.more")}}>></router-link>
           </div>
         </div>
       </div>
@@ -35,7 +35,7 @@
   padding-top: 60px;
   color: #fff;
 }
-.help .bannerimg {
+.help.bannerimg {
   display: block;
   width: 100%;
 }
@@ -51,13 +51,13 @@
     padding: 50px 0;
   }
 }
-.help .main {
+.help.main {
   margin-top: 80px;
   display: flex;
   justify-content: space-between;
   flex-direction: row;
   flex-wrap: wrap;
-  .section {
+.section {
     width: 40%;
     font-size: 16px;
     text-align: left;
@@ -71,14 +71,14 @@
       padding: 30px 0;
       color:#000;
     }
-    .item {
+.item {
       display: block;
       position: relative;
       padding: 16px 0;
       line-height: 1;
       color: #464646;
       border-bottom: 1px solid #ebebeb;
-      .text {
+.text {
         display: inline-block;
         max-width: calc(100% - 25px);
         white-space: nowrap;
@@ -87,19 +87,19 @@
         overflow: hidden;
       }
     }
-    .iconimg {
+.iconimg {
       display: inline-block;
       width: 14px;
       margin-left: 6px;
     }
   }
-  .route-wrap {
+.route-wrap {
     position: absolute;
     bottom: 0;
     right: 0;
     font-size: 14px;
     a {
-      color: #f0a70a;
+      color: #ff6b00;
     }
   }
 }
@@ -120,14 +120,9 @@ export default {
     lang() {
       return this.$store.state.lang;
     },
-    langPram(){
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+    langPram() {
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     }
   },
   methods: {

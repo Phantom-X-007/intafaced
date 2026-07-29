@@ -118,12 +118,18 @@ if (compose !== null) {
 }
 
 
-// ── 5 · the edge calls each service on the port it actually listens on ──────
+// ── 5 · EVERY service calls each other on the port it actually listens on ───
 // Nothing catches this until a request fails at runtime with ECONNREFUSED, and
 // the fleet looks entirely healthy meanwhile: every container is up, every
 // health check passes, and only the proxied call fails. Five of ten upstream
 // URLs were wrong at once because the route table was written from memory
 // rather than read from the compose.
+//
+// This originally inspected only svc-edge's own environment block, on the
+// assumption that the edge is where cross-service URLs live. It is not:
+// svc-dex called svc-indexer on 4012 when it listens on 4013, that URL sat in
+// svc-dex's block, and the gate stayed green through the whole thing. Any
+// service may name any other, so every block is checked.
 if (compose !== null) {
   const listens = new Map();
   for (const [, name, body] of compose.matchAll(/^  (svc-[a-z0-9-]+):([\s\S]*?)(?=^  \S|\Z)/gm)) {
@@ -131,13 +137,49 @@ if (compose !== null) {
     if (port) listens.set(name, port[1]);
   }
 
+  for (const [, caller, body] of compose.matchAll(/^  ([a-z0-9-]+):([\s\S]*?)(?=^  \S|\Z)/gm)) {
+    for (const [, varName, svc, port] of body.matchAll(/(\w+_URL): http:\/\/(svc-[a-z0-9-]+):(\d+)/g)) {
+      const real = listens.get(svc);
+      if (real && real !== port) {
+        failures.push({
+          file: 'docker-compose.apps.yml',
+          reason: `${caller} calls ${svc} on ${port} via ${varName}, but ${svc} listens on ${real} — every request through that route fails while both containers report healthy`,
+        });
+      }
+    }
+  }
+}
+
+// ── 6 · a mounted service the edge cannot reach ─────────────────────────────
+// svc-indexer mounted its router correctly and answered on its own port, but
+// the edge had no route to it, so every call 404'd at the door. From outside,
+// that is indistinguishable from the service being broken — and from inside,
+// the service looks perfect. A service reachable only from within the compose
+// network is not reachable.
+if (compose !== null) {
   const edgeBlock = /^  svc-edge:([\s\S]*?)(?=^  \S|\Z)/m.exec(compose);
-  for (const [, varName, svc, port] of (edgeBlock?.[1] ?? '').matchAll(/(\w+_URL): http:\/\/(svc-[a-z0-9-]+):(\d+)/g)) {
-    const real = listens.get(svc);
-    if (real && real !== port) {
+  const edgeEnv = edgeBlock?.[1] ?? '';
+  const routes = read('services/svc-edge/src/routes.ts') ?? '';
+
+  for (const svc of services) {
+    const index = read(`services/${svc}/src/index.ts`);
+    // Only services that actually serve a router need a route to them.
+    if (!index?.includes('register(fastifyTRPCPlugin')) continue;
+    if (svc === 'svc-edge') continue;
+
+    const envVar = /envVar: '(\w+)'/.exec(
+      new RegExp(`\\{[^}]*${svc.replace('svc-', '')}[^}]*\\}`, 'i').exec(routes)?.[0] ?? '',
+    )?.[1];
+
+    if (!envVar) {
+      failures.push({
+        file: 'services/svc-edge/src/routes.ts',
+        reason: `${svc} mounts a tRPC router but has no entry in UPSTREAMS — callers get a 404 from the edge while the service itself is healthy and answering`,
+      });
+    } else if (!edgeEnv.includes(`${envVar}:`)) {
       failures.push({
         file: 'docker-compose.apps.yml',
-        reason: `svc-edge calls ${svc} on ${port} via ${varName}, but ${svc} listens on ${real} — every request through that route 502s while both containers report healthy`,
+        reason: `svc-edge's route table names ${envVar} for ${svc}, but its compose block does not set it — the edge falls back to a localhost dev URL that resolves to the edge container itself`,
       });
     }
   }

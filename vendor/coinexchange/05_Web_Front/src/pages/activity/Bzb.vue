@@ -2,9 +2,9 @@
 .content_container {
   // background-color: #eee;
   padding: 60px 0 20px 0;
-  .wrapper {
+.wrapper {
     margin: 30px 12%;
-    background-color: #192330;
+    background-color: #000000;
     padding: 20px 40px;
     h2 {
       font-weight: 400;
@@ -12,7 +12,7 @@
       font-size: 20px;
       line-height: 50px;
     }
-    .wrapper_logo ul {
+.wrapper_logo ul {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -34,14 +34,14 @@
           font-weight:400;
         }
         span {
-          color: #828ea1;
+          color: #8a8a8a;
           font-size: 12px;
         }
       }
     }
-    .content_wrapper {
+.content_wrapper {
       padding: 20px 0;
-      .content1 {
+.content1 {
         padding-bottom: 20px;
         margin-bottom: 20px;
         h5 {
@@ -53,7 +53,7 @@
         p {
           font-size: 14px;
           line-height: 30px;
-          color: #828ea1;
+          color: #8a8a8a;
           margin-bottom: 15px;
           text-indent: 30px;
           // margin-bottom: 14px;
@@ -70,53 +70,60 @@
     <div class="wrapper">
       <div class="content_wrapper">
         <div class="content1">
-          <h5>BZB介绍</h5>
-          <p>BZB是币严(BIZZAN)交易平台权益凭证，总发行量5亿枚，永不增发。BZB的持有者除了可享受代币升值、收益分红、上币分红等权益外，还可以通过参与币严(BIZZAN)超级节点(合伙人)投票获得节点收益，超级节点具有决策参与权、第一知情权、优先上币权以及未来上市股票分配等传统企业股东权益。
-</p>
-          <p>BZB除了是交易平台权益凭证，也将成为BIZZAN生态项目的唯一权益凭证，如矿池、DEX、游戏、钱包、资讯等生态项目，BIZZAN是开放生态型交易所，我们欢迎任何项目方加入BZB生态，并在初期给予一定数量的BZB作为生态项目成员的发展基金。
+          <h5>Overview</h5>
+          <p>The INTAFACED token is the platform's rights certificate, capped at a fixed supply
+            that is never inflated. Holders share in trading-fee revenue and listing
+            distributions, and may stake toward a super node. Node operators carry governance
+            weight, early visibility on listings, listing priority, and a claim on future
+            distributions.
+          </p>
+          <p>The token is the single rights certificate across the whole INTAFACED ecosystem —
+            the protocol plane, the DEX, banking, the launchpad and the agent network. INTAFACED
+            is an open ecosystem: any credible project may build against it, and early
+            participants receive a development allocation.
           </p>
         </div>
       </div>
-      <h2 class="title">BZB权益</h2>
+      <h2 class="title">Token Rights</h2>
       <div class="wrapper_logo">
         <ul>
           <li>
-            <img src="../../assets/images/bzb/bzb_fenhong.png" alt="">
+            <img src="../../assets/images/token/dividends.svg" alt="">
             <h5>{{$t('bzb_description.title1')}}</h5>
             <span>{{$t('bzb_description.desc1')}}</span>
           </li>
           <li>
-            <img src="../../assets/images/bzb/bzb_zhekou.png" alt="">
+            <img src="../../assets/images/token/discount.svg" alt="">
             <h5>{{$t('bzb_description.title2')}}</h5>
             <span>{{$t('bzb_description.desc2')}}</span>
           </li>
           <li>
-            <img src="../../assets/images/bzb/bzb_rengou.png" alt="">
+            <img src="../../assets/images/token/subscription.svg" alt="">
             <h5>{{$t('bzb_description.title3')}}</h5>
             <span>{{$t('bzb_description.desc3')}}</span>
           </li>
           <li>
-            <img src="../../assets/images/bzb/bzb_toupiao.png" alt="">
+            <img src="../../assets/images/token/voting.svg" alt="">
             <h5>{{$t('bzb_description.title4')}}</h5>
             <span>{{$t('bzb_description.desc4')}}</span>
           </li>
           <li>
-            <img src="../../assets/images/bzb/bzb_zhiqing.png" alt="">
+            <img src="../../assets/images/token/disclosure.svg" alt="">
             <h5>{{$t('bzb_description.title5')}}</h5>
             <span>{{$t('bzb_description.desc5')}}</span>
           </li>
           <li>
-            <img src="../../assets/images/bzb/bzb_shangbi.png" alt="">
+            <img src="../../assets/images/token/listing.svg" alt="">
             <h5>{{$t('bzb_description.title6')}}</h5>
             <span>{{$t('bzb_description.desc6')}}</span>
           </li>
           <li>
-            <img src="../../assets/images/bzb/bzb_juece.png" alt="">
+            <img src="../../assets/images/token/governance.svg" alt="">
             <h5>{{$t('bzb_description.title7')}}</h5>
             <span>{{$t('bzb_description.desc7')}}</span>
           </li>
           <li>
-            <img src="../../assets/images/bzb/bzb_gengduo.png" alt="">
+            <img src="../../assets/images/token/more.svg" alt="">
             <h5>{{$t('bzb_description.title8')}}</h5>
             <span>{{$t('bzb_description.desc8')}}</span>
           </li>
@@ -124,9 +131,8 @@
       </div>
       <div class="content_wrapper">
         <div class="content1">
-          <h5>白皮书</h5>
-          <p>币严(BIZZAN)数字资产交易平台白皮书-中文版.pdf</p>
-          <p>BIZZAN Exchange Platform White Paper-English.pdf</p>
+          <h5>Whitepaper</h5>
+          <p>INTAFACED-Whitepaper.pdf</p>
         </div>
       </div>
     </div>
@@ -169,7 +175,7 @@ export default {
   border: 1px solid #efefef;
 }
 
-.leftmenu .divider {
+.leftmenu.divider {
   font-size: 20px;
   padding: 5px;
   background: #efefef;
@@ -186,11 +192,11 @@ export default {
 }
 
 .leftmenu li a:hover {
-  color: #f0a70a;
+  color: #ff6b00;
 }
 
 .leftmenu li.cur a {
-  color: #f0a70a;
+  color: #ff6b00;
 }
 .content {
   padding-top: 20px;
@@ -200,7 +206,7 @@ export default {
   padding-left: 20px;
 }
 
-.content .ivu-col {
+.content.ivu-col {
   text-align: left;
 }
 

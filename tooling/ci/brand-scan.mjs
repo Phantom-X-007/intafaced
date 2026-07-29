@@ -111,6 +111,16 @@ const ALLOWLIST = [
     path: join('docs', 'audit'),
     reason: 'internal audit work product; may cite vendor paths when describing CI/brand failures',
   },
+  {
+    path: join('docs', 'HANDOVER-2026-07-29.md'),
+    reason:
+      'internal handover; quotes real on-disk paths and package roots verbatim, which a developer needs in order to act on it. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
+    path: join('docs', 'SPLIT-BOARD.md'),
+    reason:
+      'internal work split; quotes real worktree paths and the Java package root verbatim. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
   { path: 'CLAUDE.md', reason: 'internal agent instructions' },
   { path: '.claude', reason: 'internal tooling config' },
 ];

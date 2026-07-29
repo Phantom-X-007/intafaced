@@ -14,7 +14,7 @@
             <div class="layout-logo"></div>
           </router-link>
           <div class="layout-ceiling-main">
-            <!-- 导航条 -->
+            <!-- header -->
             <div class="header_nav">
               <Menu :active-name="activeNav" width="auto" :open-names="['1']">
                 <Submenu name="1">
@@ -45,6 +45,26 @@
                 </Submenu>
               </Menu>
             </div>
+            <!-- INTAFACED platform.
+                 One header slot for eleven modules, because eleven more items
+                 in the bar would wrap it. The dropdown reaches each module
+                 directly; the title itself opens the hub, which holds the
+                 platform session and reports what each module can actually do
+                 today. Same Dropdown pattern as the account menu below, so the
+                 layout is not carrying a second navigation idiom. -->
+            <div class="header_nav ix-nav">
+              <Dropdown @on-click="goModule">
+                <router-link to="/platform" class="ix-nav-title">
+                  {{$t("header.platform")}}
+                  <Icon type="md-arrow-dropdown" size="16" />
+                </router-link>
+                <DropdownMenu slot="list">
+                  <DropdownItem v-for="m in ixModules" :key="m.key" :name="m.route">
+                    {{$t("intafaced.modules." + m.key + ".title")}}
+                  </DropdownItem>
+                </DropdownMenu>
+              </Dropdown>
+            </div>
             <div class="header_nav_mobile_triggle" @click="toggleMemu()">
               <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/>
             </div>
@@ -53,10 +73,10 @@
                   <Submenu name="lang">
                       <template slot="title" class="lang-title">
                         <span style="display: none;">{{languageValue}}</span>
-                        <img class="lang-img" v-if="lang=='简体中文'" src="./assets/images/lang-zh.png"></img>
+                        <img class="lang-img" v-if="false" src="./assets/images/lang-zh.png"></img>
                         <img class="lang-img" v-if="lang=='English'" src="./assets/images/lang-en.png"></img>
                       </template>
-                      <MenuItem name="zh" class="lang-item"><img src="./assets/images/lang-zh.png"></img>简体中文</MenuItem>
+                      <MenuItem name="zh" class="lang-item"><img src="./assets/images/lang-zh.png"></img>Chinese</MenuItem>
                       <MenuItem name="en" class="lang-item"><img src="./assets/images/lang-en.png"></img>ENGLISH</MenuItem>
                   </Submenu>
               </Menu>
@@ -77,8 +97,8 @@
               </poptip>
             </div>
             <div class="rr login-container">
-              <!-- 判断是否登录 -->
-              <!-- 登录 -->
+              <!-- check whether signed in -->
+              <!-- signed in -->
               <div class="login_register isLogin" v-if="isLogin">
                 <div class="mymsg">
                   <router-link to="/uc/safe">{{$t("header.usercenter")}}</router-link>
@@ -113,7 +133,7 @@
                   </DropdownMenu>
                 </Dropdown>
               </div>
-              <!-- 未登录 -->
+              <!-- signed out -->
               <div class="login_register" v-else>
                 <Menu active-name11="1-1" width="auto" :open-names="['2']">
                   <Submenu name="2" id="login_register_theme">
@@ -151,6 +171,20 @@
             <router-link to="/whitepaper">
               <MenuItem name="nav-whitepaper" style="text-align:left;">{{$t("header.whitepaper")}}</MenuItem>
             </router-link>
+            <!-- The same eleven modules on mobile, where a hover dropdown is
+                 not usable. Expanded inline rather than hidden behind the hub,
+                 so every module is one tap from the drawer. -->
+            <Submenu name="nav-platform-mobile">
+              <template slot="title" class="lang-title">
+                <span style="color:#bdc2ca;">{{$t("header.platform")}}</span>
+              </template>
+              <router-link to="/platform">
+                <MenuItem name="nav-platform" class="lang-item" style="padding-left:20px!important;">{{$t("intafaced.hub.title")}}</MenuItem>
+              </router-link>
+              <router-link v-for="m in ixModules" :key="m.key" :to="m.route">
+                <MenuItem :name="'nav-ix-' + m.key" class="lang-item" style="padding-left:20px!important;">{{$t("intafaced.modules." + m.key + ".title")}}</MenuItem>
+              </router-link>
+            </Submenu>
             <Submenu name="nav-login" id="login_register_theme" v-if="!isLogin">
               <template slot="title" class="lang-title">
                   <span style="color:#bdc2ca;">{{$t("common.loginregister")}}</span>
@@ -181,7 +215,7 @@
                 <template slot="title" class="lang-title">
                   <span style="color:#bdc2ca;">{{languageValue}}</span>
                 </template>
-                <MenuItem name="zh" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-zh.png"></img>简体中文</MenuItem>
+                <MenuItem name="zh" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-zh.png"></img>Chinese</MenuItem>
                 <MenuItem name="en" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-en.png"></img>ENGLISH</MenuItem>
             </Submenu>
             <router-link to="/app">
@@ -192,10 +226,10 @@
     <div class="footer">
       <div class="footer_content">
         <div class="footer_left">
-          <img  src="./assets/images/logo-bottom.png" style="margin:0" ></img>
+          <img src="./assets/images/logo-bottom.svg" style="margin:0" ></img>
           <!-- <h3>Caymanex.Pro</h3> -->
           <p style="letter-spacing:2px;">{{$t("footer.gsmc")}}</p>
-          <p>Copyright © 2019 - Bizzan.com All rights reserved.&nbsp;&nbsp;</p>
+          <p>Copyright © 2019 - INTAFACED.com All rights reserved.&nbsp;&nbsp;</p>
           <div class="social-list">
             <ul>
               <Tooltip content="Wechat" theme="dark" placement="top">
@@ -222,22 +256,22 @@
                     <img style="width: 130px;border-radius: 5px;" src="./assets/images/telegramqrcode.jpg"></img>
                 </div>
               </Tooltip>
-              <Tooltip content="https://weibo.com/bizzan" theme="dark" placement="top">
+              <Tooltip content="https://weibo.com/intafaced" theme="dark" placement="top">
                 <li>
                   <Icon custom="i-icon iconfont iconweibo" />
                 </li>
               </Tooltip>
-              <Tooltip content="https://twitter.com/BIZZANGlobal" theme="dark" placement="top">
+              <Tooltip content="https://twitter.com/INTAFACEDGlobal" theme="dark" placement="top">
                 <li>
                   <Icon type="logo-twitter" />
                 </li>
               </Tooltip>
-              <Tooltip content="https://medium.com/@BIZZAN" theme="dark" placement="top">
+              <Tooltip content="https://medium.com/@INTAFACED" theme="dark" placement="top">
                 <li>
                   <Icon custom="i-icon iconfont iconmedium" />
                 </li>
               </Tooltip>
-              <Tooltip content="https://www.reddit.com/u/bizzanglobal" theme="dark" placement="top">
+              <Tooltip content="https://www.reddit.com/u/intafacedglobal" theme="dark" placement="top">
                 <li>
                   <Icon custom="i-icon iconfont iconreddit" />
                 </li>
@@ -251,22 +285,22 @@
             </ul>
           </div>
         </div>
-        <div class="footer_right" style="margin-left: 5%;border-left: 1px solid #243051;padding-left: 5%;">
+        <div class="footer_right" style="margin-left: 5%;border-left: 1px solid #222222;padding-left: 5%;">
           <ul>
             <li class="footer_title">
               <span>{{$t("footer.yqlj")}}</span>
             </li>
             <li>
-              <a target="_blank"  href="https://www.feixiaohao.com/">非小号</a>
+              <a target="_blank" href="https://www.feixiaohao.com/">Feixiaohao</a>
             </li>
             <li>
-              <a target="_blank" href="https://www.8btc.com/">巴比特</a>
+              <a target="_blank" href="https://www.8btc.com/">8BTC</a>
             </li>
             <li>
-              <a target="_blank" href="https://www.chainnode.com/">链节点</a>
+              <a target="_blank" href="https://www.chainnode.com/">ChainNode</a>
             </li>
             <li>
-              <a target="_blank" href="https://www.jinse.com/">金色财经</a>
+              <a target="_blank" href="https://www.jinse.com/">Jinse Finance</a>
             </li>
           </ul>
         </div>
@@ -279,7 +313,7 @@
               <router-link target="_blank" to="/about-us">{{$t("footer.gywm")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=6&id=39&cateTitle=其他">{{$t("footer.jrwm")}}</router-link>
+              <router-link target="_blank" to="/helpdetail?cate=6&id=39&cateTitle=Other">{{$t("footer.jrwm")}}</router-link>
             </li>
             <li>
               <router-link target="_blank" to="/announcement/0">{{$t("footer.notice")}}</router-link>
@@ -298,16 +332,16 @@
               <span>{{$t("footer.bzzx")}}</span>
             </li>
             <li>
-              <router-link target="_blank" to="/helplist?cate=0&cateTitle=新手指南">{{$t("footer.xszn")}}</router-link>
+              <router-link target="_blank" to="/helplist?cate=0&cateTitle=Beginner's Guide">{{$t("footer.xszn")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helplist?cate=1&cateTitle=常见问题">{{$t("footer.cjwt")}}</router-link>
+              <router-link target="_blank" to="/helplist?cate=1&cateTitle=FAQ">{{$t("footer.cjwt")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helplist?cate=2&cateTitle=交易指南">{{$t("footer.jyzn")}}</router-link>
+              <router-link target="_blank" to="/helplist?cate=2&cateTitle=Trading Guide">{{$t("footer.jyzn")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helplist?cate=3&cateTitle=币种资料">{{$t("footer.bzzl")}}</router-link>
+              <router-link target="_blank" to="/helplist?cate=3&cateTitle=Coin info">{{$t("footer.bzzl")}}</router-link>
             </li>
           </ul>
           <ul>
@@ -315,16 +349,16 @@
               <span>{{$t("footer.tkxy")}}</span>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=5&id=2&cateTitle=条款协议">{{$t("footer.mztk")}}</router-link>
+              <router-link target="_blank" to="/helpdetail?cate=5&id=2&cateTitle=Terms of Service">{{$t("footer.mztk")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=5&id=3&cateTitle=条款协议">{{$t("footer.ystk")}}</router-link>
+              <router-link target="_blank" to="/helpdetail?cate=5&id=3&cateTitle=Terms of Service">{{$t("footer.ystk")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=5&id=5&cateTitle=条款协议">{{$t("footer.fwtk")}}</router-link>
+              <router-link target="_blank" to="/helpdetail?cate=5&id=5&cateTitle=Terms of Service">{{$t("footer.fwtk")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=5&id=38&cateTitle=条款协议">{{$t("footer.fltk")}}</router-link>
+              <router-link target="_blank" to="/helpdetail?cate=5&id=38&cateTitle=Terms of Service">{{$t("footer.fltk")}}</router-link>
             </li>
           </ul>
           <ul>
@@ -335,7 +369,7 @@
               <poptip width="200" trigger="hover" placement="right">
                 <a href="javascript:;" class="wechat">{{$t("footer.kfyx")}}</a>
                 <div slot="content">
-                  <p style="text-align:center;">service@bizzan.com</p>
+                  <p style="text-align:center;">service@intafaced.com</p>
                 </div>
               </poptip>
             </li>
@@ -343,7 +377,7 @@
               <poptip width="200" trigger="hover" placement="right">
                 <a href="javascript:;" class="wechat">{{$t("footer.swhz")}}</a>
                 <div slot="content">
-                  <p style="text-align:center;">support@bizzan.com</p>
+                  <p style="text-align:center;">support@intafaced.com</p>
                 </div>
               </poptip>
             </li>
@@ -351,7 +385,7 @@
               <poptip width="200" trigger="hover" placement="right">
                 <a href="javascript:;" class="wechat">{{$t("footer.sbsq")}}</a>
                 <div slot="content">
-                  <p style="text-align:center;">list@bizzan.com</p>
+                  <p style="text-align:center;">list@intafaced.com</p>
                 </div>
               </poptip>
             </li>
@@ -359,7 +393,7 @@
               <poptip width="200" trigger="hover" placement="right">
                 <a href="javascript:;" class="wechat">{{$t("footer.tsjb")}}</a>
                 <div slot="content">
-                  <p style="text-align:center;">ceo@bizzan.com</p>
+                  <p style="text-align:center;">ceo@intafaced.com</p>
                 </div>
               </poptip>
             </li>
@@ -375,6 +409,10 @@
 <script>
 import Vue from "vue";
 import { mapGetters, mapActions } from "vuex";
+// The one list of INTAFACED modules. The header dropdown, the mobile drawer and
+// the hub all read it, so a module cannot appear in one navigation and not the
+// others.
+import { MODULES as IX_MODULES } from "./config/intafaced.js";
 export default {
   name: "app",
   provide () {
@@ -390,6 +428,7 @@ export default {
       time: null,
       content: " ",
       navDrawerModal: false,
+      ixModules: IX_MODULES,
       wechat: this.$t("footer.wechat")
     };
   },
@@ -397,22 +436,25 @@ export default {
     activeNav: function() {
       switch (this.activeNav) {
         case "nav-exchange":
-          window.document.title = (this.lang == "简体中文" ? "交易中心" : "Exchange") + " - BIZZAN | 币严 | 全球比特币交易平台 | 全球数字货币交易平台";
+          window.document.title = "Exchange" + " - INTAFACED | Sovereign Exchange";
           break;
         case "nav-service":
-          window.document.title = (this.lang == "简体中文" ? "公告" : "Announcement") + " - BIZZAN | 币严 | 全球比特币交易平台 | 全球数字货币交易平台";
+          window.document.title = "Announcement" + " - INTAFACED | Sovereign Exchange";
           break;
         case "nav-about":
-          window.document.title = (this.lang == "简体中文" ? "关于" : "About") + " - BIZZAN | 币严 | 全球比特币交易平台 | 全球数字货币交易平台";
+          window.document.title = "About" + " - INTAFACED | Sovereign Exchange";
           break;
         case "nav-lab":
-          window.document.title = (this.lang == "简体中文" ? "创新实验室" : "Lab") + " - BIZZAN | 币严 | 全球比特币交易平台 | 全球数字货币交易平台";
+          window.document.title = "Lab" + " - INTAFACED | Sovereign Exchange";
           break;
         case "nav-invite":
-          window.document.title = (this.lang == "简体中文" ? "推广合伙人" : "Promotion") + " - BIZZAN | 币严 | 全球比特币交易平台 | 全球数字货币交易平台";
+          window.document.title = "Promotion" + " - INTAFACED | Sovereign Exchange";
+          break;
+        case "nav-platform":
+          window.document.title = "Platform" + " - INTAFACED | Sovereign Exchange";
           break;
         default:
-          window.document.title = "币严 | 币严官网 - 全球比特币交易平台 | 全球数字货币交易平台";
+          window.document.title = "INTAFACED | INTAFACED - Global digital asset exchange | Global digital asset exchange";
           break;
       }
     },
@@ -421,7 +463,7 @@ export default {
       if (to.path == "/reg") {
         this.pageView = "page-view2";
         if(!this.isMobile()){
-            if(this.$route.query.code != undefined && this.$route.query.code != "" && this.$route.query.code != null){
+            if(this.$route.query.code!= undefined && this.$route.query.code!= "" && this.$route.query.code!= null){
                 this.$router.replace('/register?code='+this.$route.query.code);
             }else{
                 this.$router.replace('/register');
@@ -439,7 +481,6 @@ export default {
         this.pageView = "page-view2";
       }
 
-      // 红包页面
       if(to.path.length > 11 && to.path.substr(0,9) == "/envelope"){
         this.pageView = "page-view3";
       }
@@ -474,14 +515,13 @@ export default {
     this.initialize();
     var d = new Date(),
       gmtHours = d.getTimezoneOffset() / 60;
-    this.utc = "GMT " + (gmtHours > 0 ? "-" : "+") + " " + String(gmtHours)[1];
+    this.utc = "GMT " + (gmtHours > 0? "-": "+") + " " + String(gmtHours)[1];
     setInterval(() => {
       this.time = new Date().getTime();
     }, 1000);
 
-    // 隐藏加载层
     let initLoading = document.getElementById("initLoading");
-    if(initLoading != null){
+    if(initLoading!= null){
       document.body.removeChild(initLoading);
     }
   },
@@ -493,15 +533,19 @@ export default {
       })
     },
     isMobile() {
-　　let flag = navigator.userAgent.match(/(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i)
-    　　return flag;
+  let flag = navigator.userAgent.match(/(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i)
+      return flag;
     },
     toggleMemu(){
-      this.navDrawerModal = !this.navDrawerModal;
+      this.navDrawerModal =!this.navDrawerModal;
+    },
+    /** DropdownItem `name` is the route, so this stays a one-liner as modules move. */
+    goModule(route) {
+      if (route && this.$route.path !== route) this.$router.push(route);
     },
     strpo(str) {
       if (str.length > 4) {
-        str = str.slice(0, 4) + "···";
+        str = str.slice(0, 4) + "…";
       } else {
         str = str;
       }
@@ -540,12 +584,12 @@ export default {
     changelanguage: function(name) {
       console.log("change language: " + name);
       if (name == "en") {
-        this.$store.commit("setlang", "English");
+        this.$store.commit("setlang");
         this.$i18n.locale = "en";
         this.reload();
       }
       if (name == "zh") {
-        this.$store.commit("setlang", "简体中文");
+        this.$store.commit("setlang");
         this.$i18n.locale = "zh";
         this.reload();
       }
@@ -557,23 +601,23 @@ export default {
 
 <style scoped lang="scss">
 @media screen and (max-width:768px){
-  .header_nav_mobile_triggle{
+.header_nav_mobile_triggle{
     display: inline-block!important;
   }
-  .footer_content{
+.footer_content{
     padding: 70px 2% 85px 5%;
   }
-  .page-view, .page-view2{
-    .page-content{
-      .layout{
+.page-view,.page-view2{
+.page-content{
+.layout{
         height: 45px;
-        .layout-ceiling{
+.layout-ceiling{
           padding: 5px 10px!important;
-          .layout-ceiling-main{
+.layout-ceiling-main{
             height: 35px!important;
             line-height: 35px!important;
           }
-          .layout-logo{
+.layout-logo{
             width: 200px!important;
             height: 35px!important;
           }
@@ -587,7 +631,31 @@ export default {
   float:right;
   padding: 0 5px 0 20px;
 }
-.page-view2 .nav-pdf {
+/* The INTAFACED platform entry. Matches the height and muted-to-orange
+   behaviour of the vendor nav items beside it rather than introducing a second
+   look in the same bar. */
+.ix-nav {
+  height: 50px;
+  line-height: 50px;
+::v-deep.ivu-dropdown-rel {
+    display: inline-block;
+  }
+.ix-nav-title {
+    display: inline-block;
+    height: 40px;
+    line-height: 40px;
+    margin-left: 20px;
+    font-size: 14px;
+    color: #8a8a8a;
+    &:hover {
+      color: #ff6b00;
+    }
+  }
+.router-link-active.ix-nav-title {
+    color: #ff6b00;
+  }
+}
+.page-view2.nav-pdf {
   color: #333;
   font-size: 14px;
 }
@@ -597,16 +665,16 @@ export default {
 }
 .page-view {
   height: 100%;
-  .page-content {
-    .time_download {
+.page-content {
+.time_download {
       padding: 0 80px;
       height: 35px;
       background-color: #000;
       line-height: 35px;
       overflow: hidden;
-      .leftwrapper {
+.leftwrapper {
         float: left;
-        .clock {
+.clock {
           display: inline-block;
           vertical-align: middle;
           color: #fff;
@@ -618,49 +686,49 @@ export default {
         }
       }
     }
-    .layout {
+.layout {
       width: 100%;
       position: absolute;
       z-index: 10;
-      .layout-ceiling {
+.layout-ceiling {
         padding: 5px 20px;
-        .layout-logo{
+.layout-logo{
           width: 300px;
           height: 48px;
-          background: url(./assets/images/logo.png) no-repeat;
+          background: url(./assets/images/logo.svg) no-repeat;
           background-size: 100% 100%;
           float: left;
           position: absolute;
           z-index: 10;
         }
-        .layout-ceiling-main {
+.layout-ceiling-main {
           height: 50px;
           line-height: 50px;
           margin-left: 218px;
-          .header_nav {
+.header_nav {
             li.ivu-menu-submenu.ivu-menu-item-active.ivu-menu-opened.ivu-menu-child-item-active {
               background: none;
-              .ivu-menu {
+.ivu-menu {
                 a {
                   &:hover {
                     li {
                       background: none;
-                      color: #f0a70a;
+                      color: #ff6b00;
                     }
                   }
                   li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-                    color: #f0a70a;
+                    color: #ff6b00;
                         border-bottom: 3px solid #ffa800;
                   }
                 }
-                .router-link-exact-active.router-link-active {
+.router-link-exact-active.router-link-active {
                   li {
-                    color: #f0a70a;
+                    color: #ff6b00;
                   }
                 }
               }
             }
-            .ivu-menu-vertical.ivu-menu-light {
+.ivu-menu-vertical.ivu-menu-light {
               background: none;
               &:after {
                 width: 0;
@@ -668,28 +736,28 @@ export default {
             }
           }
         }
-        .rr {
+.rr {
           float:right;
           z-index: 10;
-          .mymsg {
+.mymsg {
             float: left;
             padding-right: 20px;
             a {
-              color: #828ea1;
+              color: #8a8a8a;
               display: inline;
               padding-right: 20px;
-              border-right: 1px solid #828ea1;
+              border-right: 1px solid #8a8a8a;
             }
             a:hover{
               color:#FFF;
             }
           }
-          .login_register {
+.login_register {
             float: left;
             padding-right: 20px;
-            border-right: 1px solid #273c55;
+            border-right: 1px solid #292929;
             line-height: 50px;
-            .ivu-menu {
+.ivu-menu {
               background: transparent;
               #login,
               #register {
@@ -702,7 +770,7 @@ export default {
                 box-sizing: border-box;
                 li {
                   height: 100%;
-                  color: #828ea1;
+                  color: #8a8a8a;
                 }
                 &:hover {
                   li {
@@ -711,10 +779,10 @@ export default {
                 }
               }
               #login{
-                border-right: 1px solid #273c55;
+                border-right: 1px solid #292929;
               }
               #register {
-                color: #f0a70a!important;
+                color: #ff6b00!important;
                 &:hover {
                   li {
                     color: #fff;
@@ -723,42 +791,42 @@ export default {
               }
             }
           }
-          .isLogin {
-            .ivu-dropdown {
+.isLogin {
+.ivu-dropdown {
               display: block;
               float: left;
-              .ivu-dropdown-rel {
+.ivu-dropdown-rel {
                 a {
                   margin-left: 0;
-                  color: #828ea1;
+                  color: #8a8a8a;
                 }
                 a:hover{
                   color:#FFF;
                 }
               }
-              .ivu-select-dropdown {
+.ivu-select-dropdown {
                 position: absolute;
               }
             }
           }
         }
-        .rightwrapper {
+.rightwrapper {
           float: right;
-          .appdownload {
+.appdownload {
             float: left;
             // padding: 0 20px;
             padding-right: 0px;
-            .ivu-poptip-rel {
+.ivu-poptip-rel {
               a {
-                color: #828ea1;
+                color: #8a8a8a;
               }
               i.ivu-icon.ivu-icon-arrow-down-b {
                 margin-left: 5px;
               }
             }
           }
-          .ios,
-          .andrio {
+.ios,
+.andrio {
             float: left;
             text-align: center;
             img {
@@ -767,7 +835,7 @@ export default {
               margin: 0 auto;
               border-radius: 3px;
             }
-            .tips {
+.tips {
               height: 30px;
               img {
                 width: 14px;
@@ -781,13 +849,13 @@ export default {
               }
             }
           }
-          .andrio {
+.andrio {
             float: right;
           }
-          .ivu-dropdown-rel a {
+.ivu-dropdown-rel a {
             color: #fff;
           }
-          .ivu-select-dropdown {
+.ivu-select-dropdown {
             z-index: 901;
             #change_language_theme {
               li {
@@ -796,9 +864,9 @@ export default {
               }
             }
           }
-          .changelanguage {
+.changelanguage {
             float: left;
-            .languagelogo {
+.languagelogo {
               float: left;
               padding-top: 5px;
               height: 45px;
@@ -812,8 +880,8 @@ export default {
   }
 }
 .page-view2 {
-  .ivu-select-single .ivu-select-selection{
-    background-color: #0c1621;
+.ivu-select-single.ivu-select-selection{
+    background-color: #0f0f0f;
     &:hover{
       border-color: transparent;
     }
@@ -821,20 +889,20 @@ export default {
       border-color: transparent;
     }
   }
-  .ivu-input-group-prepend {
-    background-color: #0b1520;
-    border: 1px solid #0b1520;
+.ivu-input-group-prepend {
+    background-color: #0e0e0e;
+    border: 1px solid #0e0e0e;
   }
-  .page-content {
-    .time_download {
+.page-content {
+.time_download {
       padding: 0 80px;
       height: 35px;
       background-color: #000;
       line-height: 35px;
       overflow: hidden;
-      .leftwrapper {
+.leftwrapper {
         float: left;
-        .clock {
+.clock {
           display: inline-block;
           vertical-align: middle;
           color: #fff;
@@ -845,13 +913,13 @@ export default {
           font-size: 12px;
         }
       }
-      .rightwrapper {
+.rightwrapper {
         float: right;
-        .appdownload {
+.appdownload {
           float: left;
           // padding: 0 20px;
           padding-right: 30px;
-          .ivu-poptip-rel {
+.ivu-poptip-rel {
             a {
               color: #fff;
               font-size: 12px;
@@ -861,8 +929,8 @@ export default {
             }
           }
         }
-        .ios,
-        .andrio {
+.ios,
+.andrio {
           float: left;
           text-align: center;
           img {
@@ -870,7 +938,7 @@ export default {
             height: 106px;
             margin: 0 auto;
           }
-          .tips {
+.tips {
             height: 30px;
             img {
               width: 14px;
@@ -884,13 +952,13 @@ export default {
             }
           }
         }
-        .andrio {
+.andrio {
           float: right;
         }
-        .ivu-dropdown-rel a {
+.ivu-dropdown-rel a {
           color: #fff;
         }
-        .ivu-select-dropdown {
+.ivu-select-dropdown {
           z-index: 901;
           #change_language_theme {
             li {
@@ -899,9 +967,9 @@ export default {
             }
           }
         }
-        .changelanguage {
+.changelanguage {
           float: left;
-          .languagelogo {
+.languagelogo {
             float: left;
             padding-top: 5px;
             height: 45px;
@@ -911,87 +979,87 @@ export default {
         }
       }
     }
-    .layout {
-      background: #172636;
+.layout {
+      background: #1a1a1a;
       // -moz-box-shadow:0px 2px 5px #f5f5f5;
       // -webkit-box-shadow:0px 2px 5px #f5f5f5;
-      //  box-shadow:0px 2px 5px #f5f5f5;
+      // box-shadow:0px 2px 5px #f5f5f5;
       // border-bottom: 1px solid #eee;
       width: 100%;
       z-index: 10;
       position: absolute;
       top: 0;
-      .layout-ceiling {
+.layout-ceiling {
         padding: 5px 20px;
-        .layout-logo {
+.layout-logo {
           width: 300px;
           height: 48px;
-          background: url(./assets/images/logo.png) no-repeat;
+          background: url(./assets/images/logo.svg) no-repeat;
           background-size: 100% 100%;
           float: left;
           position: absolute;
         }
-        .layout-ceiling-main {
+.layout-ceiling-main {
 
           height: 50px;
           line-height: 50px;
           margin-left: 218px;
-          .header_nav {
+.header_nav {
             display: none;
             li.ivu-menu-submenu.ivu-menu-item-active.ivu-menu-opened.ivu-menu-child-item-active {
-              background: #172636;
-              .ivu-menu {
+              background: #1a1a1a;
+.ivu-menu {
                 a {
                   &:hover {
                     li {
                       background: none;
-                      color: #f0a70a;
+                      color: #ff6b00;
                     }
                   }
                   li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-                    color: #f0a70a;
+                    color: #ff6b00;
                     border-bottom: 3px solid #ffa800;
                   }
                   li {
-                    color: #828ea1;
+                    color: #8a8a8a;
                   }
                 }
-                .router-link-exact-active.router-link-active {
+.router-link-exact-active.router-link-active {
                   li {
-                    color: #f0a70a;
+                    color: #ff6b00;
                   }
                 }
               }
             }
-            .ivu-menu-vertical.ivu-menu-light {
+.ivu-menu-vertical.ivu-menu-light {
               &:after {
                 width: 0;
               }
             }
           }
         }
-        .rr {
+.rr {
           display: none;
           z-index: 10;
           float:right;
-          .mymsg {
+.mymsg {
             float: left;
             padding-right: 20px;
             a {
               display: inline;
               padding-right: 20px;
-              border-right: 1px solid #828ea1;
+              border-right: 1px solid #8a8a8a;
             }
             a:hover{
               color: #FFF;
             }
           }
-          .login_register {
+.login_register {
             float: left;
             padding-right: 20px;
-            border-right: 1px solid #273c55;
+            border-right: 1px solid #292929;
             line-height: 50px;
-            .ivu-menu {
+.ivu-menu {
               background: transparent;
               #login,
               #register {
@@ -1004,7 +1072,7 @@ export default {
                 box-sizing: border-box;
                 li {
                   height: 100%;
-                  color: #828ea1;
+                  color: #8a8a8a;
                 }
                 &:hover {
                   li {
@@ -1013,10 +1081,10 @@ export default {
                 }
               }
               #login{
-                border-right: 1px solid #273c55;
+                border-right: 1px solid #292929;
               }
               #register {
-                color: #f0a70a!important;
+                color: #ff6b00!important;
                 &:hover {
                   li {
                     color: #fff;
@@ -1025,45 +1093,45 @@ export default {
               }
             }
           }
-          .isLogin {
+.isLogin {
             a {
-              color:#828ea1;
+              color:#8a8a8a;
             }
             a:hover{
               color: #FFF;
             }
-            .ivu-dropdown {
+.ivu-dropdown {
               display: block;
               float: left;
-              .ivu-dropdown-rel {
+.ivu-dropdown-rel {
                 a {
                   margin-left: 0;
                 }
               }
-              .ivu-select-dropdown {
+.ivu-select-dropdown {
                 position: absolute;
               }
             }
           }
         }
-        .rightwrapper {
+.rightwrapper {
           display: none;
           float: right;
-          .appdownload {
+.appdownload {
             float: left;
             // padding: 0 20px;
             padding-right: 0px;
-            .ivu-poptip-rel {
+.ivu-poptip-rel {
               a {
-                color: #828ea1;
+                color: #8a8a8a;
               }
               i.ivu-icon.ivu-icon-arrow-down-b {
                 margin-left: 5px;
               }
             }
           }
-          .ios,
-          .andrio {
+.ios,
+.andrio {
             float: left;
             text-align: center;
             img {
@@ -1071,7 +1139,7 @@ export default {
               height: 106px;
               margin: 0 auto;
             }
-            .tips {
+.tips {
               height: 30px;
               img {
                 width: 14px;
@@ -1086,13 +1154,13 @@ export default {
               }
             }
           }
-          .andrio {
+.andrio {
             float: right;
           }
-          .ivu-dropdown-rel a {
+.ivu-dropdown-rel a {
             color: #fff;
           }
-          .ivu-select-dropdown {
+.ivu-select-dropdown {
             z-index: 901;
             #change_language_theme {
               li {
@@ -1101,9 +1169,9 @@ export default {
               }
             }
           }
-          .changelanguage {
+.changelanguage {
             float: left;
-            .languagelogo {
+.languagelogo {
               float: left;
               padding-top: 5px;
               height: 45px;
@@ -1115,9 +1183,9 @@ export default {
       }
     }
   }
-  .footer{
-    .footer_content{
-      .footer_right{
+.footer{
+.footer_content{
+.footer_right{
         display: none;
       }
     }
@@ -1128,20 +1196,20 @@ export default {
   background: linear-gradient(150deg, #c3333d, #bc000d, #ff1d2c);;
   min-height: 100%;
   background-color: #FFF;
-  .page-content{
+.page-content{
     padding-bottom: 20px!important;
-    .layout{
+.layout{
       display: none;
     }
-    .time_download{
+.time_download{
       display: none;
     }
   }
-  .footer{
+.footer{
     display: none;
   }
 }
-.wechatclick .api2 {
+.wechatclick.api2 {
   overflow: hidden;
   display: flex;
   justify-content: space-between;
@@ -1158,16 +1226,16 @@ export default {
   }
 }
 .appdownload {
-  /deep/ .ivu-poptip-inner {
-    background-color: #27313e;
+::v-deep.ivu-poptip-inner {
+    background-color: #141414;
     color: #fff;
     padding-top: 10px;
   }
-  /deep/ .ivu-poptip-popper .ivu-poptip-arrow {
-    border-bottom-color: #27313e;
+::v-deep.ivu-poptip-popper.ivu-poptip-arrow {
+    border-bottom-color: #141414;
   }
-  /deep/ .ivu-poptip-popper .ivu-poptip-arrow:after {
-    border-bottom-color: #27313e;
+::v-deep.ivu-poptip-popper.ivu-poptip-arrow:after {
+    border-bottom-color: #141414;
   }
 }
 </style>
@@ -1177,17 +1245,17 @@ export default {
   padding-top: 60px;
 }
 
-.ivu-table-filter-list .ivu-table-filter-select-item {
+.ivu-table-filter-list.ivu-table-filter-select-item {
   color: #ccc;
   &:hover {
-    background-color: #27313e;
-    color: #f0ac19;
+    background-color: #141414;
+    color: #ff8534;
   }
 }
-.ivu-table-filter-list .ivu-table-filter-select-item-selected {
-  color: #f0ac19;
+.ivu-table-filter-list.ivu-table-filter-select-item-selected {
+  color: #ff8534;
   &:hover {
-    color: #f0ac19;
+    color: #ff8534;
   }
 }
 
@@ -1199,23 +1267,23 @@ export default {
   color: #333;
 }
 .ivu-poptip-inner {
-  background-color: #27313e;
+  background-color: #141414;
   color: #fff;
-  .ivu-poptip-body-content-inner {
+.ivu-poptip-body-content-inner {
     color: #fff;
   }
 }
 .ivu-poptip-popper {
-  // border-top-color:#27313e;
-  .ivu-poptip-arrow:after {
+  // border-top-color:#141414;
+.ivu-poptip-arrow:after {
     left: 0!important;
-    border-right-color: #27313e !important;
+    border-right-color: #141414!important;
   }
 }
-/* 多选框 */
-.exchange .ivu-checkbox-checked .ivu-checkbox-inner {
-  background-color: #f0a70a;
-  border-color: #f0a70a;
+/* checkbox */
+.exchange.ivu-checkbox-checked.ivu-checkbox-inner {
+  background-color: #ff6b00;
+  border-color: #ff6b00;
 }
 /* modal */
 .ivu-modal-confirm-head {
@@ -1228,77 +1296,77 @@ export default {
 }
 .ivu-modal-body {
   border-radius: 5px;
-  .ivu-modal-confirm {
-    .ivu-modal-confirm-body {
+.ivu-modal-confirm {
+.ivu-modal-confirm-body {
       font-size: 14px;
     }
   }
 }
-.ivu-modal-confirm-footer .ivu-btn-primary {
-  background-color: #f0a70a;
-  border-color: #f0a70a;
+.ivu-modal-confirm-footer.ivu-btn-primary {
+  background-color: #ff6b00;
+  border-color: #ff6b00;
 }
-.ivu-modal-confirm-footer .ivu-btn-text {
+.ivu-modal-confirm-footer.ivu-btn-text {
   &:hover {
-    color: #f0a70a;
+    color: #ff6b00;
   }
 }
 .ivu-table-wrapper {
-  background-color: #192330;
-  .ivu-table {
-    box-shadow: 0px 0px 4px #27313e;
-    background-color: #192330;
+  background-color: #000000;
+.ivu-table {
+    box-shadow: 0px 0px 4px #141414;
+    background-color: #000000;
     color: #ccc;
     &:before {
       background: transparent;
     }
     &:after {
-      background: #192330;
+      background: #000000;
     }
-    .ivu-table-header {
+.ivu-table-header {
       th {
-        background-color: #27313e;
+        background-color: #141414;
         border: none;
         color: #ccc;
       }
     }
-    .ivu-table-row:hover{
-      background: #1e2834;
+.ivu-table-row:hover{
+      background: #1c1c1c;
     }
-    .ivu-table-row td {
+.ivu-table-row td {
       background-color: transparent;
       border: none;
-      border-bottom: 1px solid #27313e;
+      border-bottom: 1px solid #141414;
       color: #fff;
     }
   }
 }
 .ivu-table td {
-  background-color: #192330;
-  border-bottom: 1px solid #27313e;
+  background-color: #000000;
+  border-bottom: 1px solid #141414;
 }
-.ivu-menu-light.ivu-menu-vertical .ivu-menu-item-active:not(.ivu-menu-submenu) {
+.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu) {
   background: none;
   &:after {
     background: none;
   }
 }
-.ivu-select-dropdown .ivu-select-item {
+.ivu-select-dropdown.ivu-select-item {
   color: #ccc;
   padding: 6px 16px;
 }
 
 .page-view {
   height: 100%;
-  .page-content {
-    .layout {
-      .layout-ceiling {
-        background: #172636;
+.page-content {
+.layout {
+.layout-ceiling {
+        background: #1a1a1a;
         box-shadow: 0 0 5px 5px rgba(0,0,0,0.1);
-        .layout-ceiling-main {
-          .header_nav {
-            .ivu-menu-vertical.ivu-menu-light {
-              .ivu-menu-submenu-title {
+.layout-ceiling-main {
+.header_nav {
+.ivu-menu-vertical.ivu-menu-light {
+.ivu-menu-submenu-title {
                 i.ivu-icon.ivu-icon-ios-arrow-down.ivu-menu-submenu-title-icon {
                   &:before {
                     content: "";
@@ -1307,8 +1375,8 @@ export default {
               }
             }
           }
-          .rr {
-            .login_register .ivu-menu-submenu-title .ivu-icon {
+.rr {
+.login_register.ivu-menu-submenu-title.ivu-icon {
               &:before {
                 content: "";
               }
@@ -1321,13 +1389,13 @@ export default {
 }
 .page-view2 {
   height: 100%;
-  .page-content {
-    .layout {
-      .layout-ceiling {
-        .layout-ceiling-main {
-          .header_nav {
-            .ivu-menu-vertical.ivu-menu-light {
-              .ivu-menu-submenu-title {
+.page-content {
+.layout {
+.layout-ceiling {
+.layout-ceiling-main {
+.header_nav {
+.ivu-menu-vertical.ivu-menu-light {
+.ivu-menu-submenu-title {
                 i.ivu-icon.ivu-icon-ios-arrow-down.ivu-menu-submenu-title-icon {
                   &:before {
                     content: "";
@@ -1336,8 +1404,8 @@ export default {
               }
             }
           }
-          .rr {
-            .login_register .ivu-menu-submenu-title .ivu-icon {
+.rr {
+.login_register.ivu-menu-submenu-title.ivu-icon {
               &:before {
                 content: "";
               }
@@ -1352,11 +1420,11 @@ html,
 body {
   height: 100%;
   font-size: 14px;
-  background: #0b1520;
+  background: #0e0e0e;
   color: #fff;
 }
 
-/*自定义滚动条样式*/
+/* scrollbar */
 
 ::-webkit-scrollbar {
   width: 3px;
@@ -1364,7 +1432,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #39557a;
+  background: #3b3b3b;
   border-radius: 25px;
 }
 
@@ -1375,21 +1443,21 @@ body {
 }
 
 .ivu-menu-dark,
-.ivu-menu-dark.ivu-menu-vertical .ivu-menu-opened {
-  background: #18202a;
+.ivu-menu-dark.ivu-menu-vertical.ivu-menu-opened {
+  background: #050505;
 }
 
 #checkbox {
   width: 10px;
 }
 
-// .login_right {
-//   position: absolute;
-//   background: #fff;
-//   width: 350px;
-//   height: 510px;
-//   top: 35px;
-//   right: 50px;
+//.login_right {
+// position: absolute;
+// background: #fff;
+// width: 350px;
+// height: 510px;
+// top: 35px;
+// right: 50px;
 // }
 
 .login_title {
@@ -1398,11 +1466,11 @@ body {
   height: 80px;
   font-size: 25px;
 }
-.login_right .ivu-select-dropdown {
+.login_right.ivu-select-dropdown {
   background: #fff;
 }
 
-.ivu-form-inline .ivu-form-item {
+.ivu-form-inline.ivu-form-item {
   display: block;
   margin-right: 0;
 }
@@ -1423,16 +1491,16 @@ body {
   margin-left: 128px;
 }
 
-.layout-ceiling-main .rr {
+.layout-ceiling-main.rr {
   float: right;
 }
 
-.layout-ceiling-main .ivu-menu-vertical .ivu-menu-item,
-.ivu-menu-vertical .ivu-menu-submenu-title {
+.layout-ceiling-main.ivu-menu-vertical.ivu-menu-item,
+.ivu-menu-vertical.ivu-menu-submenu-title {
   padding: 0;
 }
 
-.layout-ceiling-main .ivu-menu-item {
+.layout-ceiling-main.ivu-menu-item {
   font-size: 14px;
 }
 
@@ -1447,10 +1515,10 @@ body {
 }
 
 @media screen and (max-width:768px){
-  .header_nav{ display:none; }
-  .login-container{ display: none; }
-  .footer_right{display:none;}
-  .rightwrapper{display:none;}
+.header_nav{ display:none; }
+.login-container{ display: none; }
+.footer_right{display:none;}
+.rightwrapper{display:none;}
 }
 
 .header_nav {
@@ -1465,14 +1533,14 @@ body {
   width: 120px;
 }
 
-.layout-ceiling-main .ivu-select-dropdown {
-  background: #27313e;
+.layout-ceiling-main.ivu-select-dropdown {
+  background: #141414;
   margin-left: 25px;
-  .ivu-dropdown-item {
+.ivu-dropdown-item {
     padding: 10px 16px;
     color: #ccc;
     &:hover {
-      color: #f0ac19;
+      color: #ff8534;
     }
   }
 }
@@ -1485,16 +1553,16 @@ body {
   line-height: 20px;
 }
 
-// .ivu-dropdown-item:hover {
-//   background: #27313e;
+//.ivu-dropdown-item:hover {
+// background: #141414;
 // }
 
-// .ivu-dropdown-item {
-//   color: #fff;
+//.ivu-dropdown-item {
+// color: #fff;
 // }
 .ivu-dropdown-item:hover {
-  background-color: #27313e;
-  color: #f0ac19;
+  background-color: #141414;
+  color: #ff8534;
 }
 .ivu-dropdown-item img {
   width: 14px;
@@ -1502,10 +1570,10 @@ body {
 }
 
 .ivu-radio-inner:after {
-  background: #18202a;
+  background: #050505;
 }
 
-/*安全中心*/
+/* security centre */
 
 .user_center {
   height: 900px;
@@ -1515,26 +1583,26 @@ body {
   text-align: center;
 }
 
-.ivu-menu-vertical .ivu-menu-submenu .ivu-menu-item {
-  padding-left: 0 !important;
+.ivu-menu-vertical.ivu-menu-submenu.ivu-menu-item {
+  padding-left: 0!important;
   padding-right: 0;
   color: rgba(130,142,161,1);
   font-size: 14px;
-  border-right: 0 !important;
+  border-right: 0!important;
 }
 
-.ivu-menu-dark.ivu-menu-vertical .ivu-menu-submenu .ivu-menu-item-active,
-.ivu-menu-dark.ivu-menu-vertical .ivu-menu-submenu .ivu-menu-item-active:hover {
-  background: #1855fd !important;
+.ivu-menu-dark.ivu-menu-vertical.ivu-menu-submenu.ivu-menu-item-active,
+.ivu-menu-dark.ivu-menu-vertical.ivu-menu-submenu.ivu-menu-item-active:hover {
+  background: #3d3d3d!important;
 }
 
-.rr .ivu-menu-vertical.ivu-menu-light:after {
+.rr.ivu-menu-vertical.ivu-menu-light:after {
   width: 0;
 }
 
 .layout_menu_right {
   margin-left: 3%;
-  background: #18202a;
+  background: #050505;
   color: #fff;
   padding-bottom: 130px;
 }
@@ -1544,31 +1612,31 @@ body {
   line-height: 45px;
   margin: 0 10px;
   padding-left: 20px;
-  border-bottom: 1px solid #263142;
+  border-bottom: 1px solid #222222;
 }
 
-.category .ivu-radio-group.ivu-radio-group-button {
+.category.ivu-radio-group.ivu-radio-group-button {
   width: 100%;
 }
 
-.category .ivu-radio-group label {
+.category.ivu-radio-group label {
   font-size: 14px;
 }
 
-.category .ivu-radio-group-button .ivu-radio-wrapper {
-  background: #28313e;
+.category.ivu-radio-group-button.ivu-radio-wrapper {
+  background: #232323;
   color: #979797;
   border: 0;
   padding: 0 25px;
 }
 
-.category .ivu-radio-group-button .ivu-radio-wrapper-checked {
+.category.ivu-radio-group-button.ivu-radio-wrapper-checked {
   color: #fff;
-  background: #2f3d52;
+  background: #2b2b2b;
   box-shadow: none;
 }
 
-.category .ivu-radio-wrapper span {
+.category.ivu-radio-wrapper span {
   padding-left: 0;
 }
 
@@ -1599,7 +1667,7 @@ body {
   float: left;
   color: #fff;
   padding: 0 20px;
-  background: #28313e;
+  background: #232323;
   width: 21%;
 }
 
@@ -1607,7 +1675,7 @@ body {
   float: left;
   width: 72%;
   height: 40px;
-  border: 2px solid #28313e;
+  border: 2px solid #232323;
   padding-left: 20px;
 }
 
@@ -1623,7 +1691,7 @@ body {
   float: left;
 }
 
-// 粘住底部布局
+// layout
 .page-content {
   min-height: 100%;
   padding-bottom: 200px;
@@ -1639,7 +1707,7 @@ body {
   padding: 80px 10%;
   color: #53575c;
   color: rgba(255, 255, 255, 0.8);
-  background: #192330;
+  background: #000000;
 }
 
 .footer_left {
@@ -1654,7 +1722,7 @@ body {
 
 .footer_left p {
   margin: 10px 0;
-  color: #828ea1;
+  color: #8a8a8a;
 }
 
 .footer_right {
@@ -1672,7 +1740,7 @@ body {
   list-style-type:none;
 }
 .footer_right ul li a {
-  color: #828ea1;
+  color: #8a8a8a;
   line-height: 30px;
   display: block;
   font-size: 12px;
@@ -1689,37 +1757,37 @@ body {
   color: #bbbec4;
 }
 
-/*法币交易*/
+/*Fiat Trading*/
 
 .ivu-col {
   text-align: center;
 }
 
 .page-view {
-  .page-content {
-    .layout {
-      .layout-ceiling {
-        .rr {
-          .login_register {
-            .ivu-menu-light.ivu-menu-vertical
-              .ivu-menu-item-active:not(.ivu-menu-submenu) {
+.page-content {
+.layout {
+.layout-ceiling {
+.rr {
+.login_register {
+.ivu-menu-light.ivu-menu-vertical
+.ivu-menu-item-active:not(.ivu-menu-submenu) {
               color: #fff;
             }
           }
-          .isLogin {
-            .ivu-dropdown {
+.isLogin {
+.ivu-dropdown {
               display: inline-block;
-              .ivu-select-dropdown {
+.ivu-select-dropdown {
                 padding: 0;
                 margin: 0;
-                .ivu-dropdown-menu {
-                  .ivu-dropdown-item {
-                    // background: #27313e;
+.ivu-dropdown-menu {
+.ivu-dropdown-item {
+                    // background: #141414;
                     // color: #ccc;
                     border-radius: 5px;
                     // &:hover {
-                    //   background: #27313e;
-                    //   color: #ccc;
+                    // background: #141414;
+                    // color: #ccc;
                     // }
                   }
                 }
@@ -1732,40 +1800,39 @@ body {
   }
 }
 .changelanguage {
-  .ivu-dropdown {
-    .ivu-select-dropdown {
+.ivu-dropdown {
+.ivu-select-dropdown {
       z-index: 901;
     }
   }
 }
-// 重置分页器颜色
 .ivu-page-next,
 .ivu-page-prev {
-  background-color: #192330;
+  background-color: #000000;
 }
 .ivu-page-item {
-  background-color: #192330;
-  border-color: #27313e;
+  background-color: #000000;
+  border-color: #141414;
 }
 .ivu-page-item-jump-next,
 .ivu-page-item-jump-prev,
 .ivu-page-next,
 .ivu-page-prev {
-  border-color: #27313e;
+  border-color: #141414;
 }
 .ivu-page-item-active {
-  // background-color: #f0ac19;
-  // border-color: #f0ac19;
+  // background-color: #ff8534;
+  // border-color: #ff8534;
   // color: #fff;
   font-weight:bold;
 }
 .ivu-page-next:hover,
 .ivu-page-prev:hover {
-  border-color: #f0ac19;
+  border-color: #ff8534;
 }
 .ivu-page-next:hover a,
 .ivu-page-prev:hover a {
-  color: #f0ac19;
+  color: #ff8534;
 }
 
 .ivu-page-item-jump-prev a,
@@ -1774,47 +1841,47 @@ body {
 }
 .ivu-page-item-jump-prev a:hover,
 .ivu-page-item-jump-next a:hover {
-  color: #f0ac19;
+  color: #ff8534;
 }
 .ivu-page-item:hover {
-  border-color: #f0ac19;
+  border-color: #ff8534;
 }
 .ivu-page-item:hover a {
-  color: #f0ac19;
+  color: #ff8534;
 }
 .ivu-page-item.ivu-page-item-active a {
-  color: #f0ac19;
+  color: #ff8534;
 }
 .ivu-page-disabled {
   a {
     cursor: not-allowed;
-    .ivu-icon {
+.ivu-icon {
       cursor: not-allowed;
     }
   }
 }
-/*input框样式重置*/
+/* input reset */
 .ivu-input,
 .ivu-input-number-input,
 .ivu-input-number {
-  background-color: #192330;
+  background-color: #000000;
   color: #fff;
-  border-color: #27313e;
+  border-color: #141414;
   &:hover {
-    border-color: #27313e;
+    border-color: #141414;
   }
   &:focus {
-    border-color: #27313e;
+    border-color: #141414;
     box-shadow: none;
   }
 }
 .ivu-input[disabled]:hover,
-fieldset[disabled] .ivu-input:hover {
-  border-color: #27313e;
+fieldset[disabled].ivu-input:hover {
+  border-color: #141414;
 }
 .ivu-input[disabled],
-fieldset[disabled] .ivu-input {
-  background-color: #27313e;
+fieldset[disabled].ivu-input {
+  background-color: #141414;
 }
 .ivu-input-number-focused {
   box-shadow: none;
@@ -1822,110 +1889,109 @@ fieldset[disabled] .ivu-input {
 .ivu-input-number:focus {
   box-shadow: none;
 }
-.ivu-form .ivu-form-item-label {
+.ivu-form.ivu-form-item-label {
   color: #ccc;
 }
 .ivu-input-number-handler-wrap {
-  background: #27313e;
-  border-left: 1px solid #192330;
+  background: #141414;
+  border-left: 1px solid #000000;
 }
 .ivu-input-number-handler {
-  border-top: 1px solid #192330;
+  border-top: 1px solid #000000;
 }
-.ivu-input-number-handler:hover .ivu-input-number-handler-up-inner,
-.ivu-input-number-handler:hover .ivu-input-number-handler-down-inner {
+.ivu-input-number-handler:hover.ivu-input-number-handler-up-inner,
+.ivu-input-number-handler:hover.ivu-input-number-handler-down-inner {
   color: #ccc;
 }
 .ivu-input-group-append,
 .ivu-input-group-prepend {
   color: #ccc;
 }
-/*下拉框样式重置*/
+/* select reset */
 .ivu-select-selection {
-  background-color: #192330;
+  background-color: #000000;
   color: #fff;
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
 }
 .ivu-select-selection:hover {
-  border-color: #27313e;
+  border-color: #141414;
 }
-.ivu-select-visible .ivu-select-selection {
-  border-color: #27313e;
+.ivu-select-visible.ivu-select-selection {
+  border-color: #141414;
   box-shadow: none;
 }
 .ivu-select-selected-value {
   color: #fff;
 }
 .ivu-select-selection-focused {
-  border-color: #27313e;
+  border-color: #141414;
 }
 .ivu-select-dropdown {
-  background-color: #192330;
+  background-color: #000000;
 }
 
-.ivu-select-disabled .ivu-select-selection {
-  background-color: #27313e;
+.ivu-select-disabled.ivu-select-selection {
+  background-color: #141414;
 }
-.ivu-select-disabled .ivu-select-selection:hover {
-  border-color: #27313e;
+.ivu-select-disabled.ivu-select-selection:hover {
+  border-color: #141414;
 }
-/*下拉框*/
+/* select */
 .ivu-select-item-selected {
-  background-color: #192330;
+  background-color: #000000;
   color: #ccc;
 }
 .ivu-select-item-focus {
-  background-color: #192330;
+  background-color: #000000;
 }
 .ivu-select-item:hover {
-  background-color: #27313e;
+  background-color: #141414;
   // color:#ccc;
-  color: #f0ac19;
+  color: #ff8534;
 }
-.ivu-select-multiple .ivu-select-item-selected {
-  background-color: #192330;
-  color: #f0ac19;
+.ivu-select-multiple.ivu-select-item-selected {
+  background-color: #000000;
+  color: #ff8534;
 }
-.ivu-select-multiple .ivu-select-item-focus,
-.ivu-select-multiple .ivu-select-item-selected:hover {
-  background-color: #192330;
+.ivu-select-multiple.ivu-select-item-focus,
+.ivu-select-multiple.ivu-select-item-selected:hover {
+  background-color: #000000;
 }
-.ivu-select-multiple .ivu-select-item-selected:after {
-  color: #f0ac19;
+.ivu-select-multiple.ivu-select-item-selected:after {
+  color: #ff8534;
 }
 
 .ivu-select-item-selected,
 .ivu-select-item-selected:hover {
-  background-color: #192330;
-  color: #f0ac19;
+  background-color: #000000;
+  color: #ff8534;
 }
 // chexkboxes
 .ivu-checkbox-inner {
-  background-color: #192330;
+  background-color: #000000;
 }
 
-// 开关
 .ivu-switch {
-  border: 1px solid #27313e;
-  background-color: #192330;
+  border: 1px solid #141414;
+  background-color: #000000;
 }
 .ivu-switch:after {
   background-color: #ccc;
 }
 // tag
 .ivu-tag {
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
   border-radius: 3px;
-  background: #192330;
+  background: #000000;
 }
 .ivu-tag-text {
   color: #ccc;
 }
-/*table组件样式重置*/
+/* table reset */
 .ivu-table-wrapper {
   border: none;
 }
-.ivu-table-wrapper > .ivu-spin-fix {
+.ivu-table-wrapper >.ivu-spin-fix {
   background-color: rgba(0, 0, 0, 0.2);
   border: none;
   border-color: #fff;
@@ -1935,31 +2001,31 @@ fieldset[disabled] .ivu-input {
   border: none;
   border-color: #fff;
 }
-/*加载样式重置*/
+/* loading reset */
 .ivu-spin-dot {
-  background: #f0ac19;
+  background: #ff8534;
 }
 .ivu-tabs-bar {
   border-color: #f5f5f5;
 }
-/*日期组件样式重置*/
+/* date picker reset */
 .ivu-picker-panel-icon-btn {
   &:hover {
-    color: #f0ac19;
+    color: #ff8534;
   }
 }
 .ivu-date-picker-focused input {
-  border-color: #1f2936;
+  border-color: #1d1d1d;
   box-shadow: none;
 }
 .ivu-date-picker-cells-focused em {
-  // -moz-box-shadow: 0 0 0 1px #f0ac19 inset;
-  // -webkit-box-shadow: 0 0 0 1px #f0ac19 inset;
-  // box-shadow: 0 0 0 1px #f0ac19 inset;
+  // -moz-box-shadow: 0 0 0 1px #ff8534 inset;
+  // -webkit-box-shadow: 0 0 0 1px #ff8534 inset;
+  // box-shadow: 0 0 0 1px #ff8534 inset;
   box-shadow: none;
-  color: #f0ac19;
+  color: #ff8534;
   &:after {
-    // background: #27313e;
+    // background: #141414;
   }
 }
 .ivu-date-picker-cells-cell {
@@ -1967,87 +2033,87 @@ fieldset[disabled] .ivu-input {
 }
 .ivu-date-picker-cells-cell-selected em,
 .ivu-date-picker-cells-cell-selected:hover em {
-  background: #27313e;
-  color: #f0ac19;
+  background: #141414;
+  color: #ff8534;
 }
 .ivu-date-picker-cells-cell-today em:after {
-  background: #27313e;
+  background: #141414;
 }
 .ivu-date-picker-cells-cell-range:before {
   background: rgba(240, 167, 10, 0.2);
 }
 .ivu-date-picker-cells-cell:hover em {
-  background: #27313e;
-  color: #f0ac19;
+  background: #141414;
+  color: #ff8534;
 }
-/*按钮样式重置*/
+/* button reset */
 
 .ivu-btn {
   border: none;
 }
 .ivu-btn-primary:hover {
-  background: #f0ac19;
-  border-color: #f0ac19;
+  background: #ff8534;
+  border-color: #ff8534;
 }
 .ivu-btn.ivu-btn-default {
-  background-color: #27313e;
+  background-color: #141414;
   color: #FFF;
   &:hover {
-    color: #f0a70a;
-    // background: #27313e;
-    // border: 1px solid #f0a70a;
+    color: #ff6b00;
+    // background: #141414;
+    // border: 1px solid #ff6b00;
   }
   &:active {
-    color: #f0a70a;
-    // border: 1px solid #f0a70a;
-    // background: #27313e;
+    color: #ff6b00;
+    // border: 1px solid #ff6b00;
+    // background: #141414;
   }
 }
-// primary按钮
+// primary
 .ivu-btn-text {
   color: #ccc;
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
 }
 .ivu-btn-primary {
-  background-color: #f0ac19;
-  border-color: #f0ac19;
+  background-color: #ff8534;
+  border-color: #ff8534;
 }
 .ivu-btn-text:hover {
   background-color: transparent;
-  color: #f0ac19;
+  color: #ff8534;
 }
 .ivu-input-group-append,
 .ivu-input-group-prepend {
-  background-color: #27313e;
-  border: 1px solid #27313e;
+  background-color: #141414;
+  border: 1px solid #141414;
 }
-.ivu-form-item-error .ivu-input-group-append,
-.ivu-form-item-error .ivu-input-group-prepend {
-  background-color: #27313e;
-  border: 1px solid #27313e;
+.ivu-form-item-error.ivu-input-group-append,
+.ivu-form-item-error.ivu-input-group-prepend {
+  background-color: #141414;
+  border: 1px solid #141414;
 }
-.ivu-form-item-error .ivu-input,
-.ivu-form-item-error .ivu-input:focus,
-.ivu-form-item-error .ivu-input:hover {
-  border: 1px solid #27313e;
+.ivu-form-item-error.ivu-input,
+.ivu-form-item-error.ivu-input:focus,
+.ivu-form-item-error.ivu-input:hover {
+  border: 1px solid #141414;
   box-shadow: none;
 }
 
-/*radio样式重置*/
-.ivu-radio-checked .ivu-radio-inner {
-  border-color: #f0ac19;
+/* radio reset */
+.ivu-radio-checked.ivu-radio-inner {
+  border-color: #ff8534;
 }
 .ivu-radio-checked:hover {
-  .ivu-radio-inner {
-    border-color: #f0ac19;
+.ivu-radio-inner {
+    border-color: #ff8534;
   }
 }
 .ivu-radio-inner:after {
-  background: #f0ac19;
+  background: #ff8534;
 }
 .ivu-switch-checked {
-  border-color: #f0ac19;
-  background-color: #f0ac19;
+  border-color: #ff8534;
+  background-color: #ff8534;
 }
 .ivu-switch:focus {
   box-shadow: none;
@@ -2056,12 +2122,11 @@ fieldset[disabled] .ivu-input {
   box-shadow: none;
 }
 
-//弹窗
 .ivu-modal-content {
-  background-color: #192330;
+  background-color: #000000;
 }
 .ivu-modal-header {
-  border-bottom: 1px solid #27313e;
+  border-bottom: 1px solid #141414;
 }
 .ivu-modal-confirm-head-icon-confirm {
   color: #fff;
@@ -2070,14 +2135,14 @@ fieldset[disabled] .ivu-input {
   color: #fff;
 }
 .ivu-modal-footer {
-  border-top: 1px solid #27313e;
+  border-top: 1px solid #141414;
 }
-/*排序小箭头样式重置*/
+/* sort arrow reset */
 .ivu-table-sort i.on {
-  color: #f0ac19;
+  color: #ff8534;
 }
 .ivu-table-sort i:hover {
-  color: #f0ac19;
+  color: #ff8534;
 }
 .ivu-modal-confirm-head-icon {
   font-size: 24px;
@@ -2092,19 +2157,18 @@ fieldset[disabled] .ivu-input {
 }
 .ivu-modal-confirm-footer {
   padding-top: 10px;
-  border-top: 1px solid #27313e;
+  border-top: 1px solid #141414;
 }
-// 上传组件
 .ivu-upload-list-file:hover {
-  background-color: #27313e;
+  background-color: #141414;
 }
 
-.ivu-menu-light.ivu-menu-horizontal .ivu-menu-item-active, .ivu-menu-light.ivu-menu-horizontal .ivu-menu-item:hover, .ivu-menu-light.ivu-menu-horizontal .ivu-menu-submenu-active, .ivu-menu-light.ivu-menu-horizontal .ivu-menu-submenu:hover{
+.ivu-menu-light.ivu-menu-horizontal.ivu-menu-item-active,.ivu-menu-light.ivu-menu-horizontal.ivu-menu-item:hover,.ivu-menu-light.ivu-menu-horizontal.ivu-menu-submenu-active,.ivu-menu-light.ivu-menu-horizontal.ivu-menu-submenu:hover{
   border-bottom:0!important;
-  color: #828ea1!important;
+  color: #8a8a8a!important;
 }
-.ivu-menu-horizontal .ivu-menu-submenu .ivu-select-dropdown .ivu-menu-item:hover{
-  background: #2f3e51!important;
+.ivu-menu-horizontal.ivu-menu-submenu.ivu-select-dropdown.ivu-menu-item:hover{
+  background: #2b2b2b!important;
 }
 .ivu-menu-horizontal.ivu-menu-light{
   background:transparent!important;
@@ -2128,11 +2192,11 @@ fieldset[disabled] .ivu-input {
     margin-right: 5px;
   }
   &:hover{
-    background:#2f3e51;
+    background:#2b2b2b;
   }
 }
 .ivu-message-notice-content{
-  background: #324368;
+  background: #303030;
   color: #a3bbcc;
 }
 
@@ -2151,13 +2215,13 @@ fieldset[disabled] .ivu-input {
   }
 }
 .ivu-tooltip-inner{
-  background: #394559;
+  background: #313131;
 }
 .ivu-tooltip-arrow{
-  border-bottom-color: #394559;
+  border-bottom-color: #313131;
 }
 .ivu-notice-notice{
-  background: #21364d;
+  background: #252525;
 }
 .ivu-notice-title{
   color: #FFFFFF;
@@ -2165,7 +2229,7 @@ fieldset[disabled] .ivu-input {
 .ivu-notice-desc{
   color: #FFFFFF;
 }
-.swiper-pagination-fraction, .swiper-pagination-custom, .swiper-container-horizontal > .swiper-pagination-bullets{
+.swiper-pagination-fraction,.swiper-pagination-custom,.swiper-container-horizontal >.swiper-pagination-bullets{
   bottom: -5px;
 }
 .swiper-pagination-bullet{
@@ -2177,25 +2241,25 @@ fieldset[disabled] .ivu-input {
   transition: all 0.5s;
 }
 .swiper-pagination-bullet-active{
-  background: #f0a70a!important;
+  background: #ff6b00!important;
   width:30px;
   opacity: 1;
 }
-.login_right .ivu-select-dropdown{
-  background: #212b36;
+.login_right.ivu-select-dropdown{
+  background: #1e1e1e;
 }
-.login_right .ivu-select-dropdown .ivu-select-item{
+.login_right.ivu-select-dropdown.ivu-select-item{
   text-align: left;
 }
-.ivu-form-item-error .ivu-input-group-append, .ivu-form-item-error .ivu-input-group-prepend,.ivu-input-group-append, .ivu-input-group-prepend{
-  background-color: #17212e;
-  border-bottom: 1px solid #27313e;
+.ivu-form-item-error.ivu-input-group-append,.ivu-form-item-error.ivu-input-group-prepend,.ivu-input-group-append,.ivu-input-group-prepend{
+  background-color: #171717;
+  border-bottom: 1px solid #141414;
   border-top:none;
   border-left: none;
   border-right: none;
 }
-.ivu-select-single .ivu-select-selection{
-  background-color: #17212e;
+.ivu-select-single.ivu-select-selection{
+  background-color: #171717;
 }
 .login_form{
   /* WebKit browsers */
@@ -2223,13 +2287,13 @@ fieldset[disabled] .ivu-input {
     letter-spacing: 1px!important;
   }
 
-  .ivu-input-group-prepend{
+.ivu-input-group-prepend{
     font-size: 0.95rem;
     letter-spacing: 1px;
   }
 }
 
-.login_form .login_right form.ivu-form.ivu-form-label-right.ivu-form-inline .password .ivu-form-item-content .ivu-input-wrapper.ivu-input-type .ivu-input{
+.login_form.login_right form.ivu-form.ivu-form-label-right.ivu-form-inline.password.ivu-form-item-content.ivu-input-wrapper.ivu-input-type.ivu-input{
   letter-spacing: 8px;
 }
 
@@ -2243,13 +2307,13 @@ fieldset[disabled] .ivu-input {
 }
 
 .ivu-spin{
-  color:#f0a70a!important;
+  color:#ff6b00!important;
 }
-.ivu-poptip-popper[x-placement^=bottom] .ivu-poptip-arrow{
-  border-bottom-color: #27313e;
+.ivu-poptip-popper[x-placement^=bottom].ivu-poptip-arrow{
+  border-bottom-color: #141414;
 }
-.ivu-poptip-popper[x-placement^=bottom] .ivu-poptip-arrow:after{
-  border-bottom-color: #27313e;
+.ivu-poptip-popper[x-placement^=bottom].ivu-poptip-arrow:after{
+  border-bottom-color: #141414;
 }
 
 .ivu-poptip-title-inner {
@@ -2257,7 +2321,7 @@ fieldset[disabled] .ivu-input {
     font-size: 14px;
 }
 .ivu-poptip-title:after {
-    background-color: #394253;
+    background-color: #2f2f2f;
 }
 .tag-hot{
     display: inline-block;
@@ -2276,13 +2340,13 @@ fieldset[disabled] .ivu-input {
 .page{
   text-align:right;
   margin-top: 10px;
-  .ivu-page{
-    .ivu-page-prev, .ivu-page-next{
+.ivu-page{
+.ivu-page-prev,.ivu-page-next{
       background: transparent!important;
       color: #000;
       border: none;
     }
-    .ivu-page-item{
+.ivu-page-item{
       background-color: transparent!important;
       color: #000;
       border: none;
@@ -2294,21 +2358,21 @@ fieldset[disabled] .ivu-input {
   background-color: #ff8100;
   max-width: 100%;
 }
-.ivu-progress-success .ivu-progress-bg{
+.ivu-progress-success.ivu-progress-bg{
   background-color: #ff8100!important;
 }
-.header_nav_mobile .ivu-menu-vertical .ivu-menu-item, .header_nav_mobile .ivu-menu-vertical .ivu-menu-submenu-title{
+.header_nav_mobile.ivu-menu-vertical.ivu-menu-item,.header_nav_mobile.ivu-menu-vertical.ivu-menu-submenu-title{
   padding: 8px 24px 8px 5px;
-  color: #828ea1;
+  color: #8a8a8a;
 }
-.header_nav_mobile .ivu-drawer-wrap .ivu-drawer-no-header .ivu-drawer-content .ivu-drawer-body{
+.header_nav_mobile.ivu-drawer-wrap.ivu-drawer-no-header.ivu-drawer-content.ivu-drawer-body{
   background: #2b323a;
   padding-top: 60px;
 }
-.header_nav_mobile .ivu-menu-vertical.ivu-menu-light:after{
+.header_nav_mobile.ivu-menu-vertical.ivu-menu-light:after{
   background:transparent!important;
 }
-.header_nav_mobile .ivu-menu-light.ivu-menu-vertical .ivu-menu-item-active:not(.ivu-menu-submenu){
-  color: #f0a70a;
+.header_nav_mobile.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu){
+  color: #ff6b00;
 }
 </style>

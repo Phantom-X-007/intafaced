@@ -7,7 +7,7 @@ let util = {
 
 };
 util.title = function(title) {
-    title = title || '管理后台 - 币严|全球数字资产交易平台';
+    title = title || '管理后台 - INTAFACED|全球数字资产交易平台';
     window.document.title = title;
 };
 

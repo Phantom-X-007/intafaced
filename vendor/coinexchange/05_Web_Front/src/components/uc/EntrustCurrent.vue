@@ -14,7 +14,7 @@
 .table {
   border-radius: 4px;
 }
-.table .ivu-table-wrapper {
+.table.ivu-table-wrapper {
   position: relative;
   /* border: 1px solid #dddee1; */
   border-bottom: 0;
@@ -23,17 +23,17 @@
   border-radius: 4px;
   // overflow: hidden;
 }
-.form.ivu-form-inline .ivu-form-item {
+.form.ivu-form-inline.ivu-form-item {
   display: inline-block;
 }
 </style>
 <style lang="scss">
-.entrustcurrent .ivu-table th,
-.entrustcurrent .ivu-table td {
+.entrustcurrent.ivu-table th,
+.entrustcurrent.ivu-table td {
   text-align: center;
 }
-.table .ivu-table-cell-expand {
-  color: #f0a70a;
+.table.ivu-table-cell-expand {
+  color: #ff6b00;
 }
 </style>
 
@@ -125,8 +125,8 @@ export default {
           render(h, params) {
             return h(
               "span",
-              params.row.type === "LIMIT_PRICE" ? self.$t("exchange.limited_price") : self.$t("exchange.market_price")
-            );
+              params.row.type === "LIMIT_PRICE"? self.$t("exchange.limited_price"): self.$t("exchange.market_price")
+);
           }
         },
         {
@@ -144,9 +144,9 @@ export default {
                 }
               },
               row.direction == "BUY"
-                ? self.$t("exchange.buyin")
-                : self.$t("exchange.sellout")
-            );
+? self.$t("exchange.buyin")
+: self.$t("exchange.sellout")
+);
           }
         },
         {
@@ -161,7 +161,7 @@ export default {
                 }
               },
               self.toFloor(params.row.price)
-            );
+);
           }
         },
         {
@@ -176,7 +176,7 @@ export default {
                 }
               },
               self.toFloor(params.row.amount)
-            );
+);
           }
         },
         {
@@ -191,7 +191,7 @@ export default {
                 }
               },
               self.toFloor(params.row.tradedAmount)
-            );
+);
           }
         },
         {
@@ -206,7 +206,7 @@ export default {
                 }
               },
               self.toFloor(params.row.turnover)
-            );
+);
           }
         },
         {
@@ -221,20 +221,20 @@ export default {
                   size: "small"
                 },
                 style: {
-                  border: "1px solid #f0ac19",
+                  border: "1px solid #ff8534",
                   color: "#f1ac19",
                   "line-height": "1.2",
                   "border-radius": "10px"
                 },
                 on: {
                   click: () => {
-                    // console.log("======开始撤单")
+                    // console.log("======")
                     self.cancel(params.row.orderId);
                   }
                 }
               },
               self.$t("exchange.undo")
-            );
+);
           }
         }
       ],
@@ -279,7 +279,7 @@ export default {
       };
     },
     getHistoryOrder() {
-      //查询历史委托
+      // Order History
       this.loading = true;
       const { symbol, type, direction, date: rangeDate } = this.formItem,
         startTime = new Date(rangeDate[0]).getTime() || "",
@@ -295,8 +295,8 @@ export default {
       var that = this;
       this.orders = [];
       this.$http
-        .post(this.host + "/exchange/order/personal/current", params)
-        .then(response => {
+.post(this.host + "/exchange/order/personal/current", params)
+.then(response => {
           var resp = response.body;
           let rows = [];
           if (resp.content.length > 0) {
@@ -305,8 +305,8 @@ export default {
               var row = resp.content[i];
               row.price =
                 row.type == "MARKET_PRICE"
-                  ? that.$t("exchange.marketprice")
-                  : row.price;
+? that.$t("exchange.marketprice")
+: row.price;
               rows.push(row);
             }
             this.orders = rows;
@@ -328,8 +328,8 @@ export default {
         content: this.$t("exchange.undotip"),
         onOk: () => {
           this.$http
-            .post(this.host + this.api.exchange.orderCancel + "/" + orderId, {})
-            .then(response => {
+.post(this.host + this.api.exchange.orderCancel + "/" + orderId, {})
+.then(response => {
               var resp = response.body;
               if (resp.code == 0) {
                 this.getHistoryOrder();

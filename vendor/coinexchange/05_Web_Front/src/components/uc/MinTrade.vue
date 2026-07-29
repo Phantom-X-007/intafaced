@@ -9,7 +9,7 @@
                     </div>
                     <div class="form-group">
                         <span>
-                            {{$t('uc.finance.trade.start_end')}} ：
+                            {{$t('uc.finance.trade.start_end')}}: 
                         </span>
                         <DatePicker v-model="rangeDate" @on-change="changedate" type="daterange" style="width: 200px;margin-right: 35px;" format="yyyy-MM-dd"></DatePicker>
                         <!--<DatePicker v-model="startDate" type="date"></DatePicker>-->
@@ -18,21 +18,21 @@
                         <!--</span>-->
                         <!--<DatePicker v-model="endDate" type="date"></DatePicker>-->
                         <!--<span>-->
-                        <!--{{$t('uc.finance.record.operatetype')}} ：-->
+                        <!--{{$t('uc.finance.record.operatetype')}}: -->
                         <!--</span>-->
                         <!--<Select v-model="recordValue" clearable style="width:200px">-->
                         <!--<Option v-for="item in recordType" :value="item.value" :key="item.value">{{ item.label }}</Option>-->
                         <!--</Select>-->
-                        <Button type="primary" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#f0a70a;border-color:#f0a70a">{{$t('uc.finance.trade.search')}}</Button>
+                        <Button type="primary" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#ff6b00;border-color:#ff6b00">{{$t('uc.finance.trade.search')}}</Button>
                     </div>
                     <!-- <div class="datedaitl">
-                        <span style="color: #eb6f6c">{{$t('uc.finance.trade.start_end')}} ：</span>&nbsp;&nbsp;<span>{{$t('uc.finance.trade.chargetime')}}</span>
+                        <span style="color: #eb6f6c">{{$t('uc.finance.trade.start_end')}}: </span>&nbsp;&nbsp;<span>{{$t('uc.finance.trade.chargetime')}}</span>
                     </div> -->
                     <div class="order-table">
                         <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :loading="loading"></Table>
                         <div style="margin: 10px;overflow: hidden">
                             <div style="float: right;">
-                                <Page :total="total" :page-size="pageSize" show-total :current="page" @on-change="changePage" id="record_pages"></Page>
+                                <Page :total="total" :page-size="pageSize" show-total:current="page" @on-change="changePage" id="record_pages"></Page>
                             </div>
                         </div>
                     </div>
@@ -130,19 +130,19 @@ export default {
       ],
       tableColumnsRecord: [
         // {
-        //     type: 'expand',
-        //     width: 60,
-        //     key:'data',
-        //     render: (h, params) => {
-        //         return h(expandRow, {
-        //             props: {
-        //                 row: params.row.data
-        //             }
-        //         })
-        //     }
+        // type: 'expand',
+        // width: 60,
+        // key:'data',
+        // render: (h, params) => {
+        // return h(expandRow, {
+        // props: {
+        // row: params.row.data
+        // }
+        // })
+        // }
         // },
         {
-          // 交易时间
+          // Time
           title: this.$t("uc.finance.trade.transactionTime"),
           // key: '_source.transaction_time',
           align: "center",
@@ -151,7 +151,7 @@ export default {
           }
         },
         {
-          // 订单ID
+          // ID
           title: this.$t("uc.finance.trade.exchangeOrderId"),
           align: "center",
           render: (h, params) => {
@@ -159,7 +159,7 @@ export default {
           }
         },
         {
-          //交易对
+          //Pair
           title: this.$t("uc.finance.trade.symbol"),
           align: "center",
           render: (h, params) => {
@@ -167,7 +167,7 @@ export default {
           }
         },
         {
-          //交易方向
+          // Side
           title: this.$t("uc.finance.trade.direction"),
           // key: 'direction',
           align: "center",
@@ -179,23 +179,22 @@ export default {
             let lang = that.$store.state.lang;
             if (type == 1) {
               lang == "English" && (str1 = "market price");
-              lang != "English" && (str1 = "限价");
+              lang!= "English" && (str1 = "Limit");
             } else if (type == 0) {
               lang == "English" && (str1 = "Present price");
-              lang != "English" && (str1 = "市价");
+              lang!= "English" && (str1 = "Market");
             }
             if (direction == 1) {
               lang == "English" && (str2 = " sell");
-              lang != "English" && (str2 = "卖出");
+              lang!= "English" && (str2 = "Sell");
             } else if (direction == 0) {
               lang == "English" && (str2 = " buy");
-              lang != "English" && (str2 = "买入");
+              lang!= "English" && (str2 = "Buy");
             }
             return h("div", str1 + str2, "");
           }
         },
         {
-          //手续费
           title: this.$t("uc.finance.trade.poundageAmount"),
           // key: 'poundageAmount',
           align: "center",
@@ -209,12 +208,11 @@ export default {
                   title: params.row._source.poundage_amount
                 }
               },
-              num + "   " + type
-            );
+              num + " " + type
+);
           }
         },
         {
-          //挖币数量
           title: this.$t("uc.finance.trade.mineAmount"),
           key: "mineAmount",
           align: "center",
@@ -229,23 +227,23 @@ export default {
                 }
               },
               str
-            );
+);
           }
         }
-        // {//到账时间
-        //     title: this.$t('uc.finance.trade.account_date'),
-        //     key: 'transactionTime',
-        //     width:160,
-        //     render:function(h,params){
-        //         var reg = /-/g;
-        //         var a = params.row.transactionTime
-        //         var b = a.split(" ")[0].replace(reg,"/")
-        //         var c = a.split(" ")[1];
-        //         var date = new Date(b).getTime()+86400000;
-        //         date = that.dateform(date);
-        //         var str = date.split(" ")[0] + " "+c;
-        //         return h('div', str,'');
-        //     }
+        // {//Credited
+        // title: this.$t('uc.finance.trade.account_date'),
+        // key: 'transactionTime',
+        // width:160,
+        // render:function(h,params){
+        // var reg = /-/g;
+        // var a = params.row.transactionTime
+        // var b = a.split(" ")[0].replace(reg,"/")
+        // var c = a.split(" ")[1];
+        // var date = new Date(b).getTime()+86400000;
+        // date = that.dateform(date);
+        // var str = date.split(" ")[0] + " "+c;
+        // return h('div', str,'');
+        // }
         // },
       ],
       accumulative_return: 0,
@@ -266,7 +264,7 @@ export default {
     },
     init() {
       let memberId = 0;
-      !this.$store.getters.isLogin && this.$router.push("/login");
+!this.$store.getters.isLogin && this.$router.push("/login");
       this.$store.getters.isLogin && (memberId = this.$store.getters.member.id);
       let startTime = "";
       let endTime = "";
@@ -306,28 +304,28 @@ export default {
       var date = new Date(time);
       var y = date.getFullYear();
       var m = date.getMonth() + 1;
-      m = m < 10 ? "0" + m : m;
+      m = m < 10? "0" + m: m;
       var d = date.getDate();
-      d = d < 10 ? "0" + d : d;
+      d = d < 10? "0" + d: d;
       var h = date.getHours();
-      h = h < 10 ? "0" + h : h;
+      h = h < 10? "0" + h: h;
       var minute = date.getMinutes();
       var second = date.getSeconds();
-      minute = minute < 10 ? "0" + minute : minute;
-      second = second < 10 ? "0" + second : second;
+      minute = minute < 10? "0" + minute: minute;
+      second = second < 10? "0" + second: second;
       return y + "-" + m + "-" + d + " " + h + ":" + minute + ":" + second;
     },
     queryOrder() {
       let rangedate = "";
       if (this.rangeDate.length == 0) {
-        this.$Message.error("请选择搜索日期范围");
+        this.$Message.error("Select a date range");
         return;
       } else {
         try {
           this.page=1;
           this.init();
         } catch (ex) {
-          this.$Message.error("请选择搜索日期范围");
+          this.$Message.error("Select a date range");
           return;
         }
       }
@@ -335,19 +333,19 @@ export default {
     updateLangData() {
       this.tableColumnsRecord[0].title = this.$t(
         "uc.finance.trade.transactionTime"
-      );
+);
       this.tableColumnsRecord[1].title = this.$t(
         "uc.finance.trade.exchangeOrderId"
-      );
+);
       this.tableColumnsRecord[2].title = this.$t("uc.finance.trade.symbol");
       this.tableColumnsRecord[3].title = this.$t("uc.finance.trade.direction");
       this.tableColumnsRecord[4].title = this.$t(
         "uc.finance.trade.poundageAmount"
-      );
+);
       this.tableColumnsRecord[5].title = this.$t("uc.finance.trade.mineAmount");
       this.tableColumnsRecord[6].title = this.$t(
         "uc.finance.trade.account_date"
-      );
+);
     }
   },
   computed: {
@@ -378,22 +376,22 @@ export default {
 }
 .rightarea {
   background: #fff;
-  padding-left: 15px !important;
-  padding-right: 15px !important;
-  margin-bottom: 60px !important;
+  padding-left: 15px!important;
+  padding-right: 15px!important;
+  margin-bottom: 60px!important;
 }
 
-.rightarea .rightarea-top {
+.rightarea.rightarea-top {
   line-height: 75px;
   border-bottom: #f1f1f1 solid 1px;
 }
 
-.rightarea .rightarea-con {
+.rightarea.rightarea-con {
   padding-top: 30px;
   padding-bottom: 20px;
 }
 
-.rightarea .trade-process {
+.rightarea.trade-process {
   line-height: 30px;
   padding: 0 15px;
   background: #f1f1f1;
@@ -402,12 +400,12 @@ export default {
   margin-right: 20px;
 }
 
-.rightarea .trade-process.active {
+.rightarea.trade-process.active {
   color: #eb6f6c;
-  background: #f9f5eb;
+  background: #1a1004;
 }
 
-.rightarea .trade-process .icon {
+.rightarea.trade-process.icon {
   background: #fff;
   border-radius: 20px;
   height: 20px;
@@ -418,7 +416,7 @@ export default {
   margin-right: 10px;
 }
 
-.rightarea .trade-process .arrow {
+.rightarea.trade-process.arrow {
   position: absolute;
   top: 10px;
   right: -5px;
@@ -429,15 +427,15 @@ export default {
   border-left: 5px solid #f1f1f1;
 }
 
-.rightarea .trade-process.active .arrow {
-  border-left: 5px solid #f9f5eb;
+.rightarea.trade-process.active.arrow {
+  border-left: 5px solid #1a1004;
 }
 
-.rightarea .rightarea-tabs {
+.rightarea.rightarea-tabs {
   border: none;
 }
 
-.rightarea .rightarea-tabs li > a {
+.rightarea.rightarea-tabs li > a {
   width: 100%;
   height: 100%;
   padding: 0;
@@ -451,11 +449,11 @@ export default {
   align-items: center;
 }
 
-.rightarea .rightarea-tabs li > a:hover {
+.rightarea.rightarea-tabs li > a:hover {
   background-color: #fcfbfb;
 }
 
-.rightarea .rightarea-tabs li {
+.rightarea.rightarea-tabs li {
   width: 125px;
   height: 40px;
   position: relative;
@@ -467,37 +465,37 @@ export default {
   cursor: pointer;
 }
 
-.rightarea .rightarea-tabs li.active {
+.rightarea.rightarea-tabs li.active {
   background-color: #fcfbfb;
 }
 
-.rightarea .rightarea-tabs li:last-child {
+.rightarea.rightarea-tabs li:last-child {
   border-right: 1px solid #f1f1f1;
 }
 
-.rightarea .rightarea-tabs li.active > a,
-.rightarea .rightarea-tabs li:hover > a {
+.rightarea.rightarea-tabs li.active > a,
+.rightarea.rightarea-tabs li:hover > a {
   color: #da2e22;
   border: none;
 }
 
-.rightarea .panel-tips {
-  border: 3px solid #fdfaf3;
+.rightarea.panel-tips {
+  border: 3px solid #1a1004;
   color: #9e9e9e;
   font-size: 12px;
 }
 
-.rightarea .panel-tips .panel-header {
-  background: #fdfaf3;
+.rightarea.panel-tips.panel-header {
+  background: #1a1004;
   line-height: 40px;
   margin-bottom: 15px;
 }
 
-.rightarea .panel-tips .panel-title {
+.rightarea.panel-tips.panel-title {
   font-size: 16px;
 }
 
-.rightarea .recordtitle {
+.rightarea.recordtitle {
   cursor: pointer;
 }
 
@@ -520,7 +518,7 @@ export default {
 }
 
 .order_box a {
-  color: #8994a3;
+  color: #909090;
   font-size: 16px;
   padding: 0 30px;
   cursor: pointer;
@@ -530,22 +528,22 @@ export default {
   display: inline-block;
 }
 
-.order_box .active {
-  border-bottom: 2px solid #f0a70a;
+.order_box.active {
+  border-bottom: 2px solid #ff6b00;
 }
 
-.order_box .search {
+.order_box.search {
   position: absolute;
   width: 300px;
   height: 32px;
   top: 12px;
   right: 0;
   display: flex;
-  /* border: #c5cdd7 solid 1px; */
+  /* border: #cccccc solid 1px; */
 }
 
-.order-table .ivu-table-body .ivu-table-cell {
-  padding-right: 0 !important;
+.order-table.ivu-table-body.ivu-table-cell {
+  padding-right: 0!important;
 }
 .trade_accumulative {
   height: auto;
@@ -557,17 +555,17 @@ export default {
   padding-bottom: 20px;
   margin-bottom: 20px;
 }
-.trade_accumulative .trade_accumulative_return {
+.trade_accumulative.trade_accumulative_return {
   width: 50%;
   float: left;
 }
-.trade_accumulative .trade_accumulat_return {
+.trade_accumulative.trade_accumulat_return {
   width: 50%;
   float: left;
 }
 </style>
 <style lang="scss">
-th .ivu-table-cell {
+th.ivu-table-cell {
   overflow: hidden;
   white-space: nowrap;
 }

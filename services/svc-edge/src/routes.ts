@@ -36,6 +36,10 @@ export const UPSTREAMS: readonly Upstream[] = [
   // does not know or care that its procedures are permissionless; that is the
   // module's own jurisdiction rule, not a property of the route table.
   { prefix: '/api/dex', envVar: 'DEX_URL', devUrl: 'http://localhost:4010' },
+  // svc-indexer mounts its router and answers on 4013, but had no route here,
+  // so every chain query 404'd at the edge while the service itself was
+  // healthy. A service reachable only from inside the network is not reachable.
+  { prefix: '/api/indexer', envVar: 'INDEXER_URL', devUrl: 'http://localhost:4013' },
 ] as const;
 
 export interface Resolved {

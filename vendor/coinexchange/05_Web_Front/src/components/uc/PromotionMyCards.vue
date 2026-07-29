@@ -15,7 +15,7 @@
 
     <Modal
         v-model="showModal"
-        :title="this.$t('uc.promotion.inputcardno')"
+:title="this.$t('uc.promotion.inputcardno')"
         width="360">
         <p slot="header" style="color:#f60;text-align:left">
             <Icon type="ios-information-circle"></Icon>
@@ -25,7 +25,7 @@
             <Input v-model="cardNo" :placeholder="this.$t('uc.promotion.inputcardno')"/>
         </div>
         <div slot="footer">
-            <Button type="error" size="large" long :loading="modal_loading" @click="exchange">{{$t('uc.promotion.exchange')}}</Button>
+            <Button type="error" size="large" long:loading="modal_loading" @click="exchange">{{$t('uc.promotion.exchange')}}</Button>
         </div>
     </Modal>
 
@@ -33,7 +33,7 @@
       <div style="position:relative;width: 318px;" id="promotionImage" ref="promotionImage">
         <img style="width:100%;display:block;" src="../../assets/images/promotion/promotionbg1.jpg"></img>
         <p style="position:absolute;top: 210px;text-align:center;width: 100%;text-align:center;font-size:26px;color:#F90;font-weight:bold;">{{promotionCode}}</p>
-        <p style="position:absolute;top: 250px;text-align:center;width: 100%;text-align:center;">推广合伙人专属兑换码</p>
+        <p style="position:absolute;top: 250px;text-align:center;width: 100%;text-align:center;">Partner redemption code</p>
       </div>
       <p style="text-align:center;font-size:12px;color:#888;margin-top: 10px;">{{$t('invite.imagetips')}}</p>
       <Button type="error" size="large" :loading="saveImageLoading" long style="margin-top: 20px;" @click="saveImage">{{$t('invite.saveimage')}}</Button>
@@ -83,7 +83,7 @@ export default {
         return new Blob([u8arr], { type: mime });
     },
     saveImage(){
-      this.save("promotionImage", "推广合伙人图片");
+      this.save("promotionImage", "Partner image");
       this.saveImageLoading = true;
     },
     save(divText, imgText) {
@@ -97,7 +97,7 @@ export default {
             document.body.removeChild(dom);
             let blob = that.dataURLToBlob(dom.toDataURL('image/png'));
             a.setAttribute('href', URL.createObjectURL(blob));
-            //这块是保存图片操作  可以设置保存的图片的信息
+            // Set
             a.setAttribute('download', imgText + '.png');
             document.body.appendChild(a);
             a.click();
@@ -160,7 +160,7 @@ export default {
         render(h, params) {
           return h(
             "span",{},params.row.coin.unit
-          );
+);
         }
       });
       columns.push({
@@ -176,7 +176,7 @@ export default {
               }
             },
             self.toFloor(params.row.amount || "0")
-          );
+);
         }
       });
       columns.push({
@@ -191,7 +191,7 @@ export default {
               }
             },
             self.toFloor(params.row.count || "0")
-          );
+);
         }
       });
       columns.push({
@@ -206,7 +206,7 @@ export default {
               }
             },
             self.toFloor(params.row.exchangeCount || "0")
-          );
+);
         }
       });
       columns.push({
@@ -222,7 +222,7 @@ export default {
               }
             },
             self.toFloor(params.row.createTime || "0")
-          );
+);
         }
       });
       columns.push({
@@ -249,7 +249,7 @@ export default {
                     }
                   },
                   self.$t("uc.promotion.gopromotion")
-                );
+);
         }
       });
       return columns;
@@ -260,28 +260,28 @@ export default {
 
 <style lang="scss">
 .nav-right {
-  .rightarea.bill_box {
-    .shaow {
+.rightarea.bill_box {
+.shaow {
       padding: 5px;
     }
-    .money_table {
-      .search{
+.money_table {
+.search{
         width: 200px;
         margin-bottom: 10px;
       }
-      .ivu-table-wrapper {
-        .ivu-table-header{
-          background: #27313e;
+.ivu-table-wrapper {
+.ivu-table-header{
+          background: #141414;
           th{
             color: #fff;
           }
         }
-        .ivu-table-body {
+.ivu-table-body {
           td {
             color: #fff;
-            .ivu-table-cell {
+.ivu-table-cell {
               padding: 10px 10px;
-              .ivu-btn {
+.ivu-btn {
                 background: transparent;
                 height: 25px;
                 padding: 0 0px;
@@ -294,30 +294,30 @@ export default {
                   letter-spacing: 1px;
                 }
               }
-              .ivu-btn.ivu-btn-info {
-                border: 1px solid #f0ac19;
+.ivu-btn.ivu-btn-info {
+                border: 1px solid #ff8534;
                 span {
-                  color: #f0ac19;
+                  color: #ff8534;
                 }
               }
-              .ivu-btn.ivu-btn-error {
+.ivu-btn.ivu-btn-error {
                 border: 1px solid #f15057;
                 span {
                   color: #f15057;
                 }
               }
-              .ivu-btn.ivu-btn-primary {
+.ivu-btn.ivu-btn-primary {
                 border: 1px solid #00b275;
                 border: 1px solid #00b275;
                 span {
                   color: #00b275;
                 }
               }
-              .ivu-btn.ivu-btn-default {
-                border: 1px solid #2c384f;
-                background: #222c3e;
+.ivu-btn.ivu-btn-default {
+                border: 1px solid #282828;
+                background: #1f1f1f;
                 span {
-                  color: #54637a;
+                  color: #464646;
                 }
               }
             }
@@ -334,7 +334,7 @@ export default {
   height: auto;
   overflow: hidden;
   padding: 0 0 0 15px;
-  .rightarea.bill_box {
+.rightarea.bill_box {
     padding-left: 15px;
     width: 100%;
     height: auto;
@@ -347,10 +347,10 @@ export default {
 }
 
 .header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #f0ac19;color: #f0ac19;
+  float:right;padding: 5px 15px;border: 1px solid #ff8534;color: #ff8534;
   margin-left: 20px;
   &:hover{
-    background: #f0ac19;
+    background: #ff8534;
     color: #000;
     cursor: pointer;
   }

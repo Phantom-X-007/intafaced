@@ -80,7 +80,7 @@
                                         <Col span="8">
                                         <input type="hidden" name="aliPreview" :value="aliPreview" />
                                         <img v-if="aliImg" :alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" :src="aliImg">
-                                        <img v-else :alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" src="../../assets/images/upload_placeholder.png">
+                                        <img v-else:alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" src="../../assets/images/upload_placeholder.png">
                                         <div class="acc_sc">
                                           <Upload ref="upload1" :on-success="aliHandleSuccess" :headers="uploadHeaders" :action="uploadUrl">
                                             <Button icon="ios-cloud-upload-outline">{{$t('uc.safe.upload')}}</Button>
@@ -134,7 +134,7 @@
                                         <Col span="8">
                                           <input type="hidden" name="wePreview" :value="wePreview" />
                                           <img v-if="weImg" :alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" :src="weImg" >
-                                          <img v-else :alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" src="../../assets/images/upload_placeholder.png">
+                                          <img v-else:alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" src="../../assets/images/upload_placeholder.png">
                                           <div class="acc_sc">
                                             <Upload ref="upload2" :on-success="weHandleSuccess" :headers="uploadHeaders" :action="uploadUrl">
                                               <Button icon="ios-cloud-upload-outline">{{$t('uc.safe.upload')}}</Button>
@@ -193,7 +193,7 @@ export default {
             // } else if (!/([a-zA-Z0-9]){6,18}/.test(value)) {
             } else if (!/([0-9]){6,18}/.test(value)) {
                 callback(new Error(this.$t('uc.account.banknomsg1')));
-            } else if (value !== this.formValidate1.bankNo) {
+            } else if (value!== this.formValidate1.bankNo) {
                 callback(new Error(this.$t('uc.account.banknomsg2')));
             } else {
                 callback();
@@ -231,120 +231,120 @@ export default {
             },
             bankNameList: [
                 {
-                    value: '中国工商银行',
-                    label: '中国工商银行'
+                    value: 'ICBC',
+                    label: 'ICBC'
                 },
                 {
-                    value: '中国农业银行',
-                    label: '中国农业银行'
+                    value: 'Agricultural Bank of China',
+                    label: 'Agricultural Bank of China'
                 },
                 {
-                    value: '中国建设银行',
-                    label: '中国建设银行'
+                    value: 'China Construction Bank',
+                    label: 'China Construction Bank'
                 },
                 {
-                    value: '中国邮政储蓄银行',
-                    label: '中国邮政储蓄银行'
+                    value: 'Postal Savings Bank of China',
+                    label: 'Postal Savings Bank of China'
                 },
                 {
-                    value: '招商银行',
-                    label: '招商银行'
+                    value: 'China Merchants Bank',
+                    label: 'China Merchants Bank'
                 },
                 {
-                    value: '中国银行',
-                    label: '中国银行'
+                    value: 'Bank of China',
+                    label: 'Bank of China'
                 },
                 {
-                    value: '交通银行',
-                    label: '交通银行'
+                    value: 'Bank of Communications',
+                    label: 'Bank of Communications'
                 },
                 {
-                    value: '中信银行',
-                    label: '中信银行'
+                    value: 'CITIC Bank',
+                    label: 'CITIC Bank'
                 },
                 {
-                    value: '华夏银行',
-                    label: '华夏银行'
+                    value: 'Hua Xia Bank',
+                    label: 'Hua Xia Bank'
                 },
                 {
-                    value: '中国民生银行',
-                    label: '中国民生银行'
+                    value: 'China Minsheng Bank',
+                    label: 'China Minsheng Bank'
                 },
                 {
-                    value: '广发银行',
-                    label: '广发银行'
+                    value: 'China Guangfa Bank',
+                    label: 'China Guangfa Bank'
                 },
                 {
-                    value: '平安银行',
-                    label: '平安银行'
+                    value: 'Ping An Bank',
+                    label: 'Ping An Bank'
                 },
                 {
-                    value: '兴业银行',
-                    label: '兴业银行'
+                    value: 'Industrial Bank',
+                    label: 'Industrial Bank'
                 },
                 {
-                    value: '上海浦东发展银行',
-                    label: '上海浦东发展银行'
+                    value: 'Shanghai Pudong Development Bank',
+                    label: 'Shanghai Pudong Development Bank'
                 },
                 {
-                    value: '浙商银行',
-                    label: '浙商银行'
+                    value: 'China Zheshang Bank',
+                    label: 'China Zheshang Bank'
                 },
                 {
-                    value: '渤海银行',
-                    label: '渤海银行'
+                    value: 'Bank of Bohai',
+                    label: 'Bank of Bohai'
                 },
                 {
-                    value: '恒丰银行',
-                    label: '恒丰银行'
+                    value: 'Hengfeng Bank',
+                    label: 'Hengfeng Bank'
                 },
                 {
-                    value: '花旗银行',
-                    label: '花旗银行'
+                    value: 'Citibank',
+                    label: 'Citibank'
                 },
                 {
-                    value: '渣打银行',
-                    label: '渣打银行'
+                    value: 'Standard Chartered',
+                    label: 'Standard Chartered'
                 },
                 {
-                    value: '汇丰银行',
-                    label: '汇丰银行'
+                    value: 'HSBC',
+                    label: 'HSBC'
                 },
                 {
-                    value: '中国光大银行',
-                    label: '中国光大银行'
+                    value: 'China Everbright Bank',
+                    label: 'China Everbright Bank'
                 },
                 {
-                    value: '上海银行',
-                    label: '上海银行'
+                    value: 'Bank of Shanghai',
+                    label: 'Bank of Shanghai'
                 },
                 {
-                    value: '江苏银行',
-                    label: '江苏银行'
+                    value: 'Bank of Jiangsu',
+                    label: 'Bank of Jiangsu'
                 },
                 {
-                    value: '重庆银行',
-                    label: '重庆银行'
+                    value: 'Bank of Chongqing',
+                    label: 'Bank of Chongqing'
                 },
                 {
-                    value: '天津银行',
-                    label: '天津银行'
+                    value: 'Bank of Tianjin',
+                    label: 'Bank of Tianjin'
                 },
                 {
-                    value: '厦门银行',
-                    label: '厦门银行'
+                    value: 'Bank of Xiamen',
+                    label: 'Bank of Xiamen'
                 },
                 {
-                    value: '城市商业银行',
-                    label: '城市商业银行'
+                    value: 'City Commercial Bank',
+                    label: 'City Commercial Bank'
                 },
                 {
-                    value: '农村商业银行',
-                    label: '农村商业银行'
+                    value: 'Rural Commercial Bank',
+                    label: 'Rural Commercial Bank'
                 },
                 {
-                    value: '徽商银行',
-                    label: '徽商银行'
+                    value: 'Huishang Bank',
+                    label: 'Huishang Bank'
                 },
 
 
@@ -405,7 +405,7 @@ export default {
             this.$refs[name].resetFields();
         },
         submit(name) {
-            //银行卡
+            //Bank card
             if (name == 'formValidate1') {
                 let param = {}
                 param['bank'] = this.formValidate1.bankName
@@ -413,7 +413,7 @@ export default {
                 param['jyPassword'] = this.formValidate1.password
                 param['realName'] = this.formValidate1.name
                 param['cardNo'] = this.formValidate1.bankNo
-              if (this.user.bankVerified==1) { //修改
+              if (this.user.bankVerified==1) { //Edit
                 this.$http.post(this.host + '/uc/approve/update/bank', param).then(response => {
                   var resp = response.body;
                   if (resp.code == 0) {
@@ -424,7 +424,7 @@ export default {
                     this.$Message.error(resp.message);
                   }
                 })
-              }else { //设置
+              }else { //Set
                 this.$http.post(this.host + '/uc/approve/bind/bank', param).then(response => {
                     var resp = response.body;
                     if (resp.code == 0) {
@@ -437,7 +437,7 @@ export default {
                 })
               }
             }
-            //支付宝
+            //Alipay
             if (name == 'formValidate2') {
                 let param = {}
                 param['ali'] = this.formValidate2.alipay
@@ -469,7 +469,6 @@ export default {
                   })
                 }
             }
-            //微信
             if (name == 'formValidate3') {
                 let param = {}
                 param['wechat'] = this.formValidate3.wechat
@@ -509,7 +508,6 @@ export default {
             this.$Message.error(this.msg);
         },
         getAccount() {
-            //获取个人账户信息
             this.$http.post(this.host + '/uc/approve/account/setting').then(response => {
                 var resp = response.body;
                 // console.log(resp);
@@ -519,14 +517,14 @@ export default {
                     // this.usernameS = (this.user.username + '').slice(0, 1)
                     // this.dataCount = resp.data.length
                     this.isNoName = false
-                    //设置
-                    this.formValidate1.bankName = this.user.bankInfo == null ? '' : this.user.bankInfo.bank
-                    this.formValidate1.bankBranch = this.user.bankInfo == null ? '' : this.user.bankInfo.branch
-                    this.formValidate1.bankNo = this.user.bankInfo == null ? '' : this.user.bankInfo.cardNo
-                    this.formValidate2.alipay = this.user.alipay == null ? '' : this.user.alipay.aliNo
-                    this.formValidate3.wechat = this.user.wechatPay == null ? '' : this.user.wechatPay.wechat
-                    this.aliImg = this.aliPreview = this.user.alipay == null ? '' : this.user.alipay.qrCodeUrl;
-                    this.weImg = this.wePreview = this.user.wechatPay == null ? '' : this.user.wechatPay.qrWeCodeUrl;
+                    //Set
+                    this.formValidate1.bankName = this.user.bankInfo == null? '': this.user.bankInfo.bank
+                    this.formValidate1.bankBranch = this.user.bankInfo == null? '': this.user.bankInfo.branch
+                    this.formValidate1.bankNo = this.user.bankInfo == null? '': this.user.bankInfo.cardNo
+                    this.formValidate2.alipay = this.user.alipay == null? '': this.user.alipay.aliNo
+                    this.formValidate3.wechat = this.user.wechatPay == null? '': this.user.wechatPay.wechat
+                    this.aliImg = this.aliPreview = this.user.alipay == null? '': this.user.alipay.qrCodeUrl;
+                    this.weImg = this.wePreview = this.user.wechatPay == null? '': this.user.wechatPay.qrWeCodeUrl;
 
                 } else {
                     this.msg = resp.message;
@@ -549,36 +547,36 @@ export default {
 }
 </script>
 <style scoped>
-.account-box .account-in .account-item .account-detail {
+.account-box.account-in.account-item.account-detail {
     padding: 30px 0;
     /* background: white; */
     margin: 6px 0;
 }
 
-.account-box .account-in .account-item .account-detail .detail-list {
+.account-box.account-in.account-item.account-detail.detail-list {
     width: 40%;
     width: 80%;
     margin: 0 auto;
 }
 
-.account-box .account-in .account-item .account-detail .detail-list .input-control {
+.account-box.account-in.account-item.account-detail.detail-list.input-control {
     margin-bottom: 10px;
     height: 45px;
 }
 
-.detail-list .input-control .ivu-input-group-prepend {
+.detail-list.input-control.ivu-input-group-prepend {
     width: 63px;
 }
 
-.detail-list .input-control .ivu-input {
+.detail-list.input-control.ivu-input {
     height: 45px;
 }
 
-.account-box .account-in .account-item {
+.account-box.account-in.account-item {
     margin-bottom: 10px;
 }
 
-.account-box .account-in .account-item .account-item-in {
+.account-box.account-in.account-item.account-item-in {
     display: -webkit-box;
     display: -ms-flexbox;
     display: flex;
@@ -592,7 +590,7 @@ export default {
     color: #fff;
 }
 
-.account-box .account-in .account-item .account-item-in .icons {
+.account-box.account-in.account-item.account-item-in.icons {
     height: 17px;
     width: 17px;
     display: inline-block;
@@ -600,7 +598,7 @@ export default {
     background-size: 100% 100%;
 }
 
-.account-box .account-in .account-item .account-item-in .bankfor {
+.account-box.account-in.account-item.account-item-in.bankfor {
     background-image: url(../../assets/img/bankcard.png);
 }
 
@@ -612,28 +610,28 @@ export default {
     background-image: url(../../assets/img/wechat.png);
 }
 
-.account-box .account-in .account-item .account-item-in .card-number {
+.account-box.account-in.account-item.account-item-in.card-number {
     width: 142px;
     height: 40px;
     margin-right: 15px;
-    border-right: 1px dashed #27313e;
+    border-right: 1px dashed #141414;
     padding: 0 15px;
     line-height: 40px;
     text-align: left;
     display: inline-block;
 }
 
-.account-box .account-in .account-item .account-item-in .bankInfo {
+.account-box.account-in.account-item.account-item-in.bankInfo {
     width:70%;
     text-align: left;
     color: rgb(130, 142, 161);
     font-size: 13px;
 }
 
-.account-box .account-in .account-item .account-item-in .btn {
+.account-box.account-in.account-item.account-item-in.btn {
     padding: 8px 10px;
     cursor: pointer;
-    color: #f0a70a;
+    color: #ff6b00;
 }
 
 .tips-g {
@@ -664,28 +662,28 @@ export default {
     display: table;
 }
 
-.action-inner .inner-box {
+.action-inner.inner-box {
     display: table-cell;
     width: 100%;
 }
 
-.action-box .title .copy {
+.action-box.title.copy {
     user-select: text;
 }
 
-.action-box .title a.link-copy {
+.action-box.title a.link-copy {
     font-size: 14px;
     margin-left: 20px;
 }
 
 .hb-night a {
     text-decoration: none;
-    color: #f0a70a;
-    transition: all .2s ease-in-out;
+    color: #ff6b00;
+    transition: all.2s ease-in-out;
     cursor: pointer;
 }
 
-.action-box .title a.link-qrcode {
+.action-box.title a.link-qrcode {
     margin-left: 20px;
     font-size: 14px;
     position: relative;
@@ -693,12 +691,12 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #f0a70a;
-    transition: all .2s ease-in-out;
+    color: #ff6b00;
+    transition: all.2s ease-in-out;
     cursor: pointer;
 }
 
-.action-box .subtitle {
+.action-box.subtitle {
     font-size: 12px;
     margin-top: 30px;
 }
@@ -710,20 +708,20 @@ export default {
     display: table;
 }
 
-.action-box .title {
+.action-box.title {
     margin-top: 20px;
     font-size: 20px;
     user-select: none;
 }
 
-.action-box .title .show-qrcode {
+.action-box.title.show-qrcode {
     position: absolute;
     top: -100px;
     left: 40px;
     padding: 10px;
 }
 
-.action-inner .inner-box.deposit-address {
+.action-inner.inner-box.deposit-address {
     width: 80%;
 }
 
@@ -754,7 +752,7 @@ p.describe {
     background-size: 100% 100%;
 }
 
-.merchant-top .tips-word {
+.merchant-top.tips-word {
     -webkit-box-flex: 2;
     -ms-flex-positive: 2;
     flex-grow: 2;
@@ -765,7 +763,7 @@ p.describe {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #f0a70a;
+    background: #ff6b00;
 }
 
 .bill_box {
@@ -775,22 +773,22 @@ p.describe {
 }
 
 .rightarea {
-    padding-left: 15px !important;
-    padding-right: 15px !important;
-    margin-bottom: 60px !important;
+    padding-left: 15px!important;
+    padding-right: 15px!important;
+    margin-bottom: 60px!important;
 }
 
-.rightarea .rightarea-top {
+.rightarea.rightarea-top {
     line-height: 75px;
     border-bottom: #f1f1f1 solid 1px;
 }
 
-.rightarea .rightarea-con {
+.rightarea.rightarea-con {
     padding-top: 30px;
     padding-bottom: 125px;
 }
 
-.rightarea .trade-process {
+.rightarea.trade-process {
     line-height: 30px;
     padding: 0 15px;
     background: #f1f1f1;
@@ -799,12 +797,12 @@ p.describe {
     margin-right: 20px;
 }
 
-.rightarea .trade-process.active {
+.rightarea.trade-process.active {
     color: #eb6f6c;
-    background: #f9f5eb;
+    background: #1a1004;
 }
 
-.rightarea .trade-process .icon {
+.rightarea.trade-process.icon {
     background: #fff;
     border-radius: 20px;
     height: 20px;
@@ -815,7 +813,7 @@ p.describe {
     margin-right: 10px;
 }
 
-.rightarea .trade-process .arrow {
+.rightarea.trade-process.arrow {
     position: absolute;
     top: 10px;
     right: -5px;
@@ -826,15 +824,15 @@ p.describe {
     border-left: 5px solid #f1f1f1;
 }
 
-.rightarea .trade-process.active .arrow {
-    border-left: 5px solid #f9f5eb;
+.rightarea.trade-process.active.arrow {
+    border-left: 5px solid #1a1004;
 }
 
-.rightarea .rightarea-tabs {
+.rightarea.rightarea-tabs {
     border: none;
 }
 
-.rightarea .rightarea-tabs li>a {
+.rightarea.rightarea-tabs li>a {
     width: 100%;
     height: 100%;
     padding: 0;
@@ -848,11 +846,11 @@ p.describe {
     align-items: center;
 }
 
-.rightarea .rightarea-tabs li>a:hover {
+.rightarea.rightarea-tabs li>a:hover {
     background-color: #fcfbfb;
 }
 
-.rightarea .rightarea-tabs li {
+.rightarea.rightarea-tabs li {
     width: 125px;
     height: 40px;
     position: relative;
@@ -864,37 +862,37 @@ p.describe {
     cursor: pointer;
 }
 
-.rightarea .rightarea-tabs li.active {
+.rightarea.rightarea-tabs li.active {
     background-color: #fcfbfb;
 }
 
-.rightarea .rightarea-tabs li:last-child {
+.rightarea.rightarea-tabs li:last-child {
     border-right: 1px solid #f1f1f1;
 }
 
-.rightarea .rightarea-tabs li.active>a,
-.rightarea .rightarea-tabs li:hover>a {
+.rightarea.rightarea-tabs li.active>a,
+.rightarea.rightarea-tabs li:hover>a {
     color: #da2e22;
     border: none;
 }
 
-.rightarea .panel-tips {
-    border: 3px solid #fdfaf3;
+.rightarea.panel-tips {
+    border: 3px solid #1a1004;
     color: #9e9e9e;
     font-size: 12px;
 }
 
-.rightarea .panel-tips .panel-header {
-    background: #fdfaf3;
+.rightarea.panel-tips.panel-header {
+    background: #1a1004;
     line-height: 40px;
     margin-bottom: 15px;
 }
 
-.rightarea .panel-tips .panel-title {
+.rightarea.panel-tips.panel-title {
     font-size: 16px;
 }
 
-.rightarea .recordtitle {
+.rightarea.recordtitle {
     cursor: pointer;
 }
 
@@ -917,7 +915,7 @@ p.describe {
 }
 
 .order_box a {
-    color: #8994A3;
+    color: #909090;
     font-size: 16px;
     padding: 0 30px;
     cursor: pointer;
@@ -927,32 +925,32 @@ p.describe {
     display: inline-block;
 }
 
-.order_box .active {
-    border-bottom: 2px solid #f0a70a;
+.order_box.active {
+    border-bottom: 2px solid #ff6b00;
 }
 
-.order_box .search {
+.order_box.search {
     position: absolute;
     width: 300px;
     height: 32px;
     top: 12px;
     right: 0;
     display: flex;
-    /* border: #c5cdd7 solid 1px; */
+    /* border: #cccccc solid 1px; */
 }
 .ivu-btn-primary{
-    background-color: #f0a70a;
-    border-color: #f0a70a;
+    background-color: #ff6b00;
+    border-color: #ff6b00;
 }
 
 @media screen and (max-width:768px){
-    .uc_account .nav-right{
+.uc_account.nav-right{
         padding: 0 0!important;
     }
-    .uc_account .account-box .account-in .account-item .account-item-in .card-number{
-        padding: 0px 5px !important;
+.uc_account.account-box.account-in.account-item.account-item-in.card-number{
+        padding: 0px 5px!important;
     }
-    .uc_account .merchant-top{
+.uc_account.merchant-top{
         padding: 0 0!important;
     }
 }

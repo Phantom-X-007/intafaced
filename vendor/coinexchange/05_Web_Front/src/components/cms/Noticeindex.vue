@@ -4,7 +4,7 @@
             <div class="bill_box rightarea padding-right-clear">
                 <section class="trade-group merchant-top">
                     <i class="merchant-icon tips"></i>
-                    <span class="tips-word">平台公告</span>
+                    <span class="tips-word">Announcements</span>
                 </section>
                 <section class="noticeBox">
                     <Table :columns="tableColumnsAdv" :data="tableData1" :show-header="sasa"></Table>
@@ -68,7 +68,7 @@ export default {
                         })
                     }
                 } else if (resp.code == 4000) {
-                    this.$Message.success('请先登录');
+                    this.$Message.success('Please sign in first');
                     this.$router.push('/login');
                 } else {
                     this.$Message.error(resp.message);
@@ -93,20 +93,20 @@ export default {
 }
 </script>
 <style>
-.notice .ivu-table:after {
+.notice.ivu-table:after {
     width: 0;
 }
 
-.notice .ivu-table:before {
+.notice.ivu-table:before {
     height: 0;
-    background: none !important;
+    background: none!important;
 }
 
-.notice .noticeBox .ivu-table-wrapper {
+.notice.noticeBox.ivu-table-wrapper {
     border: 0;
 }
 
-.notice .trade-group {
+.notice.trade-group {
     height: 50px;
     display: -webkit-box;
     display: -ms-flexbox;
@@ -121,44 +121,44 @@ export default {
     font-size: 14px;
 }
 
-.notice .merchant-icon.tips {
+.notice.merchant-icon.tips {
     display: inline-block;
     margin-left: 4px;
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #f0a70a;
+    background: #ff6b00;
 }
 
-.notice .merchant-top .tips-word {
+.notice.merchant-top.tips-word {
     -webkit-box-flex: 2;
     -ms-flex-positive: 2;
     flex-grow: 2;
     text-align: left;
 }
 
-.notice .bill_box {
+.notice.bill_box {
     width: 100%;
     height: auto;
     overflow: hidden;
 }
 
-.notice .rightarea {
+.notice.rightarea {
     background: #fff;
-    padding-left: 15px !important;
-    padding-right: 15px !important;
-    margin-bottom: 60px !important;
+    padding-left: 15px!important;
+    padding-right: 15px!important;
+    margin-bottom: 60px!important;
     padding-top: 20px;
 }
 
-.notice .nav-right {
+.notice.nav-right {
     /* width: 1000px; */
     height: auto;
     overflow: hidden;
     padding: 0 15px;
 }
 
-.notice .order_box {
+.notice.order_box {
     width: 100%;
     background: #fff;
     height: 56px;
@@ -169,7 +169,7 @@ export default {
     text-align: left;
 }
 
-.notice .order_box a {
+.notice.order_box a {
     color: #0B0D1B;
     font-size: 16px;
     padding: 0 30px;
@@ -180,17 +180,17 @@ export default {
     display: inline-block;
 }
 
-.notice .order_box .active {
-    border-bottom: 2px solid #00b5f6;
+.notice.order_box.active {
+    border-bottom: 2px solid #ff6b00;
 }
 
-.notice .order_box .search {
+.notice.order_box.search {
     position: absolute;
     width: 300px;
     height: 32px;
     top: 12px;
     right: 0;
     display: flex;
-    /* border: #c5cdd7 solid 1px; */
+    /* border: #cccccc solid 1px; */
 }
 </style>

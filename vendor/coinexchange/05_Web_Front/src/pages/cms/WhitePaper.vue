@@ -1,8 +1,8 @@
 <template>
   <div class="pdf">
-    <embed src="https://bizzan.oss-cn-hangzhou.aliyuncs.com/BIZZANWhitePaperVer%201.0.pdf" width="100%" height="800">
+    <embed src="/static/INTAFACEDWhitePaperVer%201.0.pdf" width="100%" height="800">
     <p class="arrow" style="text-align:center;color:#000;margin: 20px 0 20px 0;">
-      <a style="color: #FFF;" href="https://raw.githubusercontent.com/bizzanpublic/bizzan/master/BIZZANWhitePaperVer%201.0.pdf" target="_blank">{{$t("sectionPage.downloadwhite")}}</a>
+      <a style="color: #FFF;" href="https://raw.githubusercontent.com/intafacedpublic/intafaced/master/INTAFACEDWhitePaperVer%201.0.pdf" target="_blank">{{$t("sectionPage.downloadwhite")}}</a>
     </p>
   </div>
 </template>
@@ -10,7 +10,7 @@
 export default {
   data() {
     return {
-      src: 'https://bizzan.oss-cn-hangzhou.aliyuncs.com/BIZZANWhitePaperVer%201.0.pdf'
+      src: '/static/INTAFACEDWhitePaperVer%201.0.pdf'
     };
   },
   created: function() {
@@ -20,14 +20,9 @@ export default {
     lang() {
       return this.$store.state.lang;
     },
-    langPram(){
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+    langPram() {
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     }
   },
   methods: {
@@ -56,6 +51,6 @@ export default {
   padding-top: 60px;
   width: 100%;
   padding-bottom: 15px;
-  background: #51565b !important;
+  background: #51565b!important;
 }
 </style>

@@ -15,7 +15,7 @@
                                 <div class="user-name">
                                 </div>
                             </div>
-                            <!-- 个人姓名改为昵称 -->
+                            <!-- show nickname instead of legal name -->
                             <span class="ml10" style="width: 105px;">{{strpro(user.username)}}</span>
                         </div>
                         <div class="deal-market-info">
@@ -45,11 +45,11 @@
                             </p>
                         </div>
                         <div class="deal-user-trade-info">
-                            <p>{{$t('otc.tradeinfo.exchangetimes')}}：
+                            <p>{{$t('otc.tradeinfo.exchangetimes')}}: 
                                 <em class="trade-times">{{user.transactions}}</em>
                             </p>
-                            <!-- <p>平均放行：
-                                <em>0.21 分钟</em>
+                            <!-- <p>Average release:
+                                <em>0.21 min</em>
                             </p> -->
                         </div>
                     </div>
@@ -62,7 +62,7 @@
                                     <label>{{$t('otc.tradeinfo.price')}}</label>
                                     <span>{{user.price}} CNY / {{user.unit}}</span>
                                     <!-- <span @click="update">
-                                                                                                                            <a href="javascript:;">刷新</a>
+                                                                                                                            <a href="javascript:;">Refresh</a>
                                                                                                                         </span> -->
                                 </p>
                                 <p>
@@ -215,10 +215,10 @@ export default {
       }
     },
     getIdAdv() {
-      //获取id广告信息
+      // id
       this.$http
-        .post(this.host + "/otc/order/pre", { id: this.$route.query.tradeId })
-        .then(response => {
+.post(this.host + "/otc/order/pre", { id: this.$route.query.tradeId })
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.user = resp.data;
@@ -242,8 +242,8 @@ export default {
               this.type = this.$t("otc.tradeinfo.sellout");
             }
             this.usernameS = (this.user.username + "")
-              .replace(/^\s+|\s+$/g, "")
-              .slice(0, 1);
+.replace(/^\s+|\s+$/g, "")
+.slice(0, 1);
           } else {
             this.$Message.error(resp.message);
           }
@@ -260,8 +260,8 @@ export default {
           param["money"] = this.buyPrice;
           param["amount"] = this.nuyNum;
           this.$http
-            .post(this.host + "/otc/order/buy", param)
-            .then(response => {
+.post(this.host + "/otc/order/buy", param)
+.then(response => {
               this.btnDisabled = false;
               var resp = response.body;
               if (resp.code == 0) {
@@ -283,8 +283,8 @@ export default {
           param["money"] = this.buyPrice;
           param["amount"] = this.nuyNum;
           this.$http
-            .post(this.host + "/otc/order/sell", param)
-            .then(response => {
+.post(this.host + "/otc/order/sell", param)
+.then(response => {
               this.btnDisabled = false;
               var resp = response.body;
               if (resp.code == 0) {
@@ -304,16 +304,16 @@ export default {
     },
     sendMsg() {
       // this.$http.post(this.host + '/otc/order/sell', param).then(response => {
-      //   var resp = response.body;
-      //   if (resp.code == 0) {
-      //     this.$Message.success(resp.message);
-      //     let self = this
-      //     setTimeout(() => {
-      //       self.$router.push('/chat?tradeId=' + resp.data);
-      //     }, 2000)
-      //   } else {
-      //     this.$Message.error(resp.message);
-      //   }
+      // var resp = response.body;
+      // if (resp.code == 0) {
+      // this.$Message.success(resp.message);
+      // let self = this
+      // setTimeout(() => {
+      // self.$router.push('/chat?tradeId=' + resp.data);
+      // }, 2000)
+      // } else {
+      // this.$Message.error(resp.message);
+      // }
       // })
     },
     mul(a, b) {
@@ -330,7 +330,7 @@ export default {
         Number(d.replace(".", "")) *
         Number(e.replace(".", "")) /
         Math.pow(10, c)
-      );
+);
     },
     div(a, b) {
       var c,
@@ -347,7 +347,7 @@ export default {
         (c = Number(a.toString().replace(".", ""))),
         (d = Number(b.toString().replace(".", ""))),
         this.mul(c / d, Math.pow(10, f - e))
-      );
+);
     },
     round(v, e) {
       var t = 1;
@@ -379,7 +379,7 @@ export default {
     priceNow: function() {
       return (
         (this.user.price + "").replace(/,/g, "").replace(/[^\d|.]/g, "") - 0
-      );
+);
     },
     minNum: function() {
       return (this.user.minLimit / this.priceNow).toFixed(8);
@@ -399,35 +399,35 @@ export default {
   text-align: left;
 }
 
-.trade-right-box .trade-price {
+.trade-right-box.trade-price {
   padding: 36px;
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
   margin-bottom: 20px;
 }
 
-.trade-right-box .trade-price p {
+.trade-right-box.trade-price p {
   color: #fff;
   font-size: 14px;
   line-height: 2.8;
 }
 
-.trade-right-box .trade-price p label {
+.trade-right-box.trade-price p label {
   min-width: 80px;
   display: inline-block;
 }
 
-.trade-right-box .trade-price p span {
+.trade-right-box.trade-price p span {
   margin-left: 15%;
   display: inline-block;
 }
 
-.trade-right-box .trade-operation {
+.trade-right-box.trade-operation {
   padding: 20px;
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
   margin-bottom: 20px;
 }
 
-.trade-right-box .trade-operation .trade-price-input {
+.trade-right-box.trade-operation.trade-price-input {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -437,7 +437,7 @@ export default {
   margin-bottom: 20px;
 }
 
-.boxinput .ivu-input {
+.boxinput.ivu-input {
   border: none;
   background-color: transparent;
   outline: none;
@@ -446,15 +446,15 @@ export default {
   width: 300px;
 }
 
-.trade-right-box .trade-operation .trade-price-input .exchange1 {
+.trade-right-box.trade-operation.trade-price-input.exchange1 {
   width: 10%;
   text-align: center;
   font-size: 24px;
 }
 
-.trade-right-box .trade-operation .text-inputs {
-  background-color: #192330;
-  border: 1px solid #27313e;
+.trade-right-box.trade-operation.text-inputs {
+  background-color: #000000;
+  border: 1px solid #141414;
   outline: none;
   display: block;
   height: 100px;
@@ -465,7 +465,7 @@ export default {
   color: #ccc;
 }
 
-.trade-right-box .trade-operation .price-box {
+.trade-right-box.trade-operation.price-box {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -474,8 +474,8 @@ export default {
   align-items: center;
 }
 
-.trade-right-box .trade-operation .price-box .show-price {
-  border: 1px solid #27313e;
+.trade-right-box.trade-operation.price-box.show-price {
+  border: 1px solid #141414;
   width: 80%;
   height: 58px;
   display: -webkit-box;
@@ -487,51 +487,51 @@ export default {
   padding-left: 10px;
 }
 
-.trade-right-box .trade-operation .price-box .show-price em {
+.trade-right-box.trade-operation.price-box.show-price em {
   font-style: normal;
   font-size: 14px;
   color: #fff;
 }
 
-.trade-right-box .trade-operation .price-box .show-price span {
+.trade-right-box.trade-operation.price-box.show-price span {
   font-size: 18px;
-  color: #f0ac19;
+  color: #ff8534;
   font-weight: bolder;
 }
 
-.trade-right-box .trade-operation .price-box .btn-trade-in {
+.trade-right-box.trade-operation.price-box.btn-trade-in {
   outline: medium;
   border: 0;
   color: white;
   padding: 14px 20px;
-  background-color: #f0ac19;
+  background-color: #ff8534;
   cursor: pointer;
   width: 20%;
   text-align: center;
   font-size: 20px;
 }
 
-.trade-right-box .trade-remark {
+.trade-right-box.trade-remark {
   /* background-color: white; */
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
   padding: 30px 36px;
   /* margin-bottom: 30px; */
 }
 
-.trade-right-box .trade-remark .titles {
+.trade-right-box.trade-remark.titles {
   margin-bottom: 15px;
 }
 
-.trade-right-box .trade-remark .titles span {
+.trade-right-box.trade-remark.titles span {
   font-size: 16px;
   color: #fff;
   padding-right: 30px;
 }
 
-.trade-right-box .trade-remark .content {
+.trade-right-box.trade-remark.content {
   margin-bottom: 30px;
   font-size: 14px;
-  color: #8994a3;
+  color: #909090;
   line-height: 1.8;
 }
 
@@ -557,7 +557,7 @@ export default {
   width: 85%;
   margin: 0 auto;
   min-width: 1200px;
-  background: #192330;
+  background: #000000;
   color: #fff;
   margin-bottom: 20px;
 }
@@ -566,13 +566,13 @@ export default {
 
 .leftmenu {
   margin-bottom: 60px;
-  background-color: #192330;
+  background-color: #000000;
   position: relative;
   min-height: 1px;
   padding: 50px 15px 50px 10px;
 }
 
-.left-box .user-info {
+.left-box.user-info {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -604,7 +604,7 @@ export default {
   position: relative;
 }
 
-.user-avatar-public > .user-avatar-in,
+.user-avatar-public >.user-avatar-in,
 .user-avatar-public {
   border-radius: 50%;
   display: -webkit-box;
@@ -618,7 +618,7 @@ export default {
   align-items: center;
 }
 
-.user-avatar-public > .user-avatar-in {
+.user-avatar-public >.user-avatar-in {
   border-radius: 50%;
   display: -webkit-box;
   display: -ms-flexbox;
@@ -629,7 +629,7 @@ export default {
   -webkit-box-align: center;
   -ms-flex-align: center;
   align-items: center;
-  background: #f0a70a;
+  background: #ff6b00;
   height: 60px;
   width: 60px;
   color: #fff;
@@ -640,12 +640,12 @@ export default {
   margin-left: 5px;
 }
 
-.left-box .deal-market-info {
+.left-box.deal-market-info {
   padding: 20px 0 20px 20px;
   border-bottom: 1px dashed #ebeff5;
 }
 
-.left-box .deal-market-info p {
+.left-box.deal-market-info p {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -657,19 +657,19 @@ export default {
 }
 
 .iconfont {
-  font-family: iconfont !important;
+  font-family: iconfont!important;
   font-size: 16px;
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-.left-box .deal-market-info p .iconfont {
+.left-box.deal-market-info p.iconfont {
   margin-right: 20px;
   font-size: 20px;
 }
 
-.left-box .deal-market-info p .iconfont:before {
+.left-box.deal-market-info p.iconfont:before {
   background-size: 100% 100%;
   width: 20px;
   height: 20px;
@@ -701,16 +701,16 @@ export default {
   background-image: url(../../assets/img/t3-2.png);
 }
 
-.left-box .deal-user-trade-info {
+.left-box.deal-user-trade-info {
   padding-top: 20px;
-  color: #8994a3;
+  color: #909090;
 }
 
-.left-box .deal-user-trade-info p {
+.left-box.deal-user-trade-info p {
   margin-bottom: 6px;
 }
 
-.left-box .deal-user-trade-info p em {
+.left-box.deal-user-trade-info p em {
   font-style: normal;
   color: #fff;
 }

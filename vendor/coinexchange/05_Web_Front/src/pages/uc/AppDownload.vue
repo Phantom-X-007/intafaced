@@ -2,13 +2,13 @@
   <div class="login_form app-download">
     <div class="login_right">
       <div style="color: #000;margin-bottom: 60px;padding-top: 160px;width: 100%;text-align:center;z-index: 10;">
-        <img src="../../assets/images/applogo.png" style="width: 22%;border-radius: 15px;"></img>
-        <p style="font-size:18px;">币严</p>
-        <p style="font-size:12px;margin-top: 10px;color:#888;">最新版本：v{{version}}</p>
-        <p style="font-size:10px;margin-top: 10px;color:#888;letter-spacing: 1px;">发布时间：{{publishTime}}</p>
+        <img src="../../assets/images/applogo.svg" style="width: 22%;border-radius: 15px;"></img>
+        <p style="font-size:18px;">INTAFACED</p>
+        <p style="font-size:12px;margin-top: 10px;color:#888;">Latest version: v{{version}}</p>
+        <p style="font-size:10px;margin-top: 10px;color:#888;letter-spacing: 1px;">Released:{{publishTime}}</p>
         <p style="font-size:18px;margin-top: 45px;">
             <span style="border: 1px solid #F90; padding: 8px 30px;border-radius: 5px;background-color:#F90;color:#FFF;" @click="downloadClick">
-            <Icon custom="i-icon iconfont iconupload-demo" style="font-size: 24px;margin-right: 5px;" />立即下载</span>
+            <Icon custom="i-icon iconfont iconupload-demo" style="font-size: 24px;margin-right: 5px;" />Download</span>
         </p>
         <p style="font-size:12px;margin-top: 20px;color:#888;"></p>
       </div>
@@ -17,40 +17,40 @@
     <div class="section" id="page4">
       <ul>
         <li>
-          <div><img src="https://bizzan.oss-cn-hangzhou.aliyuncs.com/2019/download1.png" alt=""></div>
-          <p class="title">极致体验</p>
-          <p>精心优化的界面显示，体验流畅的操作响应</p>
+          <div><img src="/static/2019/download1.png" alt=""></div>
+          <p class="title">Built for speed</p>
+          <p>A carefully tuned interface with responsive controls</p>
         </li>
         <li>
-          <div><img src="https://bizzan.oss-cn-hangzhou.aliyuncs.com/2019/download2.png" alt=""></div>
-          <p class="title">币种行情</p>
-          <p>支持MACD、KDJ、RSI、BOLL等多种专业指标</p>
+          <div><img src="/static/2019/download2.png" alt=""></div>
+          <p class="title">Markets</p>
+          <p>MACD, KDJ, RSI, BOLL and more</p>
         </li>
         <li>
-          <div><img src="https://bizzan.oss-cn-hangzhou.aliyuncs.com/2019/download5.png" alt=""></div>
-          <p class="title">币币交易</p>
-          <p>支持限价委托与市价委托两种方式</p>
+          <div><img src="/static/2019/download5.png" alt=""></div>
+          <p class="title">Spot Trading</p>
+          <p>Limit and market orders</p>
         </li>
         <li>
-          <div><img src="https://bizzan.oss-cn-hangzhou.aliyuncs.com/2019/download3.png" alt=""></div>
-          <p class="title">法币交易</p>
-          <p>优质承兑商，保证资金通道顺畅无阻</p>
+          <div><img src="/static/2019/download3.png" alt=""></div>
+          <p class="title">Fiat Trading</p>
+          <p>Vetted merchants keep funding routes open</p>
         </li>
         <li>
-          <div><img src="https://bizzan.oss-cn-hangzhou.aliyuncs.com/2019/download4.png" alt=""></div>
-          <p class="title">资产中心</p>
-          <p>随时随地关注资产变化，极速充值/提现</p>
+          <div><img src="/static/2019/download4.png" alt=""></div>
+          <p class="title">Assets</p>
+          <p>Track balances anywhere, with fast deposits and withdrawals</p>
         </li>
       </ul>
     </div>
 
-    <div class="cover" id="cover" @click="coverClick"><img src="https://bizzan.oss-cn-hangzhou.aliyuncs.com/2019/appdowncover.png"></img></div>
+    <div class="cover" id="cover" @click="coverClick"><img src="/static/2019/appdowncover.png"></img></div>
   </div>
 </template>
 <style scoped lang="scss">
 .page-view2{
-  .page-content{
-    .layout{
+.page-content{
+.layout{
       display: none;
     }
   }
@@ -62,7 +62,7 @@
     width: 99%;
     margin: 0 auto;
     li {
-      flex: 0 0  25%;
+      flex: 0 0 25%;
       display: inline-block;
       width: 100%;
       padding: 0 15px;
@@ -80,7 +80,7 @@
         font-size: 14px;
         margin: 10px 0;
         text-align: center;
-        color: #828ea1;
+        color: #8a8a8a;
       }
       p.title {
         color: #000;
@@ -96,7 +96,7 @@ import $ from "jquery";
 export default {
   data() {
     return {
-      country: "中国",
+      country: "China",
       version: "1.0.0",
       publishTime: "2019/08/08 12:32:00"
     };
@@ -120,14 +120,14 @@ export default {
   },
   methods: {
     init() {
-      window.document.title = (this.lang == "简体中文" ? "APP下载 - " : "APP Download - ") + "币严 | 全球比特币交易平台 | 全球数字货币交易平台";
+      window.document.title = "APP Download - " + "INTAFACED | Sovereign Exchange";
       this.getVersion();
     },
     downloadClick(){
       if(this.isWeiXin()){
         document.getElementById("cover").style.display = "block";
       }else{
-        location.href = "https://bizzan.oss-cn-hangzhou.aliyuncs.com/appdownload/BIZZAN-release.apk";
+        location.href = "/static/appdownload/INTAFACED-release.apk";
       }
     },
     coverClick(){
@@ -136,8 +136,8 @@ export default {
     getVersion(){
       let self = this;
       this.$http
-        .post(this.host + "/uc/ancillary/system/app/version/0", null)
-        .then(response => {
+.post(this.host + "/uc/ancillary/system/app/version/0", null)
+.then(response => {
           var result = response.body;
           if (result.code == 0) {
             self.version = result.data.version;
@@ -161,7 +161,7 @@ export default {
   background:#f2f6fa!important;
 }
 .login_form {
-  .cover{
+.cover{
     width: 100%;
     height: 100%;
     position: fixed;
@@ -171,25 +171,25 @@ export default {
     z-index: 9999;
     display:none;
   }
-  .cover img{
+.cover img{
     width: 100%;
   }
-  .login_right {
+.login_right {
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
       text-align:center;
-      .ivu-form-item {
-        .ivu-form-item-content {
-          .ivu-input-wrapper.ivu-input-type {
-            .ivu-input {
+.ivu-form-item {
+.ivu-form-item-content {
+.ivu-input-wrapper.ivu-input-type {
+.ivu-input {
               border: none;
-              border-bottom: 1px solid #27313e;
+              border-bottom: 1px solid #141414;
               font-size: 14px;
               background:transparent;
               border-radius:0;
               // color:#fff;
               &:focus {
                 border: none;
-                border-bottom: 1px solid #27313e;
+                border-bottom: 1px solid #141414;
                 -moz-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
                 -webkit-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
                 box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
@@ -198,9 +198,9 @@ export default {
           }
         }
       }
-      .check-agree {
-        .ivu-checkbox-wrapper {
-          .ivu-checkbox-input {
+.check-agree {
+.ivu-checkbox-wrapper {
+.ivu-checkbox-input {
             &:focus {
               border: none;
               outline: none;
@@ -210,18 +210,18 @@ export default {
             }
           }
         }
-        .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
-          .ivu-checkbox.ivu-checkbox-checked {
-            .ivu-checkbox-inner {
-              border: 1px solid #f0ac19;
-              background-color: #f0ac19;
+.ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
+.ivu-checkbox.ivu-checkbox-checked {
+.ivu-checkbox-inner {
+              border: 1px solid #ff8534;
+              background-color: #ff8534;
             }
           }
 
         }
-        .ivu-checkbox-wrapper.ivu-checkbox-default{
-          .ivu-checkbox{
-            .ivu-checkbox-inner{
+.ivu-checkbox-wrapper.ivu-checkbox-default{
+.ivu-checkbox{
+.ivu-checkbox-inner{
               background:transparent;
             }
           }

@@ -20,18 +20,18 @@
                               <label class="after" style="color: #45b854;">CNY</label>
                             </FormItem>
                             <FormItem class="trade-input">
-                              <label class="before">{{$t('ctc.buynum')}}：</label>
-                              <InputNumber style="width:70%;float:right;" v-model="buyAmount"  size="large" :max="50000" :min="50" :placeholder="$t('ctc.input50tips')"></InputNumber>
+                              <label class="before">{{$t('ctc.buynum')}}: </label>
+                              <InputNumber style="width:70%;float:right;" v-model="buyAmount" size="large" :max="50000" :min="50" :placeholder="$t('ctc.input50tips')"></InputNumber>
                               <label class="after">USDT</label>
                             </FormItem>
                             <p style="font-size: 12px;margin-top: -20px;text-align:right;margin-bottom: 10px;">&nbsp; </p>
                             <FormItem>
-                              <label class="before">{{$t('ctc.payType')}}：</label>
+                              <label class="before">{{$t('ctc.payType')}}: </label>
                               <Select v-model="payType" style="width:70%;float:right;height:40px;" size="large">
                                   <Option v-for="item in payTypeList" :value="item.value" :key="item.value">{{ item.label }}</Option>
                               </Select>
                             </FormItem>
-                            <div style="height: 30px;line-height: 30px;margin-top: -20px;margin-bottom: 5px;color: #0074eb;text-align:right;font-size:12px;">
+                            <div style="height: 30px;line-height: 30px;margin-top: -20px;margin-bottom: 5px;color: #484848;text-align:right;font-size:12px;">
                               <router-link to="/uc/account">{{$t("ctc.payset")}}</router-link>
                             </div>
                             <div class="total buy_total" style="min-height">
@@ -53,20 +53,20 @@
                           <Form ref="formValidate">
                             <FormItem class="sell-input">
                               <label class="before">{{$t('ctc.sellprice')}}</label>
-                              <Input  v-model="sellPrice" disabled></Input>
+                              <Input v-model="sellPrice" disabled></Input>
                               <label class="after" style="color: #f2334f;">CNY</label>
                             </FormItem>
                             <FormItem class="trade-input">
-                              <label class="before">{{$t('ctc.sellnum')}}：</label>
+                              <label class="before">{{$t('ctc.sellnum')}}: </label>
                               <InputNumber style="width:70%;float:right;" v-model="sellAmount" size="large" :max="50000" :min="50" :placeholder="$t('ctc.input50tips')"></InputNumber>
                               <label class="after">USDT</label>
                             </FormItem>
                             <p style="font-size: 12px;margin-top: -20px;text-align:right;margin-bottom: 10px;">
-                              <span>{{$t('ctc.avabalance')}}</span>：
+                              <span>{{$t('ctc.avabalance')}}</span>: 
                               <span>21212</span><span style="margin-left: 5px;">USDT</span>
                             </p>
                             <FormItem>
-                              <label class="before">{{$t('ctc.receiveType')}}：</label>
+                              <label class="before">{{$t('ctc.receiveType')}}: </label>
                               <Select v-model="receiveType" style="width:70%;float:right;height:40px;" size="large">
                                   <Option v-for="item in receiveTypeList" :value="item.value" :key="item.value">{{ item.label }}</Option>
                               </Select>
@@ -91,14 +91,14 @@
                     </div>
 
                     <div style="float:right;width: 30%;height: 455px;font-size: 12px;color: #bcbcbc;">
-                      <div style="padding: 25px 35px;width: 100%;height: 395px;overflow-y: auto; overflow-x:hidden;background-color:#192330;text-align:left;line-height: 26px;">
+                      <div style="padding: 25px 35px;width: 100%;height: 395px;overflow-y: auto; overflow-x:hidden;background-color:#000000;text-align:left;line-height: 26px;">
                         <p style="text-align:center;font-size: 18px;margin-bottom: 10px;">{{$t("ctc.notice")}}</p>
                         <p>{{$t("ctc.notice1")}}</p>
                         <p>{{$t("ctc.notice2")}}</p>
                         <p>{{$t("ctc.notice3")}}</p>
                         <p>{{$t("ctc.notice4")}}</p>
                         <p>{{$t("ctc.notice5")}}</p>
-                        <router-link target="_blank" to="/helpdetail?cate=2&id=40&cateTitle=交易指南" style="float:right;">{{$t("ctc.moredetail")}}</router-link>
+                        <router-link target="_blank" to="/helpdetail?cate=2&id=40&cateTitle=Trading Guide" style="float:right;">{{$t("ctc.moredetail")}}</router-link>
                       </div>
                       <div class="notice-bottom">
                         <router-link to="/uc/safe" class="notice-btn-left">{{$t("ctc.verifyset")}}</router-link>
@@ -143,45 +143,45 @@
         </FormItem>
       </Form>
       <div slot="footer">
-        <span style="margin-right:50px" @click="cancel">取消</span>
-        <span style="background:#f0ac19;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">确定</span>
+        <span style="margin-right:50px" @click="cancel">Cancel</span>
+        <span style="background:#ff8534;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">Confirm</span>
       </div>
     </Modal>
 
     <Modal
         v-model="detailModal"
-        title="订单详情"
+        title="Order details"
         @on-ok="ok">
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 0">订单状态：等待承兑商接单...</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 1">订单状态：承兑商已接单，等待您付款中</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 2">订单状态：已付款，等待承兑商放币</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 3">订单状态：已完成</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 4">订单状态：已取消({{detailOrder.cancelReason}})</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 0">订单状态：等待承兑商接单...</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 1">订单状态：承兑商已接单，正在付款中</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 2">订单状态：承兑商已付款，确认放币中</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 3">订单状态：已完成</p>
-          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 4">订单状态：已取消({{detailOrder.cancelReason}})</p>
-          <Row style="background: #27384a;padding: 10px 0px;border-radius: 5px;">
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 0">Order status: waiting for a merchant to accept…</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 1">Order status: merchant accepted — awaiting your payment</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 2">Order status: paid — awaiting release</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 3">Order status: Completed</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 0 && detailOrder.status == 4">Order status: Cancelled({{detailOrder.cancelReason}})</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 0">Order status: waiting for a merchant to accept…</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 1">Order status: merchant accepted — payment in progress</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 2">Order status: merchant paid — confirming release</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 3">Order status: Completed</p>
+          <p class="ctc-order-status" v-if="detailOrder.direction == 1 && detailOrder.status == 4">Order status: Cancelled({{detailOrder.cancelReason}})</p>
+          <Row style="background: #272727;padding: 10px 0px;border-radius: 5px;">
               <Col span="8">
-                <p v-if="detailOrder.direction == 0" class="item-title">买入</p>
-                <p v-if="detailOrder.direction == 1" class="item-title">卖出</p>
-                <p class="item-desc">订单类型</p>
+                <p v-if="detailOrder.direction == 0" class="item-title">Buy</p>
+                <p v-if="detailOrder.direction == 1" class="item-title">Sell</p>
+                <p class="item-desc">Order type</p>
               </Col>
               <Col span="8">
                 <p v-if="detailOrder.direction == 0" class="item-title">{{detailOrder.amount | toFixed(2)}} <span class="unit">USDT</span></p>
                 <p v-if="detailOrder.direction == 1" class="item-title">{{detailOrder.amount | toFixed(2)}} <span class="unit">USDT</span></p>
-                <p class="item-desc">交易数量</p>
+                <p class="item-desc">Amount</p>
               </Col>
               <Col span="8">
                 <p v-if="detailOrder.direction == 0" class="item-title green">{{detailOrder.money | toFixed(2)}} <span class="unit">CNY</span></p>
                 <p v-if="detailOrder.direction == 1" class="item-title red">{{detailOrder.money | toFixed(2)}} <span class="unit">CNY</span></p>
-                <p class="item-desc">交易总额</p>
+                <p class="item-desc">Total</p>
               </Col>
           </Row>
 
           <div style="font-size: 12px;margin-top: 15px;" v-if="detailOrder.direction == 0">
-            <Icon type="md-information-circle" style="color:rgb(183, 183, 183);margin-right:5px;font-size:14px;"/>请向以下收款账户汇款/转账： <span class="green" style="font-size: 20px;font-weight:bold;">{{detailOrder.money | toFixed(2)}}</span> <span class="green">CNY</span>
+            <Icon type="md-information-circle" style="color:rgb(183, 183, 183);margin-right:5px;font-size:14px;"/>Transfer to the account below: <span class="green" style="font-size: 20px;font-weight:bold;">{{detailOrder.money | toFixed(2)}}</span> <span class="green">CNY</span>
 
             <div style="float:right;padding: 2px 10px;color:#FF0000;" v-if="orderCountdown > 0 && (detailOrder.status == 0 || detailOrder.status == 1)">
               <Icon type="ios-clock-outline" style="font-weight:bold;font-size:18px;margin-top:-5px;margin-right: 3px;"/>
@@ -190,44 +190,44 @@
           </div>
 
           <div style="font-size: 12px;margin-top: 15px;" v-if="detailOrder.direction == 1">
-            <Icon type="md-information-circle" style="color:rgb(183, 183, 183);margin-right:5px;font-size:14px;"/>你的以下账户将收到汇款/转账： <span class="red" style="font-size: 20px;font-weight:bold;">{{detailOrder.money | toFixed(2)}}</span> <span class="red">CNY</span>
+            <Icon type="md-information-circle" style="color:rgb(183, 183, 183);margin-right:5px;font-size:14px;"/>The account below will receive the transfer: <span class="red" style="font-size: 20px;font-weight:bold;">{{detailOrder.money | toFixed(2)}}</span> <span class="red">CNY</span>
           </div>
 
-          <Row style="margin-top: 5px;background: #27384a;padding: 20px 0px;border-radius: 5px;">
+          <Row style="margin-top: 5px;background: #272727;padding: 20px 0px;border-radius: 5px;">
               <Col span="24">
                 <div style="float:left;margin-left:20px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">账户实名：</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">Account name:</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.realName}}</span>
                 </div>
                 <div style="float:right;margin-right: 20px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">收款方式：</span>
-                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'bank'">银行卡</span>
-                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'alipay'">支付宝</span>
-                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'wechatpay'">微信支付</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">Payment method:</span>
+                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'bank'">Bank card</span>
+                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'alipay'">Alipay</span>
+                  <span style="font-size:14px;color:#FFF;" v-if="detailOrder.payMode == 'wechatpay'">WeChat Pay</span>
                 </div>
               </Col>
               <Col span="24" v-if="detailOrder.payMode == 'bank'" style="margin-top: 10px;text-align:left;">
                 <div style="float:left;margin-left:20px;width: 100%;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">开户银行：</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">Bank:</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.bankInfo.bank}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">开户支行：</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">Branch:</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.bankInfo.branch}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">银行卡号：</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">Account number:</span>
                   <span style="font-size:16px;color:#FFF;letter-spacing: 3px;font-weight:bold;">{{detailOrder.bankInfo.cardNo}}</span>
                 </div>
               </Col>
 
               <Col span="24" v-if="detailOrder.payMode == 'alipay'" style="margin-top: 10px;text-align:left;">
                 <div style="float:left;margin-left:20px;width: 100%;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">支付宝账号：</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">Alipay ID:</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.alipay.aliNo}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">收款码：</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">Payment QR:</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;text-align:center;">
                   <img :src="detailOrder.alipay.qrCodeUrl" style="width: 300px;height:400px;"></img>
@@ -236,11 +236,11 @@
 
               <Col span="24" v-if="detailOrder.payMode == 'wechatpay'" style="margin-top: 10px;text-align:left;">
                 <div style="float:left;margin-left:20px;width: 100%;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">微信账号：</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">WeChat ID:</span>
                   <span style="font-size:14px;color:#FFF;">{{detailOrder.wechatPay.wechat}}</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;">
-                  <span style="color:rgb(190, 190, 190);font-size:12px;">收款码：</span>
+                  <span style="color:rgb(190, 190, 190);font-size:12px;">Payment QR:</span>
                 </div>
                 <div style="float:left;margin-left:20px;width: 100%;margin-top: 10px;text-align:center;">
                   <img :src="detailOrder.wechatPay.qrWeCodeUrl" style="width: 300px;height:400px;"></img>
@@ -249,9 +249,9 @@
           </Row>
 
           <div slot="footer">
-            <Button v-if="(detailOrder.direction==1 && detailOrder.status==0) || (detailOrder.direction==0 && detailOrder.status < 2)" type="error" size="large" @click="cancelOrderClick">撤消订单</Button>
-            <Button v-if="detailOrder.direction==0 && detailOrder.status == 1" type="success" size="large" @click="payOrderClick">标记已付款</Button>
-            <Button type="default" size="large" @click="closeDetail">关闭</Button>
+            <Button v-if="(detailOrder.direction==1 && detailOrder.status==0) || (detailOrder.direction==0 && detailOrder.status < 2)" type="error" size="large" @click="cancelOrderClick">Cancel order</Button>
+            <Button v-if="detailOrder.direction==0 && detailOrder.status == 1" type="success" size="large" @click="payOrderClick">Mark as paid</Button>
+            <Button type="default" size="large" @click="closeDetail">Close</Button>
           </div>
     </Modal>
   </div>
@@ -342,8 +342,8 @@ export default {
           key: "direction",
           minWidth: 55,
           render: (h, params) => {
-            let dir = params.row.direction == 0 ? "买入" : "卖出";
-            const txtColor = params.row.direction == 0 ? "#42b983" : "#FF0000";
+            let dir = params.row.direction == 0? "Buy": "Sell";
+            const txtColor = params.row.direction == 0? "#42b983": "#FF0000";
             return h("div", {
                     style:{
                       color: txtColor
@@ -382,34 +382,34 @@ export default {
           key: "status",
           minWidth: 95,
           render: (h, params) => {
-            let sta = "未接单";
+            let sta = "Unaccepted";
             if(params.row.status == 1 && params.row.direction == 0){
               return h("div", {}, [
-                      h("span", {}, "已接单( "),
+                      h("span", {}, "Accepted( "),
                       h("span", {
                         style:{
                           color: "#FF0000",
                           fontSize: "10px"
                         }
-                      }, "请尽快完成付款"),
-                      h("span", {}, " )")
+                      }, "Please complete payment promptly"),
+                      h("span", {}, ")")
                     ]);
             }
             if(params.row.status == 1 && params.row.direction == 1){
               return h("div", {}, [
-                      h("span", {}, "已接单( "),
+                      h("span", {}, "Accepted( "),
                       h("span", {
                         style:{
                           color: "#42b983",
                           fontSize: "10px"
                         }
-                      }, "承兑商正在付款"),
-                      h("span", {}, " )")
+                      }, "Merchant is paying"),
+                      h("span", {}, ")")
                     ]);
             }
-            if(params.row.status == 2) sta = "已付款";
-            if(params.row.status == 3) sta = "交易完成";
-            if(params.row.status == 4) sta = "已取消";
+            if(params.row.status == 2) sta = "Paid";
+            if(params.row.status == 3) sta = "Completed";
+            if(params.row.status == 4) sta = "Cancelled";
             return h("span", {}, sta);
           }
         },
@@ -432,8 +432,8 @@ export default {
                       rparams.oid = params.row.id;
                       this.$Spin.show();
                       this.$http
-                        .post(this.host + "/uc/ctc/detail", rparams)
-                        .then(response => {
+.post(this.host + "/uc/ctc/detail", rparams)
+.then(response => {
                           var resp = response.body;
                           this.$Spin.hide();
                           if(resp.code == 0){
@@ -450,8 +450,8 @@ export default {
                   },
                   key: ''
                 },
-                "查看详情"
-              )
+                "View details"
+)
             ]);
           }
         }
@@ -498,14 +498,9 @@ export default {
     lang() {
       return this.$store.state.lang;
     },
-    langPram(){
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+    langPram() {
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     },
     isLogin: function() {
       return this.$store.getters.isLogin;
@@ -529,8 +524,8 @@ export default {
     },
     cancelOrderClick () {
         this.$Modal.confirm({
-            title: '确定取消订单吗',
-            content: '<p>您确定要取消该笔订单吗？</p>',
+            title: 'Cancel this order?',
+            content: '<p>Are you sure you want to cancel this order?</p>',
             onOk: () => {
                 this.cancelOrder();
             },
@@ -541,8 +536,8 @@ export default {
     },
     payOrderClick () {
         this.$Modal.confirm({
-            title: '确定您已付款吗？',
-            content: '<p>标记已付款前请确认您已付款！</p><p style="color:#FF0000;padding-top:10px;font-size:12px;">注意：对于恶意标记付款的账户，我们将对您的账户进行冻结等限制！</p>',
+            title: 'Confirm that you have paid?',
+            content: '<p>Only mark as paid once payment has actually been sent.</p><p style="color:#FF0000;padding-top:10px;font-size:12px;">Accounts that falsely mark orders as paid may be frozen or restricted.</p>',
             onOk: () => {
                 this.payOrder();
             },
@@ -559,8 +554,8 @@ export default {
       params.oid = this.detailOrder.id;
       this.$Spin.show();
       this.$http
-        .post(this.host + "/uc/ctc/pay-ctc-order", params)
-        .then(response => {
+.post(this.host + "/uc/ctc/pay-ctc-order", params)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.getOrderList();
@@ -579,8 +574,8 @@ export default {
       params.oid = this.detailOrder.id;
       this.$Spin.show();
       this.$http
-        .post(this.host + "/uc/ctc/cancel-ctc-order", params)
-        .then(response => {
+.post(this.host + "/uc/ctc/cancel-ctc-order", params)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.getOrderList();
@@ -602,7 +597,6 @@ export default {
       this.getOrderList();
     },
     getAccountSecurity() {
-        //获取个人账户信息
         this.$http.post(this.host + '/uc/approve/security/setting').then(response => {
             var resp = response.body;
             if (resp.code == 0) {
@@ -616,7 +610,6 @@ export default {
         });
     },
     getAccount() {
-        //获取个人账户信息
         this.$http.post(this.host + '/uc/approve/account/setting').then(response => {
             var resp = response.body;
             if (resp.code == 0) {
@@ -631,8 +624,8 @@ export default {
     },
     getC2cPrice(){
       this.$http
-        .post(this.host + "/market/ctc-usdt")
-        .then(response => {
+.post(this.host + "/market/ctc-usdt")
+.then(response => {
           var resp = response.body;
           this.buyPrice = resp.data.buy;
           this.sellPrice = resp.data.sell;
@@ -645,8 +638,8 @@ export default {
       params.pageSize = this.pageSize;
       this.orders = [];
       this.$http
-        .post(this.host + "/uc/ctc/page-query", params)
-        .then(response => {
+.post(this.host + "/uc/ctc/page-query", params)
+.then(response => {
           var resp = response.body;
           let rows = [];
           if(resp.code == 0){
@@ -683,8 +676,8 @@ export default {
       params.code = this.formInline.code;
       this.$Spin.show();
       this.$http
-        .post(this.host + "/uc/ctc/new-ctc-order", params)
-        .then(response => {
+.post(this.host + "/uc/ctc/new-ctc-order", params)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.getOrderList();
@@ -704,21 +697,21 @@ export default {
     showDetailModal(){
       var self = this;
 
-      if(this.orderTimer != ''){
+      if(this.orderTimer!= ''){
         clearInterval(this.orderTimer);
       }
-      if(this.detailOrder.currentTime != null){
+      if(this.detailOrder.currentTime!= null){
         let currentT = parseInt(new Date(this.detailOrder.currentTime).getTime()/1000);
         if(this.detailOrder.status == 0){
-          let endT =  parseInt(new Date(this.detailOrder.createTime).getTime()/1000);
-          this.orderCountdown = currentT - endT; //秒
+          let endT = parseInt(new Date(this.detailOrder.createTime).getTime()/1000);
+          this.orderCountdown = currentT - endT; //s
         }else if(this.detailOrder.status == 1){
-          let endT =  parseInt(new Date(this.detailOrder.confirmTime).getTime()/1000);
-          this.orderCountdown = currentT - endT; //秒
+          let endT = parseInt(new Date(this.detailOrder.confirmTime).getTime()/1000);
+          this.orderCountdown = currentT - endT; //s
         }
 
         if(this.orderCountdown < 30*60) {
-          this.orderCountdown = 1800 - this.orderCountdown;//倒计时
+          this.orderCountdown = 1800 - this.orderCountdown;//Time left
           this.orderTimer = setInterval(()=>{
             self.orderCountdown--;
             if(self.orderCountdown < 1) {
@@ -753,11 +746,11 @@ export default {
       });
     },
     settime() {
-      this.sendcodeValue = this.countdown+"s后重新发送";
+      this.sendcodeValue = this.countdown+"sbefore resending";
       this.codeIsSending = true;
       let timercode = setInterval(() => {
         this.countdown--;
-        this.sendcodeValue = this.countdown+"s后重新发送";
+        this.sendcodeValue = this.countdown+"sbefore resending";
         if (this.countdown <= 0) {
           clearInterval(timercode);
           this.sendcodeValue = this.$t("uc.regist.sendcode");
@@ -769,7 +762,7 @@ export default {
     ok() {
       if (this.formInline.code == "") {
         this.modal = true;
-        this.$Message.error("请填写短信验证码");
+        this.$Message.error("Enter the SMS code");
         return;
       }
       if (this.formInline.fundpwd == "") {
@@ -781,38 +774,38 @@ export default {
     },
     valid(type){
       if(!this.isLogin){
-        this.$Message.error("请先登录！");
+        this.$Message.error("Please sign in first.");
         return false;
       }
-      if(this.user.realVerified != 1){
-        this.$Message.error("请先完成实名认证！");
+      if(this.user.realVerified!= 1){
+        this.$Message.error("Please complete identity verification first.");
         return false;
       }
-      if(this.user.fundsVerified != 1){
-        this.$Message.error("请设置资产交易密码！");
+      if(this.user.fundsVerified!= 1){
+        this.$Message.error("Please set your fund password.");
         return false;
       }
       if(type == 0){
         if(this.buyAmount == "" || this.buyAmount == null || this.buyAmount == undefined){
-          this.$Message.error("请输入买入数量");
+          this.$Message.error("Enter the amount to buy");
           return false;
         }
         if(this.buyAmount < 50 || this.buyAmount > 50000) {
-          this.$Message.error("请输入正确的买入数量");
+          this.$Message.error("Enter a valid amount to buy");
           return false;
         }
         return true;
       }else{
-        if(this.userAccount.bankVerified != 1){
-          this.$Message.error("请先绑定银行卡");
+        if(this.userAccount.bankVerified!= 1){
+          this.$Message.error("Please add a bank card first");
           return false;
         }
         if(this.sellAmount == "" || this.sellAmount == null || this.sellAmount == undefined){
-          this.$Message.error("请输入买入数量");
+          this.$Message.error("Enter the amount to buy");
           return false;
         }
         if(this.sellAmount < 50 || this.sellAmount > 50000) {
-          this.$Message.error("请输入正确的买入数量");
+          this.$Message.error("Enter a valid amount to buy");
           return false;
         }
         return true;
@@ -849,33 +842,33 @@ export default {
 </script>
 
 <style>
-.ctc .item-title{
+.ctc.item-title{
   font-size: 20px;
   text-align: center;
   font-weight: bold;
   color: rgb(188, 188, 188);
 }
-.ctc .red{
+.ctc.red{
   color: #f2334f;
 }
-.ctc .green{
+.ctc.green{
   color: #45b854;
 }
-.ctc .item-title .unit{
+.ctc.item-title.unit{
   font-size: 14px;
 }
-.ctc .item-desc{
+.ctc.item-desc{
   font-size: 12px;
   text-align: center;
   color: #7c7f82;
 }
-.ctc .notice-bottom{
-  margin-top: 5px;height: 55px;background-color:#192330;padding-top: 12px;color: rgb(42, 147, 255);
+.ctc.notice-bottom{
+  margin-top: 5px;height: 55px;background-color:#000000;padding-top: 12px;color: rgb(42, 147, 255);
 }
-.ctc .notice-btn-left{
+.ctc.notice-btn-left{
   height: 30px;line-height: 30px;width: 42%;margin-left: 5%;float:left;border-radius:3px;border: 1px solid rgb(0, 116, 235);
 }
-.ctc .notice-btn-left:hover{
+.ctc.notice-btn-left:hover{
   cursor: pointer;
 }
 .ctc #sendCode {
@@ -886,41 +879,41 @@ export default {
   outline: none;
   right: 0;
   width: 30%;
-  color: #f0ac19;
+  color: #ff8534;
   cursor: pointer;
   height: 20px;
   line-height: 20px;
   border-left: 1px solid #dddee1;
 }
-.ctc .notice-btn-right{
+.ctc.notice-btn-right{
   height: 30px;line-height: 30px;width: 42%;margin-right: 5%;float:right;border-radius:3px;border: 1px solid rgb(0, 116, 235);
 }
-.ctc .notice-btn-right:hover{
+.ctc.notice-btn-right:hover{
   cursor: pointer;
 }
-.ctc .ivu-tabs-bar{
-    border-bottom: 1px solid #323c53;
+.ctc.ivu-tabs-bar{
+    border-bottom: 1px solid #2b2b2b;
     font-size: 18px;
 }
-.ctc .ivu-tabs-nav .ivu-tabs-tab:hover{
-    color: #f0a70a;
+.ctc.ivu-tabs-nav.ivu-tabs-tab:hover{
+    color: #ff6b00;
 }
-.ctc .ivu-tabs-nav .ivu-tabs-tab:hover, .ctc .ivu-tabs-nav .ivu-tabs-tab-active{
-    color: #f0a70a;
+.ctc.ivu-tabs-nav.ivu-tabs-tab:hover,.ctc.ivu-tabs-nav.ivu-tabs-tab-active{
+    color: #ff6b00;
     font-size: 18px;
 }
-.ctc .ivu-tabs-ink-bar{
-    background-color: #f0a70a;
+.ctc.ivu-tabs-ink-bar{
+    background-color: #ff6b00;
 }
-.ctc .buy_total{
-  border-top: 1px solid #323c53;
+.ctc.buy_total{
+  border-top: 1px solid #2b2b2b;
   padding-top: 30px;
   margin-bottom: 30px;
 }
-.ctc .trade_bd_ctc{
+.ctc.trade_bd_ctc{
   width: 70%;
 }
-.ctc .trade_bd_ctc .panel {
+.ctc.trade_bd_ctc.panel {
     position: relative;
     z-index: 2;
     float: left;
@@ -932,108 +925,108 @@ export default {
     padding-top: 35px;
 }
 
-.ctc .trade_panel{
+.ctc.trade_panel{
   background: transparent!important;
 }
-.ctc .trade_panel .panel .hd {
+.ctc.trade_panel.panel.hd {
     line-height: 20px;
     height: 20px;
-    border-bottom: 1px solid #1F2943;
+    border-bottom: 1px solid #1d1d1d;
     margin-bottom: 5px;
 }
 
-.ctc .trade_panel .panel .hd span {
+.ctc.trade_panel.panel.hd span {
     padding-left: 0;
     font-size: 12px;
     margin: 0 3px;
     float:right;
 }
 .ctc-order-status{
-  text-align:center;margin-bottom: 15px;background: #f0a70a;padding: 5px 0px;border-radius: 2px;color: #000000;
+  text-align:center;margin-bottom: 15px;background: #ff6b00;padding: 5px 0px;border-radius: 2px;color: #000000;
 }
-.ctc .trade_panel .panel .hd b {
+.ctc.trade_panel.panel.hd b {
     padding-left: 0;
     font-size: 12px;
     color: #7A98F7;
     float:right;
 }
 
-.ctc .trade_panel .panel .hd.hd_login a {
+.ctc.trade_panel.panel.hd.hd_login a {
     float: right;
     text-decoration: none;
     font-size: 12px;
     margin-right: 10px;
 }
 
-.ctc .trade_panel .panel.panel_buy {
+.ctc.trade_panel.panel.panel_buy {
     padding-right: 35px;
     padding-left: 35px;
-    background: #192330;
+    background: #000000;
 }
 
-.ctc .trade_panel .panel.panel_sell {
+.ctc.trade_panel.panel.panel_sell {
     padding-right: 35px;
     padding-left: 35px;
-    background: #192330;
+    background: #000000;
     margin-left: 5px;
 }
-.ctc .trade_wrap .buy-input .ivu-input {
+.ctc.trade_wrap.buy-input.ivu-input {
   color: #45b854;
   font-weight: bold;
   font-size: 22px;
   height: 40px;
 }
-.ctc .trade_wrap .sell-input .ivu-input {
+.ctc.trade_wrap.sell-input.ivu-input {
   color: #f2334f;
   font-weight: bold;
   font-size: 22px;
   height: 40px;
 }
-.ctc .trade_wrap .trade-input .ivu-input {
-    border: 1px solid #27313e;
+.ctc.trade_wrap.trade-input.ivu-input {
+    border: 1px solid #141414;
     color: #fff;
     height: 40px;
     text-indent: 25px;
     border-radius: 0;
 }
 
-.ctc .trade_wrap .ivu-input-wrapper {
+.ctc.trade_wrap.ivu-input-wrapper {
     outline: none;
 }
 
-.ctc .trade_wrap .ivu-input:focus,
-.ctc .trade_wrap .ivu-input:hover {
+.ctc.trade_wrap.ivu-input:focus,
+.ctc.trade_wrap.ivu-input:hover {
     box-shadow: none;
     outline: none;
 }
-.ctc .trade_wrap .ivu-input-number-input:focus,
-.ctc .trade_wrap .ivu-input-number-input:hover {
+.ctc.trade_wrap.ivu-input-number-input:focus,
+.ctc.trade_wrap.ivu-input-number-input:hover {
     box-shadow: none;
-    border-color: #41546d;
+    border-color: #3b3b3b;
     outline: none;
 }
 
-.ctc .trade_wrap .ivu-input:hover {
+.ctc.trade_wrap.ivu-input:hover {
     box-shadow: none;
     outline: none;
 }
-.ctc .trade_wrap .ivu-input-number-input:hover {
+.ctc.trade_wrap.ivu-input-number-input:hover {
     box-shadow: none;
-    border-color: #41546d;
+    border-color: #3b3b3b;
     outline: none;
 }
-.ctc .trade_wrap .ivu-form-item-content input{
+.ctc.trade_wrap.ivu-form-item-content input{
     padding-left: 50px;
     text-align:right;
     padding-right: 55px;
     font-size: 20px;
 }
-.ctc .trade_wrap .ivu-form-item-content input::-webkit-input-placeholder {
+.ctc.trade_wrap.ivu-form-item-content input::-webkit-input-placeholder {
     font-size: 12px;
-    color: #515a6e;
+    color: #404040;
     margin-bottom: 10px;
 }
-.ctc .trade_wrap .ivu-form-item-content label.before {
+.ctc.trade_wrap.ivu-form-item-content label.before {
     position: absolute;
     top: 4px;
     left: 10px;
@@ -1042,7 +1035,7 @@ export default {
     font-size: 14px;
 }
 
-.ctc .trade_wrap .ivu-form-item-content label.after {
+.ctc.trade_wrap.ivu-form-item-content label.after {
     position: absolute;
     top: 4px;
     right: 10px;
@@ -1070,7 +1063,7 @@ export default {
 }
 
 .trade_bd_ctc Button.bg-gray {
-    background-color: #35475b;
+    background-color: #313131;
     cursor: not-allowed;
     color: #9fabb5;
 }
@@ -1078,17 +1071,17 @@ export default {
     color: #9fabb5!important;
 }
 .trade_bd_ctc Button:hover {
-    /* background: #54679F; */
+    /* background: #4a4a4a; */
 }
-.ctc .trade_wrap .ivu-btn{
+.ctc.trade_wrap.ivu-btn{
   color: #FFF!important;
 }
-.ctc .total{
+.ctc.total{
   min-height: 90px;
 }
 </style>
 <style lang="scss" scoped>
-  .ctc {
+.ctc {
     height: 100%;
     background-size: cover;
     position: relative;
@@ -1097,11 +1090,11 @@ export default {
     padding-top: 60px;
     color: #fff;
   }
-  .ctc .bannerimg {
+.ctc.bannerimg {
     display: block;
     width: 100%;
   }
-  .ctc_container {
+.ctc_container {
     padding: 0 5%;
     text-align: center;
     height: 100%;
@@ -1113,19 +1106,19 @@ export default {
       letter-spacing: 3px;
     }
   }
-  .ctc .main {
+.ctc.main {
     margin-top: 55px;
     display: flex;
     justify-content: space-between;
     flex-direction: row;
     flex-wrap: wrap;
   }
-  .ctc-container{
+.ctc-container{
     min-height: 470px;
   }
-  .bottom-panel{
+.bottom-panel{
       border-top: 1px solid rgb(237, 237, 237);margin-top: 15px;
-      .bottom{
+.bottom{
         display: flex;
         flex-direction: row;
         justify-content: space-between;
@@ -1145,13 +1138,13 @@ export default {
         }
       }
   }
-  .right{
+.right{
     float: right;
   }
-  .left{
+.left{
     float: left;
   }
-  .gray{
+.gray{
     color: #a7a7a7;
   }
 </style>

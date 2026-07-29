@@ -59,7 +59,7 @@ export default {
         key: "activityName",
         align: "center",
         width: 300,
-        render: (h ,params) => {
+        render: (h,params) => {
           return h('a',{
             attrs: {
                 href: this.rootHost + "/lab/detail/" + params.row.activityId,
@@ -73,25 +73,25 @@ export default {
         key: "type",
         align: "center",
         render(h, params) {
-          let text = "未知";
+          let text = "Unknown";
           if(params.row.type == 1){
-            text = "首发抢购";
+            text = "Launch Sale";
           }
           if(params.row.type == 2){
-            text = "首发分摊";
+            text = "Launch Allocation";
           }
           if(params.row.type == 3){
-            text = "持仓瓜分";
+            text = "Holdings Split";
           }
           if(params.row.type == 4){
-            text = "自由认购";
+            text = "Open Subscription";
           }
           if(params.row.type == 5){
-            text = "云矿机认购";
+            text = "Cloud Miner Subscription";
           }
           return h(
             "span",{}, text
-          );
+);
         }
       });
       columns.push({
@@ -114,31 +114,31 @@ export default {
         key: "state",
         align: "center",
         render(h, params) {
-          let text = "临时";
+          let text = "Temporary";
           if(params.row.type == 5) {
             if(params.row.state == 1) {
-              text = "未部署";
+              text = "Not deployed";
             }
             if(params.row.state == 2) {
-              text = "已部署";
+              text = "Deployed";
             }
             if(params.row.state == 3) {
-              text = "已撤销";
+              text = "Revoked";
             }
           }else{
             if(params.row.state == 1) {
-              text = "待成交";
+              text = "Open";
             }
             if(params.row.state == 2) {
-              text = "已成交";
+              text = "Filled";
             }
             if(params.row.state == 3) {
-              text = "已撤销";
+              text = "Revoked";
             }
           }
           return h(
             "span",{}, text
-          );
+);
         }
       });
 
@@ -150,7 +150,7 @@ export default {
           let text = params.row.turnover + " " + params.row.baseSymbol;
           return h(
             "span",{}, text
-          );
+);
         }
       });
       columns.push({
@@ -167,28 +167,28 @@ export default {
 
 <style lang="scss">
 .nav-right {
-  .rightarea.bill_box {
-    .shaow {
+.rightarea.bill_box {
+.shaow {
       padding: 5px;
     }
-    .money_table {
-      .search{
+.money_table {
+.search{
         width: 200px;
         margin-bottom: 10px;
       }
-      .ivu-table-wrapper {
-        .ivu-table-header{
-          background: #27313e;
+.ivu-table-wrapper {
+.ivu-table-header{
+          background: #141414;
           th{
             color: #fff;
           }
         }
-        .ivu-table-body {
+.ivu-table-body {
           td {
             color: #fff;
-            .ivu-table-cell {
+.ivu-table-cell {
               padding: 10px 10px;
-              .ivu-btn {
+.ivu-btn {
                 background: transparent;
                 height: 25px;
                 padding: 0 0px;
@@ -201,30 +201,30 @@ export default {
                   letter-spacing: 1px;
                 }
               }
-              .ivu-btn.ivu-btn-info {
-                border: 1px solid #f0ac19;
+.ivu-btn.ivu-btn-info {
+                border: 1px solid #ff8534;
                 span {
-                  color: #f0ac19;
+                  color: #ff8534;
                 }
               }
-              .ivu-btn.ivu-btn-error {
+.ivu-btn.ivu-btn-error {
                 border: 1px solid #f15057;
                 span {
                   color: #f15057;
                 }
               }
-              .ivu-btn.ivu-btn-primary {
+.ivu-btn.ivu-btn-primary {
                 border: 1px solid #00b275;
                 border: 1px solid #00b275;
                 span {
                   color: #00b275;
                 }
               }
-              .ivu-btn.ivu-btn-default {
-                border: 1px solid #2c384f;
-                background: #222c3e;
+.ivu-btn.ivu-btn-default {
+                border: 1px solid #282828;
+                background: #1f1f1f;
                 span {
-                  color: #54637a;
+                  color: #464646;
                 }
               }
             }
@@ -241,7 +241,7 @@ export default {
   height: auto;
   overflow: hidden;
   padding: 0 0 0 15px;
-  .rightarea.bill_box {
+.rightarea.bill_box {
     padding-left: 15px;
     width: 100%;
     height: auto;
@@ -254,10 +254,10 @@ export default {
 }
 
 .header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #f0ac19;color: #f0ac19;
+  float:right;padding: 5px 15px;border: 1px solid #ff8534;color: #ff8534;
   margin-left: 20px;
   &:hover{
-    background: #f0ac19;
+    background: #ff8534;
     color: #000;
     cursor: pointer;
   }
