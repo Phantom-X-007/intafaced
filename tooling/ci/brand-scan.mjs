@@ -111,6 +111,16 @@ const ALLOWLIST = [
     path: join('docs', 'audit'),
     reason: 'internal audit work product; may cite vendor paths when describing CI/brand failures',
   },
+  {
+    path: join('docs', 'LICENCE-POSITION.md'),
+    reason:
+      'internal licence audit; must name the exact vendor paths and Maven groupIds an unlicensed component sits at, or an engineer cannot act on it without first asking which path was meant. Same rationale as TERMINAL_INTEGRATION.md and docs/adr. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
+    path: 'NOTICE',
+    reason:
+      'root third-party attribution record; an attribution that omits the upstream it attributes is a false legal statement, so this file must name upstreams verbatim. It has no file extension and so currently falls outside EXTENSIONS below — this entry is deliberate belt-and-braces, so that widening EXTENSIONS later cannot silently fail CI on the one file whose whole job is naming upstreams accurately.',
+  },
   { path: 'CLAUDE.md', reason: 'internal agent instructions' },
   { path: '.claude', reason: 'internal tooling config' },
 ];
