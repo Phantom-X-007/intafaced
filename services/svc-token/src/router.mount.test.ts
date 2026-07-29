@@ -1,0 +1,239 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { parseAmount as amt } from '@intafaced/ledger-client';
+import { createTokenRouter } from './router.js';
+import { TokenError, type StakeRecord, type TokenService } from './token-service.js';
+
+/**
+ * Mount boundary for svc-token — stake/unstake/mintEpoch must only run for a
+ * principal the edge signed. A forgeable principal here is forgeable custody
+ * of someone else's IFC (stake) or permanent supply inflation (mint).
+ */
+
+const SECRET = 'a-token-mount-test-edge-secret-long-enough';
+const USER = '11111111-1111-4111-8111-111111111111';
+const OTHER = '22222222-2222-4222-8222-222222222222';
+
+const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-token' });
+
+function principal(overrides: Partial<Principal> = {}): Principal {
+  return {
+    sub: USER,
+    userId: USER,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['token:read', 'token:stake'],
+    tier: 'basic',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
+  } as Principal;
+}
+
+const anonymous = () => edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
+
+function signed(p: Principal = principal()) {
+  const raw = encodePrincipal(p);
+  return edgeContext({
+    headers: {
+      'x-intafaced-principal': raw,
+      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+      'x-intafaced-region': 'DE',
+    },
+    id: 'req-signed',
+  });
+}
+
+function forged(p: Principal = principal()) {
+  return edgeContext({
+    headers: { 'x-intafaced-principal': encodePrincipal(p), 'x-intafaced-region': 'DE' },
+    id: 'req-forged',
+  });
+}
+
+function stakeRecord(overrides: Partial<StakeRecord> = {}): StakeRecord {
+  return {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    userId: USER,
+    amount: amt('1000'),
+    tier: 'flex',
+    startedAt: new Date('2026-01-01T00:00:00.000Z'),
+    unlocksAt: null,
+    status: 'active',
+    ...overrides,
+  };
+}
+
+function stubToken(overrides: Partial<TokenService> = {}): TokenService {
+  return {
+    stakeOf: vi.fn(async () => 0n),
+    accessOf: vi.fn(async () => ({ staked: 0n, tier: { name: 'Base' }, feeDiscountBps: 0 })),
+    stake: vi.fn(async () => stakeRecord()),
+    unstake: vi.fn(async () => stakeRecord({ status: 'closed' })),
+    getStake: vi.fn(async () => stakeRecord()),
+    listStakes: vi.fn(async () => [stakeRecord()]),
+    mintEpoch: vi.fn(async (epoch: number) => ({ epoch, minted: amt('136000') })),
+    mintNextEpoch: vi.fn(async () => ({ epoch: 0, minted: amt('136000') })),
+    nextEmissionEpoch: vi.fn(async () => 0),
+    ...overrides,
+  } as unknown as TokenService;
+}
+
+describe('svc-token mount — authorisation', () => {
+  it('refuses anonymous callers on stake mutations', async () => {
+    let called = false;
+    const token = stubToken({
+      stake: vi.fn(async () => {
+        called = true;
+        return stakeRecord();
+      }),
+    });
+
+    await expect(createTokenRouter(token).createCaller(anonymous()).stake({ amount: '1000', tier: 'flex' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(called).toBe(false);
+  });
+
+  it('refuses a self-asserted principal, however privileged it claims to be', async () => {
+    const ctx = forged(principal({ scopes: ['token:stake', 'admin:treasury'], tier: 'full', mfa: true }));
+    expect(ctx.principal).toBeNull();
+
+    await expect(createTokenRouter(stubToken()).createCaller(ctx).stake({ amount: '1000', tier: 'flex' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('accepts an edge-signed principal with token:stake', async () => {
+    const token = stubToken();
+    const result = await createTokenRouter(token).createCaller(signed()).stake({ amount: '1000', tier: 'flex' });
+    expect(result.userId).toBe(USER);
+    expect(result.amount).toBe('1000');
+    expect(token.stake).toHaveBeenCalledWith(expect.objectContaining({ userId: USER, amount: amt('1000'), tier: 'flex' }));
+  });
+
+  it('stakes as the principal — never as a userId from the client', async () => {
+    const token = stubToken();
+    // Input has no userId field; if someone smuggled it, zod would strip it.
+    await createTokenRouter(token)
+      .createCaller(signed())
+      .stake({ amount: '50', tier: 'm12', stakeId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' });
+
+    expect(token.stake).toHaveBeenCalledWith({
+      userId: USER,
+      amount: amt('50'),
+      tier: 'm12',
+      stakeId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+  });
+
+  it("refuses unstake of another user's stake", async () => {
+    const token = stubToken({
+      getStake: vi.fn(async () => stakeRecord({ userId: OTHER })),
+      unstake: vi.fn(async () => {
+        throw new Error('must not unstake');
+      }),
+    });
+
+    await expect(
+      createTokenRouter(token).createCaller(signed()).unstake({ stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(token.unstake).not.toHaveBeenCalled();
+  });
+
+  it('unstakes an owned stake and returns the closed record', async () => {
+    const token = stubToken({
+      getStake: vi.fn(async () => stakeRecord()),
+      unstake: vi.fn(async () => stakeRecord({ status: 'closed' })),
+    });
+
+    const result = await createTokenRouter(token).createCaller(signed()).unstake({ stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
+    expect(result.status).toBe('closed');
+    expect(token.unstake).toHaveBeenCalledWith('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  });
+
+  it('maps lock / not-found errors to the right TRPC codes (fail closed)', async () => {
+    const locked = stubToken({
+      getStake: vi.fn(async () => stakeRecord({ tier: 'm12' })),
+      unstake: vi.fn(async () => {
+        throw new TokenError('Stake is locked', 'token.stake_locked');
+      }),
+    });
+    await expect(
+      createTokenRouter(locked).createCaller(signed()).unstake({ stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    const missing = stubToken({
+      getStake: vi.fn(async () => null),
+    });
+    await expect(
+      createTokenRouter(missing).createCaller(signed()).unstake({ stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('svc-token mount — emissions', () => {
+  it('refuses mintEpoch without admin:treasury', async () => {
+    const token = stubToken();
+    await expect(createTokenRouter(token).createCaller(signed()).mintEpoch({})).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(token.mintEpoch).not.toHaveBeenCalled();
+    expect(token.mintNextEpoch).not.toHaveBeenCalled();
+  });
+
+  it('mints the next epoch for an operator when emissions are enabled', async () => {
+    const token = stubToken();
+    // admin:treasury is interactive-only — requireScope demands mfa.
+    const admin = signed(principal({ scopes: ['admin:treasury'], userId: USER, mfa: true }));
+    const result = await createTokenRouter(token, { emissionsEnabled: true }).createCaller(admin).mintEpoch({});
+    expect(result).toEqual({ epoch: 0, minted: '136000' });
+    expect(token.mintNextEpoch).toHaveBeenCalledOnce();
+  });
+
+  it('mints a specific epoch when requested', async () => {
+    const token = stubToken({
+      mintEpoch: vi.fn(async (epoch: number) => ({ epoch, minted: amt('68000') })),
+    });
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    const result = await createTokenRouter(token, { emissionsEnabled: true }).createCaller(admin).mintEpoch({ epoch: 7 });
+    expect(result).toEqual({ epoch: 7, minted: '68000' });
+    expect(token.mintEpoch).toHaveBeenCalledWith(7);
+  });
+
+  it('fails closed when EMISSIONS_ENABLED is off — no mint lands', async () => {
+    const token = stubToken();
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    await expect(createTokenRouter(token, { emissionsEnabled: false }).createCaller(admin).mintEpoch({ epoch: 0 })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(token.mintEpoch).not.toHaveBeenCalled();
+    expect(token.mintNextEpoch).not.toHaveBeenCalled();
+  });
+
+  it('refuses mintEpoch without MFA even when admin:treasury is present', async () => {
+    const token = stubToken();
+    const adminNoMfa = signed(principal({ scopes: ['admin:treasury'], mfa: false }));
+    await expect(createTokenRouter(token, { emissionsEnabled: true }).createCaller(adminNoMfa).mintEpoch({})).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(token.mintNextEpoch).not.toHaveBeenCalled();
+  });
+});
+
+describe('svc-token mount — the public surface', () => {
+  it('serves health to an anonymous caller', async () => {
+    await expect(createTokenRouter(stubToken()).createCaller(anonymous()).health()).resolves.toEqual({
+      ok: true,
+      service: 'svc-token',
+    });
+  });
+
+  it('lists stakes for the signed principal', async () => {
+    const token = stubToken();
+    const list = await createTokenRouter(token).createCaller(signed()).listStakes({ status: 'active' });
+    expect(list).toHaveLength(1);
+    expect(list[0]?.amount).toBe('1000');
+    expect(token.listStakes).toHaveBeenCalledWith(USER, 'active');
+  });
+});

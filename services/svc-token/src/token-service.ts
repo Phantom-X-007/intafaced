@@ -272,6 +272,82 @@ export class TokenService {
     return parseAmount(rows[0]?.total ?? '0');
   }
 
+  /** One stake by id — used by the router to enforce ownership before unstake. */
+  async getStake(stakeId: string): Promise<StakeRecord | null> {
+    const rows = await this.sql<
+      Array<{ id: string; user_id: string; amount: string; tier: StakeTier; started_at: Date; unlocks_at: Date | null; status: string }>
+    >`
+      SELECT id, user_id, amount, tier, started_at, unlocks_at, status
+        FROM token.stakes WHERE id = ${stakeId}
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    if (row.status !== 'active' && row.status !== 'unstaking' && row.status !== 'closed') {
+      // `pending` is an in-flight claim — not a stake the user can act on yet.
+      return null;
+    }
+    return {
+      id: row.id,
+      userId: row.user_id,
+      amount: parseAmount(row.amount),
+      tier: row.tier,
+      startedAt: row.started_at,
+      unlocksAt: row.unlocks_at,
+      status: row.status as StakeRecord['status'],
+    };
+  }
+
+  /**
+   * Stakes owned by a user. Defaults to active only — closed stakes are history
+   * and pending is never shown (it is not yet funded).
+   */
+  async listStakes(userId: string, status: 'active' | 'closed' | 'all' = 'active'): Promise<StakeRecord[]> {
+    const rows =
+      status === 'all'
+        ? await this.sql<
+            Array<{
+              id: string;
+              user_id: string;
+              amount: string;
+              tier: StakeTier;
+              started_at: Date;
+              unlocks_at: Date | null;
+              status: string;
+            }>
+          >`
+            SELECT id, user_id, amount, tier, started_at, unlocks_at, status
+              FROM token.stakes
+             WHERE user_id = ${userId} AND status IN ('active', 'unstaking', 'closed')
+             ORDER BY started_at DESC, id ASC
+          `
+        : await this.sql<
+            Array<{
+              id: string;
+              user_id: string;
+              amount: string;
+              tier: StakeTier;
+              started_at: Date;
+              unlocks_at: Date | null;
+              status: string;
+            }>
+          >`
+            SELECT id, user_id, amount, tier, started_at, unlocks_at, status
+              FROM token.stakes
+             WHERE user_id = ${userId} AND status = ${status}
+             ORDER BY started_at DESC, id ASC
+          `;
+
+    return rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      amount: parseAmount(row.amount),
+      tier: row.tier,
+      startedAt: row.started_at,
+      unlocksAt: row.unlocks_at,
+      status: row.status as StakeRecord['status'],
+    }));
+  }
+
   /**
    * The published fee-decay schedule (§4.3), read from `token_params`.
    *
@@ -490,6 +566,19 @@ export class TokenService {
   // ── Emissions (§4.3) ───────────────────────────────────────────────────────
 
   /**
+   * Next sequential epoch that has not been closed yet — what the auto-tick
+   * and an operator "mint due" both want. Gaps are not filled: if someone
+   * minted epoch 5 first, the next open index is still 6 (mintEpoch itself
+   * accepts any unclosed index for operator catch-up).
+   */
+  async nextEmissionEpoch(): Promise<number> {
+    const rows = await this.sql<Array<{ next: number | string }>>`
+      SELECT COALESCE(MAX(epoch) + 1, 0) AS next FROM token.emission_epochs WHERE closed = true
+    `;
+    return Number(rows[0]?.next ?? 0);
+  }
+
+  /**
    * Mint an epoch's scheduled emission.
    *
    * svc-token is the ONLY minter. svc-mining-pool (Phase 5) requests an epoch
@@ -499,6 +588,12 @@ export class TokenService {
    */
   async mintEpoch(epoch: number, destination = rewardsEngine('IFC')): Promise<{ epoch: number; minted: Amount }> {
     return withMoneySpan('token.mintEpoch', { operation: 'emission', epoch }, async () => this.mintEpochInner(epoch, destination));
+  }
+
+  /** Mint the next sequential epoch. Used by the auto-tick and operator surface. */
+  async mintNextEpoch(destination = rewardsEngine('IFC')): Promise<{ epoch: number; minted: Amount }> {
+    const epoch = await this.nextEmissionEpoch();
+    return this.mintEpoch(epoch, destination);
   }
 
   private async mintEpochInner(epoch: number, destination: ReturnType<typeof rewardsEngine>): Promise<{ epoch: number; minted: Amount }> {

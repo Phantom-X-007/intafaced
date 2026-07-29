@@ -10,18 +10,18 @@ Owns the emission schedule, the staking ladder, real-yield distribution, and buy
 
 ## API
 
-| Route / method                       | Purpose                                                                                                                   |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET /internal/stake/:userId`        | **The hot path.** §4.3: other services call this to gate launchpad allocations, OTC access, premium lobbies, vendor slots |
-| `stake(userId, amount, tier)`        | Opens a stake — ledger first, then the record                                                                             |
-| `unstake(stakeId)`                   | Returns principal; enforces the lock                                                                                      |
-| `stakeOf(userId)`                    | Total active stake                                                                                                        |
-| `createProposal(...)`                | Open a governance proposal (admin or Initiate+ stake)                                                                     |
-| `castVote(proposalId, choice)`       | IFC-weighted ballot — weight = `stakeOf` snapshotted on the vote row                                                      |
-| `listProposals` / `getProposal`      | List and read proposals with weight tallies                                                                               |
-| `distributeRevenue(window, sources)` | Real-yield payout to stakers                                                                                              |
-| `recordBuyback(run)`                 | Settles and records a buyback & burn                                                                                      |
-| `mintEpoch(epoch)`                   | Mints a scheduled emission — **this service is the only minter**                                                          |
+| Route / method                              | Scope / auth            | Purpose                                                                                                                   |
+| ------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET /internal/stake/:userId`               | service headers         | **The hot path.** §4.3: other services call this to gate launchpad allocations, OTC access, premium lobbies, vendor slots |
+| `POST /internal/emissions/mint-next`        | service headers         | Cron-friendly mint of the next sequential epoch (refuses when `EMISSIONS_ENABLED=false`)                                  |
+| tRPC `stake`                                | `token:stake`           | Opens a stake for the signed principal — ledger first, then the record                                                    |
+| tRPC `unstake`                              | `token:stake`           | Returns principal; enforces lock + ownership                                                                              |
+| tRPC `listStakes`                           | `token:read`            | Stakes owned by the signed principal                                                                                      |
+| tRPC `stakeOf` / `accessOf`                 | `token:read`            | Total active stake / access tier + fee discount                                                                           |
+| tRPC `mintEpoch` / `nextEmissionEpoch`      | `admin:treasury` / read | Operator mint (optional `epoch`) and next index                                                                           |
+| `distributeRevenue` / `recordBuyback` (svc) | internal                | Real-yield + buyback — still operator/job surface, not yet on /trpc                                                       |
+
+Optional auto-tick: set `EMISSIONS_AUTO_TICK=true` (and leave `EMISSIONS_ENABLED=true`) to mint the next sequential epoch every `EMISSIONS_TICK_MS` (default 1 day). Prefer external cron → `/internal/emissions/mint-next` or tRPC `mintEpoch` so the job is pauseable.
 
 ---
 
@@ -89,7 +89,7 @@ The service checks these; the database enforces them regardless.
 
 ## Kill-switch
 
-`EMISSIONS_ENABLED=false` halts minting. This is the only thing between a mis-tuned curve and permanent supply inflation, and **inflation cannot be un-minted** — which is why it is a separate switch rather than a general service toggle.
+`EMISSIONS_ENABLED=false` halts minting on every path (tRPC, internal cron endpoint, auto-tick). This is the only thing between a mis-tuned curve and permanent supply inflation, and **inflation cannot be un-minted** — which is why it is a separate switch rather than a general service toggle. `EMISSIONS_AUTO_TICK` defaults off so a redeploy never silently opens the faucet.
 
 ---
 

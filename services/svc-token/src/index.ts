@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
+import { formatAmount } from '@intafaced/ledger-client';
 import { env } from './env.js';
 import { TokenService } from './token-service.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
@@ -14,6 +15,10 @@ import { createTokenRouter, type TokenRouter } from './router.js';
  * svc-token — the native economy (§4.3).
  *
  * Graph W1-C: mount tRPC with edge-signed principal; keep /internal/stake for S2S.
+ *
+ * Emissions: operator calls `mintEpoch` (admin:treasury), or enable
+ * EMISSIONS_AUTO_TICK to mint the next sequential epoch on an interval.
+ * Both paths refuse when EMISSIONS_ENABLED=false.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -44,7 +49,7 @@ const token = new TokenService(sql, ledger, bus, {
   buyback: DEFAULT_BUYBACK_PARAMS,
 });
 
-export const appRouter = createTokenRouter(token);
+export const appRouter = createTokenRouter(token, { emissionsEnabled: env.EMISSIONS_ENABLED });
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
@@ -52,7 +57,11 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({ ready: true, emissionsEnabled: env.EMISSIONS_ENABLED }));
+app.get('/ready', async () => ({
+  ready: true,
+  emissionsEnabled: env.EMISSIONS_ENABLED,
+  emissionsAutoTick: env.EMISSIONS_AUTO_TICK,
+}));
 
 app.get<{ Params: { userId: string } }>('/internal/stake/:userId', async (req, reply) => {
   if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
@@ -61,6 +70,58 @@ app.get<{ Params: { userId: string } }>('/internal/stake/:userId', async (req, r
   const access = await token.accessOf(req.params.userId);
   return { staked: access.staked.toString(), tier: access.tier, feeDiscountBps: access.feeDiscountBps };
 });
+
+/**
+ * Service-to-service / cron mint of the next sequential epoch.
+ *
+ * Prefer external cron → this endpoint (or tRPC mintEpoch with admin:treasury)
+ * over the in-process auto-tick: a cron is pauseable, inspectable, and does not
+ * depend on which replica holds the timer.
+ */
+app.post('/internal/emissions/mint-next', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'token.unauthenticated' });
+  }
+  if (!env.EMISSIONS_ENABLED) {
+    return reply.code(503).send({ error: 'emissions are disabled', code: 'token.emissions_disabled' });
+  }
+  try {
+    const result = await token.mintNextEpoch();
+    return { epoch: result.epoch, minted: formatAmount(result.minted) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'mint failed';
+    const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : 'token.mint_failed';
+    // Fail closed: never 200 on a mint that did not land.
+    return reply.code(400).send({ error: message, code });
+  }
+});
+
+// ── Optional emissions auto-tick ─────────────────────────────────────────────
+
+let minting = false;
+
+async function emissionsTick(): Promise<void> {
+  if (!env.EMISSIONS_ENABLED) return;
+  if (minting) return;
+  minting = true;
+  try {
+    const result = await token.mintNextEpoch();
+    app.log.info({ epoch: result.epoch, minted: formatAmount(result.minted) }, 'emission epoch minted (auto-tick)');
+  } catch (err) {
+    // Never let a tick failure kill the interval. Closed/exhausted epochs are
+    // expected once the schedule ends; log and wait for the next tick.
+    app.log.error({ err }, 'emission auto-tick failed');
+  } finally {
+    minting = false;
+  }
+}
+
+let emissionsTimer: ReturnType<typeof setInterval> | undefined;
+if (env.EMISSIONS_ENABLED && env.EMISSIONS_AUTO_TICK) {
+  emissionsTimer = setInterval(() => void emissionsTick(), env.EMISSIONS_TICK_MS);
+  emissionsTimer.unref();
+  app.log.info({ tickMs: env.EMISSIONS_TICK_MS }, 'emission auto-tick enabled');
+}
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
@@ -71,11 +132,21 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, asset: env.TOKEN_ASSET_ID, emissionsEnabled: env.EMISSIONS_ENABLED, trpc: true }, 'svc-token ready');
+app.log.info(
+  {
+    port: env.HTTP_PORT,
+    asset: env.TOKEN_ASSET_ID,
+    emissionsEnabled: env.EMISSIONS_ENABLED,
+    emissionsAutoTick: env.EMISSIONS_AUTO_TICK,
+    trpc: true,
+  },
+  'svc-token ready',
+);
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
+      if (emissionsTimer) clearInterval(emissionsTimer);
       await app.close();
       await bus.close();
       await sql.end({ timeout: 5 });

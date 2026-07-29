@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**29 of 107 shipped (27%)** · 4 in progress · 31 ready to claim · 43 blocked · 15 deliberate §13 sockets
+**31 of 107 shipped (29%)** · 5 in progress · 33 ready to claim · 38 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -27,11 +27,10 @@ pnpm wt feat/<the-thing>
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | Scoped API keys, sub-accounts | `identity` | 1 | `identity.apikeys` |
-| Emission curve, halving, single-minter guarantee | `token` | 1 | `token.emissions` |
-| Stake tiers, locks, access gating | `token` | 1 | `token.staking` |
 | Real-yield distribution from platform fees | `token` | 1 | `token.yield` |
 | Buyback & burn split | `token` | 1 | `token.buyback` |
 | Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
+| OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
 | TWAP / VWAP / POV execution | `trade` | 2 | `trade.algo` |
 | CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
@@ -44,12 +43,15 @@ pnpm wt feat/<the-thing>
 | Crew matching + mentor shortlist | `blueprint` | 4 | `blueprint.crews` |
 | Export + hard delete, cascading | `blueprint` | 4 | `blueprint.ownership` |
 | Collateralised loans, LTV, margin calls, liquidation | `bank` | 5 | `bank.loans` |
+| Flexible + fixed yield pools | `bank` | 5 | `bank.earn` |
 | CardIssuerAdapter + card-sim, <2s auth decision | `bank` | 5 | `bank.cards` |
 | Navigator — tool-calling inside user guardrails | `agents` | 5 | `agents.navigator` |
 | Support agent — KB + account-state grounded | `agents` | 5 | `agents.support` |
 | Market Scanner — ranked signals by tier | `agents` | 5 | `agents.scanner` |
 | Live lobbies, LiveKit SFU, capacity tiers | `academy` | 5 | `academy.lobbies` |
 | Paper-trading market flag for workbooks | `academy` | 5 | `academy.paper-trading` |
+| Vendor lifecycle — apply, vet, list, stake-gated slots | `market` | 5 | `market.vendors` |
+| Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
 | Support desk, tickets, KB | `core-ops` | 5 | `ops.support` |
 | Multi-tier affiliate / IB trees, payout automation | `core-ops` | 5 | `ops.affiliates` |
 | Screening queues, geo-block, VPN/Tor detection | `core-ops` | 5 | `ops.compliance` |
@@ -66,17 +68,18 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | **27** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
 | **14** | Branded gateway, hosted checkout, payment links | 🔨 wip | `pay.gateway` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
-| **8** | Stake tiers, locks, access gating | 🟢 ready | `token.staking` |
 | **7** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
 | **6** | Live lobbies, LiveKit SFU, capacity tiers | 🟢 ready | `academy.lobbies` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **4** | ERC-20 deploy from audited templates | ⛔ blocked | `launch.token-factory` |
+| **2** | Chain → Postgres read models | ⛔ blocked | `indexer.readmodels` |
 
 ## 🔨 In progress
 
 | Feature | Owner | Module |
 |---|---|---|
 | WebAuthn registration + assertion (§9) | **Nitro** | `identity` |
+| Proposals + IFC-weighted voting (§4.3) | **Nitro** | `token` |
 | One-tap Convert — the retail on-ramp | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
 | Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
@@ -101,7 +104,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Worktree tooling + GitHub Flow | F |  | `infra.worktrees` |
 | 🟢 | 100+ languages — keyed from day one (§9) <br/>_Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface._ | F |  | `infra.i18n` |
 
-### Phase 1 — THE CORE (7/14)
+### Phase 1 — THE CORE (9/14)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -114,11 +117,11 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Routed KYC — submit, operator approve/reject, review queue <br/>_Reachable on svc-identity's mounted /trpc; tested in router.test.ts + identity.test.ts; nothing propped up — approval is an operator action against kyc_records, no provider stub. Custodial side only: §22 permissionless surfaces read no tier (docs/decisions/kyc-posture.md)._ | F |  | `identity.kyc-review` |
 | ✅ | Step-up challenge minting trade:withdraw for five minutes <br/>_defaultScopes() withheld trade:withdraw "until a step-up challenge" that did not exist, so no session could reach any withdrawal. Reachable on the mounted router. Known limit, platform-wide and not introduced here: a TOTP code is replayable inside its validity window._ | F |  | `identity.step-up` |
 | 🔨 | WebAuthn registration + assertion (§9) <br/>_PR #93: register/assert ceremonies; session after assertion._ | F |  | `identity.webauthn` |
-| 🟢 | Emission curve, halving, single-minter guarantee <br/>_Downgraded 2026-07-28: `mintEpoch` is called by token-service.test.ts and nothing else. svc-token/src/router.ts exposes exactly three procedures (health, stakeOf, accessOf) and index.ts starts no scheduler. No epoch can ever be minted on a running system._ | F |  | `token.emissions` |
-| 🟢 | Stake tiers, locks, access gating <br/>_Downgraded 2026-07-28: the READS ship (stakeOf/accessOf on /trpc, /internal/stake/:userId for svc-trade), but `stake` and `unstake` are called only by tests. Nobody can stake, so every access tier this gates resolves to the unstaked one._ | F |  | `token.staking` |
+| ✅ | Emission curve, halving, single-minter guarantee <br/>_PR #94: mintEpoch live path + EMISSIONS_ENABLED kill-switch._ | F |  | `token.emissions` |
+| ✅ | Stake tiers, locks, access gating <br/>_PR #94: stake/unstake/listStakes on /trpc; principal-bound._ | F |  | `token.staking` |
 | 🟢 | Real-yield distribution from platform fees <br/>_Downgraded 2026-07-28: `distributeRevenue` is called only by token-service.test.ts. No route, no consumer, no schedule — fees accrue nowhere and no yield is ever distributed._ | F |  | `token.yield` |
 | 🟢 | Buyback & burn split <br/>_Downgraded 2026-07-28: `recordBuyback` and `burnedSupply` are called only by token-service.test.ts. Same shape as token.yield — the maths is tested, the trigger does not exist._ | F |  | `token.buyback` |
-| ⛔ | Proposals + IFC-weighted voting (§4.3) <br/>_WIP 2026-07-29: createProposal / castVote / listProposals / getProposal on svc-token (weight = stakeOf snapshot)._ | F | `token.staking` | `token.governance` |
+| 🔨 | Proposals + IFC-weighted voting (§4.3) <br/>_WIP 2026-07-29: createProposal / castVote / listProposals / getProposal on svc-token (weight = stakeOf snapshot)._ | F |  | `token.governance` |
 
 ### Phase 2 — Trade (5/17)
 
@@ -130,7 +133,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🔨 | One-tap Convert — the retail on-ramp <br/>_WIP 2026-07-29: convert.quote + convert.execute on svc-trade (RFQ against book + house spread → market IOC on the same hold→fill path). PR feat/trade-convert. Not done until Postgres money-path suite green in CI and edge path product-checked._ | F |  | `trade.convert` |
 | 🟢 | Perps: cross/isolated margin, funding, liquidation ladder | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
-| ⛔ | OTC RFQ desk, staked-tier gate | F | `token.staking` | `trade.otc` |
+| 🟢 | OTC RFQ desk, staked-tier gate | F |  | `trade.otc` |
 | 🟢 | Copy trading, audited leaders, profit share | B |  | `trade.copy` |
 | ⛔ | Fiat pairs on the same engine | F | `pay.rails` | `trade.forex` |
 | 🟢 | TWAP / VWAP / POV execution | F |  | `trade.algo` |
@@ -197,7 +200,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 |---|---|---|---|---|
 | ⛔ | INTACHAIN — CometBFT + native CLOB module | P | `protocol.amm` | `chain.mainnet` |
 | ⛔ | INTAEVM sharing validator set + state | P | `chain.mainnet` | `chain.evm` |
-| ⛔ | Canonical IFC bridge + attestations | B | `chain.mainnet`, `token.emissions` | `bridge.canonical` |
+| ⛔ | Canonical IFC bridge + attestations | B | `chain.mainnet` | `bridge.canonical` |
 
 ### Phase 5 — Surfaces (2/32)
 
@@ -205,7 +208,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 |---|---|---|---|---|
 | ✅ | Multi-currency account UX over the ledger <br/>_svc-bank on main; self-mounts /trpc with an edge-verified principal; UX product may expand_ | F |  | `bank.accounts` |
 | 🟢 | Collateralised loans, LTV, margin calls, liquidation | F |  | `bank.loans` |
-| ⛔ | Flexible + fixed yield pools | F | `token.staking` | `bank.earn` |
+| 🟢 | Flexible + fixed yield pools | F |  | `bank.earn` |
 | 🟢 | CardIssuerAdapter + card-sim, <2s auth decision | F |  | `bank.cards` |
 | ⛔ | Self-custody funded card, JIT conversion (§18) | P | `bank.cards`, `protocol.smart-accounts` | `bank.sovereign-card` |
 | ⛔ | Fiat on/off ramp reusing svc-pay adapters | F | `pay.rails` | `bank.ramps` |
@@ -219,17 +222,17 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | 2D navigable room canvas, VR-ready scene state | F | `academy.lobbies` | `academy.spatial` |
 | ⛔ | DERIV//DESK library import — 20 playbooks + 3 workbooks | F | `academy.lobbies` | `academy.curriculum` |
 | ⛔ | Certifications → XP → real perks | F | `academy.curriculum` | `academy.certs` |
-| ⛔ | Residencies, IFC pay, revenue share | F | `academy.lobbies`, `token.staking` | `academy.ambassadors` |
+| ⛔ | Residencies, IFC pay, revenue share | F | `academy.lobbies` | `academy.ambassadors` |
 | ⛔ | Seasonal ladders, IFC prize pools | F | `academy.lobbies` | `academy.tournaments` |
 | 🟢 | Paper-trading market flag for workbooks | F |  | `academy.paper-trading` |
 | ⛔ | ERC-20 deploy from audited templates | B | `protocol.smart-accounts` | `launch.token-factory` |
 | ⛔ | One-click meme launch + instant market + LP | P | `launch.token-factory`, `protocol.amm` | `launch.meme-factory` |
-| ⛔ | Presale / fair launch, vesting, staked allocation tiers | F | `launch.token-factory`, `token.staking` | `launch.launchpad` |
+| ⛔ | Presale / fair launch, vesting, staked allocation tiers | F | `launch.token-factory` | `launch.launchpad` |
 | ⛔ | NFT mint / list / auction, on-chain royalties | P | `launch.token-factory` | `launch.nft` |
 | 🔌 | RWA issuance registry, licence-gated | F |  | `launch.rwa` |
-| ⛔ | Vendor lifecycle — apply, vet, list, stake-gated slots | F | `token.staking` | `market.vendors` |
+| 🟢 | Vendor lifecycle — apply, vet, list, stake-gated slots | F |  | `market.vendors` |
 | ⛔ | Listings, subscriptions, purchases, house commission | F | `market.vendors` | `market.commerce` |
-| ⛔ | Stratum share protocol, PPLNS payouts | F | `token.emissions` | `mining.pool` |
+| 🟢 | Stratum share protocol, PPLNS payouts | F |  | `mining.pool` |
 | 🟢 | Support desk, tickets, KB | F |  | `ops.support` |
 | 🟢 | Multi-tier affiliate / IB trees, payout automation | F |  | `ops.affiliates` |
 | 🟢 | Screening queues, geo-block, VPN/Tor detection | F |  | `ops.compliance` |

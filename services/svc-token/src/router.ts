@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
-import { formatAmount } from '@intafaced/ledger-client';
+import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { hasScope } from '@intafaced/auth';
 import { TokenError, type TokenService } from './token-service.js';
 
@@ -9,7 +9,25 @@ import { TokenError, type TokenService } from './token-service.js';
  *
  * Hot path for other services remains GET /internal/stake/:userId (index.ts).
  * This router mounts under /trpc for edge/principal-aware callers.
+ *
+ * Mutations: `token:stake` (users stake/unstake/vote), `admin:treasury` (mint).
+ * Governance from #97 and live stake/emissions from #94 are both on this router.
  */
+
+/** Money crosses the wire as a decimal string. Always. Never a number. */
+const amountString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amount must be an unsigned decimal string (max 18dp)');
+
+const stakeTier = z.enum(['flex', 'm3', 'm12']);
+
+const stakeOutput = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  amount: amountString,
+  tier: stakeTier,
+  startedAt: z.string(),
+  unlocksAt: z.string().nullable(),
+  status: z.enum(['active', 'unstaking', 'closed']),
+});
 
 const proposalKind = z.enum(['listing', 'fee_param', 'curriculum', 'grant']);
 const proposalStatus = z.enum(['draft', 'open', 'passed', 'rejected', 'executed', 'cancelled']);
@@ -33,8 +51,19 @@ const tallyOutput = z.object({
   voterCount: z.number().int().nonnegative(),
 });
 
+export interface TokenRouterOptions {
+  /**
+   * Kill-switch for minting. When false every mint procedure fails closed —
+   * inflation cannot be un-minted (§4.3 / EMISSIONS_ENABLED).
+   */
+  emissionsEnabled?: boolean;
+}
+
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof TRPCError) return err;
+  if (err instanceof InsufficientFundsError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
   if (err instanceof TokenError) {
     switch (err.code) {
       case 'token.proposal_not_found':
@@ -43,9 +72,19 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.proposal_not_allowed':
       case 'token.already_voted':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      case 'token.stake_locked':
+      case 'token.stake_closed':
+      case 'token.epoch_closed':
+      case 'token.supply_exhausted':
+      case 'token.nothing_to_distribute':
+      case 'token.params_missing':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
     }
+  }
+  if (err instanceof LedgerError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
   return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Token operation failed', cause: err });
 }
@@ -56,6 +95,32 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   } catch (err) {
     throw toTrpcError(err);
   }
+}
+
+function assertSelf(principalUserId: string | undefined, ownerId: string): void {
+  if (principalUserId !== ownerId) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'This stake belongs to another user' });
+  }
+}
+
+function stakeToWire(s: {
+  id: string;
+  userId: string;
+  amount: bigint;
+  tier: 'flex' | 'm3' | 'm12';
+  startedAt: Date;
+  unlocksAt: Date | null;
+  status: 'active' | 'unstaking' | 'closed';
+}) {
+  return {
+    id: s.id,
+    userId: s.userId,
+    amount: formatAmount(s.amount),
+    tier: s.tier,
+    startedAt: s.startedAt.toISOString(),
+    unlocksAt: s.unlocksAt?.toISOString() ?? null,
+    status: s.status,
+  };
 }
 
 function proposalToWire(p: {
@@ -78,7 +143,9 @@ function proposalToWire(p: {
   };
 }
 
-export function createTokenRouter(token: TokenService) {
+export function createTokenRouter(token: TokenService, options: TokenRouterOptions = {}) {
+  const emissionsEnabled = options.emissionsEnabled ?? true;
+
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-token') }))
@@ -105,21 +172,95 @@ export function createTokenRouter(token: TokenService) {
         const access = await token.accessOf(input.userId);
         return {
           staked: access.staked.toString(),
-          // `access.tier` is an AccessTier object, not a string. `String()` on
-          // it produced "[object Object]" on every call, and the `z.string()`
-          // output schema below is exactly why that typechecked and shipped.
           tier: access.tier.name,
           feeDiscountBps: access.feeDiscountBps,
         };
       }),
 
+    // ── Staking (live path) ────────────────────────────────────────────────
+
+    stake: scopedProcedure('token:stake')
+      .input(
+        z.object({
+          amount: amountString,
+          tier: stakeTier,
+          stakeId: z.string().uuid().optional(),
+        }),
+      )
+      .output(stakeOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const userId = ctx.principal.userId;
+          if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+
+          const amount = parseAmount(input.amount);
+          if (amount <= 0n) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Stake amount must be positive' });
+          }
+
+          const stake = await token.stake({
+            userId,
+            amount,
+            tier: input.tier,
+            stakeId: input.stakeId,
+          });
+          return stakeToWire(stake);
+        }),
+      ),
+
+    unstake: scopedProcedure('token:stake')
+      .input(z.object({ stakeId: z.string().uuid() }))
+      .output(stakeOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const userId = ctx.principal.userId;
+          if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+
+          const existing = await token.getStake(input.stakeId);
+          if (!existing) throw new TokenError(`Stake ${input.stakeId} not found`, 'token.stake_not_found');
+          assertSelf(userId, existing.userId);
+
+          const stake = await token.unstake(input.stakeId);
+          return stakeToWire(stake);
+        }),
+      ),
+
+    listStakes: scopedProcedure('token:read')
+      .input(z.object({ status: z.enum(['active', 'closed', 'all']).default('active') }).default({ status: 'active' }))
+      .output(z.array(stakeOutput))
+      .query(async ({ ctx, input }) =>
+        guard(async () => {
+          const userId = ctx.principal.userId;
+          if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+          const stakes = await token.listStakes(userId, input.status);
+          return stakes.map(stakeToWire);
+        }),
+      ),
+
+    // ── Emissions ──────────────────────────────────────────────────────────
+
+    mintEpoch: scopedProcedure('admin:treasury')
+      .input(z.object({ epoch: z.number().int().nonnegative().optional() }).default({}))
+      .output(z.object({ epoch: z.number().int(), minted: amountString }))
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          if (!emissionsEnabled) {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: 'Emissions are disabled (EMISSIONS_ENABLED=false)',
+            });
+          }
+          const result = input.epoch === undefined ? await token.mintNextEpoch() : await token.mintEpoch(input.epoch);
+          return { epoch: result.epoch, minted: formatAmount(result.minted) };
+        }),
+      ),
+
+    nextEmissionEpoch: scopedProcedure('token:read')
+      .output(z.object({ epoch: z.number().int().nonnegative() }))
+      .query(async () => guard(async () => ({ epoch: await token.nextEmissionEpoch() }))),
+
     // ── Governance (§4.3) ──────────────────────────────────────────────────
 
-    /**
-     * Open a proposal. Staked-tier (Initiate+) needs `token:stake`; operators
-     * may use `admin:write` / `admin:treasury` without stake. Scope is dual
-     * so this uses protectedProcedure rather than a single scopedProcedure.
-     */
     createProposal: protectedProcedure
       .input(
         z.object({
@@ -157,10 +298,6 @@ export function createTokenRouter(token: TokenService) {
         }),
       ),
 
-    /**
-     * Cast one IFC-weighted ballot. Weight is the caller's live `stakeOf`,
-     * snapshotted onto the vote row — not re-read at tally.
-     */
     castVote: scopedProcedure('token:stake')
       .input(
         z.object({
