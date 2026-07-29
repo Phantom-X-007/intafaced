@@ -117,6 +117,11 @@ const ALLOWLIST = [
       'internal handover; quotes real on-disk paths and package roots verbatim, which a developer needs in order to act on it. Remove this entry once the vendor directory and Java package root are renamed.',
   },
   {
+    path: join('docs', 'STATUS-2026-07-29-EVENING.md'),
+    reason:
+      'internal status handover; its whole purpose is telling a developer which directory the product lives in, so it must name that path verbatim. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
     path: join('docs', 'SPLIT-BOARD.md'),
     reason:
       'internal work split; quotes real worktree paths and the Java package root verbatim. Remove this entry once the vendor directory and Java package root are renamed.',

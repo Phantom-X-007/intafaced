@@ -1,15 +1,45 @@
 # Split board — two streams, no collisions
 
-**Purpose:** let two people push hard at the same time without ever waiting on
-each other or resolving a merge conflict.
-
-Assignment follows Nitro's own brief — *"I need you on the spine where agents
-would be catastrophic"* — so **Nitro owns the app surface, Denon owns the
-spine.** Swap the two column headers if you'd rather; nothing else changes.
+> ## ⚠️ 29 July, owner offline 1–2h: **Nitro has full access to the whole app.**
+>
+> The territory rule below is **suspended** while Denon is away. Debug, wire and
+> build anywhere — front end, services, Java, infrastructure. Everything below is
+> now advice about where the sharp edges are, not permission you have to ask for.
+>
+> One thing still holds, because it is not about territory: **do not merge
+> `feat/multi-asset-instruments`.** It changes the ledger's asset enum, and the
+> owner merges money personally. Everything else is yours.
 
 ---
 
-## 1. The rule
+## WHERE THE APP ACTUALLY IS — read this before you open an editor
+
+**We are building on top of the vendored exchange, and it lives in
+`vendor/coinexchange/`.** That tree IS the product. It is not a reference copy,
+not a sample to crib from, and not something to port screens out of.
+
+| what | where |
+| --- | --- |
+| **the app you open** | `vendor/coinexchange/05_Web_Front/` → http://localhost:8090 |
+| the Java backend | `vendor/coinexchange/00_framework/` (15 Maven modules) |
+| the admin console | `vendor/coinexchange/04_Web_Admin/` |
+| the wallet RPC | `vendor/coinexchange/01_wallet_rpc/` |
+| our TypeScript platform | `services/`, `packages/` — reached from the app through `svc-edge` on `:4000` |
+
+Provenance, so nobody wastes time wondering: the tree is a fork of the
+open-source `CoinExchange_CryptoExchange_Java` project (Apache-2.0, attributed in
+`vendor/coinexchange/NOTICE`). Upstream identifiers were `com.bizzan.bitrade`.
+**That name is scrubbed from everything a user or the wider team sees, and
+`brand-scan` enforces it** — but you will still meet it in Java package roots,
+the MySQL schema name and the Mongo database name, because renaming those is a
+live-data migration that has not happened yet (see §5 item 7).
+
+`apps/web` (Next.js) is NOT the product. It is a small static shell that predates
+the fork. Do not build features there.
+
+---
+
+## 1. The rule (suspended — see the banner)
 
 **You may edit anything inside your own territory without asking. You may not
 edit anything in the other stream's territory, ever — you open a request
