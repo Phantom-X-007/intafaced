@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
@@ -38,9 +38,38 @@ import { StubMatching, StubPerks, UnreachableMatching, principalFor } from './te
  * every one of those is idempotent.
  */
 
-const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced';
+/**
+ * A DEDICATED database, not the shared dev one.
+ *
+ * This test applies every forward migration, which means it MUTATES THE SCHEMA
+ * of whatever it points at. Pointed at the shared `intafaced` database it
+ * applied an unmerged branch's migration there, and `main`'s own svc-trade
+ * tests — which apply only the first migration and call `listMarket` without
+ * the column that migration made mandatory — began failing on a branch that had
+ * never touched them. A test that changes shared state is not a test, it is a
+ * deployment.
+ *
+ * Create it once:
+ *   psql -U intafaced -c "CREATE DATABASE intafaced_test OWNER intafaced"
+ *   psql -U intafaced -d intafaced_test -c "CREATE SCHEMA trade AUTHORIZATION svc_trade"
+ */
+const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', '..', 'drizzle', '0000_trade_init.sql'), 'utf8');
+
+/**
+ * EVERY forward migration, in order — not a hardcoded `0000_trade_init.sql`.
+ *
+ * The hardcoded form meant the test schema silently froze at the first
+ * migration: adding `asset_class` and `schedule` left production with the
+ * columns and the tests without them, and the failure arrived as
+ * `column "asset_class" does not exist` from inside a service that was correct.
+ * Reading the directory means a new migration is exercised the moment it lands.
+ */
+const drizzle = join(here, '..', '..', 'drizzle');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
@@ -71,7 +100,7 @@ if (!available) {
     onnotice: () => undefined,
   });
 
-  await sql.unsafe(migration);
+  for (const migration of migrations) await sql.unsafe(migration);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;

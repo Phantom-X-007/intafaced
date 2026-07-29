@@ -8,5 +8,6 @@ export * from './trpc.js';
 export * from './edge.js';
 export * from './service-auth.js';
 export * from './identity.js';
+export * from './instruments.js';
 export * from './blueprint.js';
 export * from './example-router.js';

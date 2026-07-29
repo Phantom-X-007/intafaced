@@ -1,3 +1,4 @@
+import { isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES } from '@intafaced/contracts';
 import { formatAmount, mul, mulBps, type Amount } from '@intafaced/ledger-client';
 import { TradeError, type Market, type OrderSide, type OrderType } from './types.js';
 
@@ -35,6 +36,47 @@ export function assertTradable(market: Market): void {
   if (market.status !== 'active') {
     throw new TradeError(`${market.symbol} is ${market.status}, not accepting orders`, 'trade.market_not_tradable');
   }
+}
+
+/**
+ * Is the venue open at this instant?
+ *
+ * A separate check from `assertTradable` because it asks a different question.
+ * `status` is a property of the listing — an operator halted it, or it was
+ * never launched. The schedule is a property of the *venue*: a forex pair is
+ * permanently `active` and shut every weekend, and a commodity closes daily.
+ * Nothing checked this before, so a Saturday EUR/USD order was accepted, funded
+ * and rested into a book that could not fill it until Monday — the user's money
+ * held for two days against an order that was never live.
+ *
+ * `at` is a parameter rather than a call to `new Date()` so this file keeps the
+ * property the header claims: pure functions of (market, request), no ambient
+ * clock. A check that reads a global clock cannot be tested at a boundary, and
+ * every interesting case here IS a boundary.
+ */
+export function assertMarketOpen(market: Market, at: Date): void {
+  const schedule = TRADING_SCHEDULES[market.schedule];
+
+  // An unrecognised schedule is refused, not ignored. This is the fail-safe
+  // direction: a market whose hours we cannot evaluate must not accept orders,
+  // and reading `.kind` off an undefined lookup would throw a TypeError that
+  // surfaces as a 500 rather than as a refusal the caller can act on.
+  if (!schedule) {
+    throw new TradeError(
+      `${market.symbol} has an unknown trading schedule (${String(market.schedule)}) — refusing orders`,
+      'trade.market_closed',
+    );
+  }
+
+  if (isScheduleOpen(schedule, at)) return;
+
+  const next = nextScheduleTransition(schedule, at);
+  throw new TradeError(
+    next?.open
+      ? `${market.symbol} is closed — the ${market.assetClass} session reopens at ${next.at.toISOString()}`
+      : `${market.symbol} is closed`,
+    'trade.market_closed',
+  );
 }
 
 /**

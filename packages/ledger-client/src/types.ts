@@ -14,7 +14,16 @@ export type OwnerType = (typeof OWNER_TYPES)[number];
 export const ACCOUNT_KINDS = ['available', 'hold', 'escrow', 'stake', 'collateral'] as const;
 export type AccountKind = (typeof ACCOUNT_KINDS)[number];
 
-export const ASSET_KINDS = ['crypto', 'fiat', 'native'] as const;
+/**
+ * Must match `ledger.asset_kind` exactly (svc-ledger/drizzle/0003).
+ *
+ * `commodity` covers the metals and energies the instrument catalogue lists —
+ * XAU, XAG, WTI, BRENT, NATGAS. It is a distinct kind rather than a reuse of
+ * `fiat` because gold is not a currency: nothing issues it, no jurisdiction
+ * redenominates it, and the two behave differently everywhere that branches on
+ * an asset's kind.
+ */
+export const ASSET_KINDS = ['crypto', 'fiat', 'native', 'commodity'] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
 export type Direction = 'debit' | 'credit';
