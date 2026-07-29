@@ -108,6 +108,12 @@ export interface PlaceOrderInput {
   /** The retry key. Strongly recommended — without one, a retry opens a second order. */
   clientOrderId?: string;
   subAccountId?: string;
+  /**
+   * Optional ceiling on the market-buy protection/funding price (convert M-03).
+   * When set, the engine limit is `min(slippageCap, maxProtectionPrice)` so a
+   * client maxAvgPrice binds execution, not only the pre-trade RFQ check.
+   */
+  maxProtectionPrice?: Amount | null;
 }
 
 export interface ListMarketInput {
@@ -283,6 +289,9 @@ export class TradeService {
           qty: input.qty,
           tif: 'IOC',
           clientOrderId: `convert:${input.clientConvertId}`,
+          // Bind convert maxAvgPrice into funding/engine protection (M-03), not
+          // only the live re-quote gate above.
+          maxProtectionPrice: input.side === 'buy' ? (input.maxAvgPrice ?? null) : null,
         });
         span.setAttribute('intafaced.order_id', order.id);
         span.setAttribute('intafaced.order_status', order.status);
@@ -401,6 +410,12 @@ export class TradeService {
       fundingPrice = input.price;
     } else if (input.side === 'buy') {
       protectionPrice = protectionPriceFor(market, await this.bestAsk(market.id), this.slippageCapBps);
+      if (input.maxProtectionPrice != null && input.maxProtectionPrice < protectionPrice) {
+        if (input.maxProtectionPrice <= 0n) {
+          throw new TradeError('maxProtectionPrice must be positive', 'trade.invalid_price');
+        }
+        protectionPrice = input.maxProtectionPrice;
+      }
       assertNotional(market, protectionPrice, input.qty);
       fundingPrice = protectionPrice;
     }

@@ -1,107 +1,86 @@
 # Peace of mind — current floor (Nitro)
 
-**Date:** 2026-07-29  
-**Main tip:** re-check `git rev-parse origin/main` (this file updates with residual hygiene; tip moves)  
-**Claim tags:** `[VERIFIED 2026-07-29]` audit program closed; #86 custody + shell; #96 shell residue; residual #9 CI money Postgres honesty
+**Date:** 2026-07-29 evening  
+**Main tip at wave freeze:** `27ce1d4` (#100) — re-check `git rev-parse origin/main`  
+**Wave audit:** [`audit/2026-07-29-wave/`](audit/2026-07-29-wave/) · paste: [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md)  
+**Claim tags:** `[VERIFIED 2026-07-29]` mega-wave on post-#86 delta; P1 ship on audit branch
 
-**Stream A claim:** GitHub issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83) · [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md)
+**Stream A claim:** GitHub issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83) · [NITRO-STREAM-A-CLAIM.md](NITRO-STREAM-A-CLAIM.md)
 
-**Orient:** [`START-HERE.md`](START-HERE.md) · **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md) · **Security tooling floor:** [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md) · plain when-to: [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md)
-
-Older July-27 peace/status docs are **history** — this file is the trust floor.
+**Orient:** [START-HERE.md](START-HERE.md) · Residual: [POST-MERGE-RESIDUAL-AFTER-86.md](POST-MERGE-RESIDUAL-AFTER-86.md) · Security: [SECURITY-WHEN-PLAIN.md](SECURITY-WHEN-PLAIN.md)
 
 ---
 
 ## Verdict (one breath)
 
-**Denon can keep building.** Platform is real (edge, mounts, money path, deploy, terminal, **vendored exchange shell** as product UI). Audit doors closed on main (#80, #81); three more custody doors closed with #86; **shell wallet mass-credit + CORS wildcard closed** in residual hygiene. Remaining risk is **named**, not mystery.
+**Denon and agents can keep building.** Mega-wave covered everything money/auth that landed after #86 without a full re-archaeology. **No P0 steal-money door** on tip. **P1 integrity fixes** (stake conflict, convert price bind, token jurisdiction, WebAuthn UV) ship on the wave PR. **Do not go live with real user money.**
 
-After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-audit.  
-**Do not go live with real user money** until dual-book discipline holds, production CORS origins are set, rails/chain are real, kill drill is proven, and Priority-1 licences are settled.
+Open **PR #101** (market seed + honest dex.quote + screening mechanism): **safe to merge** as engineering — sanctions **list content** still needs counsel.
 
 ---
 
 ## Scoreboard
 
-| System                   | Risk now                                           | Status                               |
-| ------------------------ | -------------------------------------------------- | ------------------------------------ |
-| Ledger                   | Low if perimeter holds                             | OK to build                          |
-| Identity                 | Open XP mint fixed; API-key escalate closed (#86)  | OK                                   |
-| Pay                      | IDOR + withdraw crash fixed; retry contract closed | OK to build                          |
-| Token / bank earn        | Claim-order + purpose pots fixed; scopes issued    | OK                                   |
-| P2P                      | Purpose escrow + party-only reads fixed            | OK                                   |
-| Edge                     | Region bound into principal HMAC                   | OK for dev                           |
-| Protocol / DEX / indexer | Mounted shells; chain propped                      | Not product-complete                 |
-| Deploy                   | One-command platform; S2S not host-published       | Usable with care                     |
-| **Vendor (shell)**       | **Product UI** OK; **high if used as books**       | **UI shell · quarantined as ledger** |
-| CI doctrine              | Brand/custody + vendor-shell + money PG required   | OK                                   |
+| System           | Risk now                                      | Status                       |
+| ---------------- | --------------------------------------------- | ---------------------------- |
+| Ledger           | Low if perimeter holds                        | OK to build                  |
+| Identity         | WebAuthn UV tightened this wave               | OK                           |
+| Pay              | Mount honest; rail idempotency residual       | OK · residual                |
+| Token            | Stake conflict + jurisdiction fixed this wave | OK to build                  |
+| Trade convert    | maxAvgPrice binds protection this wave        | OK                           |
+| P2P              | Prior audit holds                             | OK                           |
+| Edge             | Region HMAC; screening boot on #101           | OK for dev                   |
+| Protocol / AMM   | Unsigned only; no ledger write                | Shell · not product-complete |
+| DEX quote (#101) | Fail-closed venues                            | Merge-ready                  |
+| Deploy           | S2S not host-published                        | Usable with care             |
+| Vendor shell     | UI only; dual-book + MiningsJob residual      | Quarantined as books         |
+| CI doctrine      | Brand/custody/vendor-shell clean at wave L0   | OK                           |
 
 ---
 
-## Closed on main (do not re-open)
+## Closed (do not re-open without regression proof)
 
-**#80 · #81 (audit program)**
+**#80 · #81 · #86** — prior audit + custody doors (see history in older PEACE).
 
-- Protocol `/trpc` mount · awardXp service-only · pay ownership · internal HMAC
-- Withdraw reverse durability · stake/earn pending→active
-- Purpose-keyed escrow + stake pots · region HMAC · P2P read IDOR
-- S2S ports not on host · RUNNING/protocol UI honesty · tracker done evidence
+**#96 residual** — CORS allowlist · unfreezeMore dead · TRUNCATE helpers dead (verified this wave).
 
-**#86 (custody + shell)**
-
-- API-key privilege escalation (scope ceiling on grant)
-- Wallet RPC unauthenticated withdraw (shared-secret, fail-closed)
-- Live trading backdoor / mock controllers removed
-- Shell rebrand (English-only, black/orange; vendor logos out)
-- Bank + blueprint scopes issued to sessions
-- Licence inventory named · `workspace-sync` widened
-
-**Residual hygiene**
-
-- `unfreezeMore` / `unfreezeLess` mass balance credit disabled (service throw + DAO no-op) — **#96**
-- `dropWeekTable` TRUNCATE / `createWeekTable` snapshot helpers disabled — **#96**
-- CORS `*` + credentials → explicit allowlist (`CORS_ALLOWED_ORIGINS`) — **#96**
-- `pnpm scan:vendor-shell` CI gate — **#96**
-- CI money suites no longer silent-skip without Postgres — residual **#9**
-
-**PR proof:** [#80](https://github.com/Phantom-X-007/intafaced/pull/80) · [#81](https://github.com/Phantom-X-007/intafaced/pull/81) · [#86](https://github.com/Phantom-X-007/intafaced/pull/86) · [#96](https://github.com/Phantom-X-007/intafaced/pull/96)
+**This mega-wave P1** — M-01 stake conflict · M-03 convert protection bind · L2-TOKEN-JURIS · L2-WA-UV · interactive stakeOf self-only.
 
 ---
 
 ## Still open (short list)
 
-Full residual + owners: [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
+| Item                                                                | When it matters                                  |
+| ------------------------------------------------------------------- | ------------------------------------------------ |
+| **Dual-book** — shell ≠ TS ledger (MiningsJob + DAO credits remain) | **Now** · hard before real money                 |
+| **Sanctions list content**                                          | Before public / real money (mechanism ≠ content) |
+| **L2-6** S2S body-bind                                              | Before hard multi-service prod                   |
+| Real **rails / live chain**                                         | Before real user money                           |
+| Operator freeze / **kill drill**                                    | Before go-live                                   |
+| **Licences** Priority-1 (chart · MySQL connector)                   | Denon decides                                    |
+| Pay withdraw **rail** double-submit                                 | Before real rails                                |
+| Unstake claim-before-post (M-04)                                    | Soon                                             |
+| Rank get free userId (P2)                                           | Soon                                             |
+| **#102** trading hours                                              | Owner-merge money; prove order path              |
+| Stream A polish                                                     | Product                                          |
 
-| Item                                                                      | When it matters                       |
-| ------------------------------------------------------------------------- | ------------------------------------- |
-| **Dual-book** — shell ≠ books (standing policy, not a missing PR)         | Always · hard before real money       |
-| Production **CORS origins** env (`CORS_ALLOWED_ORIGINS`) for real domains | Before public shell                   |
-| **L2-6** S2S body-bind (raw-body design)                                  | Before hard multi-service prod        |
-| Real **rails / live chain**                                               | Before real user money                |
-| Operator freeze / **kill drill** proven end-to-end                        | Before go-live                        |
-| **Licences** Priority-1 (chart path · MySQL connector)                    | Before public product — Denon decides |
-| Wallet secrets / host perimeter                                           | Denon ops · before real money         |
+Full residual table: [POST-MERGE-RESIDUAL-AFTER-86.md](POST-MERGE-RESIDUAL-AFTER-86.md)
 
 ---
 
 ## Explicit non-problems
 
-- Services do not invent balances outside ledger recipes on production paths
+- Services do not invent balances outside ledger recipes on TS production paths
 - Protocol plane does not write the books
-- Historical open doors (#50 / #55 / #62 / #75) still fixed
-- Do **not** rebuild trade/matching/pay/p2p/bank from scratch
-- Product UI is the **vendored exchange shell** at localhost:8090 — not `apps/web`
-- Shell is **never** the money books without Nitro product decision (default = quarantine as ledger)
-- Do **not** merge multi-asset instruments without Denon
-- Do **not** re-run full archaeology for residual hygiene
+- Historical open doors (#50 / #55 / #62 / #75 / #80 / #86) still fixed
+- Do **not** rebuild trade/matching/pay from scratch
+- Product UI = vendored shell @ 8090 — not money books
+- Do **not** merge multi-asset without Denon
 
 ---
 
-## After Denon ships again
+## After the next ship wave
 
-1. Run [`WAVE-AUDIT.md`](WAVE-AUDIT.md) (delta only)
-2. Update **this file** if the scoreboard changes
-3. Trim residual in [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md) when items close
-4. Do **not** re-run full archaeology unless law changes or main is on fire
-
-**Entry:** [`START-HERE.md`](START-HERE.md) · Detail archive: [`audit/2026-07-29/`](audit/2026-07-29/) · Method: [`FULL-AUDIT-PROGRAM-2026-07-29.md`](FULL-AUDIT-PROGRAM-2026-07-29.md)
+1. Paste [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md) if main moved a lot; else [`WAVE-AUDIT.md`](WAVE-AUDIT.md)
+2. Update **this file** tip + scoreboard
+3. Do **not** re-run full A–E unless law changes or main is on fire

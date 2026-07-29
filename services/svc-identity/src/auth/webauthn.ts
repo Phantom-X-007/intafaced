@@ -44,7 +44,7 @@ export interface RegistrationOptionsJSON {
   excludeCredentials: Array<{ type: 'public-key'; id: string; transports?: string[] }>;
   authenticatorSelection: {
     residentKey: 'preferred';
-    userVerification: 'preferred';
+    userVerification: 'required';
     requireResidentKey: false;
   };
   attestation: 'none';
@@ -55,7 +55,7 @@ export interface AuthenticationOptionsJSON {
   timeout: number;
   rpId: string;
   allowCredentials: Array<{ type: 'public-key'; id: string; transports?: string[] }>;
-  userVerification: 'preferred';
+  userVerification: 'required';
 }
 
 /** Wire shape from `navigator.credentials.create()`. */
@@ -187,7 +187,8 @@ export function createRegistrationOptions(
     })),
     authenticatorSelection: {
       residentKey: 'preferred',
-      userVerification: 'preferred',
+      // Passwordless session issues mfa:true — require UV, not mere presence (L2-WA-UV).
+      userVerification: 'required',
       requireResidentKey: false,
     },
     attestation: 'none',
@@ -208,7 +209,8 @@ export function createAuthenticationOptions(
       id: c.credentialId,
       ...(c.transports ? { transports: c.transports } : {}),
     })),
-    userVerification: 'preferred',
+    // Passwordless login: UV required (L2-WA-UV).
+    userVerification: 'required',
   };
 }
 
@@ -266,9 +268,13 @@ function parseAuthData(authData: Buffer, expectAttested: boolean): AuthData {
   const flags = authData[32]!;
   const counter = authData.readUInt32BE(33);
   const up = (flags & 0x01) !== 0;
+  const uv = (flags & 0x04) !== 0;
   const at = (flags & 0x40) !== 0;
 
   if (!up) throw new WebAuthnError('user presence flag not set', 'webauthn.invalid');
+  // Passwordless path marks the session MFA-complete — refuse presence-only
+  // authenticators that never verified the user (L2-WA-UV).
+  if (!uv) throw new WebAuthnError('user verification flag not set', 'webauthn.invalid');
 
   if (expectAttested) {
     if (!at) throw new WebAuthnError('attested credential data missing', 'webauthn.invalid');

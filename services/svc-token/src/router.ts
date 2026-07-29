@@ -26,7 +26,7 @@ const stakeOutput = z.object({
   tier: stakeTier,
   startedAt: z.string(),
   unlocksAt: z.string().nullable(),
-  status: z.enum(['active', 'unstaking', 'closed']),
+  status: z.enum(['pending', 'active', 'unstaking', 'closed']),
 });
 
 const proposalKind = z.enum(['listing', 'fee_param', 'curriculum', 'grant']);
@@ -74,6 +74,7 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
       case 'token.stake_locked':
       case 'token.stake_closed':
+      case 'token.stake_conflict':
       case 'token.epoch_closed':
       case 'token.supply_exhausted':
       case 'token.nothing_to_distribute':
@@ -151,16 +152,20 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-token') }))
       .query(() => ({ ok: true, service: 'svc-token' as const })),
 
-    stakeOf: scopedProcedure('token:read')
-      .input(z.object({ userId: z.string().uuid() }))
+    // Self-only on the interactive surface. Cross-user stake is HMAC-only:
+    // GET /internal/stake/:userId (L2-IDOR-STAKE).
+    stakeOf: scopedProcedure('token:read', { module: 'token' })
+      .input(z.object({}).optional())
       .output(z.object({ staked: z.string() }))
-      .query(async ({ input }) => {
-        const staked = await token.stakeOf(input.userId);
+      .query(async ({ ctx }) => {
+        const userId = ctx.principal.userId;
+        if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+        const staked = await token.stakeOf(userId);
         return { staked: staked.toString() };
       }),
 
-    accessOf: scopedProcedure('token:read')
-      .input(z.object({ userId: z.string().uuid() }))
+    accessOf: scopedProcedure('token:read', { module: 'token' })
+      .input(z.object({}).optional())
       .output(
         z.object({
           staked: z.string(),
@@ -168,8 +173,10 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
           feeDiscountBps: z.number().int(),
         }),
       )
-      .query(async ({ input }) => {
-        const access = await token.accessOf(input.userId);
+      .query(async ({ ctx }) => {
+        const userId = ctx.principal.userId;
+        if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+        const access = await token.accessOf(userId);
         return {
           staked: access.staked.toString(),
           tier: access.tier.name,
@@ -178,8 +185,9 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       }),
 
     // ── Staking (live path) ────────────────────────────────────────────────
+    // Jurisdiction matrix on every custodial mutation (L2-TOKEN-JURIS).
 
-    stake: scopedProcedure('token:stake')
+    stake: scopedProcedure('token:stake', { module: 'token' })
       .input(
         z.object({
           amount: amountString,
@@ -208,7 +216,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         }),
       ),
 
-    unstake: scopedProcedure('token:stake')
+    unstake: scopedProcedure('token:stake', { module: 'token' })
       .input(z.object({ stakeId: z.string().uuid() }))
       .output(stakeOutput)
       .mutation(async ({ ctx, input }) =>
@@ -225,8 +233,8 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         }),
       ),
 
-    listStakes: scopedProcedure('token:read')
-      .input(z.object({ status: z.enum(['active', 'closed', 'all']).default('active') }).default({ status: 'active' }))
+    listStakes: scopedProcedure('token:read', { module: 'token' })
+      .input(z.object({ status: z.enum(['active', 'closed', 'pending', 'all']).default('active') }).default({ status: 'active' }))
       .output(z.array(stakeOutput))
       .query(async ({ ctx, input }) =>
         guard(async () => {
@@ -298,7 +306,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         }),
       ),
 
-    castVote: scopedProcedure('token:stake')
+    castVote: scopedProcedure('token:stake', { module: 'token' })
       .input(
         z.object({
           proposalId: z.string().uuid(),
