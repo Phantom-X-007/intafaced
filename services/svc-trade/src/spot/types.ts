@@ -1,3 +1,4 @@
+import type { AssetClass, ScheduleKey } from '@intafaced/contracts';
 import type { Amount } from '@intafaced/ledger-client';
 
 /**
@@ -36,6 +37,16 @@ export interface Market {
   readonly makerBps: number;
   readonly takerBps: number;
   readonly listedAt: Date | null;
+  readonly assetClass: AssetClass;
+  /**
+   * When this market accepts orders.
+   *
+   * `status` answers "is this market live at all"; the schedule answers "is it
+   * open right now". They are different questions, and conflating them is how
+   * a Saturday EUR/USD order gets funded into a venue that cannot fill it — a
+   * forex pair is permanently `active` and shut every weekend.
+   */
+  readonly schedule: ScheduleKey;
 }
 
 export interface OrderRecord {
@@ -89,6 +100,10 @@ export interface FillRecord {
 export type TradeErrorCode =
   | 'trade.market_not_found'
   | 'trade.market_not_tradable'
+  // Distinct from `market_not_tradable` on purpose: that one means an operator
+  // halted the listing and the caller should stop asking, this one means the
+  // venue is between sessions and the same order will be fine on Monday.
+  | 'trade.market_closed'
   | 'trade.market_kind_unsupported'
   | 'trade.order_type_unsupported'
   | 'trade.invalid_qty'

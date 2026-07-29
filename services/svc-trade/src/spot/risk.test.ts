@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
-import { assertNotional, assertPrice, assertQty, assertTradable, holdFor, protectionPriceFor, requireSupportedType } from './risk.js';
+import {
+  assertMarketOpen,
+  assertNotional,
+  assertPrice,
+  assertQty,
+  assertTradable,
+  holdFor,
+  protectionPriceFor,
+  requireSupportedType,
+} from './risk.js';
 import { TradeError, type Market } from './types.js';
 
 /**
@@ -26,9 +35,19 @@ const BTCUSDT: Market = {
   makerBps: 10,
   takerBps: 20,
   listedAt: new Date(),
+  assetClass: 'crypto',
+  schedule: 'crypto-24x7',
 };
 
 const withMarket = (overrides: Partial<Market>): Market => ({ ...BTCUSDT, ...overrides });
+
+const EURUSD = withMarket({
+  symbol: 'EUR/USD',
+  baseAsset: 'EUR',
+  quoteAsset: 'USD',
+  assetClass: 'forex',
+  schedule: 'fx-global',
+});
 
 describe('market status', () => {
   it('accepts an active spot market', () => {
@@ -167,5 +186,69 @@ describe('market buy protection price', () => {
     } catch (err) {
       expect((err as TradeError).code).toBe('trade.no_reference_price');
     }
+  });
+});
+
+describe('venue hours', () => {
+  /**
+   * Nothing checked this before. A weekend forex order was accepted, funded and
+   * rested into a book that could not fill it until Monday — the user's balance
+   * held for two days against an order that was never live.
+   *
+   * `status` and the schedule are deliberately separate questions, so these
+   * assert a market that is `active` throughout and still closed.
+   */
+
+  it('crypto is open at every instant, including the forex weekend', () => {
+    // Saturday.
+    expect(() => assertMarketOpen(BTCUSDT, new Date('2026-01-10T12:00:00Z'))).not.toThrow();
+    // Sunday, before the forex open.
+    expect(() => assertMarketOpen(BTCUSDT, new Date('2026-01-11T09:00:00Z'))).not.toThrow();
+  });
+
+  it('refuses a forex order on a Saturday', () => {
+    expect(() => assertMarketOpen(EURUSD, new Date('2026-01-10T12:00:00Z'))).toThrow(TradeError);
+    try {
+      assertMarketOpen(EURUSD, new Date('2026-01-10T12:00:00Z'));
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.market_closed');
+      expect((err as TradeError).message).toContain('EUR/USD');
+    }
+  });
+
+  it('accepts a forex order mid-week', () => {
+    // Wednesday noon UTC — inside the session on any definition.
+    expect(() => assertMarketOpen(EURUSD, new Date('2026-01-14T12:00:00Z'))).not.toThrow();
+  });
+
+  /**
+   * The forex week is defined by the 17:00 New York open and close, so the UTC
+   * instant of both moves with US daylight saving. Asserting a fixed UTC hour
+   * would pass in one half of the year and fail in the other, which is exactly
+   * the bug this check exists to prevent.
+   */
+  it('tracks the New York boundary across daylight saving', () => {
+    // January: New York is UTC-5, so 17:00 local Sunday is 22:00Z.
+    expect(() => assertMarketOpen(EURUSD, new Date('2026-01-11T21:59:00Z'))).toThrow();
+    expect(() => assertMarketOpen(EURUSD, new Date('2026-01-11T22:01:00Z'))).not.toThrow();
+
+    // July: New York is UTC-4, so the same local moment is 21:00Z.
+    expect(() => assertMarketOpen(EURUSD, new Date('2026-07-12T20:59:00Z'))).toThrow();
+    expect(() => assertMarketOpen(EURUSD, new Date('2026-07-12T21:01:00Z'))).not.toThrow();
+  });
+
+  it('names when the session reopens, so the caller can say something useful', () => {
+    try {
+      assertMarketOpen(EURUSD, new Date('2026-01-10T12:00:00Z'));
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).message).toMatch(/reopens at \d{4}-\d{2}-\d{2}T/);
+    }
+  });
+
+  it('a halted market is refused by status, not by the clock', () => {
+    // Both checks exist and neither substitutes for the other.
+    expect(() => assertTradable(withMarket({ status: 'halted' }))).toThrow(TradeError);
+    expect(() => assertMarketOpen(withMarket({ status: 'halted' }), new Date('2026-01-14T12:00:00Z'))).not.toThrow();
   });
 });

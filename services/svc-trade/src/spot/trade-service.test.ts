@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
@@ -40,7 +40,21 @@ import { StubMatching, StubPerks, UnreachableMatching, principalFor } from './te
 
 const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', '..', 'drizzle', '0000_trade_init.sql'), 'utf8');
+
+/**
+ * EVERY forward migration, in order — not a hardcoded `0000_trade_init.sql`.
+ *
+ * The hardcoded form meant the test schema silently froze at the first
+ * migration: adding `asset_class` and `schedule` left production with the
+ * columns and the tests without them, and the failure arrived as
+ * `column "asset_class" does not exist` from inside a service that was correct.
+ * Reading the directory means a new migration is exercised the moment it lands.
+ */
+const drizzle = join(here, '..', '..', 'drizzle');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
@@ -71,7 +85,7 @@ if (!available) {
     onnotice: () => undefined,
   });
 
-  await sql.unsafe(migration);
+  for (const migration of migrations) await sql.unsafe(migration);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
