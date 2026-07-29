@@ -21,11 +21,11 @@ Severity: **P0** money/trust open door · **P1** serious · **P2** structural ·
 
 ## P1 money-path residual — **FIXED Audit V2**
 
-| ID   | Sev | Title                                          | Status |
-| ---- | --- | ---------------------------------------------- | --- |
+| ID   | Sev | Title                                          | Status                                                    |
+| ---- | --- | ---------------------------------------------- | --------------------------------------------------------- |
 | L3-1 | P1  | Withdraw reverse then status update not atomic | **FIXED** — stamp failure_code then `finalizeRailRefusal` |
-| L3-2 | P1  | Token stake ledger-first without claim row     | **FIXED** — `pending` claim → ledger → `active` |
-| L3-3 | P1  | Earn deposit same claim gap                    | **FIXED** — same pending pattern |
+| L3-2 | P1  | Token stake ledger-first without claim row     | **FIXED** — `pending` claim → ledger → `active`           |
+| L3-3 | P1  | Earn deposit same claim gap                    | **FIXED** — same pending pattern                          |
 
 ## Confirmed P2 (parked)
 

@@ -3,13 +3,13 @@
 **Date:** 2026-07-29  
 **Claim tags:** `[VERIFIED 2026-07-29]` brand-scan this session · PG money tests require docker (local unavailable)
 
-| Check | Result |
-| --- | --- |
-| `node tooling/ci/brand-scan.mjs` | **clean** (after scrubbing model-vendor names from audit docs) |
-| `pnpm scan:custody` | run in CI / when docker up |
-| svc-pay / token / bank unit tests (no PG) | **pass** (router, rails, economics, mount) |
-| svc-pay / token / bank money-path tests | **skipped** without Postgres on port 5433 — CI must run them |
-| Typecheck pay/token/bank | **pass** this session |
+| Check                                     | Result                                                         |
+| ----------------------------------------- | -------------------------------------------------------------- |
+| `node tooling/ci/brand-scan.mjs`          | **clean** (after scrubbing model-vendor names from audit docs) |
+| `pnpm scan:custody`                       | run in CI / when docker up                                     |
+| svc-pay / token / bank unit tests (no PG) | **pass** (router, rails, economics, mount)                     |
+| svc-pay / token / bank money-path tests   | **skipped** without Postgres on port 5433 — CI must run them   |
+| Typecheck pay/token/bank                  | **pass** this session                                          |
 
 ## Greps / doctrine hard-bans (spot)
 

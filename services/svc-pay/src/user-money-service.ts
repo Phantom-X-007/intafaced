@@ -495,10 +495,7 @@ export class UserMoneyService {
    * re-run after a crash; reverse is ledger-idempotent and the final UPDATE
    * is guarded on `status = 'held'`.
    */
-  private async finalizeRailRefusal(
-    claimed: WithdrawalRecord,
-    failureCode: string,
-  ): Promise<void> {
+  private async finalizeRailRefusal(claimed: WithdrawalRecord, failureCode: string): Promise<void> {
     const attempt = claimed.attempts;
     const ledgerInput = {
       userId: claimed.userId,
