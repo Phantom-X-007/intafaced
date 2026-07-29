@@ -498,9 +498,10 @@ public class MemberWalletService extends BaseService {
     }
 
 
-    //更新团队钱包
+    //更新团队钱包 — DISABLED dual-book (shell is not the books)
     public int updateTeamWallet(BigDecimal teamBalance,long teamId){
-        return memberWalletDao.updateTeamWallet(teamBalance,teamId);
+        throw new IllegalStateException(
+                "updateTeamWallet is disabled: Java shell must not mint balances (INTAFACED residual)");
     }
 
     /**
@@ -519,17 +520,17 @@ public class MemberWalletService extends BaseService {
      */
     @Transactional
     public int updateByMemberIdAndCoinId(long memberId,String coinId,BigDecimal balance){
-        return memberWalletDao.updateByMemberIdAndCoinId(memberId,coinId,balance);
+        throw new IllegalStateException(
+                "updateByMemberIdAndCoinId is disabled: Java shell must not set balances (INTAFACED residual)");
     }
 
     /**
      * 增加用户BHB钱包余额
-     * @param mineAmount
-     * @param memberId
-     * @return
+     * DISABLED 2026-07-29 — dual-book; shell is not the books.
      */
     public int increaseBalanceForBHB(BigDecimal mineAmount,Long memberId) {
-       return  memberWalletDao.increaseBalanceForBHB(mineAmount,memberId);
+        throw new IllegalStateException(
+                "increaseBalanceForBHB is disabled: Java shell must not mint balances (INTAFACED residual)");
     }
 
 

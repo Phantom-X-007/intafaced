@@ -137,9 +137,10 @@ public interface MemberWalletDao extends BaseDao<MemberWallet> {
     MemberWallet getMemberWalletByCoinAndMemberId(@Param("coinId") String coinId, @Param("memberId") long memberId);
 
 
+    /** Disabled dual-book — no-op (service throws first). */
     @Transactional
     @Modifying
-    @Query(value="UPDATE member_wallet SET balance=balance+:teamBalance where coin_id = 'BHB' AND member_id=:teamId",nativeQuery = true)
+    @Query(value="UPDATE member_wallet SET id = id WHERE 1 = 0 AND member_id=:teamId",nativeQuery = true)
     int updateTeamWallet(@Param("teamBalance")BigDecimal teamBalance,@Param("teamId")long teamId);
 
     @Transactional
@@ -160,20 +161,19 @@ public interface MemberWalletDao extends BaseDao<MemberWallet> {
      * @param balance
      * @return
      */
+    /** Disabled dual-book — no-op (service throws first). */
     @Transactional(rollbackFor = Exception.class)
     @Modifying
-    @Query(value = "UPDATE member_wallet SET balance=balance+:balance WHERE coin_id=:coinId AND member_id=:memberId",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0 AND coin_id=:coinId AND member_id=:memberId",nativeQuery = true)
     int updateByMemberIdAndCoinId(@Param("memberId")long memberId,@Param("coinId")String coinId,@Param("balance")BigDecimal balance);
 
     /**
-     * 增加用户BHB余额
-     * @param memberId
-     * @return
+     * 增加用户BHB余额 — DISABLED dual-book; no-op (service throws first).
      */
 
     @Transactional(rollbackFor = Exception.class)
     @Modifying
-    @Query(value = "UPDATE member_wallet SET balance=balance+:balance WHERE coin_id='BHB' AND member_id=:memberId",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0 AND member_id=:memberId",nativeQuery = true)
     int increaseBalanceForBHB(@Param("balance")BigDecimal mineAmount,@Param("memberId") Long memberId);
 
 //    //初始化超级合伙人BHB的数量

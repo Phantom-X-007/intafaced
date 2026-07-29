@@ -51,7 +51,7 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists.
 - **Not a live money product:** rails/sandbox, chain feed propped — see trust floor.
 - **Do not rebuild** services already on main.
-- **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md)
+- **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · what “proper cleanup” means: [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md)
 - **Product UI:** vendored exchange shell → http://localhost:8090 (`vendor/<exchange-tree>/05_Web_Front`). `apps/web` is **not** the product.
 - **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
 - **Security when-to:** [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) · tooling floor: [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md)
