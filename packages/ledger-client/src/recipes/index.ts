@@ -3,6 +3,7 @@ import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
 import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
 import {
+  agentSpendHoldAccount,
   burnAccount,
   houseFees,
   merchantClearing,
@@ -12,6 +13,7 @@ import {
   rewardsEngine,
   userAvailable,
   userCollateral,
+  userHold,
   tradeEscrowAccount,
   tokenStakeAccount,
   withdrawalHoldAccount,
@@ -588,6 +590,162 @@ export function feeCharge(input: FeeChargeInput): PostRequest {
   };
 }
 
+// ── Agent fleet spend (§8.2) ─────────────────────────────────────────────────
+//
+// svc-agents spends real money with a model provider on the user's behalf, and
+// it does so BEFORE it knows what the call will cost. That inverts the usual fee
+// shape: `feeCharge` bills after the fact and can only discover at settlement
+// that the payer is broke — by which point the provider has already been paid
+// and the house is out of pocket with no way to refuse.
+//
+// So agent spend uses the same hold → settle/release shape as an order (§5.2).
+// The worst-case cost of a call is reserved from `available` before the engine
+// is touched; a user who cannot fund the reservation is refused while refusing
+// is still free. At settlement the exact cost is drawn from the reservation and
+// the over-estimate goes back.
+//
+// The hold pot is purposed per (session, window): `agent:<sessionId>:<windowId>`
+// (P0-3). Per-session would let one billing period's settlement draw down the
+// next one's reservation; per-request would leave settlement fanning a charge
+// across N pots and getting it partly done.
+
+export interface AgentSpendHoldInput {
+  sessionId: string;
+  /** Billing period the reservation belongs to. Part of the hold's purpose. */
+  windowId: string;
+  /** The caller's request id — the anti-double-hold handle, as on `run.complete`. */
+  requestId: string;
+  userId: string;
+  assetId: string;
+  /** Worst-case cost of ONE engine call, never the expected cost. */
+  amount: Amount;
+}
+
+/**
+ * Reserve the worst case of one engine call, before the engine is called.
+ *
+ * Keyed on the caller's `requestId`, so a client that retries a completion after
+ * a timeout reserves once — the same handle that stops the usage being counted
+ * twice stops the funds being reserved twice.
+ */
+export function agentSpendHold(input: AgentSpendHoldInput): PostRequest {
+  requirePositive('agent spend hold amount', input.amount);
+  return {
+    idempotencyKey: `agents.hold:${input.sessionId}:${input.requestId}`,
+    module: 'agents',
+    reason: 'agents.spend.held',
+    meta: { sessionId: input.sessionId, windowId: input.windowId, requestId: input.requestId },
+    entries: [
+      credit(userAvailable(input.userId, input.assetId), input.amount),
+      debit(agentSpendHoldAccount(input.userId, input.assetId, input.sessionId, input.windowId), input.amount),
+    ],
+  };
+}
+
+export interface AgentSpendVoidInput extends Omit<AgentSpendHoldInput, 'amount'> {
+  amount: Amount;
+}
+
+/**
+ * Give back one call's reservation because the call did not happen.
+ *
+ * The engine was unreachable, or it answered and we could not record it. Either
+ * way the user is not billed, so the reservation must come back NOW rather than
+ * waiting for the window to settle: a user should not watch an hour's worth of
+ * balance sit reserved for calls that produced nothing.
+ */
+export function agentSpendVoid(input: AgentSpendVoidInput): PostRequest {
+  requirePositive('agent spend void amount', input.amount);
+  return {
+    idempotencyKey: `agents.void:${input.sessionId}:${input.requestId}`,
+    module: 'agents',
+    reason: 'agents.spend.voided',
+    meta: { sessionId: input.sessionId, windowId: input.windowId, requestId: input.requestId },
+    entries: [
+      credit(agentSpendHoldAccount(input.userId, input.assetId, input.sessionId, input.windowId), input.amount),
+      debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export interface AgentUsageSettleInput {
+  sessionId: string;
+  windowId: string;
+  userId: string;
+  assetId: string;
+  /** Drawn from the window's reservation. */
+  fromHold: Amount;
+  /**
+   * Drawn from `available`, for usage that was metered without a reservation
+   * behind it — the only route to that is metering being switched on mid-window
+   * (§14 kill-switch). Zero on every ordinary settlement.
+   */
+  fromAvailable: Amount;
+}
+
+/**
+ * Bill a settled window into the house fee account.
+ *
+ * One transaction and one key for the whole window's charge, whichever pots it
+ * comes out of. Splitting it into "the held part" and "the shortfall" as two
+ * posts would give the window two idempotency keys, and a crash between them
+ * would leave a half-billed period that reconciles from neither side.
+ */
+export function agentUsageSettle(input: AgentUsageSettleInput): PostRequest {
+  const total = input.fromHold + input.fromAvailable;
+  requirePositive('agent usage charge', total);
+  if (input.fromHold < 0n || input.fromAvailable < 0n) {
+    throw new InvalidEntryError('Agent usage charge components must not be negative');
+  }
+
+  const entries: EntryInput[] = [];
+  if (input.fromHold > 0n) {
+    entries.push(credit(agentSpendHoldAccount(input.userId, input.assetId, input.sessionId, input.windowId), input.fromHold));
+  }
+  if (input.fromAvailable > 0n) {
+    entries.push(credit(userAvailable(input.userId, input.assetId), input.fromAvailable));
+  }
+  entries.push(debit(houseFees('agents', input.assetId), total));
+
+  return {
+    idempotencyKey: `agents.usage:${input.sessionId}:${input.windowId}`,
+    module: 'agents',
+    reason: 'agents.usage.metered',
+    meta: { sessionId: input.sessionId, windowId: input.windowId, fromHold: input.fromHold.toString() },
+    entries,
+  };
+}
+
+export interface AgentSpendReleaseInput {
+  sessionId: string;
+  windowId: string;
+  userId: string;
+  assetId: string;
+  amount: Amount;
+}
+
+/**
+ * Return what a settled window reserved but did not spend.
+ *
+ * This is the other half of `agentUsageSettle` and the reason the reservation is
+ * safe to make pessimistically: over-estimating costs the user nothing once the
+ * window closes. A settlement that charges without releasing is a settlement
+ * that quietly keeps the difference.
+ */
+export function agentSpendRelease(input: AgentSpendReleaseInput): PostRequest {
+  requirePositive('agent spend release amount', input.amount);
+  return {
+    idempotencyKey: `agents.release:${input.sessionId}:${input.windowId}`,
+    module: 'agents',
+    reason: 'agents.spend.released',
+    meta: { sessionId: input.sessionId, windowId: input.windowId },
+    entries: [
+      credit(agentSpendHoldAccount(input.userId, input.assetId, input.sessionId, input.windowId), input.amount),
+      debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
 export interface RewardPayInput {
   rewardId: string;
   userId: string;
@@ -720,6 +878,11 @@ export const recipes = {
   feeCharge,
   sweepFeesToRewards,
   rewardPay,
+  // §8.2 svc-agents — hold → settle/release for metered model spend.
+  agentSpendHold,
+  agentSpendVoid,
+  agentUsageSettle,
+  agentSpendRelease,
   collateralLock,
   collateralRelease,
   liquidate,

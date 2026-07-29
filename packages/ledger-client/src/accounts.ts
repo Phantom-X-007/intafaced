@@ -39,6 +39,18 @@ export function withdrawalHoldAccount(userId: string, assetId: string, withdrawa
 }
 
 /**
+ * Value reserved for one agent session's spend in ONE billing window (§8.2).
+ *
+ * Purposed by window, not just by session: settlement bills a window and returns
+ * that window's unspent remainder, so a session-wide pot would let the current
+ * period's charge draw down the next period's reservation — the commingling
+ * failure P0-3 exists to prevent, one level down.
+ */
+export function agentSpendHoldAccount(userId: string, assetId: string, sessionId: string, windowId: string): AccountRef {
+  return userHold(userId, assetId, `agent:${sessionId}:${windowId}`);
+}
+
+/**
  * Seller escrow FOR ONE TRADE (L3-4). Same failure class as unpurposed holds:
  * one pot per (user, asset) lets trade B fund trade A's release.
  */
