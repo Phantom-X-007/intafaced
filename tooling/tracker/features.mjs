@@ -207,7 +207,15 @@ export const FEATURES = [
     requires: ['services/svc-token'],
     note: 'Downgraded 2026-07-28: `recordBuyback` and `burnedSupply` are called only by token-service.test.ts. Same shape as token.yield — the maths is tested, the trigger does not exist.',
   }),
-  f('token.governance', 'Proposals + IFC-weighted voting (§4.3)', { module: 'token', phase: '1', dependsOn: ['token.staking'] }),
+  f('token.governance', 'Proposals + IFC-weighted voting (§4.3)', {
+    module: 'token',
+    phase: '1',
+    status: 'wip',
+    owner: 'Nitro',
+    dependsOn: ['token.staking'],
+    requires: ['services/svc-token'],
+    note: 'WIP 2026-07-29: createProposal / castVote / listProposals / getProposal on svc-token (weight = stakeOf snapshot).',
+  }),
 
   // ── PHASE 2 · TRADE ──────────────────────────────────────────────────────
   f('matching.engine', 'Orderbook + matching engine, journal, replay', {

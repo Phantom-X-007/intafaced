@@ -16,6 +16,9 @@ Owns the emission schedule, the staking ladder, real-yield distribution, and buy
 | `stake(userId, amount, tier)`        | Opens a stake — ledger first, then the record                                                                             |
 | `unstake(stakeId)`                   | Returns principal; enforces the lock                                                                                      |
 | `stakeOf(userId)`                    | Total active stake                                                                                                        |
+| `createProposal(...)`                | Open a governance proposal (admin or Initiate+ stake)                                                                     |
+| `castVote(proposalId, choice)`       | IFC-weighted ballot — weight = `stakeOf` snapshotted on the vote row                                                      |
+| `listProposals` / `getProposal`      | List and read proposals with weight tallies                                                                               |
 | `distributeRevenue(window, sources)` | Real-yield payout to stakers                                                                                              |
 | `recordBuyback(run)`                 | Settles and records a buyback & burn                                                                                      |
 | `mintEpoch(epoch)`                   | Mints a scheduled emission — **this service is the only minter**                                                          |

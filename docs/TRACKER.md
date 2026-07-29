@@ -118,7 +118,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Stake tiers, locks, access gating <br/>_Downgraded 2026-07-28: the READS ship (stakeOf/accessOf on /trpc, /internal/stake/:userId for svc-trade), but `stake` and `unstake` are called only by tests. Nobody can stake, so every access tier this gates resolves to the unstaked one._ | F |  | `token.staking` |
 | 🟢 | Real-yield distribution from platform fees <br/>_Downgraded 2026-07-28: `distributeRevenue` is called only by token-service.test.ts. No route, no consumer, no schedule — fees accrue nowhere and no yield is ever distributed._ | F |  | `token.yield` |
 | 🟢 | Buyback & burn split <br/>_Downgraded 2026-07-28: `recordBuyback` and `burnedSupply` are called only by token-service.test.ts. Same shape as token.yield — the maths is tested, the trigger does not exist._ | F |  | `token.buyback` |
-| ⛔ | Proposals + IFC-weighted voting (§4.3) | F | `token.staking` | `token.governance` |
+| ⛔ | Proposals + IFC-weighted voting (§4.3) <br/>_WIP 2026-07-29: createProposal / castVote / listProposals / getProposal on svc-token (weight = stakeOf snapshot)._ | F | `token.staking` | `token.governance` |
 
 ### Phase 2 — Trade (5/17)
 

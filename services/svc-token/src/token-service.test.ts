@@ -104,7 +104,7 @@ if (!available) {
   };
 
   beforeEach(async () => {
-    await sql`TRUNCATE token.stakes, token.buyback_runs, token.emission_epochs RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-token');
     token = new TokenService(sql, ledger, bus, options);
@@ -533,6 +533,193 @@ if (!available) {
     it('refuses to mint once the schedule is exhausted', async () => {
       // Far enough out that the reward has halved below one unit of precision.
       await expect(token.mintEpoch(10_000_000)).rejects.toBeInstanceOf(TokenError);
+    });
+  });
+
+  // ── Governance (§4.3) ─────────────────────────────────────────────────────
+
+  describe('governance — proposals and IFC-weighted voting', () => {
+    const now = new Date('2026-07-15T12:00:00.000Z');
+    const opensAt = new Date('2026-07-15T00:00:00.000Z');
+    const closesAt = new Date('2026-07-22T00:00:00.000Z');
+
+    it('lets a staked-tier holder open a proposal', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+
+      const proposal = await token.createProposal({
+        kind: 'fee_param',
+        body: { buybackBps: 1500 },
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+
+      expect(proposal.status).toBe('open');
+      expect(proposal.kind).toBe('fee_param');
+      expect(proposal.body).toMatchObject({ buybackBps: 1500 });
+    });
+
+    it('refuses a zero-stake non-admin proposal', async () => {
+      await expect(
+        token.createProposal({
+          kind: 'listing',
+          body: { symbol: 'X' },
+          createdBy: USER_A,
+          opensAt,
+          closesAt,
+          now,
+        }),
+      ).rejects.toMatchObject({ code: 'token.proposal_not_allowed' });
+    });
+
+    it('lets admin open a proposal without stake', async () => {
+      const proposal = await token.createProposal({
+        kind: 'grant',
+        body: { amount: '1' },
+        createdBy: USER_A,
+        asAdmin: true,
+        opensAt,
+        closesAt,
+        now,
+      });
+      expect(proposal.status).toBe('open');
+    });
+
+    it('snapshots stakeOf as vote weight and tallies by choice', async () => {
+      await fund(USER_A, '5000');
+      await fund(USER_B, '2000');
+      await token.stake({ userId: USER_A, amount: amt('5000'), tier: 'flex' });
+      await token.stake({ userId: USER_B, amount: amt('2000'), tier: 'flex' });
+
+      const proposal = await token.createProposal({
+        kind: 'curriculum',
+        body: { title: 'Core path' },
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+
+      const aVote = await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+      const bVote = await token.castVote({ proposalId: proposal.id, userId: USER_B, choice: 'against', now });
+
+      expect(formatAmount(aVote.weight)).toBe('5000');
+      expect(formatAmount(bVote.weight)).toBe('2000');
+
+      // Unstake after voting must not rewrite the snapshotted weight.
+      await token.unstake((await sql<Array<{ id: string }>>`SELECT id FROM token.stakes WHERE user_id = ${USER_A} LIMIT 1`)[0]!.id);
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+
+      const detail = await token.getProposal(proposal.id);
+      expect(formatAmount(detail.tally.forWeight)).toBe('5000');
+      expect(formatAmount(detail.tally.againstWeight)).toBe('2000');
+      expect(formatAmount(detail.tally.totalWeight)).toBe('7000');
+      expect(detail.tally.voterCount).toBe(2);
+    });
+
+    it('refuses a second ballot from the same user', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'listing',
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+
+      await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+      await expect(token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'against', now })).rejects.toMatchObject({
+        code: 'token.already_voted',
+      });
+    });
+
+    it('refuses a vote with zero stake', async () => {
+      const proposal = await token.createProposal({
+        kind: 'grant',
+        createdBy: USER_A,
+        asAdmin: true,
+        opensAt,
+        closesAt,
+        now,
+      });
+
+      await expect(token.castVote({ proposalId: proposal.id, userId: USER_B, choice: 'for', now })).rejects.toMatchObject({
+        code: 'token.no_voting_weight',
+      });
+    });
+
+    it('refuses votes outside the window or on a non-open proposal', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+
+      const future = await token.createProposal({
+        kind: 'listing',
+        createdBy: USER_A,
+        opensAt: new Date('2026-08-01T00:00:00.000Z'),
+        closesAt: new Date('2026-08-08T00:00:00.000Z'),
+        now,
+      });
+      expect(future.status).toBe('draft');
+      await expect(token.castVote({ proposalId: future.id, userId: USER_A, choice: 'for', now })).rejects.toMatchObject({
+        code: 'token.proposal_not_open',
+      });
+
+      const open = await token.createProposal({
+        kind: 'listing',
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      const afterClose = new Date('2026-07-23T00:00:00.000Z');
+      await expect(token.castVote({ proposalId: open.id, userId: USER_A, choice: 'for', now: afterClose })).rejects.toMatchObject({
+        code: 'token.proposal_window',
+      });
+    });
+
+    it('lists proposals filtered by status and kind', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+
+      await token.createProposal({ kind: 'listing', createdBy: USER_A, opensAt, closesAt, now });
+      await token.createProposal({ kind: 'grant', createdBy: USER_A, opensAt, closesAt, now });
+      await token.createProposal({
+        kind: 'listing',
+        createdBy: USER_A,
+        opensAt: new Date('2026-08-01T00:00:00.000Z'),
+        closesAt: new Date('2026-08-08T00:00:00.000Z'),
+        now,
+      });
+
+      const open = await token.listProposals({ status: 'open' });
+      expect(open).toHaveLength(2);
+      const listings = await token.listProposals({ kind: 'listing' });
+      expect(listings).toHaveLength(2);
+      const openListings = await token.listProposals({ status: 'open', kind: 'listing' });
+      expect(openListings).toHaveLength(1);
+    });
+
+    it('moves no ledger value when proposing or voting', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const availableBefore = await balanceOf(USER_A);
+      const stakedBefore = await stakedOf(USER_A);
+
+      const proposal = await token.createProposal({
+        kind: 'fee_param',
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'abstain', now });
+
+      expect(await balanceOf(USER_A)).toBe(availableBefore);
+      expect(await stakedOf(USER_A)).toBe(stakedBefore);
+      expect(ledger.reconcile()).toEqual({ ok: true });
     });
   });
 
