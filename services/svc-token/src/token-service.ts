@@ -305,8 +305,17 @@ export class TokenService {
     return withMoneySpan('token.unstake', { operation: 'unstake' }, async () => this.unstakeInner(stakeId, now));
   }
 
+  /**
+   * Close a stake: **claim `unstaking` → ledger unstake → `closed`** (M-04).
+   *
+   * Ledger-first left a window where principal was already available while
+   * stakeOf still counted the row. Claiming `unstaking` first (short txn)
+   * drops the row from stakeOf (active-only) before the ledger moves.
+   * Ledger key `token.unstake:${stakeId}` makes crash mid-flight retry-safe.
+   * Never hold FOR UPDATE across a remote ledger.post.
+   */
   private async unstakeInner(stakeId: string, now: Date): Promise<StakeRecord> {
-    return transaction(
+    const claimed = await transaction(
       this.sql,
       async (tx) => {
         const rows = await tx<
@@ -319,29 +328,54 @@ export class TokenService {
         const row = rows[0];
         if (!row) throw new TokenError(`Stake ${stakeId} not found`, 'token.stake_not_found');
         if (row.status === 'closed') throw new TokenError('Stake is already closed', 'token.stake_closed');
+        if (row.status === 'pending') {
+          throw new TokenError('Stake is still pending funding — cannot unstake', 'token.stake_locked');
+        }
+        if (row.status !== 'active' && row.status !== 'unstaking') {
+          throw new TokenError(`Stake is not unstakable (status=${row.status})`, 'token.stake_closed');
+        }
 
-        if (!isUnlocked(row.tier, row.started_at, now)) {
+        if (row.status === 'active' && !isUnlocked(row.tier, row.started_at, now)) {
           throw new TokenError(`Stake is locked until ${row.unlocks_at?.toISOString() ?? 'unlock'} (${row.tier})`, 'token.stake_locked');
         }
 
-        const amount = parseAmount(row.amount);
-
-        await this.ledger.post(recipes.unstake({ stakeId, userId: row.user_id, assetId: this.assetId, amount, tier: row.tier }));
-
-        await tx`UPDATE token.stakes SET status = 'closed' WHERE id = ${stakeId}`;
+        if (row.status === 'active') {
+          await tx`UPDATE token.stakes SET status = 'unstaking' WHERE id = ${stakeId} AND status = 'active'`;
+        }
 
         return {
           id: stakeId,
           userId: row.user_id,
-          amount,
+          amount: parseAmount(row.amount),
           tier: row.tier,
           startedAt: row.started_at,
           unlocksAt: row.unlocks_at,
-          status: 'closed' as const,
         };
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
+
+    await this.ledger.post(
+      recipes.unstake({
+        stakeId: claimed.id,
+        userId: claimed.userId,
+        assetId: this.assetId,
+        amount: claimed.amount,
+        tier: claimed.tier,
+      }),
+    );
+
+    await this.sql`UPDATE token.stakes SET status = 'closed' WHERE id = ${claimed.id}`;
+
+    return {
+      id: claimed.id,
+      userId: claimed.userId,
+      amount: claimed.amount,
+      tier: claimed.tier,
+      startedAt: claimed.startedAt,
+      unlocksAt: claimed.unlocksAt,
+      status: 'closed' as const,
+    };
   }
 
   /**

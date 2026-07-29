@@ -1,86 +1,70 @@
 # Peace of mind — current floor (Nitro)
 
 **Date:** 2026-07-29 evening  
-**Main tip at wave freeze:** `27ce1d4` (#100) — re-check `git rev-parse origin/main`  
-**Wave audit:** [`audit/2026-07-29-wave/`](audit/2026-07-29-wave/) · paste: [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md)  
-**Claim tags:** `[VERIFIED 2026-07-29]` mega-wave on post-#86 delta; P1 ship on audit branch
+**Main tip at write:** re-check `git rev-parse origin/main` (this PR updates residual after proper-cleanup)  
+**Proper definition:** [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md)  
+**Wave archive:** [`audit/2026-07-29-wave/`](audit/2026-07-29-wave/)  
+**Claim tags:** `[VERIFIED 2026-07-29]` mega-wave + proper Track-1 cleanup PR
 
-**Stream A claim:** GitHub issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83) · [NITRO-STREAM-A-CLAIM.md](NITRO-STREAM-A-CLAIM.md)
-
-**Orient:** [START-HERE.md](START-HERE.md) · Residual: [POST-MERGE-RESIDUAL-AFTER-86.md](POST-MERGE-RESIDUAL-AFTER-86.md) · Security: [SECURITY-WHEN-PLAIN.md](SECURITY-WHEN-PLAIN.md)
+**Stream A:** issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83) · [NITRO-STREAM-A-CLAIM.md](NITRO-STREAM-A-CLAIM.md)
 
 ---
 
 ## Verdict (one breath)
 
-**Denon and agents can keep building.** Mega-wave covered everything money/auth that landed after #86 without a full re-archaeology. **No P0 steal-money door** on tip. **P1 integrity fixes** (stake conflict, convert price bind, token jurisdiction, WebAuthn UV) ship on the wave PR. **Do not go live with real user money.**
-
-Open **PR #101** (market seed + honest dex.quote + screening mechanism): **safe to merge** as engineering — sanctions **list content** still needs counsel.
+**His ship wave is audited and code-cleaned for agent-owned residual.** Keep building. **Not go-live.** Leftover is people/ops/law (licences, rails, chain, counsel list, kill drill) — not mystery doors we were too tired to name.
 
 ---
 
 ## Scoreboard
 
-| System           | Risk now                                      | Status                       |
-| ---------------- | --------------------------------------------- | ---------------------------- |
-| Ledger           | Low if perimeter holds                        | OK to build                  |
-| Identity         | WebAuthn UV tightened this wave               | OK                           |
-| Pay              | Mount honest; rail idempotency residual       | OK · residual                |
-| Token            | Stake conflict + jurisdiction fixed this wave | OK to build                  |
-| Trade convert    | maxAvgPrice binds protection this wave        | OK                           |
-| P2P              | Prior audit holds                             | OK                           |
-| Edge             | Region HMAC; screening boot on #101           | OK for dev                   |
-| Protocol / AMM   | Unsigned only; no ledger write                | Shell · not product-complete |
-| DEX quote (#101) | Fail-closed venues                            | Merge-ready                  |
-| Deploy           | S2S not host-published                        | Usable with care             |
-| Vendor shell     | UI only; dual-book + MiningsJob residual      | Quarantined as books         |
-| CI doctrine      | Brand/custody/vendor-shell clean at wave L0   | OK                           |
+| System | Risk now | Status |
+| --- | --- | --- |
+| Ledger | Low if perimeter holds | OK |
+| Identity | WebAuthn UV + rank self-only | OK |
+| Pay | Rail double-submit residual | OK · residual |
+| Token | Stake conflict + unstake claim-before-post | OK |
+| Trade | Convert bind + market hours on create | OK |
+| Protocol / DEX | Shells; quote fail-closed | Build · not product-complete |
+| Vendor shell | Mint jobs/DAO paths killed; still not the books | UI only |
+| Deploy | S2S not host-published | Usable with care |
+| CI | Brand/custody/vendor-shell law | OK |
 
 ---
 
-## Closed (do not re-open without regression proof)
+## Closed (do not re-open without regression)
 
-**#80 · #81 · #86** — prior audit + custody doors (see history in older PEACE).
-
-**#96 residual** — CORS allowlist · unfreezeMore dead · TRUNCATE helpers dead (verified this wave).
-
-**This mega-wave P1** — M-01 stake conflict · M-03 convert protection bind · L2-TOKEN-JURIS · L2-WA-UV · interactive stakeOf self-only.
-
----
-
-## Still open (short list)
-
-| Item                                                                | When it matters                                  |
-| ------------------------------------------------------------------- | ------------------------------------------------ |
-| **Dual-book** — shell ≠ TS ledger (MiningsJob + DAO credits remain) | **Now** · hard before real money                 |
-| **Sanctions list content**                                          | Before public / real money (mechanism ≠ content) |
-| **L2-6** S2S body-bind                                              | Before hard multi-service prod                   |
-| Real **rails / live chain**                                         | Before real user money                           |
-| Operator freeze / **kill drill**                                    | Before go-live                                   |
-| **Licences** Priority-1 (chart · MySQL connector)                   | Denon decides                                    |
-| Pay withdraw **rail** double-submit                                 | Before real rails                                |
-| Unstake claim-before-post (M-04)                                    | Soon                                             |
-| Rank get free userId (P2)                                           | Soon                                             |
-| **#102** trading hours                                              | Owner-merge money; prove order path              |
-| Stream A polish                                                     | Product                                          |
-
-Full residual table: [POST-MERGE-RESIDUAL-AFTER-86.md](POST-MERGE-RESIDUAL-AFTER-86.md)
+- #80 · #81 · #86 custody/shell  
+- #96 CORS / unfreeze / TRUNCATE  
+- #99 CI money Postgres  
+- #101 market seed + dex.quote honesty + screening **mechanism**  
+- #102 trading hours on order create  
+- #105 mega-wave P1s (stake conflict, convert bind, token matrix, WebAuthn UV, stakeOf self-only)  
+- **Proper Track 1:** MiningsJob + shell mint DAO paths · unstake claim-before-post · rank get/perks self-only · scan law extended  
 
 ---
 
-## Explicit non-problems
+## Still open (only true leftovers)
 
-- Services do not invent balances outside ledger recipes on TS production paths
-- Protocol plane does not write the books
-- Historical open doors (#50 / #55 / #62 / #75 / #80 / #86) still fixed
-- Do **not** rebuild trade/matching/pay from scratch
-- Product UI = vendored shell @ 8090 — not money books
-- Do **not** merge multi-asset without Denon
+| Item | Who | Why not “agent bug” |
+| --- | --- | --- |
+| Dual-book **policy discipline** under live demo | All agents + you | Code hardens shell; habit still required |
+| Sanctions **list content** | You + counsel | Mechanism ≠ countries |
+| Licences (chart · MySQL connector) | **Denon** | Path choice |
+| Wallet secrets / keystore ops | **Denon ops** | Host secrets |
+| Real rails + live chain | **Denon** | Product infra |
+| Freeze/kill drill e2e | Denon + you sign-off | Proof, not a patch |
+| Multi-asset owner merge rule | **Denon** if more | Money enum |
+| Pay rail double-submit | Money agent when rails real | Adapter contract |
+| L2-6 S2S body-bind | Design | Not drive-by |
+| Secret scan in CI | You authorize tooling | Optional Track A |
+| Stream A polish | You | Product |
+
+Full table: [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
 
 ---
 
-## After the next ship wave
+## After next ship
 
-1. Paste [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md) if main moved a lot; else [`WAVE-AUDIT.md`](WAVE-AUDIT.md)
-2. Update **this file** tip + scoreboard
-3. Do **not** re-run full A–E unless law changes or main is on fire
+Paste [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md) or [`WAVE-AUDIT.md`](WAVE-AUDIT.md).  
+Proper bar: [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md).

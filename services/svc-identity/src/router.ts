@@ -446,11 +446,15 @@ export function createIdentityRouter(
     }),
 
     rank: router({
+      // Self-only on the interactive surface. Modules use HMAC
+      // GET /internal/rank/:userId/perks — never free userId on edge tRPC.
       get: scopedProcedure('identity:read')
-        .input(z.object({ userId: z.string().uuid() }))
+        .input(z.object({}).optional())
         .output(rankStateSchema)
-        .query(async ({ input }) => {
-          const snapshot = await rank.get(input.userId);
+        .query(async ({ ctx }) => {
+          const userId = ctx.principal.userId;
+          if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+          const snapshot = await rank.get(userId);
           return {
             userId: snapshot.userId,
             rank: snapshot.rank,
@@ -461,11 +465,15 @@ export function createIdentityRouter(
           };
         }),
 
-      /** The hot path — every module calls this. Cached in Redis in Phase 2. */
+      /** Interactive self-only. Cross-user hot path is S2S HMAC, not this. */
       perks: scopedProcedure('identity:read')
-        .input(z.object({ userId: z.string().uuid() }))
+        .input(z.object({}).optional())
         .output(rankPerksSchema)
-        .query(({ input }) => rank.perks(input.userId)),
+        .query(({ ctx }) => {
+          const userId = ctx.principal.userId;
+          if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+          return rank.perks(userId);
+        }),
 
       /**
        * Service-to-service only. Modules award XP by calling this rather than by

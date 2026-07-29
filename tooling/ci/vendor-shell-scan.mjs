@@ -47,6 +47,18 @@ const FORBIDDEN = [
     re: /to_released\s*=\s*to_released\s*-\s*/,
     reason: 'bulk to_released debit via string SQL (JDBCUtils class)',
   },
+  {
+    id: 'minings-job-credit',
+    // Live body only — disabled job throws before this path.
+    re: /userWallet\.setBalance\s*\(\s*userWallet\.getBalance\s*\(\s*\)\s*\.add\s*\(/,
+    reason: 'MiningsJob-class shell balance mint (dual-book; shell is not the books)',
+  },
+  {
+    id: 'dao-increase-balance-for-bhb-live',
+    // Only the live mint form (not no-op WHERE 1=0 replacements).
+    re: /SET\s+balance\s*=\s*balance\s*\+\s*:balance\s+WHERE\s+coin_id\s*=\s*'BHB'/i,
+    reason: 'DAO increaseBalanceForBHB live mint SQL (must stay no-op)',
+  },
 ];
 
 function walk(dir, out = []) {
