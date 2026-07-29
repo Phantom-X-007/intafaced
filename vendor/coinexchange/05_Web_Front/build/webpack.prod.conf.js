@@ -115,11 +115,6 @@ const webpackConfig = merge(baseWebpackConfig, {
     // copy custom static assets
     new CopyWebpackPlugin([
       {
-        from: path.resolve(__dirname, '../src/assets/js/charting_library/static'),
-        to: config.build.assetsSubDirectory+'/charting_library/static',
-        ignore: ['.*']
-      },
-      {
         from: path.resolve(__dirname, '../favicon.ico'),
         to: config.build.assetsRoot,
       }

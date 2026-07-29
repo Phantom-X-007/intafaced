@@ -31,6 +31,8 @@ lists what was checked. `NOTICE` §10 indexes all 23 such entries.
 
 ### 1.1 · TradingView Charting Library is proprietary and we have no licence
 
+**DECISION 2026-07-29 — Path A.** Hold TERMINAL.md (lightweight-charts). Charting Library purged from the product shell; chart rewired to lightweight-charts. See `docs/OWNER-DECISIONS-OPEN.md`.
+
 **What.** `vendor/coinexchange/05_Web_Front/src/assets/js/charting_library/` — 85 files, 5.4 MB, all
 git-tracked. Version string read from the artefact: `1.11 (internal id fe319232 @ 2017-11-14)`.
 
@@ -146,9 +148,7 @@ established commercial licensing programme and a history of enforcement.
 
 **Action, cheapest first.**
 
-1. **Swap the driver.** MariaDB Connector/J is LGPL-2.1 and wire-compatible with MySQL for ordinary
-   JDBC use. This is a one-line POM change plus a connection-string review, and it removes the
-   question entirely. Try this first.
+1. **Swap the driver.** **DONE 2026-07-29** — MariaDB Connector/J **2.7.12** (LGPL-2.1) replaces `mysql-connector-java:8.0.11` across the Java framework POMs; driver class is `org.mariadb.jdbc.Driver`.
 2. If the driver cannot be swapped, buy the Oracle commercial licence.
 3. Note that this is independent of the `mysql:8.0` **server** image (§9 of `NOTICE`) — running the
    GPLv2 server as a separate process over a network protocol is the ordinary compliant posture and

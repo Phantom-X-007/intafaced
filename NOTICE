@@ -525,7 +525,7 @@ parent POM was fetched and is named.
 
   ── COPYLEFT — SEE docs/LICENCE-POSITION.md ──────────────────────────────────
 
-  mysql:mysql-connector-java:8.0.11
+  org.mariadb.jdbc:mariadb-java-client:2.7.12 (replaces mysql:mysql-connector-java:8.0.11)
     "The GNU General Public License, v2 with FOSS exception"
     Read from mysql-connector-java-8.0.11.pom on Maven Central.
     Declared in 00_framework/pom.xml as ${mysql.version} = 8.0.11.
@@ -730,3 +730,9 @@ Provenance or terms could NOT be established from the artefact for:
 Where an entry says a licence "is not stated in the artefact", that is not a
 claim that no licence exists. It is a claim that we have not yet read one, and
 that nothing in this repository entitles anyone to assume one.
+
+  lightweight-charts 3.8.0
+    Copyright (c) 2023 TradingView, Inc.
+    License: Apache-2.0
+    Path: vendor/coinexchange/05_Web_Front/src/assets/js/market-chart/
+    Source: https://github.com/tradingview/lightweight-charts
