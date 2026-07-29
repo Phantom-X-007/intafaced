@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**35 of 107 shipped (33%)** · 3 in progress · 31 ready to claim · 38 blocked · 15 deliberate §13 sockets
+**36 of 107 shipped (34%)** · 3 in progress · 30 ready to claim · 38 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -26,7 +26,6 @@ pnpm wt feat/<the-thing>
 | Feature | Module | Phase | id |
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
-| Scoped API keys, sub-accounts | `identity` | 1 | `identity.apikeys` |
 | Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
 | OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
@@ -100,7 +99,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Worktree tooling + GitHub Flow | F |  | `infra.worktrees` |
 | 🟢 | 100+ languages — keyed from day one (§9) <br/>_Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface._ | F |  | `infra.i18n` |
 
-### Phase 1 — THE CORE (13/14)
+### Phase 1 — THE CORE ✅
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -108,7 +107,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Money recipes — every value path in the OS | F |  | `ledger.recipes` |
 | ✅ | Accounts, sessions, argon2id, TOTP | F |  | `identity.accounts` |
 | ✅ | XP graph, rank ladder, machine-readable perks | F |  | `identity.rank` |
-| 🟢 | Scoped API keys, sub-accounts <br/>_Downgraded 2026-07-28: create/list/revoke are reachable on the mounted router, but `verifyApiKey` (auth-service.ts:328) is called by nothing outside identity.test.ts. A key can be issued and never opens anything — no service accepts one._ | F |  | `identity.apikeys` |
+| ✅ | Scoped API keys, sub-accounts <br/>_create/list/revoke on /trpc + public apiKeys.exchange → short-lived access JWT the edge already verifies. Key scopes only; no refresh; interactive-only scopes stay off keys. Sub-accounts still thin (create only)._ | F |  | `identity.apikeys` |
 | ✅ | KYC tiers wired to JURISDICTION_MATRIX <br/>_Restored to done 2026-07-28: the write side the audit called out now exists. `kyc.submit` / `kyc.approve` / `kyc.reject` / `kyc.pending` / `kyc.status` are served from svc-identity's mounted /trpc, so identity.kyc_records is writable and a real user can leave tier `none`. See identity.kyc-review._ | F |  | `identity.kyc` |
 | ✅ | Routed KYC — submit, operator approve/reject, review queue <br/>_Reachable on svc-identity's mounted /trpc; tested in router.test.ts + identity.test.ts; nothing propped up — approval is an operator action against kyc_records, no provider stub. Custodial side only: §22 permissionless surfaces read no tier (docs/decisions/kyc-posture.md)._ | F |  | `identity.kyc-review` |
 | ✅ | Step-up challenge minting trade:withdraw for five minutes <br/>_defaultScopes() withheld trade:withdraw "until a step-up challenge" that did not exist, so no session could reach any withdrawal. Reachable on the mounted router. Known limit, platform-wide and not introduced here: a TOTP code is replayable inside its validity window._ | F |  | `identity.step-up` |
@@ -155,7 +154,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | Risk scoring, chargebacks, decline recovery | F | `pay.gateway` | `pay.fraud` |
 | ⛔ | Recurring — card and crypto | F | `pay.gateway` | `pay.subscriptions` |
 | ⛔ | Woo / Magento / OpenCart plugins | F | `pay.gateway` | `pay.plugins` |
-| ⛔ | Public REST + webhooks + sandbox (§9) | B | `pay.gateway`, `identity.apikeys` | `pay.public-api` |
+| ⛔ | Public REST + webhooks + sandbox (§9) | B | `pay.gateway` | `pay.public-api` |
 | ✅ | Offers, maker/taker, 100+ fiat currencies <br/>_svc-p2p on main; self-mounts /trpc with an edge-verified principal_ | F |  | `p2p.offers` |
 | ✅ | Ledger escrow — lock, release, refund <br/>_Escrow flows in svc-p2p; not a separate service_ | F |  | `p2p.escrow` |
 | ✅ | Moderated dispute resolution <br/>_Dispute paths in svc-p2p core_ | F |  | `p2p.disputes` |

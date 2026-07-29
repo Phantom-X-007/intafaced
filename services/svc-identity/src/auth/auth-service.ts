@@ -619,6 +619,62 @@ export class AuthService {
     return { userId: row.user_id, scopes: row.scopes, keyId: row.id };
   }
 
+  /**
+   * Turn a long-lived API key into a short-lived access JWT the edge already
+   * accepts (§9 Public API).
+   *
+   * Until this existed, `create`/`list`/`revoke` worked and `verifyApiKey` was
+   * only called from tests — a key could be issued and never open a door.
+   * Exchange is that door: bots call it, receive a bearer access token scoped
+   * exactly as the key, then hit the rest of the platform through svc-edge.
+   *
+   * No refresh token. API keys are not interactive sessions; when the access
+   * token expires the bot re-exchanges. `mfa` is always false — interactive-
+   * only scopes (withdraw, treasury, …) remain unreachable from a key even if
+   * someone smuggled them into the key row (create already refuses them via
+   * assertDelegatableScopes + INTERACTIVE_ONLY).
+   */
+  async exchangeApiKey(key: string): Promise<{
+    accessToken: string;
+    expiresAt: Date;
+    userId: string;
+    keyId: string;
+    scopes: string[];
+  }> {
+    const verified = await this.verifyApiKey(key);
+    if (!verified) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
+
+    const users = await this.sql<Array<{ status: string }>>`
+      SELECT status FROM identity.users WHERE id = ${verified.userId}
+    `;
+    const user = users[0];
+    if (!user) throw new AuthError('Account not found', 'auth.not_found');
+    if (user.status !== 'active') throw new AuthError(`Account is ${user.status}`, 'auth.account_frozen');
+
+    const tier = await this.kycTier(verified.userId);
+    // sessionId = key id: access tokens require a sid claim; there is no
+    // refresh session row for API-key traffic.
+    const { token: accessToken, expiresAt } = await issueAccessToken(
+      {
+        userId: verified.userId,
+        sessionId: verified.keyId,
+        scopes: verified.scopes,
+        tier,
+        mfa: false,
+        apiKeyId: verified.keyId,
+      },
+      this.tokens,
+    );
+
+    return {
+      accessToken,
+      expiresAt,
+      userId: verified.userId,
+      keyId: verified.keyId,
+      scopes: verified.scopes,
+    };
+  }
+
   async revokeApiKey(userId: string, keyId: string): Promise<boolean> {
     const result = await this.sql`
       UPDATE identity.api_keys SET revoked = true WHERE id = ${keyId} AND user_id = ${userId} AND revoked = false

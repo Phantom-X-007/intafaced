@@ -512,6 +512,36 @@ export function createIdentityRouter(
     }),
 
     apiKeys: router({
+      /**
+       * Public: long-lived key → short-lived access JWT.
+       * This is what makes identity.apikeys real — create alone is not enough.
+       */
+      exchange: publicProcedure
+        .input(z.object({ key: z.string().min(8).max(200) }))
+        .output(
+          z.object({
+            accessToken: z.string(),
+            expiresAt: z.string(),
+            userId: z.string().uuid(),
+            keyId: z.string().uuid(),
+            scopes: z.array(z.string()),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            const result = await auth.exchangeApiKey(input.key);
+            return {
+              accessToken: result.accessToken,
+              expiresAt: result.expiresAt.toISOString(),
+              userId: result.userId,
+              keyId: result.keyId,
+              scopes: result.scopes,
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
       create: scopedProcedure('identity:write')
         .input(
           z.object({

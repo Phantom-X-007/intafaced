@@ -98,6 +98,18 @@ function stubServices(): Stub {
       scopes: ['trade:withdraw'],
     })),
     createApiKey: record('createApiKey', () => ({ id: 'key-1', key: 'ifc_secret', prefix: 'ifc_abc' })),
+    exchangeApiKey: record('exchangeApiKey', () => ({
+      accessToken: 'api.key.jwt',
+      expiresAt: new Date('2026-07-28T09:15:00.000Z'),
+      userId: USER,
+      keyId: '55555555-5555-4555-8555-555555555555',
+      scopes: ['trade:read'],
+    })),
+    verifyApiKey: record('verifyApiKey', () => ({
+      userId: USER,
+      scopes: ['trade:read'],
+      keyId: '55555555-5555-4555-8555-555555555555',
+    })),
     startWebauthnRegistration: record('startWebauthnRegistration', () => ({
       challenge: 'chal-reg',
       rp: { name: 'INTAFACED', id: 'localhost' },
@@ -510,5 +522,25 @@ describe('apiKeys.create passes the GRANTING session as the ceiling', () => {
     const api = await caller(['identity:write']);
     const err = await api.apiKeys.create({ name: 'escalate', scopes: ['admin:compliance'] }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('BAD_REQUEST');
+  });
+});
+
+describe('apiKeys.exchange turns a key into an edge-usable access token', () => {
+  const argsOf = (method: string) => stub.calls.filter((c) => c.method === method).map((c) => c.args[0] as unknown);
+
+  it('is public — no principal required', async () => {
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
+    const result = await api.apiKeys.exchange({ key: 'ifc_live_secret' });
+    expect(result.accessToken).toBe('api.key.jwt');
+    expect(result.userId).toBe(USER);
+    expect(result.scopes).toEqual(['trade:read']);
+    expect(argsOf('exchangeApiKey')).toEqual(['ifc_live_secret']);
+  });
+
+  it('maps a bad key to UNAUTHORIZED without leaking whether the key existed', async () => {
+    stub.fail(new AuthError('Invalid credentials', 'auth.invalid_credentials'));
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
+    const err = await api.apiKeys.exchange({ key: 'ifc_wrong' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
   });
 });
