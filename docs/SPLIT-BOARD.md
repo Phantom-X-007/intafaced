@@ -18,12 +18,12 @@
 `vendor/coinexchange/`.** That tree IS the product. It is not a reference copy,
 not a sample to crib from, and not something to port screens out of.
 
-| what | where |
-| --- | --- |
-| **the app you open** | `vendor/coinexchange/05_Web_Front/` → http://localhost:8090 |
-| the Java backend | `vendor/coinexchange/00_framework/` (15 Maven modules) |
-| the admin console | `vendor/coinexchange/04_Web_Admin/` |
-| the wallet RPC | `vendor/coinexchange/01_wallet_rpc/` |
+| what                    | where                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| **the app you open**    | `vendor/coinexchange/05_Web_Front/` → http://localhost:8090                   |
+| the Java backend        | `vendor/coinexchange/00_framework/` (15 Maven modules)                        |
+| the admin console       | `vendor/coinexchange/04_Web_Admin/`                                           |
+| the wallet RPC          | `vendor/coinexchange/01_wallet_rpc/`                                          |
 | our TypeScript platform | `services/`, `packages/` — reached from the app through `svc-edge` on `:4000` |
 
 Provenance, so nobody wastes time wondering: the tree is a fork of the
@@ -46,12 +46,12 @@ edit anything in the other stream's territory, ever — you open a request
 instead.** One-line changes included. The cost of a two-minute wait is far
 smaller than the cost of a conflicted `App.vue` at 2am.
 
-| | **Stream A — Nitro** | **Stream B — Denon** |
-| --- | --- | --- |
-| **Owns** | `vendor/*/05_Web_Front/src/pages/`<br>`vendor/*/05_Web_Front/src/components/`<br>`vendor/*/05_Web_Front/src/assets/images/` | `services/`<br>`packages/`<br>`tooling/`<br>`vendor/*/00_framework/` (Java)<br>`docker-compose*.yml`, `Dockerfile` |
-| **Branch prefix** | `feat/app-*` | `feat/spine-*` |
-| **Dev server** | `:8090` (container `intafaced-shell-web`) | `:8091` (own container — see §3) |
-| **Verifies with** | browser + `docker logs …` compile check | `pnpm verify` + `custody-scan` |
+|                   | **Stream A — Nitro**                                                                                                        | **Stream B — Denon**                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Owns**          | `vendor/*/05_Web_Front/src/pages/`<br>`vendor/*/05_Web_Front/src/components/`<br>`vendor/*/05_Web_Front/src/assets/images/` | `services/`<br>`packages/`<br>`tooling/`<br>`vendor/*/00_framework/` (Java)<br>`docker-compose*.yml`, `Dockerfile` |
+| **Branch prefix** | `feat/app-*`                                                                                                                | `feat/spine-*`                                                                                                     |
+| **Dev server**    | `:8090` (container `intafaced-shell-web`)                                                                                   | `:8091` (own container — see §3)                                                                                   |
+| **Verifies with** | browser + `docker logs …` compile check                                                                                     | `pnpm verify` + `custody-scan`                                                                                     |
 
 ---
 
@@ -60,16 +60,16 @@ smaller than the cost of a conflicted `App.vue` at 2am.
 These are the files two people always end up in at once. Every one of them
 collided during today's agent run. Each now has exactly one owner.
 
-| file | owner | how the other stream changes it |
-| --- | --- | --- |
-| `05_Web_Front/src/App.vue` | **A** | B posts the nav item wanted |
-| `05_Web_Front/src/config/routes.js` | **A** | B posts the route wanted |
-| `05_Web_Front/config/index.js` (dev proxy) | **B** | A posts prefix → target |
-| `05_Web_Front/src/main.js` | **B** | A posts what's needed |
-| `05_Web_Front/src/assets/lang/en.js` | **shared, append-only** | see below |
-| `05_Web_Front/src/assets/css/intafaced.css` | **shared, append-only** | see below |
-| `services/svc-edge/src/routes.ts` | **B** | A posts prefix + port |
-| `docker-compose.apps.yml` | **B** | A never edits |
+| file                                        | owner                   | how the other stream changes it |
+| ------------------------------------------- | ----------------------- | ------------------------------- |
+| `05_Web_Front/src/App.vue`                  | **A**                   | B posts the nav item wanted     |
+| `05_Web_Front/src/config/routes.js`         | **A**                   | B posts the route wanted        |
+| `05_Web_Front/config/index.js` (dev proxy)  | **B**                   | A posts prefix → target         |
+| `05_Web_Front/src/main.js`                  | **B**                   | A posts what's needed           |
+| `05_Web_Front/src/assets/lang/en.js`        | **shared, append-only** | see below                       |
+| `05_Web_Front/src/assets/css/intafaced.css` | **shared, append-only** | see below                       |
+| `services/svc-edge/src/routes.ts`           | **B**                   | A posts prefix + port           |
+| `docker-compose.apps.yml`                   | **B**                   | A never edits                   |
 
 **Append-only convention** for the two shared files. Each stream writes only
 inside its own marked region, so git merges them cleanly instead of conflicting:
@@ -134,7 +134,7 @@ Ordered. Top of the list is the highest visible value.
    between a demo that lands and one that doesn't.**
 3. **Zero-KYC DEX path in the shell.** The plane switch already exists and is
    correct in the services (`checkAccess` short-circuits protocol +
-   non-custodial to `allowed.permissionless` *after* region screening). What's
+   non-custodial to `allowed.permissionless` _after_ region screening). What's
    missing is the UI: a DEX/CEX toggle that actually selects the plane, with the
    member/KYC gates stripped on the protocol side and kept on the CEX side.
 4. Order-entry polish: validation, precision, fee preview, confirmation states.
@@ -159,7 +159,7 @@ any new edge route, anything in `main.js`.
    issues neither `bank:read` nor `blueprint:read` **to anybody**, so no user in
    the platform can open a bank space. Decide what gets issued to whom — this is
    a policy call, not a patch. Two screens are dark until it's made.
-3. **P2P offers are 403 for a different reason** — the scope *is* held; the
+3. **P2P offers are 403 for a different reason** — the scope _is_ held; the
    jurisdiction matrix wants verification tier `basic`. Decide whether that's
    correct and make the UI say which of the two refusals it hit.
 4. **`svc-trade` never checks trading hours.** `isInstrumentOpen` exists and is
@@ -198,8 +198,8 @@ any new edge route, anything in `main.js`.
    excluded explicitly.
 
    **Do NOT pin `@Table` annotations first.** That was in an earlier version of
-   this item and it was wrong. JPA implicit naming derives from the *entity
-   name*, never the package: all 27 entities lacking `@Table` were verified to
+   this item and it was wrong. JPA implicit naming derives from the _entity
+   name_, never the package: all 27 entities lacking `@Table` were verified to
    map to exact snake_case renderings of their class names, across all 64 live
    tables, zero exceptions. Renaming packages without renaming classes cannot
    change a table or column name. Hand-adding 27 annotations would be 27 chances
@@ -226,6 +226,7 @@ any new edge route, anything in `main.js`.
    Also found in passing: the coinex Redis password in config does not match the
    running container, and the vendor root `pom.xml` description plus
    `sql/db_patch.sql` still carry Chinese text. Both belong in this pass.
+
 8. **Java custody hardening** — unauthenticated withdrawal `GET`s, empty-string
    ETH keystore passwords, and a hardcoded `987654321asdf` trading backdoor.
    These are line items in the fork, not blockers, but they must not reach
@@ -237,7 +238,7 @@ any new edge route, anything in `main.js`.
 ## 6. Owner-only — nobody else can do these
 
 - **Merge the money branches.** `feat/multi-asset-instruments` touches the
-  ledger's asset enum. Standing rule: *auto-open a PR, never auto-merge.*
+  ledger's asset enum. Standing rule: _auto-open a PR, never auto-merge._
 - **The sanctions blocklist is empty.** Screening works and screens nothing.
   This needs counsel before a public DEX. It is a compliance decision, not an
   engineering one, and it is the one item that can stop a launch.

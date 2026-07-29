@@ -65,7 +65,7 @@ Simplest to run: the platform works as shipped. Cost: the double-entry ledger, h
 
 ### Option B — our ledger owns balances; the upstream platform's `member_wallet` becomes a projection
 
-`member_wallet` is written *only* by a consumer of our ledger's journal, never by the upstream platform's own service code. Trading, OTC and wallet flows call our ledger through an adapter.
+`member_wallet` is written _only_ by a consumer of our ledger's journal, never by the upstream platform's own service code. Trading, OTC and wallet flows call our ledger through an adapter.
 
 Keeps every §4.2 property. Cost: real surgery — every path in the upstream platform that writes `member_wallet` has to be redirected, and the 8-decimal column still truncates unless it is widened to `decimal(38,18)`.
 
