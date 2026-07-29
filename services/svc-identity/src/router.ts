@@ -407,7 +407,14 @@ export function createIdentityRouter(auth: AuthService, rank: RankService, optio
         .output(z.object({ id: z.string(), key: z.string(), prefix: z.string() }))
         .mutation(async ({ ctx, input }) => {
           try {
-            return await auth.createApiKey({ userId: ctx.principal.userId, ...input });
+            // `grantorScopes` comes from the verified principal, never from the
+            // body. A key is a delegation of THIS session's authority, so the
+            // ceiling has to be read from the token that asked for it.
+            return await auth.createApiKey({
+              userId: ctx.principal.userId,
+              ...input,
+              grantorScopes: ctx.principal.scopes,
+            });
           } catch (err) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message, cause: err });
           }

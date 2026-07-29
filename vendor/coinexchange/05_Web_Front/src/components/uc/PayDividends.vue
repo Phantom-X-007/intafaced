@@ -7,10 +7,10 @@
                         <div class="trade_accumulative_return">{{$t('uc.finance.paydividende.money_holding')}}&nbsp;&nbsp;{{new Number(accumulative_return).toFixed(8)}}</div>
                         <!-- <div class="trade_accumulat_return">{{$t('uc.finance.paydividende.money_hold')}}&nbsp;&nbsp;{{accumulat_return}}</div> -->
                     </div>
-                    <!-- 搜素时间 隐藏-->
+                    <!-- search date (hidden)-->
                     <div class="form-group" style="display:none;">
                         <span>
-                            {{$t('uc.finance.paydividende.start_end')}} ：
+                            {{$t('uc.finance.paydividende.start_end')}}: 
                         </span>
                         <DatePicker v-model="rangeDate" type="daterange" style="width: 200px;"></DatePicker>
                         <!--<DatePicker v-model="startDate" type="date"></DatePicker>
@@ -19,23 +19,23 @@
                         </span>
                         <DatePicker v-model="endDate" type="date"></DatePicker>
                         <span>
-                        {{$t('uc.finance.record.operatetype')}} ：
+                        {{$t('uc.finance.record.operatetype')}}: 
                         </span>
                         <Select v-model="recordValue" clearable style="width:200px">
                         <Option v-for="item in recordType" :value="item.value" :key="item.value">{{ item.label }}</Option>
                         </Select>-->
-                        <Button type="primary" @click="queryOrder" style="padding: 6px 50px;margin-left:10px;background-color:#f0a70a;border-color:#f0a70a">{{$t('uc.finance.paydividende.search')}}</Button>
+                        <Button type="primary" @click="queryOrder" style="padding: 6px 50px;margin-left:10px;background-color:#ff6b00;border-color:#ff6b00">{{$t('uc.finance.paydividende.search')}}</Button>
                     </div>
-                    <!-- 隐藏结尾 -->
+                    <!-- end hidden -->
                     <div class="datedaitl" style="display:none;">
-                        <span style="color: #eb6f6c">{{$t('uc.finance.paydividende.start_end')}} ：</span>&nbsp;&nbsp;
+                        <span style="color: #eb6f6c">{{$t('uc.finance.paydividende.start_end')}}: </span>&nbsp;&nbsp;
                         <span>{{$t('uc.finance.paydividende.datehodld')}}</span>
                     </div>
                     <div class="order-table">
                         <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :loading="loading"></Table>
                         <div style="margin: 10px;overflow: hidden">
                             <div style="float: right;">
-                                <Page :total="total" :page-size="pageSize" show-total :current="page+1" @on-change="changePage" id="record_pages"></Page>
+                                <Page :total="total" :page-size="pageSize" show-total:current="page+1" @on-change="changePage" id="record_pages"></Page>
                             </div>
                         </div>
                     </div>
@@ -125,8 +125,8 @@ export default {
                 }
               },
               self.toFloor(obj.row.memBouns)
-            //   new Number(obj.row.memBouns).toFixed(8)
-            );
+            // new Number(obj.row.memBouns).toFixed(8)
+);
           }
         },
 
@@ -151,9 +151,9 @@ export default {
   methods: {
     init() {
       let memberId = 0;
-      !this.$store.getters.isLogin && this.$router.push("/login");
+!this.$store.getters.isLogin && this.$router.push("/login");
       this.$store.getters.isLogin && (memberId = this.$store.getters.member.id);
-      if (memberId && memberId != 0) {
+      if (memberId && memberId!= 0) {
         this.memberId = memberId;
         this.getTableData();
       }
@@ -161,12 +161,12 @@ export default {
     getTableData(pageNo = 1, pageSize = 10) {
       this.loading = true;
       this.$http
-        .post(this.host + this.api.uc.paydividends, {
+.post(this.host + this.api.uc.paydividends, {
           memberId: this.memberId,
           pageNo,
           pageSize
         })
-        .then(res => {
+.then(res => {
           this.loading = false;
           let resp = res.body;
           if (resp.code == 0) {
@@ -183,14 +183,14 @@ export default {
       this.getTableData(pageindex);
     },
     queryOrder() {
-      //暂时未用，如启用请加上分页并重新测试
+      // ,
       let rangedate = "";
 
       if (this.rangeDate.length == 0) {
         this.$store.state.lang == "English" &&
           this.$Message.error("Please select a search date range");
-        this.$store.state.lang != "English" &&
-          this.$Message.error("请选择搜索日期范围");
+        this.$store.state.lang!= "English" &&
+          this.$Message.error("Select a date range");
         return;
       } else {
         try {
@@ -210,8 +210,8 @@ export default {
         } catch (ex) {
           this.$store.state.lang == "English" &&
             this.$Message.error("Please select a search date range");
-          this.$store.state.lang != "English" &&
-            this.$Message.error("请选择搜索日期范围");
+          this.$store.state.lang!= "English" &&
+            this.$Message.error("Select a date range");
           return;
         }
       }
@@ -223,8 +223,8 @@ export default {
       if (typeof this.recordValue == "number")
         params["type"] = this.recordValue;
       this.$http
-        .post(this.host + "/uc/asset/transaction/all", params)
-        .then(response => {
+.post(this.host + "/uc/asset/transaction/all", params)
+.then(response => {
           var resp = response.body;
           if (resp.content) {
             this.tableRecord = resp.content;
@@ -239,13 +239,13 @@ export default {
     updateLangData() {
       this.tableColumnsRecord[0].title = this.$t(
         "uc.finance.paydividende.datehodld"
-      );
+);
       this.tableColumnsRecord[1].title = this.$t(
         "uc.finance.paydividende.paydividends"
-      );
+);
       this.tableColumnsRecord[2].title = this.$t(
         "uc.finance.paydividende.account_date"
-      );
+);
     }
   },
   computed: {
@@ -276,22 +276,22 @@ export default {
 }
 .rightarea {
   background: #fff;
-  padding-left: 15px !important;
-  padding-right: 15px !important;
-  margin-bottom: 60px !important;
+  padding-left: 15px!important;
+  padding-right: 15px!important;
+  margin-bottom: 60px!important;
 }
 
-.rightarea .rightarea-top {
+.rightarea.rightarea-top {
   line-height: 75px;
   border-bottom: #f1f1f1 solid 1px;
 }
 
-.rightarea .rightarea-con {
+.rightarea.rightarea-con {
   padding-top: 30px;
   padding-bottom: 20px;
 }
 
-.rightarea .trade-process {
+.rightarea.trade-process {
   line-height: 30px;
   padding: 0 15px;
   background: #f1f1f1;
@@ -300,12 +300,12 @@ export default {
   margin-right: 20px;
 }
 
-.rightarea .trade-process.active {
+.rightarea.trade-process.active {
   color: #eb6f6c;
-  background: #f9f5eb;
+  background: #1a1004;
 }
 
-.rightarea .trade-process .icon {
+.rightarea.trade-process.icon {
   background: #fff;
   border-radius: 20px;
   height: 20px;
@@ -316,7 +316,7 @@ export default {
   margin-right: 10px;
 }
 
-.rightarea .trade-process .arrow {
+.rightarea.trade-process.arrow {
   position: absolute;
   top: 10px;
   right: -5px;
@@ -327,15 +327,15 @@ export default {
   border-left: 5px solid #f1f1f1;
 }
 
-.rightarea .trade-process.active .arrow {
-  border-left: 5px solid #f9f5eb;
+.rightarea.trade-process.active.arrow {
+  border-left: 5px solid #1a1004;
 }
 
-.rightarea .rightarea-tabs {
+.rightarea.rightarea-tabs {
   border: none;
 }
 
-.rightarea .rightarea-tabs li > a {
+.rightarea.rightarea-tabs li > a {
   width: 100%;
   height: 100%;
   padding: 0;
@@ -349,11 +349,11 @@ export default {
   align-items: center;
 }
 
-.rightarea .rightarea-tabs li > a:hover {
+.rightarea.rightarea-tabs li > a:hover {
   background-color: #fcfbfb;
 }
 
-.rightarea .rightarea-tabs li {
+.rightarea.rightarea-tabs li {
   width: 125px;
   height: 40px;
   position: relative;
@@ -365,37 +365,37 @@ export default {
   cursor: pointer;
 }
 
-.rightarea .rightarea-tabs li.active {
+.rightarea.rightarea-tabs li.active {
   background-color: #fcfbfb;
 }
 
-.rightarea .rightarea-tabs li:last-child {
+.rightarea.rightarea-tabs li:last-child {
   border-right: 1px solid #f1f1f1;
 }
 
-.rightarea .rightarea-tabs li.active > a,
-.rightarea .rightarea-tabs li:hover > a {
+.rightarea.rightarea-tabs li.active > a,
+.rightarea.rightarea-tabs li:hover > a {
   color: #da2e22;
   border: none;
 }
 
-.rightarea .panel-tips {
-  border: 3px solid #fdfaf3;
+.rightarea.panel-tips {
+  border: 3px solid #1a1004;
   color: #9e9e9e;
   font-size: 12px;
 }
 
-.rightarea .panel-tips .panel-header {
-  background: #fdfaf3;
+.rightarea.panel-tips.panel-header {
+  background: #1a1004;
   line-height: 40px;
   margin-bottom: 15px;
 }
 
-.rightarea .panel-tips .panel-title {
+.rightarea.panel-tips.panel-title {
   font-size: 16px;
 }
 
-.rightarea .recordtitle {
+.rightarea.recordtitle {
   cursor: pointer;
 }
 
@@ -418,7 +418,7 @@ export default {
 }
 
 .order_box a {
-  color: #8994a3;
+  color: #909090;
   font-size: 16px;
   padding: 0 30px;
   cursor: pointer;
@@ -428,22 +428,22 @@ export default {
   display: inline-block;
 }
 
-.order_box .active {
-  border-bottom: 2px solid #f0a70a;
+.order_box.active {
+  border-bottom: 2px solid #ff6b00;
 }
 
-.order_box .search {
+.order_box.search {
   position: absolute;
   width: 300px;
   height: 32px;
   top: 12px;
   right: 0;
   display: flex;
-  /* border: #c5cdd7 solid 1px; */
+  /* border: #cccccc solid 1px; */
 }
 
-.order-table .ivu-table-body .ivu-table-cell {
-  padding-right: 0 !important;
+.order-table.ivu-table-body.ivu-table-cell {
+  padding-right: 0!important;
 }
 .trade_accumulative {
   height: auto;
@@ -455,11 +455,11 @@ export default {
   padding-bottom: 20px;
   margin-bottom: 20px;
 }
-.trade_accumulative .trade_accumulative_return {
+.trade_accumulative.trade_accumulative_return {
   width: 50%;
   float: left;
 }
-.trade_accumulative .trade_accumulat_return {
+.trade_accumulative.trade_accumulat_return {
   width: 50%;
   float: left;
 }

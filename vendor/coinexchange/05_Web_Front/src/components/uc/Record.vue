@@ -1,5 +1,5 @@
 <style scoped>
-.ivu-table td, .ivu-table th{
+.ivu-table td,.ivu-table th{
   height: 35px!important;
 }
 </style>
@@ -10,7 +10,7 @@
         <div class="rightarea-con">
           <div class="form-group">
             <span>
-              {{$t('uc.finance.record.start_end')}} ：
+              {{$t('uc.finance.record.start_end')}}: 
             </span>
             <DatePicker v-model="rangeDate" @on-change="changedate" format="yyyy-MM-dd" type="daterange" style="width: 200px;margin-right:30px;" @on-clear="clear"></DatePicker>
             <!--<DatePicker v-model="startDate" type="date"></DatePicker>-->
@@ -18,23 +18,23 @@
             <!--{{$t('uc.finance.record.to')}}-->
             <!--</span>-->
             <!--<DatePicker v-model="endDate" type="date"></DatePicker>-->
-            <span>{{$t('uc.finance.record.symbol')}} ：</span>
-            <Select v-model="coinType" style="width:100px;margin-right:30px;" @on-change="getAddrList" clearable :placeholder="$t('common.pleaseselect')">
+            <span>{{$t('uc.finance.record.symbol')}}: </span>
+            <Select v-model="coinType" style="width:100px;margin-right:30px;" @on-change="getAddrList" clearable:placeholder="$t('common.pleaseselect')">
               <Option v-for="item in coinList" :value="item.unit" :key="item.unit">{{ item.unit }}</Option>
             </Select>
             <span>
-              {{$t('uc.finance.record.operatetype')}} ：
+              {{$t('uc.finance.record.operatetype')}}: 
             </span>
             <Select v-model="recordValue" clearable style="width:200px" @on-change="getType" :placeholder="$t('common.pleaseselect')">
               <Option v-for="item in recordType" :value="item.value" :key="item.value">{{ item.label }}</Option>
             </Select>
-            <Button type="warning" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#f0a70a;border-color:#f0a70a">{{$t('uc.finance.record.search')}}</Button>
+            <Button type="warning" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#ff6b00;border-color:#ff6b00">{{$t('uc.finance.record.search')}}</Button>
           </div>
           <div class="order-table">
             <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :disabled-hover="true" :loading="loading"></Table>
             <div style="margin: 10px;overflow: hidden">
               <div style="float: right;">
-                <Page :total="total" :pageSize="pageSize" show-total :current="page" @on-change="changePage" id="record_pages"></Page>
+                <Page :total="total" :pageSize="pageSize" show-total:current="page" @on-change="changePage" id="record_pages"></Page>
               </div>
             </div>
           </div>
@@ -149,20 +149,19 @@ export default {
     },
     queryOrder() {
       if (this.rangeDate.length == 0) {
-        this.$Message.error("请选择搜索日期范围");
+        this.$Message.error("Select a date range");
         return;
       } else {
         try {
           this.page=1;
           this.getList(this.page);
         } catch (ex) {
-          this.$Message.error("请选择搜索日期范围");
+          this.$Message.error("Select a date range");
           return;
         }
       }
     },
     getAddrList() {
-      //获取地址
       this.$http.post(this.host + "/uc/withdraw/support/coin/info").then(response => {
           var resp = response.body;
           if (resp.code == 0 && resp.data.length > 0) {
@@ -182,21 +181,21 @@ export default {
       var date = new Date(time);
       var y = date.getFullYear();
       var m = date.getMonth() + 1;
-      m = m < 10 ? "0" + m : m;
+      m = m < 10? "0" + m: m;
       var d = date.getDate();
-      d = d < 10 ? "0" + d : d;
+      d = d < 10? "0" + d: d;
       var h = date.getHours();
-      h = h < 10 ? "0" + h : h;
+      h = h < 10? "0" + h: h;
       var minute = date.getMinutes();
       var second = date.getSeconds();
-      minute = minute < 10 ? "0" + minute : minute;
-      second = second < 10 ? "0" + second : second;
+      minute = minute < 10? "0" + minute: minute;
+      second = second < 10? "0" + second: second;
       return y + "-" + m + "-" + d + " " + h + ":" + minute + ":" + second;
     },
     getList(pageNo) {
-      //获取tableWithdraw
+      // tableWithdraw
       let memberId = 0;
-      !this.$store.getters.isLogin && this.$router.push("/login");
+!this.$store.getters.isLogin && this.$router.push("/login");
       this.$store.getters.isLogin && (memberId = this.$store.getters.member.id);
       let startTime = "";
       let endTime = "";
@@ -289,7 +288,7 @@ export default {
           } else if (type == 16) {
             str = that.$t("uc.finance.record.redin");
           }else {
-            str = "充值";
+            str = "Deposit";
           }
           return h("div", str, "");
         }
@@ -299,12 +298,12 @@ export default {
         align: "center",
         key:"symbol"
         // render: (h, param) => {
-        //   return h("div", {}, param.row._source.symbol);
+        // return h("div", {}, param.row._source.symbol);
         // }
       });
       columns.push({
         // title: this.$t("uc.finance.record.num"),
-        title: this.$t("uc.finance.record.num"), //到账数量
+        title: this.$t("uc.finance.record.num"), //Credited amount
         align: "center",
         render(h, params) {
           return h(
@@ -315,11 +314,11 @@ export default {
               }
             },
             that.toFloor(params.row.amount || "0")
-          );
+);
         }
       });
       columns.push({
-        title: this.$t("uc.finance.record.shouldfee"), //"应付手续费"
+        title: this.$t("uc.finance.record.shouldfee"), //"Fee due"
         align: "center",
         render(h, params) {
           return h(
@@ -330,11 +329,11 @@ export default {
               }
             },
             that.toFloor(params.row.fee || "0")
-          );
+);
         }
       });
       columns.push({
-        title: this.$t("uc.finance.record.discountfee"), //"抵扣手续费"
+        title: this.$t("uc.finance.record.discountfee"), //"Fee discount"
         align: "center",
         render(h, params) {
           return h(
@@ -345,11 +344,11 @@ export default {
               }
             },
             that.toFloor(params.row.discountFee || "0")
-          );
+);
         }
       });
       columns.push({
-        title: this.$t("uc.finance.record.realfee"), //"实际手续费"
+        title: this.$t("uc.finance.record.realfee"), //"Fee charged"
         align: "center",
         render(h, params) {
           return h(
@@ -360,7 +359,7 @@ export default {
               }
             },
             that.toFloor(params.row.realFee || "0")
-          );
+);
         }
       });
       columns.push({
@@ -378,12 +377,12 @@ export default {
 </script>
 <style scoped lang="scss">
 .nav-rights {
-  .nav-right {
+.nav-right {
     height: auto;
     overflow: hidden;
     padding: 0 15px;
-    .bill_flow_box .rightarea-con {
-      .form-group {
+.bill_flow_box.rightarea-con {
+.form-group {
         margin-bottom: 20px;
         text-align: left;
       }

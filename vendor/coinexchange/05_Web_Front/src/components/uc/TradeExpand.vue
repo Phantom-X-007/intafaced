@@ -57,7 +57,7 @@
                 <!--<span class="expand-key">BHB/USDT</span>-->
             <!--</Col>-->
             <!--<Col span="3">-->
-                <!--<span class="expand-key">限价卖出</span>-->
+                <!--<span class="expand-key">Limit sell</span>-->
             <!--</Col>-->
             <!--<Col span="3">-->
                 <!--<span class="expand-key">0.01USDT</span>-->
@@ -82,10 +82,10 @@
     };
 </script>
 <style scoped>
-    .expand-row{
+.expand-row{
         margin-bottom: 16px;
     }
-    .expand-row .ivu-col-span-3{
+.expand-row.ivu-col-span-3{
         width: 13.5%;
     }
 </style>

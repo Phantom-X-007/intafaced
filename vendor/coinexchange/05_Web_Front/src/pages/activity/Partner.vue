@@ -2,29 +2,29 @@
 .about_us_container {
   // background-color: #eee;
   padding: 60px 0 20px 0;
-  .wrapper {
+.wrapper {
     margin: 30px 12%;
-    background-color: #192330;
+    background-color: #000000;
     padding: 20px 40px;
     h2 {
       font-weight: 400;
       height: 50px;
       font-size: 20px;
-      border-bottom: 1px solid #27313e;
+      border-bottom: 1px solid #141414;
       line-height: 50px;
     }
-    .wrapper_logo ul {
+.wrapper_logo ul {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 20px 30px;
-      border-bottom: 1px solid #27313e;
+      border-bottom: 1px solid #141414;
       height:280px;
       li {
         width: 25%;
         padding: 0 20px;
         list-style-type: none;
-        border-right: 1px solid #27313e;
+        border-right: 1px solid #141414;
         text-align: center;
         min-height: 240px;
         img{
@@ -35,15 +35,15 @@
           font-size: 20px;
         }
         span {
-          color: #828ea1;
+          color: #8a8a8a;
           font-size: 12px;
         }
       }
     }
-    .content_wrapper {
+.content_wrapper {
       padding: 20px 0;
-      .content1 {
-        border-bottom: 1px solid #27313e;
+.content1 {
+        border-bottom: 1px solid #141414;
         padding-bottom: 20px;
         margin-bottom: 20px;
         h5 {
@@ -55,7 +55,7 @@
         p {
           font-size: 14px;
           line-height: 30px;
-          color: #828ea1;
+          color: #8a8a8a;
           margin-bottom: 15px;
           text-indent: 30px;
           // margin-bottom: 14px;
@@ -70,18 +70,21 @@
 <template>
   <div class="about_us_container">
     <div class="wrapper">
-      <h2 class="title">合伙人权益</h2>
+      <h2 class="title">Partner benefits</h2>
       <div class="wrapper_logo">
         <ul>
           <li>
             <img src="../../assets/images/feature_safe.png" alt="">
-            <h5>平台分红</h5>
-            <span>除却运营成本，Const将80%的净利润分配给平台合伙人，因市场的无法预测，Const无法承诺绝对盈利，作为合伙人需与Const共同承担风险与收益。</span>
+            <h5>Platform dividends</h5>
+            <span>After operating costs, 80% of net profit is distributed to platform partners.
+              Markets are not predictable and no level of profit is promised — a partner shares
+              the downside as well as the upside.</span>
           </li>
           <li>
             <img src="../../assets/images/feature_fast.png" alt="">
-            <h5>空投奖励</h5>
-            <span>项目方如提供一些营销币、活动币，Const将与项目方协商，分出一定的比例由合伙人优先享有空投奖励。</span>
+            <h5>Airdrop rewards</h5>
+            <span>Where a listing project supplies marketing or campaign allocations, a share is
+              negotiated on partners' behalf and distributed to them first.</span>
           </li>
           <li>
             <img src="../../assets/images/feature_global.png" alt="">
@@ -106,10 +109,10 @@
         </div>
         <div class="content1" style="border:none;">
           <h5>{{$t('cms.contactus')}}</h5>
-          <p>商务合作：</p>
-          <p>客户服务：</p>
-          <p>上币申请：</p>
-          <p>媒体合作：</p>
+          <p>Business:</p>
+          <p>Support:</p>
+          <p>Listings:</p>
+          <p>Media:</p>
         </div>
       </div>
     </div>
@@ -152,7 +155,7 @@ export default {
   border: 1px solid #efefef;
 }
 
-.leftmenu .divider {
+.leftmenu.divider {
   font-size: 20px;
   padding: 5px;
   background: #efefef;
@@ -169,11 +172,11 @@ export default {
 }
 
 .leftmenu li a:hover {
-  color: #f0a70a;
+  color: #ff6b00;
 }
 
 .leftmenu li.cur a {
-  color: #f0a70a;
+  color: #ff6b00;
 }
 .content {
   padding-top: 20px;
@@ -183,7 +186,7 @@ export default {
   padding-left: 20px;
 }
 
-.content .ivu-col {
+.content.ivu-col {
   text-align: left;
 }
 

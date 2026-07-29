@@ -70,21 +70,21 @@
             </h5>
             <!---->
           <div class="audio-wrap">
-            <audio id="noticeMusic" :src="audioSrc">您的浏览器不支持 audio 标签。</audio>
+            <audio id="noticeMusic" :src="audioSrc">Your browser does not support the audio element.</audio>
           </div>
             <div class="send-msg-box">
-                <div class="img-btn" style="cursor: default;background-color:#192330;">
+                <div class="img-btn" style="cursor: default;background-color:#000000;">
                     <!-- <Icon type="image" class="img-icons"></Icon>
-                                            <input title="上传图片" type="file" accept="image/jpg,image/jpeg,image/png" class="input-file"> -->
+                                            <input title="Upload image" type="file" accept="image/jpg,image/jpeg,image/png" class="input-file"> -->
                 </div>
                 <input v-model="mytext" @keyup.enter="sendName" autocomplete="off" type="text" :placeholder="$t('otc.chatline.contenttip')" style=" background-attachment: scroll; background-size: 16px 18px; background-position: 98% 50%;">
                 <button class="send-btn" @click="sendName">
-                    <Icon type="md-paper-plane" size="28" color="#f0ac19"/>
+                    <Icon type="md-paper-plane" size="28" color="#ff8534"/>
                 </button>
               <div class="msg-notice">
-                <!--<Checkbox @on-change="handleCheckClick" v-model="fOpenNotice">开启windows消息提醒,不担心错过任何消息</Checkbox>-->
-                <Checkbox @on-change="handleNoticeClick" v-model="fOpenNotice">开启桌面消息提醒</Checkbox>
-                <Checkbox @on-change="handleAudioClick" v-model="fOpenAudio">开启声音消息提醒</Checkbox>
+                <!--<Checkbox @on-change="handleCheckClick" v-model="fOpenNotice">Enable desktop notifications so you never miss a message</Checkbox>-->
+                <Checkbox @on-change="handleNoticeClick" v-model="fOpenNotice">Enable desktop notifications</Checkbox>
+                <Checkbox @on-change="handleAudioClick" v-model="fOpenAudio">Enable sound alerts</Checkbox>
               </div>
             </div>
 
@@ -136,7 +136,6 @@ export default {
         'processData': 'scrollToBottom',
     },
     methods: {
-        //让浏览器滚动条保持在最低部
         scrollToBottom: function() {
             this.$nextTick(() => {
                 var div = document.getElementById('scrollChat')
@@ -151,28 +150,28 @@ export default {
             if (this.fOpenNotice) {
               if (window.Notification) {
                 if (Notification.permission == "default") {
-                  this.$Message.info('请点击允许进行开启!');
+                  this.$Message.info('Click Allow to enable!');
                   Notification.requestPermission().then(function(result) {
-                    // result可能是是granted, denied, 或default.
-                    if(result == "denied") this.$Message.info('您已屏蔽消息提醒，如需开通，请查看帮助!');
+                    // resultgranted, denied, ordefault.
+                    if(result == "denied") this.$Message.info('You have blocked notifications. See Help to re-enable them.!');
                   });
                 }else if(Notification.permission == "denied") {
-                  this.$Message.info('您已屏蔽消息提醒，如需开通，请查看帮助!');
+                  this.$Message.info('You have blocked notifications. See Help to re-enable them.!');
                 }else {
-                  this.$Message.info("您已开启桌面消息提醒!");
+                  this.$Message.info("Desktop notifications enabled!");
                 }
               } else {
-                this.$Message.info('您的浏览器不支持该功能');
+                this.$Message.info('Your browser does not support this feature');
               }
             }else {
-              this.$Message.info("您已关闭桌面消息提醒!");
+              this.$Message.info("Desktop notifications disabled!");
             }
         },
         handleAudioClick:function () {
           if (this.fOpenAudio) {
-            this.$Message.info("您已开启声音消息提醒!");
+            this.$Message.info("Sound alerts enabled!");
           }else {
-            this.$Message.info("您已关闭声音消息提醒!");
+            this.$Message.info("Sound alerts disabled!");
           }
         },
         connect: function() {
@@ -185,9 +184,13 @@ export default {
                     self.otheritem = JSON.parse(response.body)
                     self.msgLists.push(self.otheritem)
                     if(self.fOpenNotice && window.Notification && Notification.permission == "granted") {
-                        var notification = new Notification(self.msg.otherSide+"：", {
+                        var notification = new Notification(self.msg.otherSide+": ", {
                             body: self.otheritem.content,
-                            icon: 'https://bihuo-ex.oss-ap-southeast-1.aliyuncs.com/FAA55D97ED0370F08273C3A94F765C22.png'
+                            // Local. This was a remote object-store URL belonging to a
+                            // third party we do not control, fetched every time a desktop
+                            // notification fired — an outbound call on a user action, to a
+                            // bucket that can serve anything or nothing.
+                            icon: '/favicon.ico'
                         });
 
                         notification.onclick = function() {
@@ -226,12 +229,12 @@ export default {
         CurentTime: function() {
             var now = new Date();
 
-            var year = now.getFullYear();       //年
-            var month = now.getMonth() + 1;     //月
-            var day = now.getDate();            //日
+            var year = now.getFullYear(); //-
+            var month = now.getMonth() + 1; //-
+            var day = now.getDate(); //
 
-            var hh = now.getHours();            //时
-            var mm = now.getMinutes();          //分
+            var hh = now.getHours(); //:
+            var mm = now.getMinutes(); //
 
             var clock = year + "-";
 
@@ -291,26 +294,26 @@ export default {
 }
 </script>
 <style scoped>
-  .msg-notice{
+.msg-notice{
     width: 20%;
   }
-  .msg-notice>label{
+.msg-notice>label{
     margin-top: 8px;
   }
-.chat-in-box .chat-in .chat-line .spe_show {
+.chat-in-box.chat-in.chat-line.spe_show {
     /* background-color: #fdf1e9; */
     color: #ed2525;
     padding: 16px;
     margin-right: 3px;
-    border:1px solid #27313e;
+    border:1px solid #141414;
 }
 
-.chat-in-box .chat-in .chat-line {
+.chat-in-box.chat-in.chat-line {
     /* background-color: white; */
     padding: 100px 24px 100px 24px;
     -webkit-box-sizing: border-box;
     box-sizing: border-box;
-    border: 1px solid #27313e;
+    border: 1px solid #141414;
     width: 95%;
     margin: 0 auto;
     position: relative;
@@ -325,7 +328,7 @@ export default {
     right: 0;
 }
 
-.chat-in-box .chat-in .chat-line .scroll-chat {
+.chat-in-box.chat-in.chat-line.scroll-chat {
     display: -webkit-box;
     display: -ms-flexbox;
     display: flex;
@@ -338,12 +341,12 @@ export default {
     padding-right: 10px;
 }
 
-.chat-in-box .chat-in .chat-line .scroll-chat .more {
+.chat-in-box.chat-in.chat-line.scroll-chat.more {
     text-align: center;
-    color: #f0a70a;
+    color: #ff6b00;
 }
 
-.chat-in-box .chat-in .chat-line .scroll-chat .more span {
+.chat-in-box.chat-in.chat-line.scroll-chat.more span {
     cursor: pointer;
     padding: 6px 20px 6px 0;
 }
@@ -359,13 +362,13 @@ export default {
     padding: 10px 0;
 }
 
-.chat-container-box .user-chat-box .user-avatar-box,
-.chat-container-box .user-chat-box {
+.chat-container-box.user-chat-box.user-avatar-box,
+.chat-container-box.user-chat-box {
     float: left;
 }
 
-.chat-container-box .user-chat-box .user-avatar-box,
-.chat-container-box .user-chat-box {
+.chat-container-box.user-chat-box.user-avatar-box,
+.chat-container-box.user-chat-box {
     float: left;
 }
 
@@ -386,7 +389,7 @@ export default {
     background: #fff;
     height: 52px;
     width: 52px;
-    box-shadow: 0 1px 5px 0 rgba(71, 78, 114, .24);
+    box-shadow: 0 1px 5px 0 rgba(71, 78, 114,.24);
     position: relative;
 }
 
@@ -405,25 +408,25 @@ export default {
 }
 
 .user-avatar-public>.user-avatar-in {
-    background: #f0a70a;
+    background: #ff6b00;
     height: 42px;
     width: 42px;
     color: #fff;
 }
 
-.chat-container-box .user-chat-box .user-content-box {
+.chat-container-box.user-chat-box.user-content-box {
     max-width: 700px;
     float: left;
 }
 
-.chat-container-box .user-chat-box .user-content-box .user-name {
+.chat-container-box.user-chat-box.user-content-box.user-name {
     padding-left: 16px;
     font-size: 12px;
-    color: #8994a3;
+    color: #909090;
     margin-bottom: 4px;
 }
 
-.chat-container-box .user-chat-box .user-content-box .chat-info .user-desc {
+.chat-container-box.user-chat-box.user-content-box.chat-info.user-desc {
     background-color: #f1f1f4;
     padding: 10px 16px;
     border-radius: 6px;
@@ -434,7 +437,7 @@ export default {
     word-break: break-all;
 }
 
-.chat-container-box .user-chat-box .user-content-box .chat-info .times {
+.chat-container-box.user-chat-box.user-content-box.chat-info.times {
     padding-left: 16px;
     padding-right: 16px;
     margin-top: 6px;
@@ -443,7 +446,7 @@ export default {
     color: #c3c1c1;
 }
 
-.chat-container-box .user-chat-box .user-content-box .chat-info .user-desc .icon {
+.chat-container-box.user-chat-box.user-content-box.chat-info.user-desc.icon {
     height: 0;
     width: 0;
     border: 8px solid transparent;
@@ -453,14 +456,14 @@ export default {
     left: -20px;
 }
 
-.chat-container-box .user-chat-box .user-content-box .chat-info .user-desc em {
+.chat-container-box.user-chat-box.user-content-box.chat-info.user-desc em {
     font-style: normal;
     font-size: 12px;
 }
 
-.chat-container-box .system-box {
+.chat-container-box.system-box {
     padding: 16px 24px;
-    background-color: #27313e;
+    background-color: #141414;
     border-radius: 7px;
     margin: 0 auto;
     margin-bottom: 20px;
@@ -469,40 +472,40 @@ export default {
     max-width: 500px;
 }
 
-.chat-container-box .system-box .times {
+.chat-container-box.system-box.times {
     text-align: right;
     font-size: 12px;
 }
 
-.chat-container-box .user-chat-box.self-chat-box .user-avatar-box,
-.chat-container-box .user-chat-box.self-chat-box {
+.chat-container-box.user-chat-box.self-chat-box.user-avatar-box,
+.chat-container-box.user-chat-box.self-chat-box {
     float: right;
 }
 
-.chat-container-box .user-chat-box.self-chat-box .user-content-box .user-name {
+.chat-container-box.user-chat-box.self-chat-box.user-content-box.user-name {
     text-align: right;
     padding-right: 16px;
 }
 
-.chat-container-box .user-chat-box .user-content-box .chat-info .self-desc {
+.chat-container-box.user-chat-box.user-content-box.chat-info.self-desc {
     margin-left: 0;
     margin-right: 16px;
-    background-color: #f0a70a;
+    background-color: #ff6b00;
     color: #fff;
 }
 
-.chat-container-box .user-chat-box .user-content-box .chat-info .self-desc .icon {
+.chat-container-box.user-chat-box.user-content-box.chat-info.self-desc.icon {
     height: 0;
     width: 0;
     border: 8px solid transparent;
-    border-left: 14px solid #f0a70a;
+    border-left: 14px solid #ff6b00;
     position: absolute;
     top: 6px;
     right: -18px;
     left: unset;
 }
 
-.chat-in-box .chat-in .chat-line .send-msg-box {
+.chat-in-box.chat-in.chat-line.send-msg-box {
     display: -webkit-box;
     display: -ms-flexbox;
     display: flex;
@@ -515,10 +518,10 @@ export default {
     left: 25px;
     -webkit-box-shadow: 0 0 3px 1px rgba(0, 0, 0, 0.1);
     box-shadow: 0 0 3px 1px rgba(0, 0, 0, 0.1);
-    border:1px solid #27313e;
+    border:1px solid #141414;
 }
 
-.chat-in-box .chat-in .chat-line .send-msg-box .img-btn {
+.chat-in-box.chat-in.chat-line.send-msg-box.img-btn {
     position: relative;
     overflow: hidden;
     background-color: transparent;
@@ -538,7 +541,7 @@ export default {
     background: #ebeff5;
 }
 
-.chat-in-box .chat-in .chat-line .send-msg-box .img-btn .input-file {
+.chat-in-box.chat-in.chat-line.send-msg-box.img-btn.input-file {
     position: absolute;
     top: 0;
     left: 0;
@@ -546,7 +549,7 @@ export default {
     width: 100%;
 }
 
-.chat-in-box .chat-in .chat-line .send-msg-box input {
+.chat-in-box.chat-in.chat-line.send-msg-box input {
     color: #fff;
     height: 60px;
     border: 1px solid transparent;
@@ -557,7 +560,7 @@ export default {
     width: 80%;
 }
 
-.chat-in-box .chat-in .chat-line .send-msg-box .send-btn {
+.chat-in-box.chat-in.chat-line.send-msg-box.send-btn {
     height: 60px;
     border: none;
     background-color: transparent;
@@ -575,17 +578,17 @@ export default {
     -webkit-box-align: center;
     -ms-flex-align: center;
     align-items: center;
-    background: #27313e;
+    background: #141414;
 }
 
-.chat-in-box .chat-in .chat-line .send-msg-box .img-btn .img-icons {
+.chat-in-box.chat-in.chat-line.send-msg-box.img-btn.img-icons {
     font-size: 24px;
-    color: #f0a70a;
+    color: #ff6b00;
 }
 
-.chat-in-box .chat-in .chat-line .send-msg-box .send-btn .iconfont {
+.chat-in-box.chat-in.chat-line.send-msg-box.send-btn.iconfont {
     font-size: 28px;
-    color: #f0a70a;
+    color: #ff6b00;
 }
 </style>
 

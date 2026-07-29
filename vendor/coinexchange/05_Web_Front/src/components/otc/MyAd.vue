@@ -109,9 +109,9 @@ export default {
                       }
                     },
                     self.$t("otc.myad.update")
-                  )
+)
                 ]
-              ),
+),
               h(
                 "Button",
                 {
@@ -124,14 +124,13 @@ export default {
                   },
                   on: {
                     click: () => {
-                      //要上架
                       if (params.row.status == 1) {
                         let canshu = {};
                         canshu["id"] = params.row.id;
-                        // canshu['status'] = params.row.status == 0 ? 1 : 0
+                        // canshu['status'] = params.row.status == 0? 1: 0
                         self.$http
-                          .post(self.host + "/otc/advertise/on/shelves", canshu)
-                          .then(response => {
+.post(self.host + "/otc/advertise/on/shelves", canshu)
+.then(response => {
                             var resp = response.body;
                             if (resp.code == 0) {
                               self.$Message.success(resp.message);
@@ -144,13 +143,13 @@ export default {
                       } else if (params.row.status == 0) {
                         let canshu = {};
                         canshu["id"] = params.row.id;
-                        // canshu['status'] = params.row.status == 0 ? 1 : 0
+                        // canshu['status'] = params.row.status == 0? 1: 0
                         self.$http
-                          .post(
+.post(
                             self.host + "/otc/advertise/off/shelves",
                             canshu
-                          )
-                          .then(response => {
+)
+.then(response => {
                             var resp = response.body;
                             if (resp.code == 0) {
                               self.$Message.success(resp.message);
@@ -165,9 +164,9 @@ export default {
                   }
                 },
                 params.row.status == 0
-                  ? self.$t("otc.myad.dropoff")
-                  : self.$t("otc.myad.shelf")
-              ),
+? self.$t("otc.myad.dropoff")
+: self.$t("otc.myad.shelf")
+),
               h(
                 "Button",
                 {
@@ -186,8 +185,8 @@ export default {
                           content: "<p>" + self.$t("common.delete") + "</p>",
                           onOk: () => {
                             self.$http
-                              .post(self.host + "/otc/advertise/delete", canshu)
-                              .then(response => {
+.post(self.host + "/otc/advertise/delete", canshu)
+.then(response => {
                                 var resp = response.body;
                                 if (resp.code == 0) {
                                   self.$Message.success(resp.message);
@@ -199,13 +198,13 @@ export default {
                           }
                         });
                       } else {
-                        self.$Message.error("下架广告后才可以删除！");
+                        self.$Message.error("Take the ad offline before deleting it.");
                       }
                     }
                   }
                 },
                 self.$t("otc.myad.delete")
-              )
+)
             ]);
           }
         }
@@ -230,7 +229,6 @@ export default {
     },
     changePage() {},
     getAd() {
-      //获取个人广告
       this.$http.post(this.host + "/otc/advertise/all").then(response => {
         var resp = response.body;
         if (resp.code == 0) {
@@ -271,20 +269,20 @@ export default {
 <style scoped lang="scss">
 .nav-rights {
   padding: 0 0 0 20px;
-  .my_ad_box {
-    .add_ad {
+.my_ad_box {
+.add_ad {
       margin-bottom: 20px;
-      .ivu-btn {
-        background: #f0a70a;
+.ivu-btn {
+        background: #ff6b00;
         color: #fff;
         &:hover {
-          border-color: #f0a70a;
+          border-color: #ff6b00;
         }
       }
     }
-    .ivu-alert.ivu-alert-info {
+.ivu-alert.ivu-alert-info {
       border: none;
-      background-color: #192330;
+      background-color: #000000;
       text-align: center;
     }
   }
@@ -292,22 +290,22 @@ export default {
 </style>
 <style lang="scss">
 .nav-rights {
-  .my_ad_box {
-    .order-table {
-      .ivu-table {
-        .ivu-table-header,
-        .ivu-table-body {
+.my_ad_box {
+.order-table {
+.ivu-table {
+.ivu-table-header,
+.ivu-table-body {
           table {
-            width: 100% !important;
+            width: 100%!important;
             thead {
-              .ivu-table-cell {
+.ivu-table-cell {
                 padding: 0;
               }
             }
           }
         }
-        .ivu-table-body {
-          .ivu-table-tbody .ivu-table-row .ivu-table-cell {
+.ivu-table-body {
+.ivu-table-tbody.ivu-table-row.ivu-table-cell {
             button.ivu-btn {
               border-radius: 10px;
               background: #fff;
@@ -320,10 +318,10 @@ export default {
               }
             }
             button.ivu-btn.ivu-btn-primary {
-              border:1px solid #f0ac19;
+              border:1px solid #ff8534;
               background-color: transparent;
               span {
-                color: #f0ac19;
+                color: #ff8534;
               }
             }
             button.ivu-btn.ivu-btn-error {

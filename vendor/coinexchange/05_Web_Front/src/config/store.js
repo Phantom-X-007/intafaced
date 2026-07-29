@@ -1,13 +1,19 @@
 import Vue from 'vue';
 import Vuex from 'vuex';
 Vue.use(Vuex);
+
+/** The one supported language. Components compare `state.lang` against this. */
+export const LANGUAGE = 'English';
+
 export default new Vuex.Store({
     state: {
         member: null,
         activeNav: '',
-        lang: '',
+        lang: LANGUAGE,
         exchangeSkin:'night',
-        loginTimes: null
+        loginTimes: null,
+        /** svc-identity session — memory only, see setIxSession. */
+        ixSession: null
     },
     mutations: {
         navigate(state, nav) {
@@ -20,16 +26,16 @@ export default new Vuex.Store({
         recoveryMember(state) {
             state.member = JSON.parse(localStorage.getItem('MEMBER'));
         },
-        setlang(state, lang) {
-            state.lang = lang;
-            localStorage.setItem('LANGUAGE', JSON.stringify(lang));
+        // English only. Both mutations are hard-wired: components across the app
+        // branch on `state.lang`, and a stored preference from an earlier build
+        // would otherwise put those branches back into Chinese.
+        setlang(state) {
+            state.lang = LANGUAGE;
+            localStorage.setItem('LANGUAGE', JSON.stringify(LANGUAGE));
         },
         initLang(state) {
-            if (localStorage.getItem('LANGUAGE') == null) {
-                state.lang = "简体中文";
-            } else {
-                state.lang = JSON.parse(localStorage.getItem('LANGUAGE'));
-            }
+            state.lang = LANGUAGE;
+            localStorage.setItem('LANGUAGE', JSON.stringify(LANGUAGE));
         },
         initLoginTimes(state){
             if(localStorage.getItem("LOGINTIMES") == null){
@@ -44,6 +50,25 @@ export default new Vuex.Store({
         },
         setSkin(state,skin){
             state.exchangeSkin=skin;
+        },
+        /**
+         * The INTAFACED platform session (svc-identity), held in memory only.
+         *
+         * Deliberately NOT localStorage. apps/web already states the same limit
+         * out loud — an httpOnly refresh cookie is the fix and it is not built —
+         * and a second surface writing a bearer token to disk would spread the
+         * exposure before the fix lands rather than after. A reload signs the
+         * platform session out; the screens say so.
+         *
+         * This is a SEPARATE session from `member`, which is the vendored
+         * exchange's own ucenter login. One account is the goal; this is not it
+         * yet, and no screen pretends otherwise.
+         */
+        setIxSession(state, session) {
+            state.ixSession = session;
+        },
+        clearIxSession(state) {
+            state.ixSession = null;
         }
     },
     getters: {
@@ -51,13 +76,19 @@ export default new Vuex.Store({
             return state.member;
         },
         isLogin(state) {
-            return state.member != null;
+            return state.member!= null;
         },
         lang(state) {
             return state.lang;
         },
         loginTimes(state) {
             return state.loginTimes;
+        },
+        ixSession(state) {
+            return state.ixSession;
+        },
+        ixToken(state) {
+            return state.ixSession ? state.ixSession.accessToken : null;
         }
     }
 });

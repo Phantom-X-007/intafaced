@@ -2,29 +2,29 @@
 .about_us_container {
   // background-color: #eee;
   padding: 60px 0 20px 0;
-  .wrapper {
+.wrapper {
     margin: 30px 12%;
-    background-color: #192330;
+    background-color: #000000;
     padding: 20px 40px;
     h2 {
       font-weight: 400;
       height: 50px;
       font-size: 20px;
-      border-bottom: 1px solid #27313e;
+      border-bottom: 1px solid #141414;
       line-height: 50px;
     }
-    .wrapper_logo ul {
+.wrapper_logo ul {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 20px 30px;
-      border-bottom: 1px solid #27313e;
+      border-bottom: 1px solid #141414;
       height:280px;
       li {
         width: 25%;
         padding: 0 20px;
         list-style-type: none;
-        border-right: 1px solid #27313e;
+        border-right: 1px solid #141414;
         text-align: center;
         min-height: 240px;
         img{
@@ -36,15 +36,15 @@
           font-weight:400;
         }
         span {
-          color: #828ea1;
+          color: #8a8a8a;
           font-size: 12px;
         }
       }
     }
-    .content_wrapper {
+.content_wrapper {
       padding: 20px 0;
-      .content1 {
-        border-bottom: 1px solid #27313e;
+.content1 {
+        border-bottom: 1px solid #141414;
         padding-bottom: 20px;
         margin-bottom: 20px;
         h5 {
@@ -56,7 +56,7 @@
         p {
           font-size: 14px;
           line-height: 30px;
-          color: #828ea1;
+          color: #8a8a8a;
           margin-bottom: 15px;
           text-indent: 30px;
           // margin-bottom: 14px;
@@ -107,21 +107,21 @@
         </div>
         <div class="content1">
           <h5>{{$t('cms.contactus')}}</h5>
-          <p>{{$t('description.service')}}：service@bizzan.com</p>
-          <p>{{$t('description.support')}}：support@bizzan.com</p>
-          <p>{{$t('description.apply')}}：apply@bizzan.com</p>
-          <p>{{$t('description.report')}}：ceo@bizzan.com</p>
-          <p>{{$t('description.coop')}}：coop@bizzan.com</p>
+          <p>{{$t('description.service')}}: service@intafaced.com</p>
+          <p>{{$t('description.support')}}: support@intafaced.com</p>
+          <p>{{$t('description.apply')}}: apply@intafaced.com</p>
+          <p>{{$t('description.report')}}: ceo@intafaced.com</p>
+          <p>{{$t('description.coop')}}: coop@intafaced.com</p>
         </div>
         <div class="content1" style="border:none;">
           <h5>{{$t('description.community')}}</h5>
-          <p>{{$t('description.wechat')}}：{{$t('description.addwechat')}}</p>
-          <p>{{$t('description.weibo')}}：https://weibo.com/bizzan</p>
-          <p>{{$t('description.twitter')}}：https://twitter.com/BIZZANGlobal</p>
-          <p>{{$t('description.biyong')}}：https://0.plus/bizzanofficial</p>
-          <p>{{$t('description.telegram')}}：https://t.me/bizzanofficial</p>
-          <p>{{$t('description.medium')}}：https://medium.com/@BIZZAN</p>
-          <p>{{$t('description.reddit')}}：https://www.reddit.com/u/bizzanglobal</p>
+          <p>{{$t('description.wechat')}}: {{$t('description.addwechat')}}</p>
+          <p>{{$t('description.weibo')}}: https://weibo.com/intafaced</p>
+          <p>{{$t('description.twitter')}}: https://twitter.com/INTAFACEDGlobal</p>
+          <p>{{$t('description.biyong')}}: https://0.plus/intafacedofficial</p>
+          <p>{{$t('description.telegram')}}: https://t.me/intafacedofficial</p>
+          <p>{{$t('description.medium')}}: https://medium.com/@INTAFACED</p>
+          <p>{{$t('description.reddit')}}: https://www.reddit.com/u/intafacedglobal</p>
         </div>
       </div>
     </div>
@@ -164,7 +164,7 @@ export default {
   border: 1px solid #efefef;
 }
 
-.leftmenu .divider {
+.leftmenu.divider {
   font-size: 20px;
   padding: 5px;
   background: #efefef;
@@ -181,11 +181,11 @@ export default {
 }
 
 .leftmenu li a:hover {
-  color: #f0a70a;
+  color: #ff6b00;
 }
 
 .leftmenu li.cur a {
-  color: #f0a70a;
+  color: #ff6b00;
 }
 .content {
   padding-top: 20px;
@@ -195,7 +195,7 @@ export default {
   padding-left: 20px;
 }
 
-.content .ivu-col {
+.content.ivu-col {
   text-align: left;
 }
 

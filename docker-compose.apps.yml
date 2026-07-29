@@ -193,6 +193,7 @@ services:
       BLUEPRINT_URL: http://svc-blueprint:4011
       PROTOCOL_URL: http://svc-protocol:4012
       DEX_URL: http://svc-dex:4010
+      INDEXER_URL: http://svc-indexer:4013
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are

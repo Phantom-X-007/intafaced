@@ -60,9 +60,7 @@ public class ApplicationConfig extends WebMvcConfigurerAdapter {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new SessionInterceptor()).addPathPatterns("/**")
                 .excludePathPatterns("/code/sms-provider/**","/captcha","/system/employee/sign/in",
-                        "/system/employee/check","/system/employee/logout",
-                        "/noauth/exchange-coin/detail",
-                        "/noauth/exchange-coin/modify-limit");
+                        "/system/employee/check","/system/employee/logout");
         registry.addInterceptor(new LogInterceptor()).addPathPatterns("/**");
         registry.addInterceptor(new OutExcelInterceptor()).addPathPatterns("/**/out-excel");
         super.addInterceptors(registry);

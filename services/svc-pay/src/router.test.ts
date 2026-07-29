@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { INTERACTIVE_ONLY_SCOPES, assertKeyScopesAllowed, issueAccessToken, verifyAccessToken } from '@intafaced/auth';
+import { INTERACTIVE_ONLY_SCOPES, SESSION_SCOPES, assertKeyScopesAllowed, issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { createPayRouter } from './router.js';
@@ -671,22 +671,12 @@ describe('deposit.credit is operator-credentialed, never user-facing', () => {
   });
 
   it('REFUSES EVERY SCOPE A USER SESSION ACTUALLY CARRIES', async () => {
-    // The exact list `AuthService.defaultScopes()` issues. If any of these ever
-    // reaches this procedure, a user can credit their own balance and the
-    // platform mints money on request.
-    const sessionScopes = [
-      'identity:read',
-      'identity:write',
-      'ledger:read',
-      'trade:read',
-      'trade:write',
-      'p2p:read',
-      'p2p:write',
-      'token:read',
-      'token:stake',
-      'academy:read',
-      'agents:read',
-    ];
+    // Read from SESSION_SCOPES, not copied from it — so a scope added to a
+    // session in a later PR is tested here on the day it is added rather than
+    // whenever someone remembers this list exists. If any of these ever reaches
+    // this procedure, a user can credit their own balance and the platform
+    // mints money on request.
+    const sessionScopes = [...SESSION_SCOPES];
 
     for (const scope of sessionScopes) {
       const api = await caller([scope]);

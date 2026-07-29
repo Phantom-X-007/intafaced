@@ -20,7 +20,7 @@
       </div>
     </div>
     <!-- <div class="help_container">
-          <div style="line-height: 40px;font-size:16px;"><router-link to="/help" style="color:#f0a70a;">{{$t('cms.servicecenter')}}</router-link>->{{$t('cms.notice')}}</div>
+          <div style="line-height: 40px;font-size:16px;"><router-link to="/help" style="color:#ff6b00;">{{$t('cms.servicecenter')}}</router-link>->{{$t('cms.notice')}}</div>
 
             <Col span="24" style="padding:0 2%;color:#000;font-size:18px;background:#fff">
                 <div class="faqlist">
@@ -39,57 +39,57 @@
 </template>
 <style lang="scss" scoped>
 .notice {
-  .banner {
+.banner {
     display: flex;
     justify-content: center;
     align-items: center;
     height: 320px;
-    background: linear-gradient(to right, #001a40, #000109);
+    background: linear-gradient(to right, #111111, #000109);
     background-size: 100% 100%;
     color: #fff;
     font-size: 40px;
   }
-  .main {
+.main {
     width: 70%;
     margin: 0 auto;
-    background-color: #192330;
+    background-color: #000000;
     color: #fff;
     // box-shadow: 0 0 2px #ccc;
     margin-top: -50px;
     border-radius: 6px;
     padding: 50px 100px;
     margin-bottom: 50px;
-    .list {
+.list {
       font-size: 14px;
-      .item {
+.item {
         line-height: 50px;
         height:50px;
-        border-bottom: 1px solid #27313e;
+        border-bottom: 1px solid #141414;
         cursor: pointer;
-        .iconimg {
+.iconimg {
           width: 35px;
           vertical-align: sub;
           margin-left: 10px;
           padding-bottom: 5px;
         }
-        .time {
+.time {
           float: right;
           color: #999;
           font-size: 14px;
         }
-        .text{
+.text{
           display: inline-block;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
           width: 70%;
           &:hover{
-            color: #f0a70a;
+            color: #ff6b00;
           }
         }
       }
     }
-    .page {
+.page {
       text-align: right;
       margin-top: 20px;
     }
@@ -113,14 +113,9 @@ export default {
     lang() {
       return this.$store.state.lang;
     },
-    langPram(){
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+    langPram() {
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     }
   },
   methods: {
@@ -135,8 +130,8 @@ export default {
         (param["pageSize"] = this.pageSize),
         (param["lang"] = this.langPram),
         this.$http
-          .post(this.host + this.api.uc.announcement, param)
-          .then(response => {
+.post(this.host + this.api.uc.announcement, param)
+.then(response => {
             // console.log(response);
             var resp = response.body;
             if (resp.code == 0) {
@@ -158,7 +153,7 @@ export default {
     titleLang(str) {
       const reg = new RegExp("[\\u4E00-\\u9FFF]+", "g");
       if (reg.test(str)) {
-        return "简体中文";
+        return "Chinese";
       } else {
         return "English";
       }

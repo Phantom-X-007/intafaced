@@ -74,8 +74,8 @@ public class WalletController {
     }
 
     @GetMapping("address/{account}")
-    public MessageResult getNewAddress(@PathVariable String account, @RequestParam(required = false, defaultValue = "") String password) {
-        logger.info("create new account={},password={}", account, password);
+    public MessageResult getNewAddress(@PathVariable String account) {
+        logger.info("create new account={}", account);
         try {
             String address;
             Account acct = accountService.findByName("ETH",account);
@@ -84,7 +84,7 @@ public class WalletController {
                 accountService.save(acct);
             }
             else {
-                address = service.createNewWallet(account, password);
+                address = service.createNewWallet(account);
             }
             MessageResult result = new MessageResult(0, "success");
             result.setData(address);

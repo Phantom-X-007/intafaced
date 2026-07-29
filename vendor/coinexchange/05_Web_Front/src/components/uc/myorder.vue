@@ -39,7 +39,7 @@
                 <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
                 <div style="margin: 10px;overflow: hidden" class="page">
                   <div style="float: right;">
-                    <Page v-if="totalPage > 0" :total="totalNum" :pageSize="pageSize" show-total :current="currentPage" @on-change="changePage"></Page>
+                    <Page v-if="totalPage > 0" :total="totalNum" :pageSize="pageSize" show-total:current="currentPage" @on-change="changePage"></Page>
                   </div>
                 </div>
               </div>
@@ -80,7 +80,6 @@ export default {
     };
   },
   methods: {
-    // 获取历史记录信息
     handleListApproveHistory() {},
     changePage(pageNo) {
       if (pageNo > 0) pageNo = pageNo - 1;
@@ -125,7 +124,7 @@ export default {
       params["status"] = this.whichItem;
       params["pageNo"] = 0;
       params["pageSize"] = this.pageSize;
-      if (this.ordKeyword != "") {
+      if (this.ordKeyword!= "") {
         params["orderSn"] = this.ordKeyword;
       }
       this.currentPage = 1;
@@ -196,7 +195,7 @@ export default {
                 }
               },
               params.row.orderSn
-            )
+)
           ]);
         }
       });
@@ -245,7 +244,7 @@ export default {
                 }
               },
               params.row.name
-            )
+)
           ]);
         }
       });
@@ -294,11 +293,11 @@ export default {
   display: inline-block;
 }
 
-.order_box .active {
-  border-bottom: 2px solid #00b5f6;
+.order_box.active {
+  border-bottom: 2px solid #ff6b00;
 }
 
-.order_box .search {
+.order_box.search {
   position: absolute;
   width: 300px;
   height: 32px;
@@ -310,50 +309,50 @@ export default {
 
 <style lang="scss">
 .bill_box_order {
-  .order_box {
-    .ivu-tabs {
+.order_box {
+.ivu-tabs {
       // overflow:initial;
       color:#fff;
-      .ivu-tabs-content.ivu-tabs-content-animated {
-        .ivu-tabs-tabpane {
-          .ivu-table-wrapper {
+.ivu-tabs-content.ivu-tabs-content-animated {
+.ivu-tabs-tabpane {
+.ivu-table-wrapper {
             border: none;
             box-shadow: none;
             a {
-              color: #f0a70a;
+              color: #ff6b00;
             }
           }
         }
       }
-      .ivu-tabs-bar {
-        border-color:#273742 !important;
-        .ivu-tabs-nav-container {
-          .ivu-tabs-nav-scroll {
-            .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
-              background-color: #f0a70a;
+.ivu-tabs-bar {
+        border-color:#262626!important;
+.ivu-tabs-nav-container {
+.ivu-tabs-nav-scroll {
+.ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
+              background-color: #ff6b00;
             }
-            .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
-              color: #f0a70a;
+.ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
+              color: #ff6b00;
               &:hover {
-                color: #f0a70a;
+                color: #ff6b00;
               }
             }
-            .ivu-tabs-tab {
+.ivu-tabs-tab {
               &:hover {
-                color: #f0a70a;
+                color: #ff6b00;
               }
             }
           }
         }
       }
-      .ivu-tabs-content {
-        .ivu-tabs-tabpane {
-          .ivu-table-header,
-          .ivu-table-body {
+.ivu-tabs-content {
+.ivu-tabs-tabpane {
+.ivu-table-header,
+.ivu-table-body {
             table {
-              width: 100% !important;
+              width: 100%!important;
               thead {
-                .ivu-table-cell {
+.ivu-table-cell {
                   padding: 0;
                 }
               }

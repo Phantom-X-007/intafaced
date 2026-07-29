@@ -33,6 +33,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-mongodb</artifactId>
         </dependency>
+        <!--
+            Needed to compile the RPC auth interceptor. Scoped provided because
+            every service depending on rpc-common already brings its own web
+            starter; this only puts spring-webmvc and the servlet API on the
+            compile classpath, it does not change what those services package.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>

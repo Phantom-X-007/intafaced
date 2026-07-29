@@ -10,15 +10,15 @@
             </h6>
             <p>{{$t('otc.publishad.msg1')}}
               <router-link to="/otc/trade/usdt">{{$t('otc.publishad.tradead')}}</router-link>
-              。
+. 
             </p>
-            <p>{{$t('otc.publishad.msg2')}}{{$t('otc.publishad.msg3')}}。</p>
+            <p>{{$t('otc.publishad.msg2')}}{{$t('otc.publishad.msg3')}}. </p>
             <p>{{$t('otc.publishad.msg4')}}
               <router-link to="/uc/ad">{{$t('otc.publishad.myad')}}</router-link>
-              。
+. 
             </p>
           </div>
-          <!--  -->
+          <!-- -->
           <div class="formbox send-form">
             <Form ref="form" :model="form" :rules="ruleValidate" :label-width="90">
               <FormItem :label="$t('otc.publishad.iwant')" prop="advertiseType">
@@ -59,10 +59,10 @@
                 </Input>
               </FormItem>
               <!-- 1 -->
-              <p class="msg">{{$t('otc.publishad.marketprice')}}：
+              <p class="msg">{{$t('otc.publishad.marketprice')}}: 
                 <span class="cankao">{{cankao}}</span>
               </p>
-              <p class="msg" v-show="!form.fixed">{{$t('otc.publishad.marketpricetip')}}{{wantstyle}}。</p>
+              <p class="msg" v-show="!form.fixed">{{$t('otc.publishad.marketpricetip')}}{{wantstyle}}. </p>
               <div class="ivu-form-item">
                 <label class="ivu-form-item-label" style="width: 90px;">{{$t('otc.publishad.exchangeprice')}}</label>
                 <div class="ivu-form-item-content" style="margin-left: 90px;">
@@ -71,7 +71,7 @@
                   </div>
                 </div>
               </div>
-              <p class="msg">{{$t('otc.publishad.formual')}}：（Bitstamp+Bitfinex+Coinbase）/ 3 *{{gongshi.toFixed(4) }}</p>
+              <p class="msg">{{$t('otc.publishad.formual')}}: (Bitstamp+Bitfinex+Coinbase)/ 3 *{{gongshi.toFixed(4) }}</p>
               <FormItem :label="wantstyle+$t('otc.publishad.num')" prop="number">
                 <Input v-model="form.number" :placeholder="$t('otc.publishad.num_text1')+wantstyle+$t('otc.publishad.num_text2')"></Input>
               </FormItem>
@@ -82,7 +82,7 @@
               </FormItem>
               <p class="msg">{{$t('otc.publishad.tip1')}} </p>
 
-              <router-link to="/uc/account" style="padding-left: 90px;color:#f0ac19;">{{$t('otc.publishad.tip2')}}</router-link>
+              <router-link to="/uc/account" style="padding-left: 90px;color:#ff8534;">{{$t('otc.publishad.tip2')}}</router-link>
               <FormItem :label="$t('otc.publishad.paymode')" prop="payMode">
                 <Select v-model="form.payMode" multiple>
                   <Option v-for="(item,index) in payModeList" :value="item.value" :key="item.value" :disabled="item.isOpen">{{ item.label }}</Option>
@@ -116,7 +116,7 @@
                 <Input v-model="form.priceW" :placeholder="$t('otc.publishad.fundpwdtip')" type="password"></Input>
               </FormItem>
               <FormItem>
-                <Button style="background:#f0a70a;color:#fff;border:1px solid #f0a70a;" long @click="handleSubmit('form')" :disabled="disAllowBtn">{{$t('otc.publishad.submit')}}</Button>
+                <Button style="background:#ff6b00;color:#fff;border:1px solid #ff6b00;" long @click="handleSubmit('form')" :disabled="disAllowBtn">{{$t('otc.publishad.submit')}}</Button>
                 <!-- <Button type="ghost" @click="handleReset('form')" style="margin-left: 8px">Reset</Button> -->
               </FormItem>
             </Form>
@@ -179,8 +179,8 @@ export default {
         callback(new Error(this.$t("otc.publishad.warning5")));
       } else if (parseFloat(value) > parseFloat(priceNow)) {
         callback(
-          new Error(this.$t("otc.publishad.warning6") + priceNow + "CNY！")
-        );
+          new Error(this.$t("otc.publishad.warning6") + priceNow + "CNY!")
+);
       } else {
         callback();
       }
@@ -195,22 +195,19 @@ export default {
       }
       if (
         this.form.maxLimit &&
-        this.form.maxLimit != 0 &&
+        this.form.maxLimit!= 0 &&
         parseFloat(value) > this.form.maxLimit - 0
-      ) {
+) {
         // console.log(this.form.maxLimit)
         callback(new Error(this.$t("otc.publishad.warning9")));
       } else {
         callback();
       }
     };
-    //    期限
     const timeLimitCheck = (rule, value, callback) => {
-      //数字
-      if (value === "" || !/^\d+$/.test(value)) {
+      if (value === "" ||!/^\d+$/.test(value)) {
         callback(new Error(this.$t("otc.publishad.warning1")));
       }
-      //出售
       if (this.form.advertiseType == 1) {
         if (value < 15 || value > 120) {
           callback(new Error(this.$t("otc.publishad.warning1")));
@@ -218,7 +215,7 @@ export default {
           callback();
         }
       }
-      //买入
+      //Buy
       if (this.form.advertiseType == 0) {
         if (value < 10 || value > 30) {
           callback(new Error(this.$t("otc.publishad.warning1")));
@@ -233,11 +230,8 @@ export default {
       isSpinShow: true,
       isId: false,
       disAllowBtn: false,
-      //币种列表
       coinList: [],
-      //账户余额
       balance: 100,
-      //参考价
       cankao: "",
       price: "",
       symbol: "",
@@ -357,7 +351,7 @@ export default {
   methods: {
     changeCoin() {
       let coinItem = this.getCoin(this.form.coin);
-      if (coinItem != null) {
+      if (coinItem!= null) {
         this.cankao = coinItem.marketPrice + "";
         let lv = (1 + this.form.premisePrice / 100).toFixed(4);
         let cankoNew =
@@ -380,7 +374,7 @@ export default {
         Number(d.replace(".", "")) *
         Number(e.replace(".", "")) /
         Math.pow(10, c)
-      );
+);
     },
     div(a, b) {
       var c,
@@ -397,7 +391,7 @@ export default {
         (c = Number(a.toString().replace(".", ""))),
         (d = Number(b.toString().replace(".", ""))),
         this.mul(c / d, Math.pow(10, f - e))
-      );
+);
     },
     round(v, e) {
       var t = 1;
@@ -409,7 +403,6 @@ export default {
       this.$refs[name].validate(valid => {
         if (valid) {
           this.disAllowBtn = true;
-          //创建
           var params = {};
           params["price"] = (this.price + "").replace(/[^\d|.]/g, "") - 0;
           params["advertiseType"] = this.form.advertiseType;
@@ -435,7 +428,7 @@ export default {
           }
           params["autoword"] = this.form.autoword;
 
-          //修改
+          //Edit
           var isIdparams = {};
           isIdparams["id"] = this.$route.query.id;
           isIdparams["advertiseType"] = this.form.advertiseType;
@@ -463,8 +456,8 @@ export default {
           isIdparams["autoword"] = this.form.autoword;
           if (this.isId) {
             this.$http
-              .post(this.host + "/otc/advertise/update", isIdparams)
-              .then(response => {
+.post(this.host + "/otc/advertise/update", isIdparams)
+.then(response => {
                 var resp = response.body;
                 if (resp.code == 0) {
                   this.$Message.success(resp.message);
@@ -476,13 +469,12 @@ export default {
                   this.$Message.error(resp.message);
                   this.disAllowBtn = false;
                 }
-                //  this.disAllowBtn=false
+                // this.disAllowBtn=false
               });
           } else {
-            //创建
             this.$http
-              .post(this.host + "/otc/advertise/create", params)
-              .then(response => {
+.post(this.host + "/otc/advertise/create", params)
+.then(response => {
                 var resp = response.body;
                 if (resp.code == 0) {
                   debugger;
@@ -537,52 +529,51 @@ export default {
       });
     },
     getMember() {
-      //获取个人安全信息
+      // Secure
       let self = this;
       this.$http.get(this.host + this.api.uc.identification).then(res => {
         let certifiedBusinessStatus = res.body.data.certifiedBusinessStatus;
         if (certifiedBusinessStatus == 2) {
           this.getAccount();
         } else {
-          this.$Message.warning("请先申请商家认证!");
+          this.$Message.warning("Apply for merchant verification first!");
           this.$router.push("/identbusiness");
         }
       });
       //
       //
       // this.$http.post(this.host + '/uc/approve/security/setting').then(response => {
-      //     var resp = response.body;
-      //     if (resp.code == 0) {
-      //         if (resp.data.realName == null || resp.data.realName == "") {
-      //             this.$Message.success(this.$t('otc.publishad.submittip1'));
-      //             self.$router.push('/uc/safe');
-      //         } else if (resp.data.phoneVerified == 0) {
-      //             this.$Message.success(this.$t('otc.publishad.submittip2'));
-      //             self.$router.push('/uc/safe');
-      //         } else if (resp.data.fundsVerified == 0) {
-      //             this.$Message.success(this.$t('otc.publishad.submittip3'));
-      //             self.$router.push('/uc/safe');
-      //         } else {
-      //             this.getAccount()
-      //         }
-      //     } else {
-      //         this.$Message.error(resp.message);
-      //     }
+      // var resp = response.body;
+      // if (resp.code == 0) {
+      // if (resp.data.realName == null || resp.data.realName == "") {
+      // this.$Message.success(this.$t('otc.publishad.submittip1'));
+      // self.$router.push('/uc/safe');
+      // } else if (resp.data.phoneVerified == 0) {
+      // this.$Message.success(this.$t('otc.publishad.submittip2'));
+      // self.$router.push('/uc/safe');
+      // } else if (resp.data.fundsVerified == 0) {
+      // this.$Message.success(this.$t('otc.publishad.submittip3'));
+      // self.$router.push('/uc/safe');
+      // } else {
+      // this.getAccount()
+      // }
+      // } else {
+      // this.$Message.error(resp.message);
+      // }
       // })
     },
     getAccount() {
-      //获取个人账户信息
       let self = this;
       this.$http
-        .post(this.host + "/uc/approve/account/setting")
-        .then(response => {
+.post(this.host + "/uc/approve/account/setting")
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             if (
               resp.data.bankVerified == 0 &&
               resp.data.aliVerified == 0 &&
               resp.data.wechatVerified == 0
-            ) {
+) {
               this.$Message.success(this.$t("otc.publishad.submittip4"));
               self.$router.push("/uc/account");
             }
@@ -604,8 +595,8 @@ export default {
     getDetailAd() {
       this.isId = true;
       this.$http
-        .post(this.host + "/otc/advertise/detail", { id: this.$route.query.id })
-        .then(response => {
+.post(this.host + "/otc/advertise/detail", { id: this.$route.query.id })
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.form.coin = resp.data.coinId + "";
@@ -681,7 +672,6 @@ export default {
     this.getMember();
     this.getAreas();
     let lv = (1 + this.form.premisePrice / 100).toFixed(4);
-    //获取币种
     this.$http.post(this.host + "/otc/coin/all").then(response => {
       var resp = response.body;
       if (resp.code == 0) {
@@ -696,7 +686,7 @@ export default {
       } else {
         this.$Message.error(resp.message);
       }
-      //修改
+      //Edit
       if (this.$route.query.id) {
         this.getDetailAd();
       } else {
@@ -707,7 +697,7 @@ export default {
 };
 </script>
 <style>
-.my_ad_container .my_ad_container_spin.ivu-spin-fix .ivu-spin-main {
+.my_ad_container.my_ad_container_spin.ivu-spin-fix.ivu-spin-main {
   top: 200px;
 }
 </style>
@@ -728,7 +718,7 @@ export default {
   color: #e24a64;
 }
 
-.send-box .send-form .msg {
+.send-box.send-form.msg {
   padding-left: 90px;
   margin-bottom: 10px;
   position: relative;
@@ -753,7 +743,7 @@ export default {
   padding-left: 18px;
 }
 
-.title-box .titles {
+.title-box.titles {
   font-size: 18px;
   font-weight: normal;
   color: #fff;
@@ -765,7 +755,7 @@ export default {
 }
 
 .title-box p a {
-  color: #f0a70a;
+  color: #ff6b00;
 }
 
 .order-table {

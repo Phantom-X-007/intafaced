@@ -5,7 +5,7 @@
         <div class="main">
           <h2>{{$t("cms.noticecenter")}}</h2>
           <div class="list">
-            <div :class="item.id==queryId?'active' : 'item1'" v-for="item in FAQList" @click="noticedeail(item.id)">
+            <div :class="item.id==queryId?'active': 'item1'" v-for="item in FAQList" @click="noticedeail(item.id)">
               <span class="text">{{item.title}}</span>
             </div>
           </div>
@@ -31,33 +31,33 @@
               <div class="nav-bottom">
                 <div class="left" v-if="data.back">
                   <router-link class="link" :to="'../announcement/'+data.back.id">
-                    < {{$t("cms.prevnotice")}} <p style="color:#f0a70a;">{{data.back.title}}</p>
+                    < {{$t("cms.prevnotice")}} <p style="color:#ff6b00;">{{data.back.title}}</p>
                   </router-link>
                 </div>
                 <div class="right" v-if="data.next">
                   <router-link class="link" :to="'../announcement/'+data.next.id">{{$t("cms.nextnotice")}} >
-                    <p style="color:#f0a70a;">{{data.next.title}}</p>
+                    <p style="color:#ff6b00;">{{data.next.title}}</p>
                   </router-link>
                 </div>
               </div>
             </div>
             <div v-show="!hasContent">
                 <p style="font-size: 30px;text-align:center;margin-top: 15%;"><Icon type="ios-cafe" /></p>
-                <p style="text-align:center;font-size: 12px;margin-top: 10px;color: #828ea1;">{{$t("cms.notexist")}}</p>
+                <p style="text-align:center;font-size: 12px;margin-top: 10px;color: #8a8a8a;">{{$t("cms.notexist")}}</p>
             </div>
             <Spin size="large" fix v-if="spinShow"></Spin>
         </div>
       </Col>
     </Row>
     <div class="bottom-list">
-      <p style="font-size: 18px;margin: 15px 0;">最新公告</p>
+      <p style="font-size: 18px;margin: 15px 0;">Latest announcements</p>
       <div class="notice-item" v-for="item in FAQList" @click="noticedeail(item.id)">
         <span class="text">[{{item.createTime | subTime}}] {{item.title}}</span>
       </div>
     </div>
     <div class="app_bottom">
       <div class="left_logo">
-        <img style="float:left;" src="../../assets/images/applogo.png"></img>
+        <img style="float:left;" src="../../assets/images/applogo.svg"></img>
         <div style="float:left;height: 40px;line-height:40px;color:#000;">{{$t("cms.downloadslogan")}}</div>
       </div>
       <div class="right_btn_wrap"><router-link to="/app" class="right_btn">{{$t("cms.download")}}</router-link></div>
@@ -108,19 +108,14 @@ export default {
   },
   computed: {
     lang() {
-      if (this.$store.state.lang != this.initLang) {
+      if (this.$store.state.lang!= this.initLang) {
         this.$router.back();
       }
       return this.$store.state.lang;
     },
     langPram() {
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     }
   },
   methods: {
@@ -146,8 +141,8 @@ export default {
         lang: this.langPram
       };
       this.$http
-        .post(this.host + "/uc/announcement/more", param)
-        .then(response => {
+.post(this.host + "/uc/announcement/more", param)
+.then(response => {
           var result = response.body;
           if (result.code == 0) {
             const data = result.data;
@@ -155,7 +150,7 @@ export default {
             this.hasContent = true;
             this.spinShow = false;
 
-            window.document.title = (this.lang == "简体中文" ? "公告 - " : "Announcement - ") + this.data.info.title + " - 币严 | 全球比特币交易平台 | 全球数字货币交易平台";
+            window.document.title = "Announcement - " + this.data.info.title + " - INTAFACED | Sovereign Exchange";
           }else{
             this.hasContent = false;
             this.spinShow = false;
@@ -179,8 +174,8 @@ export default {
         (param["pageSize"] = this.pageSize),
         (param["lang"] = this.langPram),
         this.$http
-          .post(this.host + this.api.uc.announcement, param)
-          .then(response => {
+.post(this.host + this.api.uc.announcement, param)
+.then(response => {
             // console.log(response);
             var resp = response.body;
             if (resp.code == 0) {
@@ -214,7 +209,7 @@ export default {
   overflow-x: hidden;
   padding: 0px 180px;
   min-height: 800px;
-  background: rgba(242,246,250,1) !important;
+  background: rgba(242,246,250,1)!important;
 }
 .bottom-list{
   display: none;
@@ -222,10 +217,10 @@ export default {
   color: #696969;
   background-color: #FFF;
 }
-.bottom-list .notice-item span{
+.bottom-list.notice-item span{
   display: block;
   margin: 10px 0;
-  color: #f0a70a;
+  color: #ff6b00;
   font-size: 14px;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -234,39 +229,39 @@ export default {
 
 }
 @media screen and (max-width:768px){
-  .notice{
+.notice{
     padding: 0px 0px;position: relative;
   }
-  .show-qrcode{
+.show-qrcode{
     display: none;
   }
-  .bottom-list{
+.bottom-list{
     display: block!important;
   }
-  .notice .content-wrap{
+.notice.content-wrap{
     margin-top:45px;
     padding: 30px 20px 50px 20px;
     margin-bottom: 0px;
   }
-  .notice-list{
+.notice-list{
     display: none;
   }
-  .notice .content-wrap .header h2{
+.notice.content-wrap.header h2{
     text-align: left;
   }
-  .notice .content-wrap .content{
+.notice.content-wrap.content{
     padding-bottom: 60px;
   }
-  .notice .nav-bottom{
+.notice.nav-bottom{
     padding: 30px 0px 30px 0px;
   }
-  .notice .nav-bottom .link > p{
+.notice.nav-bottom.link > p{
     display: none;
   }
-  .show-qrcode{
+.show-qrcode{
     display: none;
   }
-  .app_bottom{
+.app_bottom{
     display: block!important;
   }
 
@@ -304,16 +299,16 @@ export default {
   left: 0;
   width: 100%;
   height: 40px;
-  background: rgba(242,246,250,1) !important;
+  background: rgba(242,246,250,1)!important;
 }
-.app_bottom .left_logo img{
+.app_bottom.left_logo img{
   height: 30px;margin-top:5px;border-radius: 5px;margin-left: 5px;margin-right: 5px;
 }
-.app_bottom .right_btn_wrap{
+.app_bottom.right_btn_wrap{
   float: right;height: 40px;line-height: 40px;margin-right: 5px;
 
 }
-.app_bottom .right_btn{
+.app_bottom.right_btn{
   color: #FFF;
   border-radius: 3px;
   padding: 0px 10px;
@@ -327,27 +322,27 @@ export default {
 <style lang="scss">
 
 .notice {
-  .main{
+.main{
     h2{
       text-align:left;
       font-size: 18px;
       font-weight:normal;
     }
-    .list{
+.list{
       margin-top: 20px;
-      .item1{
+.item1{
         width: 100%;
         text-align:left;
         padding: 15px 15px;
         color: rgba(130,142,161,1);
         &:hover{
           cursor: pointer;
-          color: #f0a70a;
+          color: #ff6b00;
         }
       }
-      .active{
+.active{
         background: #FFF;
-        color: #f0a70a;
+        color: #ff6b00;
         width: 100%;
         text-align:left;
         padding: 15px 15px;
@@ -358,16 +353,16 @@ export default {
         }
       }
     }
-    .page{
+.page{
       text-align:right;
       margin-top: 10px;
-      .ivu-page{
-        .ivu-page-prev, .ivu-page-next{
+.ivu-page{
+.ivu-page-prev,.ivu-page-next{
           background: transparent!important;
           color: #000;
           border: none;
         }
-        .ivu-page-item{
+.ivu-page-item{
           background-color: transparent!important;
           color: #000;
           border: none;
@@ -375,7 +370,7 @@ export default {
       }
     }
   }
-  .content-wrap {
+.content-wrap {
     text-align:left;
     position: relative;
     width: 100%;
@@ -388,23 +383,23 @@ export default {
     padding: 50px 50px;
     margin-bottom: 50px;
     padding-bottom: 110px;
-    .link {
+.link {
       font-size: 14px;
-      color: #f0a70a;
+      color: #ff6b00;
     }
-    .header {
+.header {
       margin-bottom: 40px;
       padding-bottom: 10px;
       h2 {
         font-size: 20px;
       }
     }
-    .content {
+.content {
       color: #74777a;
       margin-bottom: 80px;
       letter-spacing: 1px;
       line-height: 25px;
-      .content-text{
+.content-text{
           p{
               text-align: justify;
               &::after {
@@ -415,45 +410,45 @@ export default {
           }
       }
       span {
-        .MsoNormal {
+.MsoNormal {
           font-weight: 100;
           line-height: 30px;
         }
-        .p1 {
-          .s1 {
+.p1 {
+.s1 {
             b {
               font-weight: 400;
               span {
-                font-size: 18px !important;
+                font-size: 18px!important;
               }
             }
           }
         }
-        .p2 {
+.p2 {
           span {
-            font-size: 12pt !important;
+            font-size: 12pt!important;
             line-height: 30px;
           }
         }
-        .p3 {
+.p3 {
           span {
-            font-size: 12pt !important;
-            color: #fff !important;
+            font-size: 12pt!important;
+            color: #fff!important;
             line-height: 30px;
           }
         }
       }
-      .image-desc {
-        .uploaded-img {
+.image-desc {
+.uploaded-img {
           width: 100%;
         }
-        .image-caption {
-          display: none !important;
+.image-caption {
+          display: none!important;
         }
       }
     }
   }
-  .nav-bottom {
+.nav-bottom {
     position: absolute;
     left: 0;
     bottom: 0;
@@ -463,16 +458,16 @@ export default {
 
     border-top: 1px solid #ebebeb;
     border-bottom: 1px solid #ebebeb;
-    .link > p {
+.link > p {
       color: #fff;
       line-height: 1;
       margin-top: 10px;
     }
-    .left {
+.left {
       text-align: left;
       float:left;
     }
-    .right {
+.right {
       text-align: right;
       float:right;
     }

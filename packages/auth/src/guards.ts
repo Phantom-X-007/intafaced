@@ -34,19 +34,29 @@ export function requireMfa(principal: Principal): void {
 
 export const TIER_ORDER = { none: 0, basic: 1, full: 2, institutional: 3 } as const;
 
+/**
+ * `tier.insufficient`, not `scope.denied`. The caller holds the authority and
+ * is short of verification — the one refusal on this page that names something
+ * the user can go and fix. The required tier is in the message so the client
+ * does not have to guess which step to send them to.
+ */
 export function requireTier(principal: Principal, tier: Principal['tier']): void {
   if (TIER_ORDER[principal.tier] < TIER_ORDER[tier]) {
-    throw new AuthError(`Verification tier "${tier}" is required`, 'scope.denied');
+    throw new AuthError(`Verification tier "${tier}" is required`, 'tier.insufficient');
   }
 }
 
 /**
  * Ownership check. A principal may act on its own resources, and on its own
  * sub-accounts — never on another user's, whatever scopes it holds.
+ *
+ * Its own code, because this one is never a prompt: no amount of verifying, and
+ * no scope, makes another account's row yours. A client that treated it as
+ * `scope.denied` would offer an upgrade path that leads nowhere.
  */
 export function requireOwnership(principal: Principal, ownerUserId: string): void {
   if (principal.userId !== ownerUserId) {
-    throw new AuthError('This resource belongs to another account', 'scope.denied');
+    throw new AuthError('This resource belongs to another account', 'ownership.denied');
   }
 }
 

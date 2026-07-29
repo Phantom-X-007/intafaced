@@ -1,89 +1,173 @@
-.chart-controls-bar{
+/* ============================================================================
+   INTAFACED — TradingView charting library skin
+   ----------------------------------------------------------------------------
+   Loaded inside the chart iframe via the widget's custom_css_url. The iframe is
+   a separate document, so it cannot see the app's CSS custom properties; the
+   palette is repeated here as literals and must stay in step with
+   src/assets/css/intafaced.css:
+
+     --ix-bg        #000000     --ix-orange      #ff6b00
+     --ix-surface   #0d0d0d     --ix-orange-lt   #ff8534
+     --ix-hairline  rgba(255,255,255,.09)
+     --ix-text-dim  #9a9a9a     --ix-text-faint  #6b6b6b
+     --ix-up        #00b275     --ix-down        #ff4a68
+
+   Candle bodies, wicks, grid and crosshair come from the widget `overrides` in
+   Exchange.vue. This sheet handles the chrome the overrides API cannot reach:
+   the header bar, toolbars, buttons and dialogs, all of which ship blue.
+   ========================================================================== */
+
+/* ── page ─────────────────────────────────────────────────────────────────── */
+html,
+body,
+.chart-page,
+.js-rootresizer__contents,
+.chart-container,
+.layout__area--center {
+  background-color: #000000 !important;
+}
+
+.loading-indicator {
+  background-color: #000000;
+}
+
+/* ── header / control bars ────────────────────────────────────────────────── */
+.chart-controls-bar {
   height: 30px;
   left: 0;
+  background-color: #000000;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
 }
-.chart-controls-bar-buttons{
+
+.chart-controls-bar-buttons {
   line-height: 30px;
 }
-.chart-controls-bar-buttons a{
+
+.chart-controls-bar-buttons a {
   padding: 4px 13px;
   height: 30px;
+  color: #6b6b6b;
 }
-.layout__area--top.header-chart-panel{
+
+.layout__area--top.header-chart-panel {
   top: 0 !important;
-  /*z-index: 999;*/
-  /*width: 40% !important;*/
-  /*left: 60% !important;*/
+  background-color: #000000 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
 }
-.header-chart-panel .left{
-  /*text-align: right;*/
-}
-.header-chart-panel .group{
-  /*margin: 5px 0 0;*/
-}
-.header-chart-panel .group.header-group-properties{
+
+.header-chart-panel .group.header-group-properties {
   margin-left: 0;
 }
-/*._tv-dialog{*/
-  /*z-index: 1110 !important;*/
-/*}*/
-.real-op>a:nth-child(2){
-  color: #8b8c8e;
-  stroke: #8b8c8e;
-  fill: #8b8c8e;
-}
-.common-op>a:nth-child(1){
-  color: #8b8c8e;
-  stroke: #8b8c8e;
-  fill: #8b8c8e;
-}
 
-.chart-page .tv-side-toolbar .group .button:hover, .chart-page .tv-side-toolbar .group .button.selected, .chart-page .header-chart-panel .group .button:hover, .chart-page .header-chart-panel .group .button.selected {
-  background: #2c3b59;
-  color: #c7cce6;
-}
-.chart-page .tv-side-toolbar .group .button, .chart-page .header-chart-panel .group .button {
-  font-weight: normal;
-  color: #4e5b85;
-}
-.chart-page .button.selected, .chart-page .button.active {
-  background-color: #4e5b85 !important;
-}
-
-.chart-page .tv-side-toolbar .group, .chart-page .header-chart-panel .group {
+.chart-page .tv-side-toolbar .group,
+.chart-page .header-chart-panel .group {
   float: left;
 }
-.chart-page .tv-side-toolbar .header-group-properties, .chart-page .tv-side-toolbar .header-group-indicators, .chart-page .header-chart-panel .header-group-properties, .chart-page .header-chart-panel .header-group-indicators {
+
+.chart-page .tv-side-toolbar .header-group-properties,
+.chart-page .tv-side-toolbar .header-group-indicators,
+.chart-page .header-chart-panel .header-group-properties,
+.chart-page .header-chart-panel .header-group-indicators {
   float: none;
 }
-.chart-page .tv-side-toolbar .header-group-fullscreen, .chart-page .header-chart-panel .header-group-fullscreen {
+
+.chart-page .tv-side-toolbar .header-group-fullscreen,
+.chart-page .header-chart-panel .header-group-fullscreen {
   float: right;
   padding-right: 5px;
 }
 
-/* 计数指标弹出框 */
-.tv-dialog.i-focused{
-  top: 45px!important;
+/* ── interval / tool buttons — the vendor blue lived here ─────────────────── */
+.chart-page .tv-side-toolbar .group .button,
+.chart-page .header-chart-panel .group .button {
+  font-weight: 500;
+  color: #6b6b6b;
+  background: transparent;
+  border-radius: 8px;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.chart-page .tv-side-toolbar .group .button:hover,
+.chart-page .header-chart-panel .group .button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f2f2f2;
+}
+
+.chart-page .tv-side-toolbar .group .button.selected,
+.chart-page .header-chart-panel .group .button.selected,
+.chart-page .button.selected,
+.chart-page .button.active {
+  background-color: rgba(255, 107, 0, 0.12) !important;
+  color: #ff6b00 !important;
+}
+
+.real-op > a:nth-child(2),
+.common-op > a:nth-child(1) {
+  color: #ff6b00;
+  stroke: #ff6b00;
+  fill: #ff6b00;
+}
+
+/* ── legend ───────────────────────────────────────────────────────────────── */
+.pane-legend {
+  top: -2px;
+  color: #9a9a9a;
+}
+
+/* ── dialogs: indicator picker and chart settings ─────────────────────────── */
+.tv-dialog.i-focused {
+  top: 45px !important;
   height: calc(100% - 100px);
   overflow: hidden;
 }
-.pane-legend{
-  top: -2px;
-}
-/* 设置弹出框 */
-._tv-dialog{
-  top: 45px!important;
+
+._tv-dialog {
+  top: 45px !important;
   overflow: auto;
   height: calc(100% - 100px);
   width: 80%;
-  left: 0!important;
+  left: 0 !important;
   right: 0;
   margin: 0 auto;
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+  color: #f2f2f2;
 }
 
-.js-rootresizer__contents{
-  background-color: #192330;
+._tv-dialog input[type='text'],
+._tv-dialog input[type='number'],
+._tv-dialog select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  color: #f2f2f2;
 }
-.loading-indicator{
-  background-color: #18202a;
+
+._tv-dialog input:focus,
+._tv-dialog select:focus {
+  border-color: #ff6b00;
+  outline: none;
+}
+
+._tv-dialog .tv-button,
+._tv-dialog button {
+  border-radius: 8px;
+}
+
+/* ── scrollbars inside the chart ──────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 107, 0, 0.28);
 }

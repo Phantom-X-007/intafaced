@@ -3,14 +3,14 @@
     <!-- <section class="trade-group merchant-top"> -->
     <!-- <i class="merchant-icon tips"></i>
             <span class="tips-word">{{this.coin.toUpperCase()}}</span> -->
-    <!-- <a href="/user/merchants">申请为认证商家&gt;&gt;</a> -->
+    <!-- <a href="/user/merchants">Apply to become a verified merchant&gt;&gt;</a> -->
     <!--<a href="/#/identbusiness">{{$t("otc.applymerchant")}}&gt;&gt;</a>-->
     <!-- </section> -->
     <section class="list-content">
       <Tabs :value="tabPage" v-model="tabPage">
         <TabPane :label="$t('otc.buyin')" name="buy">
           <div class="table-responsive list-table">
-            <Table :no-data-text="$t('common.nodata')" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader ? 250 : ''" :size="tableSize" :data="advertiment.ask.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
+            <Table :no-data-text="$t('common.nodata')" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader? 250: ''" :size="tableSize" :data="advertiment.ask.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
             <div class="page_change">
               <div style="float: right;">
                 <Page v-if="advertiment.ask.totalElement > 0" :pageSize="advertiment.ask.pageNumber" :total="advertiment.ask.totalElement" :current="advertiment.ask.currentPage" @on-change="changePage"></Page>
@@ -20,7 +20,7 @@
         </TabPane>
         <TabPane :label="$t('otc.sellout')" name="sell">
           <div class="table-responsive list-table">
-            <Table :no-data-text="$t('common.nodata')" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader ? 250 : ''" :size="tableSize" :data="advertiment.bid.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
+            <Table :no-data-text="$t('common.nodata')" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader? 250: ''" :size="tableSize" :data="advertiment.bid.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
             <div class="page_change">
               <div style="float: right;">
                 <Page v-if="advertiment.bid.totalElement > 0" :pageSize="advertiment.bid.pageNumber" :total="advertiment.bid.totalElement" :current="advertiment.bid.currentPage" @on-change="changePage"></Page>
@@ -35,63 +35,63 @@
 
 
 <style scoped lang="scss">
-#List .nav-right {
-  color: #26264c;
+#List.nav-right {
+  color: #1d1d1d;
   padding-right: 0;
-  .list-content {
+.list-content {
     color: #fff;
   }
 }
 </style>
 <style lang="scss">
-#List .nav-right {
-  color: #26264c;
+#List.nav-right {
+  color: #1d1d1d;
   padding-right: 0;
-  .list-content {
+.list-content {
     color: #fff;
-    .ivu-tabs {
-      .ivu-tabs-bar {
+.ivu-tabs {
+.ivu-tabs-bar {
         border-bottom:none;
-        .ivu-tabs-nav-container {
-          .ivu-tabs-nav-wrap {
-            .ivu-tabs-nav-scroll {
-              .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
-                background: #f0ac19;
+.ivu-tabs-nav-container {
+.ivu-tabs-nav-wrap {
+.ivu-tabs-nav-scroll {
+.ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
+                background: #ff8534;
               }
-              .ivu-tabs-tab {
+.ivu-tabs-tab {
                 &:hover {
-                  color: #f0ac19;
+                  color: #ff8534;
                 }
               }
-              .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
-                color: #f0ac19;
+.ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
+                color: #ff8534;
               }
             }
           }
         }
       }
-      .ivu-tabs-content.ivu-tabs-content-animated {
-        .ivu-tabs-tabpane {
-          .ivu-table-wrapper {
+.ivu-tabs-content.ivu-tabs-content-animated {
+.ivu-tabs-tabpane {
+.ivu-table-wrapper {
             border: none;
-            .ivu-table-body{
-              .ivu-table-tbody{
-                .ivu-table-row{
-                  .ivu-table-cell.ivu-table-cell-ellipsis{
-                    .user-face.user-avatar-public{
+.ivu-table-body{
+.ivu-table-tbody{
+.ivu-table-row{
+.ivu-table-cell.ivu-table-cell-ellipsis{
+.user-face.user-avatar-public{
                       span{
-                        background:#f0ac19;
+                        background:#ff8534;
                       }
                     }
                     p a{
-                      color:#f0ac19;
+                      color:#ff8534;
                     }
                   }
                 }
               }
             }
           }
-          .page_change{
+.page_change{
             margin: 10px;
             overflow: hidden;
           }
@@ -107,7 +107,7 @@
   color: white;
 }
 
-.tradeCenter .ivu-poptip-popper button span {
+.tradeCenter.ivu-poptip-popper button span {
   display: block;
   color: inherit;
 }
@@ -116,121 +116,121 @@
   margin-bottom: 40px;
 }
 
-// #List .nav-right .bread {
-//   font-size: 16px;
+// #List.nav-right.bread {
+// font-size: 16px;
 // }
 
-// #List .nav-right .bread a {
-//   color: #e24a64;
-//   display: inline-block;
-//   padding-left: 1rem;
-//   cursor: pointer;
+// #List.nav-right.bread a {
+// color: #e24a64;
+// display: inline-block;
+// padding-left: 1rem;
+// cursor: pointer;
 // }
 
-// #List .nav-right .list-content .list-title {
-//   box-shadow: 0 4px 0 0 rgba(69, 112, 128, 0.06);
-//   -webkit-box-shadow: 0 4px 0 0 rgba(69, 112, 128, 0.06);
-//   z-index: 1;
-//   position: relative;
+// #List.nav-right.list-content.list-title {
+// box-shadow: 0 4px 0 0 rgba(69, 112, 128, 0.06);
+// -webkit-box-shadow: 0 4px 0 0 rgba(69, 112, 128, 0.06);
+// z-index: 1;
+// position: relative;
 // }
 
-// #List .nav-right .list-content .list-title .search {
-//   background-color: #fff;
-//   height: 40px;
-//   padding: 6px 12px;
+// #List.nav-right.list-content.list-title.search {
+// background-color: #fff;
+// height: 40px;
+// padding: 6px 12px;
 // }
 
-// #List .nav-right .list-content .list-title .search .dropdown-box {
-//   display: flex;
-//   flex: 1;
-//   justify-content: flex-start;
-//   align-items: center;
-//   height: 100%;
+// #List.nav-right.list-content.list-title.search.dropdown-box {
+// display: flex;
+// flex: 1;
+// justify-content: flex-start;
+// align-items: center;
+// height: 100%;
 // }
 
-// #List .nav-right .list-content .list-title .search .dropdown-box .select-menu {
-//   border: transparent;
-//   outline: none;
-//   background-color: transparent;
+// #List.nav-right.list-content.list-title.search.dropdown-box.select-menu {
+// border: transparent;
+// outline: none;
+// background-color: transparent;
 // }
 
-// #List .nav-right .list-content .list-title .search .dropdown-box .select-items {
-//   width: 25%;
-//   display: flex;
-//   justify-content: flex-start;
-//   align-items: center;
+// #List.nav-right.list-content.list-title.search.dropdown-box.select-items {
+// width: 25%;
+// display: flex;
+// justify-content: flex-start;
+// align-items: center;
 // }
 
-// .nav .open > a,
-// .nav .open > a:hover,
-// .nav .open > a:focus {
-//   background: transparent;
+//.nav.open > a,
+//.nav.open > a:hover,
+//.nav.open > a:focus {
+// background: transparent;
 // }
 
-// #List .nav-right .list-content .list-title .search-btn {
-//   background-color: #c5cdd7;
-//   display: flex;
-//   justify-content: center;
-//   border-radius: 0 4px 4px 0;
+// #List.nav-right.list-content.list-title.search-btn {
+// background-color: #cccccc;
+// display: flex;
+// justify-content: center;
+// border-radius: 0 4px 4px 0;
 // }
 
-// #List .nav-right .list-content .list-title .search-btn span {
-//   font-size: 18px;
-//   height: 36px;
-//   line-height: 36px;
+// #List.nav-right.list-content.list-title.search-btn span {
+// font-size: 18px;
+// height: 36px;
+// line-height: 36px;
 // }
 
-// #List .nav-right .list-content .list-title .search-btn em {
-//   height: 36px;
-//   line-height: 36px;
-//   margin-left: 6px;
-//   font-style: normal;
+// #List.nav-right.list-content.list-title.search-btn em {
+// height: 36px;
+// line-height: 36px;
+// margin-left: 6px;
+// font-style: normal;
 // }
 
-// #List .nav-right .list-content .list-table table {
-//   table-layout: fixed;
+// #List.nav-right.list-content.list-table table {
+// table-layout: fixed;
 // }
 
-// #List .nav-right .list-content .list-table tr:nth-of-type(even) {
-//   background-color: #fff;
+// #List.nav-right.list-content.list-table tr:nth-of-type(even) {
+// background-color: #fff;
 // }
 
-// #List .nav-right .list-content .list-table tr > td {
-//   vertical-align: middle;
-//   line-height: normal;
-//   width: 25%;
+// #List.nav-right.list-content.list-table tr > td {
+// vertical-align: middle;
+// line-height: normal;
+// width: 25%;
 // }
 
-// #List .nav-right .list-content .list-table .table > tbody > tr > td {
-//   border-top: 1px solid transparent;
-//   text-align: left;
-//   height: 75px;
+// #List.nav-right.list-content.list-table.table > tbody > tr > td {
+// border-top: 1px solid transparent;
+// text-align: left;
+// height: 75px;
 // }
-// .ivu-menu-light.ivu-menu-vertical .ivu-menu-item-active:not(.ivu-menu-submenu) {
-//   color: #f0a70a;
+//.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu) {
+// color: #ff6b00;
 // }
-// #List .nav-right .list-content .list-table .user-name {
-//   display: flex;
-//   justify-content: flex-start;
-//   padding-left: 5%;
-// }
-
-// #List .nav-right .list-content .list-table .user-name .user-icon {
-//   background: #00b5f6;
-//   border-radius: 50%;
-//   height: 42px;
-//   width: 42px;
-//   display: flex;
-//   justify-content: center;
+// #List.nav-right.list-content.list-table.user-name {
+// display: flex;
+// justify-content: flex-start;
+// padding-left: 5%;
 // }
 
-#List .nav-right .list-content .list-table .user-name .user-icon span {
+// #List.nav-right.list-content.list-table.user-name.user-icon {
+// background: #ff6b00;
+// border-radius: 50%;
+// height: 42px;
+// width: 42px;
+// display: flex;
+// justify-content: center;
+// }
+
+#List.nav-right.list-content.list-table.user-name.user-icon span {
   font-size: 22px;
   color: white;
   align-self: center;
 }
 
-#List .nav-right .list-content .list-table .user-name .user-info {
+#List.nav-right.list-content.list-table.user-name.user-info {
   margin-left: 5%;
   width: 100px;
   word-wrap: inherit;
@@ -239,106 +239,106 @@
   justify-content: center;
 }
 
-#List .nav-right .list-content .list-table .user-name .user-info p {
+#List.nav-right.list-content.list-table.user-name.user-info p {
   height: 16px;
   margin: 0 0 3px;
 }
 
-// #List .nav-right .list-content .list-table .user-name .user-info .merchant {
-//   height: 17px;
-//   width: 67px;
-//   display: inline-block;
+// #List.nav-right.list-content.list-table.user-name.user-info.merchant {
+// height: 17px;
+// width: 67px;
+// display: inline-block;
   /* background: url("../../images/comm/merchant-flag.png") no-repeat; */
 // }
 
-// #List .nav-right .list-content .list-table .price p {
-//   font-size: 16px;
-//   font-weight: bolder;
-//   color: #444f71;
+// #List.nav-right.list-content.list-table.price p {
+// font-size: 16px;
+// font-weight: bolder;
+// color: #393939;
 // }
 
-// #List .nav-right .list-content .list-table .price h5 {
-//   font-size: 12px;
-//   color: #8994a3;
-//   margin-top: 0;
+// #List.nav-right.list-content.list-table.price h5 {
+// font-size: 12px;
+// color: #909090;
+// margin-top: 0;
 // }
 
-// #List .nav-right .list-content .list-table .Btn a {
-//   border-radius: 6px;
-//   background-color: transparent;
-//   color: #e24a64;
-//   display: inline-block;
-//   padding: 6px;
-//   width: 100px;
-//   text-align: center;
-//   text-decoration: none;
+// #List.nav-right.list-content.list-table.Btn a {
+// border-radius: 6px;
+// background-color: transparent;
+// color: #e24a64;
+// display: inline-block;
+// padding: 6px;
+// width: 100px;
+// text-align: center;
+// text-decoration: none;
 // }
 
-// #List .nav-right .list-content .list-table .Btn .sell {
-//   background-color: #0db124;
-//   color: #fff;
+// #List.nav-right.list-content.list-table.Btn.sell {
+// background-color: #0db124;
+// color: #fff;
 // }
 
-// #List .nav-right .list-content .list-table .Btn .buy {
-//   background-color: #ed7325;
-//   color: #fff;
+// #List.nav-right.list-content.list-table.Btn.buy {
+// background-color: #ed7325;
+// color: #fff;
 // }
 
-#List .nav-right .list-content .pagelist {
+#List.nav-right.list-content.pagelist {
   display: flex;
   justify-content: flex-end;
 }
 
-#List .nav-right .list-content .pagelist ul {
+#List.nav-right.list-content.pagelist ul {
   list-style: none;
 }
 
-#List .nav-right .list-content .pagelist ul li {
+#List.nav-right.list-content.pagelist ul li {
   display: inline-block;
   background-color: #ebeff5;
   height: 32px;
   width: 32px;
   text-align: center;
   line-height: 32px;
-  border: 1px solid #c5cdd7;
+  border: 1px solid #cccccc;
   border-radius: 6px;
   cursor: pointer;
   margin: 0 2px;
 }
 
-#List .nav-right .list-content .pagelist ul li:hover {
-  background-color: #c5cdd7;
+#List.nav-right.list-content.pagelist ul li:hover {
+  background-color: #cccccc;
 }
 
-#List .nav-right .list-content .pagelist ul li a {
-  color: #26264c;
+#List.nav-right.list-content.pagelist ul li a {
+  color: #1d1d1d;
 }
 
-#List .header-search {
+#List.header-search {
   width: 100%;
 }
 
-#List .select-items select {
+#List.select-items select {
   width: initial;
 }
 
-#List .list-payMethod {
+#List.list-payMethod {
   width: 80%;
   display: inline-block;
   word-break: keep-all;
 }
 
-.select-items .form-control {
+.select-items.form-control {
   -webkit-box-shadow: none;
   box-shadow: none;
 }
 
-.nav-pills .dropdown a {
-  color: #555555 !important;
+.nav-pills.dropdown a {
+  color: #555555!important;
 }
 
-.has-success .control-label {
-  color: #26264c !important;
+.has-success.control-label {
+  color: #1d1d1d!important;
 }
 
 .trade-group {
@@ -356,7 +356,7 @@
   width: 4px;
   height: 22px;
   margin-right: 10px;
-  background: #f0a70a;
+  background: #ff6b00;
 }
 
 .merchant-icon.alipay {
@@ -419,7 +419,7 @@
   color: #fff;
 }
 
-.merchant-top .tips-word {
+.merchant-top.tips-word {
   flex-grow: 2;
   text-align: left;
 }
@@ -436,14 +436,14 @@
   margin: 0 1.5%;
 }
 
-.merchant-item .item-hd {
+.merchant-item.item-hd {
   /* background: url("../../images/trade/merchant_item_split.png") left bottom no-repeat; */
   padding-bottom: 20px;
   display: flex;
   align-items: center;
 }
 
-.merchant-item .item-hd .item-face {
+.merchant-item.item-hd.item-face {
   width: 42px;
   height: 42px;
   text-align: center;
@@ -451,18 +451,18 @@
   border-radius: 42px;
   -webkit-border-radius: 42px;
   color: #fff;
-  background: #00b5f6;
+  background: #ff6b00;
 }
 
-.merchant-item .item-hd .item-name {
+.merchant-item.item-hd.item-name {
   padding: 0 10px;
 }
 
-.merchant-item .item-hd .item-name p {
+.merchant-item.item-hd.item-name p {
   margin-bottom: 0;
 }
 
-.merchant-item .item-hd .item-name p:first-child {
+.merchant-item.item-hd.item-name p:first-child {
   color: #fff;
   margin-bottom: 5px;
   overflow: hidden;
@@ -470,64 +470,64 @@
   white-space: nowrap;
 }
 
-.merchant-item .item-hd .item-name p:last-child {
-  color: #5c68a6;
+.merchant-item.item-hd.item-name p:last-child {
+  color: #4c4c4c;
   font-size: 12px;
 }
 
-.merchant-item .text-right {
+.merchant-item.text-right {
   display: flex;
   justify-content: flex-end;
 }
 
-.merchant-item .text-right .online-status-box {
+.merchant-item.text-right.online-status-box {
   color: #18b111;
   display: flex;
 }
 
-.merchant-item .item-hd .item-pay {
+.merchant-item.item-hd.item-pay {
   flex-grow: 2;
   text-align: right;
 }
 
-.merchant-item .item-hd .item-pay .states {
+.merchant-item.item-hd.item-pay.states {
   height: 17px;
   width: 67px;
   display: inline-block;
 }
 
-.merchant-item .item-hd .item-pay .states.merchant {
+.merchant-item.item-hd.item-pay.states.merchant {
   background: url("../../assets/img/renzheng.png") no-repeat;
   background-size: 100% 100%;
 }
 
-.merchant-item .item-hd .item-pay p {
+.merchant-item.item-hd.item-pay p {
   font-size: 12px;
   color: #ed7325;
   margin-bottom: 5px;
 }
 
-.merchant-item .item-bd {
+.merchant-item.item-bd {
   padding-top: 10px;
 }
 
-.merchant-item .item-bd .price {
+.merchant-item.item-bd.price {
   font-size: 16px;
-  color: #3e435e;
+  color: #313131;
   font-weight: bold;
 }
 
-.merchant-item .item-bd .price span {
+.merchant-item.item-bd.price span {
   font-size: 12px;
 }
 
-.merchant-item .item-bd .limit {
-  color: #636981;
+.merchant-item.item-bd.limit {
+  color: #4c4c4c;
   font-size: 12px;
   padding-bottom: 15px;
 }
 
-.merchant-item .item-bd .btn {
+.merchant-item.item-bd.btn {
   height: 32px;
   line-height: 32px;
   font-size: 14px;
@@ -537,11 +537,11 @@
   -webkit-border-radius: 6px;
 }
 
-.merchant-item .item-bd .btn-buy {
+.merchant-item.item-bd.btn-buy {
   background: #ed7325;
 }
 
-.merchant-item .item-bd .btn-sell {
+.merchant-item.item-bd.btn-sell {
   background: #0db124;
 }
 
@@ -558,7 +558,7 @@
   background: #d4d6e1;
 }
 
-.carousel-indicators .active {
+.carousel-indicators.active {
   width: 30px;
   height: 5px;
   border-radius: 5px;
@@ -582,7 +582,7 @@
 }
 
 .m-intro p {
-  color: #474e72;
+  color: #393939;
   font-weight: bold;
   font-size: 16px;
 }
@@ -591,7 +591,7 @@
   line-height: 40px;
   padding-left: 20px;
   background: #f7f7fa;
-  color: #636981;
+  color: #4c4c4c;
   font-size: 12px;
 }
 
@@ -636,16 +636,16 @@
   display: inline-block;
 }
 
-// .price {
-//   font-size: 16px;
-//   font-weight: bolder;
-//   color: #444f71;
+//.price {
+// font-size: 16px;
+// font-weight: bolder;
+// color: #393939;
 // }
 
-// .price2 {
-//   font-size: 12px;
-//   color: #8994a3;
-//   margin-top: 0;
+//.price2 {
+// font-size: 12px;
+// color: #909090;
+// margin-top: 0;
 // }
 
 .renzheng {
@@ -679,8 +679,8 @@
   position: relative;
 }
 
-.user-avatar-public > .user-avatar-in {
-  background: #f0a70a;
+.user-avatar-public >.user-avatar-in {
+  background: #ff6b00;
   border-radius: 50%;
   height: 35px;
   width: 35px;
@@ -690,47 +690,47 @@
   color: white;
 }
 
-.ivu-table-cell .user-avatar-public {
+.ivu-table-cell.user-avatar-public {
   width:45px;
   display: inline-block;
   margin: 10px 10px 10px 0;
   vertical-align: middle;
 }
 
-.ivu-table-cell .user-avatar-public > .user-avatar-in {
+.ivu-table-cell.user-avatar-public >.user-avatar-in {
   transform: translate(5px, 5px);
 }
 
-.ivu-table-cell .user-avatar-public ~ p {
+.ivu-table-cell.user-avatar-public ~ p {
   /*width: 60%;*/
   display: inline-block;
 }
 
-/*新加的样式*/
-// .list-content
-//   .ivu-table-body
-//   .ivu-table-tbody
-//   .ivu-table-cell.ivu-table-cell-ellipsis
-//   p
-//   a {
-//   color: #f0a70a;
+/* additions */
+//.list-content
+//.ivu-table-body
+//.ivu-table-tbody
+//.ivu-table-cell.ivu-table-cell-ellipsis
+// p
+// a {
+// color: #ff6b00;
 // }
-// .list-content {
-//   .ivu-tabs-bar {
-//     .ivu-tabs-nav-container {
-//       .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
-//         background: #f0a70a;
-//       }
-//       .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
-//         color: #f0a70a;
-//       }
-//       .ivu-tabs-tab {
-//         &:hover {
-//           color: #f0a70a;
-//         }
-//       }
-//     }
-//   }
+//.list-content {
+//.ivu-tabs-bar {
+//.ivu-tabs-nav-container {
+//.ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
+// background: #ff6b00;
+// }
+//.ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
+// color: #ff6b00;
+// }
+//.ivu-tabs-tab {
+// &:hover {
+// color: #ff6b00;
+// }
+// }
+// }
+// }
 // }
 </style>
 
@@ -753,7 +753,7 @@ export default {
       tableSize: "large",
       tabPage: "buy",
       advertiment: {
-        //卖出的广告数据
+        // Sell
         ask: {
           rows: [],
           currentPage: 1,
@@ -761,7 +761,7 @@ export default {
           pageNumber: 10,
           totalElement: 0
         },
-        //买入的广告数据
+        // Buy
         bid: {
           rows: [],
           currentPage: 1,
@@ -779,7 +779,7 @@ export default {
               var avatar = params.row.avatar,
                 haveAvatar = false;
               var innerCNT = [];
-              if (avatar != null && avatar != "") {
+              if (avatar!= null && avatar!= "") {
                 innerCNT[0] = h(
                   "div",
                   {
@@ -799,7 +799,7 @@ export default {
                       }
                     })
                   ]
-                );
+);
               } else {
                 innerCNT[0] = h(
                   "div",
@@ -817,11 +817,11 @@ export default {
                         }
                       },
                       params.row.memberName
-                        .replace(/^\s+|\s+$/g, "")
-                        .slice(0, 1)
-                    )
+.replace(/^\s+|\s+$/g, "")
+.slice(0, 1)
+)
                   ]
-                );
+);
               }
               innerCNT[1] = h("p", [
                 h(
@@ -840,7 +840,7 @@ export default {
                         if (self.isLogin) {
                           self.$router.push(
                             "/checkuser?id=" + params.row.memberName
-                          );
+);
                         } else {
                           self.$router.push("/login");
                         }
@@ -849,7 +849,7 @@ export default {
                   },
                   params.row.memberName
                   // self.strpro(params.row.memberName)
-                ),
+),
                 h(
                   "div",
                   {
@@ -858,7 +858,7 @@ export default {
                     }
                   },
                   ""
-                )
+)
               ]);
               if (params.row.level == 2)
                 innerCNT[2] = h(
@@ -879,7 +879,7 @@ export default {
                       }
                     })
                   ]
-                );
+);
               return h("div", innerCNT);
             }
           },
@@ -901,45 +901,45 @@ export default {
             key: "remainAmount"
           },
           {
-            title:"限额",
+            title:"Limit",
             align:'center',
             render:(h, params)=>{
               return h('div',{},params.row.minLimit + "-" + params.row.maxLimit + "CNY")
             }
           },
           {
-            title:"单价",
+            title:"Price",
             align:'center',
             render:(h, params)=>{
               return h('div',{},params.row.price + "CNY")
             }
           },
           // {
-          //   title: self.$t("otc.price_coin"),
-          //   key: "price",
-          //   width: 170,
-          //   render: function(h, params) {
-          //     return h("div", [
-          //       h(
-          //         "p",
-          //         {
-          //           attrs: {
-          //             class: "price"
-          //           }
-          //         },
-          //         params.row.price + "CNY"
-          //       ),
-          //       h(
-          //         "p",
-          //         {
-          //           attrs: {
-          //             class: "price2"
-          //           }
-          //         },
-          //         params.row.minLimit + "-" + params.row.maxLimit + "CNY"
-          //       )
-          //     ]);
-          //   }
+          // title: self.$t("otc.price_coin"),
+          // key: "price",
+          // width: 170,
+          // render: function(h, params) {
+          // return h("div", [
+          // h(
+          // "p",
+          // {
+          // attrs: {
+          // class: "price"
+          // }
+          // },
+          // params.row.price + "CNY"
+          //),
+          // h(
+          // "p",
+          // {
+          // attrs: {
+          // class: "price2"
+          // }
+          // },
+          // params.row.minLimit + "-" + params.row.maxLimit + "CNY"
+          //)
+          // ]);
+          // }
           // },
           {
             title: self.$t("otc.operate"),
@@ -952,14 +952,14 @@ export default {
                   "a",
                   {
                     style: {
-                      color: params.row.advertiseType == 0 ? "#f15057" : "#00b275",
+                      color: params.row.advertiseType == 0? "#f15057": "#00b275",
                     },
                     on: {
                       click: () => {
                         if (!self.isLogin) {
                           self.$router.push("/login");
                         } else if (!self.member.realName) {
-                          //                                            } else if (!self.member.memberLevel) {
+                          // } else if (!self.member.memberLevel) {
                           self.$Message.error(self.$t("otc.validate"));
                           setTimeout(() => {
                             self.$router.push("/uc/safe");
@@ -967,31 +967,31 @@ export default {
                         } else {
                           self.$router.push(
                             "/otc/tradeInfo?tradeId=" + params.row.advertiseId
-                          );
+);
                         }
                       }
                     }
                   },
                   // [
-                  //   h(
-                  //     "div",
-                  //     {
-                  //       // props: {
-                  //       //   type:"error",
-                  //       //     // params.row.advertiseType == 0 ? "error" : "success",
-                  //       //   long: true
-                  //       // },
-                  //       style: {
-                  //         marginRight: "8px",
-                  //         width: "80%",
-                  //       }
-                  //     },
+                  // h(
+                  // "div",
+                  // {
+                  // // props: {
+                  // // type:"error",
+                  // // // params.row.advertiseType == 0? "error": "success",
+                  // // long: true
+                  // // },
+                  // style: {
+                  // marginRight: "8px",
+                  // width: "80%",
+                  // }
+                  // },
                       params.row.advertiseType == 0
-                        ? self.$t("otc.sell")
-                        : self.$t("otc.buy")
-                    // )
+? self.$t("otc.sell")
+: self.$t("otc.buy")
+                    //)
                   // ]
-                )
+)
               ]);
             }
           }
@@ -1031,7 +1031,7 @@ export default {
       this.advertiment.columns[2].title = this.$t("otc.operate");
     },
     loadAd(pageNo, advertiseType, table) {
-      //获取广告
+      //fetch ads
       let params = {};
       table.rows = [];
       table.totalElement = 0;
@@ -1041,8 +1041,8 @@ export default {
       params["advertiseType"] = advertiseType;
       params["unit"] = this.coin;
       this.$http
-        .post(this.host + this.api.otc.advertise, params)
-        .then(response => {
+.post(this.host + this.api.otc.advertise, params)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             if (resp.data.context) {

@@ -1,0 +1,732 @@
+INTAFACED — THIRD-PARTY ATTRIBUTION AND LICENCE RECORD
+======================================================
+
+This file records every third-party component this repository redistributes,
+builds against, or loads at runtime, together with the licence each component
+actually declares and the evidence that declaration was read from.
+
+Compiled: 2026-07-29, against commit 4311cff.
+
+WHAT THIS FILE IS
+-----------------
+
+An engineering record. It is not legal advice, it is not a legal opinion, and
+it does not clear anything for launch. It states what is in the tree and what
+each artefact says about itself. Decisions and the work required before launch
+are in `docs/LICENCE-POSITION.md`.
+
+Two rules were applied without exception while compiling it:
+
+  1. A licence is recorded only where it was read from the artefact itself, or
+     from the published POM of the exact version the build resolves. Nothing
+     was inferred from a project's reputation, popularity or usual terms.
+
+  2. Where provenance could not be established, the entry says UNDETERMINED and
+     states exactly what was checked. An invented attribution is a false legal
+     statement and is worse than an admission of ignorance.
+
+`vendor/coinexchange/NOTICE` and `vendor/coinexchange/LICENSE` are the upstream
+provenance record and are unmodified. This file adds to them; it does not
+replace or correct them.
+
+SCOPE OF "REDISTRIBUTE"
+-----------------------
+
+Three different things are called "a dependency" below, and they carry
+different obligations:
+
+  REDISTRIBUTED IN THIS REPOSITORY — the bytes are committed here. Anyone who
+  receives a clone receives them. §1 to §5.
+
+  LOADED AT RUNTIME FROM A THIRD PARTY — the bytes are fetched from someone
+  else's server when a page runs. Not redistributed, but executed in our users'
+  browsers under our domain. §6.
+
+  RESOLVED AT BUILD TIME — the bytes are pulled from a package registry during
+  a build and end up inside a built image or bundle. Not committed here, but
+  redistributed by any image we ship. §7 and §8.
+
+
+================================================================================
+§1 · UPSTREAM EXCHANGE PLATFORM (redistributed)
+================================================================================
+
+Component:   CoinExchange_CryptoExchange_Java
+Path:        vendor/coinexchange/
+Source:      https://github.com/jammy928/CoinExchange_CryptoExchange_Java
+Licence:     Apache License 2.0
+Evidence:    vendor/coinexchange/LICENSE — full Apache-2.0 text, 201 lines.
+             Retrieval recorded in vendor/coinexchange/NOTICE as 2026-07-28.
+Scale:       1,822 tracked files. 878 `.java`, 149 `.vue`, 204 `.png`.
+Identifiers: Maven groupId `com.bizzan.bitrade`; wallet modules
+             `com.bizzan.bc.wallet`; database and module naming `bitrade`.
+
+IMPORTANT — THE APACHE-2.0 GRANT COVERS ONLY WHAT THE GRANTOR OWNED.
+
+An Apache-2.0 LICENSE file at the root of a repository is a grant by that
+repository's copyright holder over that holder's own work. It does not, and
+cannot, relicense third-party material the holder bundled in. Sections 2 to 5
+below list material inside `vendor/coinexchange/` that the upstream author did
+not write and had no evident right to sublicense to us. Each is assessed on its
+own terms, not on the root LICENSE file.
+
+Direct evidence that this tree has been re-badged at least once, which is why
+the above matters in practice rather than in theory:
+
+  vendor/coinexchange/01_wallet_rpc/act/bin/ contains 8 committed `.class`
+  files under the package root `com/ztuo/bc/wallet/`, while the `.java` sources
+  beside them are `com/bizzan/bc/wallet/`. The compiled output is from a build
+  of the same code under a different vendor identity. Whatever chain of custody
+  carried this module here, it passed through at least one party other than the
+  named upstream, and no licence record accompanied that step.
+
+
+================================================================================
+§2 · BINARY JARS REDISTRIBUTED IN THE VENDOR TREE
+================================================================================
+
+31 `.jar` files are committed. They are 8 distinct artefacts, duplicated across
+module `lib/` directories. Every one is wired into a POM as
+`<scope>system</scope>` with a `<systemPath>`, so the build uses the committed
+bytes and never resolves a coordinate from a repository.
+
+Each jar was opened. Every one carries an embedded Maven POM. NONE of the
+first six carries a `<licenses>` block, a LICENSE entry, a NOTICE entry, or an
+SCM URL.
+
+Maven Central was queried for all four groupIds:
+  https://search.maven.org/solrsearch/select?q=g:com.aqmd+OR+g:com.sparkframework+OR+g:com.spark.bc+OR+g:com.cdeer
+  → numFound: 0. None of these groupIds exists on Maven Central.
+
+--------------------------------------------------------------------------------
+2.1 · apns-http2-core 1.3 — LICENCE UNDETERMINED
+     Coordinates  com.cdeer:apns-http2-core:1.3
+     Parent       com.cdeer:apns-http2-java:1.0
+     Files        00_framework/jar/, 00_framework/chat/lib/
+     SHA-256      d0e5f71b5dece7522a1dc32188af6b971d33d3a50d850a42f404900997d56954
+     Built        2018-04-19, Apache Maven 3.5.0, JDK 1.8.0_65
+     Checked      META-INF/MANIFEST.MF (5 lines, no vendor, no URL);
+                  embedded pom.xml (no <licenses>, no <url>, no <scm>);
+                  pom.properties; full archive listing — no LICENSE or NOTICE.
+                  Maven Central: groupId does not exist.
+     Function     Apple Push Notification service client, HTTP/2.
+
+--------------------------------------------------------------------------------
+2.2 · aqmd-netty 2.0.1 — LICENCE UNDETERMINED
+2.3 · aqmd-netty-api 2.0.1 — LICENCE UNDETERMINED
+2.4 · aqmd-netty-core 2.0.1 — LICENCE UNDETERMINED
+     Coordinates  com.aqmd:aqmd-netty{,-api,-core}:2.0.1
+     Parent       com.aqmd:netty-parent:2.0.1
+     Files        00_framework/jar/, 00_framework/chat/lib/,
+                  00_framework/market/lib/
+     SHA-256      c5973fa38c782f0cf96a17049417ce9023ec6ea329dcefd4f78c73b341b89734
+                  e6d52c5c51f37af774c81212226a3527d924f907cf844d30a0d3af895d14f50f
+                  b290699aa8886f4bb681b28d2a1e530f0abeae5ca9f218497381c4a822a84cf4
+     Built        2018-08-27, Apache Maven 3.5.2, JDK 1.8.0_162
+     Evidence of  MANIFEST.MF declares `Implementation-Vendor: www.aqmd.com`
+     ownership    and `Implementation-Vendor-Id: com.aqmd`. The embedded POMs
+                  describe the artefacts as components of a named commercial
+                  product line. That is a positive indication of a corporate
+                  owner, and no indication whatsoever of a licence grant.
+     Checked      MANIFEST.MF, embedded pom.xml, pom.properties, INDEX.LIST,
+                  spring.factories, full archive listing — no LICENSE, no
+                  NOTICE, no <licenses>, no <scm>.
+                  Maven Central: groupId does not exist.
+     Function     Netty-based TCP/WebSocket server used by the market and chat
+                  services.
+
+     ASSESSMENT: these are the least defensible artefacts in the tree. Unlike
+     the others, they carry an affirmative vendor claim. Absent a licence, the
+     default is exclusive rights reserved to that vendor.
+
+--------------------------------------------------------------------------------
+2.5 · spark-core 2.6.0 — LICENCE UNDETERMINED
+     Coordinates  com.sparkframework:spark-core:2.6.0
+     Files        00_framework/jar/, 00_framework/core/lib/,
+                  00_framework/exchange-api/lib/
+     SHA-256      2938b40c106613085f1938150376ec1c2c18298d8d2e6dfec7112478cf55b960
+     Built        2017-09-12, Apache Maven 3.3.3, JDK 1.8.0_65
+     Checked      MANIFEST.MF; embedded pom.xml — `<name>spark-core2</name>`,
+                  `<url>http://maven.apache.org</url>` (the unedited Maven
+                  archetype default, which carries no information), and a
+                  distribution repository on a private Nexus host. No
+                  <licenses>, no <scm>. Full archive listing — no LICENSE.
+                  Maven Central: groupId does not exist. `a:spark-core` on
+                  Central returns 8 artefacts, all under unrelated groupIds
+                  (com.sparkjava, org.zoomba-lang, com.intellisrc and others).
+
+     THIS IS NOT APACHE SPARK AND NOT THE SPARK JAVA WEB FRAMEWORK. Both would
+     be permissively licensed. This artefact shares only a name with them. It
+     is a private framework distributed through a private repository.
+
+--------------------------------------------------------------------------------
+2.6 · bitcoin-rpc 1.2.0 — LICENCE UNDETERMINED
+     Coordinates  com.spark.bc:bitcoin-rpc:1.2.0
+     Files        01_wallet_rpc/lib/ and 11 further module lib/ directories
+                  (act, bch, bitcoin, bsv, btm, ect, eos, erc-eusdt, erc-token,
+                  eth, eth-support, rpc-common, usdt) — 14 copies in total.
+     SHA-256      19de7854c34e282f4100d75e5af62fb5821e4b3e94aa6068572e61034c030f0f
+     Built        2018-07-20, Apache Maven 3.5.0, JDK 1.8.0_65
+     Checked      MANIFEST.MF; embedded pom.xml — `<name>hot-wallet</name>` and
+                  a distribution repository on a private Nexus host. No
+                  <licenses>, no <scm>. Full archive listing — no LICENSE.
+                  Maven Central: groupId does not exist; artefact name
+                  `bitcoin-rpc` does not exist on Central at all.
+
+     THIS IS THE MOST SERIOUS ENTRY IN §2, FOR A REASON THAT IS NOT ABOUT
+     LICENSING. An unverifiable binary named "hot-wallet", of unknown
+     authorship, sits on the classpath of every wallet RPC service in the tree
+     — the services that hold private key material for BTC, ETH, USDT, LTC,
+     EOS and others. It cannot be checked against any published checksum
+     because no published artefact exists to check it against.
+
+--------------------------------------------------------------------------------
+2.7 · bitcoinj-core 0.13-alice-SNAPSHOT — Apache-2.0 declared
+     Coordinates  org.bitcoinj:bitcoinj-core:0.13-alice-SNAPSHOT
+     Files        01_wallet_rpc/ltc/lib/, 01_wallet_rpc/xmr/lib/
+     SHA-256      82a12432cd239ab58576b2458957f59624b9dcb4572af29ec88eee4d89bf1294
+     Licence      Apache License 2.0
+     Evidence     Embedded pom.xml declares
+                    <name>bitcoinj</name>
+                    <url>https://bitcoinj.github.io</url>
+                    <licenses><license>
+                      <name>The Apache Software License, Version 2.0</name>
+                      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+     Copyright    "The bitcoinj team" (declared in the embedded POM's
+                  <developers> block).
+     Caveat       This is NOT a published artefact. It is a local build of a
+                  fork: pom.properties records
+                  `m2e.projectLocation=E:\ltctest\bitcoinj-alice-master\core`
+                  and `Built-By: shaox`, dated 2019-09-15. Maven Central has no
+                  `0.13-alice-SNAPSHOT`; the highest published org.bitcoinj
+                  version is 0.17. The Apache-2.0 grant applies to the upstream
+                  code; whether the fork's modifications carry the same terms,
+                  and what those modifications are, is UNDETERMINED. The jar
+                  also contains two `pom.xml` entries at the same path with
+                  different timestamps (2015-01-22 and 2019-09-15).
+
+--------------------------------------------------------------------------------
+2.8 · litecoinj-core 0.15.20190219 — Apache-2.0 declared
+     Coordinates  org.litecoinj:litecoinj-core:0.15.20190219
+     Files        01_wallet_rpc/ltc/lib/, 01_wallet_rpc/xmr/lib/
+     SHA-256      0a150406c8ed3ca43ab867d90791a35256e2a7b3c4c0f3fecb6253f07c454b6e
+     Licence      Apache License 2.0
+     Evidence     Embedded pom.xml declares
+                    <name>litecoinj</name>
+                    <url>https://litecoinj.github.io</url>
+                    <licenses><license>
+                      <name>The Apache Software License, Version 2.0</name>
+     Copyright    "The litecoinj team" (declared in the embedded POM).
+     Caveat       Also a local build, not a published artefact:
+                  `m2e.projectLocation=E:\ltctest\litecoinj-master\core`,
+                  `Built-By: shaox`, 2019-09-16. Maven Central has no
+                  `org.litecoinj` groupId. Note also that the consuming POMs
+                  (01_wallet_rpc/ltc, 01_wallet_rpc/xmr) declare the dependency
+                  as `org.litecoin:litecoin-core`, which is a third coordinate
+                  that does not exist on Central either; the systemPath makes
+                  the mismatch harmless to the build and useless for provenance.
+
+--------------------------------------------------------------------------------
+SUMMARY OF §2 — 2 of 8 distinct jars declare a licence (2.7, 2.8, both
+Apache-2.0, both unpublished local builds of forks). 6 of 8 declare nothing and
+have no published counterpart: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6.
+
+
+================================================================================
+§3 · BROWSER ASSETS REDISTRIBUTED IN THE TRADING FRONT END
+================================================================================
+Path: vendor/coinexchange/05_Web_Front/
+
+The front end itself carries `vendor/coinexchange/05_Web_Front/LICENSE`: MIT,
+"Copyright (c) 2018", holder recorded as a pseudonymous account name. The
+`package.json` names a different author under a personal contact address, which
+is not reproduced here (Doctrine §0.7). The relationship between the LICENSE
+holder and the package author is UNDETERMINED; the file is most consistent with
+an MIT-licensed Vue starter template whose LICENSE was carried forward. The
+MIT text remains verbatim in the vendored file, which is what MIT requires.
+
+--------------------------------------------------------------------------------
+3.1 · TradingView Charting Library 1.11 — PROPRIETARY. NOT LICENSED TO US.
+     Path         05_Web_Front/src/assets/js/charting_library/
+     Scale        85 files, 5.4 MB, all git-tracked.
+     Version      "1.11 (internal id fe319232 @ 2017-11-14 03:44:26.632703)"
+                  — read from the `version()` function in
+                  charting_library.min.js.
+     Publisher    TradingView. Established from the artefact, not assumed:
+                    · charting_library.min.js guards on `window.TradingView`
+                      and constructs element ids prefixed `tradingview_`;
+                    · datafeed/udf/datafeed.js cites
+                      https://github.com/tradingview/charting_library/wiki/UDF;
+                    · static/bundles/library.52f448f933885e5e0fed.js contains
+                      tradingview.com endpoints including /snapshot/ and /x/.
+     Licence      NO LICENCE FILE, NO NOTICE, NO EULA AND NO COPYRIGHT HEADER
+                  EXISTS ANYWHERE IN THIS DIRECTORY. Searched for filenames
+                  matching *licen*, *notice*, *eula*, *agreement* across all 85
+                  files: zero results.
+
+     THIS IS THE PRIMARY LEGAL BLOCKER IN THE REPOSITORY.
+
+     The Charting Library is licensed software. It is obtained by applying to
+     TradingView and accepting their agreement; the grant runs to the named
+     licensee. It is not open source and it is not sublicensable. The
+     Apache-2.0 grant on the upstream exchange (§1) cannot convey it, because
+     the upstream author did not own it.
+
+     We have no agreement with TradingView on record, and no application has
+     been made. We are therefore redistributing 5.4 MB of a third party's
+     proprietary product in a git repository. Removing it from the working tree
+     does not remove it from history.
+
+     Sub-components bundled inside the Charting Library directory, listed
+     separately because they are separately licensed:
+
+     3.1.1 · normalize.css 3.0.3 — MIT
+             static/bundles/library.2e4e86e4539a260f4a7b69dd55f2595b.css
+             Banner, verbatim:
+               /*! normalize.css v3.0.3 | MIT License | github.com/necolas/normalize.css */
+             Source: https://github.com/necolas/normalize.css
+
+     3.1.2 · spin.js 2.0.1 — LICENCE NOT STATED IN THE ARTEFACT
+             static/js/external/spin.min.js
+             The only provenance in the file is the comment
+               //fgnass.github.com/spin.js#v2.0.1
+             which identifies the project and version. No copyright line and no
+             licence statement is present in the minified file. The licence
+             must be read from the project at that version before it is
+             recorded here.
+
+     3.1.3 · Font Awesome web font — VERSION AND LICENCE UNDETERMINED
+             static/fonts/fontawesome-webfont.{svg,ttf,woff}
+             The SVG font's <metadata> element is EMPTY. No copyright, no
+             version, no licence, no foundry. The only identifying data is the
+             font descriptor:
+               <font id="fontawesomeregular" horiz-adv-x="1536">
+               <font-face units-per-em="1792" ascent="1536" descent="-256"/>
+             Font Awesome's released fonts are dual-licensed, with different
+             terms for the font files and the CSS, and the terms have differed
+             across major versions. Because the artefact states no version, the
+             applicable terms cannot be determined from it. Establishing them
+             requires matching these files against a published release.
+
+--------------------------------------------------------------------------------
+3.2 · Geetest client SDK 0.4.6 — LICENCE UNDETERMINED
+     Path         05_Web_Front/src/assets/js/gt.js
+     Evidence     First line of the file, verbatim:
+                    // "v0.4.6 Geetest Inc.";
+                  The file configures `api_server: 'api.geetest.com'`.
+     Used by      src/pages/uc/Login.vue, Register.vue, MobileRegister.vue,
+                  FindPwd.vue.
+     Assessment   An attributed copyright line ("Geetest Inc.") and no licence
+                  grant. This is a commercial captcha vendor's client SDK. Use
+                  of the SDK is ordinarily governed by a service agreement with
+                  that vendor; we have none. See also §5.1, where the matching
+                  server-side SDK appears with its attribution removed.
+
+--------------------------------------------------------------------------------
+3.3 · jQuery 1.11.2 — MIT
+     Path         05_Web_Front/src/assets/js/jquery.min.js
+     Banner       /*! jQuery v1.11.2 | (c) 2005, 2014 jQuery Foundation, Inc. |
+                  jquery.org/license */
+     Copyright    jQuery Foundation, Inc.   Source: https://jquery.org/license
+
+3.4 · jQuery 2.0.3 — MIT
+     Path         05_Web_Front/src/assets/js/jquery-2.0.3.min.js
+     Banner       /*! jQuery v2.0.3 | (c) 2005, 2013 jQuery Foundation, Inc. |
+                  jquery.org/license */
+     Copyright    jQuery Foundation, Inc.
+
+3.5 · fullPage.js 2.5.4 — MIT
+     Path         05_Web_Front/src/assets/js/jquery.fullPage.min.js
+     Banner       "fullPage 2.5.4 / https://github.com/alvarotrigo/fullPage.js /
+                  MIT licensed / Copyright (C) 2013 alvarotrigo.com - A project
+                  by Alvaro Trigo"
+     Copyright    Alvaro Trigo
+     Source       https://github.com/alvarotrigo/fullPage.js
+
+3.6 · Peity 3.3.0 — MIT
+     Path         05_Web_Front/src/assets/js/jquery.peity.min.js
+     Banner       "Peity jQuery plugin version 3.3.0 / (c) 2018 Ben Pickles /
+                  http://benpickles.github.io/peity / Released under MIT license."
+     Copyright    Ben Pickles
+     Source       http://benpickles.github.io/peity
+
+3.7 · jquery.qrcode / QRCode for JavaScript — LICENCE NOT STATED IN THE ARTEFACT
+     Path         05_Web_Front/src/assets/js/jquery.qrcode.min.js
+     Header       Names the author as "davidshimjs" and cites
+                  http://www.d-project.com/ and
+                  http://jeromeetienne.github.com/jquery-qrcode/
+     Assessment   Two upstreams are cited and no licence is stated for either.
+                  The header describes the file as a fixed dataset derived from
+                  a third library. Terms UNDETERMINED from the artefact.
+
+3.8 · jquery.base64Upload — PROVENANCE AND LICENCE UNDETERMINED
+     Path         05_Web_Front/src/assets/js/jquery.base64Upload.js
+     Assessment   No banner, no author, no version, no licence, no URL. A bare
+                  jQuery plugin. Nothing in the file identifies where it came
+                  from.
+
+--------------------------------------------------------------------------------
+3.9 · iconfont icon font — PROVENANCE AND LICENCE UNDETERMINED
+     Path         05_Web_Front/src/assets/icons/iconfont.{eot,svg,ttf,woff,woff2}
+     Evidence     SVG <metadata> contains only "Created by iconfont".
+                  Comment: "2013-9-30: Created."
+     Assessment   This is a font assembled by an online icon-assembly tool from
+                  a catalogue of separately-uploaded glyphs. The tool records
+                  no per-glyph author and no per-glyph licence, so the font
+                  carries none. Glyphs are individually named, and at least one
+                  is a named third-party messaging brand's mark — a trademark
+                  question independent of copyright. Per-glyph provenance is
+                  not recoverable from the artefact.
+
+3.10 · Ionicons — LICENCE NOT STATED IN THE ARTEFACT
+      Path        05_Web_Front/src/assets/css/fonts/ionicons.ttf
+                  (TTF only; no SVG/metadata copy in this directory)
+      Assessment  Identified by filename and by the matching SVG in the admin
+                  front end (§4.2). No licence statement accompanies the file.
+
+3.11 · mui.ttf — PROVENANCE AND LICENCE UNDETERMINED
+      Path        05_Web_Front/src/assets/fonts/mui.ttf
+      Assessment  A TTF with no accompanying SVG, no CSS reference found in the
+                  tree, and no metadata sidecar. Nothing identifies the
+                  foundry, the project or the terms.
+
+--------------------------------------------------------------------------------
+3.12 · Third-party brand marks in raster assets
+      Path        05_Web_Front/src/assets/images/ (part of 204 committed PNG/JPG)
+      Examples    A named payment provider's logo; messaging-app QR codes and
+                  logos; the upstream operator's own wordmark and app icons.
+      Assessment  Trademarks, not copyright licences, and they are not covered
+                  by any licence in this file. They are third parties' marks
+                  and the upstream operator's marks, redistributed by us. None
+                  should reach a shipped surface.
+
+3.13 · Upstream operator screenshots
+      Path        vendor/coinexchange/09_DOC/ — product screenshots of the
+                  upstream operator's live site, carrying their branding.
+      Assessment  Documentation-only. Redistributed under §1's Apache-2.0
+                  grant insofar as the author owned them; the marks within them
+                  are not licensed to us.
+
+
+================================================================================
+§4 · BROWSER ASSETS REDISTRIBUTED IN THE ADMIN FRONT END
+================================================================================
+Path: vendor/coinexchange/04_Web_Admin/
+
+4.1 · iview-admin — MIT
+      Evidence    package.json declares
+                    "license": "MIT"
+                    "repository": { "type": "git",
+                      "url": "https://github.com/iview/iview-admin.git" }
+                    "description": "a management bases on iview"
+      Licence file vendor/coinexchange/04_Web_Admin/LICENSE — MIT text,
+                  "Copyright (c) 2018", holder recorded as a personal name in
+                  CJK script. The name is NOT transliterated or reproduced
+                  here: this repository is English-only, and transliterating a
+                  copyright holder's name is a rewriting of an attribution, not
+                  a reproduction of it. The MIT notice remains verbatim and
+                  unmodified at that path, which is what MIT requires of a
+                  distribution.
+      Caveat      The declared upstream (iview-admin) is MIT and carries its
+                  own copyright holder. The LICENSE file present here names a
+                  different holder. Whether this tree is a fork whose LICENSE
+                  was rewritten, or a distinct work, is UNDETERMINED. Both
+                  attributions may be owed.
+
+4.2 · Ionicons — LICENCE NOT STATED IN THE ARTEFACT
+      Path        04_Web_Admin/src/styles/fonts/ionicons.{eot,svg,ttf,woff}
+      Evidence    SVG <metadata>, verbatim:
+                    Created by FontForge 20120731 at Thu Dec  4 09:51:48 2014
+                     By Adam Bradley
+                    Created by Adam Bradley with FontForge 2.0
+                  <font id="Ionicons" ...>
+      Copyright   Adam Bradley, per the font's own metadata.
+      Assessment  Author and project are established from the artefact. The
+                  licence is not stated in it and must be read from the
+                  project's published release before it is recorded here.
+
+
+================================================================================
+§5 · THIRD-PARTY CODE RE-PACKAGED UNDER THE UPSTREAM'S OWN NAMESPACE
+================================================================================
+
+This section exists because §1's warning is not hypothetical. The following is
+another party's code, moved into the upstream project's package root with its
+original header removed. It is the hardest category to find and the easiest to
+ship by accident, because it looks like first-party source.
+
+5.1 · Geetest server-side Java SDK — ATTRIBUTION STRIPPED, LICENCE UNDETERMINED
+      Path      00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/
+                system/GeetestLib.java
+      Evidence  The class body is a captcha vendor's SDK:
+                  protected final String verName = "4.0";
+                  protected final String sdkLang = "java";
+                  protected final String apiUrl = "http://api.geetest.com";
+                  protected final String registerUrl = "/register.php";
+                  protected final String validateUrl = "/validate.php";
+                The class Javadoc reads, in full: "Java SDK".
+      Missing   No copyright line. No licence. No vendor name in the header. No
+                source URL. The package declaration places it in the upstream
+                project's own namespace, as though it were first-party code.
+      Related   GeeTestException.java, GeeTestAspect.java, GeetestConfig.java,
+                GeetestController.java — the surrounding integration.
+      Assessment A vendor SDK re-namespaced with its header removed is outside
+                any grant the upstream could make. Terms UNDETERMINED, and the
+                attribution that was removed is itself an unmet obligation
+                under most licences this could have carried.
+
+
+================================================================================
+§6 · THIRD-PARTY CODE AND ASSETS LOADED AT RUNTIME
+================================================================================
+
+Not redistributed by us — fetched from a third party's server when the page
+runs. Recorded because it executes in a user's browser under our origin, and
+because two of the three sources are outside anyone's control but the upstream
+operator's.
+
+6.1 · Tencent captcha — https://ssl.captcha.qq.com/TCaptcha.js
+      Declared in 05_Web_Front/index.html as an unconditional <script src>.
+      Third-party executable JavaScript with full DOM access on every page
+      load. No agreement with the provider is on record.
+
+6.2 · Geetest verification service — api.geetest.com
+      Contacted by both gt.js (§3.2) and GeetestLib.java (§5.1). A commercial
+      service; use ordinarily requires an account and an agreement.
+
+6.3 · The upstream operator's object-storage bucket
+      An Alibaba Cloud OSS bucket belonging to the upstream operator, hard-coded
+      across 05_Web_Front. It serves:
+        · marketing images, the operator's logo, and their white-paper PDF;
+        · AND, from library.52f448f933885e5e0fed.js and tv-chart.*.html:
+            .../assets/charting_library/static/bundles/library.<hash>.js
+            .../assets/charting_library/static/bundles/vendors.<hash>.js
+            .../assets/charting_library/static/js/external/spin.min.js
+
+      Read that twice. The vendored front end fetches the TradingView bundles
+      (§3.1) from a third party's bucket at runtime, in addition to the copy on
+      disk. That is a licence exposure and, independently, arbitrary remote
+      code execution in our users' browsers from a bucket controlled by an
+      operator the upstream README describes as having ceased trading.
+
+
+================================================================================
+§7 · JAVA DEPENDENCIES RESOLVED AT BUILD TIME
+================================================================================
+
+91 distinct `groupId:artifactId` coordinates are declared across 31 `pom.xml`
+files in `vendor/coinexchange/`. They are not committed here; they are pulled
+from Maven Central during a build and land inside any image built from this
+tree.
+
+Licences below were read from the published POM of the exact version the build
+resolves, fetched from repo1.maven.org. Where a POM inherits its licence, the
+parent POM was fetched and is named.
+
+  ── COPYLEFT — SEE docs/LICENCE-POSITION.md ──────────────────────────────────
+
+  mysql:mysql-connector-java:8.0.11
+    "The GNU General Public License, v2 with FOSS exception"
+    Read from mysql-connector-java-8.0.11.pom on Maven Central.
+    Declared in 00_framework/pom.xml as ${mysql.version} = 8.0.11.
+    GPLv2. The FOSS Exception permits linking from software under an
+    enumerated list of free licences. A proprietary financial product is not
+    on that list. Oracle sells a commercial licence for exactly this case.
+
+  net.sourceforge.jexcelapi:jxl:2.6.10
+    "GNU Lesser General Public License"
+    Read from jxl-2.6.10.pom on Maven Central.
+    LGPL. Weak copyleft: dynamic linking without modification is the ordinary
+    compliant pattern, but it imposes obligations (relinking, source
+    availability for the library) that a proprietary product must actually
+    meet rather than assume.
+
+  ch.qos.logback:logback-{classic,core,access}:1.1.11
+    "Eclipse Public License - v 1.0" OR "GNU Lesser General Public License"
+    Read from logback-parent-1.1.11.pom on Maven Central (the artefact POMs
+    inherit). Dual-licensed at the recipient's election. Electing EPL-1.0 is
+    the ordinary choice for proprietary use. The election should be recorded.
+
+  ── PERMISSIVE, VERIFIED AGAINST THE PUBLISHED POM ───────────────────────────
+
+  Apache-2.0
+    org.springframework.boot:* 1.5.9.RELEASE  (via spring-boot-dependencies)
+    org.springframework.cloud:*, org.springframework.data:*,
+      org.springframework.kafka:*, org.springframework.session:*
+    org.apache.kafka:kafka-clients:0.10.0.0
+    org.apache.shiro:shiro-{core,spring,quartz,ehcache}  (via org.apache:apache)
+    org.mongodb:mongo-java-driver
+    com.alibaba:dubbo:2.6.2                   (via dubbo-parent)
+    com.alibaba:druid:1.1.9                   ("Apache 2")
+    com.alibaba:fastjson:1.2.31               ("Apache 2")
+    cn.afterturn:easypoi-*:3.0.3              (via cn.afterturn:easypoi)
+    org.pac4j:pac4j-cas:2.1.0                 (via org.pac4j:pac4j)
+    io.buji:buji-pac4j:3.0.0
+    org.web3j:core:3.3.1
+    io.bytom:bytom-sdk-java:1.0.2
+    cash.bitcoinj:bitcoinj-core:0.14.5.2
+    com.lambdaworks:scrypt:1.4.0
+    com.querydsl:querydsl-{jpa,apt}:4.1.3     (via querydsl-root)
+    com.google.guava:guava:16.0.1             (via guava-parent)
+    com.squareup.okhttp3:okhttp                (via com.squareup.okhttp3:parent)
+    io.reactivex:rxjava:1.3.4
+    io.jsonwebtoken:jjwt:0.9.0
+    log4j:log4j:1.2.16
+    commons-httpclient:commons-httpclient:3.1 ("Apache License")
+    org.elasticsearch.client:transport:5.3.3
+    org.elasticsearch:elasticsearch
+
+    On Elasticsearch: version 5.3.3 predates the 2021 relicensing to
+    SSPL/Elastic Licence. The published 5.3.3 POM declares Apache-2.0 and that
+    is what applies to this artefact. Any upgrade past 7.10 changes the answer.
+
+  BSD-3-Clause
+    com.google.protobuf:protobuf-java:{2.5.0,3.6.0}
+    Read from protobuf-parent-3.6.0.pom: "3-Clause BSD License". Recorded
+    explicitly because protobuf is widely and wrongly assumed to be Apache-2.0.
+
+  MIT
+    org.projectlombok:lombok:1.16.16
+    com.mashape.unirest:unirest-java:1.4.9
+    com.github.briandilley.jsonrpc4j:jsonrpc4j:1.4.6
+    org.slf4j:slf4j-{api,log4j12}:1.7.7       (via slf4j-parent)
+
+  Bouncy Castle Licence (an MIT-form permissive licence)
+    org.bouncycastle:bcprov-ext-jdk15on:1.59
+    com.madgag.spongycastle:core:1.51.0.0
+
+  ── DECLARED BUT NOT VERIFIED IN THIS PASS ───────────────────────────────────
+
+  com.aliyun.oss:aliyun-sdk-oss:2.8.1
+    The published POM contains NO <licenses> block and NO <parent>. There is
+    nothing to inherit from and nothing to read. UNDETERMINED from the POM;
+    the terms would have to come from the SDK distribution itself.
+
+  The remaining coordinates in the 91 are Apache Commons artefacts, JUnit,
+  Jackson, Gson, javax.inject, netty and Maven build plugins. They were not
+  individually fetched in this pass. They are recorded here as NOT YET
+  VERIFIED rather than as permissive, because "everyone knows what licence
+  that is" is precisely the reasoning this file exists to avoid.
+
+
+================================================================================
+§8 · NODE DEPENDENCIES OF THE INTAFACED WORKSPACE
+================================================================================
+
+Surveyed with `pnpm licenses list --json` against the resolved tree. The
+lockfile is byte-identical between the surveyed checkout and this branch, so
+the resolution is exact.
+
+Scope: 29 `package.json` files across apps/, services/, packages/ and the root.
+37 distinct declared dependencies. 250 resolved packages.
+
+  192  MIT
+   22  Apache-2.0
+   10  ISC
+    8  BlueOak-1.0.0
+    6  BSD-2-Clause
+    6  BSD-3-Clause
+    2  Unlicense          (postgres 3.4.9, tweetnacl 1.0.3)
+    1  Python-2.0         (argparse 2.0.1 — permissive)
+    1  CC-BY-4.0          (caniuse-lite 1.0.30001806 — a data set, not code)
+    1  0BSD
+    1  Apache-2.0 AND LGPL-3.0-or-later
+
+Every INTAFACED workspace package declares `"private": true` and none declares
+a `license` field.
+
+  ── THE ONE NON-PERMISSIVE ENTRY ─────────────────────────────────────────────
+
+  @img/sharp-win32-x64 0.34.5 — "Apache-2.0 AND LGPL-3.0-or-later"
+    The prebuilt platform binary for `sharp` 0.34.5 (sharp itself is
+    Apache-2.0). The LGPL-3.0-or-later component is the bundled libvips native
+    library. It arrives as an optional dependency of Next.js image
+    optimisation, not as a direct choice of ours.
+    LGPL, not GPL: it does not reach our source. It does impose obligations on
+    a distributed binary — relinking and library source availability.
+    Only the win32-x64 variant appears because pnpm filters by platform; a
+    Linux image build resolves the corresponding linux variant under the same
+    terms.
+
+No GPL, AGPL or SSPL appears anywhere in the resolved Node tree.
+
+
+================================================================================
+§9 · CONTAINER IMAGES
+================================================================================
+
+Run, not modified and not redistributed by us. Recorded because "we run it" is
+the first question asked about a copyleft licence, and because two of these
+are AGPL.
+
+  ── AGPL-3.0 — VERIFIED AT THE PINNED TAG ────────────────────────────────────
+
+  grafana/grafana:11.4.0        AGPL-3.0
+    Verified: LICENSE at tag v11.4.0 in github.com/grafana/grafana begins
+    "GNU AFFERO GENERAL PUBLIC LICENSE Version 3, 19 November 2007".
+    Declared in docker-compose.yml:113. Local development observability.
+
+  grafana/tempo:2.6.1           AGPL-3.0
+    Verified: LICENSE at tag v2.6.1 in github.com/grafana/tempo begins
+    "GNU AFFERO GENERAL PUBLIC LICENSE Version 3, 19 November 2007".
+    Declared in docker-compose.yml:88. Local development tracing backend.
+
+    Assessment: AGPL §13 obliges offering Corresponding Source to users who
+    interact with a MODIFIED version over a network. We run both unmodified,
+    for our own developers, and ship neither. That is outside §13. It stops
+    being outside §13 the moment anyone patches either image or exposes a
+    Grafana instance to customers as part of the product.
+
+  ── OTHER IMAGES DECLARED IN COMPOSE ─────────────────────────────────────────
+
+  postgres:16-alpine, redis:7-alpine, nats:2.10-alpine,
+  prom/prometheus:v3.0.1, otel/opentelemetry-collector-contrib:0.115.1,
+  node:22-bookworm-slim (Dockerfile base), eclipse-temurin:8-jre,
+  apache/kafka:3.7.0, mysql:8.0, mongo:6
+
+  NOT VERIFIED IN THIS PASS. Two are worth naming as open questions rather
+  than as findings, because their upstreams are known to be non-permissive
+  and neither was checked at the pinned tag:
+    · mysql:8.0 — the MySQL server, distinct from the Connector/J driver at
+      §7. Oracle distributes the Community server under GPLv2.
+    · mongo:6 — MongoDB Community Server. MongoDB Inc. moved the server to
+      SSPL in 2018.
+  Both are run as infrastructure alongside the vendored platform, not linked
+  into our code and not redistributed. That is the ordinary compliant posture
+  for both licences, but it is a posture that depends on facts about how we
+  deploy, and those facts should be stated deliberately rather than assumed.
+
+
+================================================================================
+§10 · INDEX OF EVERY UNDETERMINED ENTRY
+================================================================================
+
+Provenance or terms could NOT be established from the artefact for:
+
+  §2.1   apns-http2-core 1.3                  no licence, groupId not on Central
+  §2.2   aqmd-netty 2.0.1                     no licence, vendor claim present
+  §2.3   aqmd-netty-api 2.0.1                 no licence, vendor claim present
+  §2.4   aqmd-netty-core 2.0.1                no licence, vendor claim present
+  §2.5   spark-core 2.6.0                     no licence, private repository
+  §2.6   bitcoin-rpc 1.2.0                    no licence, on the custody path
+  §2.7   bitcoinj fork modifications          Apache-2.0 base; fork delta unknown
+  §2.8   litecoinj fork modifications         Apache-2.0 base; fork delta unknown
+  §3.1   TradingView Charting Library 1.11    proprietary; no grant to us
+  §3.1.2 spin.js 2.0.1                        project known, licence not in file
+  §3.1.3 Font Awesome web font                version and licence not in file
+  §3.2   Geetest client SDK 0.4.6             attributed, no grant
+  §3.7   jquery.qrcode                        two upstreams, neither licensed
+  §3.8   jquery.base64Upload                  no provenance at all
+  §3.9   iconfont icon font                   no per-glyph provenance recoverable
+  §3.10  Ionicons TTF (front end)             licence not in file
+  §3.11  mui.ttf                              no provenance at all
+  §4.1   admin LICENSE holder vs upstream     two possible attributions
+  §4.2   Ionicons (admin)                     author known, licence not in file
+  §5.1   Geetest server SDK                   header stripped, no grant
+  §7     com.aliyun.oss:aliyun-sdk-oss:2.8.1  published POM declares no licence
+  §7     the unverified remainder of 91 Maven coordinates
+  §9     8 of 10 container images
+
+Where an entry says a licence "is not stated in the artefact", that is not a
+claim that no licence exists. It is a claim that we have not yet read one, and
+that nothing in this repository entitles anyone to assume one.

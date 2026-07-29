@@ -35,7 +35,10 @@ export function createTokenRouter(token: TokenService) {
         const access = await token.accessOf(input.userId);
         return {
           staked: access.staked.toString(),
-          tier: String(access.tier),
+          // `access.tier` is an AccessTier object, not a string. `String()` on
+          // it produced "[object Object]" on every call, and the `z.string()`
+          // output schema below is exactly why that typechecked and shipped.
+          tier: access.tier.name,
           feeDiscountBps: access.feeDiscountBps,
         };
       }),

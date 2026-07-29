@@ -46,10 +46,7 @@ public class ApplicationConfig extends WebMvcConfigurerAdapter {
         registry.addInterceptor(new MemberInterceptor())
                 .addPathPatterns("/order/**", "/favor/**")
                 .excludePathPatterns("/register/**",
-                					 "/order/time_limit",
-                					 "/order/mockaddydhdnskd",
-                					 "/order/mockcurrentydhdnskd",
-                					 "/order/mockcancelydhdnskd");
+                					 "/order/time_limit");
         super.addInterceptors(registry);
     }
 

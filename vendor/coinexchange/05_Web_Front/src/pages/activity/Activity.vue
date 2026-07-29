@@ -33,15 +33,15 @@
                                   <span class="gray">{{$t('activity.progress')}}</span>
                                   <span class="gray">{{$t('activity.totalsupply')}}</span>
                                 </div>
-                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info :stroke-width="5"/>
+                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info:stroke-width="5"/>
                                 <div class="progress-text">
                                   <span>{{item.progress | fixedScale(2)}}%</span>
                                   <span>{{item.totalSupply | fixedScale(item.amountScale)}} {{item.unit}}</span>
                                 </div>
                               </Col>
                               <Col :xs="24" :sm="24" :md="14" :lg="14">
-                                <p class="progress-time">{{$t('activity.starttime')}}：{{item.startTime | dateFormat}}</p>
-                                <p class="progress-time">{{$t('activity.endtime')}}：{{item.endTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.starttime')}}: {{item.startTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.endtime')}}: {{item.endTime | dateFormat}}</p>
                               </Col>
                           </Row>
                           <Row class="bottom-panel">
@@ -54,7 +54,7 @@
                                 <div class="bottom-mobile">
                                     <p><span><Icon type="md-information-circle" /> {{item.detail}}</span></p>
                                     <Button v-if="item.step==1" long type="warning" :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
-                                    <Button v-else type="primary" long :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
+                                    <Button v-else type="primary" long:to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
                                 </div>
                               </Col>
                           </Row>
@@ -93,15 +93,15 @@
                                   <span class="gray">{{$t('activity.progress')}}</span>
                                   <span class="gray">{{$t('activity.totalsupply')}}</span>
                                 </div>
-                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info :stroke-width="5"/>
+                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info:stroke-width="5"/>
                                 <div class="progress-text">
                                   <span>{{item.progress | fixedScale(2)}}%</span>
                                   <span>{{item.totalSupply | fixedScale(item.amountScale)}} {{item.unit}}</span>
                                 </div>
                               </Col>
                               <Col :xs="24" :sm="24" :md="14" :lg="14">
-                                <p class="progress-time">{{$t('activity.starttime')}}：{{item.startTime | dateFormat}}</p>
-                                <p class="progress-time">{{$t('activity.endtime')}}：{{item.endTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.starttime')}}: {{item.startTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.endtime')}}: {{item.endTime | dateFormat}}</p>
                               </Col>
                           </Row>
                           <Row class="bottom-panel">
@@ -114,7 +114,7 @@
                                 <div class="bottom-mobile">
                                     <p><span><Icon type="md-information-circle" /> {{item.detail}}</span></p>
                                     <Button v-if="item.step==1" long type="warning" :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
-                                    <Button v-else type="primary" long :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
+                                    <Button v-else type="primary" long:to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
                                 </div>
                               </Col>
                           </Row>
@@ -153,15 +153,15 @@
                                   <span class="gray">{{$t('activity.progress')}}</span>
                                   <span class="gray">{{$t('activity.totalsupply')}}</span>
                                 </div>
-                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info :stroke-width="5"/>
+                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info:stroke-width="5"/>
                                 <div class="progress-text">
                                   <span>{{item.progress | fixedScale(2)}}%</span>
                                   <span>{{item.totalSupply | fixedScale(item.amountScale)}} {{item.unit}}</span>
                                 </div>
                               </Col>
                               <Col :xs="24" :sm="24" :md="14" :lg="14">
-                                <p class="progress-time">{{$t('activity.starttime')}}：{{item.startTime | dateFormat}}</p>
-                                <p class="progress-time">{{$t('activity.endtime')}}：{{item.endTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.starttime')}}: {{item.startTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.endtime')}}: {{item.endTime | dateFormat}}</p>
                               </Col>
                           </Row>
                           <Row class="bottom-panel">
@@ -174,7 +174,7 @@
                                 <div class="bottom-mobile">
                                     <p><span><Icon type="md-information-circle" /> {{item.detail}}</span></p>
                                     <Button v-if="item.step==1" long type="warning" :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
-                                    <Button v-else type="primary" long :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
+                                    <Button v-else type="primary" long:to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
                                 </div>
                               </Col>
                           </Row>
@@ -213,15 +213,15 @@
                                   <span class="gray">{{$t('activity.progress')}}</span>
                                   <span class="gray">{{$t('activity.totalsupply')}}</span>
                                 </div>
-                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info :stroke-width="5"/>
+                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info:stroke-width="5"/>
                                 <div class="progress-text">
                                   <span>{{item.progress | fixedScale(2)}}%</span>
                                   <span>{{item.totalSupply | fixedScale(item.amountScale)}} {{item.unit}}</span>
                                 </div>
                               </Col>
                               <Col :xs="24" :sm="24" :md="14" :lg="14">
-                                <p class="progress-time">{{$t('activity.starttime')}}：{{item.startTime | dateFormat}}</p>
-                                <p class="progress-time">{{$t('activity.endtime')}}：{{item.endTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.starttime')}}: {{item.startTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.endtime')}}: {{item.endTime | dateFormat}}</p>
                               </Col>
                           </Row>
                           <Row class="bottom-panel">
@@ -234,7 +234,7 @@
                                 <div class="bottom-mobile">
                                     <p><span><Icon type="md-information-circle" /> {{item.detail}}</span></p>
                                     <Button v-if="item.step==1" long type="warning" :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
-                                    <Button v-else type="primary" long :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
+                                    <Button v-else type="primary" long:to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
                                 </div>
                               </Col>
                           </Row>
@@ -273,15 +273,15 @@
                                   <span class="gray">{{$t('activity.progress')}}</span>
                                   <span class="gray">{{$t('activity.totalsupply')}}</span>
                                 </div>
-                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info :stroke-width="5"/>
+                                <Progress :percent="item.progress" status="active" style="width: 100%;" hide-info:stroke-width="5"/>
                                 <div class="progress-text">
                                   <span>{{item.progress | fixedScale(2)}}%</span>
                                   <span>{{item.totalSupply | fixedScale(item.amountScale)}} {{item.unit}}</span>
                                 </div>
                               </Col>
                               <Col :xs="24" :sm="24" :md="14" :lg="14">
-                                <p class="progress-time">{{$t('activity.starttime')}}：{{item.startTime | dateFormat}}</p>
-                                <p class="progress-time">{{$t('activity.endtime')}}：{{item.endTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.starttime')}}: {{item.startTime | dateFormat}}</p>
+                                <p class="progress-time">{{$t('activity.endtime')}}: {{item.endTime | dateFormat}}</p>
                               </Col>
                           </Row>
                           <Row class="bottom-panel">
@@ -294,7 +294,7 @@
                                 <div class="bottom-mobile">
                                     <p><span><Icon type="md-information-circle" /> {{item.detail}}</span></p>
                                     <Button v-if="item.step==1" long type="warning" :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
-                                    <Button v-else type="primary" long :to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
+                                    <Button v-else type="primary" long:to="'/lab/detail/'+ item.id">{{$t('activity.viewdetail')}}</Button>
                                 </div>
                               </Col>
                           </Row>
@@ -312,7 +312,7 @@
     </div>
     <div class="app_bottom">
       <div class="left_logo">
-        <img style="float:left;" src="../../assets/images/applogo.png"></img>
+        <img style="float:left;" src="../../assets/images/applogo.svg"></img>
         <div style="float:left;height: 40px;line-height:40px;color:#000;">{{$t("cms.downloadslogan")}}</div>
       </div>
       <div class="right_btn_wrap"><router-link to="/app" class="right_btn">{{$t("cms.download")}}</router-link></div>
@@ -382,14 +382,9 @@ export default {
     lang() {
       return this.$store.state.lang;
     },
-    langPram(){
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+    langPram() {
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     }
   },
   methods: {
@@ -423,19 +418,19 @@ export default {
     },
     tabChange(name) {
       this.currentCate = name;
-      if(name == "all" && !this.activityList.all.loaded){
+      if(name == "all" &&!this.activityList.all.loaded){
         this.getData(-1);
       }
-      if(name == "step0" && !this.activityList.step0.loaded){
+      if(name == "step0" &&!this.activityList.step0.loaded){
         this.getData(0);
       }
-      if(name == "step1" && !this.activityList.step1.loaded){
+      if(name == "step1" &&!this.activityList.step1.loaded){
         this.getData(1);
       }
-      if(name == "step2" && !this.activityList.step2.loaded){
+      if(name == "step2" &&!this.activityList.step2.loaded){
         this.getData(2);
       }
-      if(name == "step3" && !this.activityList.step3.loaded){
+      if(name == "step3" &&!this.activityList.step3.loaded){
         this.getData(3);
       }
     },
@@ -453,7 +448,7 @@ export default {
       this.$http.post(this.host + "/uc/activity/page-query", param).then(res => {
         if (res.status == 200 && res.body.code == 0) {
           let aList = res.body.data.content;
-          // 持仓瓜分类型进度处理（未开始：0，进行中：50，派发中：75%，已结束：100
+          // Holdings Split (: 0, : 50, : 75%, Ended: 100
           for (var i = 0; i < aList.length; i++) {
             if(aList[i].type ==3){
               if(aList[i].step == 1){
@@ -498,19 +493,19 @@ export default {
 </script>
 
 <style>
-    .activity .ivu-tabs-bar{
+.activity.ivu-tabs-bar{
         border-bottom: 1px solid #dcdee2;
     }
-    .activity .ivu-tabs-nav .ivu-tabs-tab:hover{
-        color: #f0a70a;
+.activity.ivu-tabs-nav.ivu-tabs-tab:hover{
+        color: #ff6b00;
     }
-    .activity .ivu-tabs-nav .ivu-tabs-tab:hover, .activity .ivu-tabs-nav .ivu-tabs-tab-active{
-        color: #f0a70a;
+.activity.ivu-tabs-nav.ivu-tabs-tab:hover,.activity.ivu-tabs-nav.ivu-tabs-tab-active{
+        color: #ff6b00;
     }
-    .activity .ivu-tabs-ink-bar{
-        background-color: #f0a70a;
+.activity.ivu-tabs-ink-bar{
+        background-color: #ff6b00;
     }
-    .app_bottom{
+.app_bottom{
       display: none;
       z-index: 999;
       position: fixed;
@@ -518,15 +513,15 @@ export default {
       left: 0;
       width: 100%;
       height: 40px;
-      background: rgba(242,246,250,1) !important;
+      background: rgba(242,246,250,1)!important;
     }
-    .app_bottom .left_logo img{
+.app_bottom.left_logo img{
       height: 30px;margin-top:5px;border-radius: 5px;margin-left: 5px;margin-right: 5px;
     }
-    .app_bottom .right_btn_wrap{
+.app_bottom.right_btn_wrap{
       float: right;height: 40px;line-height: 40px;margin-right: 5px;
     }
-    .app_bottom .right_btn{
+.app_bottom.right_btn{
       color: #FFF;
       border-radius: 3px;
       padding: 0px 10px;
@@ -537,74 +532,74 @@ export default {
       background: linear-gradient(200deg, #ff9900, #ffbe2b, #ffa500);
     }
     @media screen and (max-width:768px){
-      .activity{
+.activity{
           padding-top: 45px!important;
       }
-      .activity_container {
+.activity_container {
         padding: 0 2%!important;
       }
-      .activity .main {
-        margin-top: 70px !important;
+.activity.main {
+        margin-top: 70px!important;
       }
-      .progress-time{
+.progress-time{
         text-align: left!important;
         padding-right: 0px!important;
         margin-top: 10px!important;
       }
-      .activity-item .title{
+.activity-item.title{
         text-align: left!important;
       }
-      .activity-item .title div{
+.activity-item.title div{
         display: none!important;
       }
-      .activity-item .activity-type{
+.activity-item.activity-type{
         display: none!important;
       }
-      .banner-pc{
+.banner-pc{
         display: none!important;
       }
-      .banner-mobile{
+.banner-mobile{
         display: block!important;
       }
-      .activity_container > h1{
+.activity_container > h1{
         font-size: 20px!important;
         margin-top: -170px!important;
       }
-      .activity-item img {
+.activity-item img {
           width: 100px!important;
           height: 100px!important;
       }
-      .activity-item .title span{
+.activity-item.title span{
         font-size:18px!important;
       }
-      .app_bottom{
+.app_bottom{
         display: block!important;
       }
-      .bottom-panel .bottom{
+.bottom-panel.bottom{
         display: none!important;
       }
-      .bottom-panel .bottom-mobile{
+.bottom-panel.bottom-mobile{
         display: block!important;
       }
-      .bottom-panel .bottom-mobile p{
+.bottom-panel.bottom-mobile p{
         margin: 10px 0 10px 0;
       }
-      .bottom-panel .bottom-mobile p span{
+.bottom-panel.bottom-mobile p span{
           font-size: 12px;
           color: #a7a7a7;
           margin-top:15px;
       }
     }
-    .banner-pc{
+.banner-pc{
       display: block;
     }
-    .banner-mobile{
+.banner-mobile{
       display: none;
     }
 </style>
 <style lang="scss" scoped>
-  .activity {
-    background: rgba(242,246,250,1) !important;
+.activity {
+    background: rgba(242,246,250,1)!important;
     height: 100%;
     background-size: cover;
     position: relative;
@@ -613,10 +608,10 @@ export default {
     padding-top: 60px;
     color: #fff;
   }
-  .activity .bannerimg {
+.activity.bannerimg {
     width: 100%;
   }
-  .activity_container {
+.activity_container {
     padding: 0 12%;
     text-align: center;
     height: 100%;
@@ -629,17 +624,17 @@ export default {
       letter-spacing: 3px;
     }
   }
-  .activity .main {
+.activity.main {
     margin-top: 120px;
     display: flex;
     justify-content: space-between;
     flex-direction: row;
     flex-wrap: wrap;
   }
-  .activity-container{
+.activity-container{
     min-height: 200px;
   }
-  .tips-line{
+.tips-line{
     height: 100px;
     line-height: 100px;
     text-align: center;
@@ -649,11 +644,11 @@ export default {
       width: 100px;
       margin-top: 50px;
     }
-    .ivu-spin{
+.ivu-spin{
       margin-top: 50px;
     }
   }
-  .activity-item{
+.activity-item{
     position:relative;
     overflow: hidden;
     padding: 15px 20px;
@@ -669,7 +664,7 @@ export default {
       box-shadow: 0 0 25px #DDD;
       transform: scale(1.01,1.01);
     }
-    .activity-type{
+.activity-type{
       position: absolute;
       width: 140px;
       height: 25px;
@@ -684,10 +679,10 @@ export default {
       box-shadow: 1px 1px 4px #000;
       z-index: 99;
     }
-    .title{
+.title{
       width: 100%;padding-top: 10px;display:flex;flex-direction: row;
       span{
-        font-size: 22px;color:rgba(49,54,62,1) !important;
+        font-size: 22px;color:rgba(49,54,62,1)!important;
       }
       div{
         height: 30px;
@@ -739,7 +734,7 @@ export default {
       height: 160px;
     }
   }
-  .progress-text{
+.progress-text{
     width: 100%;
     display: flex;
     flex-direction: row;
@@ -748,12 +743,12 @@ export default {
       font-size: 12px;
     }
   }
-  .bottom-panel{
+.bottom-panel{
       border-top: 1px solid rgb(237, 237, 237);margin-top: 15px;
-      .bottom-mobile{
+.bottom-mobile{
         display: none;
       }
-      .bottom{
+.bottom{
         display: flex;
         flex-direction: row;
         justify-content: space-between;
@@ -773,19 +768,19 @@ export default {
         }
       }
   }
-  .progress-time{
+.progress-time{
     font-size: 13px;
     letter-spacing: 1px;
     text-align: right;
     padding-right: 80px;
   }
-  .right{
+.right{
     float: right;
   }
-  .left{
+.left{
     float: left;
   }
-  .gray{
+.gray{
     color: #a7a7a7;
   }
 </style>

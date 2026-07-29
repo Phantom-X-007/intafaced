@@ -7,7 +7,7 @@
                 <div class="user-info">
                     <div class="avatar-box">
                         <div class="user-face user-avatar-public">
-                          <img v-if="user.avatar != null && user.avatar != ''" :src="user.avatar" width="60px" height="60px" style="border-radius: 50%">
+                          <img v-if="user.avatar!= null && user.avatar!= ''" :src="user.avatar" width="60px" height="60px" style="border-radius: 50%">
                           <span v-else class="user-avatar-in" >{{usernameS}}</span>
                         </div>
                         <div class="user-name">
@@ -45,11 +45,11 @@
                     </p>
                 </div>
                 <!-- <div class="deal-user-trade-info">
-                                                    <p>交易次数：
+                                                    <p>Trades:
                                                         <em class="trade-times">{{user.transactions}}</em>
                                                     </p>
-                                                    <p>平均放行：
-                                                        <em>666 分钟</em>
+                                                    <p>Average release:
+                                                        <em>666 min</em>
                                                     </p>
                                                 </div> -->
             </div>
@@ -158,7 +158,7 @@ export default {
                 }
               },
               params.row.price + "CNY"
-            ),
+),
             h(
               "p",
               {
@@ -167,7 +167,7 @@ export default {
                 }
               },
               params.row.minLimit + "-" + params.row.maxLimit + "CNY"
-            )
+)
           ]);
         }
       });
@@ -196,7 +196,7 @@ export default {
                     } else {
                       self.$router.push(
                         "/otc/tradeInfo?tradeId=" + params.row.advertiseId
-                      );
+);
                     }
                   }
                 },
@@ -218,9 +218,9 @@ export default {
                     }
                   },
                   self.$t("otc.checkuser.buyin")
-                )
+)
               ]
-            )
+)
           ]);
         }
       });
@@ -256,7 +256,7 @@ export default {
                 }
               },
               params.row.price + "CNY"
-            ),
+),
             h(
               "p",
               {
@@ -265,7 +265,7 @@ export default {
                 }
               },
               params.row.minLimit + "-" + params.row.maxLimit + "CNY"
-            )
+)
           ]);
         }
       });
@@ -294,7 +294,7 @@ export default {
                     } else {
                       self.$router.push(
                         "/otc/tradeInfo?tradeId=" + params.row.advertiseId
-                      );
+);
                     }
                   }
                 },
@@ -316,9 +316,9 @@ export default {
                     }
                   },
                   self.$t("otc.checkuser.sellout")
-                )
+)
               ]
-            )
+)
           ]);
         }
       });
@@ -329,12 +329,11 @@ export default {
   methods: {
     changePage() {},
     getAdv() {
-      //获取个人账户信息
       this.$http
-        .post(this.host + "/otc/advertise/member", {
+.post(this.host + "/otc/advertise/member", {
           name: this.$route.query.id
         })
-        .then(response => {
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.loading = false;
@@ -342,8 +341,8 @@ export default {
             this.tableOrderSell = resp.data.sell;
             this.user = resp.data;
             this.usernameS = (this.user.username + "")
-              .replace(/^\s+|\s+$/g, "")
-              .slice(0, 1);
+.replace(/^\s+|\s+$/g, "")
+.slice(0, 1);
           } else {
             this.$Message.error(resp.message);
           }
@@ -371,7 +370,7 @@ export default {
   padding-top: 30px;
   margin: 0 auto;
   width: 1200px;
-  background: #192330;
+  background: #000000;
   margin-bottom: 20px;
 }
 .content-wrap {
@@ -404,7 +403,7 @@ export default {
   width: 4px;
   height: 22px;
   margin-right: 10px;
-  background: #f0a70a;
+  background: #ff6b00;
   display: inline-block;
   margin-left: 4px;
 }
@@ -427,37 +426,37 @@ export default {
   text-align: left;
 }
 
-.trade-right-box .trade-price {
+.trade-right-box.trade-price {
   padding: 15px 0;
   
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
   margin-bottom: 20px;
 }
 
-.trade-right-box .trade-price p {
+.trade-right-box.trade-price p {
   color: #fff;
   font-size: 14px;
   line-height: 2.8;
 }
 
-.trade-right-box .trade-price p label {
+.trade-right-box.trade-price p label {
   min-width: 80px;
   display: inline-block;
 }
 
-.trade-right-box .trade-price p span {
+.trade-right-box.trade-price p span {
   margin-left: 15%;
   display: inline-block;
 }
 
-.trade-right-box .trade-operation {
+.trade-right-box.trade-operation {
   padding: 20px;
   
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
   margin-bottom: 20px;
 }
 
-.trade-right-box .trade-operation .trade-price-input {
+.trade-right-box.trade-operation.trade-price-input {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -467,25 +466,25 @@ export default {
   margin-bottom: 20px;
 }
 
-.trade-right-box .trade-operation .trade-price-input .price-input-list {
-  border: 1px solid #c5cdd7;
+.trade-right-box.trade-operation.trade-price-input.price-input-list {
+  border: 1px solid #cccccc;
   width: 45%;
 }
 
 .trade-right-box
-  .trade-operation
-  .trade-price-input
-  .price-input-list
-  .coin-name {
+.trade-operation
+.trade-price-input
+.price-input-list
+.coin-name {
   background-color: #ebeff5;
   display: inline-block;
   padding: 10px 22px;
   font-size: 18px;
   color: #fff;
-  border-right: 1px solid #c5cdd7;
+  border-right: 1px solid #cccccc;
 }
 
-.trade-right-box .trade-operation .trade-price-input .price-input-list > input {
+.trade-right-box.trade-operation.trade-price-input.price-input-list > input {
   border: none;
   background-color: transparent;
   outline: none;
@@ -494,20 +493,20 @@ export default {
   width: 75%;
 }
 
-.trade-right-box .trade-operation .trade-price-input .exchange {
+.trade-right-box.trade-operation.trade-price-input.exchange {
   width: 10%;
   text-align: center;
   font-size: 24px;
 }
 
-.trade-right-box .trade-operation .trade-price-input .price-input-list {
-  border: 1px solid #c5cdd7;
+.trade-right-box.trade-operation.trade-price-input.price-input-list {
+  border: 1px solid #cccccc;
   width: 45%;
 }
 
-.trade-right-box .trade-operation .text-inputs {
-  background-color: #192330;
-  border: 1px solid #c5cdd7;
+.trade-right-box.trade-operation.text-inputs {
+  background-color: #000000;
+  border: 1px solid #cccccc;
   outline: none;
   display: block;
   height: 100px;
@@ -518,7 +517,7 @@ export default {
   color: #ccc;
 }
 
-.trade-right-box .trade-operation .price-box {
+.trade-right-box.trade-operation.price-box {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -527,8 +526,8 @@ export default {
   align-items: center;
 }
 
-.trade-right-box .trade-operation .price-box .show-price {
-  border: 1px solid #c5cdd7;
+.trade-right-box.trade-operation.price-box.show-price {
+  border: 1px solid #cccccc;
   width: 80%;
   height: 58px;
   display: -webkit-box;
@@ -540,19 +539,19 @@ export default {
   padding-left: 10px;
 }
 
-.trade-right-box .trade-operation .price-box .show-price em {
+.trade-right-box.trade-operation.price-box.show-price em {
   font-style: normal;
   font-size: 14px;
   color: #fff;
 }
 
-.trade-right-box .trade-operation .price-box .show-price span {
+.trade-right-box.trade-operation.price-box.show-price span {
   font-size: 18px;
   color: #ee6543;
   font-weight: bolder;
 }
 
-.trade-right-box .trade-operation .price-box .btn-trade-in {
+.trade-right-box.trade-operation.price-box.btn-trade-in {
   outline: medium;
   border: 0;
   color: white;
@@ -563,27 +562,27 @@ export default {
   text-align: center;
 }
 
-.trade-right-box .trade-remark {
+.trade-right-box.trade-remark {
   
-  border: 1px solid #27313e;
+  border: 1px solid #141414;
   padding: 30px 36px;
   margin-bottom: 30px;
 }
 
-.trade-right-box .trade-remark .titles {
+.trade-right-box.trade-remark.titles {
   margin-bottom: 15px;
 }
 
-.trade-right-box .trade-remark .titles span {
+.trade-right-box.trade-remark.titles span {
   font-size: 16px;
   color: #fff;
   padding-right: 30px;
 }
 
-.trade-right-box .trade-remark .content {
+.trade-right-box.trade-remark.content {
   margin-bottom: 30px;
   font-size: 14px;
-  color: #8994a3;
+  color: #909090;
   line-height: 1.8;
 }
 
@@ -603,13 +602,13 @@ export default {
 
 .leftmenu {
   margin-bottom: 60px;
-  background-color: #192330;
+  background-color: #000000;
   position: relative;
   min-height: 1px;
   padding: 50px 15px 50px 10px;
 }
 
-.left-box .user-info {
+.left-box.user-info {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -641,7 +640,7 @@ export default {
   position: relative;
 }
 
-.user-avatar-public > .user-avatar-in,
+.user-avatar-public >.user-avatar-in,
 .user-avatar-public {
   border-radius: 50%;
   display: -webkit-box;
@@ -655,7 +654,7 @@ export default {
   align-items: center;
 }
 
-.user-avatar-public > .user-avatar-in {
+.user-avatar-public >.user-avatar-in {
   border-radius: 50%;
   display: -webkit-box;
   display: -ms-flexbox;
@@ -666,7 +665,7 @@ export default {
   -webkit-box-align: center;
   -ms-flex-align: center;
   align-items: center;
-  background: #f0a70a;
+  background: #ff6b00;
   height: 60px;
   width: 60px;
   color: #fff;
@@ -677,12 +676,12 @@ export default {
   margin-left: 5px;
 }
 
-.left-box .deal-market-info {
+.left-box.deal-market-info {
   padding: 20px 0 20px 20px;
   border-bottom: 1px dashed #ebeff5;
 }
 
-.left-box .deal-market-info p {
+.left-box.deal-market-info p {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -694,19 +693,19 @@ export default {
 }
 
 .iconfont {
-  font-family: iconfont !important;
+  font-family: iconfont!important;
   font-size: 16px;
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-.left-box .deal-market-info p .iconfont {
+.left-box.deal-market-info p.iconfont {
   margin-right: 20px;
   font-size: 20px;
 }
 
-.left-box .deal-market-info p .iconfont:before {
+.left-box.deal-market-info p.iconfont:before {
   background-size: 100% 100%;
   width: 20px;
   height: 20px;
@@ -738,36 +737,36 @@ export default {
   background-image: url(../../assets/img/t3-2.png);
 }
 
-.left-box .deal-user-trade-info {
+.left-box.deal-user-trade-info {
   padding-top: 20px;
-  color: #8994a3;
+  color: #909090;
 }
 
-.left-box .deal-user-trade-info p {
+.left-box.deal-user-trade-info p {
   margin-bottom: 6px;
 }
 
-.left-box .deal-user-trade-info p em {
+.left-box.deal-user-trade-info p em {
   font-style: normal;
   color: #fff;
 }
 </style>
 
 <style lang="scss">
-    .right-safe{
-        .ivu-tabs{
-            .ivu-tabs-bar{
-                .ivu-tabs-nav-container{
-                    .nav-text.ivu-tabs-nav{
-                        .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused{
-                            color: #f0a70a;
+.right-safe{
+.ivu-tabs{
+.ivu-tabs-bar{
+.ivu-tabs-nav-container{
+.nav-text.ivu-tabs-nav{
+.ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused{
+                            color: #ff6b00;
                         }
-                        .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated{
-                            background-color: #f0a70a;
+.ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated{
+                            background-color: #ff6b00;
                         }
-                        .ivu-tabs-tab{
+.ivu-tabs-tab{
                             &:hover{
-                                color: #f0a70a;
+                                color: #ff6b00;
                             }
                         }
                     }
@@ -775,11 +774,11 @@ export default {
             }
         }
     }
-    .right-safe .demo-tabs-style1.tabbox{
-      .ivu-tabs{
+.right-safe.demo-tabs-style1.tabbox{
+.ivu-tabs{
         // overflow:hidden;
         padding-bottom: 20px;
-        .ivu-tabs-content.ivu-tabs-content-animated{
+.ivu-tabs-content.ivu-tabs-content-animated{
           // width: 99.3%;
           margin: 0 auto;
         }

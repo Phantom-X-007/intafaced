@@ -1,7 +1,7 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import type { Principal, Scope } from '@intafaced/auth';
 import { requireScope, requireTier, AuthError } from '@intafaced/auth';
-import type { KycTier, ModuleId, Plane } from '@intafaced/config';
+import type { AccessDecision, KycTier, ModuleId, Plane } from '@intafaced/config';
 import { checkAccess } from '@intafaced/config';
 import { requireServiceCaller } from './service-auth.js';
 
@@ -12,6 +12,32 @@ import { requireServiceCaller } from './service-auth.js';
  * router type from here; callers import the TYPE only and get end-to-end
  * inference without importing the implementation — or, critically, its tables.
  */
+
+/**
+ * A refusal that came from the JURISDICTION_MATRIX rather than from the token.
+ *
+ * It exists to carry `AccessDecision.code` — `denied.kyc_required`,
+ * `denied.region_blocked`, `denied.module_blocked`, `denied.plane_unsupported`
+ * — out to the caller. Before it, a matrix refusal was thrown as a bare
+ * TRPCError with prose and no `cause`, so `intafacedCode` came back undefined
+ * and the only machine-readable fact about the densest gate in the OS was
+ * "403". A user short of KYC and a user in a blocked region were the same event
+ * to every client, dashboard and metric.
+ *
+ * `requiredTier` is the actionable half: it is what lets a screen say "verify
+ * to tier full" rather than "refused".
+ */
+export class JurisdictionError extends Error {
+  readonly code: AccessDecision['code'];
+  readonly requiredTier: KycTier | undefined;
+
+  constructor(readonly decision: AccessDecision) {
+    super(decision.reason);
+    this.name = 'JurisdictionError';
+    this.code = decision.code;
+    this.requiredTier = decision.requiredTier;
+  }
+}
 
 export interface Context {
   /** Null for anonymous calls. */
@@ -34,13 +60,18 @@ export interface Context {
 
 const t = initTRPC.context<Context>().create({
   errorFormatter({ shape, error }) {
+    const cause = error.cause;
     return {
       ...shape,
       data: {
         ...shape.data,
         // Surface our own error codes so clients can branch on
         // 'ledger.insufficient_funds' rather than parsing prose.
-        intafacedCode: error.cause instanceof AuthError ? error.cause.code : undefined,
+        intafacedCode: cause instanceof AuthError || cause instanceof JurisdictionError ? cause.code : undefined,
+        // Only ever set on 'denied.kyc_required'. A client that reads this can
+        // name the step the user has to take; one that ignores it is no worse
+        // off than before.
+        requiredTier: cause instanceof JurisdictionError ? cause.requiredTier : undefined,
       },
     };
   },
@@ -100,7 +131,11 @@ export function scopedProcedure(scope: Scope, guards: GuardOptions = {}) {
         kycTier: ctx.principal.tier,
       });
       if (!decision.allowed) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: decision.reason });
+        // Thrown WITH a cause, so the decision's own code reaches the client.
+        // The scope check above already passed here: whatever this caller is
+        // short of, it is not authority.
+        const cause = new JurisdictionError(decision);
+        throw new TRPCError({ code: 'FORBIDDEN', message: decision.reason, cause });
       }
     }
 
@@ -133,7 +168,7 @@ export function publicJurisdictionProcedure(module: ModuleId, plane: Plane = 'fi
   return t.procedure.use(({ ctx, next }) => {
     const decision = checkAccess({ module, plane, region: ctx.region, kycTier: ctx.principal?.tier ?? 'none' });
     if (!decision.allowed) {
-      throw new TRPCError({ code: 'FORBIDDEN', message: decision.reason });
+      throw new TRPCError({ code: 'FORBIDDEN', message: decision.reason, cause: new JurisdictionError(decision) });
     }
     return next({ ctx });
   });

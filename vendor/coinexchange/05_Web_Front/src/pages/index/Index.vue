@@ -19,12 +19,12 @@
         </div>
       </div>
       <div class="section" id="page1">
-        <!-- <div v-if="lang==='简体中文'"> -->
+        <!-- <div v-if="false"> -->
 
         <div class="spin-wrap banner-panel">
           <img style="height: 100%;" src="../../assets/images/bannerbg.png"></img>
           <p style="text-align:center;font-size:40px;color:#fff;position:absolute;top: 70px;width:100%;letter-spacing:5px;text-shadow: 0px 0px 10px #000000;">{{$t("common.slogan")}}</p>
-          <p style="text-align:center;font-size:20px;color:#828ea1;position:absolute;top: 130px;width:100%;letter-spacing:2px;">{{$t("common.subslogan")}}</p>
+          <p style="text-align:center;font-size:20px;color:#8a8a8a;position:absolute;top: 130px;width:100%;letter-spacing:2px;">{{$t("common.subslogan")}}</p>
           <div class="activity-list" v-show="picShow">
             <div class="swiper-container" id="swiper_container">
               <div class="swiper-wrapper">
@@ -44,7 +44,7 @@
           </div>
         </div>
       </div>
-      <div id="pagetips" style="background: #172636;">
+      <div id="pagetips" style="background: #1a1a1a;">
         <div class="agent-panel">
           <div class="title">
             <div class="gettingstart">{{$t('sectionPage.gettingstart')}}</div>
@@ -56,10 +56,10 @@
                 <img v-if="langPram=='EN'" src="../../assets/images/new_1usd.png"></img>
                 <img v-else="langPram=='CN'" src="../../assets/images/new_1cny.png"></img>
               </div>
-              <router-link to="/helpdetail?cate=0&id=20&cateTitle=新手指南" target="_blank">
+              <router-link to="/helpdetail?cate=0&id=20&cateTitle=Beginner's Guide" target="_blank">
                 <div class="agent-detail">
-                  <p  class="agent-name">{{$t('sectionPage.oneminutebuy')}}</p>
-                  <p  class="agent-count">{{$t('sectionPage.oneminutebuytips')}}</p>
+                  <p class="agent-name">{{$t('sectionPage.oneminutebuy')}}</p>
+                  <p class="agent-count">{{$t('sectionPage.oneminutebuytips')}}</p>
                 </div>
               </router-link>
             </div>
@@ -67,10 +67,10 @@
               <div class="agent-img">
                 <img src="../../assets/images/new_3.png"></img>
               </div>
-              <router-link to="/helplist?cate=2&cateTitle=交易指南" target="_blank">
+              <router-link to="/helplist?cate=2&cateTitle=Trading Guide" target="_blank">
                 <div class="agent-detail">
-                  <p  class="agent-name">{{$t('sectionPage.baseexchange')}}</p>
-                  <p  class="agent-count">{{$t('sectionPage.baseexchangetips')}}</p>
+                  <p class="agent-name">{{$t('sectionPage.baseexchange')}}</p>
+                  <p class="agent-count">{{$t('sectionPage.baseexchangetips')}}</p>
                 </div>
               </router-link>
             </div>
@@ -78,10 +78,10 @@
               <div class="agent-img">
                 <img src="../../assets/images/new_2.png"></img>
               </div>
-              <router-link to="/helplist?cate=6&cateTitle=基础入门" target="_blank">
+              <router-link to="/helplist?cate=6&cateTitle=Getting Started" target="_blank">
                 <div class="agent-detail">
-                  <p  class="agent-name">{{$t('sectionPage.baseknow')}}</p>
-                  <p  class="agent-count">{{$t('sectionPage.baseknowtips')}}</p>
+                  <p class="agent-name">{{$t('sectionPage.baseknow')}}</p>
+                  <p class="agent-count">{{$t('sectionPage.baseknowtips')}}</p>
                 </div>
               </router-link>
             </div>
@@ -89,35 +89,35 @@
               <div class="agent-img">
                 <img src="../../assets/images/new_4.png"></img>
               </div>
-              <router-link to="/helpdetail?cate=0&id=28&cateTitle=新手指南" target="_blank">
+              <router-link to="/helpdetail?cate=0&id=28&cateTitle=Beginner's Guide" target="_blank">
                 <div class="agent-detail">
-                  <p  class="agent-name">{{$t('sectionPage.usersocial')}}</p>
-                  <p  class="agent-count">{{$t('sectionPage.usersocialtips')}}</p>
+                  <p class="agent-name">{{$t('sectionPage.usersocial')}}</p>
+                  <p class="agent-count">{{$t('sectionPage.usersocialtips')}}</p>
                 </div>
               </router-link>
             </div>
           </div>
         </div>
       </div>
-      <div style="width: 100%;background: #141e2c;display:none;">
+      <div style="width: 100%;background: #000000;display:none;">
         <router-link to="/announcement/118930" target="_blank" style="width: 100%;">
-          <img src="https://bizzan.oss-cn-hangzhou.aliyuncs.com/bannerimg.png" style="width: 72%;margin-left: 14%;margin-top: 20px;">
+          <img src="/static/bannerimg.png" style="width: 72%;margin-left: 14%;margin-top: 20px;">
         </router-link>
       </div>
       <div class="section" id="page2">
         <div class="page2nav">
-          <div class="board-title" style="display:inline-block;display: none;">{{$t('sectionPage.mainboard')}}  &nbsp; >>></div>
+          <div class="board-title" style="display:inline-block;display: none;">{{$t('sectionPage.mainboard')}} &nbsp; >>></div>
           <ul class="brclearfix">
-            <li v-show="!(index==0&&!isLogin)" v-for="(item,index) in indexBtn" @click="addClass(index)" :class="{'active':index==choseBtn,'ivu-btn-default':index!=choseBtn}" :key="index">{{item.text}}</li>
-            <li style="float:right;padding-right: 6px;"><Input search :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/></li>
+            <li v-show="!(index==0&&!isLogin)" v-for="(item,index) in indexBtn" @click="addClass(index)" :class="{'active' :index==choseBtn,'ivu-btn-default':index!=choseBtn}" :key="index">{{item.text}}</li>
+            <li style="float:right;padding-right: 6px;"><Input search:placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/></li>
           </ul>
         </div>
         <div class="ptjy">
-          <Table v-if="choseBtn==0" :columns="favorColumns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading"  :no-data-text="$t('common.nodata')"></Table>
-          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading"  :no-data-text="$t('common.nodata')"></Table>
+          <Table v-if="choseBtn==0" :columns="favorColumns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
+          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
 <!--
-          <p v-if="choseBtn!=0" style="height:50px;line-height:50px;padding-left:10px;border-bottom:1px solid #26303d;font-size:14px;color:rgb(97, 119, 146);">创新版</p>
-          <Table  v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex2" class="tables" :disabled-hover="true" :loading="loading"  :no-data-text="$t('common.nodata')"></Table>
+          <p v-if="choseBtn!=0" style="height:50px;line-height:50px;padding-left:10px;border-bottom:1px solid #222222;font-size:14px;color:rgb(97, 119, 146);">Launchpad</p>
+          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex2" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
 -->
         </div>
       </div>
@@ -171,7 +171,7 @@
     </div>
     <div class="app_bottom">
       <div class="left_logo">
-        <img style="float:left;" src="../../assets/images/applogo.png"></img>
+        <img style="float:left;" src="../../assets/images/applogo.svg"></img>
         <div style="float:left;height: 40px;line-height:40px;color:#000;">{{$t("cms.downloadslogan")}}</div>
       </div>
       <div class="right_btn_wrap"><router-link target="_blank" to="/app" class="right_btn">{{$t("cms.download")}}</router-link></div>
@@ -214,32 +214,30 @@ export default {
             let flag = this.isLogin;
             return h("Icon", {
               props: {
-                color: "#f0a70a",
+                color: "#ff6b00",
                 size: "18",
                 type: params.row.isFavor
-                  ? "ios-star"
-                  : "ios-star-outline"
+? "ios-star"
+: "ios-star-outline"
               },
               nativeOn: {
                 click: () => {
                   if (this.isLogin) {
-                    event.stopPropagation(); //阻止事件冒泡
+                    event.stopPropagation(); //stop event propagation
                     if (
                       event.currentTarget.className ==
                       "ivu-icon ivu-icon-ios-star"
-                    ) {
-                      // 解除收藏
+) {
                       this.cancelCollect(params.index, params.row);
                       event.currentTarget.className ==
                         "ivu-icon ivu-icon-ios-star-outline";
                     } else {
-                      // 收藏
                       this.collect(params.index, params.row);
                       event.currentTarget.className =
                         "ivu-icon ivu-icon-ios-star";
                     }
                   } else {
-                    this.$Message.warning("请先登录");
+                    this.$Message.warning("Please sign in first");
                   }
                 }
               }
@@ -269,14 +267,14 @@ export default {
           },
           render: function(h, params) {
             // var rmb = self.round(self.mul(params.row.price, 6.5), 2);
-            // if (self.CNYRate != null)
-            //   rmb = self.round(self.mul(params.row.price, self.CNYRate), 2);
+            // if (self.CNYRate!= null)
+            // rmb = self.round(self.mul(params.row.price, self.CNYRate), 2);
             let CNYRate = self.CNYRate || 6.5,
               rmb = self.round(self.mul(params.row.usdRate, CNYRate), 2);
             const isgreen =
-              parseFloat(params.row.rose) < 0 ? "none" : "inline-block";
+              parseFloat(params.row.rose) < 0? "none": "inline-block";
             const nogreen =
-              parseFloat(params.row.rose) < 0 ? "inline-block" : "none";
+              parseFloat(params.row.rose) < 0? "inline-block": "none";
             return h("div", {
                   attrs: {
                     class: "price-td"
@@ -287,7 +285,7 @@ export default {
                   attrs: {
                     class: "price-rmb"
                   }
-                }, "  ≈ ￥" + rmb),
+                }, " ≈ ¥" + rmb),
               h(
                 "Icon",
                 {
@@ -305,7 +303,7 @@ export default {
                   }
                 },
                 "↑"
-              ),
+),
               h(
                 "Icon",
                 {
@@ -323,7 +321,7 @@ export default {
                   }
                 },
                 "↓"
-              )
+)
             ]);
           }
         },
@@ -344,7 +342,7 @@ export default {
           },
           render: (h, params) => {
             const row = params.row;
-            const className = parseFloat(row.rose) < 0 ? "red" : "green";
+            const className = parseFloat(row.rose) < 0? "red": "green";
             return h(
               "span",
               {
@@ -353,7 +351,7 @@ export default {
                 }
               },
               row.rose
-            );
+);
           }
         },
         {
@@ -389,20 +387,20 @@ export default {
           }
         },
         // {
-        //   title: self.$t("service.OpenPrice"),
-        //   align: "center",
-        //   key: "open",
-        //   width: 150,
-        //   sortable: true,
-        //   sortMethod: function(a, b, type) {
-        //     let a1 = parseFloat(a);
-        //     let b1 = parseFloat(b);
-        //     if (type == "asc") {
-        //       return a1 - b1;
-        //     } else {
-        //       return b1 - a1;
-        //     }
-        //   }
+        // title: self.$t("service.OpenPrice"),
+        // align: "center",
+        // key: "open",
+        // width: 150,
+        // sortable: true,
+        // sortMethod: function(a, b, type) {
+        // let a1 = parseFloat(a);
+        // let b1 = parseFloat(b);
+        // if (type == "asc") {
+        // return a1 - b1;
+        // } else {
+        // return b1 - a1;
+        // }
+        // }
         // },
 
         {
@@ -413,8 +411,8 @@ export default {
             let len = params.row.trend.length;
             valus =
               len > 0
-                ? params.row.trend
-                : [
+? params.row.trend
+: [
                     0,
                     0,
                     0,
@@ -461,7 +459,7 @@ export default {
                 h("span", {
                   style: {
                     cursor: "pointer",
-                    color: "#f0a70a",
+                    color: "#ff6b00",
                     display: "inline-block",
                     padding: "2px 8px"
                   },
@@ -480,7 +478,7 @@ export default {
             }
           }
       ],
-      //当前市场上的交易币种，按交易对分
+      // , Pair
       coins: {
         _map: [],
         USDT: [],
@@ -498,43 +496,41 @@ export default {
             width: 60,
             // renderHeader: (h, params) => {
             // return h("Icon", {
-            //   props: {
-            //     color: "#f0a70a",
-            //     size: "18",
-            //     type: "android-star-outline"
-            //   }
+            // props: {
+            // color: "#ff6b00",
+            // size: "18",
+            // type: "android-star-outline"
+            // }
             // });
             // },
             render: (h, params) => {
               let flag = this.isLogin;
               return h("Icon", {
                 props: {
-                  color: "#f0a70a",
+                  color: "#ff6b00",
                   size: "18",
                   type: params.row.isFavor
-                    ? "ios-star"
-                    : "ios-star-outline"
+? "ios-star"
+: "ios-star-outline"
                 },
                 nativeOn: {
                   click: (event) => {
                     if (this.isLogin) {
-                      event.stopPropagation(); //阻止事件冒泡
+                      event.stopPropagation(); //stop event propagation
                       if (
                         event.currentTarget.className ==
                         "ivu-icon ivu-icon-ios-star"
-                      ) {
-                        // 解除收藏
+) {
                         this.cancelCollect(params.index, params.row);
                         event.currentTarget.className ==
                           "ivu-icon ivu-icon-ios-star-outline";
                       } else {
-                        // 收藏
                         this.collect(params.index, params.row);
                         event.currentTarget.className =
                           "ivu-icon ivu-icon-ios-star";
                       }
                     } else {
-                      this.$Message.warning("请先登录");
+                      this.$Message.warning("Please sign in first");
                     }
                   }
                 }
@@ -569,14 +565,14 @@ export default {
             },
             render: function(h, params) {
               // var rmb = self.round(self.mul(params.row.price, 6.5), 2);
-              // if (self.CNYRate != null)
-              //   rmb = self.round(self.mul(params.row.price, self.CNYRate), 2);
+              // if (self.CNYRate!= null)
+              // rmb = self.round(self.mul(params.row.price, self.CNYRate), 2);
               let CNYRate = self.CNYRate || 6.5,
                 rmb = self.round(self.mul(params.row.usdRate, self.CNYRate), 2);
               const isgreen =
-                parseFloat(params.row.rose) < 0 ? "none" : "inline-block";
+                parseFloat(params.row.rose) < 0? "none": "inline-block";
               const nogreen =
-                parseFloat(params.row.rose) < 0 ? "inline-block" : "none";
+                parseFloat(params.row.rose) < 0? "inline-block": "none";
               return h("div", {
                 attrs: {
                     class: "price-td"
@@ -587,7 +583,7 @@ export default {
                   attrs: {
                     class: "price-rmb"
                   }
-                }, "  ≈ ￥" + rmb),
+                }, " ≈ ¥" + rmb),
                 h(
                   "Icon",
                   {
@@ -605,7 +601,7 @@ export default {
                     }
                   },
                   "↑"
-                ),
+),
                 h(
                   "Icon",
                   {
@@ -623,7 +619,7 @@ export default {
                     }
                   },
                   "↓"
-                )
+)
               ]);
             }
           },
@@ -644,7 +640,7 @@ export default {
             },
             render: (h, params) => {
               const row = params.row;
-              const className = parseFloat(row.rose) < 0 ? "red" : "green";
+              const className = parseFloat(row.rose) < 0? "red": "green";
               return h(
                 "span",
                 {
@@ -653,7 +649,7 @@ export default {
                   }
                 },
                 row.rose
-              );
+);
             }
           },
           {
@@ -696,8 +692,8 @@ export default {
               let len = params.row.trend.length;
               valus =
                 len > 0
-                  ? params.row.trend
-                  : [
+? params.row.trend
+: [
                       0,
                       0,
                       0,
@@ -744,7 +740,7 @@ export default {
                 h("span", {
                   style: {
                     cursor: "pointer",
-                    color: "#f0a70a",
+                    color: "#ff6b00",
                     display: "inline-block",
                     padding: "2px 8px"
                   },
@@ -802,7 +798,7 @@ export default {
       return this.$store.state.lang;
     },
     langPram: function(){
-      if(this.$store.state.lang == "简体中文"){
+      if(false){
         return "CN";
       }
       if(this.$store.state.lang == "English"){
@@ -842,8 +838,8 @@ export default {
           el: '.swiper-pagination',
           clickable: true,
         },
-        slidesPerView :4,
-        spaceBetween : 25
+        slidesPerView:4,
+        spaceBetween: 25
       });
       var comtainer = document.getElementById('swiper_container');
       comtainer.onmouseenter = function () {
@@ -856,9 +852,9 @@ export default {
     strde(str) {
       str = str.trim();
       if(this.langPram == "EN"){
-        return str.length > 25 ? str.slice(0, 25) + "..." : str;
+        return str.length > 25? str.slice(0, 25) + "...": str;
       }
-      return str.length > 18 ? str.slice(0, 18) + "..." : str;
+      return str.length > 18? str.slice(0, 18) + "...": str;
     },
     updateLangData() {
       this.indexBtn = [
@@ -917,8 +913,8 @@ export default {
         (param["pageSize"] = this.pageSize),
         (param["lang"] = this.langPram),
         this.$http
-          .post(this.host + this.api.uc.announcement, param)
-          .then(response => {
+.post(this.host + this.api.uc.announcement, param)
+.then(response => {
             var resp = response.body;
             if (resp.code == 0) {
               if (resp.data.content.length == 0) return;
@@ -944,8 +940,8 @@ export default {
     },
     getCNYRate() {
       this.$http
-        .post(this.host + "/market/exchange-rate/usd-cny")
-        .then(response => {
+.post(this.host + "/market/exchange-rate/usd-cny")
+.then(response => {
           var resp = response.body;
           this.CNYRate = resp.data;
         });
@@ -964,8 +960,8 @@ export default {
       param["sysAdvertiseLocation"] = 1;
       param["lang"] = this.langPram;
       this.$http
-        .post(this.host + "/uc/ancillary/system/advertise", param)
-        .then(response => {
+.post(this.host + "/uc/ancillary/system/advertise", param)
+.then(response => {
           var result = response.body;
           if (result.code == 0 && result.data.length > 2) {
             this.picList = result.data;
@@ -989,17 +985,16 @@ export default {
       stompClient = Stomp.over(socket);
       stompClient.debug = false;
       stompClient.connect({}, function(frame) {
-        //订阅价格变化消息
         stompClient.subscribe("/topic/market/thumb", function(msg) {
           var resp = JSON.parse(msg.body);
           var coin = that.getCoin(resp.symbol);
-          if (coin != null) {
+          if (coin!= null) {
             // coin.price = resp.close.toFixed(2);
             coin.price = resp.close;
             coin.rose =
               resp.chg > 0
-                ? "+" + (resp.chg * 100).toFixed(2) + "%"
-                : (resp.chg * 100).toFixed(2) + "%";
+? "+" + (resp.chg * 100).toFixed(2) + "%"
+: (resp.chg * 100).toFixed(2) + "%";
             // coin.close = resp.close.toFixed(2);
             // coin.high = resp.high.toFixed(2);
             // coin.low = resp.low.toFixed(2);
@@ -1031,7 +1026,7 @@ export default {
         Number(d.replace(".", "")) *
         Number(e.replace(".", "")) /
         Math.pow(10, c)
-      );
+);
     },
     addClass(index) {
       this.choseBtn = index;
@@ -1051,25 +1046,25 @@ export default {
     getSymbol() {
       this.loading = true;
       this.$http
-        .post(this.host + this.api.market.thumbTrend, {})
-        .then(response => {
+.post(this.host + this.api.market.thumbTrend, {})
+.then(response => {
           var resp = response.body;
           for (var i = 0; i < resp.length; i++) {
             var coin = resp[i];
             coin.price = resp[i].close;
             coin.rose =
               resp[i].chg > 0
-                ? "+" + (resp[i].chg * 100).toFixed(2) + "%"
-                : (resp[i].chg * 100).toFixed(2) + "%";
+? "+" + (resp[i].chg * 100).toFixed(2) + "%"
+: (resp[i].chg * 100).toFixed(2) + "%";
             coin.coin = resp[i].symbol.split("/")[0];
             coin.base = resp[i].symbol.split("/")[1];
             coin.href = (coin.coin + "_" + coin.base).toLowerCase();
             coin.isFavor = false;
             this.coins._map[coin.symbol] = coin;
             if(coin.zone == 0) {
-              this.coins[coin.base].push(coin); // 主板
+              this.coins[coin.base].push(coin); // Main
             }else{
-              this.coins[coin.base+"2"].push(coin); // 创新版
+              this.coins[coin.base+"2"].push(coin); // Launchpad
             }
           }
           if (this.isLogin) {
@@ -1080,27 +1075,27 @@ export default {
         });
     },
     // getFavor() {
-    //   //查询自选
-    //   this.$http
-    //     .post(this.host + this.api.exchange.favorFind, {})
-    //     .then(response => {
-    //       var resp = response.body;
-    //       for (var i = 0; i < resp.length; i++) {
-    //         var coin = this.getCoin(resp[i].symbol);
-    //         this.coins.favor.push(coin);
-    //       }
-    //     });
+    // //list favourites
+    // this.$http
+    //.post(this.host + this.api.exchange.favorFind, {})
+    //.then(response => {
+    // var resp = response.body;
+    // for (var i = 0; i < resp.length; i++) {
+    // var coin = this.getCoin(resp[i].symbol);
+    // this.coins.favor.push(coin);
+    // }
+    // });
     // },
     getFavor() {
-      //查询自选(收藏)
+      // list favourites()
       this.$http
-        .post(this.host + this.api.exchange.favorFind, {})
-        .then(response => {
+.post(this.host + this.api.exchange.favorFind, {})
+.then(response => {
           var resp = response.body;
           this.coins.favor = [];
           for (var i = 0; i < resp.length; i++) {
             var coin = this.getCoin(resp[i].symbol);
-            if (coin != null) {
+            if (coin!= null) {
               coin.isFavor = true;
               this.coins.favor.push(coin);
             }
@@ -1115,8 +1110,8 @@ export default {
       var params = {};
       params["symbol"] = row.symbol;
       this.$http
-        .post(this.host + this.api.exchange.favorAdd, params)
-        .then(response => {
+.post(this.host + this.api.exchange.favorAdd, params)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.$Message.info(this.$t("exchange.do_favorite"));
@@ -1134,8 +1129,8 @@ export default {
       var params = {};
       params["symbol"] = row.symbol;
       this.$http
-        .post(this.host + this.api.exchange.favorDelete, params)
-        .then(response => {
+.post(this.host + this.api.exchange.favorDelete, params)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.$Message.info(this.$t("exchange.cancel_favorite"));
@@ -1155,7 +1150,7 @@ export default {
 </script>
 <style scoped lang="scss" >
 @media screen and (max-width:768px){
-  .app_bottom{
+.app_bottom{
     display: block!important;
   }
   #fullpage {
@@ -1163,16 +1158,16 @@ export default {
   }
 }
 .banner-panel{
-  height:400px;background-color:#141e2b;overflow:hidden;position:relative;
-  .activity-list{
+  height:400px;background-color:#151515;overflow:hidden;position:relative;
+.activity-list{
     width: 100%;min-width:1200px;display:flex;flex-start:row;justify-content:center;position:absolute;bottom: 20px;
-    .swiper-container {
+.swiper-container {
       width: 72%;
       max-height: 150px;
       margin: 0 auto;
-      .swiper-wrapper{
+.swiper-wrapper{
         margin-bottom: 15px;
-        .activity-item{
+.activity-item{
           margin: 0 0;
           &:hover{
             opacity:0.9;
@@ -1193,12 +1188,12 @@ export default {
 }
 
 #pagetips{
-  .agent-panel{
+.agent-panel{
     display:flex;flex-direction:row;overflow:hidden;position:relative;justify-content: center;min-width:1200px;
-    .title{
+.title{
       margin-right: 10px;
       float:left;width:220px;padding: 10px 0px;border-right:1px solid rgb(28, 44, 72);letter-spacing: 3px;
-      .gettingstart{
+.gettingstart{
         color: #FFF;
         text-align: justify;
         height: 20px;
@@ -1208,7 +1203,7 @@ export default {
           content: '';
         }
       }
-      .tips{
+.tips{
         font-size:10px;color: #869ec9;letter-spacing:2px;margin-top: 5px;text-align: justify;
         height: 18px;
         &:after{
@@ -1218,21 +1213,21 @@ export default {
         }
       }
     }
-    .agent-list{
+.agent-list{
       float:left;padding: 4px 0px;height:62px;display:flex;flex-direction:row;overflow:hidden;
-      .agent-item{
-        height:54px;background:#151f2c;width:210px;margin-left:10px;padding-right:15px;
-        border: 1px solid #151f2c;
+.agent-item{
+        height:54px;background:#151515;width:210px;margin-left:10px;padding-right:15px;
+        border: 1px solid #151515;
         transition: all 0.5s;
-        .agent-img{
+.agent-img{
           padding-top:7px;margin-left:7px;float:left;
           img{
             height:40px;width:40px;border-radius:40px;
           }
         }
-        .agent-detail{
+.agent-detail{
           padding-top:10px;margin-left:10px;float:left;max-width:130px;
-          .agent-name{
+.agent-name{
             font-size: 13px;color:#ffa800;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1241,7 +1236,7 @@ export default {
             max-width: 130px;
             -webkit-box-orient: vertical;
           }
-          .agent-count{
+.agent-count{
             font-size: 10px;color:rgb(103, 122, 153);margin-top:5px;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1254,29 +1249,29 @@ export default {
           }
         }
       }
-      .agent-item:hover{
+.agent-item:hover{
         cursor:pointer;
         border: 1px solid rgb(240, 185, 11);
       }
     }
-    .agent-all{
-      height:62px;text-align:right;line-height:62px;background:transparent;position:absolute;right:12px;font-size:12px;color: #f0a70a;
+.agent-all{
+      height:62px;text-align:right;line-height:62px;background:transparent;position:absolute;right:12px;font-size:12px;color: #ff6b00;
     }
   }
 }
 
 #pagetips {
-  background: #141e2b;
+  background: #151515;
   padding: 0 10%;
 
   overflow: hidden;
-  .topnav {
+.topnav {
     width: 100%;
     line-height: 40px;
     height: 40px;
     // float: left;
     margin: 0 auto;
-    .carl {
+.carl {
       width: 100%;
       height: 40px;
       position: relative;
@@ -1284,30 +1279,30 @@ export default {
       justify-content: space-between;
       align-items: flex-start;
       position: relative;
-      .notice-list{
+.notice-list{
         width: 100%;
         text-align:center;
         display:flex;
         flex-start:row;
         justify-content:center;
         height: 40px;
-        .notice-item{
+.notice-item{
           max-width:25%;
           padding:0px 30px;
           text-align:center;
           position:relative;
-          .cal_content{
+.cal_content{
             max-width:100%;
             a{
               color: rgba(130,142,161,1);
               font-size:12px;
             }
             a:hover{
-              color: #f0a70a!important;
+              color: #ff6b00!important;
             }
           }
         }
-        .notice-item:not(:last-child):after{
+.notice-item:not(:last-child):after{
           content: "/";
           position: absolute;
           right: 0;
@@ -1316,12 +1311,12 @@ export default {
         }
       }
 
-      .more {
+.more {
         position: absolute;
         z-index: 0;
         right: 0;
         a {
-          color: #f0a70a!important;
+          color: #ff6b00!important;
           font-size: 12px;
           padding: 3px 12px;
           border-radius:3px;
@@ -1329,14 +1324,14 @@ export default {
       }
     }
   }
-  .frinend_wakuang {
+.frinend_wakuang {
     width: 50%;
     float: right;
     text-align: right;
     height: 100%;
     line-height: 40px;
     a {
-      color: #f0a70a;
+      color: #ff6b00;
       font-size: 14px;
     }
   }
@@ -1346,42 +1341,42 @@ export default {
   ul {
     list-style-type: none;
   }
-  .page6-out {
+.page6-out {
     -moz-box-shadow: 2px 2px 5px #f5f5f5, -2px -2px 4px #f5f5f5;
     -webkit-box-shadow: 2px 2px 5px #f5f5f5, -2px -2px 4px #f5f5f5;
     box-shadow: 2px 2px 5px #f5f5f5, -2px -2px 4px #f5f5f5;
     padding: 30px 20px;
     overflow: hidden;
-    .page6-list {
+.page6-list {
       width: 33.33333%;
       float: left;
-      .list-op {
-        .special {
+.list-op {
+.special {
           line-height: 26px;
-          .num {
-            color: #f0a70a;
+.num {
+            color: #ff6b00;
           }
         }
-        .list-opBHB {
+.list-opBHB {
           text-align: left;
         }
-        .text {
+.text {
           text-align: left;
           word-break: break-all;
           margin-right: 20px;
-          .num {
+.num {
             font-size: 30px;
-            color: #f0a70a;
+            color: #ff6b00;
             font-weight: 500;
           }
-          .type {
+.type {
             font-size: 16px;
-            color: #f0a70a;
+            color: #ff6b00;
             font-weight: 500;
           }
         }
-        .num2 {
-          color: #f0a70a;
+.num2 {
+          color: #ff6b00;
         }
       }
     }
@@ -1389,41 +1384,41 @@ export default {
 }
 #progress {
   padding: 20px 14%;
-  .title {
-    color: #f0a70a;
+.title {
+    color: #ff6b00;
     overflow: hidden;
     line-height: 30px;
     font-size: 16px;
-    .already {
+.already {
       float: left;
     }
-    .total {
+.total {
       float: right;
-      color: #f0ac19;
+      color: #ff8534;
     }
   }
-  .ivu-progress.ivu-progress-normal {
-    .ivu-progress-inner {
+.ivu-progress.ivu-progress-normal {
+.ivu-progress-inner {
       background: #fff;
       border-radius: 0;
-      .ivu-progress-bg {
+.ivu-progress-bg {
         border-radius: 0;
       }
     }
   }
 }
 #page2 {
-  background: #141e2c;
+  background: #000000;
   height: auto;
   min-height: 320px;
   padding: 40px 14%;
-  .page2nav {
+.page2nav {
     line-height: 50px;
     font-size: 20px;
-    background: #1e2834;
+    background: #1c1c1c;
     min-width: 864px;
     display:flex;
-    .board-title{
+.board-title{
       width: 20%;
       height: 60px;
       line-height: 60px;
@@ -1431,13 +1426,13 @@ export default {
       background: #ffa800;
       color: #000;
     }
-    .brclearfix {
+.brclearfix {
       width: 100%;
       li {
         float: left;
         cursor: pointer;
         color: #fff;
-        background: #1e2834;
+        background: #1c1c1c;
         list-style: none;
         font-size: 16px;
         padding: 5px 40px;
@@ -1445,28 +1440,28 @@ export default {
         -webkit-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
         box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
         &:hover {
-          background: #222b38;
+          background: #1e1e1e;
         }
       }
       li.active {
-        background: #27313e;
-        color: #f0a70a;
+        background: #141414;
+        color: #ff6b00;
         position: relative;
-        border-bottom: 2px solid #f0a70a;
+        border-bottom: 2px solid #ff6b00;
       }
     }
   }
-  .ptjy {
+.ptjy {
     height: 100%;
     min-width: 864px;
-    .tables {
+.tables {
       border: none;
       -moz-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
       -webkit-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
       box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-      .ivu-table {
-        .ivu-table-header {
-          .ivu-table-column-center {
+.ivu-table {
+.ivu-table-header {
+.ivu-table-column-center {
             background: none;
           }
         }
@@ -1480,14 +1475,14 @@ export default {
   border-color: transparent;
 }
 #page4 {
-  background: #192330;
+  background: #000000;
   height: auto;
   padding: 80px 0 80px 0;
   ul {
     width: 88%;
     margin: 0 auto;
     li {
-      flex: 0 0  25%;
+      flex: 0 0 25%;
       display: inline-block;
       width: 24%;
       padding: 0 15px;
@@ -1507,7 +1502,7 @@ export default {
         font-size: 14px;
         margin: 20px 0;
         text-align: center;
-        color: #828ea1;
+        color: #8a8a8a;
       }
       p.title {
         color: #fff;
@@ -1518,41 +1513,41 @@ export default {
   }
 }
 .bg-dark{
-  background: #192330;
+  background: #000000;
 }
 .bg-light{
-  background: #222e3d;
+  background: #202020;
 }
 #page6{
   min-height: 460px;
   padding: 80px 14%;
   position: relative;
-  .title{
+.title{
     font-size: 30px;
     text-align:center;
     width: 100%;
     letter-spacing: 6px;
   }
-  .title-left{
+.title-left{
     font-size: 30px;
     text-align:left;
     width: 100%;
     letter-spacing: 6px;
   }
-  .subtitle{
+.subtitle{
     margin-bottom: 40px;
-    color: #828ea1;
+    color: #8a8a8a;
     font-size: 13px;
     text-align:center;
     width: 100%;
   }
-  .detail{
+.detail{
     line-height: 40px;
     letter-spacing: 2px;
     text-indent:45px;
     font-size: 20px;
     margin-bottom: 20px;
-    color: #828ea1;
+    color: #8a8a8a;
     text-align:justify;
   }
 }
@@ -1560,20 +1555,20 @@ export default {
   height: 517px;
   padding: 0 14%;
   position: relative;
-  background: #192330 url("../../assets/images/app-download.jpg") no-repeat 0 0;
+  background: #000000 url("../../assets/images/app-download.jpg") no-repeat 0 0;
   background-size: 100% 517px;
   overflow: hidden;
-  .phone_image {
+.phone_image {
     width: 480px;
     float: left;
     height: 100%;
     background: url("../../assets/images/phone_img.png") no-repeat left 150px;
     background-size: 480px;
   }
-  .download {
+.download {
     float: right;
     list-style-type: none;
-    .qrcode {
+.qrcode {
       color: #fff;
       font-size: 18px;
       font-weight: 500;
@@ -1583,33 +1578,33 @@ export default {
       margin-bottom: 14px;
       font-weight: 900;
     }
-    .wrapper {
+.wrapper {
       width: 190px;
       height: 300px;
       float: left;
       padding: 0;
       margin-right: 0px;
-      .download_app {
+.download_app {
         height: 190px;
         img {
           width: 100%;
           border-radius: 5px;
         }
       }
-      .abstract {
+.abstract {
         text-align: center;
         display: flex;
         margin-top: 14px;
         justify-content: center;
         align-items: center;
         height: 30px;
-        .image {
+.image {
           width: 18px;
           img {
             vertical-align: middle;
           }
         }
-        .content {
+.content {
           font-size: 12px;
           text-align: left;
           color: #fff;
@@ -1622,26 +1617,26 @@ export default {
 </style>
 <style lang="scss">
 #progress {
-  .ivu-progress.ivu-progress-normal {
-    .ivu-progress-inner {
+.ivu-progress.ivu-progress-normal {
+.ivu-progress-inner {
       background: #fff;
       border-radius: 5px;
-      border: 1px solid #f0a70a;
-      .ivu-progress-bg {
+      border: 1px solid #ff6b00;
+.ivu-progress-bg {
         border-radius: 0;
-        background: #f0a70a;
+        background: #ff6b00;
       }
     }
   }
 }
 #page2 {
-  .ptjy {
+.ptjy {
     position:relative;
     min-height: 500px;
-    background-color: #141e2c;
-    border-bottom: 1px solid #27313e!important;
+    background-color: #000000;
+    border-bottom: 1px solid #141414!important;
     &:after{
-      background:#27313e!important;
+      background:#141414!important;
       content: '';
       width: 1px;
       height: 100%;
@@ -1651,7 +1646,7 @@ export default {
       z-index: 3;
     }
     &:before{
-      background:#27313e!important;
+      background:#141414!important;
       content: '';
       width: 1px;
       height: 100%;
@@ -1660,33 +1655,33 @@ export default {
       left: 0;
       z-index: 3;
     }
-    .tables {
-      .ivu-table {
-        background-color: #141e2c;
-        .ivu-table-header {
-          background:#27313e;
+.tables {
+.ivu-table {
+        background-color: #000000;
+.ivu-table-header {
+          background:#141414;
           color:#888;
           th {
             background: none;
-            border-color:#26303d;
+            border-color:#222222;
           }
         }
 
-        .ivu-table-header{
-          background: #141e2c;
-              border-bottom: 1px solid #27313e;
-          .ivu-table-cell {
+.ivu-table-header{
+          background: #000000;
+              border-bottom: 1px solid #141414;
+.ivu-table-cell {
             padding: 10px 0;
           }
         }
-        .ivu-table-body {
-          .ivu-table-cell {
+.ivu-table-body {
+.ivu-table-cell {
             padding: 5px 0;
           }
         }
-        .ivu-table-body table .ivu-table-tbody {
+.ivu-table-body table.ivu-table-tbody {
             tr td{
-              border-color:#26303d;
+              border-color:#222222;
               color:#fff;
             }
         }
@@ -1698,16 +1693,16 @@ export default {
 
 
 <style>
-.section .ivu-carousel-dots-inside {
+.section.ivu-carousel-dots-inside {
   bottom: 20px;
 }
 
 .green {
-  color: #00b275 !important;
+  color: #00b275!important;
 }
 
 .red {
-  color: #f15057 !important;
+  color: #f15057!important;
 }
 
 .brclearfix:after {
@@ -1765,7 +1760,7 @@ export default {
   background: url(../../assets/images/register.png) no-repeat;
 }*/
 
-/* .usdt {
+/*.usdt {
   float: left;
   width: 100%;
 } */
@@ -1774,7 +1769,7 @@ export default {
   float: left;
   width: 18%;
   height: 290px;
-  background: #1d293a;
+  background: #1d1d1d;
   padding-top: 125px;
   margin: 5px;
 }
@@ -1790,7 +1785,7 @@ export default {
   float: left;
   width: 18%;
   height: 140px;
-  background: #1d293a;
+  background: #1d1d1d;
   padding-top: 50px;
   margin: 5px;
 }
@@ -1903,12 +1898,12 @@ export default {
 }
 
 .news_1 {
-  color: #202b3c;
+  color: #1e1e1e;
   font-size: 12px;
 }
 
 .news_2 {
-  color: #505c6f;
+  color: #414141;
   font-size: 13px;
 }
 
@@ -1923,18 +1918,18 @@ export default {
 }
 
 .news_date {
-  color: #505c6f;
+  color: #414141;
 }
 
 .news_detail {
   color: #98999f;
   margin-top: 10px;
 }
-.ptjy .ivu-table td, .ptjy .ivu-table th{
+.ptjy.ivu-table td,.ptjy.ivu-table th{
   height: 25px;
 }
 .price-rmb{
-  color: #828ea1;
+  color: #8a8a8a;
   font-size: 10px;
   margin-left: 3px;
 }
@@ -1942,7 +1937,7 @@ export default {
   padding-left: 100px;
   text-align: left;
 }
-th .ivu-table-cell span{
+th.ivu-table-cell span{
   font-weight: normal!important;
 }
 .ivu-table td{
@@ -1956,15 +1951,15 @@ th .ivu-table-cell span{
   left: 0;
   width: 100%;
   height: 40px;
-  background: rgba(242,246,250,1) !important;
+  background: rgba(242,246,250,1)!important;
 }
-.app_bottom .left_logo img{
+.app_bottom.left_logo img{
   height: 30px;margin-top:5px;border-radius: 5px;margin-left: 5px;margin-right: 5px;
 }
-.app_bottom .right_btn_wrap{
+.app_bottom.right_btn_wrap{
   float: right;height: 40px;line-height: 40px;margin-right: 5px;
 }
-.app_bottom .right_btn{
+.app_bottom.right_btn{
   color: #FFF;
   border-radius: 3px;
   padding: 0px 10px;

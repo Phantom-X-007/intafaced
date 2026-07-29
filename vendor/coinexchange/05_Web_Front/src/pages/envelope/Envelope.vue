@@ -2,24 +2,24 @@
   <div class="envelope">
     <div v-if="hasInviteUser" style="width:80%;height: 35px;padding: 5px 0 5px 0px;border-radius: 35px;background-color:rgb(157, 0, 0);margin-left:10%;text-align:center;display: flex;flex-direction:row;justify-content:center;margin-bottom:10px;">
       <img style="width: 25px; height: 25px;margin-right: 10px;border-radius: 25px;" :src="inviteUserAvatar"></img>
-      <div style="height: 30px;line-height:30px;color: #EEE;">{{inviteUserId}} 邀您领红包！</div>
+      <div style="height: 30px;line-height:30px;color: #EEE;">{{inviteUserId}} has sent you a gift!</div>
     </div>
     <div style="position:absolute;top: 40px;width: 100%;text-align:center;padding-top: 50px;">
       <div v-if="hasInviteUser" style="width:100%;height:35px;"></div>
       <p style="text-align:center;padding: 15px 0px;font-size:14px;letter-spacing:1px;width:100%;color:#000;">{{envelopeInfo.name}}</p>
       <p style="text-align:center;padding: 15px 0px;font-size:36px;letter-spacing:1px;width:100%;color:#fb272a;font-weight:bold;">{{envelopeInfo.totalAmount}} {{envelopeInfo.unit}}</p>
-      <p style="text-align:center;padding: 15px 0px;font-size:14px;letter-spacing:1px;width:100%;color:rgb(227, 205, 187);">已领取：{{envelopeInfo.receiveCount}}/{{envelopeInfo.count}}</p>
+      <p style="text-align:center;padding: 15px 0px;font-size:14px;letter-spacing:1px;width:100%;color:rgb(227, 205, 187);">Claimed:{{envelopeInfo.receiveCount}}/{{envelopeInfo.count}}</p>
       <p style="text-align:center;padding: 20px 0px;font-size:14px;letter-spacing:1px;width:100%;color:#555;margin-top: 40px;">
         <img style="width: 100%;height:60px;width:60px;border-radius:60px;" :src="envelopeInfo.logo"></img>
       </p>
     </div>
     <img style="width: 100%;" :src="envelopeInfo.bgImage"></img>
-    <p style="margin-top: -80px;margin-bottom: 80px;text-align:center;color: rgb(255, 136, 79);font-size:13px;">该红包通过币严(BIZZAN.COM)发出</p>
-    <div class="input-panel"  v-if="!hasReceived &&  envelopeInfo.state == 0">
+    <p style="margin-top: -80px;margin-bottom: 80px;text-align:center;color: rgb(255, 136, 79);font-size:13px;">Sent via INTAFACED</p>
+    <div class="input-panel" v-if="!hasReceived && envelopeInfo.state == 0">
       <div style="color: rgb(177, 177, 177);font-size: 16px;margin: 10px 0 20px 0;" v-html="envelopeInfo.detail"></div>
       <Form ref="formInline" inline>
         <FormItem prop="user">
-          <Input type="text" v-model="formInline.phone" placeholder="请输入手机号码"></Input>
+          <Input type="text" v-model="formInline.phone" placeholder="Enter your phone number"></Input>
         </FormItem>
 
         <FormItem prop="code">
@@ -29,39 +29,39 @@
           </input>
         </FormItem>
         <FormItem>
-          <Button class="register_btn" @click="handleSubmit()">领取红包</Button>
+          <Button class="register_btn" @click="handleSubmit()">Claim</Button>
         </FormItem>
       </Form>
     </div>
 
-    <div class="envelope-result" v-if="hasReceived &&  envelopeInfo.state == 0">
-      <p style="font-size:14px;text-align:center;color: #999;margin-top: 5px;">恭喜您！</p>
+    <div class="envelope-result" v-if="hasReceived && envelopeInfo.state == 0">
+      <p style="font-size:14px;text-align:center;color: #999;margin-top: 5px;">Congratulations!</p>
       <p style="text-align:center;font-size: 30px;color: rgb(251, 39, 42);font-weight:bold;margin: 10px 0;">{{receiveAmount}} BTC</p>
-      <Button v-if="envelopeInfo.invite == 1" class="register_btn" @click="inviteMore()">邀请好友增加领取次数</Button>
-      <p v-if="envelopeInfo.invite ==1" style="font-size:14px;text-align:center;color: #999;margin-top:15px;">邀请一个好友增加一次领取机会</p>
+      <Button v-if="envelopeInfo.invite == 1" class="register_btn" @click="inviteMore()">Invite friends for more claims</Button>
+      <p v-if="envelopeInfo.invite ==1" style="font-size:14px;text-align:center;color: #999;margin-top:15px;">Each friend you invite adds one claim</p>
       <p style="text-align:center;">
-        <router-link style="font-size:14px;text-align:center;color: #085fff;margin-top:15px;text-decoration:underline;" to="/app">下载APP | 查看资产</router-link>
+        <router-link style="font-size:14px;text-align:center;color: #3f3f3f;margin-top:15px;text-decoration:underline;" to="/app">Download the app | View balance</router-link>
       </p>
     </div>
     <div class="envelope-result" v-if="envelopeInfo.state == 1">
-      <p style="font-size:20px;text-align:center;color: #999;margin-top: 5px;">红包已领完！</p>
+      <p style="font-size:20px;text-align:center;color: #999;margin-top: 5px;">All claimed.</p>
     </div>
     <div class="envelope-result" v-if="envelopeInfo.state == 2">
-      <p style="font-size:20px;text-align:center;color: #999;margin-top: 5px;">红包已过期！</p>
+      <p style="font-size:20px;text-align:center;color: #999;margin-top: 5px;">This gift has expired.</p>
     </div>
 
     <div class="record-list">
-      <div class="title">领取记录</div>
+      <div class="title">Claim history</div>
 
       <div class="content">
-        <p v-if="envelopeDetailList.length == 0" style="color: #999;margin: 20px 0;">暂无领取</p>
+        <p v-if="envelopeDetailList.length == 0" style="color: #999;margin: 20px 0;">No claims yet</p>
         <div class="item clearfix" v-for="item in envelopeDetailList">
           <div class="phone">{{item.userIdentify}}</div><div class="amount">{{item.amount}} {{envelopeInfo.unit}}</div>
         </div>
       </div>
     </div>
     <p style="text-align:center;margin-top: 25px;margin-bottom: 20px;">
-    <router-link style="font-size:14px;text-align:center;color: #EEE;margin-top:15px;text-decoration:underline;" to="/app">© BIZZAN.COM | 下载APP</router-link>
+    <router-link style="font-size:14px;text-align:center;color: #EEE;margin-top:15px;text-decoration:underline;" to="/app">© INTAFACED.COM | Download the app</router-link>
     </p>
 
     <Spin size="large" fix v-if="spinShow"></Spin>
@@ -74,7 +74,7 @@ export default {
     return {
       spinShow: false,
       hasReceived: false,
-      inviteLink: "https://www.bizzan.com/envelope/",
+      inviteLink: "https://www.intafaced.com/envelope/",
       envelopeNo: "",
       country: "",
       sendcodeValue: this.$t("uc.regist.sendcode"),
@@ -83,7 +83,7 @@ export default {
       promotionCode: "",
       hasInviteUser: false,
       inviteUserId: "***********",
-      inviteUserAvatar: "https://bizzan.oss-cn-hangzhou.aliyuncs.com/defaultavatar.png",
+      inviteUserAvatar: "/static/defaultavatar.png",
       envelopeInfo: {
         id: 0,
         name: "**********",
@@ -93,10 +93,10 @@ export default {
         count: 0,
         invite: 0,
         type: 0,
-        logo: "https://bizzan.oss-cn-hangzhou.aliyuncs.com/applogo.png",
-        bgImage: "https://bizzan.oss-cn-hangzhou.aliyuncs.com/redenvelope.png",
+        logo: "/static/applogo.svg",
+        bgImage: "/static/redenvelope.png",
         state: 0,
-        detail: "留给未来一个暴富的可能"
+        detail: "A small stake in a large future"
       },
       formInline: {
         verifyCode: "",
@@ -120,14 +120,9 @@ export default {
     lang() {
       return this.$store.state.lang;
     },
-    langPram(){
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+    langPram() {
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     }
   },
   methods: {
@@ -141,32 +136,31 @@ export default {
         this.$router.push("/app");
       }else{
         this.formInline.envelopeNo = eNo;
-        if(this.$route.query.code != undefined && this.$route.query.code != "" && this.$route.query.code != null){
+        if(this.$route.query.code!= undefined && this.$route.query.code!= "" && this.$route.query.code!= null){
             this.formInline.promotionCode = this.$route.query.code;
         }
       }
 
-      // 获取红包信息
       this.getEnvelope();
     },
     sendCode(){
       var reg = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
       if(!reg.test(this.formInline.phone)) {
-        this.$Message.error("请输入合法的手机号");
+        this.$Message.error("Enter a valid phone number");
       }else{
         var params = {};
         params["phone"] = this.formInline.phone;
-        params["country"] = "中国";
+        params["country"] = "China";
         params["envelopeId"] = this.envelopeInfo.id;
         if(this.envelopeInfo.id == 0 || this.envelopeInfo.id == null || this.envelopeInfo.id == undefined){
-          this.$Message.error("红包不存在");
+          this.$Message.error("Gift not found");
           return;
         }
         this.$http.post(this.host + "/uc/redenvelope/code", params).then(response => {
           var resp = response.body;
           resp.code == 0 && this.$Message.success(resp.message);
           resp.code == 0 && this.settime();
-          resp.code != 0 && this.$Message.error(resp.message);
+          resp.code!= 0 && this.$Message.error(resp.message);
         });
       }
     },
@@ -187,7 +181,7 @@ export default {
     },
     handleSubmit(){
       if (this.formInline.verifyCode == "") {
-        this.$Message.error("请输入验证码");
+        this.$Message.error("Enter the verification code");
         return;
       }
 
@@ -205,8 +199,8 @@ export default {
     inviteMore(){
       this.$router.replace('/envelope/' + this.formInline.envelopeNo + "?code=" + this.promotionCode);
       this.$Modal.confirm({
-          title: '跳转刷新提示',
-          content: '<p>点击"确定"将生成您的专属红包邀请页面。</p><br><p>使用方法：进入专属邀请页面后，分享该页面给微信好友即可</p>',
+          title: 'redirect refresh notice',
+          content: '<p>Click"Confirm"to generate your personal invite page.</p><br><p>How it works: open your invite page, then share it with your contacts.</p>',
           onOk: () => {
               this.formInline.promotionCode = this.promotionCode;
               this.hasReceived = false;
@@ -236,22 +230,22 @@ export default {
             this.envelopeInfo.invite = res.body.data.invite;
             this.envelopeInfo.type = res.body.data.type;
             this.envelopeInfo.state = res.body.data.state;
-            if(res.body.data.inviteUser != null && res.body.data.inviteUser != "" && res.body.data.inviteUser != undefined) {
+            if(res.body.data.inviteUser!= null && res.body.data.inviteUser!= "" && res.body.data.inviteUser!= undefined) {
               this.hasInviteUser = true;
               this.inviteUserId = res.body.data.inviteUser;
-              if(res.body.data.inviteUserAvatar != null){
+              if(res.body.data.inviteUserAvatar!= null){
                 this.inviteUserAvatar = res.body.data.inviteUserAvatar;
               }
             }
 
-            if(res.body.data.logoImage != null && res.body.data.logoImage != "") {
+            if(res.body.data.logoImage!= null && res.body.data.logoImage!= "") {
               this.envelopeInfo.logo = res.body.data.logoImage;
             }
-            if(res.body.data.bgImage != null && res.body.data.bgImage != "") {
+            if(res.body.data.bgImage!= null && res.body.data.bgImage!= "") {
               this.envelopeInfo.bgImage = res.body.data.bgImage;
             }
 
-            window.document.title = "【" + this.envelopeInfo.totalAmount + " " + this.envelopeInfo.unit + "】" + this.envelopeInfo.name + "  — 币严(BIZZAN.COM)交易所"
+            window.document.title = "[" + this.envelopeInfo.totalAmount + " " + this.envelopeInfo.unit + "]" + this.envelopeInfo.name + " — INTAFACED(INTAFACED.COM)Exchange"
             this.getEnvelopeDetailList();
           } else {
               this.$Message.error(res.body.message);
@@ -275,18 +269,18 @@ export default {
 <style lang="scss">
 .envelope {
   padding-top: 60px;
-  .envelope-result{
+.envelope-result{
     width:90%;
     margin-left:5%;
     background:#FFF;
     border-radius: 5px;
     position:relative;
     padding: 15px 20px 25px 20px;
-    .register_btn.ivu-btn {
+.register_btn.ivu-btn {
       width: 100%;
-      background-color: #f0ac19;
+      background-color: #ff8534;
       outline: none;
-      border-color: #f0ac19;
+      border-color: #ff8534;
       color: #fff;
       border-radius: 5px;
       font-size: 16px;
@@ -298,7 +292,7 @@ export default {
       }
     }
   }
-  .input-panel{
+.input-panel{
     width:90%;
     margin-left:5%;
     background:#FFF;
@@ -306,14 +300,14 @@ export default {
     position:relative;
     padding: 15px 20px 5px 20px;
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
-      .ivu-form-item {
+.ivu-form-item {
         margin-bottom: 15px;
-        .ivu-form-item-content {
-          .register_btn.ivu-btn {
+.ivu-form-item-content {
+.register_btn.ivu-btn {
             width: 100%;
-            background-color: #f0ac19;
+            background-color: #ff8534;
             outline: none;
-            border-color: #f0ac19;
+            border-color: #ff8534;
             color: #fff;
             border-radius: 5px;
             font-size: 16px;
@@ -324,37 +318,37 @@ export default {
               box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
             }
           }
-          .ivu-input-wrapper.ivu-input-type {
-            .ivu-input {
+.ivu-input-wrapper.ivu-input-type {
+.ivu-input {
               border: 1px solid red;
             }
           }
-          .ivu-input-wrapper{
-            .ivu-input-group-prepend{
+.ivu-input-wrapper{
+.ivu-input-group-prepend{
               background-color:#FFF!important;
               border: none!important;
-              .ivu-select-visible{
-                .ivu-select-selection{
+.ivu-select-visible{
+.ivu-select-selection{
                   border-color: 1px solid #EDEDED!important;
                 }
               }
-              .ivu-select{
-                border: none !important;
-                .ivu-select-selection{
+.ivu-select{
+                border: none!important;
+.ivu-select-selection{
                   background: #EDEDED;
                   border-color: 1px solid #EDEDED!important;
                 }
-                .ivu-select-selection-focused{
+.ivu-select-selection-focused{
                   border-color: 1px solid #EDEDED!important;
                 }
               }
             }
-            .ivu-input{
+.ivu-input{
               background-color: #EDEDED!important;
               border: none!important;
               color: #333;
             }
-            .ivu-input:hover, .ivu-input-number-input:hover, .ivu-input-number:hover{
+.ivu-input:hover,.ivu-input-number-input:hover,.ivu-input-number:hover{
               border: none;
             }
           }
@@ -371,21 +365,21 @@ export default {
           }
         }
       }
-      .check-agree {
+.check-agree {
         color: #979797;
         display: inline-block;
         line-height: 30px;
         font-size: 12px;
         cursor: default;
         a {
-          color: #f0ac19;
+          color: #ff8534;
           margin-left: -10px;
         }
-        .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
-          .ivu-checkbox.ivu-checkbox-checked {
-            .ivu-checkbox-inner {
-              border: 1px solid #f0ac19;
-              background-color: #f0ac19;
+.ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
+.ivu-checkbox.ivu-checkbox-checked {
+.ivu-checkbox-inner {
+              border: 1px solid #ff8534;
+              background-color: #ff8534;
             }
           }
         }
@@ -393,16 +387,16 @@ export default {
     }
   }
 
-  .record-list{
+.record-list{
     margin-top:30px;
     text-align:center;
-    .title{
+.title{
       position: relative;
       width: 40%;
       margin-left: 30%;
       font-size: 16px;
     }
-    .title:before{
+.title:before{
       position: absolute;
       left: -30%;
       top: 12px;
@@ -412,7 +406,7 @@ export default {
       display: block;
       background-color:#FFF;
     }
-    .title:after{
+.title:after{
       position: absolute;
       right: -30%;
       top: 12px;
@@ -423,21 +417,21 @@ export default {
       background-color:#FFF;
     }
 
-    .content{
+.content{
       background-color:#FFF;
       width: 90%;
       border-radius: 5px;
       margin-left: 5%;
       margin-top: 20px;
       padding: 10px 5px;
-      .item{
+.item{
         color: #888;
         padding: 8px 10px;
-        .phone{
+.phone{
           float:left;
           letter-spacing: 1px;
         }
-        .amount{
+.amount{
           float:right;
         }
       }

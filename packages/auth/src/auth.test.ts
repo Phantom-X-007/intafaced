@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { issueAccessToken, verifyAccessToken, AuthError, generateRefreshToken, hashRefreshToken } from './tokens.js';
 import { requireScope, requireTier, requireOwnership, requireMfa, bearerToken } from './guards.js';
-import { assertKeyScopesAllowed, expandScopes, hasScope, isScope, SCOPES } from './scopes.js';
+import {
+  assertDelegatableScopes,
+  assertKeyScopesAllowed,
+  expandScopes,
+  hasScope,
+  isScope,
+  INTERACTIVE_ONLY_SCOPES,
+  SCOPES,
+  SESSION_SCOPES,
+  WITHHELD_FROM_SESSION,
+} from './scopes.js';
 
 const config = {
   secret: 'a-test-signing-secret-that-is-long-enough',
@@ -100,6 +110,87 @@ describe('scopes', () => {
   });
 });
 
+describe('what a session is issued', () => {
+  it('accounts for every scope exactly once — issued, or withheld with a reason', () => {
+    // The compiler already enforces this through
+    // `Record<Exclude<Scope, SessionScope>, string>`; the test states it in
+    // terms a reader can check. A scope in neither list is a screen nobody can
+    // open (bank and blueprint, until this change) or authority nobody decided
+    // to hand out.
+    const issued = new Set<string>(SESSION_SCOPES);
+    const withheld = new Set(Object.keys(WITHHELD_FROM_SESSION));
+
+    for (const scope of SCOPES) {
+      expect(issued.has(scope) !== withheld.has(scope), `${scope} must be issued or withheld, not both or neither`).toBe(true);
+    }
+    expect(issued.size + withheld.size).toBe(SCOPES.length);
+    for (const reason of Object.values(WITHHELD_FROM_SESSION)) expect(reason.length).toBeGreaterThan(0);
+  });
+
+  it('opens bank and blueprint — the two modules that were issued to nobody', () => {
+    // The regression this change exists to prevent. Both services require these
+    // on every procedure; neither was ever issued, so both answered 403 to the
+    // entire platform.
+    for (const scope of ['bank:read', 'bank:write', 'blueprint:read', 'blueprint:write']) {
+      expect(SESSION_SCOPES, `${scope} is required by a live router`).toContain(scope);
+    }
+  });
+
+  it('withholds every scope that moves value off the platform or runs the platform', () => {
+    for (const scope of INTERACTIVE_ONLY_SCOPES) {
+      expect(SESSION_SCOPES, `${scope} is interactive-only and must never be a default`).not.toContain(scope);
+    }
+    for (const scope of SCOPES.filter((s) => s.startsWith('admin:'))) {
+      expect(SESSION_SCOPES, `${scope} is operator authority`).not.toContain(scope);
+    }
+    // The escalation that matters most: approving your own KYC record clears
+    // the tier gate on every custodial module in the OS.
+    expect(SESSION_SCOPES).not.toContain('admin:compliance');
+  });
+
+  it('issues no scope that implies one it withholds', () => {
+    // `bank:write` implies `bank:read`, `admin:write` implies `admin:read`.
+    // Issuing a scope whose implication is withheld would grant by the back
+    // door what the table says is withheld — and the audit would read wrong.
+    const granted = expandScopes([...SESSION_SCOPES]);
+    for (const scope of granted) {
+      expect(WITHHELD_FROM_SESSION, `${scope} is reachable by implication but listed as withheld`).not.toHaveProperty(scope);
+    }
+  });
+});
+
+describe('delegation — an API key cannot exceed the session that minted it', () => {
+  it('refuses the self-verification escalation', () => {
+    // The hole: `apiKeys.create` took a scope array from the request body and
+    // stored it verbatim. Any logged-in account could mint a key holding
+    // `admin:compliance`, approve its own KYC record to `institutional`, and
+    // clear the tier gate on every custodial module in the platform.
+    expect(() => assertDelegatableScopes(['admin:compliance'], [...SESSION_SCOPES])).toThrow(/does not hold/);
+    expect(() => assertDelegatableScopes(['admin:write'], [...SESSION_SCOPES])).toThrow(/does not hold/);
+  });
+
+  it('allows a key to carry what its session actually holds', () => {
+    expect(() => assertDelegatableScopes(['trade:read', 'bank:read'], [...SESSION_SCOPES])).not.toThrow();
+  });
+
+  it('honours implication — a session holding :write may delegate :read', () => {
+    expect(() => assertDelegatableScopes(['bank:read'], ['bank:write'])).not.toThrow();
+    expect(() => assertDelegatableScopes(['bank:write'], ['bank:read'])).toThrow(/does not hold/);
+  });
+
+  it('still refuses interactive-only scopes, even from a session that holds them', () => {
+    // A step-up session genuinely holds `trade:withdraw`. A long-lived key must
+    // still never carry it (§9).
+    expect(() => assertDelegatableScopes(['trade:withdraw'], ['trade:withdraw'])).toThrow(/interactive/);
+  });
+
+  it('refuses unknown scope strings instead of storing them', () => {
+    // Stored silently, these leave an audit trail claiming a key holds
+    // authority that no guard will ever recognise.
+    expect(() => assertDelegatableScopes(['bank:admin'], [...SESSION_SCOPES])).toThrow(/Unknown scopes/);
+  });
+});
+
 describe('guards', () => {
   it('allows a call the principal is scoped for', async () => {
     const p = await principal({ scopes: ['trade:write'] });
@@ -130,6 +221,33 @@ describe('guards', () => {
     const p = await principal();
     expect(() => requireOwnership(p, USER)).not.toThrow();
     expect(() => requireOwnership(p, '55555555-5555-4555-8555-555555555555')).toThrow(AuthError);
+  });
+
+  it('gives each refusal its OWN code — all three used to be scope.denied', async () => {
+    // Same class, same HTTP status, three different things to tell a user:
+    //   scope.denied       nothing you do to your account changes this
+    //   tier.insufficient  verify, and come back — an action they can take
+    //   ownership.denied   this is someone else's; never offer a way forward
+    const p = await principal({ scopes: ['bank:read'], tier: 'none' });
+
+    const codeOf = (fn: () => void) => {
+      try {
+        fn();
+        return 'no-throw';
+      } catch (err) {
+        return err instanceof AuthError ? err.code : 'not-an-AuthError';
+      }
+    };
+
+    expect(codeOf(() => requireScope(p, 'admin:compliance'))).toBe('scope.denied');
+    expect(codeOf(() => requireTier(p, 'full'))).toBe('tier.insufficient');
+    expect(codeOf(() => requireOwnership(p, '55555555-5555-4555-8555-555555555555'))).toBe('ownership.denied');
+    expect(codeOf(() => requireMfa(p))).toBe('mfa.required');
+  });
+
+  it('names the tier to reach, so a client need not guess the next step', async () => {
+    const p = await principal({ tier: 'none' });
+    expect(() => requireTier(p, 'full')).toThrow(/full/);
   });
 
   it('requires MFA explicitly', async () => {

@@ -5,7 +5,7 @@
 //import notice from '../pages/cms/Notice'
 //import noticeitem from '../pages/cms/NoticeItem'
 
-//import aboutus from '../pages/cms/AboutUs' /*关于我们*/
+// import aboutus from '../pages/cms/AboutUs' /**/
 //import moneyindex from '../components/uc/MoneyIndex'
 //import record from '../components/uc/Record'
 //import trade from '../components/uc/MinTrade'
@@ -23,13 +23,13 @@
 //import FindPwd from '../pages/uc/findpwd'
 //import Exchange from '../pages/exchange/exchange'
 //import Help from '../pages/cms/help'
-//import HelpList from '../pages/cms/HelpList' //帮助分类列表
-//import HelpDetail from '../pages/cms/HelpDetail' //帮助详情
+// import HelpList from '../pages/cms/HelpList' //
+// import HelpDetail from '../pages/cms/HelpDetail' //
 //import OTCMain from '../pages/otc/Main'
 //import OtcTrade from '../pages/otc/Trade'
 //import OtcOrder from '../components/uc/myorder'
-//import EntrustCurrent from '../components/uc/EntrustCurrent' //当前委托记录
-//import EntrustHistory from '../components/uc/EntrustHistory' //历史委托记录
+// import EntrustCurrent from '../components/uc/EntrustCurrent' //Open Orders
+// import EntrustHistory from '../components/uc/EntrustHistory' //Order History
 //import OtcAd from '../components/otc/MyAd'
 //import adPublish from '../pages/otc/AdPublish'
 //import identbusiness from '../pages/uc/IdentBusiness'
@@ -60,6 +60,29 @@ export default [
     { path: '/partner', component: resolve=>(require(["../pages/activity/Partner"],resolve)) },
     { path: '/bzb', component: resolve=>(require(["../pages/activity/Bzb"],resolve)) },
     { path: '/whitepaper', component: resolve=>(require(["../pages/cms/WhitePaper"],resolve)) },
+
+    // ── INTAFACED platform ────────────────────────────────────────────────────
+    // The Sovereign OS modules, embedded in this shell rather than served as a
+    // second app on a second port. Every one of them reads through svc-edge
+    // (see ../config/intafaced.js); none of them talks to a service directly.
+    //
+    // /platform is the hub: it holds the svc-identity session the scoped
+    // modules need and reports, from a live probe, what each one can do today.
+    { path: '/platform', component: resolve=>(require(["../pages/intafaced/Platform"],resolve)) },
+    { path: '/bank', component: resolve=>(require(["../pages/intafaced/Bank"],resolve)) },
+    { path: '/pay', component: resolve=>(require(["../pages/intafaced/Pay"],resolve)) },
+    { path: '/p2p', component: resolve=>(require(["../pages/intafaced/P2P"],resolve)) },
+    { path: '/token', component: resolve=>(require(["../pages/intafaced/Token"],resolve)) },
+    { path: '/agents', component: resolve=>(require(["../pages/intafaced/Agents"],resolve)) },
+    { path: '/blueprint', component: resolve=>(require(["../pages/intafaced/Blueprint"],resolve)) },
+    { path: '/protocol', component: resolve=>(require(["../pages/intafaced/Protocol"],resolve)) },
+    { path: '/dex', component: resolve=>(require(["../pages/intafaced/Dex"],resolve)) },
+    { path: '/chain', component: resolve=>(require(["../pages/intafaced/Chain"],resolve)) },
+    // Two modules with no service behind them at all. Same component, told
+    // which one it is — see pages/intafaced/NotBuilt.vue.
+    { path: '/academy', component: resolve=>(require(["../pages/intafaced/NotBuilt"],resolve)), props: { moduleKey: 'academy' } },
+    { path: '/launch', component: resolve=>(require(["../pages/intafaced/NotBuilt"],resolve)), props: { moduleKey: 'launch' } },
+
     { path: '*', component: resolve=>(require(["../pages/index/index"],resolve)) },
     { path: '/envelope/:eno', component: resolve=>(require(["../pages/envelope/Envelope"],resolve)) },
     {
@@ -177,60 +200,60 @@ export default [
         component: resolve=>(require(["../pages/uc/IdentBusiness"],resolve))
     },
     // {
-    //     path: '/newhelp',
-    //     component: newhelp,
-    //     children: [{
-    //             path: '',
-    //             component: noticeindex
-    //         },
-    //         {
-    //             path: 'index',
-    //             component: noticeindex
-    //         },
-    //         {
-    //             path: 'account',
-    //             component: account
-    //         },
-    //     ]
+    // path: '/newhelp',
+    // component: newhelp,
+    // children: [{
+    // path: '',
+    // component: noticeindex
     // },
     // {
-    //     path: '/question',
-    //     component: question
+    // path: 'index',
+    // component: noticeindex
     // },
     // {
-    //     path: '/agreement',
-    //     component: agreement
+    // path: 'account',
+    // component: account
+    // },
+    // ]
     // },
     // {
-    //     path: '/rate',
-    //     component: rate
+    // path: '/question',
+    // component: question
     // },
     // {
-    //     path: '/about-rule',
-    //     component: exchargerule
+    // path: '/agreement',
+    // component: agreement
     // },
     // {
-    //     path: '/about-protocol',
-    //     component: userprotocol
+    // path: '/rate',
+    // component: rate
     // },
     // {
-    //     path: '/about-fee',
-    //     component: feenote
+    // path: '/about-rule',
+    // component: exchargerule
     // },
     // {
-    //     path: '/about-notice',
-    //     component: homenotice
+    // path: '/about-protocol',
+    // component: userprotocol
+    // },
+    // {
+    // path: '/about-fee',
+    // component: feenote
+    // },
+    // {
+    // path: '/about-notice',
+    // component: homenotice
     // },
     {
         path: '/about-us',
         component: resolve=>(require(["../pages/cms/AboutUs"],resolve))
     },
     // {
-    //     path: '/join-us',
-    //     component: joinus
+    // path: '/join-us',
+    // component: joinus
     // },
     // {
-    //     path: '/about-merchant',
-    //     component: merchantprotocol
+    // path: '/about-merchant',
+    // component: merchantprotocol
     // }
 ];
