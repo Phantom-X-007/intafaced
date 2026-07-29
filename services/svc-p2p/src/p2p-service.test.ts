@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
-import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable, userEscrow } from '@intafaced/ledger-client';
+import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
 import { P2pService, P2pError } from './p2p-service.js';
 import { TradeStateError } from './state.js';
 import type { ReferencePriceSource } from './pricing.js';
@@ -94,7 +94,11 @@ if (!available) {
   }
 
   const availableOf = async (userId: string) => formatAmount((await ledger.balance(userAvailable(userId, ASSET))).amount);
-  const escrowOf = async (userId: string) => formatAmount((await ledger.balance(userEscrow(userId, ASSET))).amount);
+  const escrowOf = async (userId: string) => {
+    const all = await ledger.balances('user', userId);
+    const total = all.filter((b) => b.account.kind === 'escrow' && b.account.assetId === ASSET).reduce((acc, b) => acc + b.amount, 0n);
+    return formatAmount(total);
+  };
   const houseOf = async () => formatAmount((await ledger.balance(houseFees('p2p', ASSET))).amount);
 
   /** The standing invariant: the book closes and replays identically. */

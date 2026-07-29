@@ -35,25 +35,12 @@ one-shot and exiting is what success looks like.
 Then ask the services themselves:
 
 ```bash
-for p in 4001 4002 4003 4004 4005 4006 4007 4008 4009 4011 4012; do
-  curl -s "http://localhost:$p/health"; echo
-done
-```
+# Public doors only (L5-7: S2S services are not published on the host)
+curl -s http://localhost:4000/health; echo   # svc-edge
+curl -s http://localhost:4014/health; echo   # svc-ws
 
-Expected output, in order:
-
-```
-{"ok":true,"service":"svc-ledger","postingEnabled":true,"frozenReason":null,"frozenBy":null}
-{"ok":true,"service":"svc-identity"}
-{"ok":true,"service":"svc-token"}
-{"ok":true,"service":"svc-trade"}
-{"ok":true,"service":"svc-matching","enabled":true,"markets":0,"journalRecords":0}
-{"ok":true,"service":"svc-pay"}
-{"ok":true,"service":"svc-p2p"}
-{"ok":true,"service":"svc-agents"}
-{"ok":true,"service":"svc-bank"}
-{"ok":true,"service":"svc-blueprint"}
-{"ok":true,"service":"svc-protocol","chainId":31337,"custodial":false,"relayEnabled":true}
+# Full fleet health is `pnpm platform:ps` (compose healthchecks). S2S containers
+# talk on the docker network — do not expect localhost:4001–4013 to answer.
 ```
 
 Two more checks worth doing once, because they prove the wiring rather than the
@@ -93,36 +80,34 @@ database.
 Everything binds `localhost`. Nothing here collides with the vendored exchange
 stack (5506 / 6381 / 57017 / 9094 / 7000 / 6001).
 
-### Applications
+### Applications (host-published)
 
-| Port     | Service         | Notes                                                   |
-| -------- | --------------- | ------------------------------------------------------- |
-| **3000** | `web`           | Next 15 storefront                                      |
-| **3100** | `admin`         | Next 15 operator console (§14.6)                        |
-| **4001** | `svc-ledger`    | THE BALANCE (§4.2) — every other money service calls it |
-| **4002** | `svc-identity`  | accounts, rank (§4.1)                                   |
-| **4003** | `svc-token`     | native economy (§4.3)                                   |
-| **4004** | `svc-trade`     | spot product layer (§5.2)                               |
-| **4005** | `svc-matching`  | THE ENGINE (§5.1)                                       |
-| **4006** | `svc-pay`       | payments core (§6.1); webhooks at `/webhooks/:railId`   |
-| **4007** | `svc-p2p`       | escrowed P2P (§6.2)                                     |
-| **4008** | `svc-agents`    | agent fleet + model gateway (§8.2)                      |
-| **4009** | `svc-bank`      | multi-currency accounts (§8.1)                          |
-| **4011** | `svc-blueprint` | Identity Blueprint (§7.1)                               |
-| **4012** | `svc-protocol`  | smart accounts, non-custodial (§17.4)                   |
-| **4014** | `svc-ws`        | live depth stream (§5.2); the browser connects directly |
+| Port     | Service    | Notes                                       |
+| -------- | ---------- | ------------------------------------------- |
+| **3000** | `web`      | Next storefront / terminal                  |
+| **3100** | `admin`    | Operator console                            |
+| **4000** | `svc-edge` | **Only HTTP API door** for browsers/clients |
+| **4014** | `svc-ws`   | Live depth stream (browser, not via edge)   |
 
-`svc-ws` is the second port a browser touches, and the only one besides svc-edge.
-It has to be: the edge proxy buffers with `response.text()` and cannot carry a
-websocket. It holds no database, no bus and no service secret, which is what
-makes a second door acceptable — `services/svc-ws/README.md` argues it in full.
+### S2S (compose network only — not on localhost)
 
-Four of these differ from the service's own default, because three services
-independently chose `4004` and two chose `4008`. The compose file sets
-`HTTP_PORT` explicitly; the changed ones are `svc-matching` (4005, which is what
-svc-trade's `MATCHING_URL` default already pointed at), `svc-p2p` (4007),
-`svc-blueprint` (4011) and `svc-protocol` (4012). **4010 is deliberately
-unused** — leave it free.
+| Port | Service         | Notes                       |
+| ---- | --------------- | --------------------------- |
+| 4001 | `svc-ledger`    | Books only — S2S            |
+| 4002 | `svc-identity`  | Accounts, rank              |
+| 4003 | `svc-token`     | IFC stake / yield           |
+| 4004 | `svc-trade`     | Spot                        |
+| 4005 | `svc-matching`  | Engine                      |
+| 4006 | `svc-pay`       | Pay + withdraw              |
+| 4007 | `svc-p2p`       | Escrow                      |
+| 4008 | `svc-agents`    | Model gateway               |
+| 4009 | `svc-bank`      | Spaces / earn               |
+| 4010 | `svc-dex`       | Protocol quote door         |
+| 4011 | `svc-blueprint` | Onboarding                  |
+| 4012 | `svc-protocol`  | Smart accounts              |
+| 4013 | `svc-indexer`   | Chain read models (propped) |
+
+L5-7: pure S2S services use `expose` only so a host-open laptop is not a second money plane.
 
 ### Infrastructure
 

@@ -60,13 +60,16 @@ Denon shipped a real **startable platform** (edge, mounts, money path, deploy, t
 2. ~~Token stake claim-before-post (L3-2)~~ → **FIXED** — `pending` → ledger → `active`
 3. ~~Earn deposit claim-before-post (L3-3)~~ → **FIXED** — same pattern
 
-### P2 — structural honesty (still open)
+### P2 — structural honesty
 
-4. Dual-book stake/earn vs ledger (L1-2/3)
-5. Purpose-keyed P2P escrow (L3-4)
-6. Split earn vs token stake accounts (L3-5)
-7. RUNNING.md + tracker path-only `done` (L5-8, L8-2)
-8. Sign region into principal (L2-4); stronger S2S (L2-6)
+4. ~~Dual-book stake/earn~~ / ~~earn+token share pot~~ → **FIXED** (purpose-keyed stake pots)
+5. ~~Purpose-keyed P2P escrow~~ → **FIXED**
+6. ~~Region not in principal HMAC~~ → **FIXED**
+7. ~~P2P trade/dispute IDOR reads~~ → **FIXED**
+8. ~~Host-published S2S ports~~ + ~~RUNNING.md~~ → **FIXED**
+9. ~~Protocol UI false “indexer absent”~~ → **FIXED**
+10. ~~tracker empty requires for done~~ → **FIXED** (empty requires rejected; mount heuristic)
+11. **Stronger S2S body-bind (L2-6)** — **deferred** (needs raw-body plumbing; documented next wave)
 
 ### Vendor product decision (only if Denon wants product integration)
 
@@ -92,7 +95,7 @@ Denon shipped a real **startable platform** (edge, mounts, money path, deploy, t
 3. Host perimeter: do not expose S2S ports on a public network
 4. Vendor never co-custody without ledger ownership decision **B or C**
 5. Operator KYC / freeze / kill-switch path proven in a real run
-6. (Recommended before live) close P2 dual-book + P2P purpose-key — not open-door class, but money-shape honesty
+6. (Recommended before live) L2-6 S2S body-bind + operator kill-path drill
 
 ---
 

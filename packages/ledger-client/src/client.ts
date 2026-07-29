@@ -159,19 +159,29 @@ export function assertPairedLocks(entries: readonly EntryInput[]): void {
  * assembles entries directly — the recipes are the sanctioned path, not the
  * only physically possible one.
  *
- * Deliberately `hold` only. `escrow`, `stake` and `collateral` are already
- * keyed by their own business object elsewhere, and forcing a purpose onto
- * `available` would fragment a balance that is fungible with itself.
+ * Purpose is required on every *lock pot* that is not fungible with itself:
+ * `hold` (P0-3), `escrow` (L3-4), and `stake` (L1 / L3-5). `available` stays
+ * unpurposed — it is fungible with itself. `collateral` remains open until a
+ * futures claim key is designed.
  */
 export function assertPurposedHolds(entries: readonly EntryInput[]): void {
+  assertPurposedLockKinds(entries, ['hold'], 'hold', 'P0-3, §4.2');
+}
+
+/** Escrow + stake purpose check (same force as holds). */
+export function assertPurposedLocks(entries: readonly EntryInput[]): void {
+  assertPurposedLockKinds(entries, ['hold', 'escrow', 'stake'], 'lock pot', 'P0-3 / L3-4 / L1-L3-5');
+}
+
+function assertPurposedLockKinds(entries: readonly EntryInput[], kinds: readonly string[], label: string, doctrine: string): void {
   for (const entry of entries) {
-    if (entry.account.kind !== 'hold') continue;
+    if (!kinds.includes(entry.account.kind)) continue;
     if (entry.account.purpose && entry.account.purpose.length > 0) continue;
 
     throw new InvalidEntryError(
-      `Hold account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} has no purpose — ` +
-        'a hold must name what it is held for (e.g. "order:<id>", "withdraw:<id>") so one purpose cannot spend ' +
-        "another's reservation (P0-3, §4.2)",
+      `${label} account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} has no purpose — ` +
+        `a ${entry.account.kind} must name its claim (e.g. "order:<id>", "trade:<id>", "token:stake:<id>") so one claim cannot spend ` +
+        `another's reservation (${doctrine})`,
     );
   }
 }
@@ -182,7 +192,7 @@ export function assertValidPost(request: PostRequest): void {
   }
   assertBalanced(request.entries);
   assertPairedLocks(request.entries);
-  assertPurposedHolds(request.entries);
+  assertPurposedLocks(request.entries);
 }
 
 /** Total absolute value moved, per asset — used for metrics and fee reporting. */

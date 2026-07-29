@@ -13,7 +13,6 @@ import {
   houseFees,
   rewardsEngine,
   userAvailable,
-  userStake,
 } from '@intafaced/ledger-client';
 import { TokenService, TokenError } from './token-service.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
@@ -98,7 +97,11 @@ if (!available) {
   }
 
   const balanceOf = async (userId: string) => formatAmount((await ledger.balance(userAvailable(userId, 'IFC'))).amount);
-  const stakedOf = async (userId: string) => formatAmount((await ledger.balance(userStake(userId, 'IFC'))).amount);
+  const stakedOf = async (userId: string) => {
+    const all = await ledger.balances('user', userId);
+    const total = all.filter((b) => b.account.kind === 'stake' && b.account.assetId === 'IFC').reduce((acc, b) => acc + b.amount, 0n);
+    return formatAmount(total);
+  };
 
   beforeEach(async () => {
     await sql`TRUNCATE token.stakes, token.buyback_runs, token.emission_epochs RESTART IDENTITY CASCADE`;
@@ -547,9 +550,7 @@ if (!available) {
       // they CAN be compared is the point of keeping value in the ledger and
       // only metadata here.
       const fromTable = formatAmount((await token.stakeOf(USER_A)) + (await token.stakeOf(USER_B)));
-      const fromLedger = formatAmount(
-        (await ledger.balance(userStake(USER_A, 'IFC'))).amount + (await ledger.balance(userStake(USER_B, 'IFC'))).amount,
-      );
+      const fromLedger = formatAmount(amt(await stakedOf(USER_A)) + amt(await stakedOf(USER_B)));
 
       expect(fromTable).toBe(fromLedger);
       expect(fromTable).toBe('10000');

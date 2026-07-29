@@ -34,7 +34,13 @@ describe('the exchange — a bearer token becomes a signed principal', () => {
     // The real assertion: verify with the SAME function every mounted service
     // uses. A header this test invents but `createEdgeContext` rejects would be
     // worse than no edge at all.
-    const verified = verifyForwardedPrincipal(result.headers[EDGE_PRINCIPAL_HEADER], result.headers[EDGE_SIGNATURE_HEADER], EDGE_SECRET);
+    const verified = verifyForwardedPrincipal(
+      result.headers[EDGE_PRINCIPAL_HEADER],
+      result.headers[EDGE_SIGNATURE_HEADER],
+      EDGE_SECRET,
+      new Date(),
+      'GB',
+    );
     expect(verified.rejected).toBeNull();
     expect(verified.principal?.userId).toBe(USER);
     expect(verified.principal?.scopes).toEqual(['trade:read', 'trade:write']);
@@ -43,9 +49,28 @@ describe('the exchange — a bearer token becomes a signed principal', () => {
 
   it('carries mfa through, because INTERACTIVE_ONLY_SCOPES depends on it', async () => {
     const result = await exchangePrincipal(await bearer({ mfa: true, scopes: ['trade:withdraw'] }), options);
-    const verified = verifyForwardedPrincipal(result.headers[EDGE_PRINCIPAL_HEADER], result.headers[EDGE_SIGNATURE_HEADER], EDGE_SECRET);
+    const verified = verifyForwardedPrincipal(
+      result.headers[EDGE_PRINCIPAL_HEADER],
+      result.headers[EDGE_SIGNATURE_HEADER],
+      EDGE_SECRET,
+      new Date(),
+      'GB',
+    );
 
     expect(verified.principal?.mfa).toBe(true);
+  });
+
+  it('L2-4: forging region without re-signing fails verification', async () => {
+    const result = await exchangePrincipal(await bearer(), options);
+    const verified = verifyForwardedPrincipal(
+      result.headers[EDGE_PRINCIPAL_HEADER],
+      result.headers[EDGE_SIGNATURE_HEADER],
+      EDGE_SECRET,
+      new Date(),
+      'US',
+    );
+    expect(verified.principal).toBeNull();
+    expect(verified.rejected).toBe('bad-signature');
   });
 });
 
@@ -77,7 +102,13 @@ describe('reserved headers are stripped, not overwritten', () => {
     const forged = JSON.stringify({ userId: 'someone-else', scopes: ['admin:treasury'] });
     const result = await exchangePrincipal({ ...(await bearer()), [EDGE_PRINCIPAL_HEADER]: forged }, options);
 
-    const verified = verifyForwardedPrincipal(result.headers[EDGE_PRINCIPAL_HEADER], result.headers[EDGE_SIGNATURE_HEADER], EDGE_SECRET);
+    const verified = verifyForwardedPrincipal(
+      result.headers[EDGE_PRINCIPAL_HEADER],
+      result.headers[EDGE_SIGNATURE_HEADER],
+      EDGE_SECRET,
+      new Date(),
+      'GB',
+    );
     expect(verified.principal?.userId).toBe(USER);
     expect(verified.principal?.scopes).not.toContain('admin:treasury');
   });

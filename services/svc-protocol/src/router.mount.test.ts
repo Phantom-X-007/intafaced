@@ -48,7 +48,7 @@ function signed(p: Principal = principal()) {
   return edgeContext({
     headers: {
       'x-intafaced-principal': raw,
-      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET),
+      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
       'x-intafaced-region': 'DE',
     },
     id: 'req-signed',

@@ -8,7 +8,7 @@ import {
   parseAmount,
   recipes,
   mulBps,
-  userEscrow,
+  tradeEscrowAccount,
   type Amount,
   type LedgerClient,
 } from '@intafaced/ledger-client';
@@ -1356,21 +1356,35 @@ export class P2pService {
   async escrowIntegrity(): Promise<
     { ok: true } | { ok: false; drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> }
   > {
-    const rows = await this.sql<Array<{ seller_id: string; asset: string; total: string }>>`
-      SELECT seller_id, asset, COALESCE(SUM(amount), 0) AS total
+    // Per-trade pots (L3-4). Aggregate-by-seller would hide cross-trade theft.
+    const rows = await this.sql<Array<{ id: string; seller_id: string; asset: string; amount: string }>>`
+      SELECT id, seller_id, asset, amount
         FROM p2p.p2p_trades
        WHERE status IN ('escrowed', 'fiat_sent', 'disputed')
           OR (resolution IN ('released', 'refunded') AND settled_at IS NULL)
-       GROUP BY seller_id, asset
     `;
 
-    const drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> = [];
+    const bySeller = new Map<string, { expected: bigint; actual: bigint; sellerId: string; asset: string }>();
 
     for (const row of rows) {
-      const expected = parseAmount(row.total);
-      const actual = (await this.ledger.balance(userEscrow(row.seller_id, row.asset))).amount;
-      if (expected !== actual) {
-        drift.push({ sellerId: row.seller_id, asset: row.asset, expected: formatAmount(expected), actual: formatAmount(actual) });
+      const key = `${row.seller_id}\0${row.asset}`;
+      const expectedPart = parseAmount(row.amount);
+      const actualPart = (await this.ledger.balance(tradeEscrowAccount(row.seller_id, row.asset, row.id))).amount;
+      const cur = bySeller.get(key) ?? { expected: 0n, actual: 0n, sellerId: row.seller_id, asset: row.asset };
+      cur.expected += expectedPart;
+      cur.actual += actualPart;
+      bySeller.set(key, cur);
+    }
+
+    const drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> = [];
+    for (const row of bySeller.values()) {
+      if (row.expected !== row.actual) {
+        drift.push({
+          sellerId: row.sellerId,
+          asset: row.asset,
+          expected: formatAmount(row.expected),
+          actual: formatAmount(row.actual),
+        });
       }
     }
 

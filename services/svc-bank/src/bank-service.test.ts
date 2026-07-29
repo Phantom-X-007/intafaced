@@ -112,7 +112,11 @@ if (!available) {
 
   const availableOf = async (userId: string, assetId: string) =>
     formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
-  const stakedOf = async (userId: string, assetId: string) => formatAmount((await ledger.balance(userStake(userId, assetId))).amount);
+  const stakedOf = async (userId: string, assetId: string) => {
+    const all = await ledger.balances('user', userId);
+    const total = all.filter((b) => b.account.kind === 'stake' && b.account.assetId === assetId).reduce((acc, b) => acc + b.amount, 0n);
+    return formatAmount(total);
+  };
 
   beforeEach(async () => {
     await sql`
@@ -596,10 +600,7 @@ if (!available) {
 
       expect(formatAmount(await bank.earn.poolSize(pool.id))).toBe('900');
 
-      const fromLedger =
-        (await ledger.balance(userStake(USER_A, 'USDT'))).amount +
-        (await ledger.balance(userStake(USER_B, 'USDT'))).amount +
-        (await ledger.balance(userStake(USER_C, 'USDT'))).amount;
+      const fromLedger = amt(await stakedOf(USER_A, 'USDT')) + amt(await stakedOf(USER_B, 'USDT')) + amt(await stakedOf(USER_C, 'USDT'));
       expect(formatAmount(fromLedger)).toBe('900');
     });
   });
@@ -1231,7 +1232,7 @@ if (!available) {
           transferId: 'guard-2',
           occurrence: 0,
           from: userAvailable(USER_A, 'USDT'),
-          to: userStake(USER_A, 'USDT'),
+          to: userStake(USER_A, 'USDT', 'bank:earn:guard'),
           amount: amt('1'),
           kind: 'manual',
         }),

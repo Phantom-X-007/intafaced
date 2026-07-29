@@ -27,13 +27,12 @@ import styles from './terminal.module.css';
  *     is deployed. No login, no wallet connection, no account: it is arithmetic
  *     over public constants, which is exactly why it needs no permission.
  *
- * What is NOT, and is therefore a socket rather than a form:
- *   · **an on-chain order book.** INTACORE is §17.2 P1 — the CometBFT CLOB
- *     module. There is no chain, no book and no AMM in this repo.
- *   · **swap / order entry.** It would route through a session key the user
- *     grants (`buildSessionGrant` exists) to a venue that does not.
- *   · **balances.** They live on chain and are read by `svc-indexer`, which is
- *     a directory in §17.5 and not a service on disk.
+ * What is NOT product-ready yet (sockets, not missing directories):
+ *   · **an on-chain order book.** INTACORE is §17.2 P1 — no live CLOB/AMM.
+ *   · **swap / order entry.** Session grants exist; the on-chain venue does not.
+ *   · **balances.** `svc-indexer` exists and can project chain state, but the
+ *     feed is still propped (NullChain / empty projections) and the terminal
+ *     does not yet wire balance reads into this plane.
  */
 
 const copy = {
@@ -58,16 +57,16 @@ const copy = {
   ownerInvalid: 'Not a 20-byte hex address',
   bookTitle: 'On-chain order book · INTACORE',
   bookReason:
-    'There is no chain, no CLOB module and no AMM in this repo. §17.2 sequences INTACORE as P1 — a CometBFT chain with a native order-book module — and svc-chain, svc-indexer and svc-bridge are directories in §17.5, not services on disk.',
-  bookBlocked: 'svc-chain · svc-indexer',
+    'There is no live CLOB or AMM yet. §17.2 sequences INTACORE as P1. svc-indexer exists for read models, but the chain feed is still a prop — not a live book.',
+  bookBlocked: 'INTACORE CLOB · live chain feed',
   entryTitle: 'Sovereign order entry',
   entryReason:
     'The signing half exists: svc-protocol builds session-key grants and relays user-signed operations, and holds no key that could move funds. The venue half does not — there is nothing on chain to route an order to, so there is no form here to fill in.',
   entryBlocked: 'INTACORE CLOB · AMM pools',
   balanceTitle: 'Vault balances',
   balanceReason:
-    'Balances on this plane are chain state, read by svc-indexer (§17.5). That service does not exist yet, and the platform holds no ledger row for these funds to read instead — which is the point of the plane.',
-  balanceBlocked: 'svc-indexer',
+    'Balances on this plane are chain state. svc-indexer can project them, but with a propped feed and no terminal wiring yet the platform correctly shows no Fiat-ledger balance for Protocol funds.',
+  balanceBlocked: 'live chain feed · terminal wiring',
 } as const;
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;

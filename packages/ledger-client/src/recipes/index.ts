@@ -12,8 +12,8 @@ import {
   rewardsEngine,
   userAvailable,
   userCollateral,
-  userEscrow,
-  userStake,
+  tradeEscrowAccount,
+  tokenStakeAccount,
   withdrawalHoldAccount,
 } from '../accounts.js';
 
@@ -262,7 +262,7 @@ export function escrowLock(input: EscrowInput): PostRequest {
     meta: { tradeId: input.tradeId },
     entries: [
       credit(userAvailable(input.sellerId, input.assetId), input.amount),
-      debit(userEscrow(input.sellerId, input.assetId), input.amount),
+      debit(tradeEscrowAccount(input.sellerId, input.assetId, input.tradeId), input.amount),
     ],
   };
 }
@@ -279,7 +279,7 @@ export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostReq
     reason: 'p2p.escrow.release',
     meta: { tradeId: input.tradeId, feeBps: input.feeBps ?? 0 },
     entries: [
-      credit(userEscrow(input.sellerId, input.assetId), input.amount),
+      credit(tradeEscrowAccount(input.sellerId, input.assetId, input.tradeId), input.amount),
       debit(userAvailable(input.buyerId, input.assetId), toBuyer),
       ...(fee > 0n ? [debit(houseFees('p2p', input.assetId), fee)] : []),
     ],
@@ -295,7 +295,7 @@ export function escrowRefund(input: EscrowInput & { resolution?: string }): Post
     reason: 'p2p.escrow.refund',
     meta: { tradeId: input.tradeId, resolution: input.resolution ?? 'cancelled' },
     entries: [
-      credit(userEscrow(input.sellerId, input.assetId), input.amount),
+      credit(tradeEscrowAccount(input.sellerId, input.assetId, input.tradeId), input.amount),
       debit(userAvailable(input.sellerId, input.assetId), input.amount),
     ],
   };
@@ -473,7 +473,7 @@ export function stake(input: StakeInput): PostRequest {
     meta: { stakeId: input.stakeId, tier: input.tier },
     entries: [
       credit(userAvailable(input.userId, input.assetId), input.amount),
-      debit(userStake(input.userId, input.assetId), input.amount),
+      debit(tokenStakeAccount(input.userId, input.assetId, input.stakeId), input.amount),
     ],
   };
 }
@@ -486,7 +486,7 @@ export function unstake(input: StakeInput): PostRequest {
     reason: 'token.unstake',
     meta: { stakeId: input.stakeId, tier: input.tier },
     entries: [
-      credit(userStake(input.userId, input.assetId), input.amount),
+      credit(tokenStakeAccount(input.userId, input.assetId, input.stakeId), input.amount),
       debit(userAvailable(input.userId, input.assetId), input.amount),
     ],
   };
