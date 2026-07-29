@@ -94,7 +94,6 @@ if (compose !== null) {
   }
 }
 
-
 // ── 4 · no two services claim the same host port ────────────────────────────
 // Docker does not detect this until the second container tries to bind, so the
 // fleet comes up MOSTLY working and one service is missing — which reads like
@@ -116,7 +115,6 @@ if (compose !== null) {
     }
   }
 }
-
 
 // ── 5 · EVERY service calls each other on the port it actually listens on ───
 // Nothing catches this until a request fails at runtime with ECONNREFUSED, and
@@ -167,9 +165,7 @@ if (compose !== null) {
     if (!index?.includes('register(fastifyTRPCPlugin')) continue;
     if (svc === 'svc-edge') continue;
 
-    const envVar = /envVar: '(\w+)'/.exec(
-      new RegExp(`\\{[^}]*${svc.replace('svc-', '')}[^}]*\\}`, 'i').exec(routes)?.[0] ?? '',
-    )?.[1];
+    const envVar = /envVar: '(\w+)'/.exec(new RegExp(`\\{[^}]*${svc.replace('svc-', '')}[^}]*\\}`, 'i').exec(routes)?.[0] ?? '')?.[1];
 
     if (!envVar) {
       failures.push({

@@ -48,16 +48,7 @@ const protection = {
 
 console.log('· branch protection on main');
 const result = gh(
-  [
-    'api',
-    '--method',
-    'PUT',
-    `/repos/${repo}/branches/main/protection`,
-    '--input',
-    '-',
-    '-H',
-    'Accept: application/vnd.github+json',
-  ],
+  ['api', '--method', 'PUT', `/repos/${repo}/branches/main/protection`, '--input', '-', '-H', 'Accept: application/vnd.github+json'],
   { allowFail: true, input: JSON.stringify(protection) },
 );
 
@@ -112,9 +103,12 @@ const labels = [
 
 console.log('· labels');
 for (const [name, color, description] of labels) {
-  gh(['api', '--method', 'POST', `/repos/${repo}/labels`, '-f', `name=${name}`, '-f', `color=${color}`, '-f', `description=${description}`], {
-    allowFail: true,
-  });
+  gh(
+    ['api', '--method', 'POST', `/repos/${repo}/labels`, '-f', `name=${name}`, '-f', `color=${color}`, '-f', `description=${description}`],
+    {
+      allowFail: true,
+    },
+  );
 }
 console.log(`  ✓ ${labels.map(([n]) => n).join(', ')}`);
 

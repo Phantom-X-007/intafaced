@@ -55,8 +55,7 @@ for (const service of readdirSync(SERVICES)) {
         service,
         file: relative(ROOT, join(drizzleDir, up)),
         problem:
-          'destructive statement without acknowledgement — add "-- intafaced:destructive <reason>" ' +
-          'at the top if this is intended',
+          'destructive statement without acknowledgement — add "-- intafaced:destructive <reason>" ' + 'at the top if this is intended',
       });
     }
   }
@@ -91,6 +90,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(
-  `✓ migration-check clean — ${migrationsChecked} migration(s) across ${servicesChecked} service(s), all reversible`,
-);
+console.log(`✓ migration-check clean — ${migrationsChecked} migration(s) across ${servicesChecked} service(s), all reversible`);

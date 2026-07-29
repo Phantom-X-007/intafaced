@@ -68,9 +68,7 @@ function checkService(serviceDir) {
       if (!/\b(TODO|FIXME|HACK|XXX)\b/i.test(line)) return;
       if (!/\blater\b|\bfor now\b|\btemporar/i.test(line)) return;
       if (/§13|Section 13|SOCKET:/i.test(line)) return;
-      failures.push(
-        `${relative(ROOT, file)}:${i + 1} — deferred work with no §13 socket entry: "${line.trim().slice(0, 90)}"`,
-      );
+      failures.push(`${relative(ROOT, file)}:${i + 1} — deferred work with no §13 socket entry: "${line.trim().slice(0, 90)}"`);
     });
   }
 
@@ -144,9 +142,7 @@ function checkService(serviceDir) {
   }
 
   // 4 · Observability
-  const hasTracing = [...walk(srcDir, ['.ts'])].some((f) =>
-    /@opentelemetry|initTracing|withSpan/.test(readFileSync(f, 'utf8')),
-  );
+  const hasTracing = [...walk(srcDir, ['.ts'])].some((f) => /@opentelemetry|initTracing|withSpan/.test(readFileSync(f, 'utf8')));
   if (existsSync(srcDir) && !hasTracing) {
     failures.push('no OpenTelemetry instrumentation found (§14: traces + one SLO dashboard panel)');
   }
@@ -168,8 +164,7 @@ function checkService(serviceDir) {
 
     if (!declared.has(moduleId)) {
       failures.push(
-        `module "${moduleId}" has no flag declared against it in FLAG_REGISTRY — ` +
-          `the operator has no kill-switch (§14 admin controls)`,
+        `module "${moduleId}" has no flag declared against it in FLAG_REGISTRY — ` + `the operator has no kill-switch (§14 admin controls)`,
       );
     }
   }
