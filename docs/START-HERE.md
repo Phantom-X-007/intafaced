@@ -2,7 +2,7 @@
 
 **One page.** Read this when confused. Agents: load this _after_ `AGENTS.md` if the human needs orientation, not instead of the law.
 
-**Snapshot date:** 2026-07-29 · re-check live with `pnpm tracker` + `gh pr list` — numbers go stale; the _map_ does not.
+**Snapshot date:** 2026-07-29 · main tip includes audit **#80 + #81** and consolidated **#86** (re-check `git rev-parse origin/main`).
 
 ---
 
@@ -52,8 +52,11 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Not a live money product:** rails/sandbox, chain feed propped — see trust floor.
 - **Do not rebuild** services already on main.
 - **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md)
+- **Product UI:** vendored exchange shell → http://localhost:8090 (`vendor/<exchange-tree>/05_Web_Front`). `apps/web` is **not** the product.
+- **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
+- **Security when-to:** [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) · tooling floor: [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md)
 - **After Denon ships:** [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — full audit program is **closed**
-- **Next product gates:** real rails/chain → tracker-ready slices — not another full audit
+- **Next product gates:** dual-book discipline + real rails/chain → not another full audit
 
 History only (may lag): [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md)
 
