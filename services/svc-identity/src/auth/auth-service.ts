@@ -944,6 +944,20 @@ export class AuthService {
     return rows[0]!;
   }
 
+  async listSubAccounts(userId: string): Promise<Array<{ id: string; label: string; purpose: string | null; createdAt: Date }>> {
+    const rows = await this.sql<Array<{ id: string; label: string; purpose: string | null; created_at: Date }>>`
+      SELECT id, label, purpose, created_at FROM identity.sub_accounts
+       WHERE parent_user_id = ${userId}
+       ORDER BY created_at DESC
+    `;
+    return rows.map((r) => ({
+      id: r.id,
+      label: r.label,
+      purpose: r.purpose,
+      createdAt: r.created_at,
+    }));
+  }
+
   /**
    * Scopes granted to a normal interactive session.
    *
