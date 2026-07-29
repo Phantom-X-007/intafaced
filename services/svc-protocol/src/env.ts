@@ -34,6 +34,8 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     PROTOCOL_ENTRYPOINT_ADDRESS: evmAddress.default('0x0000000071727De22E5E9d8BAf0edAc6f37da032'),
     PROTOCOL_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
     PROTOCOL_IMPLEMENTATION_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
+    /** Constant-product PoolFactory (protocol.amm). Zero until deployed on the target chain. */
+    PROTOCOL_AMM_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
 
     /**
      * Public ERC-4337 bundler. Optional: without it the service still builds

@@ -68,6 +68,7 @@ function stubDeps(overrides: Partial<Record<string, unknown>> = {}): ProtocolRou
     registry: { accountsOf: async () => [] },
     relay: {},
     relayEnabled: () => true,
+    ammFactoryAddress: () => '0x0000000000000000000000000000000000000000' as const,
     ...overrides,
   } as unknown as ProtocolRouterDeps;
 }

@@ -376,7 +376,11 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['protocol.smart-accounts'],
+    requires: ['services/svc-protocol/contracts/amm', 'services/svc-protocol/src/amm'],
+    note: 'WIP 2026-07-29: ConstantProductPool + PoolFactory Solidity, pure quote math + unsigned calldata builders on svc-protocol (amm.quoteExactIn / buildCreatePool / buildSwapExactIn / buildMintLiquidity). Not done until factory is deployed on a real chain (PROTOCOL_AMM_FACTORY_ADDRESS non-zero) and forge/runtime contract tests run — Foundry still §13 socket.contract-toolchain.',
   }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', {
     module: 'protocol',
