@@ -230,16 +230,16 @@
               let payShow = "none";
               let completeShow = "none";
               let cancelShow = "none";
-              if(params.row.status == 0) { // 待接单
+              if(params.row.status == 0) {
                 confirmShow = "inline-block";
               }
-              if(params.row.status == 1){ // 已接单
+              if(params.row.status == 1){
                 cancelShow = "inline-block";
-                if(params.row.direction == 1){ // 用户卖出，则后台可标记付款
+                if(params.row.direction == 1){
                   payShow = "inline-block";
                 }
               }
-              if(params.row.status == 2){ // 已付款
+              if(params.row.status == 2){
                 completeShow = "inline-block";
                 cancelShow = "inline-block";
               }

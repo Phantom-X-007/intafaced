@@ -3,7 +3,7 @@ import Cookies from "js-cookie";
 import { setStore, getStore, removeStore } from "@/config/storage.js"
 
 
-// 不作为Main组件的子页面展示的页面单独写，如下
+// Main
 export const loginRouter = {
     path: '/login',
     name: 'login',
@@ -46,7 +46,7 @@ export const locking = {
     component: resolve => { require(['@/views/main-components/lockscreen/components/locking-page.vue'], resolve); }
 };
 
-// 作为Main组件的子页面展示但是不在左侧菜单显示的路由写在otherRouter里
+// MainotherRouter
 export const otherRouter = {
     path: '/',
     name: 'otherRouter',
@@ -72,7 +72,7 @@ export const otherRouter = {
     ]
 };
 
-// 作为Main组件的子页面展示并且在左侧菜单显示的路由写在appRouter里<Icon type="briefcase"></Icon>
+// MainappRouter<Icon type="briefcase"></Icon>
 
 let findSlideArr = [
     { id: 8, path: '/system', icon: 'android-settings', component: Main },
@@ -176,7 +176,7 @@ export const clearAppRouter = () => {
     appRouter = [];
 }
 
-// 所有上面定义的路由都要写在下面的routers里
+// routers
 export const routers = [
     loginRouter,
     otherRouter,

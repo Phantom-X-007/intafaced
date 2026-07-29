@@ -18,14 +18,16 @@
  * are not branding — a trader reads them as direction, and recolouring them to
  * fit a palette would be actively wrong.
  *
- * Run: node retheme.mjs [--dry]
+ * Run: node retheme.mjs [app] [--dry]      e.g. node retheme.mjs 04_Web_Admin
  */
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOTS = ['05_Web_Front/src', '05_Web_Front/index.html'].map((p) => join(HERE, p));
+/** The app to retheme. Defaults to the trading front end, as it always did. */
+const APP = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? '05_Web_Front';
+const ROOTS = [`${APP}/src`, `${APP}/index.html`].map((p) => join(HERE, p));
 const DRY = process.argv.includes('--dry');
 
 const EXTS = new Set(['.vue', '.less', '.scss', '.css', '.html', '.js']);

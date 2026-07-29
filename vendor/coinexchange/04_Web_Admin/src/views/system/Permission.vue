@@ -11,7 +11,7 @@
 
         <Row class="functionWrapper">
           <div class="btnsWrapper clearfix">
-            <!-- <Button type="error" @click="delPermission">删除权限</Button> -->
+            <!-- <Button type="error" @click="delPermission"></Button> -->
             <Button type="error">删除权限</Button>
             
             <Button type="primary" @click="addPermission">添加权限</Button>

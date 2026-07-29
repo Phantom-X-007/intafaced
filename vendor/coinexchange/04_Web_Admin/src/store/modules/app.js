@@ -14,8 +14,8 @@ const app = {
         cachePage: [],
         lang: '',
         isFullScreen: false,
-        openedSubmenuArr: [], // 要展开的菜单数组
-        menuTheme: 'dark', // 主题
+        openedSubmenuArr: [],
+        menuTheme: 'dark',
         themeColor: '',
         pageOpenedList: [{
             title: '首页',
@@ -27,7 +27,7 @@ const app = {
             title: '首页',
             path: '',
             name: 'home_index'
-        }], // 面包屑数组
+        }],
         menuList: [],
         datas: [],
         permissionData: {},
@@ -37,10 +37,10 @@ const app = {
         ],
         tagsList: [...otherRouter.children],
         messageCount: 0,
-        dontCache: ['artical-publish'] // 在这里定义你不想要缓存的页面的name属性值(参见路由配置router.js)
+        dontCache: ['artical-publish'] // name(router.js)
     },
     mutations: {
-        // mutations里面注册时间 type为方法名字，触发该函数的方法为commit
+        // mutations typecommit
         switchMaskLayer(state, bol) {
             state.maskLayer = bol;
         },

@@ -20,7 +20,6 @@
           </Col>
         </Row>
 
-        <!-- 放大图片 -->
         <transition name="scale">
           <div v-if="ifEnlarge" class="biggerImg">
             <Card :bordered="false">
@@ -35,7 +34,6 @@
           </div>
         </transition>
         
-        <!-- 遮罩层 -->
         <transition name="fade">
           <div class="mask" v-if="ifEnlarge" @click="ifEnlarge = false"></div>
         </transition>

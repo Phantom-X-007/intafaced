@@ -183,7 +183,7 @@ util.openNewPage = function(vm, name, argu, query) {
     let i = 0;
     let tagHasOpened = false;
     while (i < openedPageLen) {
-        if (name === pageOpenedList[i].name) { // 页面已经打开
+        if (name === pageOpenedList[i].name) {
             vm.$store.commit('pageOpenedList', {
                 index: i,
                 argu: argu,
@@ -241,9 +241,7 @@ util.toDefaultPage = function(routers, name, route, next) {
 
 util.fullscreenEvent = function(vm) {
     vm.$store.commit('initCachepage');
-    // 权限菜单过滤相关
     vm.$store.commit('updateMenulist');
-    // 全屏相关
 };
 
 util.checkUpdate = function(vm) {

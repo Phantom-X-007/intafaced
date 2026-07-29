@@ -1,6 +1,6 @@
 <template>
  <div>
-	 <!-- 待优化 2018年4月16日15:33:35 -->
+	 <!-- 201841615:33:35 -->
     <Card>
 			<p slot="title">
 			  币币设置
@@ -427,7 +427,6 @@
             </Col>
           </Row>
        </Modal>
-       <!-- 一般机器人 -->
        <Modal
           class="auditModel"
           v-model="robotModel"
@@ -507,7 +506,6 @@
           </ul>
       </Modal>
 
-      <!-- 固定价格机器人 -->
       <Modal
           class="auditModel"
           v-model="priceRobotModel"
@@ -622,7 +620,7 @@ export default {
       sortClass: false,
       publishPriceClass: false,
 
-      operation: 1, // 1: 设置   2：启动引擎   3：停止引擎   4：撤销委托
+      operation: 1, // 1:    2   3   4
 
       fixSymbol: null,
       fixEnable: 1,
@@ -643,8 +641,8 @@ export default {
       searchSymbol: "",
       searchBase: "",
 
-      robotModel: false,// 机器人参数
-      robotMode: 0, // 0:新建  1：修改
+      robotModel: false,
+      robotMode: 0, // 0:  1
       robotParams: {
         symbol: "",
         isHalt: "1",
@@ -681,8 +679,8 @@ export default {
         priceStepRate: 0.005,
         runTime: 20000
       },
-      priceRobotModel: false,// 机器人参数
-      priceRobotMode: 0, // 0:新建  1：修改
+      priceRobotModel: false,
+      priceRobotMode: 0, // 0:  1
       priceRobotParams: {
         symbol: "",
         isHalt: "1",
@@ -735,8 +733,8 @@ export default {
       maxBuyPrice: null, // add
       minTurnover: null, // add
       sort: null, // add
-      publishPrice: null, // add  分摊抢购初始价格
-      publishType: "1", // 发行活动：1-无活动  2-抢购   3-分摊
+      publishPrice: null, // add
+      publishType: "1", // 1-  2-   3
       publishAmount: 0,
       startTime: null,
       endTime: null,
@@ -883,15 +881,14 @@ export default {
                       click: () => {
                         this.$Loading.start();
                         if(row.robotType == 0){
-                          this.robotMode = row.exEngineStatus; // 0:创建   1:修改
+                          this.robotMode = row.exEngineStatus; // 0:   1
                         }else if(row.robotType == 1) {
-                          this.priceRobotMode = row.exEngineStatus; // 0:创建   1:修改
+                          this.priceRobotMode = row.exEngineStatus; // 0:   1
                         }
                         let obj ={
                           symbol:  row.symbol
                         }
                         getRobotConfig(obj).then( res => {
-                          // 一般机器人
                           if (!res.code) {
                             if(row.robotType == 0){
                               this.robotParams.symbol = row.symbol;
@@ -918,7 +915,6 @@ export default {
                               this.robotModel = true;
                               this.$Loading.finish();
                             }
-                            // 固定价格机器人
                             if(row.robotType == 1){
                               this.priceRobotParams.symbol = row.symbol;
                               if(res.data.halt) {
@@ -1423,7 +1419,6 @@ export default {
 		confirmLoginPass() {
       this.$Loading.start();
       if(this.operation == 1){
-          // 修改币币信息
   			  this.feeClass = false;
           let obj ={
             symbol:  this.fixSymbol,
@@ -1451,7 +1446,6 @@ export default {
             }
           });
       }else if(this.operation == 2){
-          // 启动交易引擎
           let obj ={
             symbol:  this.targetSymbol,
             password: this.loginPW
@@ -1478,7 +1472,6 @@ export default {
           });
 
       }else if(this.operation == 3){
-          // 停止交易引擎
           let obj ={
             symbol:  this.targetSymbol,
             password: this.loginPW
@@ -1504,7 +1497,6 @@ export default {
             }
           });
       }else if(this.operation == 4){
-          // 撤销所有委托
           let obj ={
             symbol:  this.targetSymbol,
             password: this.loginPW
@@ -1532,7 +1524,6 @@ export default {
 		},
     alterRobotClicked(){
       if(this.robotMode == 0) {
-        // 创建机器人
         createRobotConfig(this.robotParams).then( res => {
             if(!res.code) {
               this.$Notice.success({
@@ -1572,7 +1563,6 @@ export default {
     },
     alterPriceRobotClicked(){
       if(this.priceRobotMode == 0) {
-        // 创建机器人
         createPriceRobotConfig(this.priceRobotParams).then( res => {
             if(!res.code) {
               this.$Notice.success({
@@ -1736,8 +1726,8 @@ export default {
       this.maxBuyPrice = null;
       this.minTurnover = null;
       this.sort = null;
-      this.publishPrice = null; // add  分摊抢购初始价格
-      this.publishType = "1"; // 发行活动：1-无活动  2-抢购   3-分摊
+      this.publishPrice = null; // add
+      this.publishType = "1"; // 1-  2-   3
       this.publishAmount = 0;
       this.startTime = null;
       this.endTime = null;

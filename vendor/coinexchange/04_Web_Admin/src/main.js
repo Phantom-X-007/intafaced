@@ -19,20 +19,20 @@ Vue.prototype.$ajax = axios;
 axios.defaults.withCredentials = true;
 
 function toFloor(number, scale = 8) {
-    if (new Number(number) == 0) { //如果是"0.0000000000000000"
+    if (new Number(number) == 0) { // "0.0000000000000000"
         return 0;
     }
-    let str = number + ""; //转字符串
-    if (str.indexOf('e') > -1 || str.indexOf('E') > -1) { //科学计数法
+    let str = number + "";
+    if (str.indexOf('e') > -1 || str.indexOf('E') > -1) {
         let num = new Number(number).toFixed(scale + 1),
             str = num + "";
         return str.substring(0, str.length - 1);
-    } else if (str.indexOf(".") > -1) { //小数
+    } else if (str.indexOf(".") > -1) {
         if (scale == 0) {
             return str.substring(0, str.indexOf("."));
         }
-        return str.substring(0, str.indexOf(".") + scale + 1); //截取指定位数
-    } else { //整数
+        return str.substring(0, str.indexOf(".") + scale + 1);
+    } else {
         return str;
     }
 }
@@ -66,14 +66,14 @@ Date.prototype.Format = function(fmt){
         "s+": this.getSeconds(),
         "S+": this.getMilliseconds()
     };
-    //因为date.getFullYear()出来的结果是number类型的,所以为了让结果变成字符串型，下面有两种方法：
+    // date.getFullYear()number,
     if(/(y+)/.test(fmt)){
-        //第一种：利用字符串连接符“+”给date.getFullYear()+""，加一个空字符串便可以将number类型转换成字符串。
+        // “+”date.getFullYear()+""number
         fmt=fmt.replace(RegExp.$1,(this.getFullYear()+"").substr(4-RegExp.$1.length));
     }
     for(var k in o){
         if (new RegExp("(" + k +")").test(fmt)){
-            //第二种：使用String()类型进行强制数据类型转换String(date.getFullYear())，这种更容易理解。
+            // String()String(date.getFullYear())
             fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(String(o[k]).length)));
         }
     }
@@ -84,7 +84,7 @@ Date.prototype.Format = function(fmt){
 //   config.headers['x-auth-token'] = Cookies.get('x-auth-token');
 //   return config;
 // })
-Vue.prototype.numToFixed = util.numToFixed; //主要用于科学计数法转数字
+Vue.prototype.numToFixed = util.numToFixed;
 
 Vue.prototype.api = Api;
 Vue.use(VueI18n);
@@ -101,10 +101,8 @@ new Vue({
     },
     mounted() {
         this.currentPageName = this.$route.name;
-        // 显示打开的页面的列表
         this.$store.commit('setOpenedList');
         this.$store.commit('initCachepage');
-        // 权限菜单过滤相关
         this.$store.commit('updateMenulist');
     },
     created() {

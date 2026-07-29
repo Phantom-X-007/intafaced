@@ -312,9 +312,9 @@ export default {
             "YYYY-MM-DD"
           ),
           endDate: dtime(Date.now() - 24 * 60 * 60000).format("YYYY-MM-DD"),
-          baseSymbol: "", //交易结算币
-          coinSymbols: [] //平台币种集合
-          // coinSymbols: ['BTC', 'ETH']//平台币种集合
+          baseSymbol: "",
+          coinSymbols: []
+          // coinSymbols: ['BTC', 'ETH']//
         }
       },
       coinType: 1,

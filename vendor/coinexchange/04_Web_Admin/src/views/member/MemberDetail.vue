@@ -407,7 +407,6 @@ export default {
     personRecode(obj) {
       this.ifLoading = true;
       console.log(obj)
-      //个人交易记录
 			perTradeAll(obj).then(res => {
         this.ifLoading = false;
         if (!res.code) {
@@ -432,7 +431,7 @@ export default {
 		getCoinName().then(res => {
 			if(!res.code) {
 				this.allSymbol = res.data;
-				// this.allSymbol.push({ name: '', unit: '全部' })
+				// this.allSymbol.push({ name: '', unit: '' })
 			}else this.$Message.error(res.message)
 		})
 		.catch(err => {console.log(err)})

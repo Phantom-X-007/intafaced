@@ -118,9 +118,9 @@ import { memberAsset } from '@/service/getData'
 				/** 
  * unit
  * walletAddress
- * account //用户名、邮箱、手机、姓名
+ * account
  * 
- * property 排序字段
+ * property
  * direction 0 1
 */
 				currentPageIdx: 1,
@@ -201,9 +201,9 @@ import { memberAsset } from '@/service/getData'
 /** 
  * unit
  * walletAddress
- * account //用户名、邮箱、手机、姓名
+ * account
  * 
- * property 排序字段
+ * property
  * direction 0 1
 */
 
