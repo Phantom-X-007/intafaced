@@ -3,12 +3,12 @@ import { transaction } from '@intafaced/db';
 import type { EventBus } from '@intafaced/events';
 import { formatAmount, parseAmount, recipes, rewardsEngine, burnAccount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import {
+  ACCESS_TIERS,
   STAKE_TIERS,
   accessTierFor,
   feeDiscountBps,
   isUnlocked,
   parseFeeDiscountSchedule,
-  stakeWeight,
   unlockDate,
   type FeeDiscountSchedule,
   type StakeTier,
@@ -37,11 +37,62 @@ export class TokenError extends Error {
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
-      | 'token.params_missing',
+      | 'token.params_missing'
+      | 'token.proposal_not_found'
+      | 'token.proposal_not_open'
+      | 'token.proposal_window'
+      | 'token.proposal_not_allowed'
+      | 'token.already_voted'
+      | 'token.no_voting_weight',
   ) {
     super(message);
     this.name = 'TokenError';
   }
+}
+
+/** §4.3 proposal surface — what an IFC-weighted vote may decide. */
+export type ProposalKind = 'listing' | 'fee_param' | 'curriculum' | 'grant';
+export type ProposalStatus = 'draft' | 'open' | 'passed' | 'rejected' | 'executed' | 'cancelled';
+export type VoteChoice = 'for' | 'against' | 'abstain';
+
+/**
+ * Minimum access-tier stake required to open a proposal without admin.
+ *
+ * Initiate is the first non-zero rung on ACCESS_TIERS — a "staked tier" in
+ * §4.3's language, not drive-by governance spam from a zero-stake account.
+ */
+export const PROPOSAL_MIN_STAKE = ACCESS_TIERS.find((t) => t.name === 'Initiate')!.minStake;
+
+export interface ProposalRecord {
+  id: string;
+  kind: ProposalKind;
+  body: Record<string, unknown>;
+  status: ProposalStatus;
+  opensAt: Date;
+  closesAt: Date;
+  createdAt: Date;
+}
+
+export interface VoteRecord {
+  id: string;
+  proposalId: string;
+  userId: string;
+  /** Snapshotted `stakeOf` at cast time — not re-read at tally. */
+  weight: Amount;
+  choice: VoteChoice;
+  castAt: Date;
+}
+
+export interface ProposalTally {
+  forWeight: Amount;
+  againstWeight: Amount;
+  abstainWeight: Amount;
+  totalWeight: Amount;
+  voterCount: number;
+}
+
+export interface ProposalDetail extends ProposalRecord {
+  tally: ProposalTally;
 }
 
 export interface TokenServiceOptions {
@@ -482,4 +533,277 @@ export class TokenService {
       { isolation: 'read committed', maxAttempts: 5 },
     );
   }
+
+  // ── Governance (§4.3) ──────────────────────────────────────────────────────
+
+  /**
+   * Open a proposal for IFC-weighted voting.
+   *
+   * Eligibility: operator (`asAdmin`) or a staked-tier holder (Initiate+).
+   * Voting weight is never computed here — that is snapshotted per ballot at
+   * cast time so later stake changes cannot rewrite a closed election.
+   *
+   * No ledger recipe: a proposal is rules metadata, not a value movement.
+   */
+  async createProposal(input: {
+    kind: ProposalKind;
+    body?: Record<string, unknown>;
+    createdBy: string;
+    /** Operator path — bypasses the staked-tier gate. */
+    asAdmin?: boolean;
+    opensAt?: Date;
+    closesAt?: Date;
+    proposalId?: string;
+    now?: Date;
+  }): Promise<ProposalRecord> {
+    const now = input.now ?? new Date();
+    const opensAt = input.opensAt ?? now;
+    // Default window: seven days. Fixed ms so a proposal's length does not
+    // depend on calendar months or DST (same rule as stake locks).
+    const closesAt = input.closesAt ?? new Date(opensAt.getTime() + 7 * 86_400_000);
+    if (!(closesAt.getTime() > opensAt.getTime())) {
+      throw new TokenError('Proposal window must close after it opens', 'token.proposal_window');
+    }
+
+    if (!input.asAdmin) {
+      const staked = await this.stakeOf(input.createdBy);
+      if (staked < PROPOSAL_MIN_STAKE) {
+        throw new TokenError(
+          `Creating a proposal requires at least ${formatAmount(PROPOSAL_MIN_STAKE)} IFC staked (or admin)`,
+          'token.proposal_not_allowed',
+        );
+      }
+    }
+
+    const id = input.proposalId ?? crypto.randomUUID();
+    const body = input.body ?? {};
+    // Open immediately when the window already includes `now`; otherwise draft
+    // until an operator (or a future open job) flips status. Voters still check
+    // the window, so a draft never accepts ballots.
+    const status: ProposalStatus = opensAt.getTime() <= now.getTime() && closesAt.getTime() > now.getTime() ? 'open' : 'draft';
+
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        kind: ProposalKind;
+        body: Record<string, unknown>;
+        status: ProposalStatus;
+        opens_at: Date;
+        closes_at: Date;
+        created_at: Date;
+      }>
+    >`
+      INSERT INTO token.proposals (id, kind, body, status, opens_at, closes_at)
+      VALUES (
+        ${id}, ${input.kind}, ${this.sql.json(body as never)}, ${status},
+        ${opensAt}, ${closesAt}
+      )
+      RETURNING id, kind, body, status, opens_at, closes_at, created_at
+    `;
+
+    const row = rows[0]!;
+    return {
+      id: row.id,
+      kind: row.kind,
+      body: (row.body ?? {}) as Record<string, unknown>,
+      status: row.status,
+      opensAt: row.opens_at,
+      closesAt: row.closes_at,
+      createdAt: row.created_at,
+    };
+  }
+
+  /**
+   * Cast one ballot. Weight = `stakeOf(userId)` at this instant, stored on the
+   * vote row so later stake/unstake cannot amplify or erase a recorded choice.
+   *
+   * Zero weight is refused (not recorded as a free no-op): IFC-weighted means
+   * unstaked accounts do not sit in the electorate.
+   */
+  async castVote(input: {
+    proposalId: string;
+    userId: string;
+    choice: VoteChoice;
+    now?: Date;
+  }): Promise<VoteRecord> {
+    const now = input.now ?? new Date();
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const proposals = await tx<
+          Array<{
+            id: string;
+            status: ProposalStatus;
+            opens_at: Date;
+            closes_at: Date;
+          }>
+        >`
+          SELECT id, status, opens_at, closes_at
+            FROM token.proposals
+           WHERE id = ${input.proposalId}
+           FOR UPDATE
+        `;
+
+        const proposal = proposals[0];
+        if (!proposal) throw new TokenError(`Proposal ${input.proposalId} not found`, 'token.proposal_not_found');
+        if (proposal.status !== 'open') {
+          throw new TokenError(`Proposal is ${proposal.status}, not open for voting`, 'token.proposal_not_open');
+        }
+        if (now.getTime() < proposal.opens_at.getTime() || now.getTime() >= proposal.closes_at.getTime()) {
+          throw new TokenError('Proposal voting window is not active', 'token.proposal_window');
+        }
+
+        // Stake snapshot inside the same transaction as the insert so a
+        // concurrent unstake cannot race "read weight → write ballot".
+        const stakeRows = await tx<Array<{ total: string }>>`
+          SELECT COALESCE(SUM(amount), 0) AS total
+            FROM token.stakes
+           WHERE user_id = ${input.userId} AND status = 'active'
+        `;
+        const weight = parseAmount(stakeRows[0]?.total ?? '0');
+        if (weight <= 0n) {
+          throw new TokenError('No active stake — voting weight is zero', 'token.no_voting_weight');
+        }
+
+        const voteId = crypto.randomUUID();
+        try {
+          const rows = await tx<
+            Array<{
+              id: string;
+              proposal_id: string;
+              user_id: string;
+              weight: string;
+              choice: VoteChoice;
+              cast_at: Date;
+            }>
+          >`
+            INSERT INTO token.governance_votes (id, proposal_id, user_id, weight, choice, cast_at)
+            VALUES (
+              ${voteId}, ${input.proposalId}, ${input.userId},
+              ${formatAmount(weight)}::numeric, ${input.choice}, ${now}
+            )
+            RETURNING id, proposal_id, user_id, weight, choice, cast_at
+          `;
+
+          const row = rows[0]!;
+          return {
+            id: row.id,
+            proposalId: row.proposal_id,
+            userId: row.user_id,
+            weight: parseAmount(row.weight),
+            choice: row.choice,
+            castAt: row.cast_at,
+          };
+        } catch (err) {
+          // Unique (proposal_id, user_id) — one ballot per member.
+          if (isUniqueViolation(err)) {
+            throw new TokenError('Already voted on this proposal', 'token.already_voted');
+          }
+          throw err;
+        }
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  async listProposals(input: {
+    status?: ProposalStatus;
+    kind?: ProposalKind;
+    limit?: number;
+  } = {}): Promise<ProposalRecord[]> {
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        kind: ProposalKind;
+        body: Record<string, unknown>;
+        status: ProposalStatus;
+        opens_at: Date;
+        closes_at: Date;
+        created_at: Date;
+      }>
+    >`
+      SELECT id, kind, body, status, opens_at, closes_at, created_at
+        FROM token.proposals
+       WHERE (${input.status ?? null}::text IS NULL OR status = ${input.status ?? null})
+         AND (${input.kind ?? null}::text IS NULL OR kind = ${input.kind ?? null})
+       ORDER BY created_at DESC
+       LIMIT ${limit}
+    `;
+
+    return rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      body: (row.body ?? {}) as Record<string, unknown>,
+      status: row.status,
+      opensAt: row.opens_at,
+      closesAt: row.closes_at,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async getProposal(proposalId: string): Promise<ProposalDetail> {
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        kind: ProposalKind;
+        body: Record<string, unknown>;
+        status: ProposalStatus;
+        opens_at: Date;
+        closes_at: Date;
+        created_at: Date;
+      }>
+    >`
+      SELECT id, kind, body, status, opens_at, closes_at, created_at
+        FROM token.proposals
+       WHERE id = ${proposalId}
+    `;
+
+    const row = rows[0];
+    if (!row) throw new TokenError(`Proposal ${proposalId} not found`, 'token.proposal_not_found');
+
+    const tallies = await this.sql<Array<{ choice: VoteChoice; weight: string; n: string }>>`
+      SELECT choice, COALESCE(SUM(weight), 0)::text AS weight, COUNT(*)::text AS n
+        FROM token.governance_votes
+       WHERE proposal_id = ${proposalId}
+       GROUP BY choice
+    `;
+
+    let forWeight = 0n;
+    let againstWeight = 0n;
+    let abstainWeight = 0n;
+    let voterCount = 0;
+    for (const t of tallies) {
+      const w = parseAmount(t.weight);
+      const n = Number(t.n);
+      voterCount += n;
+      if (t.choice === 'for') forWeight = w;
+      else if (t.choice === 'against') againstWeight = w;
+      else abstainWeight = w;
+    }
+
+    return {
+      id: row.id,
+      kind: row.kind,
+      body: (row.body ?? {}) as Record<string, unknown>,
+      status: row.status,
+      opensAt: row.opens_at,
+      closesAt: row.closes_at,
+      createdAt: row.created_at,
+      tally: {
+        forWeight,
+        againstWeight,
+        abstainWeight,
+        totalWeight: forWeight + againstWeight + abstainWeight,
+        voterCount,
+      },
+    };
+  }
+}
+
+/** postgres.js surfaces PG error codes on `err.code` (string). */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === '23505';
 }
