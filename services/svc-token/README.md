@@ -10,18 +10,18 @@ Owns the emission schedule, the staking ladder, real-yield distribution, and buy
 
 ## API
 
-| Route / method                              | Scope / auth            | Purpose                                                                                                                   |
-| ------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET /internal/stake/:userId`               | service headers         | **The hot path.** §4.3: other services call this to gate launchpad allocations, OTC access, premium lobbies, vendor slots |
-| `POST /internal/emissions/mint-next`        | service headers         | Cron-friendly mint of the next sequential epoch (refuses when `EMISSIONS_ENABLED=false`)                                  |
-| tRPC `stake`                                | `token:stake`           | Opens a stake for the signed principal — ledger first, then the record                                                    |
-| tRPC `unstake`                              | `token:stake`           | Returns principal; enforces lock + ownership                                                                              |
-| tRPC `listStakes`                           | `token:read`            | Stakes owned by the signed principal                                                                                      |
-| tRPC `stakeOf` / `accessOf`                 | `token:read`            | Total active stake / access tier + fee discount                                                                           |
-| tRPC `mintEpoch` / `nextEmissionEpoch`      | `admin:treasury` / read | Operator mint (optional `epoch`) and next index                                                                           |
-| tRPC `distributeRevenue`                    | `admin:treasury` + MFA  | Live real-yield: sweep fee sources → pro-rata staker payouts (window + sources on the wire)                               |
-| tRPC `recordBuyback`                        | `admin:treasury` + MFA  | Live buyback settle: caller supplies `tokensBought` (trade prices elsewhere); burn + rewards split                        |
-| tRPC `burnedSupply`                         | `token:read`            | Permanently burned IFC balance                                                                                            |
+| Route / method                         | Scope / auth            | Purpose                                                                                                                   |
+| -------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET /internal/stake/:userId`          | service headers         | **The hot path.** §4.3: other services call this to gate launchpad allocations, OTC access, premium lobbies, vendor slots |
+| `POST /internal/emissions/mint-next`   | service headers         | Cron-friendly mint of the next sequential epoch (refuses when `EMISSIONS_ENABLED=false`)                                  |
+| tRPC `stake`                           | `token:stake`           | Opens a stake for the signed principal — ledger first, then the record                                                    |
+| tRPC `unstake`                         | `token:stake`           | Returns principal; enforces lock + ownership                                                                              |
+| tRPC `listStakes`                      | `token:read`            | Stakes owned by the signed principal                                                                                      |
+| tRPC `stakeOf` / `accessOf`            | `token:read`            | Total active stake / access tier + fee discount                                                                           |
+| tRPC `mintEpoch` / `nextEmissionEpoch` | `admin:treasury` / read | Operator mint (optional `epoch`) and next index                                                                           |
+| tRPC `distributeRevenue`               | `admin:treasury` + MFA  | Live real-yield: sweep fee sources → pro-rata staker payouts (window + sources on the wire)                               |
+| tRPC `recordBuyback`                   | `admin:treasury` + MFA  | Live buyback settle: caller supplies `tokensBought` (trade prices elsewhere); burn + rewards split                        |
+| tRPC `burnedSupply`                    | `token:read`            | Permanently burned IFC balance                                                                                            |
 
 Optional auto-tick: set `EMISSIONS_AUTO_TICK=true` (and leave `EMISSIONS_ENABLED=true`) to mint the next sequential epoch every `EMISSIONS_TICK_MS` (default 1 day). Prefer external cron → `/internal/emissions/mint-next` or tRPC `mintEpoch` so the job is pauseable.
 

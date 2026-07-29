@@ -268,10 +268,12 @@ describe('svc-token mount — yield + buyback', () => {
   it('distributes revenue for an MFA admin operator', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    const result = await createTokenRouter(token).createCaller(admin).distributeRevenue({
-      windowId: 'w1',
-      sources: [{ module: 'trade', amount: '100' }],
-    });
+    const result = await createTokenRouter(token)
+      .createCaller(admin)
+      .distributeRevenue({
+        windowId: 'w1',
+        sources: [{ module: 'trade', amount: '100' }],
+      });
     expect(result).toEqual({ windowId: 'w1', distributed: '100', recipients: 1, skipped: 0 });
     expect(token.distributeRevenue).toHaveBeenCalledWith({
       windowId: 'w1',
@@ -308,12 +310,14 @@ describe('svc-token mount — yield + buyback', () => {
   it('records a buyback for an MFA admin and returns burn split', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    const result = await createTokenRouter(token).createCaller(admin).recordBuyback({
-      runId: RUN,
-      revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
-      revenueTotal: { IFC: '1000' },
-      tokensBought: '100',
-    });
+    const result = await createTokenRouter(token)
+      .createCaller(admin)
+      .recordBuyback({
+        runId: RUN,
+        revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+        revenueTotal: { IFC: '1000' },
+        tokensBought: '100',
+      });
     expect(result).toEqual({ runId: RUN, burned: '50', toRewards: '50' });
     expect(token.recordBuyback).toHaveBeenCalledWith({
       runId: RUN,
