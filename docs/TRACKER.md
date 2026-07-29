@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**29 of 107 shipped (27%)** · 0 in progress · 35 ready to claim · 43 blocked · 15 deliberate §13 sockets
+**29 of 107 shipped (27%)** · 1 in progress · 34 ready to claim · 43 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -32,7 +32,6 @@ pnpm wt feat/<the-thing>
 | Stake tiers, locks, access gating | `token` | 1 | `token.staking` |
 | Real-yield distribution from platform fees | `token` | 1 | `token.yield` |
 | Buyback & burn split | `token` | 1 | `token.buyback` |
-| One-tap Convert — the retail on-ramp | `trade` | 2 | `trade.convert` |
 | Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
 | Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
 | TWAP / VWAP / POV execution | `trade` | 2 | `trade.algo` |
@@ -75,6 +74,12 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | **6** | Live lobbies, LiveKit SFU, capacity tiers | 🟢 ready | `academy.lobbies` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **4** | ERC-20 deploy from audited templates | ⛔ blocked | `launch.token-factory` |
+
+## 🔨 In progress
+
+| Feature | Owner | Module |
+|---|---|---|
+| One-tap Convert — the retail on-ramp | **Nitro** | `trade` |
 
 ---
 
@@ -122,7 +127,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Orderbook + matching engine, journal, replay | F |  | `matching.engine` |
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
-| 🟢 | One-tap Convert — the retail on-ramp | F |  | `trade.convert` |
+| 🔨 | One-tap Convert — the retail on-ramp <br/>_WIP 2026-07-29: convert.quote + convert.execute on svc-trade (RFQ against book + house spread → market IOC on the same hold→fill path). PR feat/trade-convert. Not done until Postgres money-path suite green in CI and edge path product-checked._ | F |  | `trade.convert` |
 | 🟢 | Perps: cross/isolated margin, funding, liquidation ladder | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
 | ⛔ | OTC RFQ desk, staked-tier gate | F | `token.staking` | `trade.otc` |
