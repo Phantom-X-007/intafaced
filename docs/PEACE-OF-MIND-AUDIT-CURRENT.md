@@ -80,7 +80,6 @@ Full residual + owners: [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-
 | Real **rails / live chain**                                               | Before real user money                |
 | Operator freeze / **kill drill** proven end-to-end                        | Before go-live                        |
 | **Licences** Priority-1 (chart path · MySQL connector)                    | Before public product — Denon decides |
-| **Pay withdraw retry** — after open pay feature PR lands                  | Soon · before real money              |
 | Wallet secrets / host perimeter                                           | Denon ops · before real money         |
 
 ---

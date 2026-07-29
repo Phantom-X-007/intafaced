@@ -27,13 +27,14 @@
 
 ## Closed in residual hygiene (do not re-open)
 
-| #   | Item                                                          | How                                                                                                                                          |
-| --- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2   | CORS `*` + credentials on Java web modules                    | `CorsAllowlist` + env `CORS_ALLOWED_ORIGINS`; local defaults only; `pnpm scan:vendor-shell`                                                  |
-| 3   | `unfreezeMore` / `unfreezeLess` mass balance credit           | Service throws; DAO queries no-op; scan bans `balance+500` / `+to_released`                                                                  |
-| 4   | `dropWeekTable` TRUNCATE + `createWeekTable` snapshot helpers | Service throws; DAO no-op; scan bans `TRUNCATE TABLE member_wallet_`                                                                         |
-| 9   | CI money tests can skip without PG env                        | CI sets all `TEST_DATABASE_URL_*` on `127.0.0.1:5432`; `assert-test-db-env.mjs`; `postgresAvailable` hard-fails when `CI`/`REQUIRE_POSTGRES` |
-| —   | JDBCUtils mass wallet credit / to_released bulk debit         | Methods throw; vendor-shell-scan bans `to_released=to_released-`                                                                             |
+| #   | Item                                                          | How                                                                                                                                     |
+| --- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 2   | CORS `*` + credentials on Java web modules                    | `CorsAllowlist` + env `CORS_ALLOWED_ORIGINS`; local defaults only; `pnpm scan:vendor-shell`                                             |
+| 3   | `unfreezeMore` / `unfreezeLess` mass balance credit           | Service throws; DAO queries no-op; scan bans `balance+500` / `+to_released`                                                             |
+| 4   | `dropWeekTable` TRUNCATE + `createWeekTable` snapshot helpers | Service throws; DAO no-op; scan bans `TRUNCATE TABLE member_wallet_`                                                                    |
+| 8   | Pay withdraw retry: test vs service contract                  | Same clientRef after `failed` opens next attempt; L3-1 fixture rail/destination aligned                                                 |
+| 9   | CI money tests can skip without PG env                        | CI sets all `TEST_DATABASE_URL_*` on `127.0.0.1:5432`; turbo `globalEnv`; `assert-test-db-env.mjs`; hard-fail `postgresAvailable` in CI |
+| —   | JDBCUtils mass wallet credit / to_released bulk debit         | Methods throw; vendor-shell-scan bans `to_released=to_released-`                                                                        |
 
 **Production CORS:** set `CORS_ALLOWED_ORIGINS` to your real app origins before public shell. Defaults are localhost only (not “any site”).
 
@@ -49,7 +50,6 @@
 | 5   | Wallet secrets / empty keystore passwords / host perimeter | Denon ops                                       | When Denon back · before real money     |
 | 6   | TradingView: no licence + remote third-party chart JS      | Denon picks path · Nitro if commercial TV grant | When Denon back · before public product |
 | 7   | MySQL Connector/J GPL in proprietary product               | Denon (MariaDB swap)                            | When Denon back · before public ship    |
-| 8   | Pay withdraw retry: test vs service contract               | Money agent (**after** open pay feature PR)     | Soon · before real money                |
 | 10  | `feat/multi-asset-instruments` not merged                  | **Denon only** + WAVE after                     | When Denon back                         |
 | 11  | L2-6 S2S body-bind                                         | Design, not drive-by                            | Before hard multi-service prod          |
 | 12  | Real rails + live chain                                    | Denon                                           | Before real money                       |
