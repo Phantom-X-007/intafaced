@@ -1,7 +1,10 @@
 import { z } from 'zod';
-import { publicJurisdictionProcedure, publicProcedure, router } from '@intafaced/contracts';
+import { publicJurisdictionProcedure, publicProcedure, router, TRPCError } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { presentRoute, route, type VenueQuote } from './router-quote.js';
+import type { QuoteVenue } from './quote/venue.js';
+import { QuoteRefusedError, sourceQuote } from './quote/quote-service.js';
+import { withRouteSpan } from './tracing.js';
 
 /**
  * svc-dex — the Protocol Plane's front door (§17.5).
@@ -22,6 +25,21 @@ import { presentRoute, route, type VenueQuote } from './router-quote.js';
  * with `minTier: 'basic'`, because that service holds the user's balance. Same
  * platform, two planes, and the difference is visible in one line of each
  * router.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * `quote` USED TO BE A CALCULATOR. IT IS NOW A QUOTE.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * It previously took `quotes: []` over the wire and routed whatever the CALLER
+ * supplied. The arithmetic was real and tested; the prices came from nowhere.
+ * Anything rendering that result showed a user a number no venue had ever
+ * offered — and a user who acts on such a number has been misled by us.
+ *
+ * So `quote` now sources its own prices from live venues, enforces
+ * `QUOTE_MAX_AGE_MS` on them, and REFUSES when it cannot. The old behaviour
+ * survives under a name that cannot be mistaken for a price — `routePreview` —
+ * because the arithmetic is genuinely useful for showing how routing works, and
+ * because leaving it called `quote` was the actual defect.
  */
 
 const quoteInput = z.object({
@@ -33,20 +51,151 @@ const quoteInput = z.object({
   settlementCost: z.string(),
 });
 
-export function createDexRouter() {
+/** Decimal string. The same rule the rest of the platform states. */
+const decimal = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are decimal strings with at most 18 decimal places');
+
+const routeSchema = z.object({
+  legs: z.array(
+    z.object({
+      venue: z.string(),
+      kind: z.enum(['book', 'pool']),
+      qty: z.string(),
+      quoteAmount: z.string(),
+      effectivePrice: z.string(),
+    }),
+  ),
+  filledQty: z.string(),
+  unfilledQty: z.string(),
+  totalQuoteAmount: z.string(),
+});
+
+const sourcedQuoteSchema = z.object({
+  symbol: z.string(),
+  side: z.enum(['buy', 'sell']),
+  route: routeSchema,
+  venues: z.array(
+    z.object({
+      venueId: z.string(),
+      venueKind: z.string(),
+      kind: z.enum(['book', 'pool']),
+      plane: z.enum(['protocol', 'fiat', 'external']),
+      custodial: z.boolean(),
+      feeBps: z.number().int(),
+      settlementCost: z.string(),
+      fillableQty: z.string(),
+      quoteAmount: z.string(),
+      observedAt: z.string(),
+      ageMs: z.number().int(),
+      latencyMs: z.number().int(),
+    }),
+  ),
+  unavailable: z.array(
+    z.object({
+      venueId: z.string(),
+      plane: z.enum(['protocol', 'fiat', 'external']),
+      reason: z.enum(['unreachable', 'malformed', 'not_ready', 'stale', 'clock_skew', 'no_depth']),
+      detail: z.string(),
+    }),
+  ),
+  /**
+   * The denominator of "best execution".
+   *
+   * `degraded` and `singleVenue` exist so a client cannot accidentally present
+   * the only venue that answered as the best of several. That is the quiet
+   * failure mode of every cross-venue router.
+   */
+  venuesConfigured: z.number().int(),
+  degraded: z.boolean(),
+  singleVenue: z.boolean(),
+  asOf: z.string(),
+  ageMs: z.number().int(),
+  maxAgeMs: z.number().int(),
+  custodialLegs: z.boolean(),
+});
+
+export interface DexRouterDeps {
+  /**
+   * The venues to quote, built per request from the caller's screened region.
+   *
+   * A factory rather than a fixed list so the region that passed this service's
+   * own jurisdiction check travels upstream with the read. Screening at the
+   * front door and then calling an upstream as an unknown region would leave the
+   * two disagreeing about who is being served.
+   */
+  readonly venues: (region: string) => readonly QuoteVenue[];
+  readonly maxAgeMs: number;
+  readonly depth: number;
+  /** Injected in tests. */
+  readonly now?: () => Date;
+}
+
+/**
+ * Map a refusal onto the wire.
+ *
+ * The `dex.quote.*` code leads the message because it is the part a client
+ * branches on, and prose is not a protocol. The HTTP status matters too: an
+ * unreachable venue is a 503 someone should be paged about, while an empty book
+ * is a 404-shaped fact about the market that no amount of paging fixes.
+ */
+function toTrpcError(err: QuoteRefusedError): TRPCError {
+  const code = err.code === 'dex.quote.no_liquidity' ? 'NOT_FOUND' : 'SERVICE_UNAVAILABLE';
+  return new TRPCError({ code, message: `${err.code} — ${err.message}`, cause: err });
+}
+
+export function createDexRouter(deps: DexRouterDeps) {
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.literal(true), service: z.literal('svc-dex'), custodial: z.literal(false) }))
       .query(() => ({ ok: true as const, service: 'svc-dex' as const, custodial: false as const })),
 
     /**
-     * Best execution across venues.
+     * A LIVE quote: best execution across the venues we can actually read.
+     *
+     * Every price in the response was fetched from a venue inside
+     * `QUOTE_MAX_AGE_MS`. There is no cache and no fallback — see
+     * `quote/quote-service.ts`. When no venue can be read fresh this throws
+     * rather than answering, because a refusal costs a retry and an invented
+     * price costs a trade.
      *
      * Amounts cross the wire as decimal strings and are parsed to scaled bigint
      * here. A JSON number would round the 18th decimal away, and the 18th
      * decimal is where a split route stops adding up.
      */
     quote: publicJurisdictionProcedure('dex', 'protocol')
+      .input(z.object({ symbol: z.string().min(1).max(64), side: z.enum(['buy', 'sell']), qty: decimal }))
+      .output(sourcedQuoteSchema)
+      .query(async ({ input, ctx }) => {
+        const venues = deps.venues(ctx.region);
+
+        return withRouteSpan('dex.quote', { side: input.side, venues: venues.length }, async () => {
+          try {
+            const quoted = await sourceQuote(
+              { venues, maxAgeMs: deps.maxAgeMs, depth: deps.depth, ...(deps.now ? { now: deps.now } : {}) },
+              { symbol: input.symbol, side: input.side, qty: parseAmount(input.qty) },
+            );
+            // Copied out of their readonly containers for the wire schema. The
+            // service keeps them readonly because nothing downstream of a priced
+            // route has any business editing what a venue said.
+            return { ...quoted, venues: [...quoted.venues], unavailable: [...quoted.unavailable] };
+          } catch (err) {
+            if (err instanceof QuoteRefusedError) throw toTrpcError(err);
+            throw err;
+          }
+        });
+      }),
+
+    /**
+     * The routing arithmetic, over quotes the CALLER supplies.
+     *
+     * **This is not a price and must never be rendered as one.** It answers
+     * "given these venue quotes, where would the order go?" — useful for a
+     * routing explainer, a simulation or a test, and useless as a quote, because
+     * the inputs came from whoever called it.
+     *
+     * The name now carries that. It was called `quote`, which is precisely how a
+     * caller ends up displaying invented numbers in good faith.
+     */
+    routePreview: publicJurisdictionProcedure('dex', 'protocol')
       .input(z.object({ side: z.enum(['buy', 'sell']), qty: z.string(), quotes: z.array(quoteInput) }))
       .query(({ input }) => {
         const quotes: VenueQuote[] = input.quotes.map((q) => ({
