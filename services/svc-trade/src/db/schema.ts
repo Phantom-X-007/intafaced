@@ -30,6 +30,36 @@ export const trade = pgSchema('trade');
 export const marketKindEnum = trade.enum('market_kind', ['spot', 'futures', 'options']);
 
 /**
+ * What class of thing is listed (0001).
+ *
+ * A gold market and a BTC market are not the same product to a regulator, a risk
+ * engine, or a tax report — and, more immediately, they do not keep the same
+ * hours. Every column added alongside this one exists because `crypto` was
+ * previously assumed everywhere.
+ */
+export const assetClassEnum = trade.enum('asset_class', ['crypto', 'commodity', 'forex']);
+
+/**
+ * What one unit of the base asset IS.
+ *
+ * `unit` is anything counted — a coin, a token, a unit of currency. The rest
+ * name a physical measure and are not interchangeable: 10 of `WTI/USD` is ten
+ * barrels and 10 of `XAU/USD` is ten troy ounces, and nothing downstream can
+ * recover which was meant if the listing did not say.
+ */
+export const instrumentUnitEnum = trade.enum('instrument_unit', ['unit', 'troy_ounce', 'barrel', 'mmbtu']);
+
+/**
+ * A named trading calendar, not an embedded session table.
+ *
+ * The windows live in `@intafaced/contracts` (`TRADING_SCHEDULES`), evaluated
+ * against a real IANA timezone so the forex week tracks US daylight saving
+ * rather than drifting an hour twice a year. Storing a key keeps the database
+ * from holding a second copy of the calendar that could disagree with it.
+ */
+export const tradingScheduleEnum = trade.enum('trading_schedule', ['crypto-24x7', 'fx-global', 'cme-globex']);
+
+/**
  * Market lifecycle.
  *
  * `halted` is a distinct state from `delisted`, not a flag: a halted market
@@ -80,6 +110,32 @@ export const markets = trade.table(
     baseAsset: text('base_asset').notNull(),
     quoteAsset: text('quote_asset').notNull(),
     kind: marketKindEnum('kind').notNull().default('spot'),
+    /** Human label for the base — 'Gold', 'Crude Oil (WTI)'. i18n-keyed at the surface. */
+    displayName: text('display_name').notNull().default(''),
+    assetClass: assetClassEnum('asset_class').notNull().default('crypto'),
+    /** The physical or notional unit one quoted price refers to. */
+    quoteUnit: instrumentUnitEnum('quote_unit').notNull().default('unit'),
+    /** How many `quoteUnit`s one quoted price covers. Almost always '1'. */
+    unitSize: amount('unit_size').notNull().default('1'),
+    /**
+     * The conventional smallest quoted move — 0.0001 on most FX majors, 0.01 on
+     * JPY crosses and on gold. NULL on crypto, which has no pip convention.
+     *
+     * DISTINCT from `tickSize`, which is what the ENGINE enforces. FX venues
+     * quote fractional pips, so tick is routinely a tenth of this; conflating
+     * the two displays every spread off by a factor of ten.
+     */
+    pipSize: amount('pip_size'),
+    /** Which calendar this market keeps. Crypto is the only continuous one. */
+    schedule: tradingScheduleEnum('schedule').notNull().default('crypto-24x7'),
+    /**
+     * Which plane lists this market (§22, §17.5).
+     *
+     * Read by the DEX/CEX switch. A market carrying 'protocol' is one
+     * svc-protocol can actually match; listing one it cannot would advertise a
+     * book that does not exist.
+     */
+    planes: text('planes').array().notNull().default(['fiat']),
     /** Minimum price increment. A price that is not a multiple of it is rejected. */
     tickSize: amount('tick_size').notNull(),
     /** Minimum quantity increment. */
@@ -106,6 +162,8 @@ export const markets = trade.table(
     uniqueIndex('markets_symbol_idx').on(t.symbol),
     index('markets_status_idx').on(t.status),
     index('markets_pair_idx').on(t.baseAsset, t.quoteAsset),
+    /** The terminal's asset-class tabs read this. */
+    index('markets_asset_class_idx').on(t.assetClass),
   ],
 );
 

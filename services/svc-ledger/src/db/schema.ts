@@ -12,7 +12,8 @@ export const ledger = pgSchema('ledger');
 
 export const ownerTypeEnum = ledger.enum('owner_type', ['user', 'subaccount', 'module', 'house', 'treasury']);
 export const accountKindEnum = ledger.enum('account_kind', ['available', 'hold', 'escrow', 'stake', 'collateral']);
-export const assetKindEnum = ledger.enum('asset_kind', ['crypto', 'fiat', 'native']);
+/** `commodity` added by 0003 — the metals and energies the instrument catalogue lists. */
+export const assetKindEnum = ledger.enum('asset_kind', ['crypto', 'fiat', 'native', 'commodity']);
 export const directionEnum = ledger.enum('direction', ['debit', 'credit']);
 
 export const assets = ledger.table('assets', {
