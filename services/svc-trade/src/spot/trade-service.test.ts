@@ -976,9 +976,9 @@ if (!available) {
 
     it('refuses to quote when the book is empty', async () => {
       matching.asks = [];
-      await expect(
-        trade.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') }),
-      ).rejects.toMatchObject({ code: 'trade.convert_no_liquidity' });
+      await expect(trade.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') })).rejects.toMatchObject({
+        code: 'trade.convert_no_liquidity',
+      });
     });
 
     it('executes via market IOC and is idempotent on clientConvertId', async () => {
@@ -1025,9 +1025,9 @@ if (!available) {
 
     it('honours the convert kill-switch', async () => {
       trade = new TradeService(sql, ledger, matching, perks, bus, { convertEnabled: false });
-      await expect(
-        trade.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') }),
-      ).rejects.toMatchObject({ code: 'trade.convert_disabled' });
+      await expect(trade.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') })).rejects.toMatchObject({
+        code: 'trade.convert_disabled',
+      });
     });
   });
 }

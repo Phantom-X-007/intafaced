@@ -96,8 +96,7 @@ export function estimateConvert(input: ConvertQuoteInput): ConvertQuoteResult {
   }
 
   const spread = mulBps(bookNotional, input.convertSpreadBps, 'ceil');
-  const userNotional =
-    input.side === 'buy' ? bookNotional + spread : bookNotional > spread ? sub(bookNotional, spread) : 0n;
+  const userNotional = input.side === 'buy' ? bookNotional + spread : bookNotional > spread ? sub(bookNotional, spread) : 0n;
 
   if (userNotional <= 0n) {
     throw new TradeError('convert spread consumes the entire fill', 'trade.convert_spread_too_high');
@@ -117,13 +116,16 @@ export function estimateConvert(input: ConvertQuoteInput): ConvertQuoteResult {
 }
 
 /** Present a quote for the wire (decimal strings only for money). */
-export function presentConvertQuote(q: ConvertQuoteResult, extra: {
-  symbol: string;
-  side: OrderSide;
-  requestedQty: Amount;
-  convertSpreadBps: number;
-  expiresAt: string;
-}) {
+export function presentConvertQuote(
+  q: ConvertQuoteResult,
+  extra: {
+    symbol: string;
+    side: OrderSide;
+    requestedQty: Amount;
+    convertSpreadBps: number;
+    expiresAt: string;
+  },
+) {
   return {
     symbol: extra.symbol,
     side: extra.side,
