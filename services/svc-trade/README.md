@@ -210,7 +210,7 @@ The service checks these; the database enforces them regardless.
 | options (European, cash-settled, full collateral)                  | `trade.options`                                                                           |
 | `copy_leaders`, `copy_follows`, profit share                       | `trade.copy`                                                                              |
 | `otc_quotes`, RFQ, staked-tier gate                                | `trade.otc`                                                                               |
-| Convert one-tap                                                    | `trade.convert`                                                                           |
+| Convert one-tap                                                    | `trade.convert` — **quote + execute on this service** (`convert.quote` / `convert.execute`; market IOC + house RFQ spread; same hold→fill path as spot) |
 | TWAP / VWAP / POV                                                  | `trade.algo`                                                                              |
 | internal market-maker bot, venue aggregation                       | `trade.mm-bot`, `venue.aggregation`                                                       |
 | CCXT REST/ws surface over this router                              | `trade.ccxt-api`                                                                          |

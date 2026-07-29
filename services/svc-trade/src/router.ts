@@ -288,6 +288,71 @@ export function createTradeRouter(trade: TradeService) {
         .output(z.array(fillOutput))
         .query(({ ctx, input }) => guard(async () => (await trade.myFills(ctx.principal, input?.limit ?? 100)).map(presentFill))),
     }),
+
+    /**
+     * One-tap Convert (`trade.convert`) — RFQ against the internal book + house
+     * spread, then market IOC execute on the same hold → fill money path as spot.
+     */
+    convert: router({
+      quote: scopedProcedure('trade:read', { module: 'trade' })
+        .input(
+          z.object({
+            symbol: z.string().min(3),
+            side: orderSideSchema,
+            qty: decimal,
+          }),
+        )
+        .output(
+          z.object({
+            symbol: z.string(),
+            side: orderSideSchema,
+            requestedQty: decimal,
+            filledQty: decimal,
+            bookNotional: decimal,
+            userNotional: decimal,
+            avgPrice: decimal,
+            fullyFilled: z.boolean(),
+            convertSpreadBps: z.number().int(),
+            expiresAt: z.string(),
+          }),
+        )
+        .query(({ ctx, input }) =>
+          guard(async () =>
+            trade.convertQuote(ctx.principal, {
+              symbol: input.symbol,
+              side: input.side,
+              qty: parseAmount(input.qty),
+            }),
+          ),
+        ),
+
+      execute: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            symbol: z.string().min(3),
+            side: orderSideSchema,
+            qty: decimal,
+            /** Required. Double-tap safe. Becomes the spot clientOrderId under `convert:`. */
+            clientConvertId: z.string().min(1).max(48),
+            /** Optional worst acceptable average (buy = max, sell = min). */
+            maxAvgPrice: decimal.optional(),
+          }),
+        )
+        .output(orderOutput)
+        .mutation(({ ctx, input }) =>
+          guard(async () =>
+            presentOrder(
+              await trade.convertExecute(ctx.principal, {
+                symbol: input.symbol,
+                side: input.side,
+                qty: parseAmount(input.qty),
+                clientConvertId: input.clientConvertId,
+                maxAvgPrice: input.maxAvgPrice === undefined ? null : parseAmount(input.maxAvgPrice),
+              }),
+            ),
+          ),
+        ),
+    }),
   });
 }
 

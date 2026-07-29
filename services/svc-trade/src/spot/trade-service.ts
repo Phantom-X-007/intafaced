@@ -10,6 +10,7 @@ import { assertNotional, assertPrice, assertQty, assertTradable, holdFor, protec
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
 import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from './matching-client.js';
+import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
 import {
   TradeError,
   type FillRecord,
@@ -54,6 +55,36 @@ export interface TradeServiceOptions {
   spotEnabled?: boolean;
   /** How far above the best ask a market buy may be funded. See `protectionPriceFor`. */
   marketSlippageCapBps?: number;
+  /** Mirror of the `trade.convert` flag. OFF refuses convert quote + execute. */
+  convertEnabled?: boolean;
+  /**
+   * Extra house edge on convert quotes, in bps of book notional.
+   * Execution still walks the real book via market IOC; this is the RFQ mark-up
+   * the one-tap surface shows the user before they tap.
+   */
+  convertSpreadBps?: number;
+  /** How long an indicative quote is considered fresh (ms). */
+  convertQuoteTtlMs?: number;
+}
+
+export interface ConvertQuoteRequest {
+  symbol?: string;
+  marketId?: string;
+  side: OrderSide;
+  qty: Amount;
+}
+
+export interface ConvertExecuteRequest extends ConvertQuoteRequest {
+  /**
+   * Retry key. Becomes `convert:<id>` on the underlying order so a double-tap
+   * holds and submits once (same as clientOrderId on spot).
+   */
+  clientConvertId: string;
+  /**
+   * Optional worst average price the user will accept (decimal Amount).
+   * Buy: refuse if re-quoted avg is higher. Sell: refuse if re-quoted avg is lower.
+   */
+  maxAvgPrice?: Amount | null;
 }
 
 export interface PlaceOrderInput {
@@ -87,6 +118,9 @@ export interface ListMarketInput {
 export class TradeService {
   private readonly spotEnabled: boolean;
   private readonly slippageCapBps: number;
+  private readonly convertEnabled: boolean;
+  private readonly convertSpreadBps: number;
+  private readonly convertQuoteTtlMs: number;
 
   constructor(
     private readonly sql: Sql,
@@ -98,6 +132,9 @@ export class TradeService {
   ) {
     this.spotEnabled = options.spotEnabled ?? true;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
+    this.convertEnabled = options.convertEnabled ?? true;
+    this.convertSpreadBps = options.convertSpreadBps ?? 10;
+    this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? 15_000;
   }
 
   // ── Listings (operator surface) ────────────────────────────────────────────
@@ -156,6 +193,116 @@ export class TradeService {
         FROM trade.markets ORDER BY symbol ASC
     `;
     return rows.map(toMarket);
+  }
+
+  // ── Convert — one-tap RFQ against the book (§5.2 trade.convert) ────────────
+
+  /**
+   * Indicative RFQ. Read-only against the engine depth; no hold, no order row.
+   *
+   * The number the user sees includes the published convert spread. Execution
+   * still goes through the normal hold → market IOC path so convert cannot invent
+   * a second money path around purpose-keyed holds.
+   */
+  async convertQuote(principal: Principal, input: ConvertQuoteRequest) {
+    requireScope(principal, 'trade:read');
+    return this.buildConvertQuote(input);
+  }
+
+  /**
+   * One-tap execute. Re-quotes against live depth, optionally enforces the
+   * user's worst acceptable average, then places a market IOC order under a
+   * deterministic client id so a double-tap is safe.
+   */
+  async convertExecute(principal: Principal, input: ConvertExecuteRequest): Promise<OrderRecord> {
+    return withMoneySpan(
+      'trade.convertExecute',
+      {
+        operation: 'convert',
+        userId: principal.userId,
+        symbol: input.symbol,
+        side: input.side,
+        qty: formatAmount(input.qty),
+      },
+      async (span) => {
+        requireScope(principal, 'trade:write');
+        if (!input.clientConvertId || input.clientConvertId.length < 1 || input.clientConvertId.length > 48) {
+          throw new TradeError('clientConvertId is required (1–48 chars) for convert idempotency', 'trade.convert_missing_id');
+        }
+
+        // Live re-quote — never execute on a stale number the user never saw.
+        // Uses the same path as `convertQuote` without re-checking trade:read
+        // (write is the stricter gate and is already held).
+        const quote = await this.buildConvertQuote(input);
+        const liveAvg = parseAmount(quote.avgPrice);
+        if (input.maxAvgPrice != null) {
+          if (input.side === 'buy' && liveAvg > input.maxAvgPrice) {
+            throw new TradeError(
+              `convert price ${quote.avgPrice} is above your max ${formatAmount(input.maxAvgPrice)}`,
+              'trade.convert_price_moved',
+            );
+          }
+          if (input.side === 'sell' && liveAvg < input.maxAvgPrice) {
+            throw new TradeError(
+              `convert price ${quote.avgPrice} is below your min ${formatAmount(input.maxAvgPrice)}`,
+              'trade.convert_price_moved',
+            );
+          }
+        }
+
+        const order = await this.placeOrder(principal, {
+          symbol: input.symbol,
+          marketId: input.marketId,
+          side: input.side,
+          type: 'market',
+          qty: input.qty,
+          tif: 'IOC',
+          clientOrderId: `convert:${input.clientConvertId}`,
+        });
+        span.setAttribute('intafaced.order_id', order.id);
+        span.setAttribute('intafaced.order_status', order.status);
+        return order;
+      },
+    );
+  }
+
+  private async buildConvertQuote(input: ConvertQuoteRequest) {
+    if (!this.convertEnabled) {
+      throw new TradeError('convert is disabled by the operator kill-switch', 'trade.convert_disabled');
+    }
+    if (!this.spotEnabled) {
+      throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
+    }
+
+    const market = await this.requireMarket(input);
+    assertTradable(market);
+    assertQty(market, input.qty);
+
+    const depth = await this.matching.depth(market.id, 50);
+    const levels = input.side === 'buy' ? depth.asks : depth.bids;
+    const estimate = estimateConvert({
+      side: input.side,
+      qty: input.qty,
+      levels,
+      convertSpreadBps: this.convertSpreadBps,
+      tickSize: market.tickSize,
+    });
+
+    if (!estimate.fullyFilled) {
+      throw new TradeError(
+        `insufficient book depth to convert ${formatAmount(input.qty)} ${market.baseAsset} — only ${formatAmount(estimate.filledQty)} available`,
+        'trade.convert_insufficient_depth',
+      );
+    }
+
+    const expiresAt = new Date(Date.now() + this.convertQuoteTtlMs).toISOString();
+    return presentConvertQuote(estimate, {
+      symbol: market.symbol,
+      side: input.side,
+      requestedQty: input.qty,
+      convertSpreadBps: this.convertSpreadBps,
+      expiresAt,
+    });
   }
 
   // ── The order flow (§5.2) ──────────────────────────────────────────────────
@@ -817,7 +964,7 @@ export class TradeService {
 
   // ── Internals ─────────────────────────────────────────────────────────────
 
-  private async requireMarket(input: PlaceOrderInput): Promise<Market> {
+  private async requireMarket(input: { symbol?: string; marketId?: string }): Promise<Market> {
     const market = input.marketId ? await this.marketById(input.marketId) : input.symbol ? await this.marketBySymbol(input.symbol) : null;
     if (!market) throw new TradeError(`market ${input.symbol ?? input.marketId ?? '(unspecified)'} not found`, 'trade.market_not_found');
     return market;

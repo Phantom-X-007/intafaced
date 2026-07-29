@@ -47,6 +47,8 @@ const bus = await JetStreamEventBus.connect({
 const trade = new TradeService(sql, ledger, matching, perks, bus, {
   spotEnabled: env.TRADE_SPOT_ENABLED,
   marketSlippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
+  convertEnabled: env.TRADE_CONVERT_ENABLED,
+  convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,
 });
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);

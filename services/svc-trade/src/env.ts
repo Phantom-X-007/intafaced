@@ -43,6 +43,18 @@ const schema = serviceEnvSchema
        * what was held. 200 bps = 2%.
        */
       TRADE_MARKET_SLIPPAGE_CAP_BPS: z.coerce.number().int().min(1).max(5000).default(200),
+
+      /** Kill-switch for one-tap Convert (`trade.convert`). */
+      TRADE_CONVERT_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
+       * House edge shown on convert RFQs, in bps of book notional.
+       * Execution still settles through the normal market IOC money path.
+       */
+      TRADE_CONVERT_SPREAD_BPS: z.coerce.number().int().min(0).max(5000).default(10),
     }),
   );
 
