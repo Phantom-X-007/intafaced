@@ -114,10 +114,18 @@ Until then, **this file + the GitHub “Stream A” issue are the claim.**
 
 ---
 
+## Phase 1 execution (audited plan)
+
+Decision-grade plan (honesty bar, slices S0–S8, demo vs pretty, anti-collision):  
+[`docs/STREAM-A-PHASE1-PLAN.md`](STREAM-A-PHASE1-PLAN.md)
+
+---
+
 ## Links
 
 | Doc                                                         | Role                                       |
 | ----------------------------------------------------------- | ------------------------------------------ |
+| `docs/STREAM-A-PHASE1-PLAN.md`                              | Phase 1 slices + methodology audit         |
 | Denon `docs/SPLIT-BOARD.md` (on rebrand branch until merge) | Full two-stream law                        |
 | Denon `docs/HANDOVER-2026-07-29.md`                         | Live “what’s serving” probes               |
 | `docs/DENON-MESSAGE-VS-AUDIT-2026-07-29.md`                 | How this relates to the audit              |
