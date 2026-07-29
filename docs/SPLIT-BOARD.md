@@ -139,9 +139,14 @@ any new edge route, anything in `main.js`.
    but only in the edge's own environment block. `svc-dex` called the indexer on
    the wrong port and the gate stayed green. Widen it to every service-to-service
    `*_URL`.
-6. **Decide `svc-matching` and `svc-ws`.** Neither exposes a tRPC router. If
-   that's deliberate, write it down; if not, it's the same unmounted-router bug
-   that has now bitten three times.
+6. ~~**Decide `svc-matching` and `svc-ws`.**~~ **Resolved — both are correct.**
+   Neither exposes a tRPC router because neither should. `svc-matching` serves
+   plain HTTP behind `verifyServiceHeaders` with `INTERNAL_SERVICE_SECRET` —
+   service-to-service only, and it answers 401 rather than 403 to a caller that
+   has not said who it is. `svc-ws` serves websockets, which the edge cannot
+   proxy because it buffers, so the browser reaches it directly; its snapshot
+   carries no cookie, no token and no per-caller content. Not the
+   unmounted-router bug. Written down here so it does not get re-raised.
 7. **The Java rebrand — 666 files** still under the vendor's package root.
    Completely isolated from everything else, so it is the safest possible
    parallel work. Note the trade-off `brand-scan.mjs` records: package names,
