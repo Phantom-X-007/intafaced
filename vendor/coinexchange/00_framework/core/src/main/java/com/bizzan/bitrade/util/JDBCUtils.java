@@ -101,8 +101,11 @@ public class JDBCUtils {
     }
 
 
-    //分红到用户钱包
+    //变异到用户钱包 — DISABLED 2026-07-29 (INTAFACED residual: shell is not the books)
     public void batchJDBCUpdate(List<MemberWallet> paramList, BigDecimal BHBAmount, BigDecimal bounsAmount) {
+        throw new IllegalStateException(
+                "batchJDBCUpdate is disabled: Java shell must not mass-credit wallets (INTAFACED residual)");
+        /*
         long startTime = System.currentTimeMillis();
         Connection conn = null;
         PreparedStatement stmt = null;
@@ -166,63 +169,17 @@ public class JDBCUtils {
         long endTime = System.currentTimeMillis();
         log.info("------批量操作SQL：" + sql);
         log.info("------执行时间：" + (endTime - startTime) + "ms");
-
+        */
     }
 
 
 
 
 
+    /** DISABLED 2026-07-29 — bulk deduct to_released for non-KYC invitees. */
     public void deleteFromMemberByRelaNameStatus() {
-        long startTime = System.currentTimeMillis();
-        Connection connection = null;
-        Statement statement = null;
-        ResultSet rs = null;
-        Statement updateStatement = null;
-        try {
-            //1.获取Connection
-            connection = DriverManager.getConnection(jdbcConfig.getDbURRL(), jdbcConfig.getUsername(), jdbcConfig.getPassword());
-            //2.获取Statement
-            statement = connection.createStatement();
-            updateStatement = connection.createStatement();
-            //3.准备Sql
-            String sql = " SELECT  inviter_id, count(inviter_id) counts from member WHERE inviter_id is not null and id_number is NULL GROUP BY inviter_id ";
-
-            rs = statement.executeQuery(sql);
-
-            while(rs.next()){
-                Long memberId = rs.getLong("inviter_id");
-                Long counts = rs.getLong("counts");
-                String updateSql = "update member_wallet set to_released=to_released - "+(counts*60 )+" where member_id = "+memberId+ " AND coin_id='BHB' ";
-                log.info(">>>>>>更新sql>>>>>"+updateSql);
-                updateStatement.executeUpdate(updateSql);
-                log.info(">>>>此次更新数据会员id>>"+memberId+">>>金额>>>>"+(counts*60)+">>>>清理会员>>>"+counts);
-                log.info("会员:"+memberId+"名下有:"+counts+"被邀请人未实名，扣减BHB数量:"+(counts*60));
-                Thread.sleep(10);
-
-            }
-            log.info(">>>>>>此次插入时间>>>>"+(System.currentTimeMillis()-startTime));
-        //5.处理ResultSet
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }finally{
-            try {
-                if (statement != null) {
-                    connection.close();
-                }
-
-            } catch (SQLException se) {
-            }// do nothing
-            try {
-                if (connection != null) {
-                    connection.close();
-                }
-
-            } catch (SQLException se) {
-                se.printStackTrace();
-            }
-        }
+        throw new IllegalStateException(
+                "deleteFromMemberByRelaNameStatus is disabled: Java shell must not mass-adjust wallets (INTAFACED residual)");
     }
 
     public void synchronization2MemberRegisterWallet(List<Member> members,String coinId) {

@@ -308,7 +308,7 @@ export class UserMoneyService {
     const adapter = this.rails.require(input.rail, 'payout');
 
     return withMoneySpan('pay.withdraw', { operation: 'withdraw', rail: input.rail, amount: formatAmount(input.amount) }, async (span) => {
-      const claimed = await this.claimWithdrawal(input);
+      let claimed = await this.claimWithdrawal(input);
 
       // Already finished. Returning it is the only correct answer to a retry:
       // the money is gone and asking the rail again would send it twice.
@@ -316,7 +316,8 @@ export class UserMoneyService {
 
       // L3-1 recovery: reverse began (failure_code stamped while still `held`)
       // but the process died before status became `failed`. Finish the reverse
-      // — never re-ask the rail.
+      // — never re-ask the rail. Caller may open a *new* clientRef (or the same
+      // clientRef after status is `failed` and attempts advanced) for another try.
       if (claimed.status === 'held' && claimed.failureCode) {
         await this.finalizeRailRefusal(claimed, claimed.failureCode);
         throw new PayError('Rail refused the withdrawal', 'pay.rail_failed', {
@@ -325,11 +326,18 @@ export class UserMoneyService {
         });
       }
 
+      // Residual #8: a terminal `failed` row is "this attempt is done", not
+      // "this clientRef is dead forever". `attempts` advanced on finalize; the
+      // next call with the same clientRef (same money + destination) opens the
+      // next attempt key `withdraw:<id>:<attempts>` so it cannot reuse a
+      // released hold. Different money/destination still conflicts above.
       if (claimed.status === 'failed') {
-        throw new PayError('Withdrawal already failed — use a new clientRef to try again', 'pay.withdrawal_failed', {
-          withdrawalId: claimed.id,
-          failureCode: claimed.failureCode,
-        });
+        await this.sql`
+            UPDATE pay.withdrawals
+               SET status = 'pending', failure_code = NULL, updated_at = now()
+             WHERE id = ${claimed.id} AND status = 'failed'
+          `;
+        claimed = { ...claimed, status: 'pending', failureCode: null };
       }
 
       const attempt = claimed.attempts;

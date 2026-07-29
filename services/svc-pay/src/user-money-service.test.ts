@@ -369,12 +369,14 @@ if (!available) {
     it('L3-1 recovers when failure_code is stamped on held before reverse finishes', async () => {
       // Simulate: hold posted, rail refused intent stamped on the row, process
       // died before finalizeRailRefusal ran. Money still in the hold.
+      // Fixture must match the withdraw helper (rail + destination) or claim
+      // rejects as conflict before L3-1 recovery can run.
       const clientRef = 'w-l3-1';
       const rows = await sql<Array<{ id: string }>>`
         INSERT INTO pay.withdrawals (user_id, asset_id, amount, rail, destination, client_ref, status, attempts)
         VALUES (
-          ${USER}, 'USDT', ${'40'}::numeric, 'card',
-          ${sql.json({ kind: 'bank_account', ref: 'x' })}, ${clientRef}, 'held', 0
+          ${USER}, 'USDT', ${'40'}::numeric, 'card-sandbox',
+          ${sql.json({ kind: 'bank', ref: 'DE00 1234' })}, ${clientRef}, 'held', 0
         )
         RETURNING id
       `;
@@ -384,7 +386,7 @@ if (!available) {
           userId: USER,
           assetId: 'USDT',
           amount: amt('40'),
-          rail: 'card',
+          rail: 'card-sandbox',
           withdrawalId: `${id}:0`,
         }),
       );
