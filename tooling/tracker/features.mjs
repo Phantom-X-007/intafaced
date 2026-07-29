@@ -231,7 +231,15 @@ export const FEATURES = [
     requires: ['services/svc-trade'],
     dependsOn: ['matching.engine', 'identity.rank'],
   }),
-  f('trade.convert', 'One-tap Convert — the retail on-ramp', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
+  f('trade.convert', 'One-tap Convert — the retail on-ramp', {
+    module: 'trade',
+    phase: '2',
+    status: 'wip',
+    owner: 'Nitro',
+    dependsOn: ['trade.spot'],
+    requires: ['services/svc-trade'],
+    note: 'WIP 2026-07-29: convert.quote + convert.execute on svc-trade (RFQ against book + house spread → market IOC on the same hold→fill path). PR feat/trade-convert. Not done until Postgres money-path suite green in CI and edge path product-checked.',
+  }),
   f('trade.futures', 'Perps: cross/isolated margin, funding, liquidation ladder', {
     module: 'trade',
     phase: '2',

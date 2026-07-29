@@ -204,17 +204,17 @@ The service checks these; the database enforces them regardless.
 
 `trade.spot` only. §5.2 also specifies tables and behaviour that belong to other tracker features:
 
-| §5.2 item                                                          | Where it goes                                                                             |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `positions`, `funding_rates`, `insurance_fund`, liquidation ladder | `trade.futures`                                                                           |
-| options (European, cash-settled, full collateral)                  | `trade.options`                                                                           |
-| `copy_leaders`, `copy_follows`, profit share                       | `trade.copy`                                                                              |
-| `otc_quotes`, RFQ, staked-tier gate                                | `trade.otc`                                                                               |
-| Convert one-tap                                                    | `trade.convert`                                                                           |
-| TWAP / VWAP / POV                                                  | `trade.algo`                                                                              |
-| internal market-maker bot, venue aggregation                       | `trade.mm-bot`, `venue.aggregation`                                                       |
-| CCXT REST/ws surface over this router                              | `trade.ccxt-api`                                                                          |
-| volume aggregates per user per window feeding fee tiers            | SOCKET §13 — a windowed job over `fills`; the fills it needs are all written here already |
+| §5.2 item                                                          | Where it goes                                                                                                                                           |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `positions`, `funding_rates`, `insurance_fund`, liquidation ladder | `trade.futures`                                                                                                                                         |
+| options (European, cash-settled, full collateral)                  | `trade.options`                                                                                                                                         |
+| `copy_leaders`, `copy_follows`, profit share                       | `trade.copy`                                                                                                                                            |
+| `otc_quotes`, RFQ, staked-tier gate                                | `trade.otc`                                                                                                                                             |
+| Convert one-tap                                                    | `trade.convert` — **quote + execute on this service** (`convert.quote` / `convert.execute`; market IOC + house RFQ spread; same hold→fill path as spot) |
+| TWAP / VWAP / POV                                                  | `trade.algo`                                                                                                                                            |
+| internal market-maker bot, venue aggregation                       | `trade.mm-bot`, `venue.aggregation`                                                                                                                     |
+| CCXT REST/ws surface over this router                              | `trade.ccxt-api`                                                                                                                                        |
+| volume aggregates per user per window feeding fee tiers            | SOCKET §13 — a windowed job over `fills`; the fills it needs are all written here already                                                               |
 
 The `market_kind` enum already carries `futures` and `options`, so listing one later is an `INSERT`, not a
 migration.

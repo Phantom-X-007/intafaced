@@ -101,7 +101,16 @@ export type TradeErrorCode =
   | 'trade.not_owner'
   | 'trade.perks_unavailable'
   | 'trade.dust_fill'
-  | 'trade.hold_uncovered';
+  | 'trade.hold_uncovered'
+  | 'trade.convert_disabled'
+  | 'trade.convert_no_liquidity'
+  | 'trade.convert_insufficient_depth'
+  | 'trade.convert_price_moved'
+  | 'trade.convert_missing_id'
+  | 'trade.convert_invalid_qty'
+  | 'trade.convert_bad_depth'
+  | 'trade.convert_bad_spread'
+  | 'trade.convert_spread_too_high';
 
 export class TradeError extends Error {
   constructor(
