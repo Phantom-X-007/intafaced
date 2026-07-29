@@ -299,7 +299,7 @@ export const FEATURES = [
     requires: ['services/svc-ws', 'packages/market-data'],
     note: 'services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; apps/web applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them.',
   }),
-    f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', {
+  f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', {
     module: 'trade',
     phase: '2',
     status: 'wip',
