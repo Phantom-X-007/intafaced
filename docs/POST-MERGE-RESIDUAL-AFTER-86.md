@@ -14,29 +14,29 @@
 
 ## Closed
 
-- #86 custody doors · #96 CORS/unfreeze/TRUNCATE · #99 CI PG · #101/#102/#105  
-- MiningsJob + increaseBalanceForBHB / updateTeamWallet / updateByMemberIdAndCoinId mint class  
-- Unstake claim-before-post (M-04)  
-- Rank get/perks self-only  
-- Trading hours on placeOrder (proven #102)  
+- #86 custody doors · #96 CORS/unfreeze/TRUNCATE · #99 CI PG · #101/#102/#105
+- MiningsJob + increaseBalanceForBHB / updateTeamWallet / updateByMemberIdAndCoinId mint class
+- Unstake claim-before-post (M-04)
+- Rank get/perks self-only
+- Trading hours on placeOrder (proven #102)
 
 ---
 
 ## Open (money-risk order)
 
-| # | Item | Owner | When |
-| --- | --- | --- | --- |
-| 1 | Shell ≠ books discipline (demo must not sell shell balance as truth) | All | **Now** |
-| 5 | Wallet secrets / empty keystores / perimeter | Denon ops | Before real money |
-| 6 | TradingView licence path | Denon | Before public |
-| 7 | MySQL Connector/J GPL | Denon | Before public |
-| 8 | Pay rail double-submit | Money agent | Before real rails |
-| 11 | L2-6 S2S body-bind | Design | Hard multi-service |
-| 12 | Real rails + live chain | Denon | Before real money |
-| 13 | Kill drill e2e | Denon · Nitro sign-off | Before go-live |
-| 14 | Sanctions list **content** | Nitro + counsel | Before public |
-| 15 | Secret scan CI | When you authorize | Optional |
-| 18 | Stream A polish | Nitro | Product |
+| #   | Item                                                                 | Owner                  | When               |
+| --- | -------------------------------------------------------------------- | ---------------------- | ------------------ |
+| 1   | Shell ≠ books discipline (demo must not sell shell balance as truth) | All                    | **Now**            |
+| 5   | Wallet secrets / empty keystores / perimeter                         | Denon ops              | Before real money  |
+| 6   | TradingView licence path                                             | Denon                  | Before public      |
+| 7   | MySQL Connector/J GPL                                                | Denon                  | Before public      |
+| 8   | Pay rail double-submit                                               | Money agent            | Before real rails  |
+| 11  | L2-6 S2S body-bind                                                   | Design                 | Hard multi-service |
+| 12  | Real rails + live chain                                              | Denon                  | Before real money  |
+| 13  | Kill drill e2e                                                       | Denon · Nitro sign-off | Before go-live     |
+| 14  | Sanctions list **content**                                           | Nitro + counsel        | Before public      |
+| 15  | Secret scan CI                                                       | When you authorize     | Optional           |
+| 18  | Stream A polish                                                      | Nitro                  | Product            |
 
 ---
 
