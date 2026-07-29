@@ -1,12 +1,12 @@
 # Full Audit Program — A through E (Nitro green-light gate)
 
-**Status:** WAVE-1 **EXECUTED** 2026-07-29 — baseline `a19e337` · findings + P0 fixes on [PR #80](https://github.com/Phantom-X-007/intafaced/pull/80) · scoreboard `PEACE-OF-MIND-AUDIT-CURRENT.md`  
-**Next:** residual + proof upgrades → [`AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md`](AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md) · paste [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md)  
+**Status:** **CLOSED on main** 2026-07-29 — #80 + #81 merged (`88e5e33`).  
+**Living floor:** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · next Denon waves: [`WAVE-AUDIT.md`](WAVE-AUDIT.md)  
 **Date:** 2026-07-29  
 **Audience:** Nitro (control) · executing agents (law)  
-**Claim tags:** `[VERIFIED 2026-07-29]` wave-1 ran · residual still open
+**Claim tags:** `[VERIFIED 2026-07-29]` program complete; do not re-open A→E unless main is on fire
 
-**Plan meta-audit (methods):** [`PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md`](PLAN-META-AUDIT-FULL-AUDIT-PROGRAM-2026-07-29.md) — **PATCH-THEN-RUN** absorbed into V2 (not a restart of wave-1).
+This file is **method history**. New chats: orient from START-HERE + PEACE-OF-MIND, not this program as an open job.
 
 ---
 

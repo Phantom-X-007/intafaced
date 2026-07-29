@@ -2,7 +2,7 @@
 
 **One page.** Read this when confused. Agents: load this _after_ `AGENTS.md` if the human needs orientation, not instead of the law.
 
-**Snapshot date:** 2026-07-27 · re-check live with `pnpm tracker` + `gh pr list` — numbers go stale; the _map_ does not.
+**Snapshot date:** 2026-07-29 · re-check live with `pnpm tracker` + `gh pr list` — numbers go stale; the _map_ does not.
 
 ---
 
@@ -46,17 +46,16 @@ Phase 2 Trade+       ████████░░ mounted behind edge; termina
 Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox still not live product
 ```
 
-**Snapshot date:** 2026-07-29 · re-check live with `git log origin/main -1` + `gh pr list` — numbers go stale.
+**Snapshot date:** 2026-07-29 · main tip includes audit **#80 + #81** (`88e5e33`).
 
-- **On main:** full fleet (15 services including edge, dex, indexer, ws) + apps web/admin + packages. **Routers are mounted** behind `svc-edge`. Purpose-keyed holds shipped. `pnpm platform:up` exists.
-- **Not a live money product:** rails/sandbox, chain indexer propped (`NullChainSource`), remaining money crash-window fixes on the residual queue.
+- **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists.
+- **Not a live money product:** rails/sandbox, chain feed propped — see trust floor.
 - **Do not rebuild** services already on main.
-- **Trust floor:** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · after Denon waves: [`WAVE-AUDIT.md`](WAVE-AUDIT.md).
-- **Wave-1 audit PR:** [#80](https://github.com/Phantom-X-007/intafaced/pull/80) (open doors fixed; residual money still queued).
-- **Next audit chat:** paste [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md) · program [`AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md`](AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md).
-- **Next product gates:** residual P1 money crash windows → real rails/chain → tracker-ready slices.
+- **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md)
+- **After Denon ships:** [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — full audit program is **closed**
+- **Next product gates:** real rails/chain → tracker-ready slices — not another full audit
 
-Older snapshot (may lag): [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md).
+History only (may lag): [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md)
 
 ---
 

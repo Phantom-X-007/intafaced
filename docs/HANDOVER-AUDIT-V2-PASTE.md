@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-07-29** — audit closed on main (#80+#81). Do not paste as a new open job. Floor: `docs/PEACE-OF-MIND-AUDIT-CURRENT.md` · next: `docs/WAVE-AUDIT.md`.
+
 # Paste this into a **new** chat — Audit V2 (residual + proof)
 
 **Do not paste into an old compacted chat.** New session.  
