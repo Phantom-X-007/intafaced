@@ -70,8 +70,8 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
           : kind === 'hold'
             ? userHold(userId, assetId, purpose)
             : kind === 'escrow'
-              ? userEscrow(userId, assetId)
-              : userStake(userId, assetId);
+              ? userEscrow(userId, assetId, purpose)
+              : userStake(userId, assetId, purpose);
       return formatAmount((await ledger.balance(ref)).amount);
     };
 
@@ -288,7 +288,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
       it('p2p escrow: lock → release strands nothing', async () => {
         await fund(USER_A, 'USDT', '500');
         await ledger.post(recipes.escrowLock({ tradeId: 'c-t1', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('500') }));
-        expect(await balanceOf(USER_A, 'USDT', 'escrow')).toBe('500');
+        expect(await balanceOf(USER_A, 'USDT', 'escrow', 'trade:c-t1')).toBe('500');
 
         await ledger.post(
           recipes.escrowRelease({
@@ -301,7 +301,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
           }),
         );
 
-        expect(await balanceOf(USER_A, 'USDT', 'escrow')).toBe('0');
+        expect(await balanceOf(USER_A, 'USDT', 'escrow', 'trade:c-t1')).toBe('0');
         expect(await balanceOf(USER_B, 'USDT')).toBe('499');
         expect(formatAmount((await ledger.balance(houseFees('p2p', 'USDT'))).amount)).toBe('1');
       });
@@ -338,7 +338,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
       it('staking round-trips exactly', async () => {
         await fund(USER_A, 'IFC', '10000');
         await ledger.post(recipes.stake({ stakeId: 'c-s1', userId: USER_A, assetId: 'IFC', amount: amt('4000'), tier: 'm12' }));
-        expect(await balanceOf(USER_A, 'IFC', 'stake')).toBe('4000');
+        expect(await balanceOf(USER_A, 'IFC', 'stake', 'token:stake:c-s1')).toBe('4000');
         await ledger.post(recipes.unstake({ stakeId: 'c-s1', userId: USER_A, assetId: 'IFC', amount: amt('4000'), tier: 'm12' }));
         expect(await balanceOf(USER_A, 'IFC')).toBe('10000');
       });

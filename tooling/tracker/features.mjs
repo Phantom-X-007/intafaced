@@ -75,7 +75,12 @@ export const FEATURES = [
     status: 'done',
     requires: ['packages/config'],
   }),
-  f('infra.compose', 'docker compose: Postgres, Redis, NATS, OTel, Grafana', { module: 'core-ops', phase: '0', status: 'done' }),
+  f('infra.compose', 'docker compose: Postgres, Redis, NATS, OTel, Grafana', {
+    module: 'core-ops',
+    phase: '0',
+    status: 'done',
+    requires: ['docker-compose.yml', 'docker-compose.apps.yml'],
+  }),
   f('infra.config', 'Typed env, feature flags, JURISDICTION_MATRIX', {
     module: 'core-ops',
     phase: '0',
@@ -103,7 +108,12 @@ export const FEATURES = [
     status: 'done',
     requires: ['tooling/ci'],
   }),
-  f('infra.worktrees', 'Worktree tooling + GitHub Flow', { module: 'core-ops', phase: '0', status: 'done' }),
+  f('infra.worktrees', 'Worktree tooling + GitHub Flow', {
+    module: 'core-ops',
+    phase: '0',
+    status: 'done',
+    requires: ['CONTRIBUTING.md', 'package.json'],
+  }),
   f('infra.i18n', '100+ languages — keyed from day one (§9)', {
     module: 'core-ops',
     phase: '0',

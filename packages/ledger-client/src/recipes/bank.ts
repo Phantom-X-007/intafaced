@@ -2,7 +2,7 @@ import { sum, type Amount } from '../money.js';
 import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
 import { accountKey } from '../client.js';
-import { earnPoolReserve, houseFees, userAvailable, userStake } from '../accounts.js';
+import { earnPoolReserve, earnStakeAccount, houseFees, userAvailable } from '../accounts.js';
 
 /**
  * BANK RECIPES (§8.1).
@@ -122,7 +122,7 @@ export function earnDeposit(input: EarnPositionInput): PostRequest {
     meta: { positionId: input.positionId, poolId: input.poolId },
     entries: [
       credit(userAvailable(input.userId, input.assetId), input.amount),
-      debit(userStake(input.userId, input.assetId), input.amount),
+      debit(earnStakeAccount(input.userId, input.assetId, input.positionId), input.amount),
     ],
   };
 }
@@ -136,7 +136,7 @@ export function earnWithdraw(input: EarnPositionInput): PostRequest {
     reason: 'bank.earn.withdrawn',
     meta: { positionId: input.positionId, poolId: input.poolId },
     entries: [
-      credit(userStake(input.userId, input.assetId), input.amount),
+      credit(earnStakeAccount(input.userId, input.assetId, input.positionId), input.amount),
       debit(userAvailable(input.userId, input.assetId), input.amount),
     ],
   };

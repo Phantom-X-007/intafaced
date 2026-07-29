@@ -38,12 +38,37 @@ export function withdrawalHoldAccount(userId: string, assetId: string, withdrawa
   return userHold(userId, assetId, `withdraw:${withdrawalId}`);
 }
 
-export function userEscrow(userId: string, assetId: string): AccountRef {
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'escrow' };
+/**
+ * Seller escrow FOR ONE TRADE (L3-4). Same failure class as unpurposed holds:
+ * one pot per (user, asset) lets trade B fund trade A's release.
+ */
+export function userEscrow(userId: string, assetId: string, purpose: string): AccountRef {
+  if (!purpose) throw new Error('userEscrow requires a purpose (L3-4) — e.g. `trade:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'escrow', purpose };
 }
 
-export function userStake(userId: string, assetId: string): AccountRef {
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'stake' };
+/** Escrow pot for one P2P trade. */
+export function tradeEscrowAccount(sellerId: string, assetId: string, tradeId: string): AccountRef {
+  return userEscrow(sellerId, assetId, `trade:${tradeId}`);
+}
+
+/**
+ * User stake FOR ONE CLAIM (L1 dual-book / L3-5). Token stakes and bank earn
+ * positions must not share a pot or each other's principal.
+ */
+export function userStake(userId: string, assetId: string, purpose: string): AccountRef {
+  if (!purpose) throw new Error('userStake requires a purpose (L1/L3-5) — e.g. `token:stake:<id>` or `bank:earn:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'stake', purpose };
+}
+
+/** Token staking pot for one stake row. */
+export function tokenStakeAccount(userId: string, assetId: string, stakeId: string): AccountRef {
+  return userStake(userId, assetId, `token:stake:${stakeId}`);
+}
+
+/** Bank earn pot for one position row. */
+export function earnStakeAccount(userId: string, assetId: string, positionId: string): AccountRef {
+  return userStake(userId, assetId, `bank:earn:${positionId}`);
 }
 
 export function userCollateral(userId: string, assetId: string): AccountRef {

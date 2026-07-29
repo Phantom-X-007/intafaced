@@ -68,12 +68,13 @@ export function encodePrincipal(principal: Principal): string {
  * canonical, so signing a parsed-and-restringified value would verify a
  * different byte sequence than the one that arrived.
  */
-export function signPrincipalHeader(raw: string, secret: string): string {
-  return createHmac('sha256', secret).update(raw, 'utf8').digest('hex');
+export function signPrincipalHeader(raw: string, secret: string, region = 'XX'): string {
+  // L2-4: region is bound into the signature so a free header cannot forge jurisdiction.
+  return createHmac('sha256', secret).update(`${raw}\nregion=${region}`, 'utf8').digest('hex');
 }
 
-function signatureMatches(raw: string, signature: string, secret: string): boolean {
-  const expected = signPrincipalHeader(raw, secret);
+function signatureMatches(raw: string, signature: string, secret: string, region = 'XX'): boolean {
+  const expected = signPrincipalHeader(raw, secret, region);
 
   // Length first and separately: timingSafeEqual THROWS on a length mismatch,
   // and an exception here would be an unauthenticated caller crashing a request
@@ -104,10 +105,11 @@ export function verifyForwardedPrincipal(
   signature: string | undefined,
   secret: string,
   now: Date = new Date(),
+  region = 'XX',
 ): EdgeVerifyResult {
   if (!raw) return { principal: null, rejected: null };
   if (!signature) return { principal: null, rejected: 'bad-signature' };
-  if (!signatureMatches(raw, signature, secret)) return { principal: null, rejected: 'bad-signature' };
+  if (!signatureMatches(raw, signature, secret, region)) return { principal: null, rejected: 'bad-signature' };
 
   let parsed: unknown;
   try {
@@ -185,7 +187,14 @@ export function createEdgeContext(options: EdgeContextOptions): (req: EdgeReques
       return Array.isArray(value) ? value[0] : value;
     };
 
-    const { principal } = verifyForwardedPrincipal(header(EDGE_PRINCIPAL_HEADER), header(EDGE_SIGNATURE_HEADER), options.secret);
+    const region = header('x-intafaced-region') ?? 'XX';
+    const { principal } = verifyForwardedPrincipal(
+      header(EDGE_PRINCIPAL_HEADER),
+      header(EDGE_SIGNATURE_HEADER),
+      options.secret,
+      new Date(),
+      region,
+    );
 
     const traceparent = header('traceparent');
 
@@ -197,7 +206,7 @@ export function createEdgeContext(options: EdgeContextOptions): (req: EdgeReques
     return {
       principal,
       service,
-      region: header('x-intafaced-region') ?? 'XX',
+      region,
       requestId: String(req.id ?? ''),
       ...(traceparent ? { traceparent } : {}),
     };

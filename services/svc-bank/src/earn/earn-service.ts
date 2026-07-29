@@ -4,10 +4,10 @@ import {
   InsufficientFundsError,
   LedgerError,
   earnPoolReserve,
+  earnStakeAccount,
   formatAmount,
   parseAmount,
   recipes,
-  userStake,
   type Amount,
   type LedgerClient,
 } from '@intafaced/ledger-client';
@@ -21,17 +21,10 @@ import { withMoneySpan } from '../tracing.js';
  * ── Coordination with svc-token, not duplication of it ───────────────────────
  *
  * §8.1: "flexible/fixed pools as stake-kind ledger accounts; native staking
- * already lives in svc-token". Both services move value into
- * `userStake(userId, assetId)` — the SAME ledger account for a given user and
- * asset. That is fine while they never share an asset, and catastrophic the
- * moment they do: svc-token's `stakeOf()` sums its own table and asserts the
- * result equals that ledger account, and svc-bank does the same. If both wrote
- * to `userStake(user, IFC)`, neither service's table could be reconciled
- * against the ledger and BOTH invariants would break at once.
- *
- * So svc-bank refuses the native asset outright (`bank.native_asset_not_earnable`)
- * and points the caller at svc-token. One asset, one owner. The refusal is
- * tested, because the failure it prevents is silent.
+ * already lives in svc-token". Both use the `stake` kind, but L1/L3-5 purpose
+ * keys separate them: token uses `token:stake:<id>`, earn uses `bank:earn:<id>`.
+ * svc-bank still refuses the native asset (`bank.native_asset_not_earnable`) as
+ * belt-and-suspenders so product tables stay simple.
  *
  * ── Where interest comes from ────────────────────────────────────────────────
  *
@@ -321,11 +314,7 @@ export class EarnService {
 
   /**
    * The user's total open principal in an asset, from THIS SERVICE'S TABLE.
-   *
-   * Its only purpose is to be compared with `ledger.balance(userStake(user,
-   * asset))`. Two independent answers to "how much has this user got earning",
-   * which must agree — the property that makes Doctrine §0.6 checkable rather
-   * than merely stated.
+   * Must equal `stakedOf` (sum of purposed earn stake pots).
    */
   async principalOf(userId: string, assetId: string): Promise<Amount> {
     const rows = await this.sql<Array<{ total: string }>>`
@@ -335,9 +324,17 @@ export class EarnService {
     return parseAmount(rows[0]?.total ?? '0');
   }
 
-  /** The same question, asked of the ledger. */
+  /** Sum of per-position earn stake pots on the ledger (L1 purpose keys). */
   async stakedOf(userId: string, assetId: string): Promise<Amount> {
-    return (await this.ledger.balance(userStake(userId, assetId))).amount;
+    const rows = await this.sql<Array<{ id: string }>>`
+      SELECT id FROM bank.earn_positions
+       WHERE user_id = ${userId} AND asset_id = ${assetId} AND status = 'active'
+    `;
+    let total = 0n;
+    for (const row of rows) {
+      total += (await this.ledger.balance(earnStakeAccount(userId, assetId, row.id))).amount;
+    }
+    return total;
   }
 
   /**

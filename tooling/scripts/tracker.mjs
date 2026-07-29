@@ -39,11 +39,30 @@ for (const feature of FEATURES) {
     if (!byId.has(dep)) problems.push(`${feature.id}: depends on unknown feature "${dep}"`);
   }
 
-  // The anti-wishful-thinking check.
+  // The anti-wishful-thinking check (L8-2).
   if (feature.status === 'done') {
-    for (const path of feature.requires) {
+    if (!feature.requires || feature.requires.length === 0) {
+      problems.push(`${feature.id}: claims "done" but has empty requires[] — path evidence is mandatory`);
+    }
+    for (const path of feature.requires ?? []) {
       if (!existsSync(join(ROOT, path))) {
         problems.push(`${feature.id}: claims "done" but ${path} does not exist`);
+      }
+      // Service features that claim done should have a mounted router, not only a folder.
+      if (/^services\/svc-[^/]+$/.test(path) || /\/src\/index\.ts$/.test(path)) {
+        const indexPath = path.endsWith('index.ts') ? path : join(path, 'src', 'index.ts');
+        const full = join(ROOT, indexPath);
+        if (existsSync(full)) {
+          const src = readFileSync(full, 'utf8');
+          if (!/fastifyTRPCPlugin|register\(.*trpc|\/trpc/.test(src) && /services\/svc-/.test(path)) {
+            // edge/ws may not mount tRPC the same way — only flag classic svc cores
+            if (!/svc-edge|svc-ws|svc-matching/.test(path) && !/svc-indexer/.test(path)) {
+              if (!/fastifyTRPCPlugin|@trpc\/server\/adapters\/fastify/.test(src)) {
+                problems.push(`${feature.id}: claims "done" but ${indexPath} does not register tRPC — demote to ready/wip until mounted`);
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -133,7 +152,9 @@ function render() {
   lines.push('> **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.');
   lines.push('> Run `pnpm tracker` after changing it. CI fails if this file is stale.');
   lines.push('');
-  lines.push(`**${counts.done} of ${shippable} shipped (${percent}%)** · ${counts.wip} in progress · ${counts.ready} ready to claim · ${counts.blocked} blocked · ${counts.socket} deliberate §13 sockets`);
+  lines.push(
+    `**${counts.done} of ${shippable} shipped (${percent}%)** · ${counts.wip} in progress · ${counts.ready} ready to claim · ${counts.blocked} blocked · ${counts.socket} deliberate §13 sockets`,
+  );
   lines.push('');
   lines.push('| | meaning |');
   lines.push('|---|---|');
@@ -179,7 +200,9 @@ function render() {
   if (leverage.length > 0) {
     lines.push('## Highest leverage');
     lines.push('');
-    lines.push('What each unshipped feature would unblock, transitively. **This is what should drive build order** — a feature that frees 26 others is worth more than one that frees none, whatever else is louder.');
+    lines.push(
+      'What each unshipped feature would unblock, transitively. **This is what should drive build order** — a feature that frees 26 others is worth more than one that frees none, whatever else is louder.',
+    );
     lines.push('');
     lines.push('| Unblocks | Feature | Status | id |');
     lines.push('|---:|---|---|---|');
@@ -219,7 +242,12 @@ function render() {
     lines.push('|---|---|---|---|---|');
 
     for (const f of inPhase) {
-      const blocked = f.resolved === 'blocked' ? blockers(f).map((b) => `\`${b}\``).join(', ') : '';
+      const blocked =
+        f.resolved === 'blocked'
+          ? blockers(f)
+              .map((b) => `\`${b}\``)
+              .join(', ')
+          : '';
       const note = f.note ? ` <br/>_${f.note}_` : '';
       lines.push(`| ${ICON[f.resolved]} | ${f.title}${note} | ${f.plane} | ${blocked} | \`${f.id}\` |`);
     }
@@ -230,13 +258,19 @@ function render() {
   lines.push('');
   lines.push('## How to use this');
   lines.push('');
-  lines.push('**To claim something:** find it in 🟢, set `owner` and `status: "wip"` in `tooling/tracker/features.mjs`, run `pnpm tracker`, and include both files in your first PR. That way nobody duplicates you.');
+  lines.push(
+    '**To claim something:** find it in 🟢, set `owner` and `status: "wip"` in `tooling/tracker/features.mjs`, run `pnpm tracker`, and include both files in your first PR. That way nobody duplicates you.',
+  );
   lines.push('');
-  lines.push('**To ship something:** set `status: "done"` and list the paths it created in `requires`. The check will refuse the claim if those paths are missing.');
+  lines.push(
+    '**To ship something:** set `status: "done"` and list the paths it created in `requires`. The check will refuse the claim if those paths are missing.',
+  );
   lines.push('');
   lines.push('**Plane:** `F` = Fiat (custodial, compliant) · `P` = Protocol (non-custodial, zero-KYC) · `B` = both. See §22.');
   lines.push('');
-  lines.push('**Why blocked is computed:** so the tracker cannot lie about readiness. If you think something is wrongly blocked, the fix is in `dependsOn`, and that edit is reviewable.');
+  lines.push(
+    '**Why blocked is computed:** so the tracker cannot lie about readiness. If you think something is wrongly blocked, the fix is in `dependsOn`, and that edit is reviewable.',
+  );
   lines.push('');
 
   return lines.join('\n');
@@ -345,9 +379,7 @@ if (checkMode) {
 } else if (arg) {
   // Filters — for humans at a terminal, not for the file.
   const filtered =
-    arg === 'ready'
-      ? resolved.filter((f) => f.resolved === 'ready')
-      : resolved.filter((f) => f.module === arg || f.phase === arg);
+    arg === 'ready' ? resolved.filter((f) => f.resolved === 'ready') : resolved.filter((f) => f.module === arg || f.phase === arg);
 
   if (filtered.length === 0) {
     console.log(`\nNothing matches "${arg}". Try a module id, a phase, or "ready".\n`);

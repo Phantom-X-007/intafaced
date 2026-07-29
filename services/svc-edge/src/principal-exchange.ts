@@ -119,7 +119,7 @@ export async function exchangePrincipal(
 
   const raw = encodePrincipal(principal);
   forward[EDGE_PRINCIPAL_HEADER] = raw;
-  forward[EDGE_SIGNATURE_HEADER] = signPrincipalHeader(raw, options.edgeSecret);
+  forward[EDGE_SIGNATURE_HEADER] = signPrincipalHeader(raw, options.edgeSecret, options.region);
 
   return { headers: forward, principal, rejected: null };
 }

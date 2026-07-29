@@ -26,9 +26,9 @@ function principal(overrides: Partial<Principal> = {}): Principal {
   } as Principal;
 }
 
-function forward(p: Principal, secret = SECRET): { raw: string; sig: string } {
+function forward(p: Principal, secret = SECRET, region = 'XX'): { raw: string; sig: string } {
   const raw = encodePrincipal(p);
-  return { raw, sig: signPrincipalHeader(raw, secret) };
+  return { raw, sig: signPrincipalHeader(raw, secret, region) };
 }
 
 describe('edge principal — the happy path', () => {
@@ -157,7 +157,7 @@ describe('createEdgeContext', () => {
 
   it('puts a verified principal on the context', () => {
     const ctx = createEdgeContext({ secret: SECRET, serviceName: 'svc-test' });
-    const { raw, sig } = forward(principal());
+    const { raw, sig } = forward(principal(), SECRET, 'GB');
 
     const built = ctx({
       headers: { [EDGE_PRINCIPAL_HEADER]: raw, [EDGE_SIGNATURE_HEADER]: sig, 'x-intafaced-region': 'GB' },
@@ -167,6 +167,18 @@ describe('createEdgeContext', () => {
     expect(built.principal?.userId).toBe(principal().userId);
     expect(built.region).toBe('GB');
     expect(built.requestId).toBe('req-1');
+  });
+
+  it('L2-4: rejects when region header does not match the signed region', () => {
+    const ctx = createEdgeContext({ secret: SECRET, serviceName: 'svc-test' });
+    const { raw, sig } = forward(principal(), SECRET, 'GB');
+
+    const built = ctx({
+      headers: { [EDGE_PRINCIPAL_HEADER]: raw, [EDGE_SIGNATURE_HEADER]: sig, 'x-intafaced-region': 'US' },
+      id: 'req-2',
+    });
+
+    expect(built.principal).toBeNull();
   });
 
   it('yields an anonymous context — not an error — when the principal is forged', () => {

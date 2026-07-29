@@ -255,7 +255,16 @@ export function createP2pRouter(p2p: P2pService) {
       get: scopedProcedure('p2p:read', { module: 'p2p' })
         .input(z.object({ tradeId: z.string().uuid() }))
         .output(tradeOutput)
-        .query(async ({ input }) => guard(async () => toTradeOut(await p2p.getTrade(input.tradeId)))),
+        .query(async ({ ctx, input }) =>
+          guard(async () => {
+            const trade = await p2p.getTrade(input.tradeId);
+            // L2-7: any p2p:read holder could previously read any trade by id.
+            if (trade.buyerId !== ctx.principal.userId && trade.sellerId !== ctx.principal.userId) {
+              throw new TRPCError({ code: 'NOT_FOUND', message: 'Trade not found' });
+            }
+            return toTradeOut(trade);
+          }),
+        ),
 
       list: scopedProcedure('p2p:read', { module: 'p2p' })
         .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
@@ -300,9 +309,15 @@ export function createP2pRouter(p2p: P2pService) {
             resolvedAt: z.string().nullable(),
           }),
         )
-        .query(async ({ input }) =>
+        .query(async ({ ctx, input }) =>
           guard(async () => {
             const d = await p2p.getDispute(input.tradeId);
+            const trade = await p2p.getTrade(input.tradeId);
+            const isParty = trade.buyerId === ctx.principal.userId || trade.sellerId === ctx.principal.userId;
+            const isModerator = ctx.principal.scopes.includes('admin:compliance');
+            if (!isParty && !isModerator) {
+              throw new TRPCError({ code: 'NOT_FOUND', message: 'Dispute not found' });
+            }
             return {
               id: d.id,
               tradeId: d.tradeId,

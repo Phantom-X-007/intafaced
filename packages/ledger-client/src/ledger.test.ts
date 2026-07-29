@@ -53,8 +53,8 @@ async function balanceOf(userId: string, assetId: string, kind: 'available' | 'h
       : kind === 'hold'
         ? userHold(userId, assetId, purpose)
         : kind === 'escrow'
-          ? userEscrow(userId, assetId)
-          : userStake(userId, assetId);
+          ? userEscrow(userId, assetId, purpose)
+          : userStake(userId, assetId, purpose);
   return formatAmount((await ledger.balance(ref)).amount);
 }
 
@@ -476,13 +476,13 @@ describe('recipes — the money paths', () => {
 
     await ledger.post(recipes.escrowLock({ tradeId: 't1', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('500') }));
     expect(await balanceOf(USER_A, 'USDT')).toBe('0');
-    expect(await balanceOf(USER_A, 'USDT', 'escrow')).toBe('500');
+    expect(await balanceOf(USER_A, 'USDT', 'escrow', 'trade:t1')).toBe('500');
 
     await ledger.post(
       recipes.escrowRelease({ tradeId: 't1', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('500'), feeBps: 20 }),
     );
 
-    expect(await balanceOf(USER_A, 'USDT', 'escrow')).toBe('0');
+    expect(await balanceOf(USER_A, 'USDT', 'escrow', 'trade:t1')).toBe('0');
     expect(await balanceOf(USER_B, 'USDT')).toBe('499');
     expect(formatAmount((await ledger.balance(houseFees('p2p', 'USDT'))).amount)).toBe('1');
     expect(ledger.totalsByAsset().USDT).toBe('0');
@@ -494,7 +494,21 @@ describe('recipes — the money paths', () => {
     await ledger.post(recipes.escrowRefund({ tradeId: 't2', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('500') }));
 
     expect(await balanceOf(USER_A, 'USDT')).toBe('500');
-    expect(await balanceOf(USER_A, 'USDT', 'escrow')).toBe('0');
+    expect(await balanceOf(USER_A, 'USDT', 'escrow', 'trade:t2')).toBe('0');
+  });
+
+  it('L3-4: two escrows for one seller — over-release on A cannot drain B', async () => {
+    await fund(USER_A, 'USDT', '150');
+    await ledger.post(recipes.escrowLock({ tradeId: 'a', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('100') }));
+    await ledger.post(recipes.escrowLock({ tradeId: 'b', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('50') }));
+    expect(await balanceOf(USER_A, 'USDT', 'escrow', 'trade:a')).toBe('100');
+    expect(await balanceOf(USER_A, 'USDT', 'escrow', 'trade:b')).toBe('50');
+
+    await expect(
+      ledger.post(recipes.escrowRelease({ tradeId: 'a', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('150') })),
+    ).rejects.toThrow();
+
+    expect(await balanceOf(USER_A, 'USDT', 'escrow', 'trade:b')).toBe('50');
   });
 
   it('fee charge: the IFC discount branch charges less, and the discount is not invented value', async () => {
@@ -522,11 +536,21 @@ describe('recipes — the money paths', () => {
 
     await ledger.post(recipes.stake({ stakeId: 's1', userId: USER_A, assetId: 'IFC', amount: amt('4000'), tier: 'm12' }));
     expect(await balanceOf(USER_A, 'IFC')).toBe('6000');
-    expect(await balanceOf(USER_A, 'IFC', 'stake')).toBe('4000');
+    expect(await balanceOf(USER_A, 'IFC', 'stake', 'token:stake:s1')).toBe('4000');
 
     await ledger.post(recipes.unstake({ stakeId: 's1', userId: USER_A, assetId: 'IFC', amount: amt('4000'), tier: 'm12' }));
     expect(await balanceOf(USER_A, 'IFC')).toBe('10000');
-    expect(await balanceOf(USER_A, 'IFC', 'stake')).toBe('0');
+    expect(await balanceOf(USER_A, 'IFC', 'stake', 'token:stake:s1')).toBe('0');
+  });
+
+  it('L1/L3-5: unstake of s1 cannot drain s2', async () => {
+    await fund(USER_A, 'IFC', '3000');
+    await ledger.post(recipes.stake({ stakeId: 's1', userId: USER_A, assetId: 'IFC', amount: amt('1000'), tier: 'flex' }));
+    await ledger.post(recipes.stake({ stakeId: 's2', userId: USER_A, assetId: 'IFC', amount: amt('2000'), tier: 'flex' }));
+    await expect(
+      ledger.post(recipes.unstake({ stakeId: 's1', userId: USER_A, assetId: 'IFC', amount: amt('2000'), tier: 'flex' })),
+    ).rejects.toThrow();
+    expect(await balanceOf(USER_A, 'IFC', 'stake', 'token:stake:s2')).toBe('2000');
   });
 
   it('withdrawal: hold → settle removes value only once', async () => {
