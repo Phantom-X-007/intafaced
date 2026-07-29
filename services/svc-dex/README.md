@@ -20,10 +20,13 @@ Three mechanisms make that structural rather than aspirational:
 
 ## API contract
 
-| Procedure | Access                                          | Purpose                              |
-| --------- | ----------------------------------------------- | ------------------------------------ |
-| `health`  | public                                          | liveness; reports `custodial: false` |
-| `quote`   | `publicJurisdictionProcedure('dex','protocol')` | best execution across venues         |
+| Procedure      | Access                                          | Purpose                                        |
+| -------------- | ----------------------------------------------- | ---------------------------------------------- |
+| `health`       | public                                          | liveness; reports `custodial: false`           |
+| `quote`        | `publicJurisdictionProcedure('dex','protocol')` | **live** best execution across sourced venues  |
+| `routePreview` | `publicJurisdictionProcedure('dex','protocol')` | routing arithmetic over caller-supplied quotes |
+
+> `routePreview` **is not a price and must never be rendered as one.** It answers "given these venue quotes, where would the order go?" — useful for a routing explainer or a simulation, and useless as a quote, because the inputs came from whoever called it. It was previously called `quote`, which is precisely how a caller ends up displaying invented numbers in good faith.
 
 `quote` still runs the jurisdiction matrix. **A sanctioned region is a legal constraint, not a custody one** — `checkAccess` short-circuits a `custodial: false` protocol-plane module to `allowed.permissionless` before any tier is read, so the gate that remains is the one that must, and the one that must not is gone.
 
@@ -39,6 +42,47 @@ Fees apply to the side that pays them: a buyer receives less base, raising cost 
 
 Routing is greedy over per-venue quotes. **Not provably optimal** — a true optimum needs a depth curve per venue, not a single quote. Ties break on venue id so routing is a function of the quote _set_, not of arrival order: two identical requests must route identically, or a fill becomes unreproducible and no dispute about it can be settled.
 
+## Where prices come from
+
+`quote` used to take `quotes: []` over the wire and route whatever the caller supplied. The arithmetic was real; the prices came from nowhere. **A fabricated price in a trading product is worse than an outage**, because an outage stops a user and an invented number encourages one.
+
+A price now enters this service by exactly one road: a `QuoteVenue`, which has to have really fetched a book from something, and has to say when. `QuoteVenue` **extends `LiquiditySource`** from `packages/venue-adapter` — the §27 venue fabric, our own CCXT-class layer — adding only the two things the Fiat Plane router does not model: `settlementCost` (gas) and `depth()` (the book _with_ the moment we read it).
+
+| Venue               | `kind`              | Plane      | Source                  | Status today                                                  |
+| ------------------- | ------------------- | ---------- | ----------------------- | ------------------------------------------------------------- |
+| `intachain-clob`    | `external-dex`      | `protocol` | svc-indexer read models | **refuses** — nothing projected (SOCKET §13 `socket.evm-rpc`) |
+| `internal-book`     | `internal`          | `fiat`     | svc-matching depth      | live wherever the engine has the market                       |
+| operator-configured | `external-cex` etc. | `external` | public depth endpoints  | live once `DEX_EXTERNAL_VENUES` has a row                     |
+
+**No venue is named in shipped code** (Doctrine §0.4 adapters-not-integrations, §0.7 no vendor names). Adding one is a row of `DEX_EXTERNAL_VENUES` config, and the default set is empty — a service with no outbound egress does not silently acquire it.
+
+There is **no `ccxt` dependency and must never be one.** §27 forbids a third-party connectivity library in the money path, and CCXT's unified `fetchOrderBook` returns JavaScript **numbers** — routing through it would put a float in front of every price in the platform. Every adapter reads the venue's own decimal strings and refuses a JSON number outright.
+
+The internal book implements the same interface as everyone else, so **the router has no notion of "ours" versus "theirs" and cannot quietly favour us.** It ranks on effective price alone; there is no internal-preference thumb on the scale anywhere in this service's path.
+
+### Refusal, never a guess
+
+`QUOTE_MAX_AGE_MS` (2000ms default) is enforced once, at assembly, against the moment _this process_ finished reading each venue — not a timestamp the venue supplied. Books are aged against a single clock reading taken after every fetch lands, so a venue answering in 20ms and one answering in 1900ms are not compared as though simultaneous. A book dated in the **future** is refused too: a negative age is a broken clock, not freshness.
+
+There is no cache, no last-known value and no fallback venue. Every exit is a route built from fresh books, or a refusal carrying a machine-readable code:
+
+| Code                            | HTTP                  | Meaning                                                     |
+| ------------------------------- | --------------------- | ----------------------------------------------------------- |
+| `dex.quote.no_venue_configured` | `SERVICE_UNAVAILABLE` | nothing wired — an operator problem                         |
+| `dex.quote.no_venue_available`  | `SERVICE_UNAVAILABLE` | no venue answered; the market may be fine, we cannot see it |
+| `dex.quote.stale`               | `SERVICE_UNAVAILABLE` | answered, but past the freshness ceiling                    |
+| `dex.quote.no_liquidity`        | `NOT_FOUND`           | fresh books, nothing resting on the side asked for          |
+
+### "Best of N" must not mean "the only one that answered"
+
+A cross-venue router degrades quietly by nature: three venues configured, two time out, and the survivor is presented as the best of three. So the response states it — `venuesConfigured` is how many were asked, `venues` is who priced, `unavailable` is who did not **and why**, `degraded` is true when those disagree, and `singleVenue` is true when exactly one survived out of more than one. A client showing "best execution across venues" checks one boolean first.
+
+Every venue also carries `plane` and `custodial`, derived from `kind` rather than configured. A permissionless caller may be quoted our internal book — it sometimes genuinely has the better price — but a fill there settles through the ledger, which is not self-custody. Disclosing that is the difference between an honest quote and a price behind a gate the user was told did not exist.
+
+### Execution is refused, loudly
+
+Every adapter declares `capabilities: ['quote', 'orderbook']` and **throws** on `submit` — not a no-op, not a plausible `status: 'rejected'`. Cross-venue execution is §28 (`svc-execution`, not built) and external venues need trade-scoped Venue Vault credentials (§27) that have not been issued. An execution port that answered plausibly while doing nothing would report fills that never happened.
+
 ## Events
 
 **None.** This service publishes and consumes nothing.
@@ -53,7 +97,12 @@ Routing is greedy over per-venue quotes. **Not provably optimal** — a true opt
 
 ## Not built yet
 
-- **Quote sourcing.** `quote` takes venue quotes as input rather than fetching them. Wiring it to svc-indexer read models and the internal book is the next PR.
-- **Order submission.** Routing decides _where_; executing against a pool is a contract call from the user's own smart account, which belongs with `svc-protocol` and needs the contract toolchain socket closed first.
+- **The on-chain leg does not answer yet.** `intachain-clob` is wired and refuses with `not_ready`, because svc-indexer boots on `NullChainSource` and has projected nothing (SOCKET §13 `socket.evm-rpc`). That refusal _is_ the correct behaviour — the DEX cannot quote the sovereign plane until a chain exists to quote — and the adapter starts answering without a line of it changing the moment one does.
+- **No AMM venue.** `svc-protocol` now ships a constant-product AMM (`protocol.amm`), but `quoteExactIn` takes **reserves as input** — it is arithmetic, the same shape of gap `quote` just closed. Nothing projects pool reserves: svc-indexer models books, fills and positions, not pools, and there is no EVM RPC to read `getReserves` from. Wiring an AMM venue therefore needs a reserve source first; inventing reserves to make a pool appear in a quote would recreate exactly the defect this PR removed.
+- **Order submission.** Routing decides _where_; executing against a pool is a contract call from the user's own smart account, which belongs with `svc-protocol` and needs the contract toolchain socket closed first. Every adapter here refuses `submit`.
+- **No rate-limit governor.** §27 asks for one per venue. This adapter fetches on every quote, so a busy market will hit a public endpoint hard enough to be throttled. A venue answering 429 degrades to `unreachable` and is dropped from routing rather than serving a bad price — correct, but a degradation, not a governor.
+- **REST polling, not WS streaming.** §27 asks for WS-first, sequenced, gap-detected books. `packages/market-data` already has the sequence machinery; wiring it needs a stream.
+- **Latency is graded but not weighted.** `health()` records round-trip per venue and every quote discloses it, so the input exists; nothing consumes it as a routing weight yet.
+- **Projection lag is not measured.** `observedAt` catches a slow _read_, not a projection that is up, unhalted and twenty blocks behind the chain. Closing that needs one extra field on svc-indexer's status output.
 - **Depth-curve routing.** See above — greedy is deliberate and documented, not accidental.
-- **No AMM pool implementation.** §8.6 calls for pools from audited templates; nothing here creates or prices one.
+- **Fees and settlement costs are configured, not sourced.** SOCKET §13 `socket.dex-fee-source`. Every response discloses the exact `feeBps` and `settlementCost` applied per venue, so nobody is silently quoted a figure we chose.
