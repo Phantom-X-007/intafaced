@@ -68,7 +68,13 @@ app.get<{ Params: { userId: string } }>('/internal/stake/:userId', async (req, r
     return reply.code(401).send({ error: 'service credentials required', code: 'token.unauthenticated' });
   }
   const access = await token.accessOf(req.params.userId);
-  return { staked: access.staked.toString(), tier: access.tier, feeDiscountBps: access.feeDiscountBps };
+  // `formatAmount`, not `.toString()`. `accessOf().staked` is a SCALED bigint
+  // (10^18); `.toString()` puts the raw scale on the wire, where every consumer
+  // reads it back with `parseAmount` and scales it a second time. A 4000 IFC
+  // stake arrived as 4e39 instead of 4e21, so every staked gate in the OS —
+  // launchpad allocation tiers (§8.4), premium lobbies (§8.3) — admitted any
+  // caller with a non-zero stake. Decimal strings on the wire (Doctrine).
+  return { staked: formatAmount(access.staked), tier: access.tier, feeDiscountBps: access.feeDiscountBps };
 });
 
 /**

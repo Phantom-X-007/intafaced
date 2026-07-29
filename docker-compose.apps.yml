@@ -194,6 +194,8 @@ services:
       PROTOCOL_URL: http://svc-protocol:4012
       DEX_URL: http://svc-dex:4010
       INDEXER_URL: http://svc-indexer:4013
+      LAUNCH_URL: http://svc-launch:4015
+      ACADEMY_URL: http://svc-academy:4016
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are
@@ -467,6 +469,80 @@ services:
       <<: [*needs-schema, *needs-bus]
       svc-ledger:
         condition: service_healthy
+
+  # THE LAUNCHPAD (§8.4).
+  #
+  # A raise is an escrowed sale settled entirely through svc-ledger — this
+  # service holds no balance of its own (Doctrine §0.6), which is why it needs
+  # LEDGER_URL and the internal secret that reaches `ledger.post`.
+  #
+  # TOKEN_URL is the allocation-tier gate (`token.stakeOf`). It fails CLOSED:
+  # if svc-token cannot be read the commitment is refused, because admitting at
+  # the lowest tier would sell a staked allocation to someone who does not hold
+  # the stake.
+  svc-launch:
+    <<: *app
+    container_name: intafaced-svc-launch
+    command: ['node', 'services/svc-launch/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret, *internal-secret]
+      SERVICE_NAME: svc-launch
+      # 4015: every port from 4000 to 4014 is claimed above.
+      HTTP_PORT: '4015'
+      DATABASE_URL: postgres://svc_launch:svc_launch@postgres:5432/intafaced
+      LEDGER_URL: http://svc-ledger:4001
+      TOKEN_URL: http://svc-token:4003
+      LAUNCH_MIN_CONTRIBUTION: ${LAUNCH_MIN_CONTRIBUTION:-0.000000000000000001}
+      LAUNCH_SETTLE_BATCH_SIZE: ${LAUNCH_SETTLE_BATCH_SIZE:-200}
+    # L5-7: S2S — not published on host (compose network only)
+    expose: ['4015']
+    healthcheck: *healthcheck
+    depends_on:
+      # No `nats`: svc-launch publishes no subject and consumes none.
+      <<: *needs-schema
+      svc-ledger:
+        condition: service_healthy
+      svc-token:
+        condition: service_healthy # the stake gate every allocation tier reads
+
+  # THE ACADEMY (§8.3).
+  #
+  # Note what is NOT in this environment: no LEDGER_URL. `academy` is
+  # `custodial: false` and this process holds no credential that could reach
+  # anything which moves value — the deployment is part of that proof, the same
+  # argument svc-dex's block makes above.
+  #
+  # It keeps INTERNAL_SERVICE_SECRET for exactly one caller: svc-token's
+  # `/internal/stake/:userId`, which is how a staked lobby knows who may sit
+  # down.
+  svc-academy:
+    <<: *app
+    container_name: intafaced-svc-academy
+    command: ['node', 'services/svc-academy/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret, *internal-secret]
+      SERVICE_NAME: svc-academy
+      # 4016: 4015 is svc-launch, and everything below it is taken.
+      HTTP_PORT: '4016'
+      DATABASE_URL: postgres://svc_academy:svc_academy@postgres:5432/intafaced
+      TOKEN_URL: http://svc-token:4003
+      # `none` is the honest default: lobbies run as seats, presence and the 2D
+      # scene canvas, and a request for a stream credential is refused by name
+      # rather than answered with a token that cannot connect (§13
+      # `socket.stream-provider`).
+      ACADEMY_STREAM_PROVIDER: ${ACADEMY_STREAM_PROVIDER:-none}
+      ACADEMY_CERT_XP_BASE: ${ACADEMY_CERT_XP_BASE:-250}
+      ACADEMY_CERT_XP_PER_ITEM: ${ACADEMY_CERT_XP_PER_ITEM:-25}
+      ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-5000}
+    # L5-7: S2S — not published on host (compose network only)
+    expose: ['4016']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
+      svc-identity:
+        condition: service_healthy # owns the `identity` stream certifications publish to
+      svc-token:
+        condition: service_healthy # the stake gate staked lobbies read
 
   # ── Protocol Plane (§17.4) ─────────────────────────────────────────────────
 

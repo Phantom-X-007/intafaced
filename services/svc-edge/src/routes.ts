@@ -40,6 +40,9 @@ export const UPSTREAMS: readonly Upstream[] = [
   // so every chain query 404'd at the edge while the service itself was
   // healthy. A service reachable only from inside the network is not reachable.
   { prefix: '/api/indexer', envVar: 'INDEXER_URL', devUrl: 'http://localhost:4013' },
+  // Phase 5 · §8.4 launchpad and §8.3 academy.
+  { prefix: '/api/launch', envVar: 'LAUNCH_URL', devUrl: 'http://localhost:4015' },
+  { prefix: '/api/academy', envVar: 'ACADEMY_URL', devUrl: 'http://localhost:4016' },
 ] as const;
 
 export interface Resolved {

@@ -148,6 +148,50 @@ export function earnPoolReserve(poolId: string, assetId: string): AccountRef {
 }
 
 /**
+ * LAUNCHPAD (§8.4) — the three pots one raise needs, and no fourth.
+ *
+ * Note what is NOT here: a "raise account" holding every contributor's money
+ * together. A pooled pot would make a refund draw on whatever happened to be
+ * in it, so one contributor's refund could be paid out of another's stake —
+ * the same commingling failure P0-3 removed from holds. Contributions escrow
+ * PER CONTRIBUTOR, per raise, which makes "what do we owe this person if the
+ * raise fails" a balance rather than a reconstruction.
+ */
+
+/** One contributor's committed payment for ONE raise. */
+export function raiseContributionAccount(userId: string, paymentAssetId: string, raiseId: string): AccountRef {
+  return userEscrow(userId, paymentAssetId, `launch:raise:${raiseId}`);
+}
+
+/**
+ * The issuer's sale supply, locked before the raise may open.
+ *
+ * This is what makes a raise here an escrowed sale rather than a promise: the
+ * tokens being sold have already left the issuer's spendable balance, and
+ * `balance(raiseSupplyAccount(…))` is exactly what is still deliverable. An
+ * issuer cannot sell supply they do not hold.
+ */
+export function raiseSupplyAccount(issuerId: string, saleAssetId: string, raiseId: string): AccountRef {
+  return userEscrow(issuerId, saleAssetId, `launch:supply:${raiseId}`);
+}
+
+/**
+ * Platform escrow behind ONE vesting schedule (§8.4: "vesting schedules
+ * enforced by contract + platform escrow").
+ *
+ * Module-owned rather than beneficiary-owned, and the books force that as much
+ * as the product does: §4.2 invariant 2 says a lock may only be funded out of
+ * the SAME owner's available balance in the same transaction, so a vesting pot
+ * owned by the beneficiary could only be filled by first handing them the
+ * tokens outright — which is exactly what a vesting schedule exists to not do.
+ * `module` accounts are hard non-negative, so one schedule can never release
+ * out of another's escrow.
+ */
+export function vestingEscrow(scheduleId: string, assetId: string): AccountRef {
+  return moduleAccount('launch', `vest:${scheduleId}`, assetId);
+}
+
+/**
  * THE BOUNDARY.
  *
  * `treasury` accounts are the seam between the book and the outside world: an

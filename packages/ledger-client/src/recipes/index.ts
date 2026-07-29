@@ -3,6 +3,15 @@ import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
 import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
 import {
+  raiseSupplyLock,
+  raiseSupplyReturn,
+  raiseContribute,
+  raiseRefund,
+  raiseSettleContributor,
+  vestingRelease,
+  vestingFund,
+} from './launch.js';
+import {
   burnAccount,
   houseFees,
   merchantClearing,
@@ -697,6 +706,7 @@ export function liquidate(input: LiquidationInput): PostRequest {
 }
 
 export * from './bank.js';
+export * from './launch.js';
 
 export const recipes = {
   deposit,
@@ -729,6 +739,14 @@ export const recipes = {
   earnWithdraw,
   earnPoolFund,
   earnInterest,
+  // §8.4 svc-launch — see ./launch.ts. Flagged shared-package change.
+  raiseSupplyLock,
+  raiseSupplyReturn,
+  raiseContribute,
+  raiseRefund,
+  raiseSettleContributor,
+  vestingRelease,
+  vestingFund,
 } as const;
 
 export type RecipeName = keyof typeof recipes;
