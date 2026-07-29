@@ -34,10 +34,10 @@
                     </Modal>
                   </a>
                 </div>
-                <p v-if="accountType != 0" style="margin-top: 10px;font-size:12px;color:#828ea1;">Memo：<span style="font-size: 20px;color: #F90;font-weight:bold;">{{memoCode}}</span></p>
-                <p v-if="accountType != 0" style="margin-top: 10px;font-size:12px;color:#828ea1;">
+                <p v-if="accountType!= 0" style="margin-top: 10px;font-size:12px;color:#8a8a8a;">Memo: <span style="font-size: 20px;color: #F90;font-weight:bold;">{{memoCode}}</span></p>
+                <p v-if="accountType!= 0" style="margin-top: 10px;font-size:12px;color:#8a8a8a;">
                   {{$t('uc.finance.recharge.memotips')}}
-                  <a style="color: #f0a70a;" v-clipboard:copy="memoCode" v-clipboard:success="onCopy" v-clipboard:error="onError" href="javascript:;" id="copyBtn" class="link-copy">{{$t('uc.finance.recharge.copy')}} Memo</a>
+                  <a style="color: #ff6b00;" v-clipboard:copy="memoCode" v-clipboard:success="onCopy" v-clipboard:error="onError" href="javascript:;" id="copyBtn" class="link-copy">{{$t('uc.finance.recharge.copy')}} Memo</a>
                 </p>
               </div>
             </div>
@@ -102,7 +102,7 @@ export default {
       this.getList(index);
     },
     getCurrentCoinRecharge() {
-      if (this.coinType != "") {
+      if (this.coinType!= "") {
         var temp = [];
         for (var i = 0; i < this.allTableRecharge.length; i++) {
           if (this.allTableRecharge[i].symbol == this.coinType) {
@@ -115,12 +115,12 @@ export default {
       }
     },
     showEwm() {
-      this.isShowEwm = !this.isShowEwm;
+      this.isShowEwm =!this.isShowEwm;
     },
     onCopy(e) {
       this.$Message.success(
         this.$t("uc.finance.recharge.copysuccess") + e.text
-      );
+);
     },
     onError(e) {
       this.$Message.error(this.$t("uc.finance.recharge.copysuccess"));
@@ -172,8 +172,8 @@ export default {
         let params = {};
         params["unit"] = this.qrcode.unit;
         this.$http
-          .post(this.host + "/uc/asset/wallet/reset-address", params)
-          .then(response => {
+.post(this.host + "/uc/asset/wallet/reset-address", params)
+.then(response => {
             var resp = response.body;
             if (resp.code == 0) {
               setTimeout(function() {
@@ -188,7 +188,6 @@ export default {
       }
     },
     getMoney() {
-      //获取
       this.$http.post(this.host + this.api.uc.wallet).then(response => {
         var resp = response.body;
         if (resp.code == 0) {
@@ -205,9 +204,9 @@ export default {
       });
     },
     getList(pageN) {
-      //获取tableRecharge
+      // tableRecharge
       let memberId = 0;
-      !this.$store.getters.isLogin && this.$router.push("/login");
+!this.$store.getters.isLogin && this.$router.push("/login");
       this.$store.getters.isLogin && (memberId = this.$store.getters.member.id);
       let pageNo = pageN,
         pageSize = 10,
@@ -234,15 +233,15 @@ export default {
           var resp = response.body;
           if (resp.code == 0) {
             if (resp.data.realName == null || resp.data.realName == "") {
-              // 判断是否实名认证，未认证跳转到实名认证页面；
+              // , ;
               this.$Message.success(this.$t("otc.publishad.submittip1"));
               self.$router.push("/uc/safe");
             } else if (resp.data.phoneVerified == 0) {
-              // 判断是否是手机号0，1，未认证跳转到实名认证页面；
+              // phone0, 1, ;
               this.$Message.success(this.$t("otc.publishad.submittip2"));
               self.$router.push("/uc/safe");
             } else if (resp.data.fundsVerified == 0) {
-              // 判断是否设置交易密码，未认证跳转到实名认证页面；
+              // Set, ;
               this.$Message.success(this.$t("otc.publishad.submittip3"));
               self.$router.push("/uc/safe");
             }
@@ -325,19 +324,19 @@ export default {
   display: table;
 }
 
-.action-inner .inner-box {
+.action-inner.inner-box {
   display: table-cell;
   width: 100%;
 }
 
-.action-box .title .copy {
+.action-box.title.copy {
   user-select: text;
 }
 
-.action-box .title a.link-copy {
+.action-box.title a.link-copy {
   font-size: 14px;
   margin-left: 20px;
-  color: #f0a70a;
+  color: #ff6b00;
 }
 
 .hb-night a {
@@ -347,11 +346,11 @@ export default {
   cursor: pointer;
 }
 
-.action-box .title a.link-qrcode {
+.action-box.title a.link-qrcode {
   margin-left: 20px;
   font-size: 14px;
   position: relative;
-  color: #f0a70a;
+  color: #ff6b00;
 }
 
 .hb-night a {
@@ -361,7 +360,7 @@ export default {
   cursor: pointer;
 }
 
-.action-box .subtitle {
+.action-box.subtitle {
   font-size: 12px;
   margin-top: 30px;
 }
@@ -374,13 +373,13 @@ export default {
   color: #ccc;
 }
 
-.action-box .title {
+.action-box.title {
   margin-top: 20px;
   font-size: 20px;
   user-select: none;
 }
 
-.action-box .title .show-qrcode {
+.action-box.title.show-qrcode {
   position: absolute;
   top: -100px;
   left: 40px;
@@ -388,7 +387,7 @@ export default {
   background: #FFF;
 }
 
-.action-inner .inner-box.deposit-address {
+.action-inner.inner-box.deposit-address {
   width: 80%;
 }
 
@@ -406,7 +405,7 @@ p.describe {
   width: 4px;
   height: 22px;
   margin-right: 10px;
-  background: #f0a70a;
+  background: #ff6b00;
 }
 
 .bill_box {
@@ -433,7 +432,7 @@ p.describe {
 }
 
 .order_box a {
-  color: #8994a3;
+  color: #909090;
   font-size: 16px;
   padding: 0 30px;
   cursor: pointer;
@@ -443,13 +442,13 @@ p.describe {
   display: inline-block;
 }
 
-.order_box .search {
+.order_box.search {
   position: absolute;
   width: 300px;
   height: 32px;
   top: 12px;
   right: 0;
   display: flex;
-  /* border: #c5cdd7 solid 1px; */
+  /* border: #cccccc solid 1px; */
 }
 </style>

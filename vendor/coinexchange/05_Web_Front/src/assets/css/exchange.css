@@ -4,14 +4,14 @@
     /* float: left; */
     padding: 30px 0px 0 0;
     /* color: #BCD7E6; */
-    background: #263142;
+    background: #222222;
     padding-top: 60px;
 }
 
 .sidebar {
     width: 22%;
     float: left;
-    background: #18202A;
+    background: #050505;
     padding-bottom: 10px;
 }
 
@@ -43,7 +43,7 @@
 }
 
 .sidebar .ivu-table-body tr:hover {
-    background: #262A42;
+    background: #1f1f1f;
     cursor: pointer;
 }
 
@@ -52,8 +52,8 @@
     white-space: nowrap;
     overflow-x: auto;
     font-size: 0;
-    background-color: #192330;
-    border-bottom: 1px solid #27313e;
+    background-color: #000000;
+    border-bottom: 1px solid #141414;
 }
 
 .day .sc_filter {
@@ -71,7 +71,7 @@
     color: #fff;
     cursor: pointer;
     line-height: 35px;
-    background-color: #192330;
+    background-color: #000000;
 }
 
 .day .sc_filter span {
@@ -91,14 +91,14 @@
 
 .sc_filter span.active,
 .sc_filter i.active {
-    border-bottom: 2px solid #f0a70a;
+    border-bottom: 2px solid #ff6b00;
 }
 
 .day .sc_filter span.active,
 .day .sc_filter i.active {
     background-color: #fff;
     /* border-right: 1px solid #ccc; */
-    color: #f0a70a;
+    color: #ff6b00;
 }
 
 .coin-menu .ivu-table td.coin-menu-symbol {
@@ -107,7 +107,7 @@
 }
 
 .coin-menu .coin-menu-symbol .ivu-icon {
-    color: #f0a70a;
+    color: #ff6b00;
     margin-right: 10px;
 }
 
@@ -124,7 +124,7 @@
 }
 
 .sc_table .ivu-table-body tr:hover {
-    background: #262A42;
+    background: #1f1f1f;
     cursor: pointer;
 }
 
@@ -183,7 +183,7 @@ span.price {
 .trade_panel {
     float: left;
     width: 100%;
-    background: #192330;
+    background: #000000;
 }
 
 .day .trade_panel {
@@ -199,7 +199,7 @@ span.price {
     padding: 0 30px;
     height: 50px;
     line-height: 48px;
-    background: #1B1E2E;
+    background: #161616;
     font-size: 16px;
 }
 
@@ -237,7 +237,7 @@ span.price {
 .trade_panel .panel .hd {
     line-height: 20px;
     height: 20px;
-    border-bottom: 1px solid #1F2943;
+    border-bottom: 1px solid #1d1d1d;
     margin-bottom: 5px;
 }
 
@@ -272,7 +272,7 @@ span.price {
 
 .trade_wrap .ivu-input {
     background: #000;
-    border: 1px solid #27313e;
+    border: 1px solid #141414;
     color: #fff;
     height: 40px;
     text-indent: 25px;
@@ -286,12 +286,12 @@ span.price {
 .trade_wrap .ivu-input:focus,
 .trade_wrap .ivu-input:hover {
     box-shadow: none;
-    border-color: #41546d;
+    border-color: #3b3b3b;
     outline: none;
 }
 
 .order .ivu-table-wrapper .ivu-table .ivu-table-header th {
-    background-color: #27313e;
+    background-color: #141414;
 }
 
 .day .trade_wrap .ivu-input {
@@ -349,7 +349,7 @@ p.math_price {
 }
 
 .trade_bd Button.bg-gray {
-    background-color: #35475b;
+    background-color: #313131;
     cursor: not-allowed;
     color: #9fabb5;
 }
@@ -357,14 +357,14 @@ p.math_price {
     color: #9fabb5!important;
 }
 .trade_bd Button:hover {
-    /* background: #54679F; */
+    /* background: #4a4a4a; */
 }
 
 .order_book {
     float: right;
     width: 34%;
     height: 430px;
-    background: #18202A;
+    background: #050505;
     margin-bottom: 15px;
 }
 
@@ -391,7 +391,7 @@ p.math_price {
 }
 
 .exchange .order .ivu-table-cell-expand {
-    color: #f0a70a;
+    color: #ff6b00;
 }
 
 .exchange .ivu-table th {
@@ -399,23 +399,23 @@ p.math_price {
 }
 
 .exchange .ivu-table th span {
-    color: #61688A;
+    color: #6b6b6b;
 }
 
 
 /* .order_book .ivu-table th:first-child span{
-    color:#18202A;
+    color:#050505;
 } */
 
 .ivu-table-row-highlight td,
 .ivu-table-stripe .ivu-table-body tr.ivu-table-row-highlight:nth-child(2n) td,
 .ivu-table-stripe .ivu-table-fixed-body tr.ivu-table-row-highlight:nth-child(2n) td,
 tr.ivu-table-row-highlight.ivu-table-row-hover td {
-    background: #262A42;
+    background: #1f1f1f;
 }
 
 .order_book .ivu-table .ivu-table-body tr:hover {
-    background: #262A42;
+    background: #1f1f1f;
     cursor: pointer;
 }
 
@@ -455,7 +455,7 @@ tr.ivu-table-row-highlight.ivu-table-row-hover td {
 }
 
 .buy_table {
-    /* border-top: 2px solid #1F2943 !important; */
+    /* border-top: 2px solid #1d1d1d !important; */
     min-height: 200px;
 }
 
@@ -467,7 +467,7 @@ tr.ivu-table-row-highlight.ivu-table-row-hover td {
     float: left;
     width: 64%;
     min-height: 400px;
-    background: #18202A;
+    background: #050505;
     margin-bottom: 15px;
 }
 
@@ -476,14 +476,14 @@ tr.ivu-table-row-highlight.ivu-table-row-hover td {
 }
 
 .open_orders .ivu-table .ivu-table-body tr:hover {
-    background: #262A42;
+    background: #1f1f1f;
 }
 
 .depth_graph {
     float: left;
     width: 64%;
     min-height: 550px;
-    background: #18202A;
+    background: #050505;
 }
 
 .depth_graph_hd {
@@ -524,7 +524,7 @@ tr.ivu-table-row-highlight.ivu-table-row-hover td {
     float: right;
     width: 34%;
     height: 550px;
-    background: #18202A;
+    background: #050505;
 }
 
 .deal_record .ivu-table-body {
@@ -552,7 +552,7 @@ tr.ivu-table-row-highlight.ivu-table-row-hover td {
 
 .open_orders_hd .ivu-select-selection {
     margin-top: 12px;
-    background: #1B1E2E;
+    background: #161616;
 }
 
 .trade_wrap .ivu-btn {
@@ -615,7 +615,7 @@ iframe {
 .exchange fieldset[disabled] .ivu-input {
     border-color: transparent !important;
     cursor: unset !important;
-    background: #202437;
+    background: #1a1a1a;
 }
 
 .exchange.day .ivu-input[disabled] {
@@ -637,8 +637,8 @@ iframe {
 
 .exchange .main .ivu-table .ivu-table-header th {
     line-height: 30px;
-    background-color: #192330;
-    border-bottom: 1px solid #27313e;
+    background-color: #000000;
+    border-bottom: 1px solid #141414;
 }
 
 .exchange.day .ivu-table .ivu-table-header th {
@@ -648,7 +648,7 @@ iframe {
 }
 
 .exchange .ivu-table {
-    background-color: #192330;
+    background-color: #000000;
 }
 
 .exchange.day .ivu-table {
@@ -656,8 +656,8 @@ iframe {
 }
 
 .exchange .ivu-table-wrapper .ivu-table .ivu-table-row td {
-    border-bottom: 1px solid #27313e;
-    border-color: #27313e;
+    border-bottom: 1px solid #141414;
+    border-color: #141414;
 }
 
 .exchange.day .ivu-table-wrapper .ivu-table .ivu-table-row td {
@@ -689,7 +689,7 @@ iframe {
 
 .exchange .order .linkmore {
     float: right;
-    color: #f0a70a;
+    color: #ff6b00;
     font-size: 14px;
     line-height: 40px;
     margin-right: 20px;
@@ -812,7 +812,7 @@ iframe {
 }
 
 .exchange .right .ivu-table-wrapper .ivu-table .ivu-table-row.ivu-table-row-hover td{
-  background: #273344!important;
+  background: #242424!important;
 }
 .exchange .ivu-table-wrapper .ivu-table .ivu-table-row td.percenttd {
     position: absolute;
@@ -821,7 +821,7 @@ iframe {
 }
 
 .exchange .ivu-table-wrapper .ivu-table .ivu-table-header {
-    background-color: #192330;
+    background-color: #000000;
 }
 
 .exchange .ivu-table-wrapper .ivu-table .ivu-table-header th.percenttd {
@@ -854,7 +854,7 @@ iframe {
 }
 
 .lightning-panel{
-    height:264px;width:100%;z-index:2;background:#003478;margin-bottom: 10px;
+    height:264px;width:100%;z-index:2;background:#212121;margin-bottom: 10px;
 }
 .lightning-panel img{
     width: 100%;

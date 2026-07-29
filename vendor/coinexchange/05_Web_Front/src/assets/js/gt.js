@@ -1,4 +1,4 @@
-﻿// "v0.4.6 Geetest Inc.";
+// "v0.4.6 Geetest Inc.";
 
 var gtInit = (function (window) {
     "use strict";
@@ -76,7 +76,7 @@ var isBoolean = function (value) {
     return (typeof value === 'boolean');
 };
 var isObject = function (value) {
-    return (typeof value === 'object' && value !== null);
+    return (typeof value === 'object' && value!== null);
 };
 var isFunction = function (value) {
     return (typeof value === 'function');
@@ -121,7 +121,7 @@ var normalizeDomain = function (domain) {
 };
 var normalizePath = function (path) {
     path = path.replace(/\/+/g, '/');
-    if (path.indexOf('/') !== 0) {
+    if (path.indexOf('/')!== 0) {
         path = '/' + path;
     }
     return path;
@@ -210,8 +210,8 @@ var jsonp = function (domains, path, config, callback) {
 
 var throwError = function (errorType, config) {
     var errors = {
-        networkError: '网络错误',
-        gtTypeError: 'gt字段不是字符串类型'
+        networkError: 'Network error',
+        gtTypeError: 'gtfield is not a string'
     };
     if (typeof config.onError === 'function') {
         config.onError(errors[errorType]);

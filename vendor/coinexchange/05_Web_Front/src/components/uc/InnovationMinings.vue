@@ -67,7 +67,7 @@
                           </tr>
                       </table>
                     </div>
-                    <div style="font-size:12px;margin-top: 10px;text-align:left;color: #828ea1;" v-if="item.miningInvite > 0">
+                    <div style="font-size:12px;margin-top: 10px;text-align:left;color: #8a8a8a;" v-if="item.miningInvite > 0">
                     <Icon type="ios-information-circle" /> {{$t('uc.mining.invitetip1')}}{{item.miningInvite | percentFun}}{{$t('uc.mining.invitetip2')}}{{item.miningInvitelimit | percentFun}}%</div>
                   </Card>
                 </Col>
@@ -144,19 +144,19 @@ export default {
         key: "period",
         align: "center",
         render(h, params) {
-          let text = "日";
+          let text = "";
           if(params.row.period == 1){
-            text = "周";
+            text = "w";
           }
           if(params.row.period == 2){
-            text = "月";
+            text = "-";
           }
           if(params.row.period == 3){
-            text = "年";
+            text = "-";
           }
           return h(
             "span",{}, text
-          );
+);
         }
       });
       columns.push({
@@ -174,16 +174,16 @@ export default {
         key: "miningStatus",
         align: "center",
         render(h, params) {
-          let text = "已部署";
+          let text = "Deployed";
           if(params.row.miningStatus == 1){
-            text = "挖矿中";
+            text = "Mining";
           }
           if(params.row.miningStatus == 2){
-            text = "已结束";
+            text = "Ended";
           }
           return h(
             "span",{}, text
-          );
+);
         }
       });
       columns.push({
@@ -194,7 +194,7 @@ export default {
         render(h, params) {
           return h(
             "span",{}, params.row.miningDaysprofit + " " + params.row.miningUnit
-          );
+);
         }
       });
       columns.push({
@@ -205,7 +205,7 @@ export default {
         render(h, params) {
           return h(
             "span",{}, params.row.currentDaysprofit + " " + params.row.miningUnit
-          );
+);
         }
       });
       columns.push({
@@ -234,28 +234,28 @@ export default {
 
 <style lang="scss">
 .nav-right {
-  .rightarea.bill_box {
-    .shaow {
+.rightarea.bill_box {
+.shaow {
       padding: 5px;
     }
-    .money_table {
-      .search{
+.money_table {
+.search{
         width: 200px;
         margin-bottom: 10px;
       }
-      .ivu-table-wrapper {
-        .ivu-table-header{
-          background: #27313e;
+.ivu-table-wrapper {
+.ivu-table-header{
+          background: #141414;
           th{
             color: #fff;
           }
         }
-        .ivu-table-body {
+.ivu-table-body {
           td {
             color: #fff;
-            .ivu-table-cell {
+.ivu-table-cell {
               padding: 10px 10px;
-              .ivu-btn {
+.ivu-btn {
                 background: transparent;
                 height: 25px;
                 padding: 0 0px;
@@ -268,30 +268,30 @@ export default {
                   letter-spacing: 1px;
                 }
               }
-              .ivu-btn.ivu-btn-info {
-                border: 1px solid #f0ac19;
+.ivu-btn.ivu-btn-info {
+                border: 1px solid #ff8534;
                 span {
-                  color: #f0ac19;
+                  color: #ff8534;
                 }
               }
-              .ivu-btn.ivu-btn-error {
+.ivu-btn.ivu-btn-error {
                 border: 1px solid #f15057;
                 span {
                   color: #f15057;
                 }
               }
-              .ivu-btn.ivu-btn-primary {
+.ivu-btn.ivu-btn-primary {
                 border: 1px solid #00b275;
                 border: 1px solid #00b275;
                 span {
                   color: #00b275;
                 }
               }
-              .ivu-btn.ivu-btn-default {
-                border: 1px solid #2c384f;
-                background: #222c3e;
+.ivu-btn.ivu-btn-default {
+                border: 1px solid #282828;
+                background: #1f1f1f;
                 span {
-                  color: #54637a;
+                  color: #464646;
                 }
               }
             }
@@ -308,7 +308,7 @@ export default {
   height: auto;
   overflow: hidden;
   padding: 0 0 0 15px;
-  .rightarea.bill_box {
+.rightarea.bill_box {
     padding-left: 15px;
     padding-right: 15px;
     width: 100%;
@@ -322,26 +322,26 @@ export default {
 }
 
 .header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #f0ac19;color: #f0ac19;
+  float:right;padding: 5px 15px;border: 1px solid #ff8534;color: #ff8534;
   margin-left: 20px;
   &:hover{
-    background: #f0ac19;
+    background: #ff8534;
     color: #000;
     cursor: pointer;
   }
 }
-.mining-list .ivu-row .ivu-col .ivu-card{
-  background: #2f3e59;
+.mining-list.ivu-row.ivu-col.ivu-card{
+  background: #2c2c2c;
 }
 
-.mining-list .ivu-row .ivu-col .ivu-card-bordered{
+.mining-list.ivu-row.ivu-col.ivu-card-bordered{
   border: none!important;
 }
 .config-table{
   width:100%;
   tr{
     td{
-      color: #828ea1;
+      color: #8a8a8a;
       font-size: 12px;
       &:nth-child(1){
         text-align:left;
@@ -385,7 +385,7 @@ export default {
     background-size: 100% 100%;
 }
 
-.merchant-top .tips-word {
+.merchant-top.tips-word {
     -webkit-box-flex: 2;
     -ms-flex-positive: 2;
     flex-grow: 2;
@@ -396,7 +396,7 @@ export default {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #f0a70a;
+    background: #ff6b00;
 }
 
 .bill_box {

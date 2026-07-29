@@ -1,6 +1,6 @@
 <template>
   <div>
-    <Carousel autoplay v-model="value2" loop :autoplay-speed="3000" id="carousel">
+    <Carousel autoplay v-model="value2" loop:autoplay-speed="3000" id="carousel">
         <CarouselItem>
             <div class="demo-carousel"><img src="../../assets/img/banner.jpg" alt=""></div>
         </CarouselItem>

@@ -6,7 +6,7 @@
         <h1 class="advH">{{$t('otc.index.title')}}</h1>
         <div class="advBtn">
           <button-group>
-            <i-button v-for="(item,index) in btnList" @click="addClass(index)" :class="{'ivu-btn-primary':index==choseBtn,'ivu-btn-default':index!=choseBtn}">{{item.text}}</i-button>
+            <i-button v-for="(item,index) in btnList" @click="addClass(index)" :class="{'ivu-btn-primary' :index==choseBtn,'ivu-btn-default':index!=choseBtn}">{{item.text}}</i-button>
           </button-group>
         </div>
         <div class="item1" v-show="isitem1">
@@ -28,22 +28,22 @@
                     <!-- <div class="states merchant"></div> -->
                   </div>
                   <div class="trade-info">
-                    <span>{{$t('otc.index.exchangetimes')}}：</span>
+                    <span>{{$t('otc.index.exchangetimes')}}: </span>
                     {{item.transactions}}
                   </div>
                   <div class="trade-info">
-                    <span>{{$t('otc.index.exchangeprice')}}：</span>
+                    <span>{{$t('otc.index.exchangeprice')}}: </span>
                     <span style="font-weight: bold">
                       {{item.price}}
                     </span>
                     CNY
                   </div>
                   <div class="trade-info">
-                    <span>{{$t('otc.index.exchangelimit')}}：</span>
+                    <span>{{$t('otc.index.exchangelimit')}}: </span>
                     {{item.minLimit}}-{{item.maxLimit}} CNY
                   </div>
                   <div class="trade-info">
-                    <span>{{$t('otc.index.paymode')}}：</span>{{item.payMode}}
+                    <span>{{$t('otc.index.paymode')}}: </span>{{item.payMode}}
                   </div>
                   <div class="tradeBtn">
                     <Button type="primary" icon="ios-cart-outline" size="large" long>{{$t('otc.index.buy')}}{{item.coin}}</Button>
@@ -73,22 +73,22 @@
                     <!-- <div class="states merchant"></div> -->
                   </div>
                   <div class="trade-info">
-                    <span>{{$t('otc.index.exchangetimes')}}：</span>
+                    <span>{{$t('otc.index.exchangetimes')}}: </span>
                     {{item.transactions}}
                   </div>
                   <div class="trade-info">
-                    <span>{{$t('otc.index.exchangeprice')}}：</span>
+                    <span>{{$t('otc.index.exchangeprice')}}: </span>
                     <span style="font-weight: bold">
                       {{item.price}}
                     </span>
                     CNY
                   </div>
                   <div class="trade-info">
-                    <span>{{$t('otc.index.exchangelimit')}}：</span>
+                    <span>{{$t('otc.index.exchangelimit')}}: </span>
                     {{item.minLimit}}-{{item.maxLimit}} CNY
                   </div>
                   <div class="trade-info">
-                    <span>{{$t('otc.index.paymode')}}：</span>{{item.payMode}}
+                    <span>{{$t('otc.index.paymode')}}: </span>{{item.payMode}}
                   </div>
                   <div class="tradeBtn">
                     <Button type="primary" icon="ios-color-wand-outline" size="large" long>{{$t('otc.index.sell')}}{{item.coin}}</Button>
@@ -221,8 +221,8 @@ export default {
   padding: 80px 0;
 }
 
-.adv_box .ivu-card,
-.adv_box .ivu-card-body {
+.adv_box.ivu-card,
+.adv_box.ivu-card-body {
   height: 405px;
 }
 
@@ -246,11 +246,11 @@ export default {
   transform: translateY(-100px);
 }
 
-.adv_box .ivu-card-body {
+.adv_box.ivu-card-body {
   height: 405px;
 }
 
-.adv_box .user-avatar-public {
+.adv_box.user-avatar-public {
   background: #fff;
   border-radius: 50%;
   height: 120px;
@@ -262,12 +262,12 @@ export default {
   position: relative;
 }
 
-.card-item:hover .user-avatar-public {
+.card-item:hover.user-avatar-public {
   box-shadow: 0 1px 5px 0 #F55F45;
 }
 
-.adv_box .user-avatar-public>.user-avatar-in {
-  background: #131F31;
+.adv_box.user-avatar-public>.user-avatar-in {
+  background: #151515;
   border-radius: 50%;
   height: 110px;
   width: 110px;
@@ -278,7 +278,7 @@ export default {
   margin-right: 0;
 }
 
-.card-item:hover .user-avatar-public>.user-avatar-in {
+.card-item:hover.user-avatar-public>.user-avatar-in {
   background: #F55F45;
 }
 
@@ -306,19 +306,19 @@ export default {
   background-color: #b6bab9;
 }
 
-.trade-item .trade-body {
+.trade-item.trade-body {
   padding: 0 10%;
   font-size: 16px;
 }
 
-.trade-item .trade-body .title {
+.trade-item.trade-body.title {
   line-height: 70px;
   color: #fff;
   text-align: center;
 }
 
-.trade-item .trade-body .user-info {
-  background: rgba(255, 255, 255, .16);
+.trade-item.trade-body.user-info {
+  background: rgba(255, 255, 255,.16);
   display: flex;
   align-items: center;
   flex-direction: column;
@@ -327,24 +327,24 @@ export default {
   border-bottom: #e7e9ed dotted 1px;
 }
 
-.trade-item .trade-body .user-name {
+.trade-item.trade-body.user-name {
   display: flex;
   flex-direction: column;
   font-size: 16px;
   padding: 35px 0 10px;
 }
 
-.trade-item .trade-body .online-status-box {
+.trade-item.trade-body.online-status-box {
   color: #18b111;
   font-size: 12px;
 }
 
 .trade-item {
-  color: #0D214D;
+  color: #171717;
   text-align: left;
 }
 
-.trade-item .trade-body .user-name p:last-child {
+.trade-item.trade-body.user-name p:last-child {
   font-size: 12px;
 }
 
@@ -356,7 +356,7 @@ export default {
   display: inline-block;
 }
 
-.trade-item .trade-body .trade-info {
+.trade-item.trade-body.trade-info {
   padding-bottom: 8px;
   font-size: 16px;
   width: 100%;
@@ -365,12 +365,12 @@ export default {
   white-space: nowrap;
 }
 
-.trade-item .trade-body .trade-info span:first-child {
+.trade-item.trade-body.trade-info span:first-child {
   color: #9094a7;
   font-size: 14px;
 }
 
-.trade-item .trade-btn {
+.trade-item.trade-btn {
   width: 80%;
   line-height: 45px;
   text-align: center;
@@ -382,12 +382,12 @@ export default {
   margin: 15px 10% 30px 10%;
 }
 
-.trade-item:hover .trade-btn {
+.trade-item:hover.trade-btn {
   color: #fff;
-  background: #00b5f6;
+  background: #ff6b00;
 }
 
-.trade-item .trade-btn .icon {
+.trade-item.trade-btn.icon {
   width: 16px;
   height: 17px;
   /* background: url("../../images/index/comm_icon.png") no-repeat; */
@@ -396,24 +396,24 @@ export default {
   vertical-align: middle;
 }
 
-.trade-item .trade-btn .icon.buy {
+.trade-item.trade-btn.icon.buy {
   background-position: 0 -30px;
 }
 
-.trade-item:hover .trade-btn .icon.buy {
+.trade-item:hover.trade-btn.icon.buy {
   background-position: 0 0;
 }
 
-.trade-item .trade-btn .icon.sell {
+.trade-item.trade-btn.icon.sell {
   background-position: -27px -30px;
 }
 
-.trade-item:hover .trade-btn .icon.sell {
+.trade-item:hover.trade-btn.icon.sell {
   background-position: -27px 0;
 }
 
 .trade-bottom a {
-  color: #444f71;
+  color: #393939;
   font-size: 14px;
   text-decoration: underline;
   padding: 10px 0;
@@ -439,7 +439,7 @@ export default {
 h1.advH {
   text-align: center;
   font-size: 24px;
-  color: #0D214D;
+  color: #171717;
   font-weight: normal;
   line-height: 80px;
 }
@@ -450,7 +450,7 @@ h1.advH {
   padding-top: 100px;
 }
 
-.adv_box .ivu-col {
+.adv_box.ivu-col {
   padding: 0 20px;
 }
 </style>

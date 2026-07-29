@@ -24,9 +24,9 @@
         hour: '00',
         minutes: '00',
         seconds: '00',
-        timer : '',
-        flag : false,
-        state: 0,// 0:活动未开始   1：活动已开始但未结束  2：活动已结束但未清盘结束  3：活动已清盘结束
+        timer: '',
+        flag: false,
+        state: 0,// 0:0: not started 1: running 2: ended, not settled 3: settled
       }
     },
     mounted () {
@@ -43,27 +43,27 @@
             clearInterval(this.timer);
         }
     },
-    props : {
+    props: {
       countDownBgColor:{
-        type : String
+        type: String
       },
       publishState:{
         type: Number
       },
-      publishType : {
-        type : String
+      publishType: {
+        type: String
       },
       currentTime: {
         type: Number
       },
-      startTime : {
-        type : String
+      startTime: {
+        type: String
       },
-      endTime : {
-        type : String
+      endTime: {
+        type: String
       },
-      clearTime : {
-        type : String
+      clearTime: {
+        type: String
       },
       showPublishMask: {
         type: Function,
@@ -78,7 +78,7 @@
         default: null
       }
     },
-    methods : {
+    methods: {
       timeDown () {
         var endTime = 0;
 
@@ -106,25 +106,22 @@
         this.minutes = this.formate(parseInt(leftTime/60%60));
         this.seconds = this.formate(parseInt(leftTime%60));
         if(this.state == 0){
-          // 活动未开始
           this.showPublishMask();
-          this.$emit('update:countDownBgColor',"#003478")
+          this.$emit('update:countDownBgColor',"#212121")
           this.$emit('update:publishState', 0)
         }
         if(this.state == 1){
-          // 活动开始中
           this.hidePublishMask();
           this.$emit('update:countDownBgColor',"#094802")
           this.$emit('update:publishState', 1)
         }
         if(this.state == 2){
-          // 清盘中
           this.showPublishMask();
           this.$emit('update:countDownBgColor',"#5b0000")
           this.$emit('update:publishState', 2)
         }
         if(this.state == 2 && leftTime <= 0){
-          // 清盘结束，正常交易
+          // ,
           this.hidePublishMask();
           this.hideCountDown();
           this.flag = true;

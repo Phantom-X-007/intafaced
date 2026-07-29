@@ -29,22 +29,22 @@
   background: #FFF;
   color: #000;
   min-height: 800px;
-  .container {
+.container {
     > h1 {
       text-align: center;
       margin: 30px 0 20px 0;
     }
-    .page {
+.page {
       text-align:right;
       margin-top: 10px;
-      .ivu-page{
+.ivu-page{
         background: transparent!important;
-        .ivu-page-prev, .ivu-page-next{
+.ivu-page-prev,.ivu-page-next{
           background-color: transparent!important;
           color: #000;
           border: none;
         }
-        .ivu-page-item{
+.ivu-page-item{
           background-color: transparent!important;
           color: #000;
           border: none;
@@ -55,34 +55,34 @@
 }
 .list {
   font-size: 16px;
-  .item {
+.item {
     color: #464646;
     display: block;
     line-height: 40px;
     border-bottom: 1px solid #ebebeb;
     cursor: pointer;
-    .iconimg {
+.iconimg {
       width: 14px;
       vertical-align: sub;
       margin-left: 20px;
     }
-    .time {
+.time {
       float: right;
       color: #999;
       font-size: 14px;
     }
     &:hover{
-      color: #f0a70a;
+      color: #ff6b00;
     }
   }
 }
 .route-wrap {
   font-size: 14px;
   a {
-    color: #f1ab15;
+    color: #ff8534;
   }
   span {
-    color: #f1ab15;
+    color: #ff8534;
   }
 }
 
@@ -109,14 +109,9 @@ export default {
     lang() {
       return this.$store.state.lang;
     },
-    langPram(){
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+    langPram() {
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     }
   },
   watch: {
@@ -140,8 +135,8 @@ export default {
         lang: this.langPram
       };
       this.$http
-        .post(this.host + "/uc/ancillary/more/help/page", params)
-        .then(res => {
+.post(this.host + "/uc/ancillary/more/help/page", params)
+.then(res => {
           if (res.status == 200 && res.body.code == 0) {
             this.list = res.body.data.content;
             this.total = res.body.data.totalElements;

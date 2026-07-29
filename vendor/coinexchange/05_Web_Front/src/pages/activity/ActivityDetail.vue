@@ -1,12 +1,12 @@
 <template>
     <div class="activity">
-        <img v-if="activityDetail.bannerImageUrl != ''" class="activity-detail-bannerimg" :src="activityDetail.bannerImageUrl">
+        <img v-if="activityDetail.bannerImageUrl!= ''" class="activity-detail-bannerimg" :src="activityDetail.bannerImageUrl">
         <div class="activity_container">
             <Row :gutter="20" style="min-height: 600px;">
                 <Col :xs="24" :sm="24" :md="16" :lg="16" style="min-height: 600px;margin-bottom:10px;">
                     <div class="left-container">
                         <div class="title">
-                            <img  :src="activityDetail.smallImageUrl"></img>
+                            <img :src="activityDetail.smallImageUrl"></img>
                             <div class="title-text">
                                 <h1>{{activityDetail.title}}</h1>
                                 <p>{{activityDetail.detail}}</p>
@@ -27,7 +27,7 @@
                               <span class="gray">{{$t('activity.progress')}}</span>
                               <span class="gray">{{$t('activity.totalsupply')}}</span>
                             </div>
-                            <Progress :percent="activityDetail.progress" status="active" style="width: 100%;" hide-info :stroke-width="5"/>
+                            <Progress :percent="activityDetail.progress" status="active" style="width: 100%;" hide-info:stroke-width="5"/>
                             <div class="progress-text">
                               <span>{{activityDetail.progress | fixedScale(2)}}%</span>
                               <span>{{activityDetail.totalSupply | fixedScale(activityDetail.amountScale)}} {{activityDetail.unit}}</span>
@@ -43,21 +43,21 @@
                             </div>
                             <div class="info-item">
                                 <p class="title gray">{{$t('activity.activitytype')}}</p>
-                                <p class="value" style="color:#F90;" v-if="activityDetail.type==1">{{$t('activity.activitytype1')}} <router-link to="/helpdetail?cate=1&id=33&cateTitle=常见问题" target="_blank">{{$t('activity.ruledetail')}}</router-link></p>
-                                <p class="value" style="color:#F90;" v-if="activityDetail.type==2">{{$t('activity.activitytype2')}} <router-link to="/helpdetail?cate=1&id=32&cateTitle=常见问题" target="_blank">{{$t('activity.ruledetail')}}</router-link></p>
-                                <p class="value" style="color:#F90;" v-if="activityDetail.type==3">{{$t('activity.activitytype3')}} <router-link to="/helpdetail?cate=1&id=36&cateTitle=常见问题" target="_blank">{{$t('activity.ruledetail')}}</router-link></p>
-                                <p class="value" style="color:#F90;" v-if="activityDetail.type==4">{{$t('activity.activitytype4')}} <router-link to="/helpdetail?cate=1&id=37&cateTitle=常见问题" target="_blank">{{$t('activity.ruledetail')}}</router-link></p>
+                                <p class="value" style="color:#F90;" v-if="activityDetail.type==1">{{$t('activity.activitytype1')}} <router-link to="/helpdetail?cate=1&id=33&cateTitle=FAQ" target="_blank">{{$t('activity.ruledetail')}}</router-link></p>
+                                <p class="value" style="color:#F90;" v-if="activityDetail.type==2">{{$t('activity.activitytype2')}} <router-link to="/helpdetail?cate=1&id=32&cateTitle=FAQ" target="_blank">{{$t('activity.ruledetail')}}</router-link></p>
+                                <p class="value" style="color:#F90;" v-if="activityDetail.type==3">{{$t('activity.activitytype3')}} <router-link to="/helpdetail?cate=1&id=36&cateTitle=FAQ" target="_blank">{{$t('activity.ruledetail')}}</router-link></p>
+                                <p class="value" style="color:#F90;" v-if="activityDetail.type==4">{{$t('activity.activitytype4')}} <router-link to="/helpdetail?cate=1&id=37&cateTitle=FAQ" target="_blank">{{$t('activity.ruledetail')}}</router-link></p>
                                 <p class="value" style="color:#F90;" v-if="activityDetail.type==5">{{$t('activity.activitytype5')}}</p>
                             </div>
                             <div class="info-item">
                                 <p class="title gray">{{$t('activity.totalsupply')}}</p>
                                 <p class="value">{{activityDetail.totalSupply | fixedScale(activityDetail.amountScale)}}<span style="font-size:12px;margin-left:5px;">{{activityDetail.unit}}</span></p>
                             </div>
-                            <div class="info-item" v-if="activityDetail.type != 3">
+                            <div class="info-item" v-if="activityDetail.type!= 3">
                                 <p class="title gray">{{$t('activity.publishprice')}}</p>
                                 <p class="value">{{activityDetail.price | fixedScale(activityDetail.priceScale)}}<span style="font-size:12px;margin-left:5px;">{{activityDetail.acceptUnit}}</span></p>
                             </div>
-                            <div class="info-item" v-if="activityDetail.type != 5">
+                            <div class="info-item" v-if="activityDetail.type!= 5">
                                 <p class="title gray">{{$t('activity.activitycoin')}}</p>
                                 <p class="value">{{activityDetail.unit}}</p>
                             </div>
@@ -68,7 +68,7 @@
                             </div>
                             <div class="info-item">
                                 <p class="title gray">{{$t('activity.limittimes')}}</p>
-                                <p class="value" v-if="activityDetail.limitTimes > 0">{{activityDetail.limitTimes}}次</p>
+                                <p class="value" v-if="activityDetail.limitTimes > 0">{{activityDetail.limitTimes}} times</p>
                                 <p class="value" v-else>{{$t('activity.unlimited')}}</p>
                             </div>
                             <div class="info-item">
@@ -77,11 +77,11 @@
                                     {{activityDetail.minLimitAmout | fixedScale(activityDetail.amountScale)}} ~ {{activityDetail.maxLimitAmout | fixedScale(activityDetail.amountScale)}}
                                 </p>
 
-                                <p class="value" v-if="activityDetail.minLimitAmout > 0 && activityDetail.maxLimitAmout == 0"> ≥  {{activityDetail.minLimitAmout | fixedScale(activityDetail.amountScale)}}</p>
+                                <p class="value" v-if="activityDetail.minLimitAmout > 0 && activityDetail.maxLimitAmout == 0"> ≥ {{activityDetail.minLimitAmout | fixedScale(activityDetail.amountScale)}}</p>
 
-                                <p class="value" v-if="activityDetail.minLimitAmout == 0 && activityDetail.maxLimitAmout > 0"> ≤  {{activityDetail.maxLimitAmout | fixedScale(activityDetail.amountScale)}}</p>
+                                <p class="value" v-if="activityDetail.minLimitAmout == 0 && activityDetail.maxLimitAmout > 0"> ≤ {{activityDetail.maxLimitAmout | fixedScale(activityDetail.amountScale)}}</p>
 
-                                <p class="value" v-if="activityDetail.minLimitAmout == 0 && activityDetail.maxLimitAmout == 0"> 不限 </p>
+                                <p class="value" v-if="activityDetail.minLimitAmout == 0 && activityDetail.maxLimitAmout == 0"> Unlimited </p>
                             </div>
 
                             <div class="info-item" v-if="activityDetail.leveloneCount > 0">
@@ -98,7 +98,7 @@
                                 <p class="value">{{activityDetail.endTime | dateFormat}}</p>
                             </div>
                         </div>
-                        <!-- 仅自由申购类型显示已兑/剩余数量 -->
+                        <!-- open subscription only — shows redeemed/remaining -->
                         <div class="tips" v-if="activityDetail.type == 4 || activityDetail.type == 5">
                             <div class="left-tip">
                                 <p class="title gray">{{$t('activity.alreadyamount')}}</p>
@@ -109,7 +109,7 @@
                                 <p>{{(activityDetail.totalSupply - activityDetail.tradedAmount) | fixedScale(activityDetail.amountScale)}} {{activityDetail.unit}}</p>
                             </div>
                         </div>
-                        <!-- 持仓瓜分类型显示冻结参与者 -->
+                        <!-- holdings split — shows frozen participants -->
                         <div class="tips flexcolumn" v-if="activityDetail.type == 3">
                             <div class="tipsline1">
                                 <div class="left-tip">
@@ -122,7 +122,7 @@
                                 </div>
                             </div>
                             <div class="tipsline2" v-if="isLogin">
-                            {{$t('activity.currentdivided')}}：{{myHoldAmount | holdPercent(activityDetail.freezeAmount, activityDetail.totalSupply)}} {{activityDetail.unit}}
+                            {{$t('activity.currentdivided')}}: {{myHoldAmount | holdPercent(activityDetail.freezeAmount, activityDetail.totalSupply)}} {{activityDetail.unit}}
                             </div>
                         </div>
                         <p v-if="activityDetail.type == 3" class="hold-tips">*{{$t('activity.holdtips')}}</p>
@@ -142,14 +142,14 @@
                             </div>
                         </div>
                         <div class="bottom">
-                            <Button type="warning" size="large" long  v-if="activityDetail.step==1 && isActivityInDate" @click="apply">{{$t('activity.attend')}}</Button>
-                            <Button type="warning" size="large" long disabled  v-else>{{$t('activity.attend')}}</Button>
+                            <Button type="warning" size="large" long v-if="activityDetail.step==1 && isActivityInDate" @click="apply">{{$t('activity.attend')}}</Button>
+                            <Button type="warning" size="large" long disabled v-else>{{$t('activity.attend')}}</Button>
                         </div>
                         <p class="mobile-tip">{{$t('activity.tipsmobile1')}}</p>
                         <img v-if="activityDetail.step==3" src="../../assets/images/completed.png" style="position: absolute;top:-10px;right:15px;width: 110px;"></img>
                     </div>
                     <div class="memo">
-                        <p style="font-size:14px;margin-bottom:10px;">{{$t('activity.attention')}}：</p>
+                        <p style="font-size:14px;margin-bottom:10px;">{{$t('activity.attention')}}: </p>
                         <p>{{$t('activity.attentiontxt1')}}</p>
                         <p>{{$t('activity.attentiontxt2')}}</p>
                         <p>{{$t('activity.attentiontxt3')}}</p><br>
@@ -168,36 +168,36 @@
         <!-- model -->
         <Modal v-model="modal2" width="360">
           <p slot="header" style="color:#f60;text-align:center">
-            <Icon type="ios-mail" size="20" color="#00b5f6;" />
+            <Icon type="ios-mail" size="20" color="#ff6b00;" />
             <span>{{$t('uc.finance.withdraw.safevalidate')}}</span>
           </p>
           <div style="text-align:center">
             <Form ref="formValidateAddr" :model="formValidateAddr" :rules="ruleValidate" :label-width="85">
-              <!-- 手机号 -->
+              <!-- phone -->
               <FormItem :label="$t('uc.finance.withdraw.telno')" prop="mobileNo" v-show="validPhone">
                 <Input disabled size="large" v-model="formValidateAddr.mobileNo"></Input>
               </FormItem>
-              <!-- 手机验证码 -->
+              <!-- SMS code -->
               <FormItem :label="$t('uc.finance.withdraw.smscode')" prop="vailCode2" v-show="validPhone">
                 <Input v-model="formValidateAddr.vailCode2" size="large">
-                <!-- <Button slot="append">点击获取</Button> -->
+                <!-- <Button slot="append">Get code</Button> -->
                 <div class="timebox" slot="append">
                   <Button @click="send(2)" :disabled="disbtn">
-                    <!--sendMsgDisabled2为true 时间+秒    sendMsgDisabled2为false为，点击获取 -->
+                    <!--sendMsgDisabled2true shows the countdown; sendMsgDisabled2 false shows Get code -->
                     <span v-if="sendMsgDisabled2">{{time2+$t('uc.finance.withdraw.second')}}</span>
                     <span v-if="!sendMsgDisabled2">{{$t('uc.finance.withdraw.clickget')}}</span>
                   </Button>
                 </div>
                 </Input>
               </FormItem>
-              <!-- 邮箱 -->
+              <!-- email -->
               <FormItem :label="$t('uc.finance.withdraw.email')" prop="email" v-show="validEmail">
                 <Input disabled v-model="formValidateAddr.email" size="large"></Input>
               </FormItem>
-              <!-- 邮箱验证码 -->
+              <!-- Email code -->
               <FormItem :label="$t('uc.finance.withdraw.emailcode')" prop="vailCode1" v-show="validEmail">
                 <Input v-model="formValidateAddr.vailCode1" size="large">
-                <!-- <Button slot="append">点击获取</Button> -->
+                <!-- <Button slot="append">Get code</Button> -->
                 <div class="timebox" slot="append">
                   <Button @click="send(1)" :disabled="disbtn">
                     <span v-if="sendMsgDisabled1">{{time1+$t('uc.finance.withdraw.second')}}</span>
@@ -215,7 +215,7 @@
 
         <div class="app_bottom">
           <div class="left_logo">
-            <img style="float:left;" src="../../assets/images/applogo.png"></img>
+            <img style="float:left;" src="../../assets/images/applogo.svg"></img>
             <div style="float:left;height: 40px;line-height:40px;color:#000;">{{$t("cms.downloadslogan")}}</div>
           </div>
           <div class="right_btn_wrap"><router-link to="/app" class="right_btn">{{$t("cms.download")}}</router-link></div>
@@ -234,19 +234,19 @@ var moment = require("moment");
 export default {
   data() {
     return {
-        mybalance: 0, // 我的可用余额
+        mybalance: 0, // Available balance
         modal2: false,
         sendMsgDisabled1: false,
         sendMsgDisabled2: false,
-        time1: 60, // 发送验证码倒计时
-        time2: 60, // 发送验证码倒计时
+        time1: 60, // verification-code resend countdown
+        time2: 60, // verification-code resend countdown
         attendAmount: 0,
         myHoldAmount: 0,
         disbtn: false,
         validEmail: false,
         validPhone: false,
         myRecordList: [],
-        isActivityInDate: false, // 活动是否可参加
+        isActivityInDate: false, // whether the activity can be joined
         qrcode: {
             value: "",
             size: 200
@@ -329,7 +329,7 @@ export default {
       return moment(tick).format("YYYY-MM-DD HH:mm:ss");
     },
     fixedScale: function(value, scale) {
-      if(value != undefined && value != null && value != ""){
+      if(value!= undefined && value!= null && value!= ""){
         return value.toFixed(scale);
       }
       return 0;
@@ -346,14 +346,9 @@ export default {
     lang() {
       return this.$store.state.lang;
     },
-    langPram(){
-      if(this.$store.state.lang == "简体中文"){
-        return "CN";
-      }
-      if(this.$store.state.lang == "English"){
-        return "EN";
-      }
-      return "CN";
+    langPram() {
+      // English only — the backend must never be asked for CN content.
+      return "EN";
     },
     isLogin: function() {
       return this.$store.getters.isLogin;
@@ -370,8 +365,8 @@ export default {
         this.$http.post(this.host + "/uc/activity/detail", param).then(res => {
         if (res.status == 200 && res.body.code == 0) {
             this.activityDetail = res.body.data;
-            window.document.title = (this.lang == "简体中文" ? "活动 - " : "Activity - ") + this.activityDetail.title + " - 币严 | 全球比特币交易平台 | 全球数字货币交易平台";
-            //持仓瓜分类型进度显示处理
+            window.document.title = "Activity - " + this.activityDetail.title + " - INTAFACED | Sovereign Exchange";
+            // Holdings Split
             if(this.activityDetail.type == 3){
                 if(this.activityDetail.step == 1){
                     this.activityDetail.progress = 50;
@@ -428,7 +423,6 @@ export default {
           this.disbtn = false;
         }
       }, 1000);
-      // 输入检查
       if(!this.attendAmount) {
         if(this.activityDetail.type == 3)
             this.$Notice.error({
@@ -442,11 +436,10 @@ export default {
             });
         return;
       }
-      // 大于0
+      // 0
       if(parseFloat(this.attendAmount) == 0) {
         return;
       }
-      // 余额检查
       if(this.activityDetail.type == 4){
         if(parseFloat(this.attendAmount) * this.activityDetail.price > this.mybalance) {
             this.$Notice.error({
@@ -456,7 +449,6 @@ export default {
             return;
         }
       }
-      // 云矿机需整数购买
       if(this.activityDetail.type == 5) {
         if (!(/(^[1-9]\d*$)/.test(this.attendAmount))) {
             this.$Notice.error({
@@ -466,7 +458,7 @@ export default {
             return;
         }
       }
-      // 限购次数、限购量检查
+      // times,
       var temAlreadyAttendAmount = 0;
       var temAlreadyAttendTimes = this.myRecordList.length;
 
@@ -478,7 +470,6 @@ export default {
           }
       }
 
-      // 最小起兑量检查
       if(this.activityDetail.minLimitAmout > 0 && this.attendAmount < this.activityDetail.minLimitAmout){
         this.$Notice.error({
           title: this.$t("common.tip"),
@@ -487,7 +478,6 @@ export default {
         return;
       }
 
-      // 最大兑换量检查
       if(this.activityDetail.maxLimitAmout > 0 && ((temAlreadyAttendAmount + parseFloat(this.attendAmount)) > this.activityDetail.maxLimitAmout)){
 
         this.$Notice.error({
@@ -497,7 +487,7 @@ export default {
         return;
       }
 
-      // 个人限购次数检查
+      // times
       if(this.activityDetail.limitTimes > 0 && (temAlreadyAttendTimes+1) > this.activityDetail.limitTimes){
         this.$Notice.error({
           title: this.$t("common.tip"),
@@ -506,7 +496,7 @@ export default {
         return;
       }
 
-      // 显示安全验证
+      // Secure
       this.modal2 = true;
     },
     isMobile() {
@@ -514,7 +504,7 @@ export default {
         if(ua.match(/MicroMessenger/i) == 'micromessenger'){
             return true;
         }
-    　　let flag = window.navigator.userAgent.match(/(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i)
+      let flag = window.navigator.userAgent.match(/(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i)
         return flag;
     },
     handleSubmit(name) {
@@ -539,8 +529,8 @@ export default {
       }
 
       this.$http
-        .post(this.host + this.api.uc.attendActivity, param)
-        .then(response => {
+.post(this.host + this.api.uc.attendActivity, param)
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             this.$Notice.success({
@@ -560,8 +550,8 @@ export default {
     },
     getWallet() {
       this.$http
-        .post(this.host + this.api.uc.wallet + this.activityDetail.acceptUnit, {})
-        .then(response => {
+.post(this.host + this.api.uc.wallet + this.activityDetail.acceptUnit, {})
+.then(response => {
           var resp = response.body;
           this.mybalance = resp.data.balance || "";
         });
@@ -570,8 +560,8 @@ export default {
         let param = {};
         param["activityId"] = this.$route.params.id;
         this.$http
-        .post(this.host + this.api.uc.memberactivity, param)
-        .then(response => {
+.post(this.host + this.api.uc.memberactivity, param)
+.then(response => {
             var resp = response.body;
             this.myRecordList = resp.data;
             this.myHoldAmount = 0;
@@ -583,10 +573,10 @@ export default {
         });
     },
     getMember() {
-      //获取个人安全信息
+      // Secure
       this.$http
-        .post(this.host + "/uc/approve/security/setting")
-        .then(response => {
+.post(this.host + "/uc/approve/security/setting")
+.then(response => {
           var resp = response.body;
           if (resp.code == 0) {
             if (resp.data.mobilePhone) {
@@ -608,7 +598,7 @@ export default {
       this.disbtn = true;
       if (index == 1) {
         if (this.formValidateAddr.email) {
-          //获取邮箱code
+          // emailcode
           this.$http.post(this.host + "/uc/activity/code").then(response => {
             var resp = response.body;
             if (resp.code == 0) {
@@ -633,10 +623,10 @@ export default {
         }
       } else if (index == 2) {
         if (this.formValidateAddr.mobileNo) {
-          //获取手机code
+          // phonecode
           this.$http
-            .post(this.host + "/uc/mobile/activity/code")
-            .then(response => {
+.post(this.host + "/uc/mobile/activity/code")
+.then(response => {
               var resp = response.body;
               if (resp.code == 0) {
                 this.$Message.success(resp.message);
@@ -665,17 +655,17 @@ export default {
 </script>
 
 <style>
-    .ivu-progress-bg{
+.ivu-progress-bg{
       border-radius: 0!important;
       background-color: #ff8100;
       max-width: 100%;
     }
-    .mobile-tip{
+.mobile-tip{
         text-align:center;color:#FF0000;margin-top:10px;
         display: none;
         font-size:10px;
     }
-    .app_bottom{
+.app_bottom{
       display: none;
       z-index: 999;
       position: fixed;
@@ -683,15 +673,15 @@ export default {
       left: 0;
       width: 100%;
       height: 40px;
-      background: rgba(242,246,250,1) !important;
+      background: rgba(242,246,250,1)!important;
     }
-    .app_bottom .left_logo img{
+.app_bottom.left_logo img{
       height: 30px;margin-top:5px;border-radius: 5px;margin-left: 5px;margin-right: 5px;
     }
-    .app_bottom .right_btn_wrap{
+.app_bottom.right_btn_wrap{
       float: right;height: 40px;line-height: 40px;margin-right: 5px;
     }
-    .app_bottom .right_btn{
+.app_bottom.right_btn{
       color: #FFF;
       border-radius: 3px;
       padding: 0px 10px;
@@ -702,38 +692,38 @@ export default {
       background: linear-gradient(200deg, #ff9900, #ffbe2b, #ffa500);
     }
     @media screen and (max-width:768px){
-        .activity{
+.activity{
             padding-top: 45px!important;
         }
-        .activity_container {
+.activity_container {
             padding: 0 3%!important;
         }
-        .mobile-tip{
+.mobile-tip{
             display: block!important;
         }
-        .app_bottom{
+.app_bottom{
             display: block!important;
         }
-        .show-qrcode{
+.show-qrcode{
             display: none!important;
         }
-        .activity .activity_container .left-container .title img{
+.activity.activity_container.left-container.title img{
             height:40px!important;
             margin-top: 10px!important;
         }
-        .activity .activity_container .left-container .title .title-text{
+.activity.activity_container.left-container.title.title-text{
             padding-left: 10px!important;
         }
-        .activity .activity_container .left-container .title .title-text h1{
+.activity.activity_container.left-container.title.title-text h1{
             font-size:18px!important;
         }
-        .activity .activity_container .left-container{
+.activity.activity_container.left-container{
             min-height: 50px!important;
         }
-        .activity .activity_container .right-container{
+.activity.activity_container.right-container{
             min-height: 50px!important;
         }
-        .more-activity{
+.more-activity{
             display: block!important;
         }
     }
@@ -741,7 +731,7 @@ export default {
 
 <style lang="scss">
 .activity{
-    background: rgba(242,246,250,1) !important;
+    background: rgba(242,246,250,1)!important;
     height: 100%;
     background-size: cover;
     position: relative;
@@ -750,23 +740,23 @@ export default {
     padding-top: 60px;
     color: #fff;
 
-    .activity-detail-bannerimg {
+.activity-detail-bannerimg {
         display: block;
         width: 100%;
     }
-    .activity_container {
+.activity_container {
         padding: 0 12%;
         text-align: center;
         height: 100%;
         min-height: 600px;
         margin-top: 20px;
-        .left-container{
+.left-container{
             width: 100%;
             background:#FFF;
             min-height: 1600px;
             padding: 20px 20px;
             box-shadow: 0 0 25px #DDD;
-            .title{
+.title{
                 padding-bottom: 20px;
                 border-bottom: 1px solid #ededed;
                 display: flex;
@@ -775,14 +765,14 @@ export default {
                 img{
                     height: 80px;
                 }
-                .title-text{
+.title-text{
                     padding-left: 20px;
                     text-align:left;
                     h1{
                         margin-top: 5px;
                         font-size: 22px;
                         font-weight: normal;
-                        color: #31363e !important;
+                        color: #31363e!important;
                     }
                     p{
                         margin-top: 10px;
@@ -791,19 +781,19 @@ export default {
                     }
                 }
             }
-            .content-wrap {
+.content-wrap {
                 flex: 1 1 100%;
                 width: 100%;
                 background: #FFF;
                 min-height:600px;
-                .content {
+.content {
                     padding: 20px 10px;
                     color:#74777a;
                     letter-spacing: 1px;
                     font-size: 14px;
                     text-align:left;
                     line-height: 25px;
-                    .content-text{
+.content-text{
                         p{
                             text-align: justify;
                             &::after {
@@ -816,12 +806,12 @@ export default {
                 }
             }
         }
-        .right-container{
+.right-container{
             width: 100%;
             background: #FFF;
             min-height: 300px;
             padding: 20px 20px;
-            color: #31363e !important;
+            color: #31363e!important;
             box-shadow: 0 0 25px #DDD;
             p.base{
                 text-align: left;
@@ -829,8 +819,8 @@ export default {
                 margin-bottom: 35px;
                 color: #5d5d5d;
             }
-            .progress{
-                .progress-text{
+.progress{
+.progress-text{
                   width: 100%;
                   display: flex;
                   flex-direction: row;
@@ -840,16 +830,16 @@ export default {
                   }
                 }
             }
-            .info{
+.info{
                 margin-top: 35px;
-                .info-item{
+.info-item{
                     text-align:left;
                     margin-bottom: 20px;
-                    .title{
+.title{
                         font-size: 13px;
                         margin-bottom: 5px;
                     }
-                    .value{
+.value{
                         font-size: 14px;
                         letter-spacing: 1px;
                         a{
@@ -860,22 +850,22 @@ export default {
                     }
                 }
             }
-            .flexcolumn{
+.flexcolumn{
                 display: flex;
-                flex-direction: column !important;
+                flex-direction: column!important;
             }
             p.hold-tips{
                 font-size: 12px;text-align:right;margin-top: 10px;color: #F90;
             }
-            .tips{
-                background: rgba(240,245,249,1) !important;
+.tips{
+                background: rgba(240,245,249,1)!important;
                 padding: 15px 15px;
                 border-radius: 3px;
                 margin-top: 35px;
                 display: flex;
                 flex-direction: row;
                 justify-content: space-between;
-                .left-tip{
+.left-tip{
                     text-align:left;
                     p.title{
                         font-size: 12px;
@@ -884,7 +874,7 @@ export default {
                         font-size: 13px;
                     }
                 }
-                .right-tip{
+.right-tip{
                     text-align: right;
                     p.title{
                         font-size: 12px;
@@ -893,17 +883,17 @@ export default {
                         font-size: 13px;
                     }
                 }
-                .tipsline1{
+.tipsline1{
                     display:flex;flex-direction:row;justify-content:space-between;width: 100%;
                 }
-                .tipsline2{
+.tipsline2{
                     padding-top:10px;font-size:12px;width:100%;display:flex;flex-direction:row;justify-content:center;width: 100%;text-align:center;border-top: 1px solid #cedae3;
                     margin-top: 10px;
                 }
             }
-            .bottom{
+.bottom{
                 width:100%;margin-top: 30px;
-                .ivu-btn-warning[disabled]{
+.ivu-btn-warning[disabled]{
                     color: #ffffff;
                     background-color: #8c8c8c;
                     border-color: #dcdee2;
@@ -913,27 +903,27 @@ export default {
                     padding: 10px 5px;
                 }
             }
-            .t-header{
-                font-size: 12px; color: #727272;padding-bottom:3px;background:#f0f5f9 !important;padding:5px 0;margin-top:-20px;
+.t-header{
+                font-size: 12px; color: #727272;padding-bottom:3px;background:#f0f5f9!important;padding:5px 0;margin-top:-20px;
             }
-            .do-activity{
+.do-activity{
                 display:flex;flex-direction:row;justify-content:space-between;margin-top: 30px;
-                .do-left{
+.do-left{
                     width: 50%;
                     text-align:left;
-                    .p-title{
+.p-title{
                         font-size: 12px;
-                        color: #aeb2b9 !important;
+                        color: #aeb2b9!important;
                     }
                 }
-                .do-right{
+.do-right{
                     width: 50%;
                     text-align: right;
-                    .p-title{
+.p-title{
                         font-size: 12px;
-                        color: #aeb2b9 !important;
+                        color: #aeb2b9!important;
                     }
-                    .p-value{
+.p-value{
                         margin-top: 2px;
                         line-height: 30px;
                         height:30px;
@@ -949,10 +939,10 @@ export default {
                 }
             }
         }
-        .memo{
+.memo{
             text-align:left;
             font-size: 12px;
-            color: #959595 !important;
+            color: #959595!important;
             background:#fffded;
             padding: 20px 20px 30px 20px;
             border-top: 1px dashed #CCC;
@@ -960,7 +950,7 @@ export default {
                 margin-top: 5px;
             }
         }
-        .more-activity{
+.more-activity{
             width: 100%;
             margin-top: 20px;
             border-radius: 3px;
@@ -972,12 +962,12 @@ export default {
 }
 
 .gray{
-  color: #aeb2b9 !important;
+  color: #aeb2b9!important;
 }
 .do-activity{
-    .ivu-input,
-    .ivu-input-number-input,
-    .ivu-input-number {
+.ivu-input,
+.ivu-input-number-input,
+.ivu-input-number {
         font-size:14px;
       background-color: #FFF;
       color: #000;
@@ -994,16 +984,16 @@ export default {
         box-shadow: none;
       }
     }
-    .ivu-input-group-append{
+.ivu-input-group-append{
         background-color: #ffffff;
         border-bottom: 1px dashed #CCC;
         border-radius: 0;
         font-size: 14px;
         color: #5f5f5f;
     }
-    .ivu-input[disabled]:hover,
-    fieldset[disabled] .ivu-input:hover {
-      border-color: #27313e;
+.ivu-input[disabled]:hover,
+    fieldset[disabled].ivu-input:hover {
+      border-color: #141414;
     }
 }
 </style>

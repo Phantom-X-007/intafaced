@@ -42,13 +42,228 @@ module.exports = {
         assetmanage: "Finance",
         trademanage: "Exchange",
         activity: "Lightning",
-        lab: "BIZZAN Lab",
+        lab: "INTAFACED Lab",
         ctc: "C2C Exchange",
-        labdetail: "BIZZAN Lightning Lab",
+        labdetail: "INTAFACED Lightning Lab",
         invite: "Promoting Partner",
         whitepaper: "White Paper",
         scandownload: "Download App",
-        innovationmanage: "Innovation"
+        innovationmanage: "Innovation",
+        platform: "Platform"
+    },
+    /**
+     * The INTAFACED platform surfaces — every feature area of the Sovereign OS,
+     * embedded in this shell rather than served as a second app.
+     *
+     * Copy here is deliberately blunt about what is not built. A screen with no
+     * data has to say WHY in a sentence a non-engineer can act on, otherwise an
+     * unfinished module reads as a finished empty one.
+     */
+    intafaced: {
+        hub: {
+            title: "Platform",
+            lead: "Every INTAFACED module, inside this app. One account, one balance owner — the ledger. This page reports what each module can actually do today, not what is planned.",
+            summary: "{live} live · {partial} partially reachable · {absent} not reachable",
+            legendTitle: "What the labels mean",
+            legendLive: "A real procedure answers with real data today.",
+            legendPartial: "The module is behind the front door, but the surface you want is refused — and the reason is named on its screen.",
+            legendAbsent: "There is nothing to call: no route at the edge, no mounted router, or no service at all.",
+            open: "Open",
+            sessionTitle: "Platform session",
+            sessionLead: "The modules below authenticate against svc-identity through svc-edge. This is a SEPARATE session from your exchange login above — one account is the goal and this is not it yet.",
+            sessionMemoryOnly: "Held in memory only. A page reload signs this session out; an httpOnly refresh cookie is the fix and it is not built.",
+            identifier: "Email or handle",
+            password: "Password",
+            signIn: "Sign in",
+            signOut: "Sign out",
+            signedInAs: "Signed in",
+            userId: "User id",
+            expires: "Access token expires",
+            scopes: "Scopes carried by this session",
+            noSession: "No platform session. Public procedures still answer; everything scoped will refuse.",
+            signInFailed: "Sign-in failed",
+            probeTitle: "Front door",
+            probeLead: "Live check against svc-edge — the single entry point every module goes through.",
+            probeRun: "Re-check",
+            probeRoutes: "Routes the edge will forward"
+        },
+        state: {
+            loading: "Reading",
+            serviceSaid: "The service said:",
+            goSignIn: "Go to platform session",
+            empty: "The endpoint answered, and there is nothing in it yet.",
+            refresh: "Refresh"
+        },
+        reason: {
+            unreachable: {
+                title: "svc-edge did not answer",
+                body: "The request never reached the platform. Either the dev-server proxy for /api is not configured, or svc-edge is not running on port 4000."
+            },
+            not_routed: {
+                title: "The front door has no route for this module",
+                body: "svc-edge refuses any prefix that is not in its route table, rather than forwarding it into the internal network. Until the prefix is added there, no browser can reach this service."
+            },
+            not_mounted: {
+                title: "The service serves no such path",
+                body: "The service is up and the edge routed the request, but the procedure is not exposed. Its tRPC router exists in the source and is never registered on the HTTP server."
+            },
+            unauthorized: {
+                title: "No platform session",
+                body: "This procedure needs an authenticated principal. Sign in to the platform session and the same call will be retried with a bearer token."
+            },
+            scope_denied: {
+                title: "This session does not carry the required scope",
+                body: "The session is valid; the scope simply is not in it. svc-identity issues a fixed scope list to an interactive session, and this one is not on that list — so no user can reach this procedure today."
+            },
+            tier_required: {
+                title: "A verification tier is required",
+                body: "The jurisdiction matrix gates this module behind a KYC tier your account has not reached. This is a policy refusal, not a fault."
+            },
+            forbidden: {
+                title: "Refused",
+                body: "The service authenticated the caller and still declined."
+            },
+            error: {
+                title: "The service returned an error",
+                body: "The call reached the service and it answered with a failure."
+            }
+        },
+        modules: {
+            bank: {
+                title: "Bank",
+                blurb: "Multi-currency spaces, standing orders and earn pools — every figure read from the ledger at request time.",
+                note: "Behind the front door and mounted. Every procedure demands bank:read or bank:write, and an interactive session is issued neither, so no user can read a space today."
+            },
+            pay: {
+                title: "Pay",
+                blurb: "Withdrawable balance and withdrawal history, read from the ledger rather than summed anywhere else.",
+                note: "The withdrawal surfaces answer a normal session. Merchant, payment and settlement need pay:* scopes that are issued to nobody."
+            },
+            p2p: {
+                title: "OTC / P2P",
+                blurb: "Peer-to-peer offers across 100+ fiat currencies, escrowed on the ledger.",
+                note: "The fiat currency list is public and real. Offers carry a scope this session does hold, but the jurisdiction matrix refuses them below verification tier \"basic\"."
+            },
+            token: {
+                title: "Token",
+                blurb: "Your IFC stake and the access tier and fee discount it buys.",
+                note: "Both procedures answer a normal session with real figures."
+            },
+            agents: {
+                title: "Agents",
+                blurb: "The model-agnostic gateway — the routing table it will use, priced per million tokens, and your own action log.",
+                note: "The routing table and your action log answer a normal session. Opening a session and running a task need agents:execute, which is issued to nobody."
+            },
+            blueprint: {
+                title: "Blueprint",
+                blurb: "Your sovereign profile — portable, exportable, erasable, and never a balance.",
+                note: "Behind the front door and mounted. Every procedure demands blueprint:read or blueprint:write, and neither is issued to an interactive session."
+            },
+            protocol: {
+                title: "Protocol",
+                blurb: "Self-custody smart accounts and session keys. Non-custodial by construction — we relay, we never hold.",
+                note: "The service is up and behind the front door, but it never registers its tRPC router. Only /health and /ready are served; every procedure written in its router is unreachable."
+            },
+            dex: {
+                title: "DEX",
+                blurb: "Best execution split across venues, on the Protocol Plane.",
+                note: "The router is mounted and the routing arithmetic is real, but it takes the venue quotes as INPUT and nothing in the platform supplies them yet — so there is no price to show."
+            },
+            chain: {
+                title: "Chain",
+                blurb: "INTACHAIN read models — indexed height, markets, book, fills and positions.",
+                note: "svc-indexer is running and serves its router, but there is no /api/indexer in svc-edge's route table. The edge answers 404, so no browser can reach it."
+            },
+            academy: {
+                title: "Academy",
+                blurb: "Courses, workbooks, live lobbies and paper trading.",
+                note: "The service does not exist. There is no svc-academy in the monorepo, no route at the edge, and no endpoint to call."
+            },
+            launch: {
+                title: "Launch",
+                blurb: "Token factory, launchpad and vesting from audited templates.",
+                note: "The service does not exist. There is no svc-launch in the monorepo, no route at the edge, and no endpoint to call."
+            }
+        },
+        bank: {
+            spaces: "Spaces",
+            unnamed: "Assets without a space",
+            pools: "Earn pools",
+            schedules: "Standing orders",
+            balance: "Balance",
+            goal: "Goal",
+            lockedUntil: "Locked until",
+            apr: "APR",
+            term: "Term",
+            minDeposit: "Minimum deposit",
+            cadence: "Cadence",
+            nextRun: "Next run",
+            status: "Status",
+            days: "days"
+        },
+        pay: {
+            balanceTitle: "Withdrawable balance",
+            balanceLead: "Read from svc-ledger, not from svc-pay's own tables. The ledger is the balance.",
+            asset: "Asset",
+            check: "Check",
+            available: "Available",
+            withdrawals: "My withdrawals",
+            noWithdrawals: "No withdrawals on this account yet.",
+            amount: "Amount",
+            created: "Created"
+        },
+        p2p: {
+            fiat: "Fiat currencies",
+            fiatLead: "Served publicly by svc-p2p — no session required.",
+            offers: "Open offers",
+            code: "Code",
+            name: "Name",
+            symbol: "Symbol",
+            minorUnits: "Minor units",
+            side: "Side",
+            price: "Price",
+            limits: "Limits"
+        },
+        token: {
+            lead: "Figures for the account holding this platform session.",
+            staked: "IFC staked",
+            tier: "Access tier",
+            feeDiscount: "Fee discount",
+            bps: "bps",
+            tierBug: "svc-token returns the tier as \"[object Object]\": its router stringifies an object with String(). Shown verbatim rather than cleaned up here, because the fix belongs in the service."
+        },
+        agents: {
+            routes: "Routing table",
+            routesLead: "What the gateway will use per task, and what it costs. Prices are decimal strings, per million tokens.",
+            task: "Task",
+            capability: "Capability",
+            maxOutput: "Max output tokens",
+            inputPrice: "Input / 1M",
+            outputPrice: "Output / 1M",
+            log: "My action log",
+            logLead: "Every action an agent took on your account. Always your own.",
+            noActions: "No agent has acted on this account."
+        },
+        blueprint: {
+            lead: "Your profile, as svc-blueprint holds it."
+        },
+        protocol: {
+            healthTitle: "Service health",
+            healthLead: "The only surface svc-protocol serves today.",
+            chainId: "Chain id",
+            custodial: "Custodial",
+            relayEnabled: "Relay enabled",
+            unreachableList: "Written, and unreachable from any browser:"
+        },
+        dex: {
+            healthTitle: "Service health",
+            custodial: "Custodial",
+            quoteTitle: "Route a quote",
+            quoteLead: "svc-dex splits a size across venue quotes you supply. It has no venue feed of its own, so this is the arithmetic without a market behind it."
+        },
+        chain: {
+            wouldServe: "What svc-indexer serves on its own port, and the edge does not forward:"
+        }
     },
     sectionPage: {
         ptaqTitle: 'Platform Security',
@@ -56,20 +271,20 @@ module.exports = {
         ptslTitle: 'Platform Strength',
         ptslContent: "The world's largest bitcoin trading platform",
         newsTitle: 'News Center',
-        brandTitle: "About BIZZAN",
-        brandDetail: "Honest  |  Fair  |  Enthusiasm  |  Open",
-        brandDesc1: "BIZZAN was founded by a group of early Bitcoin participants and geeks. The core members of the team are from well-known enterprises such as Google, Microsoft, Alibaba, Tencent and so on. It has deep research and development strength and rich experience in Internet product operation.",
-        brandDesc2: "BIZZAN is located in the basic service provider of block chain, dedicated to providing high-quality encrypted assets trading platform for global users, adhering to the basic principle of “DO NOT BE EVIL”, upholding honest, fair and enthusiastic service to customers, and welcoming all partners/projects that are beneficial to the fundamental interests of users with an open attitude.",
+        brandTitle: "About INTAFACED",
+        brandDetail: "Honest | Fair | Enthusiasm | Open",
+        brandDesc1: "INTAFACED was founded by a group of early Bitcoin participants and geeks. The core members of the team are from well-known enterprises such as Google, Microsoft, Alibaba, Tencent and so on. It has deep research and development strength and rich experience in Internet product operation.",
+        brandDesc2: "INTAFACED is located in the basic service provider of block chain, dedicated to providing high-quality encrypted assets trading platform for global users, adhering to the basic principle of “DO NOT BE EVIL”, upholding honest, fair and enthusiastic service to customers, and welcoming all partners/projects that are beneficial to the fundamental interests of users with an open attitude.",
         gettingstart: "HOT | Beginner's Guide",
-        officialstart: "BIZZAN Official Customer Service",
+        officialstart: "INTAFACED Official Customer Service",
         oneminutebuy: "Fiat Currency",
         oneminutebuytips: "Trade Bitcoin with usd",
         baseknow: "Basics of Blockchain",
-        baseknowtips: "Blockchain、Bitcoin etc.",
+        baseknowtips: "Blockchain, Bitcoin etc.",
         baseexchange: "How To Exchange",
-        baseexchangetips: "How to buy and sell on bizzan",
+        baseexchangetips: "How to buy and sell on intafaced",
         usersocial: "User Community",
-        usersocialtips: "Experience、Information etc.",
+        usersocialtips: "Experience, Information etc.",
         mainboard: "Main Board",
         preview: "Previous",
         nextpage: "Next",
@@ -199,7 +414,7 @@ module.exports = {
     },
     ctc: {
         title: "One-click Sale ● Platform Guarantee ● Security",
-        desc:"Crypto assets are managed by BIZZAN, and the acceptor provides exchange services for exchange.",
+        desc:"Crypto assets are managed by INTAFACED, and the acceptor provides exchange services for exchange.",
         buyin: "Buy",
         sell: "Sell",
         buyprice: "Buy Price",
@@ -212,11 +427,11 @@ module.exports = {
         time: "Trade Date",
         tip: "Notice",
         notice: "Notice",
-        notice1: "1. The legal currency trading area is an asset transaction between users and acceptors. The funds are not transferred to a platform, and the platform does not accept RMB recharge/remittance；",
-        notice2: "2. The acceptors of legal currency transactions have passed real-name certification, offering transaction margins, and the tokens are hosted by the platform, so you can be assured that they can be converted；",
-        notice3: "3. The service time of the acceptor is 09:00-21:00 per day. The acceptance is completed within 30 minutes after the acceptance of the order, and the two-hour uncompleted transaction is cancelled；",
-        notice4: "4. In order to support bank cards in the legal currency trading area, it is necessary to transfer funds using an account that you have authenticated by your real name；",
-        notice5: "5. In order to ensure the security of transaction funds, the legal currency transaction requires users to pass real-name authentication；",
+        notice1: "1. The legal currency trading area is an asset transaction between users and acceptors. The funds are not transferred to a platform, and the platform does not accept RMB recharge/remittance; ",
+        notice2: "2. The acceptors of legal currency transactions have passed real-name certification, offering transaction margins, and the tokens are hosted by the platform, so you can be assured that they can be converted; ",
+        notice3: "3. The service time of the acceptor is 09:00-21:00 per day. The acceptance is completed within 30 minutes after the acceptance of the order, and the two-hour uncompleted transaction is cancelled; ",
+        notice4: "4. In order to support bank cards in the legal currency trading area, it is necessary to transfer funds using an account that you have authenticated by your real name; ",
+        notice5: "5. In order to ensure the security of transaction funds, the legal currency transaction requires users to pass real-name authentication; ",
         payType: "Pay Account",
         receiveType: "Receive Account",
         moneyTips: "The above price is for reference only. Please refer to the actual settlement amount after the following order.",
@@ -257,7 +472,7 @@ module.exports = {
         myad: {
             title: 'My Ad',
             post: 'Post An Ad',
-            alert: '【Tip】：When the minimum amount of advertising purchases plus the fee is greater than the remaining number of advertisements, the ad is automatically taken off the shelf.',
+            alert: '[Tip]: When the minimum amount of advertising purchases plus the fee is greater than the remaining number of advertisements, the ad is automatically taken off the shelf.',
             no: 'no',
             type: 'type',
             sell: 'sell',
@@ -275,13 +490,13 @@ module.exports = {
         },
         myorder: 'My Order',
         chatline: {
-            status_1: 'The buyer did not pay and waited for the buyer to pay！',
-            status_2: 'The buyer has paid and waits for the seller to release！',
-            status_3: 'Order completed transaction！',
-            status_4: 'Order is being appealed！',
-            status_5: 'Order cancelled！',
+            status_1: 'The buyer did not pay and waited for the buyer to pay!',
+            status_2: 'The buyer has paid and waits for the seller to release!',
+            status_3: 'Order completed transaction!',
+            status_4: 'Order is being appealed!',
+            status_5: 'Order cancelled!',
             loadmore: 'Load more',
-            warning: 'Anti-fraud alerts: In the recent past, fraudsters have repeatedly used bank transfer remittance information and fake remittance credentials for fraud, so please be sure to check your own payment account number. Ensure the safety of remittance funds and avoid the risk of bank cards being frozen！',
+            warning: 'Anti-fraud alerts: In the recent past, fraudsters have repeatedly used bank transfer remittance information and fake remittance credentials for fraud, so please be sure to check your own payment account number. Ensure the safety of remittance funds and avoid the risk of bank cards being frozen!',
             contenttip: 'Please enter chat content Enter key to send',
             contentmsg: 'Message cannot be empty',
         },
@@ -297,8 +512,8 @@ module.exports = {
             note: 'Note',
             notetip: 'Please do not use other chat software to communicate with each other, and do not accept any documents, email attachments, etc. sent to you by the direction. All communication links are completed in the chat window on this page.',
             operatetip_2_1: 'The digital assets that you have sold have been submitted to the platform for hosting and freezing. ou have confirmed your payment, click',
-            operatetip_2_2: 'Please do not believe any reason for urging the currency to be released, confirm the receipt of the money and release the digital assets to avoid loss！',
-            operatetip_2_3: 'After receiving the account short message, please be sure to log in to online banking or mobile banking to confirm whether the payment is accounted for, to avoid the false release of digital assets due to receiving fraudulent messages！',
+            operatetip_2_2: 'Please do not believe any reason for urging the currency to be released, confirm the receipt of the money and release the digital assets to avoid loss!',
+            operatetip_2_3: 'After receiving the account short message, please be sure to log in to online banking or mobile banking to confirm whether the payment is accounted for, to avoid the false release of digital assets due to receiving fraudulent messages!',
             confirmrelease: 'Confirm release',
             paydigital: 'Pay digital assets',
             orderstatus: 'Order status',
@@ -321,7 +536,7 @@ module.exports = {
             qrcode: 'QRCode',
             msg1: 'Are you sure you have paid?',
             msg2: 'Payments are not refundable! Are you sure to cancel your order?',
-            msg3: '【Repeat】：Payments are not refundable!Are you sure to cancel your order?',
+            msg3: '[Repeat]: Payments are not refundable!Are you sure to cancel your order?',
             msg4: 'Paid, not received',
             msg5: 'Already paid, not received',
             tip: 'Tip',
@@ -389,9 +604,9 @@ module.exports = {
             remarktitle: 'Horizon Remarks',
             exchangetitle: 'Trading Information',
             exchange_tip1: 'After you initiate the transaction request, the digital currency is locked in the hosting and protected by the platform. If you are a seller, after you initiate a transaction request, you can top up and wait for the buyer to pay. Buyers pay within the payment deadline. After you receive the payment, you should release the digital currency that is under your custody.',
-            exchange_tip2: 'Read before trading《Platform Network Terms of Service》 and FAQs, trading guides and other help documentation.',
+            exchange_tip2: 'Read before tradingPlatform Network Terms of Service and FAQs, trading guides and other help documentation.',
             exchange_tip3: 'Beware of liar!Before the transaction, please check the rating received by the user and pay more attention to the newly created account.',
-            exchange_tip4: 'Please note，Rounding and price fluctuations may affect the amount of digital currency that is eventually traded.The fixed amount you enter determines the final amount, and the digital currency amount will be calculated from the instant exchange rate at the same time that the request is issued.',
+            exchange_tip4: 'Please note, Rounding and price fluctuations may affect the amount of digital currency that is eventually traded.The fixed amount you enter determines the final amount, and the digital currency amount will be calculated from the instant exchange rate at the same time that the request is issued.',
             exchange_tip5: 'Hosting services protect both buyers and sellers of online transactions.In the event of a dispute, we will evaluate all the information provided and release the hosted digital currency to its legal owner.',
             warning1: 'Enter up to 2 decimal places',
             warning2: 'Order amount is',
@@ -436,7 +651,7 @@ module.exports = {
             exchangeperiod_text1: 'Please enter your trading deadline',
             minute: 'min',
             tip1: 'How much time the buyer can accept transactions, please enter an integer',
-            tip2: '【Tip】Can be bound to personal center/Add payment method',
+            tip2: '[Tip]Can be bound to personal center/Add payment method',
             tip3: 'Please enter your minimum transaction amount',
             tip4: 'Please enter your maximum transaction amount',
             tip5: 'You can fill in your special requirements in the remarks information, such as: the buyer\'s requirements, online time and so on.',
@@ -531,26 +746,26 @@ module.exports = {
         alreadyamount: "Already Sell Amount",
         leftamount: "Left Amount",
         attention: "Attention",
-        attentiontxt1: "1、Assets will be frozen after submitting for participation in [warehouse partitioning] and [free subscription] type activities until thawing is completed.",
-        attentiontxt2: "2、Users may not withdraw their application for participation after participating in the activities of the type of 'Holder Divide' and 'Fress Buy'",
-        attentiontxt3: "3、If the activity is cancelled due to the project party and other force majeure factors, the original route shall be returned to the frozen assets.",
-        attentiontxt4: "* The right of final interpretation of this activity belongs to the official ownership of BIZZAN.",
+        attentiontxt1: "1, Assets will be frozen after submitting for participation in [warehouse partitioning] and [free subscription] type activities until thawing is completed.",
+        attentiontxt2: "2, Users may not withdraw their application for participation after participating in the activities of the type of 'Holder Divide' and 'Fress Buy'",
+        attentiontxt3: "3, If the activity is cancelled due to the project party and other force majeure factors, the original route shall be returned to the frozen assets.",
+        attentiontxt4: "* The right of final interpretation of this activity belongs to the official ownership of INTAFACED.",
         inputamount: "Input Amount",
         inputholdamount: "Input Lock Amount",
         mybalance: "Available Balance",
         holdtips: "[HolderDivide] requires lockout until the end of the activity.",
         pleaseinputamount: "Please input amount!",
         pleaseinputholdamount: "Please input hold amount!",
-        commitfailed: "Commit Failed！",
-        minlimitamountfailed: "The quantity of exchange must not be less than the minimum minimum amount of exchange.！",
-        maxlimitamountfailed: "The amount of exchange shall not be greater than the maximum purchase amount.！",
-        limittimesfailed: "You have participated in more than the maximum number of individual purchases.！",
-        balancenotenough: "Balance is not enough！",
+        commitfailed: "Commit Failed!",
+        minlimitamountfailed: "The quantity of exchange must not be less than the minimum minimum amount of exchange.!",
+        maxlimitamountfailed: "The amount of exchange shall not be greater than the maximum purchase amount.!",
+        limittimesfailed: "You have participated in more than the maximum number of individual purchases.!",
+        balancenotenough: "Balance is not enough!",
         headertitledesc: "Open Laboratories for Win-win Cooperation among Investors, Projectors and Exchanges",
         currentdivided: "My current position will get",
         leveloneCount: "Limit Level One Count",
         submit: "Submit",
-        tipsmobile: "Please use PC web（www.bizzan.com）",
+        tipsmobile: "Please use PC web (www.intafaced.com)",
         tipsmobile1: "You can enter PC web to attend this activity.",
         intvalue: "Please input int value",
         inputminingamount: "Input Buy Count",
@@ -566,22 +781,22 @@ module.exports = {
         extrareward: "Additional rewards",
         partnerlevel: "Partnership level",
         ruledetail: "Rule details",
-        ruleprofile1:"[Promotion Partner] is the highest proportion of online Commission return and the longest time of commission return (maximum lifetime commission). Promoters who make corresponding efforts can become real platform ‘partners’ and enjoy the dividend of growing together with BIZZAN trading platform. Detailed rules are as follows:",
+        ruleprofile1:"[Promotion Partner] is the highest proportion of online Commission return and the longest time of commission return (maximum lifetime commission). Promoters who make corresponding efforts can become real platform ‘partners’ and enjoy the dividend of growing together with INTAFACED trading platform. Detailed rules are as follows:",
         ruleprofile2:"",
         ruleprofile3:"",
         ruleprofile4:"",
-        ruletext1: "1、In order to preach the concept of digital assets and expand the scale of users, BIZZAN launched the “Promotion Partner” program, which is effective for a long time.",
-        ruletext2: "2、Inviting friends can be divided into two levels. If A invites B, then B is A's first-level friend. If B invites C, then C belongs to B's first-level friend and also to A's second-level friend.",
-        ruletext3: "3、When promoting the registration of friends, the first-level friends of inviters can only be the first-level friends of inviters by links provided by inviters or by manually entering invitation codes of inviters.",
-        ruletext4: "4、After the invitee registers with the inviter's invitation code and completes the real-name certification, the Commission incentive will take effect.",
-        ruletext5: "5、The time of commission is N months from the beginning of the invitee's real-name certification. According to the different grades, the proportion of commission enjoyed is different.",
-        ruletext6: "6、Promotion of commission assets is the transaction fee of lower-level Friend Currency, which is the three market base currencies, namely USDT, BTC and ETH.",
-        ruletext7: "7、The proportion and duration of promotion commission are positively correlated with the number of first-level friends. The more the number of promotion, the higher the proportion of enjoyable commission. The specific promotion of commission rebate ratio is as follows：",
-        ruletext8: "8、TOP10 or TOP100 will be awarded additional incentives by BIZZAN from time to time.",
-        ruletext9: "9、If other activities are in conflict with the activities of the Promotion Partner, the Partners will be expected to understand whether to change temporarily after consultation.",
-        ruletext10: "10、L4(Xunfu), L5(Taishou) and L6(Jiedushi) envoy-level partners are entitled to 5%, 10% and 15% bonuses of the total annual Commission returns, respectively.",
-        ruletext11: "11、The right of final interpretation of this activity belongs to BIZZAN.",
-        ruleexampletitle: "For Example：",
+        ruletext1: "1, In order to preach the concept of digital assets and expand the scale of users, INTAFACED launched the “Promotion Partner” program, which is effective for a long time.",
+        ruletext2: "2, Inviting friends can be divided into two levels. If A invites B, then B is A's first-level friend. If B invites C, then C belongs to B's first-level friend and also to A's second-level friend.",
+        ruletext3: "3, When promoting the registration of friends, the first-level friends of inviters can only be the first-level friends of inviters by links provided by inviters or by manually entering invitation codes of inviters.",
+        ruletext4: "4, After the invitee registers with the inviter's invitation code and completes the real-name certification, the Commission incentive will take effect.",
+        ruletext5: "5, The time of commission is N months from the beginning of the invitee's real-name certification. According to the different grades, the proportion of commission enjoyed is different.",
+        ruletext6: "6, Promotion of commission assets is the transaction fee of lower-level Friend Currency, which is the three market base currencies, namely USDT, BTC and ETH.",
+        ruletext7: "7, The proportion and duration of promotion commission are positively correlated with the number of first-level friends. The more the number of promotion, the higher the proportion of enjoyable commission. The specific promotion of commission rebate ratio is as follows: ",
+        ruletext8: "8, TOP10 or TOP100 will be awarded additional incentives by INTAFACED from time to time.",
+        ruletext9: "9, If other activities are in conflict with the activities of the Promotion Partner, the Partners will be expected to understand whether to change temporarily after consultation.",
+        ruletext10: "10, L4(Xunfu), L5(Taishou) and L6(Jiedushi) envoy-level partners are entitled to 5%, 10% and 15% bonuses of the total annual Commission returns, respectively.",
+        ruletext11: "11, The right of final interpretation of this activity belongs to INTAFACED.",
+        ruleexampletitle: "For Example: ",
         ruleexamplecontent1: "If the user Xiaoyan invited 100 first-class friends, TA's first-class friends invited five second-class friends, then Xiaoyan had 100 first-class friends and 500 second-class friends. If the average person trades 3000 yuan per day, Xiaoyan's monthly income is about (100 * 3000 * 0.001 * 30% + 500 * 3000 * 0.001 * 10%)* 30 = 7200 / month.",
         ruleexamplecontent2: "If user Xiaoyan invited 1000 first-class friends, TA first-class friends invited 5 second-class friends, Xiaoyan had 1000 first-class friends and 5000 second-class friends. If the average person trades 3000 yuan per day, Xiaoyan's monthly income is about (1000*3000*0.001*50%+5000*3000*0.001*20%)*30=135000/month.",
         lastupdate: "Last updated in",
@@ -610,13 +825,13 @@ module.exports = {
         commissionusdt: "Commission(USDT)",
         ranktip1: "The number of invitations is the number of first-class friends. This list ranks the total amount of commissions from large to small.",
         ranktip2: "The number of invitations is the number of first-class friends. The list is ranked by the number of first-class friends invited.",
-        thanks: "Thank you for supporting BIZZAN！",
+        thanks: "Thank you for supporting INTAFACED!",
         headertip: "The above data is not updated in real time. The system statistics and updates every 24H.",
         ptools: "Promotion Tools",
         pt_title: "Cryptocurrency Gift Card",
         pt_desc: "This is a surprise from the future, to send friends, relatives, customers, partners.",
         pt_more: "More tools is coming",
-        pt_tips: "If you have a good idea, please send an email to promotion@bizzan.com, with a reward after adoption.！",
+        pt_tips: "If you have a good idea, please send an email to promotion@intafaced.com, with a reward after adoption.!",
         pt_card_amount: "Card Amount",
         pt_card_deadline: "DeadLine",
         pt_card_noend: "Indefinite",
@@ -625,11 +840,11 @@ module.exports = {
         pt_card_rule: "Rule Details",
         pt_card_summary: "Digital currency gift card is a promotional tool developed to enable promotional partners to better invite offline friends. When users exchange gift cards, they will automatically become offline friends of promotional partners.",
         pt_card_rule1: "1. Free gift cards are limited to 30 cards per user. If more gift cards need to be issued, users need to pay for customization, which can customize the amount of cards, LOGO, instructions, etc. For customized requirements, please send an email to",
-        pt_card_rule2: "2. Free gift cards are limited to one copy per user. Free gift cards issued by the BIZZAN government are limited to one for each user. Even if different users receive free gift cards with different exchange codes, only one can be exchanged. Custom gift cards are not subject to this restriction.",
+        pt_card_rule2: "2. Free gift cards are limited to one copy per user. Free gift cards issued by the INTAFACED government are limited to one for each user. Even if different users receive free gift cards with different exchange codes, only one can be exchanged. Custom gift cards are not subject to this restriction.",
         pt_card_rule3: "3. Before the user exchanges the gift card, if there is no 'inviter' (i.e. the invitation code has not been entered at the time of registering the account), it will be automatically associated with the first-level friend of the card issuer. If A does not enter an invitation code when registering an account, then A does not belong to any one's first or second-level friends, but when A is converted into B's first-level friends through the gift card issued by B, A automatically becomes B's first-level friends.",
         pt_card_rule4: "4. In order to prevent brushing, the book value of gift cards is not paid in real time. It will be frozen for 180 days after collection and released into user account balance automatically after 180 days.",
         pt_card_rule5: "5. When receiving free gift cards, we need to complete the real-name certification. When converting, we can get them without completing the real-name certification. This is to facilitate promoters to get lower-level friends faster.",
-        pt_card_rule6: "6. The right of final interpretation of free gift cards belongs to BIZZAN.COM.",
+        pt_card_rule6: "6. The right of final interpretation of free gift cards belongs to INTAFACED.COM.",
         pt_card_day: "Days",
         pt_card_title_tips: "Free promotion grant of 2000 CNY",
         pt_card_receivew_success: "Congratulations! Successful collection of partner promotion gift cards! Please go to the Personal Center - > Card and Voucher Center.",
@@ -647,7 +862,7 @@ module.exports = {
     uc: {
         verify: "Finish KYC First",
         login: {
-            noaccount: 'No Account？',
+            noaccount: 'No Account?',
             register: 'Sign Up',
             login: 'Log In',
             welcomelogin: 'Welcome',
@@ -664,7 +879,7 @@ module.exports = {
             getlostpwd: "Forget Password"
         },
         forget: {
-            hasaccount: 'Have a Account？To Log In',
+            hasaccount: 'Have a Account?To Log In',
             login: 'Log In',
             sendcode: 'Send',
             newpwd: 'Enter new password',
@@ -712,11 +927,11 @@ module.exports = {
                 matcherr2: 'Exceeds the maximum number of matches!',
                 matchsuccess: 'Match Success!',
                 needreleased: "Assets to be released",
-                totalassets: "Estimated Total Value of Assets："
+                totalassets: "Estimated Total Value of Assets: "
             },
             trade: {
-                accumulative_return: 'Mining fees have been repaid (BHB) : ',
-                accumulat_return: 'Mining fees should be repaid(BHB) : ',
+                accumulative_return: 'Mining fees have been repaid (BHB): ',
+                accumulat_return: 'Mining fees should be repaid(BHB): ',
                 start_end: 'Start-End',
                 account_date: 'Time for receiving the capital',
                 to: 'To',
@@ -760,8 +975,8 @@ module.exports = {
                 turnover: "Turnover"
             },
             inviting: {
-                accumulative_return: 'Inviting mining rewards has been returned and accumulated(BHB) : ',
-                accumulat_return: 'Invite mining awards to be returned(BHB) : ',
+                accumulative_return: 'Inviting mining rewards has been returned and accumulated(BHB): ',
+                accumulat_return: 'Invite mining awards to be returned(BHB): ',
                 account_date: 'Time for receiving the capital',
                 start_end: 'Start-End',
                 to: 'To',
@@ -793,8 +1008,8 @@ module.exports = {
                 refereinput: 'Please enter the name / cell phone number'
             },
             paydividende: {
-                money_holding: 'Money sharing has been returned and accumulated(ETH) : ',
-                money_hold: 'Pay dividends to return(ETH) : ',
+                money_holding: 'Money sharing has been returned and accumulated(ETH): ',
+                money_hold: 'Pay dividends to return(ETH): ',
                 paydividends: 'Pay dividends(ETH)',
                 account_date: 'Time for receiving the capital',
                 datehodld: 'Date of holding money',
@@ -869,11 +1084,11 @@ module.exports = {
                 msg4: 'Your top-up address will not change frequently and you can repeat the recharge; if there is any change, we will try to notify you via website announcement or email.',
                 msg5: 'Please be sure to confirm the security of your computer and browser to prevent information from being tampered with or leaked.',
                 record: 'Recording',
-                copysuccess: 'Success！',
-                copyerr: 'Failure！Please copy it manually',
+                copysuccess: 'Success!',
+                copyerr: 'Failure!Please copy it manually',
                 time: 'Arrival time',
                 amount: 'Amount',
-                gettingaddress: "Getting deposit address，Please wait...",
+                gettingaddress: "Getting deposit address, Please wait...",
                 getaddress: "Get Deposit Address",
                 memotips: "Please enter this Memo when recharging, otherwise you will lose assets."
             },
@@ -920,7 +1135,7 @@ module.exports = {
                 second: 'second',
                 clickget: 'Get',
                 email: 'Email',
-                emailcode: 'Email  verification code',
+                emailcode: 'Email verification code',
                 save: 'Save',
                 delete: 'Delete',
                 telerr: 'Incorrect phone number',
@@ -954,7 +1169,7 @@ module.exports = {
             myad: 'My ad',
         },
         regist: {
-            hasaccount: 'Have a Account？To Log In',
+            hasaccount: 'Have a Account?To Log In',
             login: 'Log in',
             username: 'Username',
             country: 'Country',
@@ -1104,7 +1319,7 @@ module.exports = {
             certified: "already certified",
             placeholder: "Please fill in the reason for cancellation",
             apply: 'Apply to become business',
-            become: "Become BIZZAN Certified Business and enjoy more transaction privileges",
+            become: "Become INTAFACED Certified Business and enjoy more transaction privileges",
             zhusnhu: "Businesses enjoy exclusive advertising booths to increase transaction success",
             tijiaoziliao: "Submit merchant authentication information",
             place: "Please upload the prepared merchant authentication information to the platform and submit it",
@@ -1156,7 +1371,7 @@ module.exports = {
             handphoto: 'User holding ID photo',
             qq: 'QQ',
             ploy: 'Whether there is a corresponding risk control strategy',
-            agreement: '《Certified Merchant Agreement》',
+            agreement: 'Certified Merchant Agreement',
             applyfor: 'Apply',
             sendcode: 'Send',
             confirm: 'Confirm',
@@ -1175,8 +1390,8 @@ module.exports = {
             linkdesc: 'The following URL is your address for promotion to the outside world. You can promote it through friends, QQ, Wechat, Weibo, blogs, forums or your own website. All people who have accessed through this address will be your users after registration., And when these users submit strategies in this site, you can earn commissions, and detailed promotion can be viewed in the access record.',
             linktitle: 'Your romotion links',
             copy: 'Copy',
-            copy_msg1: 'Copy Success！',
-            copy_msg2: 'Failure！Please copy it manually',
+            copy_msg1: 'Copy Success!',
+            copy_msg2: 'Failure!Please copy it manually',
             username: 'Name',
             currrecharge: 'Transaction',
             userlevel: 'User Level',
@@ -1208,7 +1423,7 @@ module.exports = {
             gopromotion: "Promotion",
             inputcardno: "Please input the card code",
             exchange: "Exchange",
-            exchangesuccess: "Congratulations！You can check the asset in finance center！",
+            exchangesuccess: "Congratulations!You can check the asset in finance center!",
             exchangewithcode: "Exchange With Code"
         },
         activity: {
@@ -1280,7 +1495,7 @@ module.exports = {
         otherhelp: "Other In This Category",
         scanforshare: "Scan for share",
         download: "Download",
-        downloadslogan: "BIZZAN APP - Trade everywhere."
+        downloadslogan: "INTAFACED APP - Trade everywhere."
     },
     description: {
         title1: 'Security',
@@ -1292,19 +1507,19 @@ module.exports = {
         message3: 'Global Business Service Network Coverage Helps You Invest in Global Encrypted Assets and Transact with Global Users',
         message4: 'We strictly select those high-quality blockchain projects to filter 80% extremely high-risk projects for you.',
         scanqrcode: "Scan QR code, Download APP",
-        aboutdesc1: "BIZZAN.COM is a leading digital asset trading platform in the world, registered in the Cayman Islands, with a core operating team in Hong Kong. The core members of BIZZAN.COM come from top Internet and financial companies. Most of them are deep believers in Bitcoin and block chains. We are convinced that block chains will change the traditional monopolistic financial system and build a more democratic and autonomous social structure.",
-        aboutdesc2: "BIZZAN.COM platform has a professional financial-level trading architecture, a self-developed high concurrent memory matching trading engine. The platform uses a full-cold rechargeable wallet system + multiple signatures + high-protection DDOS attack system and other trading architecture to ensure customer asset security.",
-        aboutdesc3: "In order to let customers better grasp the investment opportunities, BIZZAN.COM adopts flat management in customer service department, and establishes an extremely fast service response mechanism. The asset customer service manager is on-line 7*24H all the year round, providing customers with services such as recharge and cash of assets, and ensuring that customers complete recharge in 25 minutes.",
-        aboutdesc4: "BIZZAN.COM strictly screens high-quality projects and provides secure and stable asset hosting services. BIZZAN.COM upholds the concept of “honesty, justice, enthusiasm and openness”, and strives to create a safe, reliable, efficient and friendly ultimate exchange for users.",
+        aboutdesc1: "INTAFACED.COM is a leading digital asset trading platform in the world, registered in the Cayman Islands, with a core operating team in Hong Kong. The core members of INTAFACED.COM come from top Internet and financial companies. Most of them are deep believers in Bitcoin and block chains. We are convinced that block chains will change the traditional monopolistic financial system and build a more democratic and autonomous social structure.",
+        aboutdesc2: "INTAFACED.COM platform has a professional financial-level trading architecture, a self-developed high concurrent memory matching trading engine. The platform uses a full-cold rechargeable wallet system + multiple signatures + high-protection DDOS attack system and other trading architecture to ensure customer asset security.",
+        aboutdesc3: "In order to let customers better grasp the investment opportunities, INTAFACED.COM adopts flat management in customer service department, and establishes an extremely fast service response mechanism. The asset customer service manager is on-line 7*24H all the year round, providing customers with services such as recharge and cash of assets, and ensuring that customers complete recharge in 25 minutes.",
+        aboutdesc4: "INTAFACED.COM strictly screens high-quality projects and provides secure and stable asset hosting services. INTAFACED.COM upholds the concept of “honesty, justice, enthusiasm and openness”, and strives to create a safe, reliable, efficient and friendly ultimate exchange for users.",
         aboutdesc5: "Although digital assets are only in a small circle now, we believe that this kind of assets that everyone can fully grasp will be popular in the future. Let's work together and look forward to it!",
         support: "Support",
         report: "Suggestion",
         service: "Customer Service",
         apply: "Board Apply",
         coop: "Cooperation",
-        community: "BIZZAN Community",
+        community: "INTAFACED Community",
         wechat: "Wechat",
-        addwechat: "Add 'bizzan01' as Wechat friends and then enter Wechat community",
+        addwechat: "Add 'intafaced01' as Wechat friends and then enter Wechat community",
         weibo: "Weibo",
         twitter: "Twitter",
         biyong: "Biyong",
@@ -1375,18 +1590,18 @@ module.exports = {
         checkMineprinciple: "View the principle of mining",
         checkFlowVolum: 'Inspection of circulation',
         checkLockPosition: 'Check the lock situation',
-        BHBregister: "BIZZAN account registration",
+        BHBregister: "INTAFACED account registration",
         tibi: "The time and limit of the payment of the money to the bill",
         line_plane: "Announcement on BHB's on-line plan, circulation and service fee return",
-        fenpeijizhi: 'A description of the BIZZAN income distribution mechanism',
+        fenpeijizhi: 'A description of the INTAFACED income distribution mechanism',
         jiangli_jihua: "Inviting the mining Award Scheme",
         friend_fanhuan: "Invite friends, earn extra fee and return"
     },
     plate: {
-        title: "Platform income distribution scheme（BHB Holder's equity）",
-        content1: "As described in the white paper, BIZZAN will take up 80% of the platform (after deduct Taxes and fees )The income is allocated to BHB holders, and 20% of revenue is used to support R & D and operation of the platform.",
+        title: "Platform income distribution scheme (BHB Holder's equity)",
+        content1: "As described in the white paper, INTAFACED will take up 80% of the platform (after deduct Taxes and fees)The income is allocated to BHB holders, and 20% of revenue is used to support R & D and operation of the platform.",
         content2: "The distribution of income takes days as a distribution cycle, and June 6, 2018 as the first distribution day. Every day after that, the total income to be distributed on the previous day will be allocated to BHB holders in proportion.",
-        content3: "（notice：1. the BHB here only refers to the BHB that has been released / circulated. See also【",
+        content3: " (notice: 1. the BHB here only refers to the BHB that has been released / circulated. See also[",
         content3_1: 'Note on the ratio of BHB circulation / participation in income distribution',
         content3_2: "2. the hourly (whole point) snapshot is calculated once and the income distribution is executed once a day.",
         hourFenpei: "Distribution of income today",
@@ -1409,6 +1624,6 @@ module.exports = {
         todaycharge: "Average price (ETH)",
         totalChange: 'Total (ETH)',
         returnCharge: "Trans-Fee Mining reimbursement(BHB)",
-        todayChargeReturn: "Incentive Program for FCoin reimbursement（BHB）"
+        todayChargeReturn: "Incentive Program for FCoin reimbursement (BHB)"
     }
 }

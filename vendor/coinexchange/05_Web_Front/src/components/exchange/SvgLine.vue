@@ -52,7 +52,7 @@ export default {
           return this.coords.slice(2, this.coords.length - 2).join(' ');
         },
       polygonPoints:function(){
-          return this.coords.join( );
+          return this.coords.join();
       }
   },
   mounted:function(){
@@ -63,13 +63,13 @@ export default {
         var opts = this.opts;
         var values = this.values;
         if (values.length == 1) values.push(values[0])
-        var max = Math.max.apply(Math, opts.max == undefined ? values : values.concat(opts.max))
-            , min = Math.min.apply(Math, opts.min == undefined ? values : values.concat(opts.min))
+        var max = Math.max.apply(Math, opts.max == undefined? values: values.concat(opts.max))
+, min = Math.min.apply(Math, opts.min == undefined? values: values.concat(opts.min))
 
         var strokeWidth = opts.strokeWidth
-            , width = opts.width
-            , height = opts.height - strokeWidth
-            , diff = max - min
+, width = opts.width
+, height = opts.height - strokeWidth
+, diff = max - min
 
         var xScale = this.x = function(input) {
             return input * (width / (values.length - 1))
@@ -93,7 +93,7 @@ export default {
             this.coords.push(
             xScale(i),
             yScale(values[i])
-            )
+)
         }
 
         this.coords.push(width, zero);

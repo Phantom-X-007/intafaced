@@ -1,11 +1,11 @@
 <style scoped>
-    .expand-row{
+.expand-row{
         margin-bottom: 8px;
     }
     td.ivu-table-expanded-cell{
         padding: 10px 50px;
     }
-    .expand-row .ivu-col{
+.expand-row.ivu-col{
         line-height: 20px;
     }
 </style>
@@ -22,13 +22,13 @@
                 <span class="expand-key">{{$t('exchange.expand.amount')}} </span>
             </Col>
             <Col span="4">
-              <span class="expand-key">成交额</span>
+              <span class="expand-key">Volume</span>
             </Col>
             <Col span="4">
                 <span class="expand-key">{{$t('exchange.expand.fee')}}</span>
             </Col>
         </Row>
-        <Row v-for="(row , index) in rows" key="index">
+        <Row v-for="(row, index) in rows" key="index">
             <Col span="8">
                 <span class="expand-value">{{ row.time|dateFormat }}</span>
             </Col>

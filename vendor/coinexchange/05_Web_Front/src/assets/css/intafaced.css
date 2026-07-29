@@ -1,0 +1,939 @@
+/* ============================================================================
+   INTAFACED — design layer
+   ----------------------------------------------------------------------------
+   The vendored front-end is a 2018 exchange: hard 90° corners, flat opaque
+   panels, 1px hairline borders, no depth. This sheet sits ON TOP of iView and
+   the vendor styles and modernises every surface at once — glass panels, real
+   radii, soft elevation — without editing 600 templates.
+
+   It is loaded LAST in main.js so it wins on equal specificity. Where the
+   vendor used inline styles or deep selectors we match with a slightly heavier
+   selector rather than reaching for !important, except on the handful of
+   properties the vendor itself set inline.
+
+   Palette is declared once here as custom properties. The literal hex values
+   still present throughout the templates were remapped by retheme.mjs to the
+   same values, so the two agree.
+   ========================================================================== */
+
+:root {
+  /* ── brand ─────────────────────────────────────────────────────────────── */
+  --ix-orange: #ff6b00;
+  --ix-orange-light: #ff8534;
+  --ix-orange-dark: #cc5500;
+  --ix-orange-soft: rgba(255, 107, 0, 0.12);
+  --ix-orange-glow: rgba(255, 107, 0, 0.28);
+
+  /* ── surfaces: black, lifted by translucency rather than by lighter greys ─ */
+  --ix-bg: #000000;
+  --ix-surface: rgba(255, 255, 255, 0.045);
+  --ix-surface-raised: rgba(255, 255, 255, 0.07);
+  --ix-surface-solid: #0d0d0d;
+  --ix-hairline: rgba(255, 255, 255, 0.09);
+  --ix-hairline-strong: rgba(255, 255, 255, 0.16);
+
+  /* ── type ──────────────────────────────────────────────────────────────── */
+  --ix-text: #f2f2f2;
+  --ix-text-dim: #9a9a9a;
+  --ix-text-faint: #6b6b6b;
+
+  /* ── market direction — never rebranded, a trader reads these as meaning ─ */
+  --ix-up: #00b275;
+  --ix-down: #ff4a68;
+
+  /* ── geometry ──────────────────────────────────────────────────────────── */
+  --ix-radius-sm: 8px;
+  --ix-radius: 14px;
+  --ix-radius-lg: 20px;
+  --ix-radius-pill: 999px;
+
+  --ix-blur: saturate(180%) blur(20px);
+  --ix-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --ix-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
+}
+
+/* ── base ──────────────────────────────────────────────────────────────────
+   A single fixed radial wash behind everything. Glass needs something to
+   refract; over flat #000 a blurred panel is indistinguishable from a solid
+   one, and the whole effect collapses. */
+html,
+body {
+  background: var(--ix-bg);
+  color: var(--ix-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 700px at 12% -10%, rgba(255, 107, 0, 0.16), transparent 60%),
+    radial-gradient(900px 600px at 100% 0%, rgba(255, 107, 0, 0.08), transparent 55%),
+    radial-gradient(800px 800px at 50% 120%, rgba(255, 133, 52, 0.06), transparent 60%);
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+}
+
+::selection {
+  background: var(--ix-orange);
+  color: #000;
+}
+
+/* ── scrollbars ────────────────────────────────────────────────────────────
+   The default chrome on a dark page is a bright grey slab. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: var(--ix-radius-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ix-orange-glow);
+  background-clip: content-box;
+}
+
+/* ============================================================================
+   GLASS — the shared surface treatment
+   ========================================================================== */
+
+.ix-glass,
+.ivu-card,
+.ivu-modal-content,
+.ivu-poptip-inner,
+.ivu-select-dropdown,
+.ivu-dropdown-menu,
+.ivu-tooltip-inner,
+.ivu-message-notice-content,
+.ivu-notice-notice-content {
+  background: var(--ix-surface) !important;
+  backdrop-filter: var(--ix-blur);
+  -webkit-backdrop-filter: var(--ix-blur);
+  border: 1px solid var(--ix-hairline) !important;
+  border-radius: var(--ix-radius) !important;
+  box-shadow: var(--ix-shadow);
+  color: var(--ix-text);
+}
+
+/* Dropdowns and tooltips sit over content and need to stay legible, so they
+   get a darker base under the same blur. */
+.ivu-select-dropdown,
+.ivu-dropdown-menu,
+.ivu-tooltip-inner,
+.ivu-poptip-inner {
+  background: rgba(14, 14, 14, 0.86) !important;
+}
+
+.ivu-modal-content {
+  background: rgba(12, 12, 12, 0.82) !important;
+  box-shadow: var(--ix-shadow-lg);
+}
+.ivu-modal-header,
+.ivu-modal-footer {
+  border-color: var(--ix-hairline) !important;
+}
+.ivu-modal-header p,
+.ivu-modal-header-inner {
+  color: var(--ix-text) !important;
+  font-weight: 600;
+}
+.ivu-modal-mask {
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ============================================================================
+   CORNERS — nothing square
+   ========================================================================== */
+
+.ivu-btn,
+.ivu-input,
+.ivu-input-number,
+.ivu-select-selection,
+.ivu-tag,
+.ivu-alert,
+.ivu-progress-bg,
+.ivu-upload-drag,
+.ivu-badge-count,
+.ivu-steps .ivu-steps-head-inner,
+input[type='text'],
+input[type='password'],
+input[type='number'],
+input[type='email'],
+select,
+textarea,
+button {
+  border-radius: var(--ix-radius-sm) !important;
+}
+
+.ivu-btn-circle,
+.ivu-tag,
+.ivu-badge-count {
+  border-radius: var(--ix-radius-pill) !important;
+}
+
+img.avatar,
+.avatar img,
+.ivu-avatar {
+  border-radius: var(--ix-radius-pill) !important;
+}
+
+/* ============================================================================
+   CONTROLS
+   ========================================================================== */
+
+.ivu-btn {
+  border: 1px solid var(--ix-hairline);
+  background: var(--ix-surface-raised);
+  color: var(--ix-text);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1),
+    box-shadow 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+.ivu-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--ix-hairline-strong);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.ivu-btn:active {
+  transform: translateY(0);
+}
+
+/* Primary is the brand. The glow is what makes it read as the one action on
+   the page rather than a flat orange rectangle. */
+.ivu-btn-primary,
+.ivu-btn-warning {
+  background: linear-gradient(180deg, var(--ix-orange-light), var(--ix-orange)) !important;
+  border-color: transparent !important;
+  color: #0a0a0a !important;
+  box-shadow: 0 6px 20px var(--ix-orange-glow);
+}
+.ivu-btn-primary:hover,
+.ivu-btn-warning:hover {
+  background: linear-gradient(180deg, #ff9448, var(--ix-orange-light)) !important;
+  box-shadow: 0 10px 28px var(--ix-orange-glow);
+  color: #0a0a0a !important;
+}
+
+.ivu-btn-success {
+  background: linear-gradient(180deg, #14c98a, var(--ix-up)) !important;
+  border-color: transparent !important;
+  color: #04170f !important;
+  box-shadow: 0 6px 20px rgba(0, 178, 117, 0.28);
+}
+.ivu-btn-error {
+  background: linear-gradient(180deg, #ff6b83, var(--ix-down)) !important;
+  border-color: transparent !important;
+  color: #1a0409 !important;
+  box-shadow: 0 6px 20px rgba(255, 74, 104, 0.28);
+}
+
+.ivu-btn-text {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ix-text-dim);
+}
+.ivu-btn-text:hover {
+  background: var(--ix-orange-soft);
+  color: var(--ix-orange);
+}
+
+/* ── inputs ───────────────────────────────────────────────────────────────── */
+.ivu-input,
+.ivu-select-selection,
+.ivu-input-number,
+input[type='text'],
+input[type='password'],
+input[type='number'],
+input[type='email'],
+textarea,
+select {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid var(--ix-hairline) !important;
+  color: var(--ix-text) !important;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+.ivu-input:focus,
+.ivu-input:hover,
+.ivu-select-selection:hover,
+.ivu-select-visible .ivu-select-selection,
+input:focus,
+textarea:focus {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--ix-orange) !important;
+  box-shadow: 0 0 0 3px var(--ix-orange-soft) !important;
+  outline: none;
+}
+.ivu-input::placeholder,
+input::placeholder,
+textarea::placeholder {
+  color: var(--ix-text-faint) !important;
+}
+.ivu-input-group-append,
+.ivu-input-group-prepend {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--ix-hairline) !important;
+  color: var(--ix-text-dim) !important;
+}
+
+.ivu-checkbox-inner,
+.ivu-radio-inner {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--ix-hairline-strong);
+}
+.ivu-checkbox-checked .ivu-checkbox-inner,
+.ivu-radio-checked .ivu-radio-inner {
+  background: var(--ix-orange);
+  border-color: var(--ix-orange);
+}
+.ivu-switch-checked {
+  background: var(--ix-orange);
+  border-color: var(--ix-orange);
+}
+
+/* ============================================================================
+   NAVIGATION
+   ========================================================================== */
+
+.ivu-menu,
+.ivu-menu-light,
+.ivu-menu-dark,
+.ivu-tabs-bar {
+  background: transparent !important;
+  border-color: var(--ix-hairline) !important;
+}
+
+.ivu-menu-item,
+.ivu-tabs-tab {
+  color: var(--ix-text-dim) !important;
+  border-radius: var(--ix-radius-sm);
+  transition:
+    color 0.16s ease,
+    background 0.16s ease;
+}
+.ivu-menu-item:hover,
+.ivu-tabs-tab:hover {
+  color: var(--ix-text) !important;
+  background: rgba(255, 255, 255, 0.05);
+}
+.ivu-menu-item-active,
+.ivu-tabs-tab-active {
+  color: var(--ix-orange) !important;
+  background: var(--ix-orange-soft);
+}
+.ivu-menu-horizontal .ivu-menu-item-active::after {
+  background: var(--ix-orange) !important;
+}
+.ivu-tabs-ink-bar {
+  background: var(--ix-orange) !important;
+  height: 2px;
+  border-radius: var(--ix-radius-pill);
+}
+
+/* ── iView's light defaults ────────────────────────────────────────────────
+   iView ships a light theme with #2d8cf0 as its primary. On a black page the
+   dropdown panels render as white cards and every focus ring, active border
+   and hover underline comes back blue. The component library sets these on
+   deep selectors and inline, so they are overridden explicitly rather than
+   left to cascade. */
+
+.ivu-menu-drop-list,
+.ivu-menu-submenu .ivu-menu,
+.ivu-select-dropdown-list,
+.ivu-menu-vertical.ivu-menu-light,
+.ivu-dropdown-rel + .ivu-select-dropdown,
+.ivu-poptip-body,
+.ivu-poptip-title,
+.ivu-date-picker-cells,
+.ivu-picker-panel-body,
+.ivu-time-picker-cells,
+.ivu-cascader-menu,
+.ivu-transfer-list,
+.ivu-modal-body {
+  background: rgba(14, 14, 14, 0.92) !important;
+  color: var(--ix-text) !important;
+  border-color: var(--ix-hairline) !important;
+}
+
+.ivu-menu-drop-list .ivu-menu-item,
+.ivu-select-item,
+.ivu-dropdown-item,
+.ivu-date-picker-cells-cell,
+.ivu-cascader-menu-item {
+  color: var(--ix-text-dim) !important;
+  background: transparent !important;
+}
+
+/* The white flash on hover — the single loudest thing on the page. */
+.ivu-menu-drop-list .ivu-menu-item:hover,
+.ivu-select-item:hover,
+.ivu-select-item-focus,
+.ivu-dropdown-item:hover,
+.ivu-date-picker-cells-cell:hover em,
+.ivu-cascader-menu-item:hover {
+  background: var(--ix-orange-soft) !important;
+  color: var(--ix-orange) !important;
+}
+
+.ivu-select-item-selected,
+.ivu-select-item-selected:hover,
+.ivu-date-picker-cells-cell-selected em {
+  background: var(--ix-orange) !important;
+  color: #0a0a0a !important;
+}
+
+/* Every remaining trace of iView blue. */
+.ivu-menu-horizontal .ivu-menu-item:hover,
+.ivu-menu-horizontal .ivu-menu-submenu:hover,
+.ivu-menu-horizontal .ivu-menu-item-active,
+.ivu-menu-horizontal .ivu-menu-submenu-active {
+  color: var(--ix-orange) !important;
+  border-bottom-color: var(--ix-orange) !important;
+  background: transparent !important;
+}
+.ivu-menu-item-active:not(.ivu-menu-submenu),
+.ivu-menu-vertical .ivu-menu-item-active::after {
+  background: var(--ix-orange-soft) !important;
+  color: var(--ix-orange) !important;
+}
+.ivu-menu-light.ivu-menu-vertical .ivu-menu-item-active::after {
+  background: var(--ix-orange) !important;
+}
+.ivu-radio-focus,
+.ivu-checkbox-focus,
+.ivu-input-focused,
+.ivu-select-selection:focus {
+  box-shadow: 0 0 0 3px var(--ix-orange-soft) !important;
+  border-color: var(--ix-orange) !important;
+}
+.ivu-btn-primary:focus,
+.ivu-btn:focus {
+  box-shadow: 0 0 0 3px var(--ix-orange-soft) !important;
+}
+.ivu-tag-primary,
+.ivu-badge-count,
+.ivu-slider-bar,
+.ivu-slider-button,
+.ivu-steps-item-process .ivu-steps-head-inner {
+  background: var(--ix-orange) !important;
+  border-color: var(--ix-orange) !important;
+}
+
+/* The submenu caret and its container border. */
+.ivu-menu-submenu-title-icon,
+.ivu-select-arrow {
+  color: var(--ix-text-faint) !important;
+}
+.ivu-menu-drop-list,
+.ivu-dropdown-menu {
+  border-radius: var(--ix-radius) !important;
+  overflow: hidden;
+  box-shadow: var(--ix-shadow-lg);
+  backdrop-filter: var(--ix-blur);
+  -webkit-backdrop-filter: var(--ix-blur);
+}
+
+/* ============================================================================
+   TABLES — order books, market lists, ledgers
+   ========================================================================== */
+
+.ivu-table,
+.ivu-table td,
+.ivu-table th,
+.ivu-table-tbody,
+.ivu-table-header,
+.ivu-table-overflowX {
+  background: transparent !important;
+  color: var(--ix-text) !important;
+  border-color: var(--ix-hairline) !important;
+}
+.ivu-table::before,
+.ivu-table::after {
+  background: transparent !important;
+}
+.ivu-table-wrapper {
+  border: 1px solid var(--ix-hairline) !important;
+  border-radius: var(--ix-radius) !important;
+  overflow: hidden;
+  background: var(--ix-surface);
+  backdrop-filter: var(--ix-blur);
+  -webkit-backdrop-filter: var(--ix-blur);
+}
+.ivu-table th {
+  color: var(--ix-text-faint) !important;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ivu-table-row:hover td,
+.ivu-table-row-hover td {
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+
+/* Tabular figures — prices must not jitter as digits change. */
+.ivu-table td,
+.price,
+.amount,
+.number,
+[class*='price'],
+[class*='amount'] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ============================================================================
+   FEEDBACK
+   ========================================================================== */
+
+.ivu-page-item,
+.ivu-page-prev,
+.ivu-page-next {
+  background: var(--ix-surface-raised) !important;
+  border-color: var(--ix-hairline) !important;
+  border-radius: var(--ix-radius-sm) !important;
+}
+.ivu-page-item a,
+.ivu-page-prev a,
+.ivu-page-next a {
+  color: var(--ix-text-dim) !important;
+}
+.ivu-page-item-active {
+  background: var(--ix-orange) !important;
+  border-color: var(--ix-orange) !important;
+}
+.ivu-page-item-active a {
+  color: #0a0a0a !important;
+}
+
+.ivu-spin-dot {
+  background-color: var(--ix-orange) !important;
+}
+.ivu-progress-bg {
+  background: linear-gradient(90deg, var(--ix-orange), var(--ix-orange-light)) !important;
+}
+.ivu-alert {
+  background: var(--ix-surface) !important;
+  border: 1px solid var(--ix-hairline) !important;
+  color: var(--ix-text) !important;
+  backdrop-filter: var(--ix-blur);
+  -webkit-backdrop-filter: var(--ix-blur);
+}
+.ivu-alert-warning {
+  background: var(--ix-orange-soft) !important;
+  border-color: rgba(255, 107, 0, 0.3) !important;
+}
+
+/* ============================================================================
+   VENDOR SURFACES
+   ----------------------------------------------------------------------------
+   The templates carry their own panel classes with hard corners and opaque
+   fills. Rather than chase every one, catch the structural names.
+   ========================================================================== */
+
+.content-wrap,
+.main-wrap,
+.card,
+.panel,
+.box,
+.list-wrap,
+.form-wrap,
+.trade-wrap,
+.market-wrap,
+.uc-content,
+.notice .content-wrap,
+.helpdetail .content-wrap {
+  border-radius: var(--ix-radius) !important;
+}
+
+/* Anything the vendor painted with the old white/near-white card fill becomes
+   glass, so light panels stop punching holes in a black page. */
+[style*='background:#FFF'],
+[style*='background: #FFF'],
+[style*='background:#fff'],
+[style*='background: #fff'],
+[style*='background-color:#FFF'],
+[style*='background-color: #fff'] {
+  background: var(--ix-surface) !important;
+  backdrop-filter: var(--ix-blur);
+  -webkit-backdrop-filter: var(--ix-blur);
+  border-radius: var(--ix-radius) !important;
+  color: var(--ix-text) !important;
+}
+
+/* ============================================================================
+   MOTION
+   ========================================================================== */
+
+a,
+button,
+.ivu-btn,
+.route,
+.item,
+.nav-item {
+  transition:
+    color 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease,
+    transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+a {
+  color: var(--ix-orange);
+}
+a:hover {
+  color: var(--ix-orange-light);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Backdrop-filter is the whole effect; where it is unsupported the translucent
+   fills would leave text floating over raw content. Fall back to solids. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ix-glass,
+  .ivu-card,
+  .ivu-modal-content,
+  .ivu-table-wrapper,
+  .ivu-select-dropdown,
+  .ivu-dropdown-menu {
+    background: var(--ix-surface-solid) !important;
+  }
+}
+
+/* ============================================================================
+   PLATFORM MODULE SCREENS
+   ----------------------------------------------------------------------------
+   The INTAFACED feature areas (bank, pay, p2p, token, agents, blueprint,
+   protocol, dex, chain, academy, launch) render through one small class set
+   rather than eleven scoped stylesheets, so they cannot drift apart and every
+   one of them inherits a palette change for free.
+
+   Everything below uses the custom properties declared at the top of this file.
+   No literal colour is introduced here.
+   ========================================================================== */
+
+.ix-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 110px 24px 80px;
+  color: var(--ix-text);
+}
+
+.ix-page-head {
+  margin-bottom: 28px;
+}
+.ix-page-head h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  color: var(--ix-text);
+}
+.ix-page-head p {
+  margin: 0;
+  color: var(--ix-text-dim);
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 760px;
+}
+
+/* The one line on every screen that says where its data comes from. A screen
+   that will not name its endpoint is a screen that can quietly stop having
+   one. */
+.ix-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 6px 12px;
+  border: 1px solid var(--ix-hairline);
+  border-radius: var(--ix-radius-pill);
+  background: var(--ix-surface);
+  backdrop-filter: var(--ix-blur);
+  -webkit-backdrop-filter: var(--ix-blur);
+  font-size: 12px;
+  color: var(--ix-text-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.ix-card {
+  background: var(--ix-surface);
+  backdrop-filter: var(--ix-blur);
+  -webkit-backdrop-filter: var(--ix-blur);
+  border: 1px solid var(--ix-hairline);
+  border-radius: var(--ix-radius-lg);
+  box-shadow: var(--ix-shadow);
+  padding: 22px 24px;
+  margin-bottom: 18px;
+}
+.ix-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.ix-card-head h2 {
+  font-size: 17px;
+  font-weight: 650;
+  margin: 0;
+  color: var(--ix-text);
+}
+.ix-card-head .ix-sub {
+  font-size: 12px;
+  color: var(--ix-text-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.ix-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+/* A hub tile. The whole thing is the link target. */
+.ix-tile {
+  display: block;
+  background: var(--ix-surface);
+  backdrop-filter: var(--ix-blur);
+  -webkit-backdrop-filter: var(--ix-blur);
+  border: 1px solid var(--ix-hairline);
+  border-radius: var(--ix-radius-lg);
+  padding: 20px 22px;
+  text-decoration: none;
+  color: var(--ix-text);
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.ix-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--ix-orange);
+  box-shadow: 0 10px 34px var(--ix-orange-glow);
+  color: var(--ix-text);
+}
+.ix-tile h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--ix-text);
+}
+.ix-tile p {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ix-text-dim);
+}
+
+/* ── status pills ──────────────────────────────────────────────────────────
+   Three states, three readings. `live` is green because it is the only one a
+   user can act on; the other two are orange and grey because "not finished" is
+   a brand state here, not an error. */
+.ix-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--ix-radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.ix-pill-live {
+  background: rgba(0, 178, 117, 0.14);
+  color: var(--ix-up);
+  border-color: rgba(0, 178, 117, 0.32);
+}
+.ix-pill-partial {
+  background: var(--ix-orange-soft);
+  color: var(--ix-orange);
+  border-color: rgba(255, 107, 0, 0.32);
+}
+.ix-pill-absent {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ix-text-faint);
+  border-color: var(--ix-hairline);
+}
+
+/* ── the honest empty state ────────────────────────────────────────────────
+   Rendered wherever a screen has no data. It always names the reason and the
+   endpoint, so nothing can look finished by looking blank. */
+.ix-note {
+  border: 1px solid var(--ix-hairline);
+  border-left: 3px solid var(--ix-orange);
+  border-radius: var(--ix-radius);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px 18px;
+  color: var(--ix-text-dim);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+.ix-note strong {
+  color: var(--ix-text);
+  font-weight: 650;
+}
+.ix-note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--ix-orange);
+  background: var(--ix-orange-soft);
+  padding: 1px 6px;
+  border-radius: var(--ix-radius-sm);
+}
+.ix-note-quiet {
+  border-left-color: var(--ix-hairline-strong);
+}
+
+/* ── key/value readouts ───────────────────────────────────────────────────── */
+.ix-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+.ix-kv-item {
+  border: 1px solid var(--ix-hairline);
+  border-radius: var(--ix-radius);
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.ix-kv-item .k {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ix-text-faint);
+  margin-bottom: 6px;
+}
+.ix-kv-item .v {
+  display: block;
+  font-size: 20px;
+  font-weight: 650;
+  color: var(--ix-text);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  word-break: break-all;
+}
+
+.ix-scroll {
+  overflow-x: auto;
+}
+
+.ix-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ix-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: var(--ix-radius-pill);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--ix-hairline);
+  color: var(--ix-text-dim);
+}
+.ix-tag-on {
+  background: var(--ix-orange-soft);
+  border-color: rgba(255, 107, 0, 0.3);
+  color: var(--ix-orange);
+}
+
+.ix-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.ix-form-row > * {
+  flex: 1 1 200px;
+}
+.ix-form-row > .ix-form-action {
+  flex: 0 0 auto;
+}
+
+@media screen and (max-width: 768px) {
+  .ix-page {
+    padding: 80px 14px 60px;
+  }
+  .ix-page-head h1 {
+    font-size: 25px;
+  }
+}
+
+/* Plain tables inside module screens — the vendor's iView Table is heavier than
+   these read-only lists need, and it fights the glass panel it sits in. */
+.ix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.ix-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ix-text-faint);
+  padding: 0 14px 10px 0;
+  border-bottom: 1px solid var(--ix-hairline);
+  white-space: nowrap;
+}
+.ix-table td {
+  padding: 11px 14px 11px 0;
+  border-bottom: 1px solid var(--ix-hairline);
+  color: var(--ix-text);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  white-space: nowrap;
+}
+.ix-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.ix-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+/* Raw JSON, shown as the service returned it. Used where re-labelling the
+   fields would misrepresent what a user would get if they exported the record. */
+.ix-pre {
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--ix-hairline);
+  border-radius: var(--ix-radius);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--ix-text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+}
