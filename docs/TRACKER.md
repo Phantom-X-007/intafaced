@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**29 of 107 shipped (27%)** · 1 in progress · 34 ready to claim · 43 blocked · 15 deliberate §13 sockets
+**29 of 107 shipped (27%)** · 2 in progress · 33 ready to claim · 43 blocked · 15 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -40,7 +40,6 @@ pnpm wt feat/<the-thing>
 | External venue adapters via CCXT (cross-venue) | `trade` | 2 | `venue.aggregation` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
 | WebSocket fan-out: depth, trades, orders, positions | `trade` | 2 | `ws.gateway` |
-| Branded gateway, hosted checkout, payment links | `pay` | 3 | `pay.gateway` |
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | Share card render (1080×1350, 1200×630) | `blueprint` | 4 | `blueprint.card` |
@@ -67,7 +66,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
 | **27** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
-| **14** | Branded gateway, hosted checkout, payment links | 🟢 ready | `pay.gateway` |
+| **14** | Branded gateway, hosted checkout, payment links | 🔨 wip | `pay.gateway` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
 | **8** | Stake tiers, locks, access gating | 🟢 ready | `token.staking` |
 | **7** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
@@ -80,6 +79,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Feature | Owner | Module |
 |---|---|---|
 | One-tap Convert — the retail on-ramp | **Nitro** | `trade` |
+| Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
 
 ---
 
@@ -146,11 +146,11 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| 🟢 | Branded gateway, hosted checkout, payment links <br/>_Downgraded 2026-07-28: all 13 procedures are unreachable. svc-pay/src/index.ts:67 builds the router "so the type is exported" and never registers fastifyTRPCPlugin — the only served routes are /health, /ready and POST /webhooks/:railId. No merchant can create a payment. There is no hosted checkout and no payment link in the repo at all._ | F |  | `pay.gateway` |
+| 🔨 | Branded gateway, hosted checkout, payment links <br/>_Updated 2026-07-29: /trpc is mounted (createEdgeContext + fastifyTRPCPlugin, webhook raw-body parser encapsulated so it does not break tRPC). Edge already routes /api/pay → svc-pay. Merchant payment procedures are on the wire. Still not `done`: hosted checkout and payment links do not exist in the repo — the title is only partially delivered. Rails remain sandbox (MemoryChain + card-sandbox)._ | F |  | `pay.gateway` |
 | ⛔ | PSP mode — own the merchant, digital KYB, custom pricing | F | `pay.gateway` | `pay.psp` |
 | ⛔ | PayFac mode — sub-merchant trees, 14 permission areas | F | `pay.psp` | `pay.payfac` |
-| ⛔ | RailAdapter interface + crypto-native + card-sandbox <br/>_Downgraded 2026-07-28: the interface and the conformance kit are real and well tested, but neither v1 rail can move real value — crypto-native runs on `MemoryChain`, an in-memory reference chain (index.ts:46, an explicit §13 socket), and the other is named card-SANDBOX. The only path that reaches a rail (the webhook route) can only be reached about a payment that pay.gateway cannot create._ | F | `pay.gateway` | `pay.rails` |
-| ⛔ | User deposit + withdrawal — the two paths off the merchant path <br/>_Code-complete and tested, NOT reachable. recipes.deposit had no production caller and there was no user withdrawal anywhere, so register → deposit → order → fill → withdraw could not complete; deposit.credit (admin:treasury) and withdrawal.create (trade:withdraw, INTERACTIVE_ONLY + 2FA) now exist and are covered by 28 money-path tests against real Postgres. The one thing between them and a caller is that svc-pay still does not register fastifyTRPCPlugin — svc-edge already routes /api/pay to it, so the edge forwards to a service with no /trpc. `ready`, not `done`, until svc-pay mounts per docs/decisions/mount-boundary.md._ | F | `pay.rails` | `pay.user-money` |
+| ⛔ | RailAdapter interface + crypto-native + card-sandbox <br/>_Interface + conformance kit are real and tested; neither v1 rail moves real value — crypto-native runs on `MemoryChain` (index.ts, §13 socket), the other is card-SANDBOX. Merchant payments and webhooks can exercise these adapters now that /trpc is mounted; production rails are still sockets._ | F | `pay.gateway` | `pay.rails` |
+| ⛔ | User deposit + withdrawal — the two paths off the merchant path <br/>_Updated 2026-07-29: deposit.credit (admin:treasury) and withdrawal.* (trade:withdraw INTERACTIVE_ONLY + 2FA / trade:read) are reachable on mounted /trpc via svc-edge /api/pay — edge-signed principal required (router.mount.test.ts). Money-path suite against real Postgres remains. Still not `done`: depends on pay.rails which is MemoryChain + card-sandbox, so real value cannot leave/enter production rails._ | F | `pay.rails` | `pay.user-money` |
 | ⛔ | Smart routing — geo, method, risk, approval rate | F | `pay.rails` | `pay.routing` |
 | ⛔ | Dual settlement — bank or crypto | F | `pay.rails` | `pay.settlement` |
 | ⛔ | Risk scoring, chargebacks, decline recovery | F | `pay.gateway` | `pay.fraud` |
