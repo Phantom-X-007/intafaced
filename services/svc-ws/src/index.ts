@@ -1,13 +1,16 @@
 import Fastify from 'fastify';
+import { JetStreamEventBus, type Subscription } from '@intafaced/events';
 import { env } from './env.js';
 import { DepthHub } from './depth/hub.js';
 import { DepthPoller } from './depth/poller.js';
 import { HttpDepthSource } from './depth/source.js';
 import { registerRoutes } from './routes.js';
+import { TradeHub } from './trade/hub.js';
+import { subscribeTradeTape } from './trade/source.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 
 /**
- * svc-ws — the live depth stream (§5.2 ws.gateway).
+ * svc-ws — live public market data (§5.2 ws.gateway).
  *
  * ── Why this is its own service ─────────────────────────────────────────────
  *
@@ -28,10 +31,9 @@ import { createWebSocketGateway } from './ws/gateway.js';
  * to that process trades the entire custodial blast radius for one saved
  * container.
  *
- * So: a process that holds nothing. No database, no bus, no ledger client, no
- * service secret, no principal key. Its whole authority is "GET a public
- * endpoint and re-broadcast it", which is exactly the authority a public
- * market-data feed should have. See README.md.
+ * So: a process that holds nothing. No database, no ledger client, no service
+ * secret, no principal key. Depth is a public GET re-broadcast; trades are a
+ * public strip of `orderFilled` off the bus. See README.md.
  */
 
 const source = new HttpDepthSource({ baseUrl: env.MATCHING_URL });
@@ -50,6 +52,17 @@ const hub = new DepthHub(
   app.log,
 );
 
+const tradeHub = new TradeHub(
+  {
+    highWaterBytes: env.WS_HIGH_WATER_BYTES,
+    maxLagTicks: env.WS_MAX_LAG_TICKS,
+    maxConnections: env.WS_MAX_CONNECTIONS,
+    recentLimit: env.WS_TRADE_RECENT_LIMIT,
+    ensureKnownMarket: (marketId) => hub.ensureKnownMarket(marketId),
+  },
+  app.log,
+);
+
 let enabled = env.WS_GATEWAY_ENABLED;
 const isEnabled = () => enabled;
 
@@ -62,6 +75,7 @@ const poller = new DepthPoller(
 
 registerRoutes(app, {
   hub,
+  tradeHub,
   source,
   depthLimit: env.WS_DEPTH_LIMIT,
   serviceName: env.SERVICE_NAME,
@@ -85,11 +99,41 @@ await hub.refreshMarkets().catch((err: unknown) => {
   );
 });
 
+/**
+ * Trade tape: subscribe to `orderFilled` if NATS is up. Depth must keep
+ * working when the bus is down — a public book feed should not die because
+ * JetStream hiccuped. `ownedStreams: []` — matching owns the stream.
+ */
+let bus: Awaited<ReturnType<typeof JetStreamEventBus.connect>> | null = null;
+let tradeSub: Subscription | null = null;
+try {
+  bus = await JetStreamEventBus.connect({
+    servers: env.NATS_URL,
+    producer: env.SERVICE_NAME,
+    streamPrefix: env.NATS_STREAM_PREFIX,
+    ownedStreams: [],
+  });
+  tradeSub = await subscribeTradeTape({
+    bus,
+    hub: tradeHub,
+    durable: env.WS_TRADES_DURABLE,
+    log: app.log,
+  });
+} catch (err) {
+  app.log.warn(
+    { err: String(err), nats: env.NATS_URL },
+    'svc-ws: trade tape bus unavailable — depth still serves; trades will be empty until reconnect',
+  );
+  bus = null;
+  tradeSub = null;
+}
+
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 
 const gateway = createWebSocketGateway({
   server: app.server,
   hub,
+  tradeHub,
   heartbeatMs: env.WS_HEARTBEAT_MS,
   log: app.log,
   enabled: isEnabled,
@@ -98,8 +142,15 @@ const gateway = createWebSocketGateway({
 poller.start();
 
 app.log.info(
-  { port: env.HTTP_PORT, upstream: env.MATCHING_URL, depthLimit: env.WS_DEPTH_LIMIT, pollMs: env.WS_POLL_INTERVAL_MS, enabled },
-  'svc-ws ready — depth fan-out',
+  {
+    port: env.HTTP_PORT,
+    upstream: env.MATCHING_URL,
+    depthLimit: env.WS_DEPTH_LIMIT,
+    pollMs: env.WS_POLL_INTERVAL_MS,
+    trades: tradeSub !== null,
+    enabled,
+  },
+  'svc-ws ready — depth + trade tape',
 );
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
@@ -109,6 +160,8 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       // socket that is mid-close, and tell every client why it is going.
       enabled = false;
       poller.stop();
+      if (tradeSub) await tradeSub.unsubscribe().catch(() => undefined);
+      if (bus) await bus.close().catch(() => undefined);
       await gateway.close('gateway shutting down');
       await app.close();
       process.exit(0);

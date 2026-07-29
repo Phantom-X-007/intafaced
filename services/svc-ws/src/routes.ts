@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { toSnapshot, type DepthHub } from './depth/hub.js';
 import { DepthSourceError, type DepthSource } from './depth/source.js';
+import type { TradeHub } from './trade/hub.js';
 import { withWsSpan } from './tracing.js';
 
 /**
@@ -35,6 +36,7 @@ const MARKET_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 
 export interface RouteOptions {
   readonly hub: DepthHub;
+  readonly tradeHub: TradeHub;
   readonly source: DepthSource;
   readonly depthLimit: number;
   readonly serviceName: string;
@@ -43,13 +45,15 @@ export interface RouteOptions {
 }
 
 export function registerRoutes(app: FastifyInstance, options: RouteOptions): void {
-  const { hub, source, depthLimit, serviceName, upstream, enabled } = options;
+  const { hub, tradeHub, source, depthLimit, serviceName, upstream, enabled } = options;
 
   app.get('/health', async () => ({
     ok: true,
     service: serviceName,
     enabled: enabled(),
-    connections: hub.connections,
+    connections: hub.connections + tradeHub.connections,
+    depthConnections: hub.connections,
+    tradeConnections: tradeHub.connections,
   }));
 
   /**
@@ -64,7 +68,8 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       upstream,
       depthLimit,
       markets: hub.knownMarkets,
-      ...hub.stats,
+      depth: hub.stats,
+      trades: tradeHub.stats,
     };
   });
 

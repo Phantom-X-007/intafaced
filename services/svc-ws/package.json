@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@intafaced/config": "workspace:*",
+    "@intafaced/events": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",
     "@intafaced/market-data": "workspace:*",
     "@opentelemetry/api": "^1.9.0",

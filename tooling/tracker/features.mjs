@@ -299,11 +299,14 @@ export const FEATURES = [
     requires: ['services/svc-ws', 'packages/market-data'],
     note: 'services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; apps/web applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them.',
   }),
-  f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', {
+    f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', {
     module: 'trade',
     phase: '2',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['matching.engine', 'ws.depth'],
-    note: 'Depth shipped as `ws.depth` (services/svc-ws). The other three streams have not: a TRADE tape needs `orderFilled` off the bus plus a message shape `packages/market-data` does not define; ORDERS and POSITIONS are per-principal, which is a different security posture from svc-ws’s deliberately credential-free public port and probably a different port. Left `ready` rather than `done` so the title keeps meaning what it says.',
+    requires: ['services/svc-ws', 'packages/market-data'],
+    note: 'Depth + public TRADE tape on svc-ws (PR #91). Orders/positions still missing.',
   }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────

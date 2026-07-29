@@ -1,10 +1,18 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
-import { applyDelta, bookFromSnapshot, type DepthBook, type DepthMessage, type DepthSnapshot } from '@intafaced/market-data';
+import {
+  applyDelta,
+  bookFromSnapshot,
+  type DepthBook,
+  type DepthMessage,
+  type DepthSnapshot,
+  type TradePrint,
+} from '@intafaced/market-data';
 import { DepthHub } from '../depth/hub.js';
 import type { DepthSource } from '../depth/source.js';
 import { registerRoutes } from '../routes.js';
+import { TradeHub } from '../trade/hub.js';
 import { createWebSocketGateway, type WebSocketGateway } from './gateway.js';
 
 /**
@@ -125,6 +133,7 @@ const log = { info: vi.fn(), warn: vi.fn() };
 describe('the websocket gateway, over a real socket', () => {
   let app: FastifyInstance;
   let hub: DepthHub;
+  let tradeHub: TradeHub;
   let source: StubSource;
   let gateway: WebSocketGateway;
   let base: string;
@@ -142,8 +151,16 @@ describe('the websocket gateway, over a real socket', () => {
       maxConnections: 4,
       marketsRefreshMs: 0,
     });
+    tradeHub = new TradeHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 4,
+      recentLimit: 10,
+      ensureKnownMarket: (id) => hub.ensureKnownMarket(id),
+    });
     registerRoutes(app, {
       hub,
+      tradeHub,
       source,
       depthLimit: 50,
       serviceName: 'svc-ws-test',
@@ -156,7 +173,14 @@ describe('the websocket gateway, over a real socket', () => {
     const port = typeof address === 'object' && address ? address.port : 0;
     base = `127.0.0.1:${port}`;
 
-    gateway = createWebSocketGateway({ server: app.server, hub, heartbeatMs: 60_000, log, enabled: () => enabled });
+    gateway = createWebSocketGateway({
+      server: app.server,
+      hub,
+      tradeHub,
+      heartbeatMs: 60_000,
+      log,
+      enabled: () => enabled,
+    });
     await hub.refreshMarkets();
   });
 
@@ -266,11 +290,53 @@ describe('the websocket gateway, over a real socket', () => {
     expect(closed.code).toBe(1001);
     expect(closed.reason).toBe('gateway shutting down');
   });
+
+  it('streams public trade prints on channel=trades', async () => {
+    tradeHub.ingest({
+      marketId: MARKET,
+      makerOrderId: '11111111-1111-1111-1111-111111111111',
+      takerOrderId: '22222222-2222-2222-2222-222222222222',
+      price: '30100.5',
+      qty: '0.1',
+      sequence: 50,
+      ts: '2026-07-29T12:00:00.000Z',
+    });
+
+    const client = connect(`market=${MARKET}&channel=trades`);
+    await client.frameCount(1);
+
+    const print = JSON.parse(client.frames[0]!) as TradePrint;
+    expect(print).toEqual({
+      type: 'trade',
+      marketId: MARKET,
+      sequence: 50,
+      price: '30100.5',
+      quantity: '0.1',
+      ts: '2026-07-29T12:00:00.000Z',
+    });
+    expect(client.frames[0]).not.toContain('makerOrderId');
+    expect(client.frames[0]).not.toContain('11111111');
+
+    tradeHub.ingest({
+      marketId: MARKET,
+      price: '30101',
+      qty: '0.2',
+      sequence: 51,
+      ts: '2026-07-29T12:00:01.000Z',
+    });
+    await client.frameCount(2);
+    expect(JSON.parse(client.frames[1]!) as TradePrint).toMatchObject({ type: 'trade', sequence: 51, quantity: '0.2' });
+  });
+
+  it('refuses an unknown channel on the upgrade', async () => {
+    expect(await upgradeStatus(`ws://${base}/stream?market=${MARKET}&channel=orders`)).toBe(400);
+  });
 });
 
 describe('the HTTP half', () => {
   let app: FastifyInstance;
   let hub: DepthHub;
+  let tradeHub: TradeHub;
   let source: StubSource;
   let enabled = true;
 
@@ -285,8 +351,16 @@ describe('the HTTP half', () => {
       maxConnections: 4,
       marketsRefreshMs: 0,
     });
+    tradeHub = new TradeHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 4,
+      recentLimit: 10,
+      ensureKnownMarket: (id) => hub.ensureKnownMarket(id),
+    });
     registerRoutes(app, {
       hub,
+      tradeHub,
       source,
       depthLimit: 50,
       serviceName: 'svc-ws-test',
