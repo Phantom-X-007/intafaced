@@ -38,7 +38,22 @@ import { StubMatching, StubPerks, UnreachableMatching, principalFor } from './te
  * every one of those is idempotent.
  */
 
-const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced';
+/**
+ * A DEDICATED database, not the shared dev one.
+ *
+ * This test applies every forward migration, which means it MUTATES THE SCHEMA
+ * of whatever it points at. Pointed at the shared `intafaced` database it
+ * applied an unmerged branch's migration there, and `main`'s own svc-trade
+ * tests — which apply only the first migration and call `listMarket` without
+ * the column that migration made mandatory — began failing on a branch that had
+ * never touched them. A test that changes shared state is not a test, it is a
+ * deployment.
+ *
+ * Create it once:
+ *   psql -U intafaced -c "CREATE DATABASE intafaced_test OWNER intafaced"
+ *   psql -U intafaced -d intafaced_test -c "CREATE SCHEMA trade AUTHORIZATION svc_trade"
+ */
+const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
