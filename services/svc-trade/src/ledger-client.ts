@@ -1,6 +1,7 @@
 import {
   formatAmount,
   parseAmount,
+  InsufficientFundsError,
   type AccountRef,
   type Balance,
   type LedgerClient,
@@ -20,6 +21,64 @@ import { serviceAuthHeaders } from '@intafaced/contracts';
  * the Postgres engine implement, so the money paths in `spot/trade-service.ts`
  * are written once and tested against the reference without a network.
  */
+/**
+ * Rebuild the ledger's own typed error from the wire.
+ *
+ * ── Why this is not cosmetic ────────────────────────────────────────────────
+ *
+ * `toTrpcError` in `router.ts` branches on `err instanceof
+ * InsufficientFundsError` to answer BAD_REQUEST, with a comment explaining that
+ * `ledger.insufficient_funds` must not look retryable. This client used to
+ * throw a plain `Error`, which is not an instance of anything the router knows,
+ * so a user who could not afford an order got **500 INTERNAL_SERVER_ERROR**
+ * from the live fleet — the most retryable class there is, and the exact
+ * opposite of the documented contract.
+ *
+ * The in-process ledger the unit tests use throws the typed error directly, so
+ * every test agreed with the comment while the deployed platform did not. Found
+ * by `tooling/e2e/src/failure-paths.e2e.test.ts`.
+ *
+ * `code` is the signal, not the status: 400 is also what a malformed request
+ * returns, and "you cannot afford this" is a different answer to the user.
+ *
+ * ── Deliberately only ONE code is translated ────────────────────────────────
+ *
+ * `toTrpcError` maps any `LedgerError` to BAD_REQUEST, so translating every
+ * code here would quietly turn `ledger.frozen` — an operator having stopped the
+ * book, which is neither the caller's fault nor permanent — into a 400 telling
+ * the user their request was bad. Today it is a 500, which is at least honest
+ * about whose problem it is and stays retryable. Widening this map means
+ * deciding the right tRPC class for each ledger code, and that is an argument
+ * with its own PR, not a side effect of fixing insufficient funds.
+ *
+ * Everything unrecognised therefore stays a plain `Error` and a 500 — the same
+ * behaviour as before this function existed.
+ */
+function toLedgerError(path: string, status: number, detail: string): Error {
+  let code: string | undefined;
+  let message: string | undefined;
+  try {
+    const body = JSON.parse(detail) as { code?: unknown; message?: unknown };
+    if (typeof body.code === 'string') code = body.code;
+    if (typeof body.message === 'string') message = body.message;
+  } catch {
+    // Not JSON — fall through to the generic error below, with the text intact.
+  }
+
+  if (code === 'ledger.insufficient_funds') {
+    // The wire body carries the ledger's message, which already names the asset
+    // and both amounts. The structured fields are not on the wire, so they are
+    // reconstructed as unknown rather than invented — nothing reads them on this
+    // path, and a fabricated balance in an error object is a number somebody
+    // will eventually believe.
+    const err = new InsufficientFundsError('unknown', 'unknown', '0', '0');
+    err.message = message ?? err.message;
+    return err;
+  }
+
+  return new Error(`svc-ledger ${path} failed (${status}): ${detail}`);
+}
+
 export function createLedgerClient(baseUrl: string, internalSecret: string): LedgerClient {
   /**
    * Service credentials, per call (§2).
@@ -50,7 +109,7 @@ export function createLedgerClient(baseUrl: string, internalSecret: string): Led
       // user who cannot afford an order, the second is a book that has stopped
       // accepting writes — and collapsing them into "request failed" would make
       // both unactionable.
-      throw new Error(`svc-ledger ${path} failed (${response.status}): ${detail}`);
+      throw toLedgerError(path, response.status, detail);
     }
 
     return (await response.json()) as T;

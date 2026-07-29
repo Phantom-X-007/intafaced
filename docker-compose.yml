@@ -121,6 +121,13 @@ services:
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
     volumes:
       - ./tooling/infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      # Dashboards as code (§14.5). The provider in
+      # `provisioning/dashboards/dashboards.yaml` reads this path. Without the
+      # mount the provider finds an empty directory and Grafana comes up with no
+      # dashboards and no error, which is the failure mode this whole
+      # arrangement exists to avoid — a panel clicked into a running instance
+      # dies with the next `down -v`.
+      - ./tooling/infra/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafanadata:/var/lib/grafana
     ports:
       - '3001:3000'

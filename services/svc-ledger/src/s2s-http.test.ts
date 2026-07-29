@@ -58,6 +58,21 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(mapped.status).toBe(412);
   });
 
+  /**
+   * The status alone is not enough for a calling service to act on, and this is
+   * not hypothetical: svc-trade's ledger client could not tell "you cannot
+   * afford this" (400) from "your request was malformed" (also 400), so it
+   * threw a plain `Error` and the router answered **500** for insufficient
+   * funds — the opposite of the retryability its own comment promises. Found by
+   * the e2e suite; this asserts the machine-readable half stays on the wire.
+   */
+  it('carries the ledger error CODE, not just a message', () => {
+    expect(httpError(new InsufficientFundsError(userAvailable(USER, 'USDT'), amt('1'), amt('0'))).body.code).toBe(
+      'ledger.insufficient_funds',
+    );
+    expect(httpError(new LedgerError('frozen for test', 'ledger.frozen')).body.code).toBe('ledger.frozen');
+  });
+
   it('returns balance amounts as decimal strings', async () => {
     const out = await handleS2sBalance(stubService(), userAvailable(USER, 'USDT'));
     expect(out.amount).toBe(formatAmount(amt('42')));

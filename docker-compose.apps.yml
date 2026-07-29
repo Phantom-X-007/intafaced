@@ -573,8 +573,23 @@ services:
       HOSTNAME: 0.0.0.0
       HEALTHCHECK_PORT: '3100'
       HEALTHCHECK_PATH: /
+      # §14.6 — the operator kill-switch, wired to something.
+      #
+      # Server-side only: read in `apps/admin/src/lib/kill-switch-client.ts`,
+      # never `NEXT_PUBLIC_*`. A token carrying `admin:write` that reached the
+      # browser bundle would be a token in everybody's devtools.
+      #
+      # `ADMIN_OPERATOR_TOKEN` is empty by default and the console SAYS SO on
+      # its face ("Not configured") rather than rendering switches that quietly
+      # do nothing. Issue one with `admin:write` and `mfa`; the edge's audit
+      # line then names its subject.
+      EDGE_URL: ${ADMIN_EDGE_URL:-http://svc-edge:4000}
+      ADMIN_OPERATOR_TOKEN: ${ADMIN_OPERATOR_TOKEN:-}
     ports: ['3100:3100']
     healthcheck: *healthcheck
+    depends_on:
+      svc-edge:
+        condition: service_healthy
 
 volumes:
   matchingjournal:

@@ -23,19 +23,41 @@ import {
  * `resolveAll()` / `isEnabled()` in `@intafaced/config`. The board cannot drift
  * from what the services enforce because it holds no list of its own.
  *
- * Overrides staged here live in this browser session only. Applying them is a
- * stub until the flag store is deployed — see `stageNotice` below.
+ * ── Two kinds of switch on one board, and the difference is not cosmetic ────
+ *
+ * **Module kill-switches are LIVE.** Toggling one posts to `/api/kill-switch`,
+ * which reaches `svc-edge`'s control plane, which refuses new commitments to
+ * that module on the request path — while still passing cancels and reads, so
+ * the switch never traps a user's funds. The board renders the state the
+ * platform reports, not the state this browser wishes for.
+ *
+ * **Individual FLAG overrides are still staged locally.** They are a faithful
+ * preview of what the same override would do inside a service, and they still
+ * go nowhere, because there is still no durable flag store. That is called out
+ * on the panel rather than left for an operator to discover during an incident.
  */
+
+export type ControlStatus = 'reachable' | 'unconfigured' | 'unreachable';
 
 export interface KillSwitchBoardProps {
   drop: Drop;
   flagEnv: Record<string, string>;
+  /** Whether this console can reach the platform control plane at all. */
+  controlStatus: ControlStatus;
+  /** One sentence an operator can act on, when it cannot. */
+  controlDetail: string | null;
+  /** Modules the PLATFORM reports as killed — read from svc-edge, not from this browser. */
+  liveDisabledModules: ModuleId[];
+  liveReasons: Record<string, string>;
 }
 
-export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
+export function KillSwitchBoard({ drop, flagEnv, controlStatus, controlDetail, liveDisabledModules, liveReasons }: KillSwitchBoardProps) {
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  const [disabledModules, setDisabledModules] = useState<ModuleId[]>([]);
+  const [disabledModules, setDisabledModules] = useState<ModuleId[]>(liveDisabledModules);
   const [criticalArmed, setCriticalArmed] = useState(false);
+  const [pending, setPending] = useState<ModuleId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const live = controlStatus === 'reachable';
 
   const baseline = useMemo(() => flagStates({ drop, env: flagEnv }), [drop, flagEnv]);
   const staged = useMemo(() => flagStates({ drop, env: flagEnv, overrides, disabledModules }), [drop, flagEnv, overrides, disabledModules]);
@@ -60,14 +82,53 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
     });
   }
 
-  function toggleModule(module: ModuleId) {
-    setDisabledModules((prev) => (prev.includes(module) ? prev.filter((m) => m !== module) : [...prev, module]));
+  /**
+   * THE LIVE ONE.
+   *
+   * Optimism is deliberately absent: the board does not move until the platform
+   * has confirmed the new state, because a switch that looks flipped and is not
+   * is worse than one that takes a second. `next` comes from the response, so if
+   * two operators act at once the board shows what actually happened.
+   */
+  async function toggleModule(module: ModuleId) {
+    if (!live) {
+      setError(controlDetail ?? 'This console cannot reach the control plane.');
+      return;
+    }
+
+    const disabled = !disabledModules.includes(module);
+    setPending(module);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/kill-switch', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          module,
+          disabled,
+          reason: disabled ? `operator killed ${module} from the console` : `operator restored ${module} from the console`,
+        }),
+      });
+      const body = (await res.json()) as { snapshot?: { disabledModules?: ModuleId[] }; detail?: string; error?: string };
+
+      if (!res.ok) {
+        setError(body.detail ?? body.error ?? `The control plane answered ${res.status}.`);
+        return;
+      }
+      setDisabledModules(body.snapshot?.disabledModules ?? []);
+    } catch (err) {
+      setError(`The control plane did not answer: ${(err as Error).message}`);
+    } finally {
+      setPending(null);
+    }
   }
 
+  /** Clears only what is staged locally. A live kill is not something a "reset" button undoes. */
   function reset() {
     setOverrides({});
-    setDisabledModules([]);
     setCriticalArmed(false);
+    setError(null);
   }
 
   return (
@@ -82,11 +143,36 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
           </p>
         </div>
         <div className="adm-inline">
-          <button type="button" className="adm-btn" onClick={reset} disabled={changes.length === 0 && disabledModules.length === 0}>
+          <button type="button" className="adm-btn" onClick={reset} disabled={changes.length === 0}>
             Reset staged
           </button>
         </div>
       </div>
+
+      <Panel
+        title="Control plane"
+        className={live ? undefined : 'adm-panel--warn'}
+        actions={<Chip tone={live ? 'live' : 'warn'}>{CONTROL_LABEL[controlStatus]}</Chip>}
+      >
+        <div className="adm-stack">
+          <p className="adm-footnote">{live ? CONTROL_LIVE_COPY : (controlDetail ?? CONTROL_DEAD_COPY)}</p>
+          {error && (
+            <div className="adm-callout" data-tone="danger">
+              <strong>The last switch did not take</strong>
+              {error}
+            </div>
+          )}
+          {live && disabledModules.length > 0 && (
+            <div className="adm-inline">
+              {disabledModules.map((id) => (
+                <Chip key={id} tone="danger">
+                  {id} killed{liveReasons[id] ? ` — ${liveReasons[id]}` : ''}
+                </Chip>
+              ))}
+            </div>
+          )}
+        </div>
+      </Panel>
 
       <Panel title="Platform state" live>
         <div className="adm-statrow">
@@ -160,7 +246,13 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
                       </Chip>
                       <span className="adm-topbar__spacer" />
                       {group.killed && <Chip tone="danger">Module killed</Chip>}
-                      <Switch on={!group.killed} onLabel="Enabled" offLabel="Killed" onToggle={() => toggleModule(group.module)} />
+                      <Switch
+                        on={!group.killed}
+                        onLabel="Enabled"
+                        offLabel="Killed"
+                        disabled={!live || pending === group.module}
+                        onToggle={() => void toggleModule(group.module)}
+                      />
                     </span>
                   </td>
                 </tr>
@@ -208,9 +300,25 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
 
 const FLAG_COUNT_COPY = 'Every flag declared in the registry, grouped by the module that owns it.';
 
+const CONTROL_LABEL: Readonly<Record<ControlStatus, string>> = {
+  reachable: 'Live',
+  unconfigured: 'Not configured',
+  unreachable: 'Unreachable',
+};
+
+const CONTROL_LIVE_COPY =
+  'Module switches on this board are LIVE. Killing a module tells svc-edge to refuse new commitments to it immediately — new orders, ' +
+  'new payments, new escrows — while still passing cancels and reads, because a control that traps funds is not a safety control. ' +
+  'Individual flag rows below are still staged locally; only the module switch reaches the platform.';
+
+const CONTROL_DEAD_COPY =
+  'This console cannot reach the platform control plane, so the module switches below are inert. Nothing on this page can change the ' +
+  'platform until that is fixed.';
+
 const stageNotice =
-  'Staged changes are held in this browser session and have not been sent anywhere. Live wiring lands when the flag store is deployed; ' +
-  'until then this board is a faithful preview of what the same override would do inside a service.';
+  'These are FLAG overrides, and they are held in this browser session — they have not been sent anywhere. There is still no durable ' +
+  'flag store. The MODULE switches above them are live and do reach svc-edge; these rows are a faithful preview of what the same ' +
+  'override would do inside a service.';
 
 // ── Rows ────────────────────────────────────────────────────────────────────
 

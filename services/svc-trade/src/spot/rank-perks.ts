@@ -1,4 +1,4 @@
-import { BASE_PERKS, rankPerksSchema, type RankPerks } from '@intafaced/contracts';
+import { BASE_PERKS, rankPerksSchema, serviceAuthHeaders, type RankPerks } from '@intafaced/contracts';
 import { TradeError } from './types.js';
 
 /**
@@ -39,8 +39,22 @@ export class BasePerks implements RankPerksSource {
  * error is far harder to unwind than an order that was never placed. Nothing
  * has moved at this point in the flow, which is exactly why this is the right
  * place to be strict.
+ *
+ * ── The call is SIGNED, and for a while it was not ──────────────────────────
+ *
+ * `/internal/rank/:userId/perks` was unauthenticated until the full audit
+ * (L2-3) closed it with `verifyServiceHeaders`. This caller was not updated to
+ * match, so it sent `content-type` and nothing else and svc-identity answered
+ * 401 — which, because this client fails closed, turned every single
+ * `orders.create` on the fleet into a 500. Nothing caught it: svc-trade's unit
+ * tests inject `BasePerks`, so the only thing that could see it was a request
+ * crossing a real process boundary.
+ *
+ * That is the entire argument for the e2e suite in `tooling/e2e`, and it is why
+ * `internalSecret` is a REQUIRED parameter here rather than an optional one — a
+ * caller that forgets it should not compile.
  */
-export function createRankPerksClient(baseUrl: string): RankPerksSource {
+export function createRankPerksClient(baseUrl: string, internalSecret: string): RankPerksSource {
   const url = baseUrl.replace(/\/$/, '');
 
   return {
@@ -51,7 +65,7 @@ export function createRankPerksClient(baseUrl: string): RankPerksSource {
         // on rank.perks while still failing closed on transport/parse errors.
         response = await fetch(`${url}/internal/rank/${encodeURIComponent(userId)}/perks`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-trade', internalSecret) },
         });
       } catch (err) {
         throw new TradeError(`rank perks unavailable: ${(err as Error).message}`, 'trade.perks_unavailable');

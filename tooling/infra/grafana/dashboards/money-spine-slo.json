@@ -1,0 +1,225 @@
+{
+  "uid": "intafaced-money-spine-slo",
+  "title": "INTAFACED · Money spine SLO",
+  "tags": ["intafaced", "slo", "money-path"],
+  "timezone": "utc",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "description": "The two promises the exchange makes on the order path, measured at the front door: an order is accepted quickly, and an order is accepted at all. Provisioned from tooling/infra/grafana/dashboards/money-spine-slo.json — a dashboard clicked into a running Grafana does not survive `docker compose down -v`, and §14.5 asks for a panel that exists.",
+  "templating": {
+    "list": [
+      {
+        "name": "module",
+        "label": "Module",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+        "query": "label_values(intafaced_edge_requests_total, module)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "SLO · order placement",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "SLO · order placement latency p99 (objective: < 250 ms)",
+      "description": "p99 of trade.orders.create as the caller experiences it, measured at svc-edge including every hop behind it. Measured at the front door on purpose: svc-trade timing its own handler cannot see the queue in front of it, and would report health during exactly the incident an SLO exists to catch.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(intafaced_edge_request_duration_seconds_bucket{procedure=\"orders.create\"}[5m])))",
+          "legendFormat": "p99",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(intafaced_edge_request_duration_seconds_bucket{procedure=\"orders.create\"}[5m])))",
+          "legendFormat": "p50",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.25 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "SLO · order placement success rate (objective: ≥ 99.5%)",
+      "description": "Share of trade.orders.create calls that did not fail with a 5xx. 4xx is EXCLUDED from the numerator's failures deliberately: 'insufficient funds' and 'market halted' are the platform working correctly, and an SLO that counts them as errors is an SLO that goes red when risk controls do their job.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "expr": "100 * (1 - (sum(rate(intafaced_edge_requests_total{procedure=\"orders.create\",status=\"5xx\"}[30m])) or vector(0)) / clamp_min(sum(rate(intafaced_edge_requests_total{procedure=\"orders.create\"}[30m])), 0.0000001))",
+          "legendFormat": "success %",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 3,
+          "min": 95,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 99.5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Orders placed (5m rate)",
+      "description": "Traffic on the SLO's own denominator. A success rate of 100% over zero requests is not a healthy exchange, and this is the panel that says which one you are looking at.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "expr": "sum(rate(intafaced_edge_requests_total{procedure=\"orders.create\"}[5m])) * 60",
+          "legendFormat": "orders/min",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] } },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "none",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "The rest of the front door",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Request rate by module and status class",
+      "description": "Every request svc-edge proxies. `5xx` is ours; `4xx` is usually a caller being refused correctly.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 11 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "expr": "sum by (module, status) (rate(intafaced_edge_requests_total{module=~\"$module\"}[5m]))",
+          "legendFormat": "{{module}} · {{status}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "stacking": { "mode": "normal", "group": "A" },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["mean"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Refused credentials (auth = refused)",
+      "description": "A bad token lands as anonymous rather than as an error (services/svc-edge/README.md), so it never shows up as a 5xx. This is the only panel where a credential-stuffing run is visible at all.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 11 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "expr": "sum by (module) (rate(intafaced_edge_requests_total{auth=\"refused\"}[5m]))",
+          "legendFormat": "{{module}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}

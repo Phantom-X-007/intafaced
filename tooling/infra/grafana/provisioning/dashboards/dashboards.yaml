@@ -1,0 +1,22 @@
+# Dashboards as code (§14.5 — "at least one SLO dashboard panel").
+#
+# A dashboard clicked into a running Grafana lives in `grafanadata`, which
+# `docker compose down -v` deletes. The DoD item is "a panel EXISTS", and a
+# panel that exists until the next volume prune is not evidence of anything.
+#
+# `allowUiUpdates: false` on purpose. An operator can still explore in Grafana;
+# they cannot silently overwrite the committed definition, so the file in the
+# repo stays the truth about what the SLO is.
+apiVersion: 1
+
+providers:
+  - name: intafaced
+    orgId: 1
+    folder: INTAFACED
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

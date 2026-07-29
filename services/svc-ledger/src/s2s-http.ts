@@ -21,21 +21,45 @@ import type { LedgerService } from './service.js';
  * DoD gate can require a real import from a test without booting Postgres.
  */
 
-export function httpError(err: unknown): { status: number; body: { message: string } } {
-  if (err instanceof InsufficientFundsError) return { status: 400, body: { message: err.message } };
+/**
+ * `code` travels with `message`, and that is not decoration.
+ *
+ * ── The bug this closed ─────────────────────────────────────────────────────
+ *
+ * Every service ledger-client throws a plain `Error` carrying the response text
+ * when the ledger refuses. `svc-trade`'s `toTrpcError` branches on
+ * `err instanceof InsufficientFundsError`, which a plain `Error` never is — so
+ * a user with too little balance received **500 INTERNAL_SERVER_ERROR** from
+ * the live fleet, not the 400 the router's own comment promises:
+ *
+ *   "`ledger.insufficient_funds` must NOT look retryable — retrying a rejected
+ *    hold just rejects it again."
+ *
+ * 500 is the most retryable class there is, so the contract said one thing and
+ * the platform did the opposite. Invisible to unit tests, which use the
+ * in-process ledger and get the typed error directly; only a request crossing a
+ * real process boundary could see it. Found by `tooling/e2e`.
+ *
+ * A status code alone is not enough to fix it: 400 is also what a Zod failure
+ * returns, and "you cannot afford this" and "your request was malformed" are
+ * not the same answer. The code is the machine-readable half, additive to the
+ * existing body so no caller breaks.
+ */
+export function httpError(err: unknown): { status: number; body: { message: string; code?: string } } {
+  if (err instanceof InsufficientFundsError) return { status: 400, body: { message: err.message, code: err.code } };
   if (err instanceof UnbalancedTransactionError || err instanceof InvalidEntryError) {
-    return { status: 500, body: { message: err.message } };
+    return { status: 500, body: { message: err.message, code: err.code } };
   }
   // 401, not 403: the caller has not said who it is. "Known and not allowed" is
   // a different answer and must stay distinguishable to a calling service.
   if (err instanceof LedgerError && err.code === 'ledger.unauthenticated') {
-    return { status: 401, body: { message: err.message } };
+    return { status: 401, body: { message: err.message, code: err.code } };
   }
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
-    return { status: 412, body: { message: err.message } };
+    return { status: 412, body: { message: err.message, code: err.code } };
   }
-  if (err instanceof LedgerError) return { status: 500, body: { message: err.message } };
-  if (err instanceof z.ZodError) return { status: 400, body: { message: err.message } };
+  if (err instanceof LedgerError) return { status: 500, body: { message: err.message, code: err.code } };
+  if (err instanceof z.ZodError) return { status: 400, body: { message: err.message, code: 'ledger.invalid_request' } };
   return { status: 500, body: { message: 'Ledger request failed' } };
 }
 

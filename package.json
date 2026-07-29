@@ -32,6 +32,7 @@
     "tracker:check": "node tooling/scripts/tracker.mjs --check",
     "verify": "turbo run build typecheck test && pnpm scan:workspace && node tooling/ci/dod-gate.mjs",
     "gate": "node tooling/ci/dod-gate.mjs",
+    "e2e": "pnpm --filter @intafaced/e2e e2e",
     "scan:brand": "node tooling/ci/brand-scan.mjs",
     "scan:custody": "node tooling/ci/custody-scan.mjs",
     "scan:vendor-shell": "node tooling/ci/vendor-shell-scan.mjs",

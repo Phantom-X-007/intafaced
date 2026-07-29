@@ -130,10 +130,99 @@ jobs:
 
       - run: pnpm test
 
+  # ── §14.3 — the money spine, end to end, against a real fleet ───────────────
+  #
+  # Not a second unit-test job. Every request goes through svc-edge on :4000 to
+  # containers built from this commit, and the assertions are made on the
+  # LEDGER's answer rather than on any service's opinion of a balance.
+  #
+  # It earned its place on the first run: it found two P0s that every unit test
+  # in the repo agreed were fine, because both only exist across a process
+  # boundary — svc-trade calling svc-identity without service credentials (every
+  # `orders.create` a 500), and the HTTP ledger client flattening
+  # `InsufficientFundsError` into a plain Error (insufficient funds answered 500
+  # instead of 400). That is the entire argument for this job.
+  e2e:
+    name: E2E money spine (§14.3)
+    runs-on: ubuntu-latest
+    needs: [build]
+    # The fleet is fifteen containers built from source. Generous, and still
+    # bounded — a hung compose must fail the job rather than burn the runner.
+    timeout-minutes: 45
+
+    env:
+      # Dev secrets, and they are dev secrets in a throwaway VM. They must be
+      # ≥ 32 chars to satisfy the config schemas, and identical to what the
+      # suite signs its operator token with.
+      JWT_ACCESS_SECRET: ci-only-signing-secret-not-used-anywhere-real-000
+      EDGE_PRINCIPAL_SECRET: ci-only-edge-principal-secret-not-real-00000000
+      INTERNAL_SERVICE_SECRET: ci-only-internal-service-secret-not-real-00000
+      PAY_CARD_SANDBOX_WEBHOOK_SECRET: ci-only-card-sandbox-webhook-secret-000000
+      PAY_CRYPTO_WEBHOOK_SECRET: ci-only-crypto-webhook-secret-00000000000000
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # `.env` is what compose reads. Built from the checked-in example so a new
+      # variable added there cannot be silently missing here.
+      - name: Compose environment
+        run: |
+          cp .env.example .env
+          {
+            echo "JWT_ACCESS_SECRET=$JWT_ACCESS_SECRET"
+            echo "EDGE_PRINCIPAL_SECRET=$EDGE_PRINCIPAL_SECRET"
+            echo "INTERNAL_SERVICE_SECRET=$INTERNAL_SERVICE_SECRET"
+            echo "PAY_CARD_SANDBOX_WEBHOOK_SECRET=$PAY_CARD_SANDBOX_WEBHOOK_SECRET"
+            echo "PAY_CRYPTO_WEBHOOK_SECRET=$PAY_CRYPTO_WEBHOOK_SECRET"
+          } >> .env
+
+      # §14.6 — apps/admin needs an operator to reach the control plane, and no
+      # login svc-identity can perform produces one. See the header of the
+      # script: this is the honest workaround, not a shortcut, and it is a §13
+      # socket until operator issuance lands.
+      - name: Mint the console's operator token
+        run: |
+          echo "ADMIN_OPERATOR_TOKEN=$(node tooling/e2e/src/mint-operator-token.mjs)" >> .env
+
+      - name: Bring up the fleet
+        run: docker compose -f docker-compose.apps.yml up -d --build --wait --wait-timeout 900
+
+      # `--wait` covers container health. This covers the front door specifically,
+      # so a failure here says "the edge never answered" instead of surfacing as
+      # forty assertion errors.
+      - name: Wait for the front door
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:4000/ready > /dev/null; then
+              echo "svc-edge ready after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "svc-edge never became ready"; exit 1
+
+      - name: Run the e2e suite
+        run: pnpm e2e
+
+      # Only on failure, and it is the whole point: an e2e that fails in CI with
+      # nothing but a stack trace costs an afternoon of local reproduction.
+      - name: Fleet logs
+        if: failure()
+        run: docker compose -f docker-compose.apps.yml logs --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.apps.yml down -v
+
   dod:
     name: Definition of Done
     runs-on: ubuntu-latest
-    needs: [gates, build, test]
+    needs: [gates, build, test, e2e]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -145,4 +234,7 @@ jobs:
 
       # §0.1 — never half done. This is the gate that decides whether a module
       # ships, and it runs on every PR so nothing "temporary" reaches main.
+      #
+      # `needs: e2e` is what lets the gate assert "e2e green in CI" as a fact
+      # rather than as a checkbox: this job cannot run unless that one passed.
       - run: pnpm gate

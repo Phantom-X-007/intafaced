@@ -14,3 +14,24 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ['nats:8222']
+
+  # The front door — and the only place in the fleet emitting an application
+  # metric today (§14.5). Everything user-facing crosses it, so an SLO measured
+  # here is measured where the promise was made rather than where it happens to
+  # be convenient. See `services/svc-edge/src/metrics.ts`.
+  #
+  # `svc-edge` is started by `docker-compose.apps.yml`, which `include:`s the
+  # compose file this config belongs to, so both land in the same project
+  # network. Prometheus scrapes the container by service name, never the
+  # published host port.
+  #
+  # A missing target here shows up as DOWN on :9090/targets, which is a visible
+  # failure — the reason this is a static config rather than discovery that
+  # would report "no targets found" as "nothing wrong".
+  - job_name: svc-edge
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['svc-edge:4000']
+        labels:
+          service: svc-edge
