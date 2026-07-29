@@ -2,7 +2,23 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
   "globalDependencies": ["tsconfig.base.json", ".env"],
-  "globalEnv": ["NODE_ENV", "APP_ENV"],
+  "globalEnv": [
+    "NODE_ENV",
+    "APP_ENV",
+    "CI",
+    "REQUIRE_POSTGRES",
+    "TEST_DATABASE_URL",
+    "TEST_DATABASE_URL_PAY",
+    "TEST_DATABASE_URL_IDENTITY",
+    "TEST_DATABASE_URL_TOKEN",
+    "TEST_DATABASE_URL_TRADE",
+    "TEST_DATABASE_URL_P2P",
+    "TEST_DATABASE_URL_BANK",
+    "TEST_DATABASE_URL_BLUEPRINT",
+    "TEST_DATABASE_URL_AGENTS",
+    "REDIS_URL",
+    "NATS_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -17,7 +33,8 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "cache": false
     },
     "test:watch": {
       "cache": false,
