@@ -991,6 +991,7 @@ export default {
       this.trend = 0;
       this.lastTick = 0;
       this.chartFailed = false;
+      this.feeKnown = false;
       this.marketsLoading = false;
       this.marketsReachable = false;
       this.bookReachable = false;

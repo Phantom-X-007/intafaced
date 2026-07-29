@@ -113,8 +113,8 @@
           </ul>
         </div>
         <div class="ptjy">
-          <Table v-if="choseBtn==0" :columns="favorColumns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
-          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
+          <Table v-if="choseBtn==0" :columns="favorColumns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
+          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
 <!--
           <p v-if="choseBtn!=0" style="height:50px;line-height:50px;padding-left:10px;border-bottom:1px solid #222222;font-size:14px;color:rgb(97, 119, 146);">Launchpad</p>
           <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex2" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
@@ -193,6 +193,8 @@ export default {
     let self = this;
     return {
       loading: false,
+      /* True only when market thumb failed — empty table is not "no markets". */
+      marketsDown: false,
       percent: 0,
       pageNo: 1,
       pageSize: 6,
@@ -805,6 +807,12 @@ export default {
         return "EN";
       }
       return "CN";
+    },
+    marketsTableEmptyText: function() {
+      if (this.marketsDown) {
+        return this.$t("common.marketsUnavailable");
+      }
+      return this.$t("common.nodata");
     }
   },
   watch: {
@@ -1045,10 +1053,16 @@ export default {
     },
     getSymbol() {
       this.loading = true;
+      this.marketsDown = false;
       this.$http
 .post(this.host + this.api.market.thumbTrend, {})
 .then(response => {
           var resp = response.body;
+          if (!Array.isArray(resp)) {
+            this.marketsDown = true;
+            this.loading = false;
+            return;
+          }
           for (var i = 0; i < resp.length; i++) {
             var coin = resp[i];
             coin.price = resp[i].close;
@@ -1071,6 +1085,9 @@ export default {
             this.getFavor();
           }
           this.startWebsock();
+          this.loading = false;
+        }, () => {
+          this.marketsDown = true;
           this.loading = false;
         });
     },

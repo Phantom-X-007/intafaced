@@ -1,12 +1,12 @@
 # Nitro Stream A claim — app surface
 
-**Status:** CLAIMED by Nitro (`@ZenYoda3`)  
+**Status:** CLAIMED by Nitro (`@ZenYoda3`) — **Phase 1 agent floor closed** (2026-07-29)  
 **Date:** 2026-07-29  
 **GitHub:** issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83)  
 **Source of law:** Denon board on `feat/rebrand-english-black-orange (LANDS AS #86 on main — treat as done)` → `docs/SPLIT-BOARD.md` + message 2026-07-29  
 **Partner stream:** Denon = Stream B (spine) — do not edit his territory
 
-**Claim tags:** `[VERIFIED 2026-07-29]` claim published · board files still on rebrand branch until he merges · re-verify with `gh pr list`.
+**Claim tags:** `[VERIFIED 2026-07-29]` Phase 1 UI slices S0–S1 + S3–S7 on main via #98/#103/#108 + follow-ups. Open: **S2 seed** [#109](https://github.com/Phantom-X-007/intafaced/issues/109) · **S8 look tour** (Nitro only).
 
 ---
 
