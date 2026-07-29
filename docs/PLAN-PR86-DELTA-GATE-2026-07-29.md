@@ -13,15 +13,15 @@
 
 **Unspoken needs:**
 
-| # | Need | Plan answer |
-| --- | --- | --- |
-| 1 | Catch Denon speed mistakes without freezing product for days | **WAVE/delta gate on #86 only** — not A–E full program |
-| 2 | Land real security fixes (open wallet RPC, API-key escalate, trading backdoor) | Merge when **CI green + delta P0 clean** — do not hold security fixes for theatre |
-| 3 | Control without coding | You decide merge / go-live / licence forks; agents run format, wave, fixes |
-| 4 | Not rubber-stamp “it’s green” | Verify **GitHub CI**, not Denon’s local gate story |
-| 5 | Vendor map without gutting money doctrine | UI = `vendor/<exchange-tree>` @ :8090; **books still TS ledger**; vendor-as-sole-money still forbidden |
-| 6 | Licence landmines not silently “done” | Merge can ship code + honest blockers; **chart + MySQL connector wait for Denon** |
-| 7 | Fast + quality tooling | L0 machine → parallel risk layers → maker-checker on P0 → format fix → merge → update PEACE |
+| #   | Need                                                                           | Plan answer                                                                                            |
+| --- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| 1   | Catch Denon speed mistakes without freezing product for days                   | **WAVE/delta gate on #86 only** — not A–E full program                                                 |
+| 2   | Land real security fixes (open wallet RPC, API-key escalate, trading backdoor) | Merge when **CI green + delta P0 clean** — do not hold security fixes for theatre                      |
+| 3   | Control without coding                                                         | You decide merge / go-live / licence forks; agents run format, wave, fixes                             |
+| 4   | Not rubber-stamp “it’s green”                                                  | Verify **GitHub CI**, not Denon’s local gate story                                                     |
+| 5   | Vendor map without gutting money doctrine                                      | UI = `vendor/<exchange-tree>` @ :8090; **books still TS ledger**; vendor-as-sole-money still forbidden |
+| 6   | Licence landmines not silently “done”                                          | Merge can ship code + honest blockers; **chart + MySQL connector wait for Denon**                      |
+| 7   | Fast + quality tooling                                                         | L0 machine → parallel risk layers → maker-checker on P0 → format fix → merge → update PEACE            |
 
 **Verdict (strategy):**  
 **Do not start a full new audit before continuing.**  
@@ -62,67 +62,74 @@ Consolidated release: **shell rebrand** + **three custody locks** + **auth scope
 
 ### Claimed security fixes — verification posture
 
-| Claim | Evidence posture (initial) | Merge bar |
-| --- | --- | --- |
-| API-key privilege escalation | `assertDelegatableScopes` + grantor = principal scopes; tests for escalate refuse | Must stay |
-| Wallet RPC open withdraw | `RpcAuthInterceptor` + `RpcSecurityConfig`; fail closed | Must stay |
-| Trading backdoor / TestController / OrderController holes | Controllers deleted in custody fix commit | Must stay |
-| Prettier / format CI | 4 docs failed format:check | **Must fix before merge** |
-| Known pay test disagreement | Named in PR; CI Tests job still **passed** on GitHub | Follow-up, not silent skip |
-| CORS wildcard + credentials | Named **unfixed** in STATUS | Post-merge P1 (needs origin allowlist decision) |
-| TradingView no licence / MySQL GPL | `LICENCE-POSITION.md` | **Do not invent** — Denon product call |
+| Claim                                                     | Evidence posture (initial)                                                        | Merge bar                                       |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------- |
+| API-key privilege escalation                              | `assertDelegatableScopes` + grantor = principal scopes; tests for escalate refuse | Must stay                                       |
+| Wallet RPC open withdraw                                  | `RpcAuthInterceptor` + `RpcSecurityConfig`; fail closed                           | Must stay                                       |
+| Trading backdoor / TestController / OrderController holes | Controllers deleted in custody fix commit                                         | Must stay                                       |
+| Prettier / format CI                                      | 4 docs failed format:check                                                        | **Must fix before merge**                       |
+| Known pay test disagreement                               | Named in PR; CI Tests job still **passed** on GitHub                              | Follow-up, not silent skip                      |
+| CORS wildcard + credentials                               | Named **unfixed** in STATUS                                                       | Post-merge P1 (needs origin allowlist decision) |
+| TradingView no licence / MySQL GPL                        | `LICENCE-POSITION.md`                                                             | **Do not invent** — Denon product call          |
 
 ---
 
 ## Decomposition (ordered work)
 
 ### Phase 0 — Freeze & honesty (minutes)
-1. `git fetch`; tip of #86 vs main  
-2. CI matrix: doctrine / tests / typecheck-format / DoD  
-3. Refuse “green” if format or doctrine red  
+
+1. `git fetch`; tip of #86 vs main
+2. CI matrix: doctrine / tests / typecheck-format / DoD
+3. Refuse “green” if format or doctrine red
 
 ### Phase 1 — Unblock CI (minutes) **[in progress]**
-1. Worktree from release branch  
-2. Prettier write on the 4 failing docs  
-3. Push so #86 CI re-runs green  
+
+1. Worktree from release branch
+2. Prettier write on the 4 failing docs
+3. Push so #86 CI re-runs green
 
 ### Phase 2 — Delta audit (WAVE) (parallel agents)
-1. **Inventory** delta since `4311cff`  
-2. **Parallel layers:** money · auth · deploy/brand/vendor  
-3. **Claim check:** re-read each security fix with file evidence  
-4. **Cheat-diff:** no test gutting on money/auth files  
-5. Output: P0-before-merge / P1-after / P2 park  
+
+1. **Inventory** delta since `4311cff`
+2. **Parallel layers:** money · auth · deploy/brand/vendor
+3. **Claim check:** re-read each security fix with file evidence
+4. **Cheat-diff:** no test gutting on money/auth files
+5. Output: P0-before-merge / P1-after / P2 park
 
 ### Phase 3 — Merge gate
-Merge **only if:**  
-- Doctrine + Tests + format green  
-- No open P0 from Phase 2 on this delta  
+
+Merge **only if:**
+
+- Doctrine + Tests + format green
+- No open P0 from Phase 2 on this delta
 - Nitro explicit go (or standing “merge when clean” from this plan)
 
 ### Phase 4 — After merge (same day, not archaeology)
-1. Update `PEACE-OF-MIND`: vendor = product **UI**; books = ledger; residual CORS + licences  
-2. Restack/close stale docs PRs (#85 security floor, #84 Stream A) if conflicted  
+
+1. Update `PEACE-OF-MIND`: vendor = product **UI**; books = ledger; residual CORS + licences
+2. Restack/close stale docs PRs (#85 security floor, #84 Stream A) if conflicted
 3. Residual queue for next coding session (not merge blockers unless P0)
 
 ### Explicit non-goals
-- Full A–E restart  
-- Strix / live exploit without go + non-prod  
-- Merging `feat/multi-asset-instruments`  
-- Building features in `apps/web`  
-- Guessing licence path for TradingView or MySQL connector  
+
+- Full A–E restart
+- Strix / live exploit without go + non-prod
+- Merging `feat/multi-asset-instruments`
+- Building features in `apps/web`
+- Guessing licence path for TradingView or MySQL connector
 
 ---
 
 ## Tooling & workflow (how we move fast without quality loss)
 
-| Tool | Use |
-| --- | --- |
-| **GitHub CI** | Law truth — not local “I ran brand-scan” alone |
-| **`pnpm scan:brand` / `custody` / format** | L0 before merge |
-| **`docs/WAVE-AUDIT.md` + `.grok/workflows/denon-wave-audit.rhai`** | Parallel delta risk layers |
-| **Maker-checker subagent** | Fresh context on any P0 found |
-| **Worktree** | Never edit main checkout |
-| **Security floor** | `docs/SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md` (Track A still partial after this) |
+| Tool                                                               | Use                                                                                |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| **GitHub CI**                                                      | Law truth — not local “I ran brand-scan” alone                                     |
+| **`pnpm scan:brand` / `custody` / format**                         | L0 before merge                                                                    |
+| **`docs/WAVE-AUDIT.md` + `.grok/workflows/denon-wave-audit.rhai`** | Parallel delta risk layers                                                         |
+| **Maker-checker subagent**                                         | Fresh context on any P0 found                                                      |
+| **Worktree**                                                       | Never edit main checkout                                                           |
+| **Security floor**                                                 | `docs/SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md` (Track A still partial after this) |
 
 **Do not invent:** Semgrep/gitleaks install mid-merge unless a delta finding forces it. Prefer land #86 security fixes first.
 
@@ -130,10 +137,10 @@ Merge **only if:**
 
 ## Recommended sequence for Nitro (plain)
 
-1. **Authorize:** “delta gate + format + merge when green” — not full audit first.  
-2. Agents finish Prettier → wait CI green.  
-3. Agents finish WAVE findings list — you see only P0s that block.  
-4. **You (or agent on your order):** squash-merge #86.  
+1. **Authorize:** “delta gate + format + merge when green” — not full audit first.
+2. Agents finish Prettier → wait CI green.
+3. Agents finish WAVE findings list — you see only P0s that block.
+4. **You (or agent on your order):** squash-merge #86.
 5. Next session: residual CORS + PEACE update + licence wait for Denon.
 
 ---
@@ -165,20 +172,20 @@ One-line verdict + P0 list + PR/CI proof + next residual (CORS/licences).
 
 ## Status log
 
-| Step | Status |
-| --- | --- |
-| Strategy pick (delta vs full) | **DONE** — delta/WAVE |
-| Product framing subagent | **DONE** — agrees |
-| Security claim spot-check | **DONE** — MERGE_AFTER_FORMAT |
-| Prettier unblock | **DONE** — pushed to release branch `af87540` |
-| WAVE / security delta | **DONE** (code-reviewer + explore) |
-| Merge | **WAIT** green + no P0 |
+| Step                          | Status                                        |
+| ----------------------------- | --------------------------------------------- |
+| Strategy pick (delta vs full) | **DONE** — delta/WAVE                         |
+| Product framing subagent      | **DONE** — agrees                             |
+| Security claim spot-check     | **DONE** — MERGE_AFTER_FORMAT                 |
+| Prettier unblock              | **DONE** — pushed to release branch `af87540` |
+| WAVE / security delta         | **DONE** (code-reviewer + explore)            |
+| Merge                         | **WAIT** green + no P0                        |
 
 ---
 
 ## Sources
 
-- PR #86 body + CI logs (format fail on 4 md files)  
-- `docs/WAVE-AUDIT.md` on main  
-- Branch STATUS / HANDOVER / SPLIT-BOARD / LICENCE-POSITION  
-- PEACE-OF-MIND vendor quarantine line on main  
+- PR #86 body + CI logs (format fail on 4 md files)
+- `docs/WAVE-AUDIT.md` on main
+- Branch STATUS / HANDOVER / SPLIT-BOARD / LICENCE-POSITION
+- PEACE-OF-MIND vendor quarantine line on main
