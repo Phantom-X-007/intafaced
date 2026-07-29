@@ -53,7 +53,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE "bank"."position_status" AS ENUM ('active', 'closed');
+  CREATE TYPE "bank"."position_status" AS ENUM ('pending', 'active', 'closed');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ── spaces ───────────────────────────────────────────────────────────────────

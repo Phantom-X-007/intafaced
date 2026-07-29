@@ -16,7 +16,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE "token"."stake_status" AS ENUM ('active', 'unstaking', 'closed');
+  CREATE TYPE "token"."stake_status" AS ENUM ('pending', 'active', 'unstaking', 'closed');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN

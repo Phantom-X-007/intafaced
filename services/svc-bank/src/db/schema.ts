@@ -64,7 +64,7 @@ export const executionStatusEnum = bank.enum('execution_status', ['pending', 'se
 
 export const poolKindEnum = bank.enum('pool_kind', ['flexible', 'fixed']);
 export const poolStatusEnum = bank.enum('pool_status', ['open', 'closed']);
-export const positionStatusEnum = bank.enum('position_status', ['active', 'closed']);
+export const positionStatusEnum = bank.enum('position_status', ['pending', 'active', 'closed']);
 
 /**
  * A SPACE — a name and a policy over a ledger account (§8.1).

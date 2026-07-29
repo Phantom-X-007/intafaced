@@ -236,11 +236,10 @@ export class EarnService {
   /**
    * Open a position.
    *
-   * Ledger first, then the row — the same ordering as svc-token's `stake`, for
-   * the same reason. If the ledger post fails no row is written; if the row
-   * write fails the ledger post is idempotent on `bank.earn.deposit:<positionId>`
-   * and the retry reconciles. The reverse order would let a position exist with
-   * nothing behind it: a position we would pay interest on that nobody funded.
+   * L3-3 ordering: **claim `pending` → ledger post → activate** (same as
+   * svc-token stake). `pending` is not interest-eligible; if the ledger
+   * refuses we delete the claim so nothing is left to accrue against.
+   * Ledger post is idempotent on `positionId` for crash recovery.
    */
   async deposit(input: { poolId: string; userId: string; amount: Amount; positionId?: string; now?: Date }): Promise<PositionRecord> {
     const positionId = input.positionId ?? crypto.randomUUID();
@@ -266,29 +265,37 @@ export class EarnService {
           );
         }
 
-        await this.ledger.post(
-          recipes.earnDeposit({
-            positionId,
-            poolId: pool.id,
-            userId: input.userId,
-            assetId: pool.assetId,
-            amount: input.amount,
-          }),
-        );
-
         const maturesAt =
           pool.kind === 'fixed' && pool.termDays !== null ? new Date(now.getTime() + pool.termDays * 24 * 60 * 60 * 1000) : null;
 
-        const rows = await this.sql<PositionRow[]>`
-          INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at)
+        await this.sql`
+          INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
           VALUES (${positionId}, ${pool.id}, ${input.userId}, ${pool.assetId},
-                  ${formatAmount(input.amount)}::numeric, ${now}, ${maturesAt})
+                  ${formatAmount(input.amount)}::numeric, ${now}, ${maturesAt}, 'pending')
           ON CONFLICT (id) DO NOTHING
-          RETURNING id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
         `;
 
-        const inserted = rows[0];
-        if (inserted) return toPosition(inserted);
+        try {
+          await this.ledger.post(
+            recipes.earnDeposit({
+              positionId,
+              poolId: pool.id,
+              userId: input.userId,
+              assetId: pool.assetId,
+              amount: input.amount,
+            }),
+          );
+        } catch (err) {
+          await this.sql`
+            DELETE FROM bank.earn_positions WHERE id = ${positionId} AND status = 'pending'
+          `;
+          throw err;
+        }
+
+        await this.sql`
+          UPDATE bank.earn_positions SET status = 'active' WHERE id = ${positionId} AND status = 'pending'
+        `;
+
         return this.position(positionId);
       },
     );

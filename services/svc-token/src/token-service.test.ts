@@ -34,6 +34,7 @@ import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 const URL = process.env.TEST_DATABASE_URL_TOKEN ?? 'postgres://svc_token:svc_token@localhost:5433/intafaced';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_token_init.sql'), 'utf8');
+const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_stake_pending.sql'), 'utf8');
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -65,6 +66,7 @@ if (!available) {
   });
 
   await sql.unsafe(migration);
+  await sql.unsafe(migrationPending);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -128,10 +130,23 @@ if (!available) {
       await fund(USER_A, '100');
       await expect(token.stake({ userId: USER_A, amount: amt('101'), tier: 'flex' })).rejects.toThrow();
 
-      // And leaves NO stake row behind — the ledger post is attempted first
-      // precisely so a failure cannot create a stake with nothing behind it.
+      // L3-2: pending claim is deleted when ledger refuses — no stake row left
+      // (and never an active unfunded stake).
       const rows = await sql`SELECT id FROM token.stakes`;
       expect(rows).toHaveLength(0);
+    });
+
+    it('L3-2 activates a pending claim after ledger funds it (retry-safe)', async () => {
+      await fund(USER_A, '5000');
+      const stakeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId });
+      expect(stake.status).toBe('active');
+      // Idempotent re-entry with same stakeId: ledger no-op, still active.
+      const again = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId });
+      expect(again.id).toBe(stakeId);
+      expect(await stakedOf(USER_A)).toBe('1000');
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.stakes WHERE id = ${stakeId}`;
+      expect(rows[0]?.status).toBe('active');
     });
 
     it('never records a stake the ledger did not fund', async () => {

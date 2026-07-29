@@ -65,7 +65,7 @@ Severity = what fails if unpatched while the live audit “succeeds.”
 
 | ID | Gap | Why it hurts | Patch |
 | --- | --- | --- | --- |
-| **G1** | **Same-family “adversarial” pass is theater risk** | Research: LLMs self-prefer; same-session/same-family review misses correlated bugs. Parallel multi-tool study: **~93% of findings unique to one of four reviewers** — diversity is the signal, not “a second agent with the same brain.” Plan says “independent agent” but does **not** require **fresh context + read-only + different model family/tool** | Mandate: every P0/P1 gets (a) fresh-context critic, (b) **cross-family** second eye when available (Claude ↔ Grok/Codex), (c) read-only tools for critic. Optional third: structural cheat-audit on fix diffs |
+| **G1** | **Same-family “adversarial” pass is theater risk** | Research: LLMs self-prefer; same-session/same-family review misses correlated bugs. Parallel multi-tool study: **~93% of findings unique to one of four reviewers** — diversity is the signal, not “a second agent with the same brain.” Plan says “independent agent” but does **not** require **fresh context + read-only + different model family/tool** | Mandate: every P0/P1 gets (a) fresh-context critic, (b) **cross-family** second eye when available (session model ↔ peer family (e.g. Grok/Codex)), (c) read-only tools for critic. Optional third: structural cheat-audit on fix diffs |
 | **G2** | **No deterministic SAST / doctrine machine layer** | Plan is almost 100% LLM judgment. Repo already has brand/custody/DoD scanners — plan under-uses them as *expansion surface*. Industry: Semgrep custom rules + taint for auth→money sinks; CodeQL for cross-file flow | Add **Layer L0 (machine)** before/alongside L1–L11: extend `scan:custody` / new `scan:money-types` / Semgrep rules for `number` money, bare `ledger.post`, cross-service SQL, unauth public procedures. LLM findings that a scanner can prove must be **scanner-backed** |
 | **G3** | **Layer “complete” has no coverage metric** | Exit gate B allows “written complete” with zero routes enumerated. That is how audits hallucinate coverage | Per layer: **inventory count → checked count**. e.g. L2: N public procedures; L6: N mounted routes vs edge map; L3: named money journeys with crash-midway checklist each |
 | **G4** | **Business-logic money journeys under-specified** | L3 lists deposit/withdraw/fill/webhook/P2P but no **invariant list** (double-entry balance, hold purpose key, idempotent webhook, concurrent hold race, refund/double-spend). ShopPay-class defects pass green tests | For each money journey: **invariant set + crash points + concurrency note + “test that would catch this.”** Prefer property tests (`fast-check`) on ledger invariants where cheap |
@@ -85,7 +85,7 @@ Severity = what fails if unpatched while the live audit “succeeds.”
 
 | ID | Gap | Patch |
 | --- | --- | --- |
-| **G11** | Claude/Grok split vague on isolation | Critic never shares builder transcript; fixer is third role after FAIL |
+| **G11** | Builder/critic model split vague on isolation | Critic never shares builder transcript; fixer is third role after FAIL |
 | **G12** | L9 vendor lacks license/OSS attribution checklist | Add license + transitive brand surface to L9 exit |
 | **G13** | No graph/money-path map artifact | Optional: graphify or hand map of ledger recipes → callers for L1/L3 speed |
 | **G14** | last30days/X gap this session | Re-run X lane later; not blocking plan meta |
@@ -137,7 +137,7 @@ Severity = what fails if unpatched while the live audit “succeeds.”
 | Tool / pattern | Fit for INTAFACED | Action |
 | --- | --- | --- |
 | **Maker-checker / ASDLC adversarial review** | Critical for Phase B second pass + Phase D fix PRs | **Absorb** into method law |
-| **Cross-family multi-model review** (Claude + Grok/Codex; tools like Signum / multi-model skill) | P0 findings | **Absorb** when both available; document if only one model |
+| **Cross-family multi-model review** (session model + peer family; tools like Signum / multi-model skill) | P0 findings | **Absorb** when both available; document if only one model |
 | **Semgrep** (+ custom rules for money/auth) | Fast deterministic doctrine | **Absorb** — start CE rules; Pro taint later if needed |
 | **CodeQL** | Deeper cross-file; heavier | Optional Phase E if Semgrep gaps |
 | **moonrunnerkc/swarm-orchestrator** | AI-PR cheat detectors; offline; advisory default | **Absorb for Phase D** on fix diffs; do not auto-block merge until proven on this repo |

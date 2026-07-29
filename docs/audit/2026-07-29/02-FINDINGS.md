@@ -19,13 +19,13 @@ Severity: **P0** money/trust open door · **P1** serious · **P2** structural ·
 | L2-3 / L11-4 | P1  | Unauth `/internal/*` on identity/token/p2p                                | **FIXED** service HMAC                                      |
 | L8-1         | P1  | Tracker false `done` on protocol.smart-accounts                           | **FIXED** → `ready` + honest note                           |
 
-## Confirmed P1 money-path residual (not fixed this PR — queued)
+## P1 money-path residual — **FIXED Audit V2**
 
-| ID   | Sev | Title                                          | Fix shape                                 |
-| ---- | --- | ---------------------------------------------- | ----------------------------------------- |
-| L3-1 | P1  | Withdraw reverse then status update not atomic | reverse + failed status same durable step |
-| L3-2 | P1  | Token stake ledger-first without claim row     | claim row before post                     |
-| L3-3 | P1  | Earn deposit same claim gap                    | claim before post                         |
+| ID   | Sev | Title                                          | Status |
+| ---- | --- | ---------------------------------------------- | --- |
+| L3-1 | P1  | Withdraw reverse then status update not atomic | **FIXED** — stamp failure_code then `finalizeRailRefusal` |
+| L3-2 | P1  | Token stake ledger-first without claim row     | **FIXED** — `pending` claim → ledger → `active` |
+| L3-3 | P1  | Earn deposit same claim gap                    | **FIXED** — same pending pattern |
 
 ## Confirmed P2 (parked)
 

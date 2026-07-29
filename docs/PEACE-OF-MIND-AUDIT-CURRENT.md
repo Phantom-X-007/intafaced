@@ -39,8 +39,8 @@ Denon shipped a real **startable platform** (edge, mounts, money path, deploy, t
 | **Ledger**                  | Only balances                      | Low if network perimeter holds                                                    | S2S auth tests; verify suite  | Good enough for continued build |
 | **Identity**                | Login / rank / KYC                 | Was **critical** (XP mint) → **fixed**                                            | serviceProcedure + tests      | Fixed this branch               |
 | **Trade / matching**        | Orders + book                      | Low–med                                                                           | Auth regression tests hold    | OK                              |
-| **Pay**                     | Money in/out rails                 | Was **critical** IDOR on mutations → **fixed**; residual withdraw crash window P1 | ownership tests               | Fixed + residual queue          |
-| **Bank earn / token stake** | Yield / stake                      | Med dual-book + claim-order gaps                                                  | audit L1/L3                   | Residual P1–P2                  |
+| **Pay**                     | Money in/out rails                 | Was **critical** IDOR → **fixed**; withdraw reverse crash window → **fixed V2** | ownership + reverse tests     | Good enough for continued build |
+| **Bank earn / token stake** | Yield / stake                      | Claim-order crash windows → **fixed V2**; dual-book still P2                    | pending→active + tests        | Residual P2 only                |
 | **P2P**                     | Escrow                             | Med pooled escrow                                                                 | integrity endpoint now authed | Residual purpose-key            |
 | **Edge**                    | Public door                        | Low for forge; med if S2S ports exposed                                           | principal HMAC                | OK for dev                      |
 | **Protocol**                | Smart accounts API                 | Was **empty door** → **mounted**                                                  | code fix                      | Ready not “done”                |
@@ -52,15 +52,15 @@ Denon shipped a real **startable platform** (edge, mounts, money path, deploy, t
 
 ---
 
-## Ranked remaining queue (after this PR)
+## Ranked remaining queue
 
-### P1 — fix next (money crash windows)
+### P1 money crash windows — **fixed on this branch (Audit V2)**
 
-1. **Withdraw reverse vs status** (L3-1) — reverse can commit without marking failed
-2. **Token stake claim-before-post** (L3-2)
-3. **Earn deposit claim-before-post** (L3-3)
+1. ~~Withdraw reverse vs status (L3-1)~~ → **FIXED** — durable reverse finalize  
+2. ~~Token stake claim-before-post (L3-2)~~ → **FIXED** — `pending` → ledger → `active`  
+3. ~~Earn deposit claim-before-post (L3-3)~~ → **FIXED** — same pattern  
 
-### P2 — structural honesty
+### P2 — structural honesty (still open)
 
 4. Dual-book stake/earn vs ledger (L1-2/3)
 5. Purpose-keyed P2P escrow (L3-4)
@@ -97,18 +97,20 @@ Denon shipped a real **startable platform** (edge, mounts, money path, deploy, t
 
 ## What was fixed in this audit PR (checkable)
 
-| Fix                    | Where you see it                                     |
-| ---------------------- | ---------------------------------------------------- |
-| Protocol `/trpc` mount | `services/svc-protocol/src/index.ts`                 |
-| awardXp service-only   | `services/svc-identity` + router tests               |
-| Pay mutation ownership | `services/svc-pay/src/router.ts` + tests             |
-| Internal route HMAC    | identity / token / p2p                               |
-| Dex correct ports      | compose + `svc-dex` env                              |
-| Brand + format green   | brand-scan allowlist ADRs; prettier ignore vendor    |
-| Tracker honesty        | protocol.smart-accounts → ready; edge header updated |
+| Fix | Where you see it |
+| --- | --- |
+| Protocol `/trpc` mount | `services/svc-protocol/src/index.ts` |
+| awardXp service-only | `services/svc-identity` + router tests |
+| Pay mutation ownership | `services/svc-pay/src/router.ts` + tests |
+| Internal route HMAC | identity / token / p2p |
+| Dex correct ports | compose + `svc-dex` env |
+| Brand + format green | brand-scan; prettier ignore vendor |
+| Tracker honesty | protocol.smart-accounts → ready |
+| **L3-1 withdraw reverse durable** | `svc-pay` `finalizeRailRefusal` + recovery test |
+| **L3-2 stake pending→active** | `svc-token` + migration `0001_stake_pending` |
+| **L3-3 earn pending→active** | `svc-bank` + migration `0001_position_pending` |
 
-**Proof commands** (agent already ran subsets):  
-`pnpm scan:brand` clean · identity 84 tests · pay 221 tests · typechecks pass.
+**Proof:** brand-scan clean · pay 221 non-PG tests · token economics 101 · typecheck pay/token/bank. Full money-path PG tests need docker (CI).
 
 ---
 

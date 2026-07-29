@@ -23,7 +23,7 @@ export const stakeTierEnum = token.enum('stake_tier', ['flex', 'm3', 'm12']);
  * asked to unwind still counts for nothing in `stakeOf` but its principal is
  * not yet released, and the two must never be confused.
  */
-export const stakeStatusEnum = token.enum('stake_status', ['active', 'unstaking', 'closed']);
+export const stakeStatusEnum = token.enum('stake_status', ['pending', 'active', 'unstaking', 'closed']);
 
 /** §4.3 governance surface: what an IFC-weighted vote is allowed to decide. */
 export const proposalKindEnum = token.enum('proposal_kind', ['listing', 'fee_param', 'curriculum', 'grant']);
