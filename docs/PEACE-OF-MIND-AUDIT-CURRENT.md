@@ -1,8 +1,8 @@
 # Peace of mind — current floor (Nitro)
 
 **Date:** 2026-07-29  
-**Main tip:** `f27db87` (includes #80 + #81 + #86 + Stream A claim #84) — re-check `git rev-parse origin/main`  
-**Claim tags:** `[VERIFIED 2026-07-29]` audit program closed; #86 custody + shell on main
+**Main tip:** re-check `git rev-parse origin/main` (this file updates with residual hygiene; tip moves)  
+**Claim tags:** `[VERIFIED 2026-07-29]` audit program closed; #86 custody + shell on main; residual wallet mass-credit + CORS `*` closed on this PR
 
 **Stream A claim:** GitHub issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83) · [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md)
 
@@ -14,10 +14,10 @@ Older July-27 peace/status docs are **history** — this file is the trust floor
 
 ## Verdict (one breath)
 
-**Denon can keep building.** Platform is real (edge, mounts, money path, deploy, terminal, **vendored exchange shell** as product UI). Audit doors closed on main (#80, #81); three more custody doors closed with #86. Remaining risk is **named**, not mystery.
+**Denon can keep building.** Platform is real (edge, mounts, money path, deploy, terminal, **vendored exchange shell** as product UI). Audit doors closed on main (#80, #81); three more custody doors closed with #86; **shell wallet mass-credit + CORS wildcard closed** in residual hygiene. Remaining risk is **named**, not mystery.
 
 After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-audit.  
-**Do not go live with real user money** until dual-book discipline holds, CORS origins are locked, rails/chain are real, kill drill is proven, and Priority-1 licences are settled.
+**Do not go live with real user money** until dual-book discipline holds, production CORS origins are set, rails/chain are real, kill drill is proven, and Priority-1 licences are settled.
 
 ---
 
@@ -34,7 +34,7 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 | Protocol / DEX / indexer | Mounted shells; chain propped                        | Not product-complete                 |
 | Deploy                   | One-command platform; S2S not host-published         | Usable with care                     |
 | **Vendor (shell)**       | **Product UI** OK; **high if used as books**         | **UI shell · quarantined as ledger** |
-| CI doctrine              | Brand/custody law                                    | OK                                   |
+| CI doctrine              | Brand/custody + vendor-shell residue scan            | OK                                   |
 
 ---
 
@@ -56,6 +56,13 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 - Bank + blueprint scopes issued to sessions
 - Licence inventory named · `workspace-sync` widened
 
+**Residual hygiene (this wave)**
+
+- `unfreezeMore` / `unfreezeLess` mass balance credit disabled (service throw + DAO no-op)
+- `dropWeekTable` TRUNCATE / `createWeekTable` snapshot helpers disabled
+- CORS `*` + credentials replaced with explicit allowlist (`CORS_ALLOWED_ORIGINS`)
+- `pnpm scan:vendor-shell` CI gate so these cannot silently return
+
 **PR proof:** [#80](https://github.com/Phantom-X-007/intafaced/pull/80) · [#81](https://github.com/Phantom-X-007/intafaced/pull/81) · [#86](https://github.com/Phantom-X-007/intafaced/pull/86)
 
 ---
@@ -64,16 +71,16 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 Full residual + owners: [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
 
-| Item                                                                            | When it matters                            |
-| ------------------------------------------------------------------------------- | ------------------------------------------ |
-| **Dual-book** — vendored exchange shell ≠ money books (TS ledger remains books) | **Now** · hard before real money           |
-| **CORS** star + credentials on Java web modules                                 | Before public shell / real money           |
-| **`unfreezeMore`** (+500) still in Java DAO                                     | Cheap now · must be gone before real money |
-| **L2-6** S2S body-bind (raw-body design)                                        | Before hard multi-service prod             |
-| Real **rails / live chain**                                                     | Before real user money                     |
-| Operator freeze / **kill drill** proven end-to-end                              | Before go-live                             |
-| **Licences** Priority-1 (chart path · MySQL connector)                          | Before public product — Denon decides      |
-| **Pay withdraw retry** — test vs service contract                               | Soon · before real money                   |
+| Item                                                                            | When it matters                       |
+| ------------------------------------------------------------------------------- | ------------------------------------- |
+| **Dual-book** — vendored exchange shell ≠ money books (TS ledger remains books) | **Now** · hard before real money      |
+| Production **CORS origins** env (`CORS_ALLOWED_ORIGINS`) for real domains       | Before public shell                   |
+| **L2-6** S2S body-bind (raw-body design)                                        | Before hard multi-service prod        |
+| Real **rails / live chain**                                                     | Before real user money                |
+| Operator freeze / **kill drill** proven end-to-end                              | Before go-live                        |
+| **Licences** Priority-1 (chart path · MySQL connector)                          | Before public product — Denon decides |
+| **Pay withdraw retry** — test vs service contract                               | Soon · before real money              |
+| Wallet secrets / host perimeter                                                 | Denon ops · before real money         |
 
 ---
 
@@ -86,6 +93,7 @@ Full residual + owners: [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-
 - Product UI is the **vendored exchange shell** at localhost:8090 — not `apps/web`
 - Shell is **never** the money books without Nitro product decision (default = quarantine as ledger)
 - Do **not** merge multi-asset instruments without Denon
+- Do **not** re-run full archaeology for residual hygiene
 
 ---
 

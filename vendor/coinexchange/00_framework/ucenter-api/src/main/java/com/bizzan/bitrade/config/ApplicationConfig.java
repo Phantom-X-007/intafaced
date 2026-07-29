@@ -16,6 +16,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter
 
 import com.bizzan.bitrade.ext.OrdinalToEnumConverterFactory;
 import com.bizzan.bitrade.interceptor.MemberInterceptor;
+import com.bizzan.bitrade.util.CorsAllowlist;
 
 /**
  * @author GS
@@ -83,10 +84,8 @@ public class ApplicationConfig  extends WebMvcConfigurerAdapter {
     public FilterRegistrationBean corsFilterForBusi() {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOrigin("*");
-        config.setAllowCredentials(true);
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
+        // INTAFACED residual: no wildcard origin with credentials
+        CorsAllowlist.apply(config);
         config.addExposedHeader("x-auth-token");
         source.registerCorsConfiguration("/**", config);
         FilterRegistrationBean bean = new FilterRegistrationBean(new CorsFilter(source));

@@ -456,12 +456,20 @@ public class MemberWalletService extends BaseService {
         memberWalletDao.increaseBalance(walletId,amount);
     }
     
+    /**
+     * Disabled 2026-07-29 (POST-MERGE residual after #86).
+     * Upstream mass-credited {@code to_released} into balance. The vendored shell
+     * is product UI only — TS ledger remains the books.
+     */
     public int unfreezeLess(){
-        return memberWalletDao.unfreezeLess();
+        throw new IllegalStateException(
+                "unfreezeLess is disabled: Java shell must not mass-credit balances (INTAFACED residual)");
     }
-    
+
+    /** Disabled 2026-07-29 — upstream mass +500 balance credit. */
     public int unfreezeMore(){
-        return memberWalletDao.unfreezeMore();
+        throw new IllegalStateException(
+                "unfreezeMore is disabled: Java shell must not mass-credit balances (INTAFACED residual)");
     }
     
     
@@ -469,12 +477,16 @@ public class MemberWalletService extends BaseService {
 //        return memberWalletDao.initSuperPaterner(memberId);
 //    }
     
+    /** Disabled 2026-07-29 — upstream TRUNCATE of wallet snapshot tables. */
     public int dropWeekTable(int weekDay){
-        return memberWalletDao.dropWeekTable(weekDay);
+        throw new IllegalStateException(
+                "dropWeekTable is disabled: Java shell must not TRUNCATE wallet tables (INTAFACED residual)");
     }
-    
+
+    /** Disabled 2026-07-29 — snapshot copy of live wallets. */
     public int createWeekTable(int weekDay){
-        return memberWalletDao.createWeekTable(weekDay);
+        throw new IllegalStateException(
+                "createWeekTable is disabled: Java shell must not snapshot wallets for credit jobs (INTAFACED residual)");
     }
 
     public BigDecimal getWalletBalanceAmount(String coinId,int week){
