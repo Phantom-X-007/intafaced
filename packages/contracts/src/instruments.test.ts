@@ -175,7 +175,11 @@ describe('the plane split', () => {
 describe('venueClock', () => {
   it('resolves an instant to the venue wall clock, not to UTC', () => {
     // 2026-01-05T22:30:00Z is 17:30 Monday in New York (EST, UTC-5).
-    expect(venueClock(new Date('2026-01-05T22:30:00Z'), 'America/New_York')).toEqual({ weekday: 1, minutes: 17 * 60 + 30, date: '2026-01-05' });
+    expect(venueClock(new Date('2026-01-05T22:30:00Z'), 'America/New_York')).toEqual({
+      weekday: 1,
+      minutes: 17 * 60 + 30,
+      date: '2026-01-05',
+    });
   });
 
   it('tracks daylight saving', () => {

@@ -395,7 +395,11 @@ export const instrumentSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['quoteConvention', 'pipSize'], message: 'crypto has no pip convention' });
     }
     if (i.assetClass !== 'crypto' && i.quoteConvention.pipSize === null) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['quoteConvention', 'pipSize'], message: `${i.assetClass} instruments quote in pips` });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['quoteConvention', 'pipSize'],
+        message: `${i.assetClass} instruments quote in pips`,
+      });
     }
     // THE HOURS RULE. The whole reason this model exists: crypto is the only
     // class that trades continuously, and a forex or commodity listing marked
@@ -447,14 +451,7 @@ const id = (v: string): InstrumentId => instrumentIdSchema.parse(v);
  * one array and one row of seed data. Until then, the honest thing is for the
  * DEX to show what it can fill.
  */
-const crypto = (
-  base: string,
-  quote: string,
-  displayName: string,
-  tickSize: string,
-  lotSize: string,
-  minNotional: string,
-): Instrument => ({
+const crypto = (base: string, quote: string, displayName: string, tickSize: string, lotSize: string, minNotional: string): Instrument => ({
   id: id(`${base}-${quote}`),
   symbol: `${base}/${quote}`,
   assetClass: 'crypto',
@@ -566,9 +563,7 @@ export const INSTRUMENTS: readonly Instrument[] = [
 ];
 
 /** Assets the catalogue requires `ledger.assets` to carry. Asserted by the tests. */
-export const CATALOGUE_ASSETS: readonly string[] = [
-  ...new Set(INSTRUMENTS.flatMap((i) => [i.base, i.quote])),
-].sort();
+export const CATALOGUE_ASSETS: readonly string[] = [...new Set(INSTRUMENTS.flatMap((i) => [i.base, i.quote]))].sort();
 
 export function instrumentById(id: string): Instrument | undefined {
   return INSTRUMENTS.find((i) => i.id === id);
