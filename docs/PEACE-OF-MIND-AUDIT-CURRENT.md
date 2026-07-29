@@ -115,16 +115,22 @@ Denon shipped a real **startable platform** (edge, mounts, money path, deploy, t
 
 ---
 
-## What wave-1 did _not_ fully prove (honesty)
+## What “properly audited” means here (and what it does not)
 
-Wave-1 found and fixed **real open doors**. It was **not** a full multi-tool stress campaign. Named gaps (method, not mystery):
+**Properly for this program =** every system that can lose money or trust was **named**, risk **judged**, open doors **fixed or parked with reason**, and you have **one scoreboard** — not “every line of every file” and not “go-live certified.”
 
-- Cross-family critic not mandatory on every finding
-- No property-test invariants yet for residual crash windows
-- No structural “AI false-done” cheat scan on fix diffs
-- No concurrent load smoke on withdraw/stake races
+| Bar                                                  | Status                                                                   |
+| ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| Denon tip through vendor #73 (`a19e337`) inventoried | **Yes**                                                                  |
+| Auth/money open doors found + fixed (wave-1 + V2)    | **Yes on branch**                                                        |
+| Named residual queue (no mystery fear)               | **Yes** — P2 list                                                        |
+| CI fully green + merged to main                      | **Closing** — tests/doctrine green; format was the last blocker (pushed) |
+| Cross-family second model on every fix               | **Not done** (same-session judgment)                                     |
+| Property-test library on ledger invariants           | **Not done**                                                             |
+| Concurrent load smoke                                | **Not done**                                                             |
+| Live rails / production deploy audit                 | **Out of scope** (not live money product yet)                            |
 
-**Next program:** [`AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md`](AUDIT-V2-RESIDUAL-AND-STRESS-2026-07-29.md) · paste: [`HANDOVER-AUDIT-V2-PASTE.md`](HANDOVER-AUDIT-V2-PASTE.md)
+Optional extra proof (not “hidden unfinished audit”): property tests + concurrent smoke. Not required to close **review of what Denon shipped so far**.
 
 ---
 
