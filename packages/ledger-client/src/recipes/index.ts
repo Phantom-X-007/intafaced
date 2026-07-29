@@ -2,6 +2,7 @@ import { mulBps, sub, type Amount } from '../money.js';
 import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
 import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
+import { cardAuthHold, cardCapture, cardAuthRelease, cardRefund } from './card.js';
 import {
   burnAccount,
   houseFees,
@@ -697,6 +698,7 @@ export function liquidate(input: LiquidationInput): PostRequest {
 }
 
 export * from './bank.js';
+export * from './card.js';
 
 export const recipes = {
   deposit,
@@ -729,6 +731,11 @@ export const recipes = {
   earnWithdraw,
   earnPoolFund,
   earnInterest,
+  // §8.1 cards / §18 sovereign card — see ./card.ts. Flagged shared-package change.
+  cardAuthHold,
+  cardCapture,
+  cardAuthRelease,
+  cardRefund,
 } as const;
 
 export type RecipeName = keyof typeof recipes;

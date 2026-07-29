@@ -198,3 +198,22 @@ export function bridgeBoundary(chain: string, assetId: string): AccountRef {
 export function venueBoundary(venue: string, assetId: string): AccountRef {
   return { ownerType: 'treasury', ownerId: `venue:${venue}`, assetId, kind: 'available' };
 }
+
+/**
+ * The card-network boundary for ONE issuer programme (§8.1, §18).
+ *
+ * A card capture is value leaving the book towards a scheme somebody else
+ * settles with, so it goes out through a rail boundary exactly as a withdrawal
+ * does. This function exists so the naming is decided here, once, rather than
+ * at each call site.
+ *
+ * Per ISSUER rather than one pooled `card` account, and that is the point: the
+ * negative balance here is precisely what we owe that issuer right now, which
+ * is the figure their settlement file has to agree with. Pooling two issuers
+ * into one boundary turns a daily reconciliation into an investigation — and a
+ * programme manager runs several issuers at once by design (§18
+ * "issuer risk is a swappable module").
+ */
+export function cardIssuerBoundary(issuerId: string, assetId: string): AccountRef {
+  return railBoundary(`card:${issuerId}`, assetId);
+}

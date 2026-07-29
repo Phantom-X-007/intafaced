@@ -1,4 +1,4 @@
-import { date, index, integer, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -284,6 +284,193 @@ export const interestAccruals = bank.table(
   ],
 );
 
+// ── CARDS (§8.1, §18) ───────────────────────────────────────────────────────
+//
+// Same rule as everything above: no balance, no running total. A card's spend
+// against its daily and monthly caps is a SUM over `card_authorizations` in the
+// window, computed when it is asked. A `cards.spent_today` column would be a
+// second source of truth for money and would drift the first time a reversal
+// posted without decrementing it.
+
+/** §18: the funding design is what makes a low-verification tier lawful, or not. */
+export const cardFundingSourceEnum = bank.enum('card_funding_source', ['ledger', 'self_custody']);
+
+export const cardProgrammeStatusEnum = bank.enum('card_programme_status', ['draft', 'live', 'suspended']);
+
+export const cardStatusEnum = bank.enum('card_status', ['active', 'frozen', 'closed']);
+export const cardFormEnum = bank.enum('card_form', ['virtual', 'physical']);
+export const cardChannelEnum = bank.enum('card_channel', ['pos', 'online', 'atm']);
+
+/**
+ * `approved` is a promise we have made to a scheme and cannot retract. The
+ * other three are what became of it. There is no `pending`: an authorisation
+ * that has not been decided does not exist, because the decision and the row
+ * are written in the same breath as the ledger hold.
+ */
+export const cardAuthorizationStatusEnum = bank.enum('card_authorization_status', ['approved', 'declined', 'captured', 'reversed']);
+
+/**
+ * AN ISSUER'S PROGRAMME, in one region, at one verification tier (§18).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THIS TABLE EXISTS BECAUSE WE DO NOT SET THESE NUMBERS.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * A card is issued by a licensed institution under their programme, and the
+ * verification floor and the limits are theirs. `docs/decisions/kyc-posture.md`
+ * (owner-directed): "the tier thresholds are an issuer negotiation, not an
+ * engineering decision… a configured parameter, not a constant, because the
+ * first issuer will change them and the second will disagree with the first."
+ *
+ * So they are rows. Every numeric column here is a POLICY LIMIT — the ceiling
+ * an issuer has agreed to — and none of them ever changes as a result of
+ * somebody spending.
+ *
+ * `reviewed_by` / `reviewed_at` mirror `assertReviewed()` on the jurisdiction
+ * matrix, and the CHECK constraint below is the same rule: a programme cannot
+ * be `live` without a human name and a date against it.
+ */
+export const cardProgrammes = bank.table(
+  'card_programmes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Operator-facing label — 'sovereign', 'verified'. Never a magic value in code. */
+    code: text('code').notNull(),
+    /** The `CardIssuerAdapter.id` that runs it — and the ledger boundary account. */
+    issuerId: text('issuer_id').notNull(),
+    /** The issuer's own identifier for the programme, passed back to them on issue. */
+    programmeRef: text('programme_ref').notNull(),
+    /** ISO-3166 alpha-2, or '*' for the issuer's default. */
+    region: text('region').notNull().default('*'),
+    assetId: text('asset_id').notNull(),
+    fundingSource: cardFundingSourceEnum('funding_source').notNull(),
+    /** The verification floor THE ISSUER requires. Never below what the matrix demands. */
+    requiredTier: text('required_tier').notNull(),
+    /** POLICY LIMIT: the largest single transaction the issuer will authorise. */
+    perAuthorizationLimit: amount('per_authorization_limit').notNull(),
+    /** POLICY LIMIT: the daily ceiling. */
+    dailyLimit: amount('daily_limit').notNull(),
+    /** POLICY LIMIT: the monthly ceiling. */
+    monthlyLimit: amount('monthly_limit').notNull(),
+    atmEnabled: boolean('atm_enabled').notNull().default(false),
+    onlineEnabled: boolean('online_enabled').notNull().default(true),
+    crossBorderEnabled: boolean('cross_border_enabled').notNull().default(false),
+    /** §18 cashback in IFC. The RATE; the payment is `rewardPay`. */
+    cashbackBps: bps('cashback_bps').notNull().default('0'),
+    status: cardProgrammeStatusEnum('status').notNull().default('draft'),
+    /** Counsel sign-off. Without both, the programme cannot go live. */
+    reviewedBy: text('reviewed_by'),
+    reviewedAt: tstz('reviewed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    /** One programme per issuer, code and region. */
+    uniqueIndex('card_programmes_issuer_code_region_idx').on(t.issuerId, t.code, t.region),
+    index('card_programmes_status_idx').on(t.status, t.region),
+  ],
+);
+
+/**
+ * ONE CARD.
+ *
+ * A name and a pointer, like every other row in this service. It holds no
+ * balance: the money behind a `ledger`-funded card is the user's ordinary
+ * available balance, and behind a `self_custody` one it is in their smart
+ * account and this service never sees it.
+ *
+ * There is no column here a PAN, CVV or expiry could be written to, and that is
+ * deliberate — it is what keeps svc-bank out of PCI scope. `last_four` is
+ * display data the issuer hands back.
+ */
+export const cards = bank.table(
+  'cards',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    programmeId: uuid('programme_id')
+      .notNull()
+      .references(() => cardProgrammes.id),
+    assetId: text('asset_id').notNull(),
+    form: cardFormEnum('form').notNull().default('virtual'),
+    /** The issuer's reference. Stable for the card's whole life. */
+    issuerCardRef: text('issuer_card_ref').notNull(),
+    /** Display only. Four digits from the issuer — never a PAN. */
+    lastFour: text('last_four'),
+    status: cardStatusEnum('status').notNull().default('active'),
+    /**
+     * §18 self-custody funding: the smart account the JIT settlement would pull
+     * from. Recorded so the card is honest about where its money lives even
+     * while the settlement leg is unbuilt. Never a key, never a signer.
+     */
+    fundingAccountRef: text('funding_account_ref'),
+    atmEnabled: boolean('atm_enabled').notNull().default(false),
+    onlineEnabled: boolean('online_enabled').notNull().default(true),
+    crossBorderEnabled: boolean('cross_border_enabled').notNull().default(false),
+    frozenAt: tstz('frozen_at'),
+    closedAt: tstz('closed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('cards_user_idx').on(t.userId, t.status),
+    /** The webhook's lookup: an issuer event names a card by THEIR reference. */
+    uniqueIndex('cards_issuer_ref_idx').on(t.issuerCardRef),
+  ],
+);
+
+/**
+ * ONE AUTHORISATION — a RECORD of something that already happened.
+ *
+ * Written once when the decision is made, updated only to move `status` along
+ * its one-way path (`approved` → `captured` | `reversed`). The money columns are
+ * never revised: `amount` is what we approved and `captured_amount` is what the
+ * scheme actually took, and keeping both is what makes a partial capture
+ * auditable instead of a mystery.
+ *
+ * Summing this table over a window is how a card's daily and monthly spend are
+ * computed. That is the reason there is no total column anywhere near it.
+ */
+export const cardAuthorizations = bank.table(
+  'card_authorizations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => cards.id),
+    userId: text('user_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    /** The issuer's authorisation reference — how a later capture finds this row. */
+    issuerAuthRef: text('issuer_auth_ref').notNull(),
+    /** What we APPROVED. Immutable after insert. */
+    amount: amount('amount').notNull(),
+    /** What the scheme actually took. Written once, at capture. */
+    capturedAmount: amount('captured_amount'),
+    channel: cardChannelEnum('channel').notNull(),
+    crossBorder: boolean('cross_border').notNull().default(false),
+    merchantName: text('merchant_name'),
+    merchantCategoryCode: text('merchant_category_code'),
+    status: cardAuthorizationStatusEnum('status').notNull(),
+    /** The `AuthorizationCode` — why, in a form a dashboard can group by. */
+    decisionCode: text('decision_code').notNull(),
+    /** svc-ledger's transaction id for the hold. The join back to the book. */
+    holdLedgerTxId: text('hold_ledger_tx_id'),
+    captureLedgerTxId: text('capture_ledger_tx_id'),
+    occurredAt: tstz('occurred_at').notNull().defaultNow(),
+    settledAt: tstz('settled_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    /**
+     * THE DOUBLE-AUTHORISE GUARD. A scheme redelivers; an issuer retries. One
+     * authorisation reference is one authorisation, whatever arrives twice.
+     */
+    uniqueIndex('card_authorizations_issuer_ref_idx').on(t.issuerAuthRef),
+    /** The window query: this card's approved spend since a given instant. */
+    index('card_authorizations_card_window_idx').on(t.cardId, t.status, t.occurredAt),
+  ],
+);
+
 export const schema = {
   spaces,
   scheduledTransfers,
@@ -291,4 +478,7 @@ export const schema = {
   earnPools,
   earnPositions,
   interestAccruals,
+  cardProgrammes,
+  cards,
+  cardAuthorizations,
 };
