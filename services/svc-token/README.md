@@ -19,7 +19,9 @@ Owns the emission schedule, the staking ladder, real-yield distribution, and buy
 | tRPC `listStakes`                           | `token:read`            | Stakes owned by the signed principal                                                                                      |
 | tRPC `stakeOf` / `accessOf`                 | `token:read`            | Total active stake / access tier + fee discount                                                                           |
 | tRPC `mintEpoch` / `nextEmissionEpoch`      | `admin:treasury` / read | Operator mint (optional `epoch`) and next index                                                                           |
-| `distributeRevenue` / `recordBuyback` (svc) | internal                | Real-yield + buyback — still operator/job surface, not yet on /trpc                                                       |
+| tRPC `distributeRevenue`                    | `admin:treasury` + MFA  | Live real-yield: sweep fee sources → pro-rata staker payouts (window + sources on the wire)                               |
+| tRPC `recordBuyback`                        | `admin:treasury` + MFA  | Live buyback settle: caller supplies `tokensBought` (trade prices elsewhere); burn + rewards split                        |
+| tRPC `burnedSupply`                         | `token:read`            | Permanently burned IFC balance                                                                                            |
 
 Optional auto-tick: set `EMISSIONS_AUTO_TICK=true` (and leave `EMISSIONS_ENABLED=true`) to mint the next sequential epoch every `EMISSIONS_TICK_MS` (default 1 day). Prefer external cron → `/internal/emissions/mint-next` or tRPC `mintEpoch` so the job is pauseable.
 

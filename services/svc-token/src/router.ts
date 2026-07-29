@@ -10,8 +10,8 @@ import { TokenError, type TokenService } from './token-service.js';
  * Hot path for other services remains GET /internal/stake/:userId (index.ts).
  * This router mounts under /trpc for edge/principal-aware callers.
  *
- * Mutations: `token:stake` (users stake/unstake/vote), `admin:treasury` (mint).
- * Governance from #97 and live stake/emissions from #94 are both on this router.
+ * Mutations: `token:stake` (users stake/unstake/vote), `admin:treasury` (mint / yield / buyback).
+ * Governance (#97), stake/emissions (#94), yield+buyback live paths — all on this router.
  */
 
 /** Money crosses the wire as a decimal string. Always. Never a number. */
@@ -266,6 +266,101 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
     nextEmissionEpoch: scopedProcedure('token:read')
       .output(z.object({ epoch: z.number().int().nonnegative() }))
       .query(async () => guard(async () => ({ epoch: await token.nextEmissionEpoch() }))),
+
+    // ── Real yield + buyback (§4.3) ─────────────────────────────────────────
+    // Maths + ledger recipes already lived in TokenService; they were only
+    // reachable from tests. Same hole stake/emissions had before #94: no live
+    // path. Operator (admin:treasury + MFA) supplies the revenue window until
+    // Phase 2 auto-consumes trade fills. Buyback: caller supplies tokensBought
+    // because pricing/execution is svc-trade — this service never decides a price.
+
+    distributeRevenue: scopedProcedure('admin:treasury')
+      .input(
+        z.object({
+          windowId: z.string().min(1).max(128),
+          sources: z
+            .array(
+              z.object({
+                module: z.string().min(1).max(64),
+                amount: amountString,
+              }),
+            )
+            .min(1),
+        }),
+      )
+      .output(
+        z.object({
+          windowId: z.string(),
+          distributed: amountString,
+          recipients: z.number().int().nonnegative(),
+          skipped: z.number().int().nonnegative(),
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const result = await token.distributeRevenue({
+            windowId: input.windowId,
+            sources: input.sources.map((s) => ({ module: s.module, amount: parseAmount(s.amount) })),
+          });
+          return {
+            windowId: result.windowId,
+            distributed: formatAmount(result.distributed),
+            recipients: result.recipients,
+            skipped: result.skipped,
+          };
+        }),
+      ),
+
+    recordBuyback: scopedProcedure('admin:treasury')
+      .input(
+        z.object({
+          runId: z.string().uuid(),
+          revenueWindow: z.object({
+            from: z.string().datetime({ offset: true }),
+            to: z.string().datetime({ offset: true }),
+          }),
+          revenueTotal: z.record(z.string()),
+          tokensBought: amountString,
+        }),
+      )
+      .output(
+        z.object({
+          runId: z.string().uuid(),
+          burned: amountString,
+          toRewards: amountString,
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const from = new Date(input.revenueWindow.from);
+          const to = new Date(input.revenueWindow.to);
+          if (!(from.getTime() < to.getTime())) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'revenueWindow.from must be strictly before revenueWindow.to',
+            });
+          }
+          const result = await token.recordBuyback({
+            runId: input.runId,
+            revenueWindow: { from, to },
+            revenueTotal: input.revenueTotal,
+            tokensBought: parseAmount(input.tokensBought),
+          });
+          return {
+            runId: result.runId,
+            burned: formatAmount(result.burned),
+            toRewards: formatAmount(result.toRewards),
+          };
+        }),
+      ),
+
+    burnedSupply: scopedProcedure('token:read')
+      .output(z.object({ burned: amountString }))
+      .query(async () =>
+        guard(async () => ({
+          burned: formatAmount(await token.burnedSupply()),
+        })),
+      ),
 
     // ── Governance (§4.3) ──────────────────────────────────────────────────
 

@@ -6,9 +6,10 @@ import { createTokenRouter } from './router.js';
 import { TokenError, type StakeRecord, type TokenService } from './token-service.js';
 
 /**
- * Mount boundary for svc-token — stake/unstake/mintEpoch must only run for a
- * principal the edge signed. A forgeable principal here is forgeable custody
- * of someone else's IFC (stake) or permanent supply inflation (mint).
+ * Mount boundary for svc-token — stake/unstake/mintEpoch/yield/buyback must
+ * only run for a principal the edge signed. A forgeable principal here is
+ * forgeable custody of someone else's IFC (stake), permanent supply inflation
+ * (mint), or treasury fee sweeps / burns (yield + buyback).
  */
 
 const SECRET = 'a-token-mount-test-edge-secret-long-enough';
@@ -75,6 +76,18 @@ function stubToken(overrides: Partial<TokenService> = {}): TokenService {
     mintEpoch: vi.fn(async (epoch: number) => ({ epoch, minted: amt('136000') })),
     mintNextEpoch: vi.fn(async () => ({ epoch: 0, minted: amt('136000') })),
     nextEmissionEpoch: vi.fn(async () => 0),
+    distributeRevenue: vi.fn(async () => ({
+      windowId: 'w1',
+      distributed: amt('100'),
+      recipients: 1,
+      skipped: 0,
+    })),
+    recordBuyback: vi.fn(async () => ({
+      runId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      burned: amt('50'),
+      toRewards: amt('50'),
+    })),
+    burnedSupply: vi.fn(async () => amt('0')),
     ...overrides,
   } as unknown as TokenService;
 }
@@ -236,6 +249,103 @@ describe('svc-token mount — emissions', () => {
       code: 'UNAUTHORIZED',
     });
     expect(token.mintNextEpoch).not.toHaveBeenCalled();
+  });
+});
+
+describe('svc-token mount — yield + buyback', () => {
+  const RUN = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+  it('refuses distributeRevenue without admin:treasury', async () => {
+    const token = stubToken();
+    await expect(
+      createTokenRouter(token)
+        .createCaller(signed())
+        .distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }] }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(token.distributeRevenue).not.toHaveBeenCalled();
+  });
+
+  it('distributes revenue for an MFA admin operator', async () => {
+    const token = stubToken();
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    const result = await createTokenRouter(token).createCaller(admin).distributeRevenue({
+      windowId: 'w1',
+      sources: [{ module: 'trade', amount: '100' }],
+    });
+    expect(result).toEqual({ windowId: 'w1', distributed: '100', recipients: 1, skipped: 0 });
+    expect(token.distributeRevenue).toHaveBeenCalledWith({
+      windowId: 'w1',
+      sources: [{ module: 'trade', amount: amt('100') }],
+    });
+  });
+
+  it('refuses distributeRevenue without MFA', async () => {
+    const token = stubToken();
+    const adminNoMfa = signed(principal({ scopes: ['admin:treasury'], mfa: false }));
+    await expect(
+      createTokenRouter(token)
+        .createCaller(adminNoMfa)
+        .distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }] }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(token.distributeRevenue).not.toHaveBeenCalled();
+  });
+
+  it('refuses recordBuyback without admin:treasury', async () => {
+    const token = stubToken();
+    await expect(
+      createTokenRouter(token)
+        .createCaller(signed())
+        .recordBuyback({
+          runId: RUN,
+          revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+          revenueTotal: { IFC: '1000' },
+          tokensBought: '100',
+        }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(token.recordBuyback).not.toHaveBeenCalled();
+  });
+
+  it('records a buyback for an MFA admin and returns burn split', async () => {
+    const token = stubToken();
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    const result = await createTokenRouter(token).createCaller(admin).recordBuyback({
+      runId: RUN,
+      revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+      revenueTotal: { IFC: '1000' },
+      tokensBought: '100',
+    });
+    expect(result).toEqual({ runId: RUN, burned: '50', toRewards: '50' });
+    expect(token.recordBuyback).toHaveBeenCalledWith({
+      runId: RUN,
+      revenueWindow: {
+        from: new Date('2026-07-01T00:00:00.000Z'),
+        to: new Date('2026-07-08T00:00:00.000Z'),
+      },
+      revenueTotal: { IFC: '1000' },
+      tokensBought: amt('100'),
+    });
+  });
+
+  it('rejects a non-ordered revenue window without calling the service', async () => {
+    const token = stubToken();
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    await expect(
+      createTokenRouter(token)
+        .createCaller(admin)
+        .recordBuyback({
+          runId: RUN,
+          revenueWindow: { from: '2026-07-08T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' },
+          revenueTotal: { IFC: '1000' },
+          tokensBought: '100',
+        }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(token.recordBuyback).not.toHaveBeenCalled();
+  });
+
+  it('serves burnedSupply to a token:read principal', async () => {
+    const token = stubToken({ burnedSupply: vi.fn(async () => amt('42')) });
+    const result = await createTokenRouter(token).createCaller(signed()).burnedSupply();
+    expect(result).toEqual({ burned: '42' });
   });
 });
 
