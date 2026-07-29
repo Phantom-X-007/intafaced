@@ -602,6 +602,27 @@ export function createIdentityRouter(
         .input(z.object({ label: z.string().min(1).max(64), purpose: z.string().max(200).optional() }))
         .output(z.object({ id: z.string().uuid() }))
         .mutation(({ ctx, input }) => auth.createSubAccount(ctx.principal.userId, input.label, input.purpose)),
+
+      list: scopedProcedure('identity:read')
+        .output(
+          z.array(
+            z.object({
+              id: z.string().uuid(),
+              label: z.string(),
+              purpose: z.string().nullable(),
+              createdAt: z.string(),
+            }),
+          ),
+        )
+        .query(async ({ ctx }) => {
+          const rows = await auth.listSubAccounts(ctx.principal.userId);
+          return rows.map((r) => ({
+            id: r.id,
+            label: r.label,
+            purpose: r.purpose,
+            createdAt: r.createdAt.toISOString(),
+          }));
+        }),
     }),
   });
 }
