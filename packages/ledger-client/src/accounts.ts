@@ -71,6 +71,24 @@ export function earnStakeAccount(userId: string, assetId: string, positionId: st
   return userStake(userId, assetId, `bank:earn:${positionId}`);
 }
 
+/**
+ * Value held while ONE card authorization is live at the issuer (§8.1, §18).
+ *
+ * Purpose-keyed for the same reason every other hold is (P0-3): a card
+ * authorization can sit open for days waiting on a capture, and during that
+ * window the same user may place an order and start a withdrawal. One shared
+ * `hold` pot per (user, asset) would let a merchant's capture settle out of the
+ * withdrawal's reservation, and the books would balance while recording nothing
+ * about which of the three lost.
+ *
+ * One account per AUTHORIZATION, never per card: what is being reserved is one
+ * merchant's claim on one amount, and a card with three open authorizations
+ * must reserve three separate amounts or it has committed the same money twice.
+ */
+export function cardAuthHoldAccount(userId: string, assetId: string, authorizationId: string): AccountRef {
+  return userHold(userId, assetId, `card:auth:${authorizationId}`);
+}
+
 export function userCollateral(userId: string, assetId: string): AccountRef {
   return { ownerType: 'user', ownerId: userId, assetId, kind: 'collateral' };
 }
