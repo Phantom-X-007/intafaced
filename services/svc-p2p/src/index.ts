@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext } from '@intafaced/contracts';
+import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { P2pService } from './p2p-service.js';
@@ -78,13 +78,19 @@ app.get('/ready', async () => ({ ready: true, tradingEnabled: env.P2P_TRADING_EN
  * escrow against the ledger's, per (seller, asset). Drift here is an operator
  * alarm, not a metric — it means a trade's terms and its value disagree.
  */
-app.get('/internal/escrow-integrity', async (_req, reply) => {
+app.get('/internal/escrow-integrity', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
+  }
   const result = await p2p.escrowIntegrity();
   if (!result.ok) reply.status(500);
   return result;
 });
 
-app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (req) => {
+app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
+  }
   const snapshot = await p2p.reputationOf(req.params.userId);
   return { ...snapshot, badges: [...snapshot.badges] };
 });

@@ -150,19 +150,25 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
       ),
 
     merchant: router({
+      /**
+       * Ownership: userId is always the authenticated principal. Body userId
+       * was dropped so a caller with pay:write cannot create a merchant under
+       * another account (full audit L2-1).
+       */
       create: scopedProcedure('pay:write', { module: 'pay' })
         .input(
           z.object({
-            userId: z.string().uuid(),
             mode: z.enum(['gateway', 'psp', 'payfac']).default('gateway'),
             pricing: z.object({ feeBps: z.number().int().min(0).max(10_000) }),
             settlementPrefs: z.record(z.unknown()).optional(),
           }),
         )
         .output(z.object({ id: z.string().uuid(), userId: z.string().uuid(), mode: z.string(), feeBps: z.number() }))
-        .mutation(({ input }) =>
+        .mutation(({ ctx, input }) =>
           wrap(async () => {
-            const merchant = await pay.createMerchant(input);
+            const userId = ctx.principal?.userId;
+            if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+            const merchant = await pay.createMerchant({ ...input, userId });
             return { id: merchant.id, userId: merchant.userId, mode: merchant.mode, feeBps: merchant.pricing.feeBps ?? 0 };
           }),
         ),
@@ -177,7 +183,12 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           }),
         )
         .output(z.object({ id: z.string().uuid(), merchantId: z.string().uuid() }))
-        .mutation(({ input }) => wrap(() => pay.createProfile(input))),
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            return pay.createProfile(input);
+          }),
+        ),
 
       /**
        * What we owe this merchant but have not settled, and what they can
@@ -188,11 +199,14 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
       balances: scopedProcedure('pay:read', { module: 'pay' })
         .input(z.object({ merchantId: z.string().uuid(), assetId: assetIdSchema }))
         .output(z.object({ clearing: amountSchema, available: amountSchema }))
-        .query(({ input }) =>
-          wrap(async () => ({
-            clearing: formatAmount(await pay.clearingBalance(input.merchantId, input.assetId)),
-            available: formatAmount(await pay.merchantBalance(input.merchantId, input.assetId)),
-          })),
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            return {
+              clearing: formatAmount(await pay.clearingBalance(input.merchantId, input.assetId)),
+              available: formatAmount(await pay.merchantBalance(input.merchantId, input.assetId)),
+            };
+          }),
         ),
     }),
 
@@ -212,40 +226,55 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           }),
         )
         .output(paymentView)
-        .mutation(({ input }) =>
-          wrap(async () =>
-            toPaymentOut(
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            return toPaymentOut(
               await pay.createPayment({
                 ...input,
                 profileId: input.profileId ?? null,
                 amount: parseAmount(input.amount),
               }),
-            ),
-          ),
+            );
+          }),
         ),
 
       authorize: scopedProcedure('pay:write', { module: 'pay' })
         .input(z.object({ paymentId: z.string().uuid() }))
         .output(paymentView)
-        .mutation(({ input }) => wrap(async () => toPaymentOut(await pay.authorize(input.paymentId)))),
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const payment = await pay.getPayment(input.paymentId);
+            await assertMerchantOwner(pay, ctx.principal?.userId, payment.merchantId);
+            return toPaymentOut(await pay.authorize(input.paymentId));
+          }),
+        ),
 
       capture: scopedProcedure('pay:write', { module: 'pay' })
         .input(z.object({ paymentId: z.string().uuid(), amount: amountSchema.optional() }))
         .output(paymentView)
-        .mutation(({ input }) =>
-          wrap(async () =>
-            toPaymentOut(await pay.capture(input.paymentId, input.amount === undefined ? {} : { amount: parseAmount(input.amount) })),
-          ),
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const payment = await pay.getPayment(input.paymentId);
+            await assertMerchantOwner(pay, ctx.principal?.userId, payment.merchantId);
+            return toPaymentOut(
+              await pay.capture(input.paymentId, input.amount === undefined ? {} : { amount: parseAmount(input.amount) }),
+            );
+          }),
         ),
 
       /** Its own scope. Refunding is not the same authority as taking payment. */
       refund: scopedProcedure('pay:refund', { module: 'pay' })
         .input(z.object({ paymentId: z.string().uuid(), amount: amountSchema, refundId: z.string().optional() }))
         .output(paymentView)
-        .mutation(({ input }) =>
-          wrap(async () =>
-            toPaymentOut(await pay.refund(input.paymentId, parseAmount(input.amount), input.refundId ? { refundId: input.refundId } : {})),
-          ),
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const payment = await pay.getPayment(input.paymentId);
+            await assertMerchantOwner(pay, ctx.principal?.userId, payment.merchantId);
+            return toPaymentOut(
+              await pay.refund(input.paymentId, parseAmount(input.amount), input.refundId ? { refundId: input.refundId } : {}),
+            );
+          }),
         ),
 
       get: scopedProcedure('pay:read', { module: 'pay' })
@@ -300,7 +329,12 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
       run: scopedProcedure('pay:write', { module: 'pay' })
         .input(z.object({ merchantId: z.string().uuid(), window: z.string().min(1), assetId: assetIdSchema }))
         .output(settlementView)
-        .mutation(({ input }) => wrap(async () => toSettlementOut(await pay.settleWindow(input)))),
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            return toSettlementOut(await pay.settleWindow(input));
+          }),
+        ),
 
       /** Value leaves the book here, so it carries its own scope. */
       payout: scopedProcedure('pay:payout', { module: 'pay' })
@@ -312,7 +346,13 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           }),
         )
         .output(settlementView)
-        .mutation(({ input }) => wrap(async () => toSettlementOut(await pay.payoutSettlement(input)))),
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const settlement = await pay.getSettlement(input.settlementId);
+            await assertMerchantOwner(pay, ctx.principal?.userId, settlement.merchantId);
+            return toSettlementOut(await pay.payoutSettlement(input));
+          }),
+        ),
 
       get: scopedProcedure('pay:read', { module: 'pay' })
         .input(z.object({ settlementId: z.string().uuid() }))

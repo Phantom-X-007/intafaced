@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import { router, publicProcedure, protectedProcedure, scopedProcedure, serviceProcedure, TRPCError } from '@intafaced/contracts';
 import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
@@ -360,20 +360,19 @@ export function createIdentityRouter(auth: AuthService, rank: RankService, optio
         .query(({ input }) => rank.perks(input.userId)),
 
       /**
-       * Service-to-service. Modules award XP by calling this rather than by
+       * Service-to-service only. Modules award XP by calling this rather than by
        * writing rank_state — svc-identity is the only writer (§4.1).
        *
-       * SCOPED, not public. This was `publicProcedure` with only a comment
-       * saying "service-to-service", which is a comment, not a control: the
-       * moment the router is mounted, anyone could award themselves XP, and XP
-       * drives rank, which drives fee discounts, P2P limits and launchpad
-       * allocation. `identity:write` is a scope no user session carries for
-       * another account, and `requireOwnership` is deliberately NOT applied
-       * because the caller is a service acting on a user's behalf.
+       * Was `publicProcedure`, then `scopedProcedure('identity:write')` after a
+       * partner audit. That still failed closed the wrong way: every interactive
+       * session receives `identity:write` via `defaultScopes()`, so any logged-in
+       * user could mint XP (and therefore rank, fee discounts, P2P limits,
+       * launchpad allocation) for any userId. `serviceProcedure` requires the
+       * shared INTERNAL_SERVICE_SECRET HMAC — same bar as ledger.post (#50).
        *
-       * Found by partner audit.
+       * Full audit L2-2 / L11-2, 2026-07-29.
        */
-      awardXp: scopedProcedure('identity:write')
+      awardXp: serviceProcedure
         .input(
           z.object({
             userId: z.string().uuid(),

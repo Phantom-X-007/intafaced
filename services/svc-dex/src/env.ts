@@ -25,9 +25,10 @@ const schema = baseEnvSchema
       HTTP_PORT: z.coerce.number().int().default(4010),
 
       /** Read models. Quotes are served from projections, never from a chain call. */
-      INDEXER_URL: z.string().url().default('http://localhost:4012'),
+      // 4013 = svc-indexer (4012 is svc-protocol). Matching listens on 4005.
+      INDEXER_URL: z.string().url().default('http://localhost:4013'),
       /** The internal CLOB, quoted as one venue among several. */
-      MATCHING_URL: z.string().url().default('http://localhost:4004'),
+      MATCHING_URL: z.string().url().default('http://localhost:4005'),
 
       /**
        * Quote staleness ceiling. A router that acts on an old quote routes to a

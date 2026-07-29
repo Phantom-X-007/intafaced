@@ -99,7 +99,14 @@ function stubServices(): Stub {
     })),
   } as unknown as AuthService;
 
-  const rank = {} as unknown as RankService;
+  const rank = {
+    awardXp: record('awardXp', () => ({
+      snapshot: { rank: 1, xp: 100n },
+      applied: true,
+      rankChanged: false,
+    })),
+    perks: record('perks', () => ({ rank: 1, feeDiscountBps: 0, p2pLimitMultiplier: 1 })),
+  } as unknown as RankService;
 
   return {
     auth,
@@ -121,6 +128,56 @@ beforeEach(() => {
 
 const caller = async (scopes: string[], opts?: Parameters<typeof ctx>[1]) => router.createCaller(await ctx(scopes, opts));
 const codeOf = (err: unknown) => (err as { code?: string }).code;
+
+// ── rank.awardXp is service-only (full audit L2-2) ───────────────────────────
+
+describe('rank.awardXp refuses user sessions, including defaultScopes()', () => {
+  const award = {
+    userId: USER,
+    sourceModule: 'svc-p2p',
+    action: 'trade.completed.seller',
+    xpDelta: 50,
+    idempotencyKey: 'idem-award-1-long-enough',
+  };
+
+  it('refuses a session that only holds identity:write', async () => {
+    const api = await caller(['identity:write']);
+    const err = await api.rank.awardXp(award).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+    expect(stub.calls.filter((c) => c.method === 'awardXp')).toHaveLength(0);
+  });
+
+  it('refuses the full default session scope list', async () => {
+    const sessionScopes = [
+      'identity:read',
+      'identity:write',
+      'ledger:read',
+      'trade:read',
+      'trade:write',
+      'p2p:read',
+      'p2p:write',
+      'token:read',
+      'token:stake',
+      'academy:read',
+      'agents:read',
+    ];
+    const api = await caller(sessionScopes);
+    const err = await api.rank.awardXp(award).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+    expect(stub.calls.filter((c) => c.method === 'awardXp')).toHaveLength(0);
+  });
+
+  it('accepts a service caller with no user principal', async () => {
+    const api = router.createCaller({
+      principal: null,
+      service: 'svc-p2p',
+      region: 'DE',
+      requestId: 'req-svc-1',
+    });
+    await expect(api.rank.awardXp(award)).resolves.toMatchObject({ applied: true, rank: 1 });
+    expect(stub.calls.filter((c) => c.method === 'awardXp')).toHaveLength(1);
+  });
+});
 
 // ── Who may grant trading access ─────────────────────────────────────────────
 

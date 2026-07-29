@@ -1,10 +1,13 @@
 import { z } from 'zod';
-import { authEnvSchema, edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { authEnvSchema, edgeEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
 // Self-mounts /trpc — must authenticate the edge principal (see packages/contracts/src/edge.ts).
+// INTERNAL_SERVICE_SECRET is required because rank.awardXp is a serviceProcedure
+// (user sessions carry identity:write and must never mint rank).
 const schema = serviceEnvSchema
   .merge(authEnvSchema)
   .merge(edgeEnvSchema)
+  .merge(internalServiceEnvSchema)
   .merge(
     z.object({
       SERVICE_NAME: z.string().default('svc-identity'),

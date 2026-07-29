@@ -156,8 +156,10 @@ services:
       <<: [*service-env, *edge-secret]
       SERVICE_NAME: svc-dex
       HTTP_PORT: '4010'
-      INDEXER_URL: http://svc-indexer:4012
-      MATCHING_URL: http://svc-matching:4004
+      # Indexer is 4013 (protocol owns 4012). Matching is 4005 (trade owns 4004).
+      # Wrong ports here were latent until dex starts calling them (audit L5-1/2).
+      INDEXER_URL: http://svc-indexer:4013
+      MATCHING_URL: http://svc-matching:4005
       QUOTE_MAX_AGE_MS: ${QUOTE_MAX_AGE_MS:-2000}
     ports: ['4010:4010']
     healthcheck: *healthcheck
@@ -202,7 +204,8 @@ services:
     container_name: intafaced-svc-identity
     command: ['node', 'services/svc-identity/dist/index.js']
     environment:
-      <<: [*service-env, *edge-secret]
+      # internal-secret: rank.awardXp is serviceProcedure; /internal/rank needs HMAC.
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-identity
       HTTP_PORT: '4002'
       DATABASE_URL: postgres://svc_identity:svc_identity@postgres:5432/intafaced
