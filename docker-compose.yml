@@ -109,6 +109,73 @@ services:
     ports:
       - '9090:9090'
 
+  # ══════════════════════════════════════════════════════════════════════════
+  # DEV ONLY — A THROWAWAY EVM. NEVER DEPLOY THIS. NEVER POINT IT AT VALUE.
+  # ══════════════════════════════════════════════════════════════════════════
+  #
+  # § no-deploy: evm — this service exists so `services/svc-protocol` has a
+  # chain to answer to on a laptop. It is not a chain decision, it is not a
+  # staging chain, and it must never appear in any deploy manifest. A local
+  # dev chain and a production chain are different questions and only the
+  # second one needs a human to decide it.
+  #
+  # ── What it is ────────────────────────────────────────────────────────────
+  #
+  # Anvil (Foundry), pinned. Instant mining, ten pre-funded accounts derived
+  # from the `test test ... junk` mnemonic every EVM dev tool prints on start.
+  # Those keys are public by design and worthless by design; see
+  # `services/svc-protocol/scripts/dev-chain.ts` for the full statement and the
+  # guard that refuses to sign with them anywhere else.
+  #
+  # ── Why it holds no volume ────────────────────────────────────────────────
+  #
+  # State is deliberately ephemeral. A restart gives a genesis-fresh chain, the
+  # deployer's nonce is 0 again, and `pnpm --filter @intafaced/svc-protocol
+  # chain:deploy` therefore lands the suite at the SAME addresses every time —
+  # which is what lets docker-compose.apps.yml name them as defaults instead of
+  # making every developer copy hex out of a terminal. Persisting the chain
+  # would break that determinism for no benefit nobody asked for.
+  #
+  # ── What it does NOT provide ──────────────────────────────────────────────
+  #
+  # No ERC-4337 EntryPoint (a public singleton we do not own, not in this repo)
+  # and no bundler. So `protocol.relayUserOperation` still cannot work here —
+  # it refuses, correctly, exactly as it does with no chain at all.
+  #
+  # Stop it and everything chain-dependent in svc-protocol goes back to the
+  # typed refusals it ships with (`protocol.chain_unreachable`). That is the
+  # property under test in `chain/refusal-without-chain.test.ts`.
+  evm:
+    image: ghcr.io/foundry-rs/foundry:v1.5.1
+    container_name: intafaced-evm-dev
+    restart: unless-stopped
+    labels:
+      com.intafaced.environment: 'dev-only'
+      com.intafaced.deploy: 'never'
+    # The image's entrypoint is `/bin/sh -c`, so this is one string, not argv.
+    command:
+      - >-
+        anvil
+        --host 0.0.0.0
+        --port 8545
+        --chain-id ${PROTOCOL_CHAIN_ID:-31337}
+        --accounts 10
+        --balance 10000
+        --block-base-fee-per-gas 0
+        --silent
+    ports:
+      # 8545 is the EVM dev convention and nothing else in this stack wants it.
+      # Overridable because a developer may already run their own node there.
+      - '${EVM_HOST_PORT:-8545}:8545'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          cast block-number --rpc-url http://127.0.0.1:8545 > /dev/null 2>&1 || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   grafana:
     image: grafana/grafana:11.4.0
     container_name: intafaced-grafana

@@ -56,6 +56,27 @@ export interface ChainStatus {
   /** What the RPC says it is. Null when it did not answer. */
   readonly observedChainId: number | null;
   readonly blockNumber: string | null;
+  /**
+   * Both addresses are non-zero. A statement about configuration and nothing
+   * more — it says somebody set an env var, not that anything exists.
+   */
+  readonly suiteConfigured: boolean;
+  /**
+   * VERIFIED: the factory AND the implementation hold contract code on this
+   * chain, read this call.
+   *
+   * This used to be the same boolean as `suiteConfigured`, and that was the
+   * remaining place this service could still claim something it had not
+   * checked. The moment real addresses go into a compose file — which is
+   * exactly what a local dev chain makes possible — "configured" and "deployed"
+   * come apart: point the stack at a chain where the suite was never deployed,
+   * or at a restarted anvil that lost its state, and the addresses are still
+   * non-zero while nothing is there. `usable` is derived from this one, so it
+   * has to be the read and not the guess.
+   *
+   * False whenever the chain could not be reached, because an unverifiable
+   * claim is not a true one.
+   */
   readonly suiteDeployed: boolean;
   readonly refusalCode: string | null;
   readonly reason: string | null;
@@ -231,16 +252,22 @@ export class ProtocolChain {
    * because a product surface needs to render the refusal, not catch it.
    */
   async status(): Promise<ChainStatus> {
-    const suiteDeployed = !isZeroAddress(this.config.factory) && !isZeroAddress(this.config.implementation);
+    const suiteConfigured = !isZeroAddress(this.config.factory) && !isZeroAddress(this.config.implementation);
 
     try {
       const observedChainId = await this.assertChainId();
       const blockNumber = await this.#read('blockNumber', 'chain.blockNumber', async () => this.client.getBlockNumber());
+      // Two `eth_getCode` calls, only when the addresses are worth asking
+      // about. This is the difference between "somebody set an env var" and
+      // "the contracts are there", and it is cheap enough to do on every probe.
+      const suiteDeployed =
+        suiteConfigured && (await this.isDeployed(this.config.factory)) && (await this.isDeployed(this.config.implementation));
       return {
         reachable: true,
         configuredChainId: this.config.chainId,
         observedChainId,
         blockNumber: blockNumber.toString(),
+        suiteConfigured,
         suiteDeployed,
         refusalCode: null,
         reason: null,
@@ -255,7 +282,9 @@ export class ProtocolChain {
         // as ours. The observed id is named in `reason`.
         observedChainId: null,
         blockNumber: null,
-        suiteDeployed,
+        suiteConfigured,
+        // Nobody looked, so nothing is deployed as far as this answer goes.
+        suiteDeployed: false,
         refusalCode: refusal.code,
         reason: refusal.message,
       };

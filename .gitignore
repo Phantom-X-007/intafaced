@@ -7,6 +7,17 @@ out/
 coverage/
 *.tsbuildinfo
 
+# Compiled Solidity for svc-protocol — TRACKED ON PURPOSE, and the blanket
+# `out/` above (Next.js static export) would otherwise swallow it silently.
+#
+# This is not build noise. It is the exact bytecode a deployment pushes, it is
+# reviewable in a diff, and it lets tests and `chain:deploy` run without every
+# machine invoking a compiler. It cannot rot unnoticed: each artefact carries a
+# `sourceHash` over the compilation input that `chain/artifacts.test.ts`
+# re-derives from the `.sol` files on disk.
+!services/svc-protocol/contracts/out/
+!services/svc-protocol/contracts/out/**
+
 # The vendored exchange front-ends keep their webpack CONFIG in build/, not
 # build output. The blanket `build/` rule above silently dropped all 13 files
 # when the vendor tree was committed, so the app could not be started from a

@@ -156,7 +156,13 @@ CREATE2 deployment of EIP-1167 clones. `getAddress(owner, userSalt)` answers bef
 
 ## Tests
 
-`pnpm --filter @intafaced/svc-protocol test` — **127 tests, no database or chain required.**
+`pnpm --filter @intafaced/svc-protocol test` — **241 tests. No database required. 45 of them need a chain and skip without one.**
+
+Start the chain first to run all of them:
+
+```bash
+docker compose up -d evm      # anvil, dev-only, see docker-compose.yml
+```
 
 | File                        | Covers                                                                                                                                                                                                                                                                                    |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -166,21 +172,36 @@ CREATE2 deployment of EIP-1167 clones. `getAddress(owner, userSalt)` answers bef
 | `accounts/registry.test.ts` | claim requires the derived address AND an owner signature; refuses impostors, cross-user replay, and profile transfer; idempotent re-claim                                                                                                                                                |
 | `sovereignty.test.ts`       | **§22 from this side** — `allowed.permissionless` for every region and every tier, `denied.plane_unsupported` on the fiat plane, a custodial control that must still be gated, and the §16.10 custody assertions listed under **Ledger**                                                  |
 
-The Solidity/TypeScript cross-checks in the first two files deserve a note: with no compiler in the loop, they are what stops the two languages diverging. They assert that the exact selector constants, the 30-day cap, the list caps, and the EIP-1167 byte constants appear verbatim in the `.sol` sources. A change to one side without the other fails the suite.
+| `chain/artifacts.test.ts` | the committed bytecode still matches the `.sol` on disk (`sourceHash`), the compiler and EVM version are pinned, and **the hand-written `abi.ts` agrees with the compiled ABI** — inputs, outputs, `stateMutability` and `indexed` flags. A wrong output type there does not throw; viem decodes the same bytes into a different value |
+| `chain/refusal-without-chain.test.ts` | every chain path refuses with its typed code against a **real closed socket**, not a stub. The dev chain must never become something this service quietly needs |
+| `accounts/create2-onchain.test.ts` | **needs a chain.** The TypeScript derivation against `AccountFactory.getAddress`, 25 owner/salt pairs; the account lands at the predicted address, is owned by the user rather than the relayer, and its runtime is byte-identical to the EIP-1167 proxy the init code hashes |
+| `router.live-chain.test.ts` | **needs a chain.** `predictAddress`, `buildDeployment`, `sessionStatus` and `claimAccount` returning real values through the real `ProtocolChain`, including a session granted on chain and read back with a matching `specHash` |
 
-### Not covered — §13 sockets
+The Solidity/TypeScript cross-checks in the first two files date from before there was a compiler: they assert that the exact selector constants, the 30-day cap, the list caps and the EIP-1167 byte constants appear verbatim in the `.sol` sources. They are still worth having — they are cheap and they run with no chain — but they are no longer the only thing standing between the two languages. `create2-onchain.test.ts` asks the deployed factory.
 
-Contract behaviour is **not executed** by any test, because there is no Solidity toolchain in this repo and adding one was out of scope for this feature. Recorded as tracker sockets:
+### The contracts, compiled
 
-| Socket                            | What lands with it                                                                                                                                                                                                                                                |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `socket.contract-toolchain`       | Foundry, compilation in CI, and the contract suite: session-key escalation attempts, spend-limit re-entrancy, `validateUserOp` rejecting a session op that is not `executeWithSession`, clone address equality against `AccountFactory.getAddress`, gas snapshots |
-| `socket.userop-differential-test` | `getUserOperationHash` checked against a live EntryPoint's `getUserOpHash`                                                                                                                                                                                        |
-| `socket.p256-verifier`            | Passkey (P-256) owners end to end. The ERC-1271 path in `SmartAccount` already accepts a contract owner                                                                                                                                                           |
-| `socket.social-recovery`          | Deliberately absent. A guardian set is a second party who can take the account, and the platform must never be one — the design needs its own review                                                                                                              |
-| `socket.contract-audit`           | External audit before any mainnet deployment. Nothing in this suite has been audited                                                                                                                                                                              |
+```bash
+pnpm --filter @intafaced/svc-protocol contracts:build   # solc 0.8.28, pinned
+docker compose up -d evm
+pnpm --filter @intafaced/svc-protocol chain:deploy      # + CREATE2 cross-check
+```
 
-**Nothing in `contracts/` should be deployed to a chain holding real value until `socket.contract-toolchain` and `socket.contract-audit` are closed.**
+`scripts/compile-contracts.mjs` compiles with `solc` from npm — the compiler itself, pinned in `pnpm-lock.yaml`, so every machine and every CI runner produce identical bytecode. Output is committed under `contracts/out/` and carries a `sourceHash` the test suite re-derives, so "committed" never means "unverified".
+
+**The first compile found a bug.** `contracts/amm/ConstantProductPool.swapExactIn` calls `swap`, which is `external`; Solidity does not allow that, so the AMM pool has never produced bytecode and could never have been deployed. It is pinned as a known-broken suite in `scripts/contract-sources.mjs` — the build fails if it starts compiling, or fails differently, without somebody deciding. Fixing it belongs to `protocol.amm`, not here.
+
+### Still not covered — §13 sockets
+
+| Socket                            | What lands with it                                                                                                                                                                                                                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `socket.contract-toolchain`       | **Partly closed.** Compilation and on-chain execution run in CI now, including clone address equality against `AccountFactory.getAddress`. Still open: fuzz/invariant tests for session-key escalation and spend-limit re-entrancy, `validateUserOp` refusing a session op that is not `executeWithSession`, and gas snapshots |
+| `socket.userop-differential-test` | `getUserOperationHash` checked against a live EntryPoint's `getUserOpHash`                                                                                                                                                                                                                                                     |
+| `socket.p256-verifier`            | Passkey (P-256) owners end to end. The ERC-1271 path in `SmartAccount` already accepts a contract owner                                                                                                                                                                                                                        |
+| `socket.social-recovery`          | Deliberately absent. A guardian set is a second party who can take the account, and the platform must never be one — the design needs its own review                                                                                                                                                                           |
+| `socket.contract-audit`           | External audit before any mainnet deployment. Nothing in this suite has been audited                                                                                                                                                                                                                                           |
+
+**Nothing in `contracts/` should be deployed to a chain holding real value until `socket.contract-toolchain` and `socket.contract-audit` are closed.** A local anvil proves these contracts compile and behave as described. It proves nothing about whether they are safe, and choosing a production chain is a separate decision nobody has made.
 
 ---
 
@@ -197,14 +218,25 @@ Note what a kill-switch can and cannot do on this plane. It stops _us_ relaying.
 ## Running it
 
 ```bash
-docker compose up -d
-pnpm --filter @intafaced/svc-protocol db:migrate    # runs as svc_protocol, which owns the schema
+docker compose up -d                                  # includes `evm` — anvil, dev-only
+pnpm --filter @intafaced/svc-protocol db:migrate      # runs as svc_protocol, which owns the schema
+pnpm --filter @intafaced/svc-protocol chain:deploy    # factory + implementation on the dev chain
 pnpm --filter @intafaced/svc-protocol test
 pnpm --filter @intafaced/svc-protocol dev
 ```
+
+### The dev chain
+
+`docker-compose.yml` runs anvil as the `evm` service on 8545. It is marked `# no-deploy`, holds no volume, and is **not a decision about what chain this platform ships on**. Because it starts at genesis every time, `chain:deploy` always lands the suite at the same two addresses, which is why `docker-compose.apps.yml` can name them as defaults.
+
+Stop it and svc-protocol behaves exactly as it did before it existed: every chain-dependent path refuses with `protocol.chain_unreachable`, a typed 503. Naming an address in config does not make the service claim the contract is there — `chainStatus.suiteDeployed` is an `eth_getCode` read, kept separate from `suiteConfigured`.
+
+What the dev chain does **not** give you: no ERC-4337 EntryPoint (a public singleton we do not own) and no bundler, so `relayUserOperation` still refuses locally with `relay.bundler_unavailable`.
 
 Configuration lives in `src/env.ts`: chain id, RPC, EntryPoint, factory, implementation, and an optional bundler URL. A missing bundler degrades convenience, never access — the user submits the operation themselves. There is no key to configure, and there never should be.
 
 ## AMM (`protocol.amm`)
 
 Constant-product pools under `contracts/amm/`. Permissionless tRPC: `amm.quoteExactIn`, `amm.buildCreatePool`, `amm.buildSwapExactIn`, `amm.buildMintLiquidity`. Platform never holds LP keys. Factory address: `PROTOCOL_AMM_FACTORY_ADDRESS`.
+
+**`ConstantProductPool` does not compile** (see above). Standing up the dev chain is what revealed it. Until it is fixed there is no pool bytecode to deploy, so `PROTOCOL_AMM_FACTORY_ADDRESS` stays zero and every AMM chain read refuses.

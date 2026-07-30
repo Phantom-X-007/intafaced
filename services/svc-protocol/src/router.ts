@@ -8,7 +8,7 @@ import type { ProtocolChain } from './chain/client.js';
 import { ChainUnavailableError, isZeroAddress } from './chain/availability.js';
 import { RelayRefusedError, SessionRelay } from './session/relay.js';
 import { createSessionSpec, evaluateSessionCall, hashSessionSpec, sessionSpecInputSchema, SessionScopeError } from './session/spec.js';
-import type { UserOperation } from './chain/userop.js';
+import { SignatureEnvelopeError, type UserOperation } from './chain/userop.js';
 import { AmmMathError } from './amm/math.js';
 import { buildCreatePool, buildMintLiquidity, buildSwapExactIn, quoteExactIn } from './amm/build.js';
 
@@ -125,6 +125,21 @@ function toTrpcError(err: unknown): TRPCError {
     const code = err.code === 'registry.already_claimed' ? 'CONFLICT' : 'BAD_REQUEST';
     return new TRPCError({ code, message: err.message, cause: err });
   }
+  /**
+   * A malformed signature envelope is the caller's mistake, not ours.
+   *
+   * Found the first time `relayUserOperation` was called with a live chain
+   * behind it: a signature that is not `1 mode byte + 65 bytes` throws
+   * `SignatureEnvelopeError`, which nothing here recognised, so it fell to the
+   * bottom of this function and arrived as
+   * `INTERNAL_SERVER_ERROR: 'Protocol request failed'`. That is the same opaque
+   * answer #193 removed from the chain paths — a 500 invites a retry of an
+   * operation that can never be accepted, and hides the one thing the caller
+   * needs to know, which is that their bytes are the wrong shape.
+   */
+  if (err instanceof SignatureEnvelopeError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
   if (err instanceof RelayRefusedError) {
     const code = err.code === 'relay.bundler_unavailable' ? 'PRECONDITION_FAILED' : 'BAD_REQUEST';
     return new TRPCError({ code, message: err.message, cause: err });
@@ -210,7 +225,9 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
           configuredChainId: z.number(),
           observedChainId: z.number().nullable(),
           blockNumber: z.string().nullable(),
-          /** Factory AND implementation are both non-zero. */
+          /** Factory AND implementation are both non-zero. Config, not evidence. */
+          suiteConfigured: z.boolean(),
+          /** READ FROM THE CHAIN: both addresses hold contract code. */
           suiteDeployed: z.boolean(),
           refusalCode: z.string().nullable(),
           reason: z.string().nullable(),

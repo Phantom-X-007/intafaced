@@ -244,7 +244,9 @@ function deadChain(overrides: Record<string, unknown> = {}) {
       configuredChainId: CHAIN_ID,
       observedChainId: null,
       blockNumber: null,
-      suiteDeployed: true,
+      suiteConfigured: true,
+      // Configured, never verified: nobody could read the chain to check.
+      suiteDeployed: false,
       refusalCode: 'protocol.chain_unreachable',
       reason: `status: no answer from the EVM RPC at ${RPC}`,
     }),
@@ -352,13 +354,23 @@ describe('no chain — every dependent path refuses with a typed reason', () => 
   });
 
   /**
-   * `usable` is the field a product surface should branch on. `suiteDeployed`
-   * alone is not enough — contracts configured on a chain nobody can reach are
-   * still unusable — and `health.ok` is not enough either, since it is true
-   * whenever the process is running.
+   * `usable` is the field a product surface should branch on. `suiteConfigured`
+   * alone is not enough — addresses set on a chain nobody can reach are still
+   * unusable — and `health.ok` is not enough either, since it is true whenever
+   * the process is running.
+   *
+   * `suiteDeployed` is false here on purpose, and that is the honest answer
+   * rather than a pessimistic one: it means "verified to hold code", the
+   * verification is an `eth_getCode` against a chain that did not answer, and
+   * an unverifiable claim is not a true one. Wiring real factory addresses into
+   * compose is exactly what makes "configured" and "deployed" come apart.
    */
-  it('reports usable:false when the suite is deployed but the chain is unreachable', async () => {
-    await expect(caller().chainStatus()).resolves.toMatchObject({ suiteDeployed: true, usable: false });
+  it('reports usable:false when the suite is configured but the chain is unreachable', async () => {
+    await expect(caller().chainStatus()).resolves.toMatchObject({
+      suiteConfigured: true,
+      suiteDeployed: false,
+      usable: false,
+    });
   });
 
   it('still serves health as ok, because liveness is not chain reachability', async () => {
