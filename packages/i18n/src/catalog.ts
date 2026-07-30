@@ -122,6 +122,14 @@ export const en = {
   'p2p.merchant.badge': 'Verified merchant',
   'p2p.merchant.trades': { one: '{count} trade', other: '{count} trades' },
 
+  // ── notify · in-app inbox (title + body per kind; keys stored on the row) ──
+  'notify.trade.fill.title': 'Order filled',
+  'notify.trade.fill.body': '{side} {qty} on {marketId} at {price}.',
+  'notify.p2p.escrow.locked.title': 'Escrow locked',
+  'notify.p2p.escrow.locked.body': '{amount} {asset} locked for {fiatAmount} {fiatCurrency}.',
+  'notify.identity.kyc.approved.title': 'Verification approved',
+  'notify.identity.kyc.approved.body': 'You are verified at the {tier} tier.',
+
   // ── errors ────────────────────────────────────────────────────────────────
   'error.insufficientFunds': 'Insufficient balance.',
   'error.generic': 'Something went wrong. Try again.',
