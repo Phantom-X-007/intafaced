@@ -260,6 +260,10 @@
 
             <!-- Balances — exchange venue wallet only; not the TypeScript ledger books -->
             <div v-else-if="accountTab === 'balances'">
+              <p class="ix-dualbook" role="note">
+                <strong>Two books.</strong> Numbers below are this venue’s exchange wallet only.
+                Platform ledgers (bank / pay / p2p) are separate — never treat this table as the full OS balance.
+              </p>
               <p class="ix-empty ix-empty-note">
                 Exchange wallet on this venue · not the platform ledger books
               </p>
@@ -289,9 +293,14 @@
             </div>
 
             <!-- Positions -->
-            <p class="ix-empty" v-else-if="accountTab === 'positions'">
-              Spot markets do not carry positions. Your holdings are under Balances.
-            </p>
+            <div v-else-if="accountTab === 'positions'">
+              <p class="ix-dualbook" role="note">
+                Spot has no perps positions. Futures would stream here later — empty is honest, not “zero risk”.
+              </p>
+              <p class="ix-empty">
+                Spot markets do not carry positions. Your holdings are under Balances.
+              </p>
+            </div>
 
             <!-- Open orders -->
             <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'open' && !ordersReachable">
@@ -2203,6 +2212,20 @@ $radius-sm: var(--ix-radius-sm, 8px);
   text-align: center;
   color: $faint;
   font-size: var(--type-11, 11px);
+}
+.ix-dualbook {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 107, 0, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 107, 0, 0.06);
+  color: #c8cdd4;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ix-dualbook strong {
+  color: #ff6b00;
+  font-weight: 600;
 }
 .ix-empty-error {
   color: $down;
