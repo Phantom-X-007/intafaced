@@ -21,16 +21,7 @@
  * 7. Pidfile + log under .artifacts/uiproof/
  */
 import { spawn, execFileSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  openSync,
-  closeSync,
-  readdirSync,
-  statSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, openSync, closeSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 

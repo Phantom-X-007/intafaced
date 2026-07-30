@@ -140,7 +140,9 @@ if (!adminApi) {
 } else {
   for (const scope of ['admin:write', 'admin:treasury']) {
     if (!adminApi.includes(scope)) {
-      failures.push(`svc-edge/src/admin-api.ts does not require "${scope}" — halting a market and halting the money plane are different authorities`);
+      failures.push(
+        `svc-edge/src/admin-api.ts does not require "${scope}" — halting a market and halting the money plane are different authorities`,
+      );
     }
   }
   if (!/requireMfa|INTERACTIVE_ONLY/.test(adminApi)) {

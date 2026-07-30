@@ -6,12 +6,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import {
-  installAuth,
-  mockCheckLoginOk,
-  mockWalletAndOrdersEmpty,
-  mockWalletAndOrdersDown,
-} from './auth-fixture.mjs';
+import { installAuth, mockCheckLoginOk, mockWalletAndOrdersEmpty, mockWalletAndOrdersDown } from './auth-fixture.mjs';
 
 const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -20,12 +15,7 @@ const ARTIFACTS = join(REPO_ROOT, '.artifacts', 'uiproof');
 const SHOTS = join(ARTIFACTS, 'shots-auth');
 mkdirSync(SHOTS, { recursive: true });
 
-const ERROR_SNIPPETS = [
-  /Account services did not respond/i,
-  /unknown, not zero/i,
-  /Wallet service did not respond/i,
-  /are unknown/i,
-];
+const ERROR_SNIPPETS = [/Account services did not respond/i, /unknown, not zero/i, /Wallet service did not respond/i, /are unknown/i];
 
 test.describe('Pass 3 auth fixture', () => {
   test('logged-in /uc/account is reachable (not login gate)', async ({ page }) => {
@@ -59,10 +49,7 @@ test.describe('Pass 3 auth fixture', () => {
 
     const body = await page.locator('body').innerText();
     const hits = ERROR_SNIPPETS.some((re) => re.test(body));
-    expect(
-      hits,
-      `logged-in account pane must name unknown/error when services down; body snippet: ${body.slice(0, 400)}`,
-    ).toBeTruthy();
+    expect(hits, `logged-in account pane must name unknown/error when services down; body snippet: ${body.slice(0, 400)}`).toBeTruthy();
 
     // Must not sell a full account strip as empty success with no error language.
     expect(body).not.toMatch(/Nothing here yet/);
@@ -90,15 +77,8 @@ test.describe('Pass 3 auth fixture', () => {
     expect(body).not.toMatch(/are unknown, not zero/i);
 
     // Honest empty (zero balance display is OK when reachable) or empty-tab copy.
-    const emptyOk =
-      /Nothing here yet/i.test(body) ||
-      /\$0/.test(body) ||
-      /0\.00/.test(body) ||
-      /available/i.test(body);
-    expect(
-      emptyOk,
-      `empty reachable account should show zero/empty UI; snippet: ${body.slice(0, 400)}`,
-    ).toBeTruthy();
+    const emptyOk = /Nothing here yet/i.test(body) || /\$0/.test(body) || /0\.00/.test(body) || /available/i.test(body);
+    expect(emptyOk, `empty reachable account should show zero/empty UI; snippet: ${body.slice(0, 400)}`).toBeTruthy();
 
     await page.screenshot({
       path: join(SHOTS, 'exchange__wallet-empty-desktop.png'),

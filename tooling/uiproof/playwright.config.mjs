@@ -35,10 +35,7 @@ export default defineConfig({
   retries: 0,
   timeout: 60_000,
   expect: { timeout: 15_000 },
-  reporter: [
-    ['list'],
-    ['json', { outputFile: join(ARTIFACTS, 'playwright-report.json') }],
-  ],
+  reporter: [['list'], ['json', { outputFile: join(ARTIFACTS, 'playwright-report.json') }]],
   outputDir: join(ARTIFACTS, 'test-results'),
   use: {
     baseURL: BASE,
