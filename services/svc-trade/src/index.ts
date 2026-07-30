@@ -10,6 +10,7 @@ import { createRankPerksClient } from './spot/rank-perks.js';
 import { createLedgerClient } from './ledger-client.js';
 import { subscribeMatchingEvents } from './events.js';
 import { createTradeRouter, type TradeRouter } from './router.js';
+import { registerPublicRest } from './public-rest.js';
 
 /**
  * svc-trade — the product layer over the matching engine (§5.2).
@@ -68,6 +69,14 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true };
 });
 
+// Public CCXT-style REST (markets + orderbook). No auth — market data is public.
+// Paths match packages/exchange-contract REST_ROUTES; edge routes /api/v1 → here.
+registerPublicRest(app, {
+  markets: () => trade.markets(),
+  marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
+  depth: (marketId, limit) => matching.depth(marketId, limit),
+});
+
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
@@ -77,7 +86,10 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, spotEnabled: env.TRADE_SPOT_ENABLED, trpc: true }, 'svc-trade ready');
+app.log.info(
+  { port: env.HTTP_PORT, spotEnabled: env.TRADE_SPOT_ENABLED, trpc: true, publicRest: ['/api/v1/markets', '/api/v1/orderbook/:symbol'] },
+  'svc-trade ready',
+);
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
