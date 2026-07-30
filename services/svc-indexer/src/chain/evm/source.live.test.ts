@@ -287,9 +287,9 @@ if (!reachable) {
     });
 
     it('refuses a venue address of zero at construction, before any RPC call', () => {
-      expect(
-        () => new EvmChainSource({ chainId: DEV_CHAIN_ID, rpcUrl, venue: '0x0000000000000000000000000000000000000000' }),
-      ).toThrow(ChainUnavailableError);
+      expect(() => new EvmChainSource({ chainId: DEV_CHAIN_ID, rpcUrl, venue: '0x0000000000000000000000000000000000000000' })).toThrow(
+        ChainUnavailableError,
+      );
     });
 
     /**

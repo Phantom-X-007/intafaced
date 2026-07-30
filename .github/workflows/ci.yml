@@ -131,6 +131,10 @@ jobs:
       # with no chain and must NEVER skip here.
       REQUIRE_EVM_CHAIN: '1'
       PROTOCOL_RPC_URL: http://127.0.0.1:8545
+      # svc-indexer's non-destructive adapter suite shares 8545. Its reorg suite
+      # does not, and must not — see the `evm-reorg` step below.
+      INDEXER_RPC_URL: http://127.0.0.1:8545
+      INDEXER_REORG_RPC_URL: http://127.0.0.1:8546
 
     steps:
       - uses: actions/checkout@v4
@@ -203,6 +207,32 @@ jobs:
           done
           echo "::error::the dev chain never answered — REQUIRE_EVM_CHAIN=1 will fail the protocol suite"
           docker logs intafaced-ci-evm || true
+          exit 1
+
+      # A SECOND throwaway EVM, for svc-indexer's reorg suite only.
+      #
+      # That suite proves rows written from an orphaned block do not survive it,
+      # which means actually reorging — and `evm_snapshot`/`evm_revert` rewind the
+      # whole NODE, not one caller's view of it. Sharing 8545 would rewind
+      # svc-protocol's deployed factory out from under its own live tests, and
+      # `pnpm test` runs package tasks in parallel, so non-overlap is not
+      # something anyone gets to assume. Mirrors the `evm-reorg` service in
+      # docker-compose.yml.
+      - name: Local EVM dev chain for the reorg suite
+        run: |
+          docker run -d --name intafaced-ci-evm-reorg -p 8546:8545 ghcr.io/foundry-rs/foundry:v1.5.1 \
+            "anvil --host 0.0.0.0 --port 8545 --chain-id 31337 --accounts 10 --balance 10000 --block-base-fee-per-gas 0 --silent"
+          for _ in $(seq 1 30); do
+            if curl -sf -X POST -H 'content-type: application/json' \
+                 --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}' \
+                 http://127.0.0.1:8546 | grep -q 0x7a69; then
+              echo "reorg chain answering on 8546"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the reorg chain never answered — REQUIRE_EVM_CHAIN=1 will fail the indexer suite"
+          docker logs intafaced-ci-evm-reorg || true
           exit 1
 
       # Runs the compiled factory against the TypeScript derivation and prints

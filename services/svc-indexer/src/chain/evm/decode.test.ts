@@ -215,7 +215,11 @@ describe('svc-indexer · EVM decode — ordering and identity', () => {
   });
 
   it('sorts by log index, whatever order the node returned them in', () => {
-    const events = decodeVenueLogs([positionLog(10n ** 18n, 10n ** 18n, 5), bookLevelLog(0, 10n ** 18n, 10n ** 18n, 1), fillLog(10n ** 18n, 10n ** 18n, 0, 3)]);
+    const events = decodeVenueLogs([
+      positionLog(10n ** 18n, 10n ** 18n, 5),
+      bookLevelLog(0, 10n ** 18n, 10n ** 18n, 1),
+      fillLog(10n ** 18n, 10n ** 18n, 0, 3),
+    ]);
     expect(events.map((e) => e.kind)).toEqual(['book_level', 'fill', 'position']);
   });
 

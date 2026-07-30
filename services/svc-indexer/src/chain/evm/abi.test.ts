@@ -61,9 +61,10 @@ describe('svc-indexer · the declared venue ABI matches the compiled contract', 
   it('agrees on which inputs are indexed, which topic0 alone would not catch', () => {
     for (const declared of venueAbi) {
       const compiled = compiledEvents.get(declared.name)!;
-      expect(compiled.inputs.map((i) => [i.name, i.type, i.indexed === true]), declared.name).toEqual(
-        declared.inputs.map((i) => [i.name, i.type, i.indexed === true]),
-      );
+      expect(
+        compiled.inputs.map((i) => [i.name, i.type, i.indexed === true]),
+        declared.name,
+      ).toEqual(declared.inputs.map((i) => [i.name, i.type, i.indexed === true]));
     }
   });
 
