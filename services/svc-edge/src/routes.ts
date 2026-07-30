@@ -23,7 +23,7 @@ export interface Upstream {
   /**
    * When true, forward the full inbound pathname instead of stripping `prefix`.
    * Used for CCXT-contract paths (`/api/v1/...`) that must land on the upstream
-   * at the same absolute path (trade mounts `/api/v1/markets`, not `/markets`).
+   * at the same absolute path (the exchange mounts `/api/v1/markets`, not `/markets`).
    */
   readonly preservePath?: boolean;
 }
