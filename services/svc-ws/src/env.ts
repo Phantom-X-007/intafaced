@@ -13,9 +13,9 @@ import { baseEnvSchema, httpEnvSchema, loadEnv, natsEnvSchema, otelEnvSchema } f
  *     not also hold the credential that opens `ledger.post` and
  *     `matching.submit`. svc-matching's depth read needs no credential, so
  *     there is nothing here to take.
- *   · **no `EDGE_PRINCIPAL_SECRET`.** Nothing here is scoped to a principal.
- *     A key that verifies "who is calling" is dead weight on a surface where
- *     the answer is always "anyone".
+ *   · **no `EDGE_PRINCIPAL_SECRET`.** The public port is not principal-scoped.
+ *     Optional `JWT_ACCESS_SECRET` is ONLY for `/private/stream` order
+ *     lifecycle (same secret as identity/edge). Public `/stream` never reads it.
  *   · **no `DATABASE_URL`.** Depth and the trade tape are derived, never
  *     stored. The engine's book and the bus are the truth.
  *   · **no `REDIS_URL`.** One replica holds one book per subscribed market, in
@@ -105,6 +105,16 @@ const schema = baseEnvSchema
        * fill (JetStream durables are exclusive).
        */
       WS_TRADES_DURABLE: z.string().min(1).max(128).default('ws-trade-tape'),
+
+      /**
+       * Optional. When set, `/private/stream` accepts `access_token` and fans
+       * `orderUpdated` to that user. When unset, private upgrades return 403 —
+       * public market data is unaffected.
+       */
+      JWT_ACCESS_SECRET: z.string().min(32).optional(),
+      JWT_ISSUER: z.string().default('intafaced'),
+      JWT_AUDIENCE: z.string().default('intafaced'),
+      WS_PRIVATE_ORDERS_DURABLE: z.string().min(1).max(128).default('ws-private-orders'),
 
       /**
        * Kill-switch, mirroring the `ws.gateway` flag. When false the service

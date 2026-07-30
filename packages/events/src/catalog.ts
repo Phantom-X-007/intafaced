@@ -293,6 +293,34 @@ export const orderCancelled = defineEvent(
   'Order left the book — svc-trade releases the ledger hold.',
 );
 
+/**
+ * User-visible order lifecycle (svc-trade).
+ *
+ * Matching's `orderFilled` / `orderCancelled` are engine facts without a user
+ * id. Private order streams and mobile clients need a trade-owned signal that
+ * names the owner. This is that signal — not a money path, not a balance.
+ */
+export const orderUpdated = defineEvent(
+  'trade',
+  'order',
+  'updated',
+  1,
+  z.object({
+    orderId: z.string().uuid(),
+    userId: z.string().uuid(),
+    marketId: z.string(),
+    status: z.enum(['pending', 'open', 'filled', 'cancelled', 'rejected', 'expired']),
+    side: z.enum(['buy', 'sell']),
+    type: z.enum(['limit', 'market']),
+    qty: amountSchema,
+    filledQty: amountSchema,
+    price: amountSchema.nullable(),
+    clientOrderId: z.string().nullable(),
+    ts: z.string().datetime({ offset: true }),
+  }),
+  'svc-trade order row changed — private WS fans this to the owning principal only.',
+);
+
 // ── protocol (§17.4 · Protocol Plane, non-custodial) ─────────────────────────
 //
 // Every event below is an OBSERVATION of chain state, not a record of something
@@ -574,6 +602,7 @@ export const EVENT_CATALOG = {
   orderAccepted,
   orderFilled,
   orderCancelled,
+  orderUpdated,
   protocolAccountCreated,
   protocolSessionKeyCreated,
   protocolSessionKeyCancelled,

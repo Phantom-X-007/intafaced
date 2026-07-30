@@ -14,6 +14,7 @@
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
+    "@intafaced/auth": "workspace:*",
     "@intafaced/config": "workspace:*",
     "@intafaced/events": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",

@@ -312,7 +312,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['matching.engine', 'ws.depth'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'Depth + public TRADE tape on svc-ws (PR #91). Orders/positions still missing.',
+    note: 'Depth + public TRADE tape + private orderUpdated stream (/private/stream, JWT optional). Positions still missing.',
   }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
