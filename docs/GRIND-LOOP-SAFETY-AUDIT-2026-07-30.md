@@ -1,6 +1,6 @@
 # Grind-loop safety audit — 2026-07-30
 
-**Auditor:** Grok (this chat) · **Mode:** read-only, no code changes  
+**Auditor:** session agent (this chat) · **Mode:** read-only, no code changes  
 **Live check window:** ~13:40–13:50 UTC · tip `da329d3` · PR high water live **#216**  
 **Repo:** `Phantom-X-007/intafaced` · local main checkout was **~126 commits behind** tip (docs below are from `origin/main` / GitHub API)
 
@@ -154,7 +154,7 @@ So: if a partner says “you’re still grinding,” the accurate reply is:
 2. **Babysit-merge under Nitro’s name** makes partner messages like “you pushed” *technically true* and *socially confusing*.
 3. **Stale LIVE-LANES + grind high-water + chain-factory human-only line** can cause the *next* compact session to lie to itself.
 4. **No posted review notes** on money babysit-merges — CI only. Doctrine wants self-audit; GitHub doesn’t show a separate agent review artifact.
-5. **Closed chat** does not prove **all** grind sessions are dead. This audit did not attach to every Claude/Grok PID on the machine and prove none still run the 45m loop. It proved **GitHub effects**: Nitro product shipping has stopped; Denon continues.
+5. **Closed chat** does not prove **all** grind sessions are dead. This audit did not attach to every agent process on the machine and prove none still run the 45m loop. It proved **GitHub effects**: Nitro product shipping has stopped; Denon continues.
 
 ---
 
