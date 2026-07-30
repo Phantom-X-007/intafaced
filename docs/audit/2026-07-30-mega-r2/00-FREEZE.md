@@ -70,3 +70,13 @@ This r2 run: full L0 on tip + residual re-verify + L3 code-path sample + Phase 2
 ## GATE-0
 
 All eight lines present → **PASS**. Proceed Phase 1.
+
+## Tip moved mid-run (re-trigger note)
+
+|                       |                                                                        |
+| --------------------- | ---------------------------------------------------------------------- |
+| Freeze tip at Phase 0 | `6dd3defec668e2dfc07042d39c0e8eab9672e248`                             |
+| Mid-run origin/main   | `36874756c9caec86d46109ce62cdfdae5482f750` (#175 + #178 docs)          |
+| Action                | rebased fix commit onto new tip; re-ran brand + format                 |
+| New delta files       | docs only + `tooling/ci/brand-scan.mjs` allowlist — **not money/auth** |
+| Open PR #175          | **MERGED** mid-run — disposition obsolete                              |

@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-30  
 **Main tip (literal SHA this audit closed against after fix PR merges — refresh on next fetch):** see bottom **TIP block**  
-**Pre-fix tip this r2 run:** `6dd3defec668e2dfc07042d39c0e8eab9672e248` (#177)  
+**Pre-fix tip this r2 run:** `6dd3def…` (#177) · mid-run tip became `36874756c9caec86d46109ce62cdfdae5482f750` (#175+#178 docs) before merge  
 **Cook SINCE baseline:** `8a8c19bc626e6dada49a33be1f88d17873f42502` (#107)  
 **Prior mega archive:** [`audit/2026-07-30-afk-cook-mega/`](audit/2026-07-30-afk-cook-mega/) (#176)  
 **This re-prove archive:** [`audit/2026-07-30-mega-r2/`](audit/2026-07-30-mega-r2/)  
@@ -90,9 +90,10 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 ```
 PRE-AUDIT TIP (r2 start):  6dd3defec668e2dfc07042d39c0e8eab9672e248
+MID-RUN TIP (rebase base): 36874756c9caec86d46109ce62cdfdae5482f750
 SINCE (cook baseline):     8a8c19bc626e6dada49a33be1f88d17873f42502
 LAST PEACE-AUDITED (#176): d926edfc6479dcb0f8babe226415cf60992b130c
-POST-FIX TIP (this PR):    (filled at merge — same as FINAL until more merges)
+POST-FIX TIP (this PR):    (filled at merge)
 FINAL main tip:            (filled after merge = git rev-parse origin/main)
 ```
 

@@ -59,3 +59,14 @@
 ## GATE-2
 
 Every surface named and assigned a judgment layer → **PASS**.
+
+## Tip moved mid-run
+
+After Phase 0 freeze, origin advanced:
+
+| SHA       | PR   | files                                                                  |
+| --------- | ---- | ---------------------------------------------------------------------- |
+| `d92e121` | #175 | `docs/NITRO-AGENT-PACKAGES-2026-07-30.md`, `tooling/ci/brand-scan.mjs` |
+| `3687475` | #178 | grind/scoreboard high water docs                                       |
+
+Judged: **docs + brand allowlist only** — not money/auth/migrate. Brand re-run green after rebase.
