@@ -16,7 +16,7 @@ Plus prior night still on main: #110–#117 (yield/buyback, apikeys, edge ifc_, 
 ## Audit (local)
 
 - Brand: **was red on main** → fixed #118  
-- Custody / vendor-shell / tracker: green  
+- Custody / vendor-shell / tracker: green (re-check after product ships; tracker:check may still want `pnpm tracker` if markdown stale)  
 - GitHub Actions: **still billing-blocked** (jobs never start) — human Billing & plans  
 - Residual money table unchanged for Denon-owned items (rails, licences, counsel list)
 
@@ -36,10 +36,12 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | Item | Why |
 | --- | --- |
 | GitHub CI green | Org payment / spending limit — **not agent-fixable** |
-| Positions WS | After private orders |
-| Hosted checkout UI | Links exist; full merchant UI does not |
+| Positions product | Honest `[]` REST only; futures later |
+| Hosted checkout UI | Links + minimal HTML exist; full merchant UI does not |
 | protocol.smart-accounts | Chain non-propped |
 | Real rails / kill drill / licences | Denon + counsel |
+| DoD gate svc-notify OTEL | Pre-existing red — agent queue #1 |
+| tracker:check | May still be red if TRACKER.md markdown stale — agent queue #2 |
 
 ## Config notes for Denon
 
@@ -48,11 +50,12 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 
 ## Free mountains next
 
-1. Positions private stream  
-2. ops.notifications skeleton  
-3. protocol.smart-accounts non-propped slice  
-4. secret-scan CI (needs Nitro go)  
-5. Human: **fix GitHub Actions billing**
+1. svc-notify OTEL (DoD gate)  
+2. tracker:check if TRACKER.md stale  
+3. p2pTradeDisputed notify (openedBy only)  
+4. identity subAccounts.revoke if cheap  
+5. Human: **fix GitHub Actions billing**  
+6. Prefer skip: private balance WS, pay.public-api  
 
 ## Grind continuation (same AFK)
 
@@ -109,27 +112,33 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | #148 | Notify fans: rankUpdated · stakeCreated · p2pEscrowReleased |
 | #149 | Tracker: **trade.convert** done (mounted + money-path tests) |
 | #150 | Notify fan: **p2pEscrowRefunded** |
+| #151 | Docs: Wave D grind loop high-water + compaction survival |
+| #152 | Tracker honesty wave D — notes match main code |
+| #153 | Docs(audit): Wave D doctrine scan log with real exit codes |
+| #154 | SQL **symbol filter** on account/trades + positions health log |
 
-**Audit:** `docs/audit/WAVE-D-2026-07-30.md` — light gates this docs PR; full monorepo scans if install allows, else run-on-return.
+**Audit:** `docs/audit/WAVE-D-2026-07-30.md` · scan log: `docs/audit/WAVE-D-SCANS-2026-07-30.md` — brand/custody/vendor-shell/workspace green; honest reds: tracker:check (if still stale) + svc-notify OTEL DoD.
 
-### Unspoken needs (Wave D progress)
+### Unspoken needs (Wave D → post-#154)
 
-| Need | Status after #145–#150 |
+| Need | Status after #145–#154 |
 | --- | --- |
-| Volume + quality without Nitro | Continuous product PRs through #150; loop file is compaction survival |
-| Bots can trade (CCXT public+private) | Balance + positions empty + OHLCV empty on tip; write path already on main |
-| In-app notifications | Fans expanded (rank/stake/p2p release+refund); dispute-resolved still skipped (no userIds) |
-| Continuous light gates + wave audits | Policy still every PR / every 3–4 ships; Wave D audit doc |
-| Peace-of-mind scoreboard | This table + GRIND-LOOP-ACTIVE high water |
+| Volume + quality without Nitro | Continuous product + docs PRs through #154; loop file is compaction survival |
+| Bots can trade (CCXT public+private) | Balance · positions empty · OHLCV empty · mytrades `?symbol=` on tip; write path already on main |
+| In-app notifications | Fans expanded (rank/stake/p2p release+refund); dispute-opened (`p2pTradeDisputed` openedBy) still queue |
+| Continuous light gates + wave audits | Policy still every PR / every 3–4 ships; Wave D audit + scan log |
+| Peace-of-mind scoreboard | This table + GRIND-LOOP-ACTIVE high water **#154** |
+| Compaction survival | Loop paste prompt + MERGED high water updated each batch |
 | Never fake human blockers | CI billing still human; factory/rails/futures still human or later |
 
 ### Still agent-cookable (see loop NEXT QUEUE)
 
-1. `account/trades?symbol=` if filter still missing  
-2. Tracker note hygiene (notify fans under-listed)  
-3. Safe notify fans only  
-4. Private balance WS only if event path is safe — else skip  
-5. Thin `pay.public-api` only if cheap  
-6. Wave audits + DRAINED reassess  
+1. DoD gate: svc-notify OTEL if still open  
+2. tracker:check if TRACKER.md still stale  
+3. p2pTradeDisputed notify (openedBy only) if not shipped  
+4. pay.public-api thin slice — **skip proven**  
+5. Private balance WS — only if safe ledger event projection; **prefer skip**  
+6. identity subAccounts.revoke if missing and cheap  
+7. Reassess DRAINED when only human blockers + large phase features remain  
 
-**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: RUNNING** · scheduler 45m
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: RUNNING** · high water **#154** · scheduler 45m

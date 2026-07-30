@@ -2,7 +2,7 @@
 
 **Status:** RUNNING · Nitro AFK · agents + 45m scheduler own the loop  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` and ship **NEXT QUEUE**  
-**Last tip:** re-check `git rev-parse origin/main` (high water through **#150** — balance REST · OHLCV empty · positions empty · convert tracker done · notify fans)
+**Last tip:** re-check `git rev-parse origin/main` (high water through **#154** — balance · OHLCV · positions · notify fans · convert done · grind loop · tracker honesty · wave D scans · mytrades symbol filter)
 
 ---
 
@@ -40,6 +40,7 @@ RULES (hard):
   - Doctrine: no balances outside ledger-client; no money as number; cross-service only via contracts/events.
   - Update docs/GRIND-LOOP-ACTIVE.md BEFORE you stop (queue + high water + honest status).
   - Front-run Denon product holes without fake "done" on human blockers.
+  - After compact / new chat: this file is law — re-read tip, never re-do MERGED.
 
 UNSPOKEN NEEDS (deduce and ship toward these — Nitro is not present to restate them):
   - Volume + quality without Nitro: keep shipping real product surface, not ceremony.
@@ -47,7 +48,9 @@ UNSPOKEN NEEDS (deduce and ship toward these — Nitro is not present to restate
   - In-app notifications: fan safe bus events into svc-notify inbox; skip events without userIds.
   - Continuous light gates + periodic wave audits — peace of mind without reading code.
   - Scoreboard stays current so a human can scan "are we good?" in seconds.
+  - Compaction survival: every stop updates this loop file so the next session continues cold.
   - NEVER invent green CI, NEVER mark human-only items done, NEVER invent candle data / balances / factory addresses.
+  - NEVER fake human-only work as agent-done (billing, chain props, licences, counsel, kill drill, multi-asset rails).
 
 GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED, update scoreboard, stop product ships.
 ```
@@ -56,7 +59,7 @@ GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED,
 
 ## MERGED (do not redo) — high water
 
-**#110–#150** area on main, including latest:
+**#110–#154** on main, including latest wave:
 
 | PR | What |
 | --- | --- |
@@ -66,6 +69,10 @@ GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED,
 | **#148** | Notify fans: `rankUpdated`, `stakeCreated`, `p2pEscrowReleased` |
 | **#149** | Tracker: **trade.convert** marked done (mounted + money-path tests) |
 | **#150** | Notify fan: `p2pEscrowRefunded` |
+| **#151** | Docs: Wave D grind loop high-water + compaction survival |
+| **#152** | Tracker honesty wave D — notes match main code |
+| **#153** | Docs(audit): Wave D doctrine scan log with real exit codes |
+| **#154** | SQL **symbol filter** on `account/trades` + positions health log |
 
 **Earlier in the same cook (do not redo):**
 
@@ -77,20 +84,20 @@ GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED,
 - Notify: svc-notify inbox + i18n + edge + fans above
 - Protocol: factory honesty (still not chain-done)
 - **CCXT REST public:** markets, orderbook, ticker, tickers, trades (tape), ohlcv (empty)
-- **CCXT REST private:** open/create/cancel/get/closed, account/trades, cancel-all, fees, balance, positions empty
-- Docs: grind plan, loop files, wave A–C audits, scoreboards
+- **CCXT REST private:** open/create/cancel/get/closed, account/trades (+ symbol filter), cancel-all, fees, balance, positions empty
+- Docs: grind plan, loop files, wave A–D audits, scoreboards
 
 ---
 
 ## NEXT QUEUE (agent-cookable — honest)
 
-1. **`GET /account/trades?symbol=`** — route exists as `myFills` without market filter; add optional `?symbol=` (resolve market, filter fills) if not already on tip. Re-check before shipping.
-2. **Tracker note hygiene** — refresh stale notes (e.g. `ops.notifications` still under-lists fans; keep `trade.ccxt-api` aligned with tip). No status lies.
-3. **More notify fans only if safe** — subject already published, maps to userId(s), clear user meaning. **`p2pDisputeResolved` lacks buyer/seller userIds — skip.** `p2pTradeExpired` has no userIds — skip. Prefer remaining high-signal events with principal ids only.
-4. **Private balance WS** — only if a safe ledger projection event path exists for self-only stream; otherwise **skip** (do not invent balance events or poll ledger from svc-ws).
-5. **`pay.public-api` thin public REST** — only if a cheap slice is clear (e.g. public resolve already exists via links; do not invent webhooks/sandbox). Else skip and note.
-6. **Wave audit** — brand / custody / vendor-shell / workspace / tracker on tip; record under `docs/audit/`.
-7. **Reassess DRAINED** — when every remaining item is human-blocked or explicitly skipped for safety, flip Status to **DRAINED** and update the scoreboard.
+1. **Fix DoD gate `svc-notify` OTEL** — if still open (`node tooling/ci/dod-gate.mjs` red: no OpenTelemetry instrumentation §14). Ship minimal instrumentation matching other services; do not invent SLO panels.
+2. **Fix `tracker:check` if `TRACKER.md` still stale** — run `pnpm tracker` / regenerate and commit only if `--check` is red. No status lies.
+3. **`p2pTradeDisputed` notify fan (openedBy only)** — if not shipped: event has `openedBy` userId; fan that principal only. **Still skip** `p2pDisputeResolved` (no buyer/seller userIds) and events with no principal ids.
+4. **`pay.public-api` thin slice — SKIP (proven not worth it)** — public resolve already exists via payment links / hosted checkout. Do not invent webhooks/sandbox.
+5. **Private balance WS** — only if a safe ledger projection event path exists for self-only stream; **prefer skip** (do not invent balance events or poll ledger from svc-ws).
+6. **Identity `subAccounts.revoke`** — if still missing and cheap (create/list exist; no revoke). Soft-delete or status flag only if schema supports it cleanly; else skip with note.
+7. **Reassess DRAINED** — when only human blockers + large phase features remain (futures, candle job, chain factory, push/email/SMS), flip Status to **DRAINED** and update the scoreboard. Do not pad the queue with ceremony.
 
 ---
 
@@ -107,7 +114,7 @@ GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED,
 
 ## Exit (DRAINED)
 
-Agent queue empty **or** each remaining item is human-blocked / safety-skipped · local doctrine scans green · **Status:** DRAINED on this file · scoreboard Wave row updated · no open agent-owned product PRs rotting.
+Agent queue empty **or** each remaining item is human-blocked / safety-skipped / large phase feature · local doctrine scans green · **Status:** DRAINED on this file · scoreboard Wave row updated · no open agent-owned product PRs rotting.
 
 ---
 
@@ -115,4 +122,4 @@ Agent queue empty **or** each remaining item is human-blocked / safety-skipped �
 
 Every **45 minutes:** re-read this file on `origin/main` → ship NEXT QUEUE #1 (or next free mountain) → update this file before stop.
 
-**Next agent after compact: NEXT QUEUE #1 (`account/trades?symbol=` if still missing; else #2 tracker hygiene).**
+**Next agent after compact: NEXT QUEUE #1 (`svc-notify` OTEL / DoD gate if still red; else #2 tracker:check).**
