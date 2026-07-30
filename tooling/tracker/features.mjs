@@ -271,7 +271,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot'],
-    note: 'partial — public REST: markets, orderbook, ticker, tickers, trades (tape), ohlcv (route exists, always [] until candle aggregation job — no inventing candles); private REST (edge-signed principal, fail-closed): GET orders/open|closed, GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance (ledger projection, self-only), GET positions (returns [] until trade.futures; setLeverage/setMarginMode not mounted). Still open: leverage/margin when futures exists, WS private.',
+    note: 'partial — public REST: markets, orderbook, ticker, tickers, trades (tape), ohlcv (route exists, always [] until candle aggregation job — no inventing candles); private REST (edge-signed principal, fail-closed): GET orders/open|closed, GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance (ledger projection, self-only), GET positions (returns [] until trade.futures; setLeverage/setMarginMode not mounted). Still open: OHLCV empty (no candle job), futures leverage/margin when trade.futures exists. Private WS is under `ws.gateway` (/private/stream), not this REST surface.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
@@ -286,7 +286,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.depth'],
-    note: 'Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. DEPTH is now live too: the terminal streams snapshot+deltas from services/svc-ws and withholds the book on a gap rather than drawing a stale one. Still missing from the four words in the title: CHARTS (no candle or trade-tape source exists anywhere), HOTKEYS and SUB-ACCOUNTS (not started). Those render as §13 sockets with the reason on screen. `dependsOn` moved from `ws.gateway` to `ws.depth`: the book needs depth, not positions, and depending on the umbrella would keep this blocked on streams it does not use.',
+    note: 'Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. DEPTH is live: terminal streams snapshot+deltas from services/svc-ws and withholds the book on a gap. Public TRADE tape exists on svc-ws (`channel=trades`) but the terminal UI does not wire it yet. Still missing from the four words in the title: CHARTS (no candle store / OHLCV always []; tape source exists, not chart-wired), HOTKEYS and SUB-ACCOUNTS (not started). Those render as §13 sockets with the reason on screen. `dependsOn` is `ws.depth` not `ws.gateway` so the book is not blocked on positions.',
   }),
   f('web.shell', 'apps/web scaffold on the design system', {
     module: 'core-ops',
@@ -311,7 +311,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['matching.engine', 'ws.depth'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'Depth + public TRADE tape + private orders/fills (/private/stream: orderUpdated + fillSettled, JWT optional). Futures positions still missing.',
+    note: 'Depth done + public TRADE tape + private orders/fills on /private/stream (orderUpdated+fillSettled, JWT). Futures positions still missing — title names four streams; three of four is not done.',
   }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
@@ -607,7 +607,7 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['infra.events'],
     requires: ['services/svc-notify'],
-    note: 'In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers for fillSettled, p2pEscrowLocked, kycApproved; ON CONFLICT dedupe). Push / email / SMS remain §13 sockets — no channel senders in this service.',
+    note: 'In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers: fillSettled, p2pEscrowLocked, p2pEscrowReleased, p2pEscrowRefunded, kycApproved, rankUpdated, stakeCreated; ON CONFLICT dedupe). Push / email / SMS remain §13 sockets — no channel senders in this service. Not done until those channels exist.',
   }),
   f('socket.notify-push', 'Push notification channel (device tokens + provider)', {
     module: 'notify',
