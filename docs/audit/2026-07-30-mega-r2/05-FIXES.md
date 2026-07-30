@@ -4,6 +4,7 @@
 
 | id              | severity | change                                                                                                                                            | attempt | PR          | affected L0                           |
 | --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ----------- | ------------------------------------- |
+| FMT-2           | P1       | prettier on #175 docs that made format:check red on tip                                                                                           | 1       | _(this PR)_ | format:check=0                        |
 | L7-EQUITY-STALE | P1       | `apps/web/src/components/terminal/terminal.tsx` — equity socket admits `GET /api/v1/account/balance` exists; panel not wired; no invented numbers | 1       | _(this PR)_ | format:check=0 · web test=0 · brand=0 |
 
 ## Prior #176 (already on tip — not re-fixed)

@@ -13,6 +13,7 @@
 | R6                  | L3      | private-rest cost           | market buy cost "0"               | P1       | protectionPrice          | **FIXED on tip** (sell residual)        |
 | WS-JWT              | L5/L7   | compose svc-ws              | JWT missing in fleet              | P1       | #176 compose             | **FIXED on tip**                        |
 | R7                  | L8      | scoreboards                 | free-mountains fossils            | P2       | #176 docs                | **FIXED on tip**                        |
+| **FMT-2**           | L0      | docs from #175              | format red after mid-run tip      | **P1**   | prettier                 | **FIXED this run**                      |
 | **L7-EQUITY-STALE** | L7      | `apps/web/.../terminal.tsx` | UI claimed no balance read exists | **P1**   | balance REST #145 exists | **FIXED this run** (honest socket copy) |
 | L3-7b               | L3      | private-rest cost           | market sell cost still "0"        | residual | no fill avg              | **OPEN residual**                       |
 | StreamA             | tooling | uiproof                     | PROOF/Chromium                    | residual | no artifacts             | **UNVERIFIED**                          |

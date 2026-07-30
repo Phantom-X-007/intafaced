@@ -226,11 +226,11 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 
 ## 45m re-check (post-#175 / #177)
 
-| Event | Result |
-| --- | --- |
-| #175 | Admin-merged — four Stream A agent packages (live-probed); brand allowlist for shell paths |
-| #176–#177 | Already on tip — mega-audit P0/P1 + PEACE tip SHA |
-| Open PRs | none after merge |
-| Product queue | still **DRAINED** |
+| Event         | Result                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| #175          | Admin-merged — four Stream A agent packages (live-probed); brand allowlist for shell paths |
+| #176–#177     | Already on tip — mega-audit P0/P1 + PEACE tip SHA                                          |
+| Open PRs      | none after merge                                                                           |
+| Product queue | still **DRAINED**                                                                          |
 
 **Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · tip **#175+** · Status **DRAINED (agent product queue)**
