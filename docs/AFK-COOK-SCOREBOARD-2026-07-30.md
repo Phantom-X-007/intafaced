@@ -87,3 +87,13 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 ## Compaction survival
 
 **Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) — paste prompt + queue. Next chat continues without Nitro.
+
+## Loop after compact
+
+| PR | What |
+| --- | --- |
+| #135–#137 | Grind loop docs + queue refresh |
+| #139 | Pay **hosted checkout** HTML for payment links |
+| #140 | CCXT private REST **create/cancel/get/closed/trades** |
+
+**Continue:** `docs/GRIND-LOOP-ACTIVE.md` · scheduler every 45m

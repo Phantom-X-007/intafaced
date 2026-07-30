@@ -58,19 +58,21 @@ GO. Enhance the queue if live main changed. Ship.
 - Payment links full CRUD soft-deactivate
 - svc-notify · i18n · protocol factory honesty
 - CCXT public: markets, orderbook, ticker, trades, **tickers**
-- CCXT private: **orders/open**
+- CCXT private: **orders/open**, create/cancel/get/closed, account/trades
+- Pay **hosted checkout HTML**
+- #139–#140 region
 - Grind plan · wave audits · **GRIND-LOOP-ACTIVE**
 
 ## NEXT QUEUE (ordered)
 
 ### Ready to cook (agent)
 
-1. **trade.ccxt-api private REST** — createOrder + cancelOrder + fetchOrder/closed/myTrades (principal + money path careful)
-2. **pay hosted checkout** — minimal HTML resolve of payment link token (no fake rails)
+1. **trade.ccxt-api** — account/balance REST (ledger read via trade if safe) OR fees endpoint
+2. **trade.ccxt-api** — cancel-all REST mapping to cancelAllOrders
 3. **fills.forOrder** tRPC if still missing
-4. **trade.convert** edge product path check; flip tracker only if honest
-5. **public OHLCV** REST if matching has candles; else socket note
-6. Wave audit after this batch
+4. **trade.convert** tracker honesty after product path check
+5. **public OHLCV** REST if data exists; else leave socket
+6. Wave audit + DRAINED reassessment
 
 ### Human-only (never fake-ship)
 
@@ -103,4 +105,4 @@ All of:
 
 ## Last agent note
 
-Session compacting. **Next agent: start at NEXT QUEUE #1 (REST private create/cancel).** #136 tickers+orders/open already merged.
+Post-compact: **start NEXT QUEUE #1.** #139 checkout + #140 private order write REST already merged. Scheduler fires every 45m on GRIND-LOOP-ACTIVE.
