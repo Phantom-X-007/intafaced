@@ -75,6 +75,18 @@ export interface TradeServiceOptions {
   convertSpreadBps?: number;
   /** How long an indicative quote is considered fresh (ms). */
   convertQuoteTtlMs?: number;
+  /**
+   * The clock the venue-hours check reads.
+   *
+   * `risk.ts` deliberately takes `at` as a parameter so a session boundary can
+   * be tested; that only buys anything if the boundary is reachable from the
+   * outside too. Without this seam the *ordering* claim — refused before any
+   * hold is taken — could only be verified by reading the code, and on 5 days
+   * out of 7 a test asserting it would pass for the wrong reason.
+   *
+   * Production leaves it unset and gets the real clock.
+   */
+  now?: () => Date;
 }
 
 export interface ConvertQuoteRequest {
@@ -147,6 +159,7 @@ export class TradeService {
   private readonly convertEnabled: boolean;
   private readonly convertSpreadBps: number;
   private readonly convertQuoteTtlMs: number;
+  private readonly now: () => Date;
 
   constructor(
     private readonly sql: Sql,
@@ -161,6 +174,7 @@ export class TradeService {
     this.convertEnabled = options.convertEnabled ?? true;
     this.convertSpreadBps = options.convertSpreadBps ?? 10;
     this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? 15_000;
+    this.now = options.now ?? (() => new Date());
   }
 
   // ── Listings (operator surface) ────────────────────────────────────────────
@@ -384,7 +398,11 @@ export class TradeService {
     // Before any hold is taken. A closed venue cannot fill, so funding an order
     // into one locks the user's balance behind a book nobody is matching until
     // the session reopens.
-    assertMarketOpen(market, new Date());
+    //
+    // Read ONCE, here, and passed down. Calling the clock twice on one order
+    // could straddle a session boundary and decide two different things about
+    // the same request.
+    assertMarketOpen(market, this.now());
     const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
 

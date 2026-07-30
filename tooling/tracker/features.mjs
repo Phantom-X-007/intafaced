@@ -265,7 +265,12 @@ export const FEATURES = [
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', { module: 'trade', phase: '2', dependsOn: ['trade.spot', 'token.staking'] }),
   f('trade.copy', 'Copy trading, audited leaders, profit share', { module: 'trade', phase: '2', plane: 'B', dependsOn: ['trade.spot'] }),
-  f('trade.forex', 'Fiat pairs on the same engine', { module: 'trade', phase: '2', dependsOn: ['trade.spot', 'pay.rails'] }),
+  f('trade.forex', 'Fiat pairs on the same engine', {
+    module: 'trade',
+    phase: '2',
+    dependsOn: ['trade.spot', 'pay.rails'],
+    note: 'NOT started as a product. What exists: the instrument model (asset_class + schedule on trade.markets) and venue-hours enforcement on order-create — #102 added assertMarketOpen before the hold, so a weekend EUR/USD order is refused with trade.market_closed rather than funded. Hours coverage completed since: the unrecognised-schedule fail-safe (rows.ts casts the DB enum with no runtime parse, so an enum added without a TRADING_SCHEDULES entry must refuse, not throw), the cme-globex daily settlement break, Chicago DST, and an end-to-end proof that a closed venue takes no hold and writes no intent row. Still missing for the actual feature: fiat settlement rails, so no forex market is listed in production.',
+  }),
   f('trade.algo', 'TWAP / VWAP / POV execution', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',

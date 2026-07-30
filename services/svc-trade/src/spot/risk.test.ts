@@ -49,6 +49,14 @@ const EURUSD = withMarket({
   schedule: 'fx-global',
 });
 
+const XAUUSD = withMarket({
+  symbol: 'XAU/USD',
+  baseAsset: 'XAU',
+  quoteAsset: 'USD',
+  assetClass: 'commodity',
+  schedule: 'cme-globex',
+});
+
 describe('market status', () => {
   it('accepts an active spot market', () => {
     expect(() => assertTradable(BTCUSDT)).not.toThrow();
@@ -250,5 +258,86 @@ describe('venue hours', () => {
     // Both checks exist and neither substitutes for the other.
     expect(() => assertTradable(withMarket({ status: 'halted' }))).toThrow(TradeError);
     expect(() => assertMarketOpen(withMarket({ status: 'halted' }), new Date('2026-01-14T12:00:00Z'))).not.toThrow();
+  });
+
+  /**
+   * The mirror of the case above, and the one that actually bites: a market that
+   * is CLOSED but perfectly `active`. Neither check alone accepts this order and
+   * only one of them is the reason.
+   */
+  it('an active market is still refused when the venue is shut', () => {
+    expect(() => assertTradable(EURUSD)).not.toThrow();
+    expect(() => assertMarketOpen(EURUSD, new Date('2026-01-10T12:00:00Z'))).toThrow(TradeError);
+  });
+
+  /**
+   * A commodity closes DAILY, not only at the weekend, so the gap a forex-only
+   * test leaves open is an hour wide every weekday — long enough to hold a
+   * user's balance against a book in settlement.
+   */
+  it('refuses a commodity order during the daily settlement break', () => {
+    // Wednesday 15:59 Chicago — inside the session.
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-01-14T21:59:00Z'))).not.toThrow();
+    // 16:01 and 16:59 Chicago — the 60-minute break.
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-01-14T22:01:00Z'))).toThrow(TradeError);
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-01-14T22:59:00Z'))).toThrow(TradeError);
+    // 17:01 Chicago — reopened.
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-01-14T23:01:00Z'))).not.toThrow();
+  });
+
+  it('refuses a commodity order on a Saturday', () => {
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-01-10T12:00:00Z'))).toThrow(TradeError);
+  });
+
+  /**
+   * Same DST trap as forex, on a different zone and a different boundary. The
+   * break is 16:00 CHICAGO, so its UTC instant moves by an hour in March and
+   * November — and Chicago does not shift on the same weekend as Europe.
+   */
+  it('tracks the Chicago settlement break across daylight saving', () => {
+    // January: Chicago is UTC-6, so 16:00 local Wednesday is 22:00Z.
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-01-14T21:59:00Z'))).not.toThrow();
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-01-14T22:01:00Z'))).toThrow();
+
+    // July: Chicago is UTC-5, so the same local moment is 21:00Z. Asserting the
+    // January instant here would report the market open mid-break.
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-07-15T20:59:00Z'))).not.toThrow();
+    expect(() => assertMarketOpen(XAUUSD, new Date('2026-07-15T21:01:00Z'))).toThrow();
+  });
+
+  /**
+   * THE FAIL-SAFE DIRECTION.
+   *
+   * `schedule` reaches this function as a bare cast of a Postgres enum value
+   * (`rows.ts` — no runtime parse), so a migration that adds a schedule to the
+   * database enum without adding it to `TRADING_SCHEDULES` puts an unknown key
+   * on this path. For an hours check the safe answer is REFUSE: passing would
+   * fund an order into a venue whose hours we cannot evaluate.
+   *
+   * It must also be a refusal rather than a crash. Reading `.kind` off the
+   * missing lookup throws a TypeError, which reaches the caller as a 500 — and a
+   * 500 is not something a client can act on, where `trade.market_closed` is.
+   */
+  it('refuses a schedule it does not recognise instead of failing open', () => {
+    const drifted = withMarket({ schedule: 'lse-equities' as Market['schedule'] });
+
+    expect(() => assertMarketOpen(drifted, new Date('2026-01-14T12:00:00Z'))).toThrow(TradeError);
+    try {
+      assertMarketOpen(drifted, new Date('2026-01-14T12:00:00Z'));
+      expect.unreachable('an unknown schedule must not be accepted');
+    } catch (err) {
+      // A TradeError, not a TypeError — assert the type, not only that it threw.
+      expect(err).toBeInstanceOf(TradeError);
+      expect((err as TradeError).code).toBe('trade.market_closed');
+      expect((err as TradeError).message).toContain('lse-equities');
+    }
+  });
+
+  /** Undefined and null arrive the same way from a row that predates the column. */
+  it('refuses a missing schedule rather than reading through it', () => {
+    for (const bad of [undefined, null, '']) {
+      const market = withMarket({ schedule: bad as unknown as Market['schedule'] });
+      expect(() => assertMarketOpen(market, new Date('2026-01-14T12:00:00Z'))).toThrow(TradeError);
+    }
   });
 });

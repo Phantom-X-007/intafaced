@@ -707,6 +707,110 @@ if (!available) {
       expect(matching.submitted).toHaveLength(0);
     });
 
+    /**
+     * VENUE HOURS, end to end.
+     *
+     * `risk.test.ts` proves the predicate; this proves the ORDERING, which is the
+     * money claim: a closed venue is refused before `recipes.orderHold` posts. A
+     * hold taken here locks the user's balance behind a book nobody is matching
+     * until the session reopens — two days, over a weekend.
+     *
+     * The clock is injected. With the ambient one this test would pass for the
+     * wrong reason five days a week and fail on the other two.
+     */
+    it('refuses a weekend forex order and holds nothing', async () => {
+      const eurusd = await trade.listMarket({
+        symbol: 'EUR/USD',
+        baseAsset: 'EUR',
+        quoteAsset: 'USD',
+        tickSize: amt('0.00001'),
+        lotSize: amt('0.01'),
+        minQty: amt('0.01'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+        assetClass: 'forex',
+        schedule: 'fx-global',
+      });
+
+      // Saturday. The listing is `active` throughout — this is the venue, not a halt.
+      expect(eurusd.status).toBe('active');
+      const saturday = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        now: () => new Date('2026-01-10T12:00:00Z'),
+      });
+
+      await fund(ALICE, 'USD', '1000');
+
+      await expect(
+        saturday.placeOrder(principalFor(ALICE), {
+          marketId: eurusd.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('100'),
+          price: amt('1.10000'),
+          clientOrderId: 'weekend-eurusd',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.market_closed' });
+
+      // The three things that must all be untouched: no hold, nothing submitted,
+      // and the full balance still spendable.
+      expect(await held(ALICE, 'USD')).toBe('0');
+      expect(await avail(ALICE, 'USD')).toBe('1000');
+      expect(matching.submitted).toHaveLength(0);
+
+      // Not even a `pending` intent row — the refusal is upstream of the row.
+      const rows = await sql`SELECT id FROM trade.orders WHERE id = ${orderIdFor(ALICE, eurusd.id, 'weekend-eurusd')}`;
+      expect(rows).toHaveLength(0);
+
+      // And no ledger movement of any kind happened under the hold reason.
+      expect(postsWithReason('order.hold')).toHaveLength(0);
+    });
+
+    /**
+     * The same market, the same service, one clock apart. This is what makes the
+     * refusal above attributable to the schedule rather than to the listing being
+     * broken in some unrelated way.
+     */
+    it('accepts the same forex order once the session opens', async () => {
+      const eurusd = await trade.listMarket({
+        symbol: 'EUR/USD',
+        baseAsset: 'EUR',
+        quoteAsset: 'USD',
+        tickSize: amt('0.00001'),
+        lotSize: amt('0.01'),
+        minQty: amt('0.01'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+        assetClass: 'forex',
+        schedule: 'fx-global',
+      });
+
+      // Wednesday noon UTC — inside the session on any definition.
+      const wednesday = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        now: () => new Date('2026-01-14T12:00:00Z'),
+      });
+
+      await fund(ALICE, 'USD', '1000');
+
+      const order = await wednesday.placeOrder(principalFor(ALICE), {
+        marketId: eurusd.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('100'),
+        price: amt('1.10000'),
+        clientOrderId: 'midweek-eurusd',
+      });
+
+      expect(order.status).toBe('open');
+      expect(await held(ALICE, 'USD')).toBe('110');
+      expect(await avail(ALICE, 'USD')).toBe('890');
+    });
+
     it('refuses an off-grid price and an off-grid quantity before any hold', async () => {
       await fund(ALICE, 'USDT', '1000');
 
