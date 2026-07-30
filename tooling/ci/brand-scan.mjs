@@ -147,6 +147,11 @@ const ALLOWLIST = [
       'internal custody runbook; an operator following it must be able to copy the real module paths and MongoDB collection names verbatim. A runbook that paraphrases the path it wants you to act on is how the wrong directory gets re-encrypted. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
   },
   {
+    path: join('docs', 'VENDORED-OVERLAP-AUDIT.md'),
+    reason:
+      'internal overlap audit; its entire product is a per-capability decision about which vendored module we adopt, rebuild or delete, and that decision cannot be taken against paraphrased paths. It cites the exact controller files whose money paths are in scope, the exact schema the balances sit in, and the exact module jars that are and are not running — the same rationale as docs/adr and LICENCE-POSITION.md. Seven occurrences, all of them a path or a database name an engineer must be able to copy. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
     path: 'NOTICE',
     reason:
       'root third-party attribution record; an attribution that omits the upstream it attributes is a false legal statement, so this file must name upstreams verbatim. It has no file extension and so currently falls outside EXTENSIONS below — this entry is deliberate belt-and-braces, so that widening EXTENSIONS later cannot silently fail CI on the one file whose whole job is naming upstreams accurately.',
