@@ -240,6 +240,39 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           }),
         ),
 
+      listLinks: scopedProcedure('pay:read', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().uuid() }))
+        .output(
+          z.array(
+            z.object({
+              id: z.string().uuid(),
+              prefix: z.string(),
+              label: z.string(),
+              amount: amountSchema.nullable(),
+              currency: z.string().nullable(),
+              active: z.boolean(),
+              expiresAt: z.string().nullable(),
+              createdAt: z.string(),
+            }),
+          ),
+        )
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            return pay.listPaymentLinks(input.merchantId);
+          }),
+        ),
+
+      deactivateLink: scopedProcedure('pay:write', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().uuid(), linkId: z.string().uuid() }))
+        .output(z.object({ deactivated: z.boolean() }))
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            return pay.deactivatePaymentLink(input.merchantId, input.linkId);
+          }),
+        ),
+
       /**
        * What we owe this merchant but have not settled, and what they can
        * already spend. Both read from the LEDGER, not from svc-pay's tables —

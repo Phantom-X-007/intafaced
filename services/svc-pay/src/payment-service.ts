@@ -415,6 +415,59 @@ export class PayService {
     };
   }
 
+  async listPaymentLinks(merchantId: string): Promise<
+    Array<{
+      id: string;
+      prefix: string;
+      label: string;
+      amount: string | null;
+      currency: string | null;
+      active: boolean;
+      expiresAt: string | null;
+      createdAt: string;
+    }>
+  > {
+    await this.getMerchant(merchantId);
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        token_prefix: string;
+        label: string;
+        amount: string | null;
+        currency: string | null;
+        active: boolean;
+        expires_at: Date | null;
+        created_at: Date;
+      }>
+    >`
+      SELECT id, token_prefix, label, amount::text, currency, active, expires_at, created_at
+        FROM pay.payment_links
+       WHERE merchant_id = ${merchantId}
+       ORDER BY created_at DESC
+    `;
+    return rows.map((r) => ({
+      id: r.id,
+      prefix: r.token_prefix,
+      label: r.label,
+      amount: r.amount,
+      currency: r.currency,
+      active: r.active,
+      expiresAt: r.expires_at?.toISOString() ?? null,
+      createdAt: r.created_at.toISOString(),
+    }));
+  }
+
+  /** Soft-disable a link so public resolve fails. Token never re-issued. */
+  async deactivatePaymentLink(merchantId: string, linkId: string): Promise<{ deactivated: boolean }> {
+    await this.getMerchant(merchantId);
+    const result = await this.sql`
+      UPDATE pay.payment_links
+         SET active = false
+       WHERE id = ${linkId} AND merchant_id = ${merchantId} AND active = true
+    `;
+    return { deactivated: result.count > 0 };
+  }
+
   // ── Payment lifecycle ──────────────────────────────────────────────────────
 
   /**
