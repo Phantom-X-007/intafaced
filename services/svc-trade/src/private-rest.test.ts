@@ -938,4 +938,63 @@ describe('private REST — mount boundary + order write path', () => {
     expect(body.balances).toEqual({});
     await app.close();
   });
+
+  // ── GET /positions (honest empty until trade.futures) ──────────────────────
+
+  it('GET /positions: anonymous → 401', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/positions' });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe('Unauthorized');
+    await app.close();
+  });
+
+  it('GET /positions: self-asserted principal → 401 (fail closed)', async () => {
+    const app = await build();
+    const forged = encodePrincipal(principal({ scopes: ['trade:read', 'trade:write'], tier: 'full', mfa: true }));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions',
+      headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe('Unauthorized');
+    await app.close();
+  });
+
+  it('GET /positions: scope miss → 403', async () => {
+    const app = await build();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions',
+      headers: signedHeaders(principal({ scopes: [] })),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('scope.denied');
+    await app.close();
+  });
+
+  it('GET /positions: signed principal → 200 + [] (no futures engine)', async () => {
+    const app = await build();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /positions?symbol=: still returns [] (filter accepted, no invent)', async () => {
+    const app = await build();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions?symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
 });
