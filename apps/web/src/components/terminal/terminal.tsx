@@ -6,14 +6,16 @@ import { listMarkets } from '@/lib/api/services';
 import type { Market } from '@/lib/api/wire';
 import { useEdge, usePlane } from '@/lib/providers';
 import { useService } from '@/lib/use-service';
+import { AccountEquity } from './account-equity';
 import { Blotter } from './blotter';
+import { LiveChart } from './live-chart';
 import { LiveOrderBook } from './live-book';
 import { LiveTradeTape } from './live-tape';
 import { OrderTicket } from './order-ticket';
 import { CustodyBanner, PlaneSwitch } from './plane-switch';
 import { ProtocolPlanePanels } from './protocol-plane';
 import { SignInPanel } from './sign-in';
-import { FailureNotice, LoadingNotice, SocketPanel } from './socket-panel';
+import { FailureNotice, LoadingNotice } from './socket-panel';
 import styles from './terminal.module.css';
 
 /**
@@ -30,6 +32,8 @@ import styles from './terminal.module.css';
  *   · sign-in and verification tier (`identity.auth.login`, `identity.kyc.status`)
  *   · open orders and fills (`trade.orders.open`, `trade.fills.mine`)
  *   · order entry (`trade.orders.create`)
+ *   · OHLCV chart (`GET /api/v1/ohlcv` — fill aggregation; honest [] if never traded)
+ *   · account equity (`GET /api/v1/account/balance` — self-only ledger projection)
  *   · Protocol Plane status and smart-account derivation (`protocol.health`,
  *     `protocol.predictAddress`)
  *
@@ -37,12 +41,9 @@ import styles from './terminal.module.css';
  *   · the order book — snapshot + sequenced deltas (`channel` default / depth)
  *   · the public trade tape — `TradePrint` frames on `channel=trades`
  *
- * Sockets, each with the reason on screen:
- *   · the chart — public tape is live above; candles still have no store
- *     (CCXT OHLCV is always empty until a candle aggregation job exists)
- *   · account equity — balance REST exists on trade (`GET /api/v1/account/balance`,
- *     self-only ledger projection); this terminal panel is not wired to it yet
- *   · everything on the Protocol Plane that needs a chain
+ * Still sockets (honest holes):
+ *   · hotkeys / sub-accounts (not started)
+ *   · everything on the Protocol Plane that needs a production chain
  *
  * The count is deliberate. Real panels and honest holes is a truthful
  * terminal; panels of plausible numbers is a demo that gets somebody hurt.
@@ -52,14 +53,6 @@ const copy = {
   markets: 'Markets',
   marketsLoading: 'Asking svc-trade…',
   noMarkets: 'svc-trade has no listed markets',
-  chartTitle: 'Chart',
-  chartReason:
-    'No candle store exists. The public trade tape is live in the panel above (svc-ws channel=trades); building OHLC candles from those prints is a separate job, and the CCXT OHLCV route correctly returns [] until that job runs — this panel will not invent candles from an empty series.',
-  chartBlocked: 'trade.candles · candle aggregation job',
-  equityTitle: 'Account equity',
-  equityReason:
-    'A self-only balance read exists on svc-trade (`GET /api/v1/account/balance` via edge `/api/v1`, trade:read) as a ledger projection — not a direct ledger browser scope. This terminal panel is not wired to that route yet; it will not invent numbers meanwhile.',
-  equityBlocked: 'terminal equity panel · wire to account/balance',
   select: 'Select',
   selected: 'Selected',
 } as const;
@@ -99,14 +92,14 @@ export function Terminal() {
 
           <div className={styles.chartColumn}>
             <LiveTradeTape marketId={selected?.id ?? null} />
-            <SocketPanel title={copy.chartTitle} reason={copy.chartReason} blockedBy={copy.chartBlocked} />
+            <LiveChart symbol={selected?.symbol ?? null} />
             <Blotter markets={markets} />
           </div>
 
           <div className={styles.ticketColumn}>
             <SignInPanel />
             <OrderTicket market={selected} />
-            <SocketPanel title={copy.equityTitle} reason={copy.equityReason} blockedBy={copy.equityBlocked} />
+            <AccountEquity />
           </div>
         </div>
       )}

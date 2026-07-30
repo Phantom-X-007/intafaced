@@ -234,7 +234,7 @@ pnpm --filter @intafaced/svc-protocol chain:deploy      # + CREATE2 cross-check
 
 `scripts/compile-contracts.mjs` compiles with `solc` from npm — the compiler itself, pinned in `pnpm-lock.yaml`, so every machine and every CI runner produce identical bytecode. Output is committed under `contracts/out/` and carries a `sourceHash` the test suite re-derives, so "committed" never means "unverified".
 
-**The first compile found a bug.** `contracts/amm/ConstantProductPool.swapExactIn` calls `swap`, which is `external`; Solidity does not allow that, so the AMM pool has never produced bytecode and could never have been deployed. It is pinned as a known-broken suite in `scripts/contract-sources.mjs` — the build fails if it starts compiling, or fails differently, without somebody deciding. Fixing it belongs to `protocol.amm`, not here.
+**AMM compile (2026-07-31):** `ConstantProductPool` previously failed because `swapExactIn` called `external swap` by name. Fixed with a private `_swap` shared by both entrypoints; the `amm` suite now `expect: 'compiles'` and artefacts are committed. Factory deploy on the dev chain and audit remain open before `protocol.amm` is `done`.
 
 ### Still not covered — §13 sockets
 

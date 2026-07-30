@@ -290,8 +290,11 @@ export const FEATURES = [
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
     phase: '2',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.depth'],
-    note: 'Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. DEPTH is live: terminal streams snapshot+deltas from services/svc-ws and withholds the book on a gap. Public TRADE tape is now wired in the terminal (`LiveTradeTape` → svc-ws `channel=trades`, decimal-string prints only, no candles). Still missing from the four words in the title: CHARTS (no candle store / OHLCV always []; tape is live, chart socket remains honest), HOTKEYS and SUB-ACCOUNTS (not started). Those render as §13 sockets with the reason on screen. `dependsOn` is `ws.depth` not `ws.gateway` so the book is not blocked on positions.',
+    requires: ['apps/web/src/components/terminal'],
+    note: 'Updated 2026-07-31: CHARTS + EQUITY are live. `LiveChart` reads real OHLCV from edge `/api/v1/ohlcv` (fill aggregation #201 — honest [] when never traded; decimal-string OHLC; SVG candles, no invented zeros). `AccountEquity` reads self-only `/api/v1/account/balance`. Depth + public tape + order entry/blotter already wired. Still missing from the title: HOTKEYS and SUB-ACCOUNTS (not started). `dependsOn` is `ws.depth` not `ws.gateway` so the book is not blocked on positions.',
   }),
   f('web.shell', 'apps/web scaffold on the design system', {
     module: 'core-ops',
@@ -408,11 +411,11 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'wip',
+    status: 'ready',
     owner: 'Nitro',
     dependsOn: ['protocol.smart-accounts'],
     requires: ['services/svc-protocol/contracts/amm', 'services/svc-protocol/src/amm'],
-    note: 'WIP 2026-07-29: ConstantProductPool + PoolFactory Solidity, pure quote math + unsigned calldata builders on svc-protocol (amm.quoteExactIn / buildCreatePool / buildSwapExactIn / buildMintLiquidity). 2026-07-30: quoteExactIn took reserves as an INPUT and nothing in the repo supplied them — getReserves was in the ABI and called from nowhere, so a correct AMM was a calculator with no inputs. Added chain reads (poolReserves/poolToken0/poolToken1/poolFeeBps) and amm.quoteFromPool, which sources its own reserves, orients them by token0, and refuses a tokenIn the pool does not trade (amm.token_not_in_pool) rather than assuming token1. Both quotes now carry reservesFromChain so a caller can tell a real quote from arithmetic. quoteFromPool refuses in this environment every time — there is no chain. 2026-07-30 THE CONTRACT DOES NOT COMPILE. First time anything ran a Solidity compiler over this tree: ConstantProductPool.swapExactIn calls `swap` at lines 177 and 179, `swap` is declared `external`, and Solidity does not permit an internal call to an external function. So the pool has never produced bytecode and could never have been deployed. Fix is `external` -> `public` or a shared internal `_swap`; deliberately NOT done as a side effect of standing up a dev chain, because it changes a money contract external surface. Pinned in scripts/contract-sources.mjs so the build fails if it starts compiling (or fails differently) without somebody deciding. Not done until that is fixed, the factory is deployed (PROTOCOL_AMM_FACTORY_ADDRESS non-zero) and pool tests run on chain.',
+    note: 'Updated 2026-07-31: COMPILE UNBLOCKED. ConstantProductPool now shares private `_swap` between external `swap` and `swapExactIn` — bytecode + PoolFactory artefacts committed (solc 0.8.28 paris); suite flipped to expect:compiles; artifacts.test pins sourceHash + hand-written pool/factory ABI. TS quote/build surface already existed. Still not `done`: PROTOCOL_AMM_FACTORY_ADDRESS defaults 0x0 (factory not in deploy-dev yet), no live pool mint/swap proof on anvil in this PR, NOTHING AUDITED. Unlocks lending/router/meme-factory to start once factory is deployed on the dev chain.',
   }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', {
     module: 'protocol',

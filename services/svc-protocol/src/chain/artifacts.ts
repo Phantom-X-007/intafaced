@@ -34,7 +34,8 @@ import type { Abi, Hex } from 'viem';
  * `scripts/` under tsx — all three sit exactly two levels below the service root.
  */
 
-export type ArtifactName = 'AccountFactory' | 'SmartAccount' | 'SessionKeyLib' | 'SovereignToken' | 'TokenFactory';
+export type ArtifactName =
+  'AccountFactory' | 'SmartAccount' | 'SessionKeyLib' | 'SovereignToken' | 'TokenFactory' | 'ConstantProductPool' | 'PoolFactory';
 
 export interface ContractArtifact {
   readonly contractName: string;

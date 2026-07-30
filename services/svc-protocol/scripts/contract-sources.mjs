@@ -130,27 +130,15 @@ export const SUITES = [
   },
   {
     name: 'amm',
-    expect: 'fails',
+    expect: 'compiles',
     /**
-     * `protocol.amm` — BLOCKED, and now demonstrably so at the contract layer.
+     * `protocol.amm` — constant-product pool + factory.
      *
-     * `ConstantProductPool.swap` is declared `external`, and `swapExactIn`
-     * calls it by name at lines 177 and 179. Solidity does not allow an
-     * external function to be called internally, so this file has never
-     * produced bytecode and the pool as written is undeployable. Nobody knew,
-     * because until `compile-contracts.mjs` landed nothing in this repository
-     * had ever run a Solidity compiler.
-     *
-     * NOT FIXED HERE, deliberately. The fix changes a money contract's external
-     * surface (`external` → `public`, or an internal `_swap` the two callers
-     * share) on a feature that belongs to `protocol.amm`, not to standing up a
-     * dev chain. Changing what a pool exposes as a side effect of adding a
-     * build script is the kind of edit that gets waved through in review. It is
-     * pinned here so whoever opens `protocol.amm` finds it in the first ten
-     * seconds instead of the first ten hours.
+     * Was pinned `fails` while `swapExactIn` called `external swap` by name
+     * (Undeclared identifier). Fixed via private `_swap` shared by both
+     * entrypoints — external ABI of `swap` unchanged for calldata builders.
      */
     sources: ['amm/ConstantProductPool.sol', 'amm/IERC20Minimal.sol', 'amm/PoolFactory.sol'],
-    expectedError: 'Undeclared identifier',
   },
 ];
 
