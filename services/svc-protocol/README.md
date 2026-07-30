@@ -40,23 +40,23 @@ Almost everything is `publicJurisdictionProcedure('protocol', 'protocol')` — *
 
 | Procedure                     | Guard          | Input                            | Output                                                                                                             |
 | ----------------------------- | -------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `launch.status`               | permissionless | —                                | `{ configured, deployed, usable, template: { sourceHash, audited: false }, limits, mintAuthorityRetained: false }`  |
-| `launch.predictTokenAddress`  | permissionless | `{ creator, userSalt?, params }` | `{ address, chainId, factory, scaledTotalSupply, deployed, templateSourceHash }`                                    |
-| `launch.buildTokenDeployment` | permissionless | `{ creator, userSalt?, params }` | unsigned call + `predictedAddress`, `scaledTotalSupply`                                                             |
-| `launch.tokenInfo`            | permissionless | `{ token }`                      | `{ name, symbol, decimals, totalSupply, initialHolder, creator, fromThisFactory, matchesTemplate }`                 |
+| `launch.status`               | permissionless | —                                | `{ configured, deployed, usable, template: { sourceHash, audited: false }, limits, mintAuthorityRetained: false }` |
+| `launch.predictTokenAddress`  | permissionless | `{ creator, userSalt?, params }` | `{ address, chainId, factory, scaledTotalSupply, deployed, templateSourceHash }`                                   |
+| `launch.buildTokenDeployment` | permissionless | `{ creator, userSalt?, params }` | unsigned call + `predictedAddress`, `scaledTotalSupply`                                                            |
+| `launch.tokenInfo`            | permissionless | `{ token }`                      | `{ name, symbol, decimals, totalSupply, initialHolder, creator, fromThisFactory, matchesTemplate }`                |
 
 `params` is `{ name, symbol, decimals, totalSupply, recipient }`. **`totalSupply` is a decimal string of whole tokens** ("1000000", "21000000.5") and becomes a scaled `bigint` in `src/launch/params.ts` and nowhere else. It is never a JS `number` at any point — 1e21 is already past `MAX_SAFE_INTEGER`, and a rounded supply is permanent.
 
 **The product decisions this surface makes, written down because a launch cannot be undone:**
 
-| Question                               | Answer                                                                                                                                                    |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Who may deploy?                        | Anyone. Permissionless per §22 — the platform holds nothing. It never originates the transaction either: it builds bytes the **creator** signs.            |
-| Does the deployer keep mint authority? | **No. Nobody does.** The template has no `mint`, no `owner`, no `pause`, no upgrade path. No API flag can change that.                                     |
-| What decimals are permitted?           | 0–18. Above 18 cannot round-trip through the ledger's `numeric(38,18)`. Enforced in the contract **and** the API.                                          |
-| What supply is permitted?              | Up to 10^20 − 1 whole tokens — where the amount stops being representable in `numeric(38,18)`. **API-only**; the contract allows the full `uint256`.       |
-| Is the template audited?               | **No.** `launch.status` returns `audited: false`. `contracts/out/` is compiler output, not an audit report.                                                |
-| Who charges the launch fee?            | Nobody, here. The factory is not payable and takes no fee — a fee is a Fiat Plane ledger recipe (§0.6), never value held by a contract on this plane.      |
+| Question                               | Answer                                                                                                                                                |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who may deploy?                        | Anyone. Permissionless per §22 — the platform holds nothing. It never originates the transaction either: it builds bytes the **creator** signs.       |
+| Does the deployer keep mint authority? | **No. Nobody does.** The template has no `mint`, no `owner`, no `pause`, no upgrade path. No API flag can change that.                                |
+| What decimals are permitted?           | 0–18. Above 18 cannot round-trip through the ledger's `numeric(38,18)`. Enforced in the contract **and** the API.                                     |
+| What supply is permitted?              | Up to 10^20 − 1 whole tokens — where the amount stops being representable in `numeric(38,18)`. **API-only**; the contract allows the full `uint256`.  |
+| Is the template audited?               | **No.** `launch.status` returns `audited: false`. `contracts/out/` is compiler output, not an audit report.                                           |
+| Who charges the launch fee?            | Nobody, here. The factory is not payable and takes no fee — a fee is a Fiat Plane ledger recipe (§0.6), never value held by a contract on this plane. |
 
 Every launch path **refuses** with `launch.factory_not_configured` when `PROTOCOL_TOKEN_FACTORY_ADDRESS` is the zero default. That is the check that matters most here: CREATE2 against `factory = 0x0` succeeds and returns a real, checksummed, entirely fictional token address — which a creator would then publish.
 
