@@ -12,6 +12,23 @@ describe('route resolution', () => {
     expect(resolve('/api/identity')?.path).toBe('/');
   });
 
+  it('preserves the full path for public CCXT REST (/api/v1 → trade)', () => {
+    const markets = resolve('/api/v1/markets');
+    expect(markets?.upstream.prefix).toBe('/api/v1');
+    expect(markets?.upstream.envVar).toBe('TRADE_URL');
+    expect(markets?.upstream.preservePath).toBe(true);
+    expect(markets?.path).toBe('/api/v1/markets');
+
+    const book = resolve('/api/v1/orderbook/BTC%2FUSDT');
+    expect(book?.path).toBe('/api/v1/orderbook/BTC%2FUSDT');
+  });
+
+  it('does not let /api/v1 steal /api/trade (longer prefix wins)', () => {
+    const r = resolve('/api/trade/trpc/markets.list');
+    expect(r?.upstream.prefix).toBe('/api/trade');
+    expect(r?.path).toBe('/trpc/markets.list');
+  });
+
   /**
    * The property that keeps the edge from being a proxy for the whole internal
    * network. Anything unlisted must 404 — never fall through to a default.

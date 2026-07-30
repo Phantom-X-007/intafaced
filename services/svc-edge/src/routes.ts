@@ -20,11 +20,20 @@ export interface Upstream {
   readonly envVar: string;
   /** Default for local development only. */
   readonly devUrl: string;
+  /**
+   * When true, forward the full inbound pathname instead of stripping `prefix`.
+   * Used for CCXT-contract paths (`/api/v1/...`) that must land on the upstream
+   * at the same absolute path (trade mounts `/api/v1/markets`, not `/markets`).
+   */
+  readonly preservePath?: boolean;
 }
 
 export const UPSTREAMS: readonly Upstream[] = [
   { prefix: '/api/identity', envVar: 'IDENTITY_URL', devUrl: 'http://localhost:4002' },
   { prefix: '/api/trade', envVar: 'TRADE_URL', devUrl: 'http://localhost:4004' },
+  // Public exchange REST (CCXT contract paths). Path preserved so
+  // edge /api/v1/markets → trade /api/v1/markets.
+  { prefix: '/api/v1', envVar: 'TRADE_URL', devUrl: 'http://localhost:4004', preservePath: true },
   { prefix: '/api/token', envVar: 'TOKEN_URL', devUrl: 'http://localhost:4003' },
   { prefix: '/api/agents', envVar: 'AGENTS_URL', devUrl: 'http://localhost:4008' },
   { prefix: '/api/bank', envVar: 'BANK_URL', devUrl: 'http://localhost:4009' },
@@ -61,6 +70,9 @@ export function resolve(pathname: string): Resolved | null {
 
   for (const upstream of candidates) {
     if (pathname === upstream.prefix || pathname.startsWith(`${upstream.prefix}/`)) {
+      if (upstream.preservePath) {
+        return { upstream, path: pathname };
+      }
       const rest = pathname.slice(upstream.prefix.length);
       return { upstream, path: rest === '' ? '/' : rest };
     }
