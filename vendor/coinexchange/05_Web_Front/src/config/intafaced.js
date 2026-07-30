@@ -197,14 +197,15 @@ export const MODULES = [
     { key: 'token', route: '/token', edge: 'token', service: 'svc-token', state: 'live' },
     { key: 'agents', route: '/agents', edge: 'agents', service: 'svc-agents', state: 'live' },
     { key: 'blueprint', route: '/blueprint', edge: 'blueprint', service: 'svc-blueprint', state: 'partial' },
-    { key: 'protocol', route: '/protocol', edge: 'protocol', service: 'svc-protocol', state: 'absent' },
+    // Router mounted on main (#210/#217). Public health/chainStatus/launch.status answer.
+    { key: 'protocol', route: '/protocol', edge: 'protocol', service: 'svc-protocol', state: 'partial' },
     { key: 'dex', route: '/dex', edge: 'dex', service: 'svc-dex', state: 'partial' },
-    // svc-indexer is up and serves its router, but there is no /api/indexer in
-    // svc-edge's route table — so from a browser it does not exist.
-    { key: 'chain', route: '/chain', edge: null, service: 'svc-indexer', state: 'absent' },
-    // No such service in services/. Nothing to call, nothing to route.
-    { key: 'academy', route: '/academy', edge: null, service: 'svc-academy', state: 'absent' },
-    { key: 'launch', route: '/launch', edge: null, service: 'svc-launch', state: 'absent' }
+    // Edge route /api/indexer exists on main (#218). Read models need a live chain.
+    { key: 'chain', route: '/chain', edge: 'indexer', service: 'svc-indexer', state: 'partial' },
+    // svc-academy on main (#208); lobbies need academy:* scopes + fleet.
+    { key: 'academy', route: '/academy', edge: 'academy', service: 'svc-academy', state: 'partial' },
+    // Token factory status lives on svc-protocol as launch.* (#217) — not a separate svc-launch.
+    { key: 'launch', route: '/launch', edge: 'protocol', service: 'svc-protocol', state: 'partial' }
 ];
 
 export function moduleByKey(key) {

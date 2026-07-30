@@ -12,6 +12,28 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('intafaced.pay.healthTitle') }}</h2>
+        <span class="ix-sub">health</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.pay.healthLead') }}
+      </p>
+      <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
+        <div v-if="health.data" class="ix-kv">
+          <div class="ix-kv-item">
+            <span class="k">service</span>
+            <span class="v">{{ health.data.service }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('intafaced.pay.rails') }}</span>
+            <span class="v">{{ (health.data.rails && health.data.rails.length) ? health.data.rails.join(', ') : $t('intafaced.pay.noRails') }}</span>
+          </div>
+        </div>
+      </IxState>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
         <h2>{{ $t('intafaced.pay.balanceTitle') }}</h2>
         <span class="ix-sub">withdrawal.balance</span>
       </div>
@@ -68,14 +90,15 @@
 
 <script>
 /**
- * svc-pay — the two surfaces a normal session can actually reach.
+ * svc-pay — health + the two surfaces a normal session can actually reach.
+ *
+ * `health` is public and lists configured rail ids (may be empty / sandbox-only).
+ * Hosted checkout (#214) is a separate public HTML path at /api/pay/checkout —
+ * not a merchant dashboard on this page. `railHealth` needs pay:read (issued to
+ * nobody) so it is not drawn as a false permanent 403.
  *
  * `withdrawal.balance` is gated on `ledger:read` and `withdrawal.mine` on
- * `trade:read`, both of which an interactive session holds. Everything else in
- * svc-pay (merchant profiles, payments, settlement, payouts) sits behind
- * `pay:read` / `pay:write` / `pay:refund` / `pay:payout`, none of which
- * svc-identity issues to anybody — so those surfaces are not drawn here rather
- * than drawn and left permanently refusing.
+ * `trade:read`, both of which an interactive session holds.
  *
  * The balance is svc-ledger's number, forwarded. svc-pay does not sum its own
  * tables for it and neither does this screen.
@@ -91,12 +114,14 @@ export default {
   data() {
     return {
       assetId: 'USDT',
+      health: this.emptySection(),
       balance: this.emptySection(),
       withdrawals: this.emptySection()
     };
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
+    this.load('health', query('pay', 'health', undefined, this.ixToken));
     this.checkBalance();
     this.load('withdrawals', query('pay', 'withdrawal.mine', undefined, this.ixToken));
   },
