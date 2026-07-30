@@ -195,3 +195,14 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 | Agent product queue | still **empty** — DRAINED |
 
 **Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED (agent queue)** · product high water **#162–#163** · tip through **#165 + #138** · scheduler 45m re-check only
+
+## 45m re-check (post-#167)
+
+| Event | Result |
+| --- | --- |
+| Open PR babysit | **#167** admin-merged — trade migration backfill `display_name` before CHECK (fleet-down on non-empty markets) |
+| Local verify | migration-check green; brand green; CI billing-blocked |
+| Agent product queue | still **DRAINED** — ops fix only |
+
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · tip **#167** · Status **DRAINED (agent queue)**
+
