@@ -34,5 +34,5 @@ Filled at merge time in PEACE TIP block and operator chat.
 ## POST-MERGE TIP
 
 ```
-(pending merge)
+d926edfc6479dcb0f8babe226415cf60992b130c
 ```
