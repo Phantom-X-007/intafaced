@@ -130,6 +130,18 @@ for (const suite of SUITES) {
             abi: artefact.abi,
             bytecode,
             deployedBytecode: `0x${artefact.evm.deployedBytecode.object}`,
+            /**
+             * Byte ranges the CONSTRUCTOR writes into the runtime — Solidity
+             * `immutable` values. Zero placeholders in the output above, real
+             * values on chain.
+             *
+             * Recorded so `deployedCodeMatches()` can compare a deployed
+             * contract against this artefact honestly. Without it the only
+             * available check is byte-equality, which is FALSE for every
+             * correctly deployed contract that has an immutable — a check that
+             * looks strict and rejects the truth.
+             */
+            immutableReferences: artefact.evm.deployedBytecode.immutableReferences ?? {},
           },
           null,
           2,

@@ -2,7 +2,9 @@ import { createPublicClient, defineChain, http } from 'viem';
 import type { Address, Hex, PublicClient } from 'viem';
 import { accountFactoryAbi, smartAccountAbi } from './abi.js';
 import { poolAbi } from '../amm/abi.js';
-import { ChainUnavailableError, classifyChainError, isZeroAddress } from './availability.js';
+import { erc20ReadAbi, tokenFactoryAbi } from './abi.js';
+import { ChainUnavailableError, classifyChainError, isZeroAddress, ZERO_ADDRESS } from './availability.js';
+import type { TokenParams } from '../launch/params.js';
 import { withSpan } from '../tracing.js';
 
 /**
@@ -26,8 +28,27 @@ export interface ChainConfig {
   readonly entryPoint: Address;
   readonly factory: Address;
   readonly implementation: Address;
+  /**
+   * `TokenFactory` for `launch.token-factory` (§8.4).
+   *
+   * Optional here and normalised to the zero address on the class below, so
+   * that "the caller did not mention it" and "it is not deployed" collapse into
+   * one state downstream rather than two. Two spellings of absence is how one
+   * of them ends up unhandled.
+   */
+  readonly tokenFactory?: Address;
   /** ERC-4337 bundler JSON-RPC. Absent = relaying is unavailable, reads still work. */
   readonly bundlerUrl?: string;
+}
+
+/** What a launched token says about itself — read from the token, never from our config. */
+export interface TokenMetadata {
+  readonly name: string;
+  readonly symbol: string;
+  readonly decimals: number;
+  /** Scaled by `decimals`. A bigint until the edge of the process, never a number. */
+  readonly totalSupply: bigint;
+  readonly initialHolder: Address;
 }
 
 export interface OnChainSession {
@@ -78,6 +99,17 @@ export interface ChainStatus {
    * claim is not a true one.
    */
   readonly suiteDeployed: boolean;
+  /**
+   * `PROTOCOL_TOKEN_FACTORY_ADDRESS` is non-zero. Config, not evidence.
+   *
+   * SEPARATE from `suiteConfigured` rather than folded into it, deliberately.
+   * Folding it in would make the smart-account layer report itself unusable
+   * because a launch contract is missing — two unrelated features, one boolean,
+   * and the more important one goes dark for the wrong reason.
+   */
+  readonly tokenFactoryConfigured: boolean;
+  /** VERIFIED by `eth_getCode`: the token factory holds code on this chain. */
+  readonly tokenFactoryDeployed: boolean;
   readonly refusalCode: string | null;
   readonly reason: string | null;
 }
@@ -85,7 +117,18 @@ export interface ChainStatus {
 export class ProtocolChain {
   readonly client: PublicClient;
 
+  /**
+   * The launch factory, with absence spelled exactly one way.
+   *
+   * `env.ts` defaults it to the zero address on purpose — a loud zero rather
+   * than a plausible-looking address — and an omitted config field means the
+   * same thing. Collapsing both here means every caller below has one check to
+   * make instead of two.
+   */
+  readonly tokenFactory: Address;
+
   constructor(readonly config: ChainConfig) {
+    this.tokenFactory = config.tokenFactory ?? (ZERO_ADDRESS as Address);
     const chain = defineChain({
       id: config.chainId,
       name: `intafaced-protocol-${config.chainId}`,
@@ -115,6 +158,21 @@ export class ProtocolChain {
     return this.#read('isDeployed', 'chain.isDeployed', async () => {
       const code = await this.client.getCode({ address });
       return code !== undefined && code !== '0x';
+    });
+  }
+
+  /**
+   * The runtime bytecode at an address, or null when there is none.
+   *
+   * `isDeployed` answers the same `eth_getCode` and throws the bytes away. This
+   * returns them, because "there is code here" and "the code here is the code we
+   * compiled" are different claims, and only the second one rules out a factory
+   * that deploys something other than the template it is documented to deploy.
+   */
+  async runtimeCode(address: Address): Promise<Hex | null> {
+    return this.#read('runtimeCode', 'chain.getCode', async () => {
+      const code = await this.client.getCode({ address });
+      return code === undefined || code === '0x' ? null : code;
     });
   }
 
@@ -226,6 +284,83 @@ export class ProtocolChain {
     );
   }
 
+  // ── launch.token-factory (§8.4) ──────────────────────────────────────────
+
+  /**
+   * The factory's own answer for where a token will land.
+   *
+   * The same role `predictAddressOnChain` plays for accounts, and for the same
+   * reason: `launch/address.ts` derives this independently, and a derivation bug
+   * in this repository would otherwise be invisible until a creator published
+   * an address nothing would ever be deployed to.
+   */
+  async predictTokenAddressOnChain(creator: Address, userSalt: Hex, params: TokenParams): Promise<Address> {
+    return this.#read('predictTokenAddressOnChain', 'chain.tokenGetAddress', async () =>
+      this.client.readContract({
+        address: this.tokenFactory,
+        abi: tokenFactoryAbi,
+        functionName: 'getAddress',
+        args: [creator, userSalt, params],
+      }),
+    );
+  }
+
+  /**
+   * The factory's own init code for these parameters.
+   *
+   * Not needed to serve a request — it exists so a test can compare bytes with
+   * `tokenInitCode()` directly. An address mismatch tells you something is
+   * wrong; these bytes tell you WHERE, and the difference is an afternoon.
+   */
+  async tokenInitCodeOnChain(params: TokenParams): Promise<Hex> {
+    return this.#read('tokenInitCodeOnChain', 'chain.tokenInitCode', async () =>
+      this.client.readContract({ address: this.tokenFactory, abi: tokenFactoryAbi, functionName: 'initCode', args: [params] }),
+    );
+  }
+
+  /**
+   * Who launched a token through this factory, or `null` if it did not come
+   * from here.
+   *
+   * The null is the point. §35 wants deployer reputation, and a token whose
+   * creator we cannot name must read as unknown provenance rather than as
+   * `0x0` — an address that looks like an answer and is not one.
+   */
+  async tokenCreator(token: Address): Promise<Address | null> {
+    const creator = await this.#read('tokenCreator', 'chain.tokenCreatorOf', async () =>
+      this.client.readContract({ address: this.tokenFactory, abi: tokenFactoryAbi, functionName: 'creatorOf', args: [token] }),
+    );
+    return isZeroAddress(creator) ? null : creator;
+  }
+
+  /**
+   * What a token says about itself.
+   *
+   * Five reads, batched. Every value comes from the token contract; none is
+   * echoed back from what a caller asked for. That distinction is the whole
+   * value of this call — a surface that displayed the requested supply rather
+   * than the deployed supply could not tell a creator that their launch did
+   * something other than what they typed.
+   */
+  async tokenMetadata(token: Address): Promise<TokenMetadata> {
+    return this.#read('tokenMetadata', 'chain.tokenMetadata', async () => {
+      const [name, symbol, decimals, totalSupply, initialHolder] = await Promise.all([
+        this.client.readContract({ address: token, abi: erc20ReadAbi, functionName: 'name' }),
+        this.client.readContract({ address: token, abi: erc20ReadAbi, functionName: 'symbol' }),
+        this.client.readContract({ address: token, abi: erc20ReadAbi, functionName: 'decimals' }),
+        this.client.readContract({ address: token, abi: erc20ReadAbi, functionName: 'totalSupply' }),
+        this.client.readContract({ address: token, abi: erc20ReadAbi, functionName: 'initialHolder' }),
+      ]);
+      return { name, symbol, decimals: Number(decimals), totalSupply, initialHolder };
+    });
+  }
+
+  async tokenBalanceOf(token: Address, holder: Address): Promise<bigint> {
+    return this.#read('tokenBalanceOf', 'chain.tokenBalanceOf', async () =>
+      this.client.readContract({ address: token, abi: erc20ReadAbi, functionName: 'balanceOf', args: [holder] }),
+    );
+  }
+
   /**
    * Assert the RPC is the chain we derive addresses for.
    *
@@ -253,6 +388,7 @@ export class ProtocolChain {
    */
   async status(): Promise<ChainStatus> {
     const suiteConfigured = !isZeroAddress(this.config.factory) && !isZeroAddress(this.config.implementation);
+    const tokenFactoryConfigured = !isZeroAddress(this.tokenFactory);
 
     try {
       const observedChainId = await this.assertChainId();
@@ -262,6 +398,9 @@ export class ProtocolChain {
       // "the contracts are there", and it is cheap enough to do on every probe.
       const suiteDeployed =
         suiteConfigured && (await this.isDeployed(this.config.factory)) && (await this.isDeployed(this.config.implementation));
+      // Same rule, applied to the launch factory: configured is not deployed,
+      // and the only way to know the difference is to ask the chain.
+      const tokenFactoryDeployed = tokenFactoryConfigured && (await this.isDeployed(this.tokenFactory));
       return {
         reachable: true,
         configuredChainId: this.config.chainId,
@@ -269,6 +408,8 @@ export class ProtocolChain {
         blockNumber: blockNumber.toString(),
         suiteConfigured,
         suiteDeployed,
+        tokenFactoryConfigured,
+        tokenFactoryDeployed,
         refusalCode: null,
         reason: null,
       };
@@ -285,6 +426,8 @@ export class ProtocolChain {
         suiteConfigured,
         // Nobody looked, so nothing is deployed as far as this answer goes.
         suiteDeployed: false,
+        tokenFactoryConfigured,
+        tokenFactoryDeployed: false,
         refusalCode: refusal.code,
         reason: refusal.message,
       };

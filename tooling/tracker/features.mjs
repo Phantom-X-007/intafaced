@@ -581,7 +581,48 @@ export const FEATURES = [
     module: 'launch',
     phase: '5',
     plane: 'B',
-    dependsOn: ['protocol.smart-accounts'],
+    status: 'ready',
+    // DEPENDENCY REMOVED 2026-07-30, on evidence rather than opinion.
+    // This declared `dependsOn: ['protocol.smart-accounts']`, and that is not
+    // true: a token launch needs a chain and a factory, not an account
+    // abstraction layer. `launch/router-launch-live.test.ts` builds the router
+    // with `factory: ZERO, implementation: ZERO` — the smart-account suite
+    // deliberately NOT deployed — and launches a token through it on a real
+    // chain. That is also why `tokenFactoryDeployed` is a separate boolean from
+    // `suiteDeployed`: neither feature may take the other down.
+    dependsOn: [],
+    requires: ['services/svc-protocol/contracts/launch', 'services/svc-protocol/src/launch'],
+    note:
+      'NOT `done`, for the same reason protocol.smart-accounts is not: a local dev chain is not a chain decision, and ' +
+      'the title says "audited templates" while nothing here has been audited. What DOES exist, on main and mounted: ' +
+      'contracts/launch/SovereignToken.sol (fixed-supply ERC-20 — NO mint, NO owner, NO pause, NO blacklist, NO upgrade ' +
+      'path; entire supply minted once in the constructor to a named recipient) and TokenFactory.sol (CREATE2; the salt ' +
+      'binds the creator and every parameter binds via the init code, so "this address, these parameters, this creator" ' +
+      'is one claim; a repeat launch REVERTS rather than returning the existing token, unlike AccountFactory, because the ' +
+      'supply was already minted by the first call). Compiled as its own pinned suite (solc 0.8.28, paris, artefacts ' +
+      'committed with a sourceHash the suite re-derives). Service surface on svc-protocol: launch.status / ' +
+      'predictTokenAddress / buildTokenDeployment / tokenInfo, permissionless per §22, unsigned calldata only — the ' +
+      'service holds no key and never originates a launch. PROVEN ON THE REAL DEV CHAIN: the TypeScript CREATE2 ' +
+      'derivation agrees with TokenFactory.getAddress over 20 creator/salt pairs and 5 parameter sets; our init code ' +
+      'equals the factory own initCode(); the token lands at the predicted address; the deployed runtime IS the compiled ' +
+      'template; the full supply reaches the recipient and NOTHING reaches the creator; no mint/owner/pause/upgrade ' +
+      'selector appears anywhere in the deployed bytecode. End to end through the router: predict, build, broadcast ' +
+      'exactly the bytes the service returned, token is at the predicted address (router-launch-live.test.ts) — which is ' +
+      'what rules out predicting one address while handing out calldata that deploys to another. FOUND AND FIXED: ' +
+      'comparing a deployed contract against artifact.deployedBytecode is WRONG and looks right — Solidity immutable ' +
+      'values are spliced in by the constructor, so SovereignToken (decimals/totalSupply/initialHolder) never matches ' +
+      'byte for byte. deployedCodeMatches() now masks the compiler immutableReferences ranges; shipping the naive check ' +
+      'would have meant a "verified against the template" field that was permanently false. MONEY: supply is a decimal ' +
+      'string on the wire and a scaled bigint in memory, never a number; capped at 10^20-1 whole tokens so it stays ' +
+      'representable in numeric(38,18); decimals 0-18 enforced in the contract AND the API. No ledger recipe, no balance, ' +
+      'no fee — the factory is not payable, and a launch fee is a Fiat Plane recipe (§0.6) belonging to whichever module ' +
+      'sells the launch. REFUSALS: every launch path refuses with launch.factory_not_configured on a zero factory BEFORE ' +
+      'any arithmetic runs, because CREATE2 against 0x0 returns a real, checksummed, entirely fictional token address ' +
+      'that a creator would publish; proven against a real closed socket, not a stub. STILL NOT DONE: no ' +
+      'services/svc-launch (§8.4 owns launchpad/meme/NFT/RWA — this is the contract + protocol layer per §17.5 "launch ' +
+      'factory contracts"), no product UI, no launch fee, no instant market creation in svc-trade, no seed pool (needs ' +
+      'protocol.amm, which does not compile), and NOTHING IS AUDITED — launch.status reports audited:false deliberately. ' +
+      'Sockets: socket.contract-audit, socket.contract-toolchain (no fuzz suite and no gas snapshots for these contracts).',
   }),
   f('launch.meme-factory', 'One-click meme launch + instant market + LP', {
     module: 'launch',

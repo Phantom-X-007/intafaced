@@ -6,11 +6,22 @@ import { computeAccountAddress, DEFAULT_USER_SALT, AddressDerivationError } from
 import { AccountRegistry, bindingMessage, ClaimRefusedError } from './accounts/registry.js';
 import type { ProtocolChain } from './chain/client.js';
 import { ChainUnavailableError, isZeroAddress } from './chain/availability.js';
+import { deployedCodeMatches } from './chain/artifacts.js';
 import { RelayRefusedError, SessionRelay } from './session/relay.js';
 import { createSessionSpec, evaluateSessionCall, hashSessionSpec, sessionSpecInputSchema, SessionScopeError } from './session/spec.js';
 import { SignatureEnvelopeError, type UserOperation } from './chain/userop.js';
 import { AmmMathError } from './amm/math.js';
 import { buildCreatePool, buildMintLiquidity, buildSwapExactIn, quoteExactIn } from './amm/build.js';
+import { computeTokenAddress, DEFAULT_TOKEN_SALT, templateArtifact, TokenAddressError } from './launch/address.js';
+import { buildCreateToken } from './launch/build.js';
+import {
+  MAX_DECIMALS,
+  MAX_NAME_BYTES,
+  MAX_SYMBOL_BYTES,
+  MAX_WHOLE_SUPPLY,
+  parseTokenParams,
+  TokenParamsError,
+} from './launch/params.js';
 
 /**
  * svc-protocol's API.
@@ -76,6 +87,30 @@ function toUserOperation(input: z.infer<typeof userOperationSchema>): UserOperat
   };
 }
 
+/**
+ * Launch parameters, as they arrive on the wire.
+ *
+ * Shape only. The real validation is `parseTokenParams`, and the split is
+ * deliberate: zod gives a caller a 400 with a field path, and `params.ts` gives
+ * them a `launch.*` code with a sentence explaining why an irreversible choice
+ * was refused. Encoding the second as zod refinements would flatten those
+ * sentences into "Invalid input".
+ *
+ * `totalSupply` is a STRING here and stays one until `parseUnits` turns it into
+ * a bigint. It is never `z.number()`, which would silently round any supply past
+ * 2^53 — the doctrine on money in a `number`, at the one place the wire touches
+ * this service.
+ */
+const tokenParamsInputSchema = z.object({
+  name: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int(),
+  /** Whole tokens, decimal string: "1000000", "21000000.5". */
+  totalSupply: z.string(),
+  /** Receives the entire supply at construction. */
+  recipient: addressSchema,
+});
+
 const unsignedCallOutput = z.object({
   to: z.string(),
   data: z.string(),
@@ -83,6 +118,27 @@ const unsignedCallOutput = z.object({
   value: z.string(),
   summary: z.string(),
 });
+
+/**
+ * Refuse every launch path against an unconfigured factory (default is 0x0).
+ *
+ * This is the check that stops the worst thing this service could do. CREATE2
+ * arithmetic against `factory = 0x0` succeeds — it returns a real, checksummed
+ * address that looks exactly like a token address and belongs to a contract
+ * nothing will ever deploy. A creator would publish it, and the money buyers
+ * sent there would be gone to nobody.
+ */
+function requireTokenFactoryConfigured(tokenFactory: string): void {
+  if (isZeroAddress(tokenFactory)) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message:
+        'launch.factory_not_configured: no TokenFactory is deployed on this chain (PROTOCOL_TOKEN_FACTORY_ADDRESS). ' +
+        'Refusing to derive a token address from the zero address — it would be a real-looking address that ' +
+        'nothing will ever be deployed to. Contracts are in-repo under contracts/launch/.',
+    });
+  }
+}
 
 /** Refuse create2 arithmetic against an unconfigured factory/impl (defaults are 0x0). */
 function requireAccountFactoryConfigured(factory: string, implementation: string): void {
@@ -149,6 +205,19 @@ function toTrpcError(err: unknown): TRPCError {
   }
   if (err instanceof AmmMathError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
+  /**
+   * A launch parameter the platform will not put its name on, or an address
+   * that does not parse. Both are the caller's input, and both carry their own
+   * `launch.*` code — which the message keeps, because "invalid supply" without
+   * the reason is not something a creator can act on, and the decision they are
+   * about to make is irreversible.
+   */
+  if (err instanceof TokenParamsError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.code}: ${err.message}`, cause: err });
+  }
+  if (err instanceof TokenAddressError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.code}: ${err.message}`, cause: err });
   }
   return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Protocol request failed', cause: err });
 }
@@ -229,15 +298,30 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
           suiteConfigured: z.boolean(),
           /** READ FROM THE CHAIN: both addresses hold contract code. */
           suiteDeployed: z.boolean(),
+          /** `PROTOCOL_TOKEN_FACTORY_ADDRESS` is non-zero. Config, not evidence. */
+          tokenFactoryConfigured: z.boolean(),
+          /** READ FROM THE CHAIN: the launch factory holds contract code. */
+          tokenFactoryDeployed: z.boolean(),
           refusalCode: z.string().nullable(),
           reason: z.string().nullable(),
-          /** True only when a real chain answered AND the suite is deployed on it. */
+          /** True only when a real chain answered AND the smart-account suite is deployed on it. */
           usable: z.boolean(),
+          /**
+           * The same claim for `launch.token-factory`, kept separate.
+           *
+           * One `usable` covering both would go false for whichever feature was
+           * not deployed and take the other down with it.
+           */
+          launchUsable: z.boolean(),
         }),
       )
       .query(async () => {
         const status = await chain.status();
-        return { ...status, usable: status.reachable && status.suiteDeployed };
+        return {
+          ...status,
+          usable: status.reachable && status.suiteDeployed,
+          launchUsable: status.reachable && status.tokenFactoryDeployed,
+        };
       }),
 
     /**
@@ -775,6 +859,280 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
             BigInt(input.amount1Desired),
           );
           return { to: call.to, data: call.data, value: call.value, summary: call.summary };
+        }),
+    }),
+
+    /**
+     * LAUNCH (`launch.token-factory`, §8.4) — ERC-20 deploy from an in-repo template.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE PRODUCT DECISIONS THIS SURFACE MAKES, STATED WHERE THEY LIVE
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * A token deploy is money-adjacent and irreversible, so the answers are
+     * here rather than implied by the code:
+     *
+     *   · WHO MAY DEPLOY — anyone. Permissionless, `publicJurisdictionProcedure`,
+     *     no login and no KYC tier, because §22 ties verification to custody and
+     *     the platform holds nothing here. Note what that does NOT mean: the
+     *     platform never originates the transaction. It builds bytes the creator
+     *     signs, so "who may deploy" is really "whoever holds a key and can pay
+     *     gas" — which is what permissionless means on this plane.
+     *   · WHAT SUPPLY AND DECIMALS ARE PERMITTED — `launch/params.ts`. Decimals
+     *     0–18; supply a decimal string of whole tokens, at most 10^20 − 1 so it
+     *     stays representable in the ledger's `numeric(38,18)`.
+     *   · WHETHER THE DEPLOYER KEEPS MINT AUTHORITY — no. Nobody does. The
+     *     template has no mint function at all (`contracts/launch/SovereignToken.sol`).
+     *     There is no flag on this API that can change that, deliberately.
+     *
+     * Nothing here posts to the ledger and nothing here holds a balance: a
+     * launched token's supply lives in the creator's own contract on a public
+     * chain, which is why §0.6 is not in play. A launch FEE would be — and it is
+     * not charged here, by design.
+     */
+    launch: router({
+      /**
+       * Is a launch possible right now, and against what?
+       *
+       * A status procedure rather than a thrown refusal, for the same reason
+       * `chainStatus` is: a product surface has to render "launching is not
+       * available here" as a state. It reports the template's `sourceHash` so a
+       * creator — or an auditor — can tie an address they were shown to the
+       * exact bytes that produced it.
+       */
+      status: publicJurisdictionProcedure('protocol', 'protocol')
+        .output(
+          z.object({
+            chainId: z.number(),
+            factory: z.string(),
+            /** Non-zero address configured. Says somebody set an env var. */
+            configured: z.boolean(),
+            /** READ FROM THE CHAIN: the factory holds contract code. */
+            deployed: z.boolean(),
+            /** Reachable AND deployed. The only field a UI should gate on. */
+            usable: z.boolean(),
+            refusalCode: z.string().nullable(),
+            template: z.object({
+              contractName: z.string(),
+              /** sha256 over the compilation input — solc version, settings, sources. */
+              sourceHash: z.string(),
+              solcVersion: z.string(),
+              evmVersion: z.string(),
+              /**
+               * FALSE, and it will stay false until somebody pays for an audit.
+               * The tracker calls this feature "ERC-20 deploy from audited
+               * templates"; compiler output is not an audit, and a creator
+               * deserves to be told which one they are getting.
+               */
+              audited: z.literal(false),
+            }),
+            limits: z.object({
+              maxDecimals: z.number(),
+              maxNameBytes: z.number(),
+              maxSymbolBytes: z.number(),
+              /** Whole tokens, as a decimal string — never a number. */
+              maxWholeSupply: z.string(),
+            }),
+            mintAuthorityRetained: z.literal(false),
+          }),
+        )
+        .query(async () => {
+          const template = templateArtifact();
+          const status = await chain.status();
+          return {
+            chainId: chain.config.chainId,
+            factory: chain.tokenFactory,
+            configured: status.tokenFactoryConfigured,
+            deployed: status.tokenFactoryDeployed,
+            usable: status.reachable && status.tokenFactoryDeployed,
+            refusalCode: status.refusalCode,
+            template: {
+              contractName: template.contractName,
+              sourceHash: template.sourceHash,
+              solcVersion: template.solcVersion,
+              evmVersion: template.evmVersion,
+              audited: false as const,
+            },
+            limits: {
+              maxDecimals: MAX_DECIMALS,
+              maxNameBytes: MAX_NAME_BYTES,
+              maxSymbolBytes: MAX_SYMBOL_BYTES,
+              maxWholeSupply: MAX_WHOLE_SUPPLY.toString(),
+            },
+            mintAuthorityRetained: false as const,
+          };
+        }),
+
+      /**
+       * The address a token will have, before it exists.
+       *
+       * Refuses on an unconfigured factory before any arithmetic runs, and
+       * reports `deployed` from a real `eth_getCode` rather than assuming. The
+       * scaled supply comes back as a string so a caller can show a creator
+       * exactly what will be minted without ever holding it as a number.
+       */
+      predictTokenAddress: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(
+          z.object({
+            creator: addressSchema,
+            userSalt: bytes32Schema.default(DEFAULT_TOKEN_SALT),
+            params: tokenParamsInputSchema,
+          }),
+        )
+        .output(
+          z.object({
+            address: z.string(),
+            chainId: z.number(),
+            factory: z.string(),
+            /** Base units, scaled by `decimals`. A string on the wire, always. */
+            scaledTotalSupply: z.string(),
+            /** READ FROM THE CHAIN. A predicted address normally has no code. */
+            deployed: z.boolean(),
+            templateSourceHash: z.string(),
+          }),
+        )
+        .query(async ({ input }) => {
+          requireTokenFactoryConfigured(chain.tokenFactory);
+          try {
+            const params = parseTokenParams({ ...input.params, recipient: input.params.recipient as Address });
+            const address = computeTokenAddress({
+              factory: chain.tokenFactory,
+              creator: input.creator as Address,
+              userSalt: input.userSalt as Hex,
+              params,
+            });
+            return {
+              address,
+              chainId: chain.config.chainId,
+              factory: chain.tokenFactory,
+              scaledTotalSupply: params.totalSupply.toString(),
+              deployed: await chain.isDeployed(address),
+              templateSourceHash: templateArtifact().sourceHash,
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Unsigned calldata for the launch. The creator signs it; anyone may send it.
+       *
+       * Reads nothing, so it answers with the chain down — the same bargain
+       * `buildDeployment` makes. The bytes are valid whenever the factory
+       * address is, and a creator can hold them.
+       */
+      buildTokenDeployment: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(
+          z.object({
+            creator: addressSchema,
+            userSalt: bytes32Schema.default(DEFAULT_TOKEN_SALT),
+            params: tokenParamsInputSchema,
+          }),
+        )
+        .output(unsignedCallOutput.extend({ predictedAddress: z.string(), scaledTotalSupply: z.string() }))
+        .query(({ input }) => {
+          requireTokenFactoryConfigured(chain.tokenFactory);
+          try {
+            const params = parseTokenParams({ ...input.params, recipient: input.params.recipient as Address });
+            const predictedAddress = computeTokenAddress({
+              factory: chain.tokenFactory,
+              creator: input.creator as Address,
+              userSalt: input.userSalt as Hex,
+              params,
+            });
+            const call = buildCreateToken(chain.tokenFactory, input.userSalt as Hex, params, predictedAddress);
+            return {
+              to: call.to,
+              data: call.data,
+              value: call.value.toString(),
+              summary: call.summary,
+              predictedAddress,
+              scaledTotalSupply: params.totalSupply.toString(),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * What a launched token says about itself, plus its provenance.
+       *
+       * Every field is read from the chain. `creator` is `null` when the token
+       * did not come from our factory — unknown provenance, which is the honest
+       * answer and the one §35 (deployer reputation) needs. Reporting `0x0`
+       * there would be an address that looks like an answer.
+       *
+       * Refuses rather than returning empty metadata when the address holds no
+       * code: `name: ""` for a token nobody deployed is the fabrication this
+       * whole surface exists to avoid.
+       */
+      tokenInfo: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(z.object({ token: addressSchema }))
+        .output(
+          z.object({
+            token: z.string(),
+            name: z.string(),
+            symbol: z.string(),
+            decimals: z.number().int(),
+            /** Base units. String on the wire — see the doctrine on money in a `number`. */
+            totalSupply: z.string(),
+            initialHolder: z.string(),
+            /** Null = not launched through this factory. Not the zero address. */
+            creator: z.string().nullable(),
+            fromThisFactory: z.boolean(),
+            /**
+             * The deployed runtime IS the compiled template, once the
+             * constructor-written `immutable` values are masked out.
+             *
+             * Read, not assumed. `fromThisFactory` says our factory recorded
+             * the creator; this says the code at the address really is the
+             * template — the check that catches a factory whose recorded
+             * provenance no longer matches what it deploys.
+             *
+             * The masking is not a loosening. See `deployedCodeMatches`: a
+             * byte-identical comparison is FALSE for every correct deployment,
+             * because `decimals`, `totalSupply` and `initialHolder` are spliced
+             * into the runtime at construction.
+             */
+            matchesTemplate: z.boolean(),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            const token = input.token as Address;
+
+            // `isDeployed` first, for the reason `sessionStatus` reads it
+            // first: an ERC-20 read against an address with no code is a decode
+            // failure, and it must never be flattened into empty metadata.
+            if (!(await chain.isDeployed(token))) {
+              throw new ChainUnavailableError(
+                'protocol.contract_not_deployed',
+                `${token} holds no contract code on chain ${chain.config.chainId}, so there is no token there to describe. ` +
+                  `This is not a token with empty metadata.`,
+              );
+            }
+
+            const metadata = await chain.tokenMetadata(token);
+            // Provenance needs a factory to ask. With none configured the
+            // answer is "unknown", which is exactly what `null` says — the
+            // metadata above is still real and still worth returning.
+            const creator = isZeroAddress(chain.tokenFactory) ? null : await chain.tokenCreator(token);
+            const runtime = await chain.runtimeCode(token);
+
+            return {
+              token,
+              name: metadata.name,
+              symbol: metadata.symbol,
+              decimals: metadata.decimals,
+              totalSupply: metadata.totalSupply.toString(),
+              initialHolder: metadata.initialHolder,
+              creator,
+              fromThisFactory: creator !== null,
+              matchesTemplate: deployedCodeMatches(templateArtifact(), runtime),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
         }),
     }),
   });

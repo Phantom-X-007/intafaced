@@ -2,13 +2,17 @@
  * The contract surface this service speaks to, hand-written from
  * `contracts/*.sol`.
  *
- * Hand-written rather than generated because there is no Solidity compiler in
- * this toolchain yet (§13 socket `socket.contract-toolchain`), and because the
- * ABI is small enough that a reviewer can diff it against the source by eye.
+ * Hand-written, and kept that way — though the reason has changed. It was
+ * "there is no Solidity compiler in this toolchain yet", which was literally
+ * true until `scripts/compile-contracts.mjs` landed. Now these stay
+ * hand-written because they are the surface this service CHOSE to speak to,
+ * which is deliberately a subset of what the contracts expose, and
+ * `artifacts.test.ts` checks every entry below against the compiled ABI — so
+ * drift is a build failure rather than something a reviewer must catch by eye.
  *
- * Note what is absent, and stays absent: there is no function on either ABI
+ * Note what is absent, and stays absent: there is no function on any ABI here
  * that this service could call to move a user's funds, because there is no such
- * function on either contract.
+ * function on any of these contracts.
  */
 
 export const SESSION_SPEC_COMPONENTS = [
@@ -146,5 +150,116 @@ export const smartAccountAbi = [
       { name: 'sessionKey', type: 'address', indexed: true },
       { name: 'revokedBy', type: 'address', indexed: true },
     ],
+  },
+] as const;
+
+/**
+ * `TokenFactory.TokenParams` — the struct, as a tuple.
+ *
+ * Field ORDER is load-bearing twice over: it is the ABI encoding of a call
+ * argument, and the same order appears in `SovereignToken`'s constructor, which
+ * is what `launch/address.ts` encodes to build the init code. Reordering here
+ * without reordering the Solidity produces a call that decodes into the wrong
+ * fields and an address that is confidently wrong. `artifacts.test.ts` compares
+ * the canonical tuple signature, so a swap of the two `string`s — the one case
+ * that would still encode — is caught by the on-chain cross-check instead.
+ */
+export const TOKEN_PARAMS_COMPONENTS = [
+  { name: 'name', type: 'string' },
+  { name: 'symbol', type: 'string' },
+  { name: 'decimals', type: 'uint8' },
+  { name: 'totalSupply', type: 'uint256' },
+  { name: 'recipient', type: 'address' },
+] as const;
+
+export const tokenFactoryAbi = [
+  {
+    type: 'function',
+    name: 'getAddress',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'creator', type: 'address' },
+      { name: 'userSalt', type: 'bytes32' },
+      { name: 'params', type: 'tuple', components: TOKEN_PARAMS_COMPONENTS },
+    ],
+    outputs: [{ type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'isDeployed',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'creator', type: 'address' },
+      { name: 'userSalt', type: 'bytes32' },
+      { name: 'params', type: 'tuple', components: TOKEN_PARAMS_COMPONENTS },
+    ],
+    outputs: [{ type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'initCode',
+    stateMutability: 'pure',
+    inputs: [{ name: 'params', type: 'tuple', components: TOKEN_PARAMS_COMPONENTS }],
+    outputs: [{ type: 'bytes' }],
+  },
+  /** Provenance for §35 deployer reputation. `0x0` means "not from this factory". */
+  {
+    type: 'function',
+    name: 'creatorOf',
+    stateMutability: 'view',
+    inputs: [{ name: 'token', type: 'address' }],
+    outputs: [{ type: 'address' }],
+  },
+  { type: 'function', name: 'MAX_DECIMALS', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
+  {
+    type: 'function',
+    name: 'createToken',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'userSalt', type: 'bytes32' },
+      { name: 'params', type: 'tuple', components: TOKEN_PARAMS_COMPONENTS },
+    ],
+    outputs: [{ type: 'address' }],
+  },
+  {
+    type: 'event',
+    name: 'TokenCreated',
+    inputs: [
+      { name: 'token', type: 'address', indexed: true },
+      { name: 'creator', type: 'address', indexed: true },
+      { name: 'recipient', type: 'address', indexed: true },
+      { name: 'name', type: 'string', indexed: false },
+      { name: 'symbol', type: 'string', indexed: false },
+      { name: 'decimals', type: 'uint8', indexed: false },
+      { name: 'totalSupply', type: 'uint256', indexed: false },
+    ],
+  },
+] as const;
+
+/**
+ * The READ surface of a launched token. Reads only, on purpose.
+ *
+ * `transfer`, `approve` and `transferFrom` are absent and must stay absent.
+ * Not because they would fail — this service holds no key, so it could not
+ * originate any of them — but because their presence on an ABI this service
+ * imports is the shape a custody bug takes on the way in. `custody-scan`
+ * watches the ledger surface; this is the same instinct applied to the chain.
+ *
+ * `decimals` is `uint8`: decoding it as `uint256` would still work today and
+ * break the moment a token returns something else in the high bytes, which is
+ * exactly the class of silent corruption `artifacts.test.ts` exists to catch.
+ */
+export const erc20ReadAbi = [
+  { type: 'function', name: 'name', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'symbol', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'decimals', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'totalSupply', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'initialHolder', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  {
+    type: 'function',
+    name: 'balanceOf',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
   },
 ] as const;

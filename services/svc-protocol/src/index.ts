@@ -54,6 +54,7 @@ const chain = new ProtocolChain({
   entryPoint: env.PROTOCOL_ENTRYPOINT_ADDRESS as Address,
   factory: env.PROTOCOL_FACTORY_ADDRESS as Address,
   implementation: env.PROTOCOL_IMPLEMENTATION_ADDRESS as Address,
+  tokenFactory: env.PROTOCOL_TOKEN_FACTORY_ADDRESS as Address,
   ...(env.PROTOCOL_BUNDLER_URL ? { bundlerUrl: env.PROTOCOL_BUNDLER_URL } : {}),
 });
 

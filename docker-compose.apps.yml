@@ -599,10 +599,15 @@ services:
       # need it.
       PROTOCOL_ENTRYPOINT_ADDRESS: ${PROTOCOL_ENTRYPOINT_ADDRESS:-0x0000000071727De22E5E9d8BAf0edAc6f37da032}
       # Deterministic dev-chain addresses: CREATE from anvil account #0 at
-      # nonce 1 and nonce 0. See `chain:deploy`. Zero these to get the old
-      # "nothing is configured" refusal back.
+      # nonce 1, nonce 0 and nonce 2. See `chain:deploy`. Zero these to get the
+      # old "nothing is configured" refusal back.
       PROTOCOL_FACTORY_ADDRESS: ${PROTOCOL_FACTORY_ADDRESS:-0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512}
       PROTOCOL_IMPLEMENTATION_ADDRESS: ${PROTOCOL_IMPLEMENTATION_ADDRESS:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
+      # launch.token-factory (§8.4). The launch deploy is APPENDED at nonce 2 so
+      # the two addresses above keep the values named here — inserting a
+      # deployment before them would move both and point this service at
+      # addresses holding no code.
+      PROTOCOL_TOKEN_FACTORY_ADDRESS: ${PROTOCOL_TOKEN_FACTORY_ADDRESS:-0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4012']
     extra_hosts:
