@@ -117,28 +117,51 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | #153 | Docs(audit): Wave D doctrine scan log with real exit codes |
 | #154 | SQL **symbol filter** on account/trades + positions health log |
 
-**Audit:** `docs/audit/WAVE-D-2026-07-30.md` · scan log: `docs/audit/WAVE-D-SCANS-2026-07-30.md` — brand/custody/vendor-shell/workspace green; honest reds: tracker:check (if still stale) + svc-notify OTEL DoD.
+**Audit:** `docs/audit/WAVE-D-2026-07-30.md` · scan log: `docs/audit/WAVE-D-SCANS-2026-07-30.md` — brand/custody/vendor-shell/workspace green at Wave D; OTEL/tracker reds cleared in Wave E.
 
-### Unspoken needs (Wave D → post-#154)
+## Wave E (queue clear → DRAINED)
 
-| Need | Status after #145–#154 |
+| PR | What |
 | --- | --- |
-| Volume + quality without Nitro | Continuous product + docs PRs through #154; loop file is compaction survival |
-| Bots can trade (CCXT public+private) | Balance · positions empty · OHLCV empty · mytrades `?symbol=` on tip; write path already on main |
-| In-app notifications | Fans expanded (rank/stake/p2p release+refund); dispute-opened (`p2pTradeDisputed` openedBy) still queue |
-| Continuous light gates + wave audits | Policy still every PR / every 3–4 ships; Wave D audit + scan log |
-| Peace-of-mind scoreboard | This table + GRIND-LOOP-ACTIVE high water **#154** |
-| Compaction survival | Loop paste prompt + MERGED high water updated each batch |
-| Never fake human blockers | CI billing still human; factory/rails/futures still human or later |
+| #155 | Docs: grind loop high water past #154 + AFK scoreboard |
+| #156 | **svc-notify OpenTelemetry** + tracker:check green |
+| #157 | Notify fan: **p2pTradeDisputed** (openedBy only) |
+| #158 | Identity **subAccounts.revoke** soft-disable |
+| (this) | Loop + scoreboard **DRAINED**; tracker note honesty for sub-accounts create/list/revoke |
 
-### Still agent-cookable (see loop NEXT QUEUE)
+### Unspoken needs (post-#158)
 
-1. DoD gate: svc-notify OTEL if still open  
-2. tracker:check if TRACKER.md still stale  
-3. p2pTradeDisputed notify (openedBy only) if not shipped  
-4. pay.public-api thin slice — **skip proven**  
-5. Private balance WS — only if safe ledger event projection; **prefer skip**  
-6. identity subAccounts.revoke if missing and cheap  
-7. Reassess DRAINED when only human blockers + large phase features remain  
+| Need | Status |
+| --- | --- |
+| Volume + quality without Nitro | Product queue emptied through #158; no padding ceremony |
+| Bots can trade (CCXT public+private) | Balance · positions empty · OHLCV empty · mytrades `?symbol=` · write path on main |
+| In-app notifications | Fans include rank/stake/p2p lock/release/refund + **dispute opened** (openedBy) |
+| Continuous light gates + wave audits | Local green at drain: brand/custody/vendor-shell/workspace/dod-gate/tracker:check |
+| Peace-of-mind scoreboard | This file + GRIND-LOOP-ACTIVE high water **#158** · **Status DRAINED** |
+| Compaction survival | Loop file still law for every 45m fire |
+| Never fake human blockers | CI billing · chain factory · futures · candles · push/email/SMS still human/later |
 
-**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: RUNNING** · high water **#154** · scheduler 45m
+### Agent queue disposition
+
+| Item | Result |
+| --- | --- |
+| svc-notify OTEL | **DONE** #156 |
+| tracker:check | **DONE** #156 (+ note honesty this PR) |
+| p2pTradeDisputed fan | **DONE** #157 |
+| pay.public-api | **SKIP** |
+| Private balance WS | **SKIP** |
+| subAccounts.revoke | **DONE** #158 |
+| Reassess DRAINED | **Met** |
+
+### Still open (honest — not agent product)
+
+| Item | Why |
+| --- | --- |
+| GitHub CI green | Org billing / spending limit — **human** |
+| Futures / real positions | Honest `[]` only |
+| Candle aggregation / OHLCV data | Honest empty until real job |
+| protocol.smart-accounts chain | Factory honesty only — not propped |
+| Push / email / SMS | §13 sockets |
+| Real rails / kill drill / licences / counsel | Denon + counsel |
+
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED** · high water **#158** · scheduler 45m re-check only
