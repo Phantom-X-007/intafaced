@@ -349,7 +349,9 @@ export function loanLiquidate(input: LoanLiquidationInput): PostRequest {
   }
 
   if (input.buyer.collateralTo.assetId !== input.collateralAssetId) {
-    throw new InvalidEntryError(`Buyer's collateral account is in ${input.buyer.collateralTo.assetId}, expected ${input.collateralAssetId}`);
+    throw new InvalidEntryError(
+      `Buyer's collateral account is in ${input.buyer.collateralTo.assetId}, expected ${input.collateralAssetId}`,
+    );
   }
   if (input.buyer.proceedsFrom.assetId !== input.debtAssetId) {
     throw new InvalidEntryError(`Buyer's payment account is in ${input.buyer.proceedsFrom.assetId}, expected ${input.debtAssetId}`);

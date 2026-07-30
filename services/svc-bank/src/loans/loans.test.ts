@@ -62,7 +62,8 @@ const BANK_INIT = readFileSync(join(here, '..', '..', 'drizzle', '0000_bank_init
 const POSITION_PENDING = readFileSync(join(here, '..', '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
 const LOANS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
 
-const LOANS_DB_URL = process.env.TEST_DATABASE_URL_BANK_LOANS ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_bank_loans_test';
+const LOANS_DB_URL =
+  process.env.TEST_DATABASE_URL_BANK_LOANS ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_bank_loans_test';
 
 const BORROWER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -192,9 +193,9 @@ describe('policy coherence', () => {
   });
 
   it('refuses thresholds that would liquidate a loan before it is ever called', () => {
-    expect(() =>
-      assertPolicyCoherent({ ...DEFAULT_LIQUIDATION_POLICY, liquidationLtvBps: 7_000, marginCallLtvBps: 7_500 }, 6_000),
-    ).toThrow(/Incoherent policy/);
+    expect(() => assertPolicyCoherent({ ...DEFAULT_LIQUIDATION_POLICY, liquidationLtvBps: 7_000, marginCallLtvBps: 7_500 }, 6_000)).toThrow(
+      /Incoherent policy/,
+    );
   });
 
   it('refuses a liquidation target that leaves the loan still in margin call', () => {
@@ -559,7 +560,9 @@ describe('loan recipes', () => {
   const fundReserve = async (assetId: string, value: string) => {
     const payer = '99999999-9999-4999-8999-999999999999';
     await fund(payer, assetId, value);
-    await ledger.post(recipes.feeCharge({ chargeId: `bank:${Math.random()}`, userId: payer, module: 'bank', mode: 'asset', assetId, amount: amt(value) }));
+    await ledger.post(
+      recipes.feeCharge({ chargeId: `bank:${Math.random()}`, userId: payer, module: 'bank', mode: 'asset', assetId, amount: amt(value) }),
+    );
     await ledger.post(recipes.loanReserveFund({ fundingId: `f:${Math.random()}`, debtAssetId: assetId, amount: amt(value) }));
   };
 
@@ -577,8 +580,12 @@ describe('loan recipes', () => {
   it('keeps two loans&apos; collateral in separate pots, so releasing one cannot unsecure the other', async () => {
     await fund(BORROWER, 'BTC', '2');
 
-    await ledger.post(recipes.loanCollateralLock({ loanId: 'loan-a', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }));
-    await ledger.post(recipes.loanCollateralLock({ loanId: 'loan-b', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }));
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'loan-a', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'loan-b', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
 
     // Two accounts, one per loan. Not one pot with two claims on it.
     const a = await ledger.balance(loanCollateralAccount(BORROWER, 'BTC', 'loan-a'));
@@ -596,7 +603,9 @@ describe('loan recipes', () => {
     // And A cannot be released twice, because there is nothing left in ITS pot —
     // it can no longer reach B's. Before the purpose key this succeeded.
     await expect(
-      ledger.post(recipes.loanCollateralRelease({ loanId: 'loan-a', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 2 })),
+      ledger.post(
+        recipes.loanCollateralRelease({ loanId: 'loan-a', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 2 }),
+      ),
     ).rejects.toThrow(/[Ii]nsufficient/);
   });
 
@@ -637,7 +646,9 @@ describe('loan recipes', () => {
    */
   it('cannot lend principal the reserve does not have', async () => {
     await fund(BORROWER, 'BTC', '1');
-    await ledger.post(recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }));
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
 
     await expect(
       ledger.post(recipes.loanDraw({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('5000') })),
@@ -648,7 +659,9 @@ describe('loan recipes', () => {
     await fundReserve('USDT', '10000');
     await fund(BORROWER, 'BTC', '1');
 
-    await ledger.post(recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }));
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
     await ledger.post(recipes.loanDraw({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('5000') }));
 
     expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
@@ -701,7 +714,9 @@ describe('loan recipes', () => {
       ],
     });
 
-    await ledger.post(recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }));
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
     await ledger.post(recipes.loanDraw({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('5000') }));
 
     await ledger.post(
@@ -801,9 +816,9 @@ describe('loan recipes', () => {
   /** The loss has a name and an owner, and when nobody can cover it the post fails. */
   it('books bad debt against the insurance fund, and fails loudly when it is empty', async () => {
     await fundReserve('USDT', '10000');
-    await expect(
-      ledger.post(recipes.loanBadDebt({ loanId: 'l1', debtAssetId: 'USDT', shortfall: amt('500') })),
-    ).rejects.toThrow(/[Ii]nsufficient/);
+    await expect(ledger.post(recipes.loanBadDebt({ loanId: 'l1', debtAssetId: 'USDT', shortfall: amt('500') }))).rejects.toThrow(
+      /[Ii]nsufficient/,
+    );
 
     // Fund the insurance fund and it works, moving the loss where it belongs.
     await fund('ins', 'USDT', '1000');
@@ -1047,7 +1062,9 @@ if (client === null) {
       it('recovers by re-driving once the reserve is funded — locking collateral exactly once', async () => {
         await fund(BORROWER, 'BTC', '1');
         const product = await makeProduct();
-        await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now }).catch(() => undefined);
+        await loans
+          .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
 
         await fundReserve('USDT', '100000');
         const resumed = await loans.resumePending();
@@ -1068,7 +1085,9 @@ if (client === null) {
       it('recovers by abandoning — the collateral goes back to the borrower', async () => {
         await fund(BORROWER, 'BTC', '1');
         const product = await makeProduct();
-        await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now }).catch(() => undefined);
+        await loans
+          .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
 
         const rows = await sql<Array<{ id: string }>>`SELECT id FROM bank.loans`;
         const result = await loans.abandonPending(rows[0]!.id);
@@ -1081,7 +1100,13 @@ if (client === null) {
         await fundReserve('USDT', '100000');
         await fund(BORROWER, 'BTC', '1');
         const product = await makeProduct();
-        const opened = await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
 
         await expect(loans.abandonPending(opened.loan.id)).rejects.toThrow(/secures drawn principal/);
       });
@@ -1223,7 +1248,9 @@ if (client === null) {
       it('does not charge interest on a loan whose principal was never drawn', async () => {
         await fund(BORROWER, 'BTC', '1');
         const product = await makeProduct();
-        await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now }).catch(() => undefined);
+        await loans
+          .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
 
         const rows = await sql<Array<{ id: string }>>`SELECT id FROM bank.loans`;
         const result = await loans.accrue({ loanId: rows[0]!.id, until: new Date(now.getTime() + 5 * DAY_MS) });
@@ -1319,8 +1346,22 @@ if (client === null) {
         });
 
         const product = await makeProduct();
-        const opened = await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt(principal), now });
-        loans = new LoanService(sql, ledger, { priceSource: price(collateralPrice), marginCalls: { send: async (i) => { calls.push({ loanId: i.loanId, ltvBps: i.ltvBps }); } }, venue: marketMakerVenue() });
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt(principal),
+          now,
+        });
+        loans = new LoanService(sql, ledger, {
+          priceSource: price(collateralPrice),
+          marginCalls: {
+            send: async (i) => {
+              calls.push({ loanId: i.loanId, ltvBps: i.ltvBps });
+            },
+          },
+          venue: marketMakerVenue(),
+        });
         return opened;
       }
 
@@ -1477,7 +1518,13 @@ if (client === null) {
         await fundReserve('USDT', '100000');
         await fund(BORROWER, 'BTC', '1');
         const product = await makeProduct();
-        const opened = await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
 
         const noBuyer: LiquidationVenue = { quote: async () => null };
         loans = new LoanService(sql, ledger, { priceSource: price('5700'), venue: noBuyer });
@@ -1495,7 +1542,9 @@ if (client === null) {
         await fund(OTHER, 'ETH', '10');
         const exotic = await makeProduct({ name: 'ETH-backed', collateralAssetId: 'ETH' });
         await fundReserve('USDT', '100000');
-        await loans.open({ productId: exotic.id, userId: OTHER, collateralAmount: amt('10'), principal: amt('1'), now }).catch(() => undefined);
+        await loans
+          .open({ productId: exotic.id, userId: OTHER, collateralAmount: amt('10'), principal: amt('1'), now })
+          .catch(() => undefined);
 
         const sweep = await sweepAt(now);
         // The BTC loan was marked; the ETH one has no mark and is reported.

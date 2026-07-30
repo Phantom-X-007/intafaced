@@ -1044,14 +1044,15 @@ if (!available) {
         'loan_interest_accruals.interest_amount': "a RECORD of one day's charge; summing the table is the lifetime figure",
         'loan_repayments.interest_amount': 'a RECORD of one completed repayment; written once',
         'loan_repayments.principal_amount': 'a RECORD of one completed repayment; written once',
-        'loan_margin_calls.cure_collateral_amount': 'a FIGURE quoted at one instant; the next mark writes a new row rather than revising this one',
+        'loan_margin_calls.cure_collateral_amount':
+          'a FIGURE quoted at one instant; the next mark writes a new row rather than revising this one',
         'loan_liquidations.mark_price': 'the PRICE one rung executed at, for the dispute nobody wants to have',
         'loan_liquidations.collateral_sold': 'a RECORD of one completed rung; written once',
         'loan_liquidations.proceeds': 'a RECORD of one completed rung; the four allocations below must sum to it',
         'loan_liquidations.principal_repaid': 'a RECORD of one completed rung; written once',
         'loan_liquidations.interest_repaid': 'a RECORD of one completed rung; written once',
         'loan_liquidations.penalty': 'a RECORD of one completed rung; written once',
-        'loan_liquidations.surplus_returned': "a RECORD of what went back to the borrower; written once",
+        'loan_liquidations.surplus_returned': 'a RECORD of what went back to the borrower; written once',
         'loan_liquidations.shortfall': 'a RECORD of bad debt crystallised on a closing rung; written once',
       };
 

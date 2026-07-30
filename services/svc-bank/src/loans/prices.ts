@@ -172,7 +172,10 @@ export function acceptableForLiquidation(mark: QuotedMark, previous: Amount | nu
 
   const ageSeconds = (now.getTime() - mark.asOf.getTime()) / 1_000;
   if (ageSeconds > policy.liquidationMaxAgeSeconds) {
-    return { ok: false, reason: `${mark.assetId}: mark is ${Math.round(ageSeconds)}s old, liquidation limit ${policy.liquidationMaxAgeSeconds}s` };
+    return {
+      ok: false,
+      reason: `${mark.assetId}: mark is ${Math.round(ageSeconds)}s old, liquidation limit ${policy.liquidationMaxAgeSeconds}s`,
+    };
   }
 
   if (previous !== null && previous > 0n) {
@@ -250,11 +253,7 @@ interface TickerResponse {
  * weaker one. This is a READ of another stream's public surface — no import of
  * svc-trade, no shared table, and nothing here writes to it.
  */
-export function tickerPriceSource(options: {
-  baseUrl: string;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
-}): PriceSource {
+export function tickerPriceSource(options: { baseUrl: string; fetchImpl?: typeof fetch; timeoutMs?: number }): PriceSource {
   const doFetch = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? 3_000;
 

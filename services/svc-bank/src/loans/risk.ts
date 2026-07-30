@@ -208,7 +208,8 @@ export function markPortfolio(exposures: readonly LoanExposure[], marks: Readonl
  */
 export function dailyLoanInterest(debt: Amount, aprBps: number, daysPerYear = DAYS_PER_YEAR): Amount {
   if (debt <= 0n) return 0n;
-  if (!Number.isInteger(aprBps) || aprBps < 0) throw new RiskError(`APR must be a non-negative integer in bps, got ${aprBps}`, 'bank.risk_invalid');
+  if (!Number.isInteger(aprBps) || aprBps < 0)
+    throw new RiskError(`APR must be a non-negative integer in bps, got ${aprBps}`, 'bank.risk_invalid');
   if (aprBps === 0) return 0n;
 
   const annual = mulBps(debt, aprBps, 'floor');

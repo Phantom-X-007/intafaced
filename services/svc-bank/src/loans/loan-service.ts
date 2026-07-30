@@ -593,7 +593,10 @@ export class LoanService {
   async abandonPending(loanId: string): Promise<{ released: Amount; ledgerTxId: string | null }> {
     const loan = await this.loan(loanId);
     if (loan.status !== 'pending') {
-      throw new BankError(`Loan ${loanId} is ${loan.status}, not pending — its collateral secures drawn principal`, 'bank.loan_not_drawable');
+      throw new BankError(
+        `Loan ${loanId} is ${loan.status}, not pending — its collateral secures drawn principal`,
+        'bank.loan_not_drawable',
+      );
     }
 
     const held = await this.collateralOf(loan);
@@ -812,7 +815,8 @@ export class LoanService {
     const now = input.now ?? new Date();
     const loan = await this.loan(input.loanId);
 
-    if (loan.status === 'repaid' || loan.status === 'liquidated') throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
+    if (loan.status === 'repaid' || loan.status === 'liquidated')
+      throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
     if (loan.status === 'pending') throw new BankError(`Loan ${loan.id} has no drawn principal to repay`, 'bank.loan_not_drawable');
     if (input.amount <= 0n) throw new BankError('A repayment must be positive', 'bank.below_minimum');
 
@@ -919,7 +923,9 @@ export class LoanService {
    * like" without any chance of the question liquidating somebody.
    */
   async markUser(userId: string, now: Date = new Date()): Promise<PortfolioMark> {
-    const loans = (await this.loansOf(userId)).filter((l) => l.status === 'active' || l.status === 'margin_call' || l.status === 'liquidating');
+    const loans = (await this.loansOf(userId)).filter(
+      (l) => l.status === 'active' || l.status === 'margin_call' || l.status === 'liquidating',
+    );
     if (loans.length === 0) return { debtValue: 0n, collateralValue: 0n, portfolioLtvBps: 0, loans: [] };
 
     const quote = loans[0]!.quoteAssetId;
@@ -1197,20 +1203,17 @@ export class LoanService {
 
     const tranche = await this.nextSequence('loan_liquidations', loan.id, 'tranche');
 
-    await withMoneySpan(
-      'bank.loan.liquidate',
-      { operation: 'loan-liquidate', loanId: loan.id, tranche },
-      async (span) => {
-        span.setAttribute('intafaced.ltv_bps', input.ltv);
-        span.setAttribute('intafaced.grace_waived', input.graceWaived);
+    await withMoneySpan('bank.loan.liquidate', { operation: 'loan-liquidate', loanId: loan.id, tranche }, async (span) => {
+      span.setAttribute('intafaced.ltv_bps', input.ltv);
+      span.setAttribute('intafaced.grace_waived', input.graceWaived);
 
-        await this.sql`
+      await this.sql`
           UPDATE bank.loans SET status = 'liquidating', updated_at = now() WHERE id = ${loan.id}
         `;
 
-        const ledgerTxId = await this.drivenPost({
-          claim: async (tx) => {
-            const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
+      const ledgerTxId = await this.drivenPost({
+        claim: async (tx) => {
+          const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
               INSERT INTO bank.loan_liquidations (
                 loan_id, tranche, ltv_bps, mark_price, grace_waived, collateral_sold, proceeds,
                 principal_repaid, interest_repaid, penalty, surplus_returned, shortfall
@@ -1224,36 +1227,35 @@ export class LoanService {
               ON CONFLICT (loan_id, tranche) DO NOTHING
               RETURNING id, ledger_tx_id
             `;
-            if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
-            const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
+          if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
+          const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
               SELECT id, ledger_tx_id FROM bank.loan_liquidations WHERE loan_id = ${loan.id} AND tranche = ${tranche}
             `;
-            return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
-          },
-          post: () =>
-            this.ledger.post(
-              recipes.loanLiquidate({
-                loanId: loan.id,
-                userId: loan.userId,
-                tranche,
-                collateralAssetId: loan.collateralAssetId,
-                collateralSold: input.collateralToSell,
-                debtAssetId: loan.debtAssetId,
-                proceeds: quoted.proceeds,
-                principalRepaid: split.principalRepaid,
-                interestRepaid: split.interestRepaid,
-                penalty: split.penalty,
-                surplusToBorrower: split.surplusToBorrower,
-                buyer: quoted.buyer,
-                markPrice: collateralMark.price,
-              }),
-            ),
-          table: 'loan_liquidations',
-        });
+          return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
+        },
+        post: () =>
+          this.ledger.post(
+            recipes.loanLiquidate({
+              loanId: loan.id,
+              userId: loan.userId,
+              tranche,
+              collateralAssetId: loan.collateralAssetId,
+              collateralSold: input.collateralToSell,
+              debtAssetId: loan.debtAssetId,
+              proceeds: quoted.proceeds,
+              principalRepaid: split.principalRepaid,
+              interestRepaid: split.interestRepaid,
+              penalty: split.penalty,
+              surplusToBorrower: split.surplusToBorrower,
+              buyer: quoted.buyer,
+              markPrice: collateralMark.price,
+            }),
+          ),
+        table: 'loan_liquidations',
+      });
 
-        void ledgerTxId;
-      },
-    );
+      void ledgerTxId;
+    });
 
     // ── The shortfall, named ────────────────────────────────────────────────
     if (split.shortfall > 0n) {
@@ -1337,7 +1339,9 @@ export class LoanService {
   }> {
     const reserve = await this.ledger.balance(loanReserve(debtAssetId));
 
-    const rows = await this.sql<Array<{ outstanding_principal: string; bad_debt: string; drawn: string; repaid: string; recovered: string }>>`
+    const rows = await this.sql<
+      Array<{ outstanding_principal: string; bad_debt: string; drawn: string; repaid: string; recovered: string }>
+    >`
       WITH open_loans AS (
         SELECT id, principal FROM bank.loans WHERE debt_asset_id = ${debtAssetId}
       )
@@ -1391,7 +1395,12 @@ export class LoanService {
    * zero, because a zero collateral mark reads as a borrower with no collateral
    * and the LTV that follows says liquidate.
    */
-  private async marksFor(collateralAssetId: string, debtAssetId: string, quoteAssetId: string, now: Date): Promise<Map<string, QuotedMark>> {
+  private async marksFor(
+    collateralAssetId: string,
+    debtAssetId: string,
+    quoteAssetId: string,
+    now: Date,
+  ): Promise<Map<string, QuotedMark>> {
     const marks = await this.acceptedMarks([collateralAssetId, debtAssetId], quoteAssetId, now);
     for (const assetId of [collateralAssetId, debtAssetId]) {
       if (!marks.has(assetId)) throw new BankError(`No usable mark for ${assetId} in ${quoteAssetId}`, 'bank.mark_missing');
@@ -1436,10 +1445,10 @@ export class LoanService {
     try {
       posted = await input.post();
     } catch (err) {
-      await this.sql.unsafe(
-        `UPDATE bank.${input.table} SET status = 'rejected', rejection_code = $1 WHERE id = $2`,
-        [err instanceof LedgerError ? err.code : 'bank.post_failed', claim.id],
-      );
+      await this.sql.unsafe(`UPDATE bank.${input.table} SET status = 'rejected', rejection_code = $1 WHERE id = $2`, [
+        err instanceof LedgerError ? err.code : 'bank.post_failed',
+        claim.id,
+      ]);
       throw err;
     }
 
