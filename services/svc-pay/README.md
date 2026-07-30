@@ -120,7 +120,7 @@ That builds `EvmLiveChain` (`src/rails/evm-chain.ts`, `posture: 'live'`), starts
 
 - A **production** (or public testnet) RPC, not only compose anvil — anvil proves the wiring; it is not a chain decision (`docs/decisions/local-dev-chain.md`).
 - Custody of the hot wallet / deposit mnemonic outside the repo (HSM or signing service preferred; the in-process key is the v1 minimum).
-- Durable broadcast idempotency across multiple svc-pay replicas (today: in-process `MemoryBroadcastStore` — fine for single-instance; multi-instance needs a shared store).
+- Durable broadcast idempotency across multiple svc-pay replicas (today: in-process `MemoryBroadcastStore` with claim→send→put-before-receipt — single-instance only; multi-replica go-live needs a shared durable store). A crash **after** `eth_sendRawTransaction` but **before** `put` can still double-send on retry; put-before-receipt closes the wait-for-inclusion window only.
 - **Card acquiring** — sponsor bank / BIN. Still a §13 commercial socket; `card-sandbox` is never it.
 
 `/ready` and `railHealth` both carry `mode` now, because `healthy: true` was accurate and useless — a sandbox is reliably healthy at simulating.

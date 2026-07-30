@@ -162,8 +162,11 @@ export class EvmLiveChain implements CryptoChainPort {
   }
 
   async send(request: ChainSendRequest): Promise<{ txHash: string }> {
-    const prior = await this.broadcasts.get(request.idempotencyKey);
-    if (prior) return { txHash: prior };
+    // Class M ordering: claim → broadcast → journal hash → wait receipt.
+    // Journaling BEFORE waitForTransactionReceipt means a crash while waiting
+    // for inclusion still returns the same hash on retry instead of a second send.
+    const claimed = await this.broadcasts.claim(request.idempotencyKey);
+    if (claimed.kind === 'done') return { txHash: claimed.txHash };
 
     if (!isAddress(request.to)) {
       throw new Error(`Outbound destination is not an address: ${request.to}`);
@@ -193,8 +196,8 @@ export class EvmLiveChain implements CryptoChainPort {
       });
     }
 
-    await this.public.waitForTransactionReceipt({ hash });
     const stored = await this.broadcasts.put(request.idempotencyKey, hash);
+    await this.public.waitForTransactionReceipt({ hash: stored as Hex });
     return { txHash: stored };
   }
 
