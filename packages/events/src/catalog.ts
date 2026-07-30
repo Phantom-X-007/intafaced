@@ -203,6 +203,49 @@ export const buybackExecuted = defineEvent(
   'Structural buyback & burn ran. One flywheel across both planes (§17.3).',
 );
 
+// ── bank (§8.1) ──────────────────────────────────────────────────────────────
+
+/**
+ * A margin call was raised on a collateralised loan.
+ *
+ * This subject exists so that RAISING a call and TELLING the borrower stay two
+ * separable facts. svc-bank writes the call durably — a `loan_margin_calls` row
+ * whose grace clock gates liquidation — and publishes this. Whether the borrower
+ * was actually reached is svc-notify's answer, recorded per channel, and it is
+ * allowed to be "no". A borrower disputing a liquidation is owed both halves of
+ * that story, and a single subject meaning "borrower notified" would have
+ * destroyed the second half.
+ *
+ * `sequence` is the per-loan call number and the business key: a redelivered
+ * call 3 of loan X must not notify twice. It sits on the payload rather than
+ * only in the producer's idempotency key because the CONSUMER needs to dedupe
+ * on it too, and a consumer cannot see a header it was not given.
+ *
+ * NOT a money event — nothing moved. `cureCollateralAmount` is what the borrower
+ * would have to ADD to clear the call: a decimal string, like every other amount
+ * on this bus.
+ */
+export const bankMarginCalled = defineEvent(
+  'bank',
+  'margin_call',
+  'created',
+  1,
+  z.object({
+    loanId: z.string().uuid(),
+    userId: userIdSchema,
+    /** Per-loan call number, from 1. The business key for at-least-once delivery. */
+    sequence: z.number().int().min(1),
+    ltvBps: z.number().int().min(0),
+    /** Collateral to ADD to return to target LTV. Not a balance, not a movement. */
+    cureCollateralAmount: amountSchema,
+    collateralAssetId: assetIdSchema,
+    calledAt: z.string().datetime({ offset: true }),
+    /** When grace ends and the liquidation ladder may act. */
+    graceExpiresAt: z.string().datetime({ offset: true }),
+  }),
+  'A loan crossed the margin-call threshold. The call is durable at the producer whether or not anyone was reached (§8.1).',
+);
+
 // ── blueprint (§7.1) ─────────────────────────────────────────────────────────
 //
 // Doctrine §0.7 governs these payloads as much as any UI string: nothing here
@@ -624,6 +667,7 @@ export const EVENT_CATALOG = {
   ledgerFreezeUpdated,
   stakeCreated,
   buybackExecuted,
+  bankMarginCalled,
   blueprintCreated,
   blueprintDeleted,
   crewMemberCreated,
