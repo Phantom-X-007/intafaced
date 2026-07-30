@@ -101,12 +101,7 @@ describe('presenters', () => {
   });
 
   it('presents a ticker with null last when the tape is empty', () => {
-    const wire = presentTicker(
-      'BTC/USDT',
-      { bids: [], asks: [], sequence: 0 },
-      null,
-      1_700_000_000_000,
-    );
+    const wire = presentTicker('BTC/USDT', { bids: [], asks: [], sequence: 0 }, null, 1_700_000_000_000);
     expect(tickerSchema.safeParse(wire).success).toBe(true);
     expect(wire.bid).toBeNull();
     expect(wire.ask).toBeNull();

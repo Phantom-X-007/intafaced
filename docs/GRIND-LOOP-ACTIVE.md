@@ -1,8 +1,8 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** DRAINED (agent queue) · Nitro AFK · 45m scheduler re-checks for open PRs / regressions / honest tracker lies only  
+**Status:** DRAINED (agent product queue) · **mega-audit 2026-07-30 ran** (archive `docs/audit/2026-07-30-afk-cook-mega/`) · 45m scheduler: open PRs / regressions only — **pause product grind during audit; product still DRAINED**  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#172** (uiproof PR-2 harness + design bar) + **#169** (ui:boot) · prior **#167** fleet-down migration · **#170–#171** parallel/mega-audit docs · backend micro-queue still **DRAINED** · do not re-ship **#110–#172**
+**Last tip:** high water through **#174** mega-audit plan V2 + overlay · **#172/#169** Stream A uiproof · **#167** fleet-down · backend micro-queue **DRAINED** · do not re-ship **#110–#174** · audit agent fixes land as chore/fix PR(s) after #174
 
 ---
 
@@ -61,27 +61,27 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 **#110–#172** on main. Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
 
-| PR | What |
-| --- | --- |
-| **#145** | Private REST **account/balance** (ledger projection, self-only) |
-| **#146** | Public **OHLCV** route — honest empty until candle aggregation |
-| **#147** | **GET /positions** — honest `[]` until `trade.futures` |
-| **#148** | Notify fans: `rankUpdated`, `stakeCreated`, `p2pEscrowReleased` |
-| **#149** | Tracker: **trade.convert** marked done (mounted + money-path tests) |
-| **#150** | Notify fan: `p2pEscrowRefunded` |
-| **#151** | Docs: Wave D grind loop high-water + compaction survival |
-| **#152** | Tracker honesty wave D — notes match main code |
-| **#153** | Docs(audit): Wave D doctrine scan log with real exit codes |
-| **#154** | SQL **symbol filter** on `account/trades` + positions health log |
-| **#155** | Docs: grind loop high water past #154 + AFK scoreboard |
-| **#156** | **svc-notify OpenTelemetry** + `tracker:check` green |
-| **#157** | Notify fan: **`p2pTradeDisputed`** (openedBy only) |
-| **#158** | Identity **`subAccounts.revoke`** soft-disable (`revoked=true`) |
-| **#159** | Docs: loop **DRAINED** + sub-account tracker honesty |
-| **#160** | Docs(audit): Wave E doctrine scan log with real exit codes |
-| **#161** | Docs: **DRAINED (agent queue)** + p2pTradeDisputed tracker honesty |
+| PR       | What                                                                                    |
+| -------- | --------------------------------------------------------------------------------------- |
+| **#145** | Private REST **account/balance** (ledger projection, self-only)                         |
+| **#146** | Public **OHLCV** route — honest empty until candle aggregation                          |
+| **#147** | **GET /positions** — honest `[]` until `trade.futures`                                  |
+| **#148** | Notify fans: `rankUpdated`, `stakeCreated`, `p2pEscrowReleased`                         |
+| **#149** | Tracker: **trade.convert** marked done (mounted + money-path tests)                     |
+| **#150** | Notify fan: `p2pEscrowRefunded`                                                         |
+| **#151** | Docs: Wave D grind loop high-water + compaction survival                                |
+| **#152** | Tracker honesty wave D — notes match main code                                          |
+| **#153** | Docs(audit): Wave D doctrine scan log with real exit codes                              |
+| **#154** | SQL **symbol filter** on `account/trades` + positions health log                        |
+| **#155** | Docs: grind loop high water past #154 + AFK scoreboard                                  |
+| **#156** | **svc-notify OpenTelemetry** + `tracker:check` green                                    |
+| **#157** | Notify fan: **`p2pTradeDisputed`** (openedBy only)                                      |
+| **#158** | Identity **`subAccounts.revoke`** soft-disable (`revoked=true`)                         |
+| **#159** | Docs: loop **DRAINED** + sub-account tracker honesty                                    |
+| **#160** | Docs(audit): Wave E doctrine scan log with real exit codes                              |
+| **#161** | Docs: **DRAINED (agent queue)** + p2pTradeDisputed tracker honesty                      |
 | **#162** | **Terminal public trade tape** — `LiveTradeTape` ← svc-ws `channel=trades` (no candles) |
-| **#163** | CCXT optional **`since` (ms)** on account/trades · closed orders · public trades |
+| **#163** | CCXT optional **`since` (ms)** on account/trades · closed orders · public trades        |
 
 **Earlier in the same cook (do not redo):**
 
@@ -103,31 +103,31 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 **Empty of product ships.** Remaining items are human-only, safety-skipped, or large phase features.
 
-| # | Item | Disposition |
-| --- | --- | --- |
-| 1 | svc-notify OTEL / DoD | **DONE** #156 · local `dod-gate` green including svc-notify |
-| 2 | tracker:check | **DONE** #156 · green on tip (sub-account note honesty may land with drain docs) |
-| 3 | p2pTradeDisputed fan | **DONE** #157 · openedBy only; still **skip** p2pDisputeResolved (no buyer/seller ids) |
-| 4 | pay.public-api thin slice | **SKIP** — public resolve via payment links / hosted checkout |
-| 5 | Private balance WS | **SKIP** — no safe ledger projection event path; do not invent poll from svc-ws |
-| 6 | identity subAccounts.revoke | **DONE** #158 · soft `revoked`; no hard delete |
-| 7 | Terminal public trade tape | **DONE** #162 · post-DRAINED product; charts still socket |
-| 8 | CCXT `since` filters | **DONE** #163 · post-DRAINED product; mytrades / closed / public tape |
-| 9 | Reassess DRAINED | **Met again** — Status **DRAINED (agent queue)** after re-check post-#162/#163 |
+| #   | Item                        | Disposition                                                                            |
+| --- | --------------------------- | -------------------------------------------------------------------------------------- |
+| 1   | svc-notify OTEL / DoD       | **DONE** #156 · local `dod-gate` green including svc-notify                            |
+| 2   | tracker:check               | **DONE** #156 · green on tip (sub-account note honesty may land with drain docs)       |
+| 3   | p2pTradeDisputed fan        | **DONE** #157 · openedBy only; still **skip** p2pDisputeResolved (no buyer/seller ids) |
+| 4   | pay.public-api thin slice   | **SKIP** — public resolve via payment links / hosted checkout                          |
+| 5   | Private balance WS          | **SKIP** — no safe ledger projection event path; do not invent poll from svc-ws        |
+| 6   | identity subAccounts.revoke | **DONE** #158 · soft `revoked`; no hard delete                                         |
+| 7   | Terminal public trade tape  | **DONE** #162 · post-DRAINED product; charts still socket                              |
+| 8   | CCXT `since` filters        | **DONE** #163 · post-DRAINED product; mytrades / closed / public tape                  |
+| 9   | Reassess DRAINED            | **Met again** — Status **DRAINED (agent queue)** after re-check post-#162/#163         |
 
 **Not agent micro-queue (large phase / design — do not fake done):**
 
-- Futures · candle aggregation · real chain factory + RPC  
-- Push / email / SMS · `pay.public-api` design beyond links · venue.aggregation implementations  
-- `ops.admin` real wiring (not browser-local pretend kill-switches)  
+- Futures · candle aggregation · real chain factory + RPC
+- Push / email / SMS · `pay.public-api` design beyond links · venue.aggregation implementations
+- `ops.admin` real wiring (not browser-local pretend kill-switches)
 - Terminal charts / hotkeys / sub-accounts UI (tape is live; chart remains honest empty)
 
 **Drained-mode work only (each fire):**
 
-1. `gh pr list --state open` — babysit; local verify + admin-merge if CI billing-stuck  
-2. Local doctrine: brand / custody / vendor-shell / workspace / dod-gate / tracker:check  
-3. Honest tracker lies only if `--check` red or notes contradict main code  
-4. Do **not** invent product surface for futures, candles, chain factory, push/email/SMS, ops.admin  
+1. `gh pr list --state open` — babysit; local verify + admin-merge if CI billing-stuck
+2. Local doctrine: brand / custody / vendor-shell / workspace / dod-gate / tracker:check
+3. Honest tracker lies only if `--check` red or notes contradict main code
+4. Do **not** invent product surface for futures, candles, chain factory, push/email/SMS, ops.admin
 
 **NEXT QUEUE summary:** empty of micro product · only **scheduler babysit open PRs / human blockers**.
 
@@ -158,7 +158,7 @@ Agent queue empty · remaining items human-blocked / safety-skipped / large phas
 
 Every **45 minutes:** re-read this file on `origin/main`.
 
-- If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.  
+- If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
 **Next agent after compact: Status DRAINED (backend micro-queue) — do not re-ship #110–#172; babysit open PRs; PROOF.md needs human/desktop Chromium not agent invent.**

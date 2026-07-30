@@ -88,23 +88,23 @@ That file is the definition of “the UI works,” not a human opening localhost
 
 ## Rules agents must not break
 
-| Rule | Why |
-| --- | --- |
-| Never `npm run dev` in the **foreground** of a chat turn | Freezes the session (see `STREAM-A-UNSTICK-CONTINUE.md`) |
-| Never claim visual “done” without `PROOF.md` (or say **unverified**) | Unfalsifiable glances are forbidden |
-| Backends-down is a valid fixture for Phase 1 | Honesty bar / empty states are the product |
-| Do not invent prices | S2 waits on market seed #109 |
-| Auth-gated `/uc/*` empty vs error is **unproven** until an auth fixture | Pass 3 of the operating plan |
+| Rule                                                                    | Why                                                      |
+| ----------------------------------------------------------------------- | -------------------------------------------------------- |
+| Never `npm run dev` in the **foreground** of a chat turn                | Freezes the session (see `STREAM-A-UNSTICK-CONTINUE.md`) |
+| Never claim visual “done” without `PROOF.md` (or say **unverified**)    | Unfalsifiable glances are forbidden                      |
+| Backends-down is a valid fixture for Phase 1                            | Honesty bar / empty states are the product               |
+| Do not invent prices                                                    | S2 waits on market seed #109                             |
+| Auth-gated `/uc/*` empty vs error is **unproven** until an auth fixture | Pass 3 of the operating plan                             |
 
 ---
 
 ## Ports
 
-| Port | Owner |
-| --- | --- |
-| **8090** | Stream A shell (this doc) |
-| 8080 | webpack default if `PORT` unset — do not use for proof |
-| 3000 / 3100 / 4000 / 4014 | Platform apps / edge / ws — not Stream A |
+| Port                      | Owner                                                  |
+| ------------------------- | ------------------------------------------------------ |
+| **8090**                  | Stream A shell (this doc)                              |
+| 8080                      | webpack default if `PORT` unset — do not use for proof |
+| 3000 / 3100 / 4000 / 4014 | Platform apps / edge / ws — not Stream A               |
 
 ---
 

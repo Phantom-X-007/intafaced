@@ -13,7 +13,7 @@
 
 | Fact                                                                                                                                                                                                                                                                                    | Evidence                                                                                   |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Shell stack is **Vue 2.5 / webpack 3 / iView 3 / jQuery 3 / less+sass**, `engines.node >= 4`                                                                                                                                                                                            | `vendor/*/05_Web_Front/package.json`                                            |
+| Shell stack is **Vue 2.5 / webpack 3 / iView 3 / jQuery 3 / less+sass**, `engines.node >= 4`                                                                                                                                                                                            | `vendor/*/05_Web_Front/package.json`                                                       |
 | Shell ships **dead 2018 e2e scaffolding** — Nightwatch 0.9 + selenium-server + chromedriver 2.27, one placeholder spec                                                                                                                                                                  | `test/e2e/`, `test/unit/specs/HelloWorld.spec.js`                                          |
 | **No Playwright, Cypress or Puppeteer anywhere in the repo**                                                                                                                                                                                                                            | grep over every non-vendored `package.json`                                                |
 | A dev server **is running right now** on `:8090`, PID 40202, cwd = `.worktrees/feat-app-phase1-plan/.../05_Web_Front`                                                                                                                                                                   | `lsof -iTCP:8090`, `ps`                                                                    |
@@ -90,8 +90,8 @@ Taste, direction, and product calls. The S8 "human look tour" is real and stays 
 | ------------------------------------------ | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Playwright**                             | **CHOSEN**                                 | Talks HTTP to `:8090` — zero coupling to webpack 3 / babel 6 / iView 3. Multi-viewport and multi-browser are config lines. `page.on('pageerror')` is the single highest-value check for a 2018 Vue app. Headless, deterministic, CI-able, free. Ships its own browser so it does not depend on Nitro's Chrome. |
 | **Cypress**                                | Rejected                                   | Runs _inside_ the page, which fights same-origin/websocket-heavy trading UI. Heavier install, weaker viewport matrix, weaker multi-tab. Buys nothing Playwright does not, costs more.                                                                                                                          |
-| **Computer Use / browser computer-use**        | Rejected **as a gate**; kept as an S8 tool | Non-deterministic, token-priced per run, cannot run unattended in CI, cannot fail a PR reproducibly. It is excellent for _exploratory_ "does this feel like a real exchange" passes. It is not a regression gate.                                                                                              |
-| **Orca**                                   | Not applicable                             | Worktree/terminal orchestration and an embedded browser for agent handoff. It is how executor gets a workspace, not how work is proven. Using its browser as the proof surface would make the proof unreproducible outside Orca.                                                                                   |
+| **Computer Use / browser computer-use**    | Rejected **as a gate**; kept as an S8 tool | Non-deterministic, token-priced per run, cannot run unattended in CI, cannot fail a PR reproducibly. It is excellent for _exploratory_ "does this feel like a real exchange" passes. It is not a regression gate.                                                                                              |
+| **Orca**                                   | Not applicable                             | Worktree/terminal orchestration and an embedded browser for agent handoff. It is how executor gets a workspace, not how work is proven. Using its browser as the proof surface would make the proof unreproducible outside Orca.                                                                               |
 | **Nightwatch/Selenium (already vendored)** | Do not revive                              | 2018, chromedriver pinned to Chrome 57. Dead scaffolding. _Not deleted this turn_ — flagged only, per surgical-changes rule.                                                                                                                                                                                   |
 
 **The one thing that makes this cheap:** the harness never enters the vendored package. No new dependency lands in `vendor/*/05_Web_Front/package.json`, so vendor drift stays zero and the licence inventory in `NOTICE` is untouched.
@@ -212,13 +212,13 @@ A Stream A visual claim is done when **all six** hold:
 
 ### 4.3 · RACI — Planner vs executor
 
-| Activity                                   | Planner | executor               |
+| Activity                                   | Planner | executor           |
 | ------------------------------------------ | ------- | ------------------ |
 | Plan, audit, harness design, exit criteria | **R/A** | C                  |
 | Writing `boot.mjs`, harness, specs         | C       | **R/A**            |
 | Vendor shell UI edits (Phase 1 remainder)  | C       | **R/A**            |
 | Running the harness, producing artefacts   | I       | **R/A**            |
-| Adversarial review of executor's PRs           | **R/A** | I                  |
+| Adversarial review of executor's PRs       | **R/A** | I                  |
 | Lane claim on `LIVE-LANES.md`              | I       | **R/A**            |
 | Product/taste calls, S8 tour               | I       | I — **Nitro is A** |
 | Licence decisions (charting, any new dep)  | **R**   | I — **Nitro is A** |
@@ -238,7 +238,7 @@ One rule that matters more than the table: **Executor executes, planner verifies
 
 | Boundary                          | Rule                                                                                                                                                                          |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Paths Stream A may touch          | `vendor/*/05_Web_Front/**`, `tooling/uiproof/**`, `docs/STREAM-A-*`, `docs/FRONTEND-*`                                                                             |
+| Paths Stream A may touch          | `vendor/*/05_Web_Front/**`, `tooling/uiproof/**`, `docs/STREAM-A-*`, `docs/FRONTEND-*`                                                                                        |
 | Paths Stream A must **not** touch | `services/**`, `packages/**`, `apps/**`, `tooling/ci/**`, `Dockerfile`, `docker-compose*.yml`, any migration                                                                  |
 | The one shared file               | root `package.json` — PR-1 adds **two scripts and one devDependency**, nothing else. Smallest possible shared-file diff, in the _first_ PR, so later PRs touch nothing shared |
 | Ports                             | Stream A owns `:8090` only. `:3000/:3100/:4000/:4014` and `55xx/56xx` belong to other stacks (`RUNNING.md`) — the harness never boots them                                    |
@@ -279,7 +279,7 @@ Then claim `stream-a-uiproof` on `docs/LIVE-LANES.md`. Base off `origin/main` @ 
 | --- | --------------------------------------------------------------------------------------------------- |
 | 1   | Probe `http://127.0.0.1:${PORT}/` first; if 200, print `reusing existing server (pid N)` and exit 0 |
 | 2   | Spawn detached + `unref()`, stdio to `.artifacts/uiproof/devserver.log`. **Never** await the child  |
-| 3   | cwd = `git rev-parse --show-toplevel` + `/vendor/*/05_Web_Front`                         |
+| 3   | cwd = `git rev-parse --show-toplevel` + `/vendor/*/05_Web_Front`                                    |
 | 4   | If that dir has no `node_modules`, exit 1 printing the exact `npm ci` command and its directory     |
 | 5   | Ready = `GET /` 200 **AND** `GET /app.js` 200. Poll every 2 s                                       |
 | 6   | Timeout 240 s → exit 1 + last 40 lines of the log                                                   |

@@ -13,9 +13,7 @@ const bool = (defaultOn: boolean) =>
   z
     .union([z.boolean(), z.string()])
     .default(defaultOn)
-    .transform((v) =>
-      typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase()),
-    );
+    .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase())));
 
 const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
   z.object({

@@ -166,9 +166,9 @@ describe('svc-protocol mount — the public surface', () => {
   });
 
   it('refuses predictAddress when factory is zero', async () => {
-    await expect(
-      createProtocolRouter(stubDeps()).createCaller(anonymous()).predictAddress({ owner: OWNER }),
-    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(createProtocolRouter(stubDeps()).createCaller(anonymous()).predictAddress({ owner: OWNER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
   });
 
   it('refuses buildDeployment when implementation is zero', async () => {
@@ -178,8 +178,8 @@ describe('svc-protocol mount — the public surface', () => {
         isDeployed: async () => false,
       },
     });
-    await expect(
-      createProtocolRouter(deps).createCaller(anonymous()).buildDeployment({ owner: OWNER }),
-    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(createProtocolRouter(deps).createCaller(anonymous()).buildDeployment({ owner: OWNER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
   });
 });

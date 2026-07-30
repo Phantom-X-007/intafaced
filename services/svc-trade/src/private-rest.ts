@@ -162,9 +162,13 @@ export function presentCcxtOrder(order: OrderRecord, symbol: string) {
   const amount = formatAmount(order.qty);
   const filled = formatAmount(order.filledQty);
   const remaining = formatAmount(order.qty - order.filledQty);
-  // Cost only when something filled at a known price; open unfilled → "0".
+  // Limit: use limit price. Market: limit price is null — use protectionPrice
+  // (the funding/engine ceiling) so filled market cost is never a silent "0"
+  // that pretends no quote moved (mega-audit R6). Still "0" when unfilled or
+  // when neither price is known.
   const price = order.price === null ? null : formatAmount(order.price);
-  const cost = order.filledQty === 0n || order.price === null ? '0' : formatAmount(mul(order.price, order.filledQty));
+  const costBasis = order.price ?? order.protectionPrice;
+  const cost = order.filledQty === 0n || costBasis === null ? '0' : formatAmount(mul(costBasis, order.filledQty));
 
   return {
     id: order.id,
@@ -439,95 +443,89 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>(
-    '/api/v1/orders/closed',
-    async (req, reply) => {
-      const principal = requirePrincipal(req, reply);
-      if (!principal) return;
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>('/api/v1/orders/closed', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
 
-      let marketId: string | undefined;
-      const symbolRaw = req.query.symbol;
-      if (symbolRaw !== undefined && symbolRaw !== '') {
-        const symbol = decodeURIComponent(symbolRaw);
-        const market = await deps.marketBySymbol(symbol);
-        if (!market) {
-          return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+    let marketId: string | undefined;
+    const symbolRaw = req.query.symbol;
+    if (symbolRaw !== undefined && symbolRaw !== '') {
+      const symbol = decodeURIComponent(symbolRaw);
+      const market = await deps.marketBySymbol(symbol);
+      if (!market) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+      }
+      marketId = market.id;
+    }
+    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+    const sinceParsed = parseSince(req.query.since);
+    if (!sinceParsed.ok) {
+      return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
+    }
+
+    try {
+      // since → SQL on orders.created_at (timestamptz) via orderHistory.sinceMs.
+      const orders = await deps.orderHistory(principal, {
+        marketId,
+        limit,
+        sinceMs: sinceParsed.sinceMs,
+      });
+      const symbolByMarket = new Map<string, string>();
+      const wire = [];
+      for (const order of orders) {
+        const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
+        wire.push(presentCcxtOrder(order, symbol));
+      }
+      return reply.code(200).send(wire);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>('/api/v1/account/trades', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    const limit = parseLimit(req.query.limit, DEFAULT_FILLS, MAX_FILLS);
+    const sinceParsed = parseSince(req.query.since);
+    if (!sinceParsed.ok) {
+      return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
+    }
+    let filterMarketId: string | undefined;
+    const symbolRaw = req.query.symbol;
+    if (symbolRaw !== undefined && symbolRaw !== '') {
+      const symbol = decodeURIComponent(symbolRaw);
+      const market = await deps.marketBySymbol(symbol);
+      if (!market) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+      }
+      filterMarketId = market.id;
+    }
+
+    try {
+      // Symbol + since resolve in SQL via myFills (fills.market_id, fills.ts),
+      // not a post-filter of a user-wide page.
+      const fills = await deps.myFills(principal, limit, filterMarketId, sinceParsed.sinceMs);
+      const symbolByMarket = new Map<string, string>();
+      const wire = [];
+      for (const fill of fills) {
+        let symbol = symbolByMarket.get(fill.marketId);
+        if (symbol === undefined) {
+          const market = await deps.marketById(fill.marketId);
+          symbol = market?.symbol ?? fill.marketId;
+          symbolByMarket.set(fill.marketId, symbol);
         }
-        marketId = market.id;
+        wire.push(presentCcxtMyTrade(fill, symbol));
       }
-      const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
-      const sinceParsed = parseSince(req.query.since);
-      if (!sinceParsed.ok) {
-        return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
-      }
-
-      try {
-        // since → SQL on orders.created_at (timestamptz) via orderHistory.sinceMs.
-        const orders = await deps.orderHistory(principal, {
-          marketId,
-          limit,
-          sinceMs: sinceParsed.sinceMs,
-        });
-        const symbolByMarket = new Map<string, string>();
-        const wire = [];
-        for (const order of orders) {
-          const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
-          wire.push(presentCcxtOrder(order, symbol));
-        }
-        return reply.code(200).send(wire);
-      } catch (err) {
-        const sent = sendDomainError(reply, err);
-        if (sent) return sent;
-        throw err;
-      }
-    },
-  );
-
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>(
-    '/api/v1/account/trades',
-    async (req, reply) => {
-      const principal = requirePrincipal(req, reply);
-      if (!principal) return;
-
-      const limit = parseLimit(req.query.limit, DEFAULT_FILLS, MAX_FILLS);
-      const sinceParsed = parseSince(req.query.since);
-      if (!sinceParsed.ok) {
-        return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
-      }
-      let filterMarketId: string | undefined;
-      const symbolRaw = req.query.symbol;
-      if (symbolRaw !== undefined && symbolRaw !== '') {
-        const symbol = decodeURIComponent(symbolRaw);
-        const market = await deps.marketBySymbol(symbol);
-        if (!market) {
-          return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
-        }
-        filterMarketId = market.id;
-      }
-
-      try {
-        // Symbol + since resolve in SQL via myFills (fills.market_id, fills.ts),
-        // not a post-filter of a user-wide page.
-        const fills = await deps.myFills(principal, limit, filterMarketId, sinceParsed.sinceMs);
-        const symbolByMarket = new Map<string, string>();
-        const wire = [];
-        for (const fill of fills) {
-          let symbol = symbolByMarket.get(fill.marketId);
-          if (symbol === undefined) {
-            const market = await deps.marketById(fill.marketId);
-            symbol = market?.symbol ?? fill.marketId;
-            symbolByMarket.set(fill.marketId, symbol);
-          }
-          wire.push(presentCcxtMyTrade(fill, symbol));
-        }
-        return reply.code(200).send(wire);
-      } catch (err) {
-        const sent = sendDomainError(reply, err);
-        if (sent) return sent;
-        throw err;
-      }
-    },
-  );
+      return reply.code(200).send(wire);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
 
   /**
    * Published maker/taker from `trade.markets`. No ledger, no rank perk
@@ -723,6 +721,7 @@ export function fakeOrder(partial: {
   filledQty?: OrderRecord['filledQty'];
   status?: OrderRecord['status'];
   tif?: OrderRecord['tif'];
+  protectionPrice?: OrderRecord['protectionPrice'];
   createdAt?: Date;
 }): OrderRecord {
   const qty = partial.qty ?? 1_000_000_000_000_000_000n; // 1.0
@@ -742,7 +741,7 @@ export function fakeOrder(partial: {
     holdAsset: 'USDT',
     holdAmount: 100_000_000_000_000_000_000n,
     feeDiscountBps: 0,
-    protectionPrice: null,
+    protectionPrice: partial.protectionPrice === undefined ? null : partial.protectionPrice,
     engineSequence: 1,
     rejectCode: null,
     createdAt: partial.createdAt ?? new Date('2023-11-14T22:13:20.000Z'),

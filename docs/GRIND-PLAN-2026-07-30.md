@@ -2,11 +2,11 @@
 
 ## Audit policy (decided)
 
-| Cadence | What |
-| --- | --- |
-| **Every PR** | typecheck/build of touched packages · relevant unit tests · `pnpm scan:brand` when docs/UI touched |
-| **Every ~3–4 product PRs** | wave audit: brand/custody/vendor-shell/tracker + money greps on tip |
-| **Not** only-at-end | End-only misses failures that block the whole repo (e.g. brand-scan red) |
+| Cadence                    | What                                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Every PR**               | typecheck/build of touched packages · relevant unit tests · `pnpm scan:brand` when docs/UI touched |
+| **Every ~3–4 product PRs** | wave audit: brand/custody/vendor-shell/tracker + money greps on tip                                |
+| **Not** only-at-end        | End-only misses failures that block the whole repo (e.g. brand-scan red)                           |
 
 ## Wave A (this block) — parallel
 

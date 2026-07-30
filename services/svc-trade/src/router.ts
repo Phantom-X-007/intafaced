@@ -274,9 +274,7 @@ export function createTradeRouter(trade: TradeService) {
       cancelAll: scopedProcedure('trade:write', { module: 'trade' })
         .input(z.object({ marketId: z.string().uuid().optional() }).optional())
         .output(z.array(orderOutput))
-        .mutation(({ ctx, input }) =>
-          guard(async () => (await trade.cancelAllOrders(ctx.principal, input?.marketId)).map(presentOrder)),
-        ),
+        .mutation(({ ctx, input }) => guard(async () => (await trade.cancelAllOrders(ctx.principal, input?.marketId)).map(presentOrder))),
 
       get: scopedProcedure('trade:read')
         .input(z.object({ orderId: z.string().uuid() }))
@@ -299,7 +297,9 @@ export function createTradeRouter(trade: TradeService) {
         )
         .output(z.array(orderOutput))
         .query(({ ctx, input }) =>
-          guard(async () => (await trade.orderHistory(ctx.principal, { marketId: input?.marketId, limit: input?.limit })).map(presentOrder)),
+          guard(async () =>
+            (await trade.orderHistory(ctx.principal, { marketId: input?.marketId, limit: input?.limit })).map(presentOrder),
+          ),
         ),
     }),
 
@@ -312,9 +312,7 @@ export function createTradeRouter(trade: TradeService) {
       forOrder: scopedProcedure('trade:read')
         .input(z.object({ orderId: z.string().uuid() }))
         .output(z.array(fillOutput))
-        .query(({ ctx, input }) =>
-          guard(async () => (await trade.fillsForOrder(ctx.principal, input.orderId)).map(presentFill)),
-        ),
+        .query(({ ctx, input }) => guard(async () => (await trade.fillsForOrder(ctx.principal, input.orderId)).map(presentFill))),
     }),
 
     /**

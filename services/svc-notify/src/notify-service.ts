@@ -1,10 +1,4 @@
-import type {
-  InsertNotificationInput,
-  ListQuery,
-  ListResult,
-  Notification,
-  NotifyStore,
-} from './store.js';
+import type { InsertNotificationInput, ListQuery, ListResult, Notification, NotifyStore } from './store.js';
 import { withNotifySpan } from './tracing.js';
 
 /**
@@ -30,20 +24,16 @@ export class NotifyService {
    * writing — consumers still ack the bus message.
    */
   async create(input: InsertNotificationInput): Promise<{ inserted: boolean; notification: Notification | null }> {
-    return withNotifySpan(
-      'notify.create',
-      { op: 'create', kind: input.kind, sourceSubject: input.sourceSubject },
-      async (span) => {
-        if (!this.options.fanoutEnabled) {
-          span.setAttribute('intafaced.notify.fanout_enabled', false);
-          return { inserted: false, notification: null };
-        }
-        span.setAttribute('intafaced.notify.fanout_enabled', true);
-        const result = await this.store.insert(input);
-        span.setAttribute('intafaced.notify.inserted', result.inserted);
-        return result;
-      },
-    );
+    return withNotifySpan('notify.create', { op: 'create', kind: input.kind, sourceSubject: input.sourceSubject }, async (span) => {
+      if (!this.options.fanoutEnabled) {
+        span.setAttribute('intafaced.notify.fanout_enabled', false);
+        return { inserted: false, notification: null };
+      }
+      span.setAttribute('intafaced.notify.fanout_enabled', true);
+      const result = await this.store.insert(input);
+      span.setAttribute('intafaced.notify.inserted', result.inserted);
+      return result;
+    });
   }
 
   list(query: ListQuery): Promise<ListResult> {

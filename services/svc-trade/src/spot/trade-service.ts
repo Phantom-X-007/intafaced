@@ -378,6 +378,13 @@ export class TradeService {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
 
+    // Fail closed on sub-accounts: accept-and-store would label orders with any
+    // UUID, including revoked or foreign ones. Ownership/revoked check needs an
+    // identity S2S read that is not mounted yet — refuse until it is (mega-audit R5).
+    if (input.subAccountId != null) {
+      throw new TradeError('sub-account orders are not enabled until ownership and revoked checks are wired', 'trade.sub_account_ungated');
+    }
+
     // ── 2 · RISK CHECKS ─────────────────────────────────────────────────────
     const market = await this.requireMarket(input);
     assertTradable(market);
@@ -1050,10 +1057,7 @@ export class TradeService {
    * Optional `sinceMs` (unix ms) is applied in SQL on `orders.created_at >= since`
    * (CCXT convention). `created_at` is timestamptz — convert ms via `Date`.
    */
-  async orderHistory(
-    principal: Principal,
-    input: { marketId?: string; limit?: number; sinceMs?: number } = {},
-  ): Promise<OrderRecord[]> {
+  async orderHistory(principal: Principal, input: { marketId?: string; limit?: number; sinceMs?: number } = {}): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
     // timestamptz compare: Date carries ms precision into postgres.js.

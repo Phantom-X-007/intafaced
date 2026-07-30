@@ -113,7 +113,9 @@ const schema = baseEnvSchema
        */
       JWT_ACCESS_SECRET: z.string().min(32).optional(),
       JWT_ISSUER: z.string().default('intafaced'),
-      JWT_AUDIENCE: z.string().default('intafaced'),
+      // Must match svc-identity / svc-edge (`intafaced.api`). A mismatch presents
+      // as "logged in but private stream 401" with no obvious cause.
+      JWT_AUDIENCE: z.string().default('intafaced.api'),
       WS_PRIVATE_ORDERS_DURABLE: z.string().min(1).max(128).default('ws-private-orders'),
 
       /**

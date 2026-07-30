@@ -94,8 +94,7 @@ function requireAccountFactoryConfigured(factory: string, implementation: string
   if (isZeroAddress(factory) || isZeroAddress(implementation)) {
     throw new TRPCError({
       code: 'PRECONDITION_FAILED',
-      message:
-        'Smart account factory/implementation is not configured (PROTOCOL_FACTORY_ADDRESS / PROTOCOL_IMPLEMENTATION_ADDRESS).',
+      message: 'Smart account factory/implementation is not configured (PROTOCOL_FACTORY_ADDRESS / PROTOCOL_IMPLEMENTATION_ADDRESS).',
     });
   }
 }
@@ -168,8 +167,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         chainId: chain.config.chainId,
         custodial: false as const,
         relayEnabled: deps.relayEnabled(),
-        factoryConfigured:
-          !isZeroAddress(chain.config.factory) && !isZeroAddress(chain.config.implementation),
+        factoryConfigured: !isZeroAddress(chain.config.factory) && !isZeroAddress(chain.config.implementation),
       })),
 
     /**

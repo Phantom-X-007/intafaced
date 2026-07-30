@@ -125,7 +125,9 @@ describe('svc-notify mount — authorisation', () => {
 
     const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     await expect(
-      createNotifyRouter(notify).createCaller(signed()).notify.markRead({ ids: [id] }),
+      createNotifyRouter(notify)
+        .createCaller(signed())
+        .notify.markRead({ ids: [id] }),
     ).resolves.toEqual({ marked: 1 });
     expect(markFor).toBe(USER);
   });

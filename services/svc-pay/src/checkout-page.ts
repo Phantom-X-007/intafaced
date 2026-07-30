@@ -36,22 +36,14 @@ export type CheckoutPageState =
 
 /** Escape for HTML text/attribute contexts. Labels are merchant-supplied. */
 export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /**
  * Pull a payment-link token from query and/or path.
  * Accepts `/checkout?token=…`, `/checkout/:token`, `/pay/link/:token`.
  */
-export function extractCheckoutToken(input: {
-  queryToken?: string | string[];
-  pathToken?: string;
-}): string | null {
+export function extractCheckoutToken(input: { queryToken?: string | string[]; pathToken?: string }): string | null {
   const raw = input.pathToken ?? (Array.isArray(input.queryToken) ? input.queryToken[0] : input.queryToken);
   if (typeof raw !== 'string') return null;
   const token = raw.trim();
@@ -100,9 +92,7 @@ function okBody(link: CheckoutLinkView): string {
   // Merchant-safe subset of checkoutConfig only — never dump the whole bag
   // (profiles may later hold routing hints that should not hit the browser).
   const displayName = readSafeString(link.checkoutConfig, 'displayName');
-  const merchantLine = displayName
-    ? `<p class="merchant">Merchant: ${escapeHtml(displayName)}</p>`
-    : '';
+  const merchantLine = displayName ? `<p class="merchant">Merchant: ${escapeHtml(displayName)}</p>` : '';
 
   return `
     <header class="head">
@@ -188,7 +178,10 @@ function errorCode(err: unknown): string | undefined {
 }
 
 export async function registerCheckoutRoutes(app: FastifyInstance, pay: CheckoutPay): Promise<void> {
-  const handle = async (token: string | null, reply: { code: (n: number) => { type: (t: string) => { send: (b: string) => unknown } } }) => {
+  const handle = async (
+    token: string | null,
+    reply: { code: (n: number) => { type: (t: string) => { send: (b: string) => unknown } } },
+  ) => {
     if (!token) {
       const page = renderCheckoutPage({ kind: 'missing_token' });
       return reply.code(page.status).type('text/html; charset=utf-8').send(page.html);

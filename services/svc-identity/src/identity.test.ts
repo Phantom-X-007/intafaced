@@ -33,11 +33,9 @@ import {
 const URL = process.env.TEST_DATABASE_URL_IDENTITY ?? 'postgres://svc_identity:svc_identity@localhost:5433/intafaced';
 const here = dirname(fileURLToPath(import.meta.url));
 /** Every migration, in order. A suite that applies only 0000 tests a schema nobody deploys. */
-const migrations = [
-  '0000_identity_init.sql',
-  '0001_identity_kyc_review.sql',
-  '0002_sub_accounts_revoke.sql',
-].map((f) => readFileSync(join(here, '..', 'drizzle', f), 'utf8'));
+const migrations = ['0000_identity_init.sql', '0001_identity_kyc_review.sql', '0002_sub_accounts_revoke.sql'].map((f) =>
+  readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
+);
 
 const tokenConfig = {
   secret: 'an-identity-test-signing-secret-long-enough',

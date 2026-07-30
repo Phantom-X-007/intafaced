@@ -13,29 +13,29 @@ Agents score polish PRs against this checklist. A PR that fails the bar is not �
 
 ## 0 · Non-negotiables (instant reject)
 
-| Rule | Fail looks like |
-| --- | --- |
+| Rule                        | Fail looks like                                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------------------------------- |
 | **No second design system** | Tailwind, shadcn, Radix, Element UI, Ant Design Vue, Naive, Quasar, or any Vue 3 kit alongside iView |
-| **No fake prices** | Any number invented for S2 / charts before market seed #109 |
-| **No confetti / thrash** | Success fireworks, layout jump on every tick, spinner party |
-| **Empty ≠ zero** | Failed balance fetch rendered as `$0.00` |
-| **Brand scrub** | Forbidden vendor strings in runtime DOM (`ui:proof` + brand-scan) |
-| **Nitro is not the runner** | “Open localhost and tell us” as the only gate |
+| **No fake prices**          | Any number invented for S2 / charts before market seed #109                                          |
+| **No confetti / thrash**    | Success fireworks, layout jump on every tick, spinner party                                          |
+| **Empty ≠ zero**            | Failed balance fetch rendered as `$0.00`                                                             |
+| **Brand scrub**             | Forbidden vendor strings in runtime DOM (`ui:proof` + brand-scan)                                    |
+| **Nitro is not the runner** | “Open localhost and tell us” as the only gate                                                        |
 
 ---
 
 ## 1 · Product layers (what “world-class” means)
 
-| Layer | Meaning | When |
-| --- | --- | --- |
-| **Trust** | Numbers never lie; empty / loading / error are three states | Phase 1 + harness |
-| **Clarity** | Next action obvious in ~2 seconds | Phase 1–2 |
-| **Density** | Book + chart + form + balances without hunting | Phase 2 |
-| **Calm** | Stable layout when data ticks; quiet success | Phase 2 |
-| **Speed of feel** | Usable first paint; no multi-second white flash | Phase 2 (budget) |
-| **Consistency** | Same space/type/accent/empty recipe everywhere | Phase 2 tokens |
-| **Accessibility** | Keyboard order form, focus rings, contrast | Phase 1.5 axe → Phase 2 |
-| **Plane unity** | CEX and DEX = one product, two risk modes | Phase 2 |
+| Layer             | Meaning                                                     | When                    |
+| ----------------- | ----------------------------------------------------------- | ----------------------- |
+| **Trust**         | Numbers never lie; empty / loading / error are three states | Phase 1 + harness       |
+| **Clarity**       | Next action obvious in ~2 seconds                           | Phase 1–2               |
+| **Density**       | Book + chart + form + balances without hunting              | Phase 2                 |
+| **Calm**          | Stable layout when data ticks; quiet success                | Phase 2                 |
+| **Speed of feel** | Usable first paint; no multi-second white flash             | Phase 2 (budget)        |
+| **Consistency**   | Same space/type/accent/empty recipe everywhere              | Phase 2 tokens          |
+| **Accessibility** | Keyboard order form, focus rings, contrast                  | Phase 1.5 axe → Phase 2 |
+| **Plane unity**   | CEX and DEX = one product, two risk modes                   | Phase 2                 |
 
 ---
 
@@ -43,13 +43,13 @@ Agents score polish PRs against this checklist. A PR that fails the bar is not �
 
 Implement as CSS variables (Stream A sheet or an append-only region in the existing brand CSS). Map to **#86** black/orange already shipped.
 
-| Token group | Minimum set |
-| --- | --- |
-| **Color** | `--bg`, `--panel`, `--border`, `--text`, `--text-muted`, `--up`, `--down`, `--accent` (orange) |
-| **Space** | 4 / 8 / 12 / 16 / 24 |
-| **Type** | 11 / 12 / 13 / 14 / 16; **tabular nums** for prices and sizes |
-| **Control** | order-form control height; radius small/medium |
-| **Z** | drawer / modal / toast scale |
+| Token group | Minimum set                                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| **Color**   | `--bg`, `--panel`, `--border`, `--text`, `--text-muted`, `--up`, `--down`, `--accent` (orange) |
+| **Space**   | 4 / 8 / 12 / 16 / 24                                                                           |
+| **Type**    | 11 / 12 / 13 / 14 / 16; **tabular nums** for prices and sizes                                  |
+| **Control** | order-form control height; radius small/medium                                                 |
+| **Z**       | drawer / modal / toast scale                                                                   |
 
 **How agents restyle:** iView via variables + local SCSS overrides — never fork the kit.
 
@@ -96,23 +96,23 @@ Use public products as **pattern references only** (no markup or assets).
 
 ## 4 · Surfaces Phase 2 may touch (in order)
 
-1. **Terminal density** — exchange pair view: book / trades / form alignment  
-2. **Token file** — §2 variables wired into brand + iView overrides  
-3. **Empty/error recipes** — shared component or mixin used on index + account + terminal  
-4. **Plane toggle** — CEX/DEX feels like one product  
-5. **Performance budget** — flag 12 MB `app.js`; no new heavy deps without budget  
+1. **Terminal density** — exchange pair view: book / trades / form alignment
+2. **Token file** — §2 variables wired into brand + iView overrides
+3. **Empty/error recipes** — shared component or mixin used on index + account + terminal
+4. **Plane toggle** — CEX/DEX feels like one product
+5. **Performance budget** — flag 12 MB `app.js`; no new heavy deps without budget
 6. **Charts** — Lightweight Charts **only** after licence/NOTICE + #109 (never proprietary Charting Library)
 
 ---
 
 ## 5 · How a polish PR proves the bar
 
-| Required | Artefact |
-| --- | --- |
-| Functional | `pnpm ui:proof` → `PROOF.md` all PASS (or **unverified** if blocked) |
-| Design | This checklist filled in the PR body (checkboxes, not vibes) |
-| Doctrine | `pnpm verify` green; brand/custody clean |
-| Taste (elective) | S8 screenshot pack only when Nitro asks — never the only gate |
+| Required         | Artefact                                                             |
+| ---------------- | -------------------------------------------------------------------- |
+| Functional       | `pnpm ui:proof` → `PROOF.md` all PASS (or **unverified** if blocked) |
+| Design           | This checklist filled in the PR body (checkboxes, not vibes)         |
+| Doctrine         | `pnpm verify` green; brand/custody clean                             |
+| Taste (elective) | S8 screenshot pack only when Nitro asks — never the only gate        |
 
 **Writer ≠ certifier:** executor implements; planner/auditor scores the checklist.
 
@@ -120,10 +120,10 @@ Use public products as **pattern references only** (no markup or assets).
 
 ## 6 · Explicitly out of scope for this doc
 
-- Auth fixture (Pass 3) and account empty-vs-error proof  
-- Pixel baselines (Pass 4)  
-- Real prices (Pass 5 / #109)  
-- Rewriting the shell off Vue 2 / iView  
+- Auth fixture (Pass 3) and account empty-vs-error proof
+- Pixel baselines (Pass 4)
+- Real prices (Pass 5 / #109)
+- Rewriting the shell off Vue 2 / iView
 
 ---
 

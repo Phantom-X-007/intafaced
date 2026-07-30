@@ -86,6 +86,22 @@ describe('toCcxtOrderStatus / presentCcxtOrder / presentCcxtMyTrade / fees', () 
     expect(typeof wire.amount).toBe('string');
   });
 
+  it('filled market order cost uses protectionPrice when limit price is null (R6)', () => {
+    const order = fakeOrder({
+      type: 'market',
+      price: null,
+      protectionPrice: parseAmount('100'),
+      qty: parseAmount('2'),
+      filledQty: parseAmount('2'),
+      status: 'filled',
+    });
+    const wire = presentCcxtOrder(order, 'BTC/USDT');
+    expect(orderSchema.safeParse(wire).success).toBe(true);
+    expect(wire.price).toBeNull();
+    expect(wire.cost).toBe('200');
+    expect(wire.cost).not.toBe('0');
+  });
+
   it('presents a fill that validates against tradeSchema with decimal strings', () => {
     const fill = fakeFill({
       price: parseAmount('100.5'),
