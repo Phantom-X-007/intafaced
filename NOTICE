@@ -73,12 +73,24 @@ own terms, not on the root LICENSE file.
 Direct evidence that this tree has been re-badged at least once, which is why
 the above matters in practice rather than in theory:
 
-  vendor/coinexchange/01_wallet_rpc/act/bin/ contains 8 committed `.class`
+  vendor/coinexchange/01_wallet_rpc/act/bin/ contained 8 committed `.class`
   files under the package root `com/ztuo/bc/wallet/`, while the `.java` sources
-  beside them are `com/bizzan/bc/wallet/`. The compiled output is from a build
+  beside them are `com/bizzan/bc/wallet/`. The compiled output was from a build
   of the same code under a different vendor identity. Whatever chain of custody
   carried this module here, it passed through at least one party other than the
   named upstream, and no licence record accompanied that step.
+
+  PAST TENSE, and deliberately so: that directory was removed on branch
+  `feat/spine-wallet-perimeter` (board item A1.4). It was Eclipse build output —
+  referenced by no POM, no module list and no build step — and it also carried a
+  stale `application.properties` holding a MongoDB credential and a compiled copy
+  of the wallet controller from before the RPC auth wall landed in #86.
+
+  The finding above is not weakened by the removal. The evidence is preserved in
+  git history, where the `.class` files and their `com/ztuo/` package root can
+  still be read, and the observation is recorded here. Keeping stale bytecode in
+  the working tree to serve as an exhibit is not how evidence is retained; it is
+  just how a credential survives a cleanup.
 
 
 ================================================================================

@@ -137,6 +137,16 @@ const ALLOWLIST = [
       'internal licence audit; must name the exact vendor paths and Maven groupIds an unlicensed component sits at, or an engineer cannot act on it without first asking which path was meant. Same rationale as TERMINAL_INTEGRATION.md and docs/adr. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
   },
   {
+    path: join('docs', 'A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md'),
+    reason:
+      'internal security work product (board item A1.4); names the exact module and file each committed credential sits in. A finding that says "a password in some properties file" is not actionable — the whole value of the document is that an engineer can go straight to the key and rotate it. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
+    path: join('docs', 'RUNBOOK-ETH-KEYSTORE-REENCRYPTION.md'),
+    reason:
+      'internal custody runbook; an operator following it must be able to copy the real module paths and MongoDB collection names verbatim. A runbook that paraphrases the path it wants you to act on is how the wrong directory gets re-encrypted. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
     path: 'NOTICE',
     reason:
       'root third-party attribution record; an attribution that omits the upstream it attributes is a false legal statement, so this file must name upstreams verbatim. It has no file extension and so currently falls outside EXTENSIONS below — this entry is deliberate belt-and-braces, so that widening EXTENSIONS later cannot silently fail CI on the one file whose whole job is naming upstreams accurately.',
