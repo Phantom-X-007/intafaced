@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
-import { marketSchema, orderBookSchema, tickerSchema, tradeSchema } from '@intafaced/exchange-contract';
+import { exchangeErrorSchema, marketSchema, ohlcvSchema, orderBookSchema, tickerSchema, tradeSchema } from '@intafaced/exchange-contract';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
   bpsToRate,
@@ -47,12 +47,52 @@ describe('presenters', () => {
     expect(marketSchema.safeParse(wire).success).toBe(true);
     expect(wire.maker).toBe('0.001');
     expect(wire.taker).toBe('0.002');
-    expect(wire.precision.price).toBe(2);
-    expect(wire.precision.amount).toBe(4);
+    // Precision is the tick and the lot themselves, not a count of places.
+    expect(wire.precisionMode).toBe('TICK_SIZE');
+    expect(wire.precision.price).toBe('0.01');
+    expect(wire.precision.amount).toBe('0.0001');
     expect(wire.limits.amount.min).toBe('0.0001');
     // Money fields are decimal strings, never numbers.
     expect(typeof wire.maker).toBe('string');
     expect(typeof wire.limits.cost.min).toBe('string');
+  });
+
+  /**
+   * The regression this shape exists to stop. Seven of the sixteen live
+   * listings have a lot size that is not a power of ten — the six forex majors
+   * at 1000 units and NATGAS/USD at 10 — and the previous decimal-places
+   * report collapsed every one of them to `0`. A client rounding an amount to
+   * 0 decimal places builds 1500 units of EUR/USD, which the engine must
+   * reject because it enforces the lot as a multiple.
+   */
+  it('reports a lot size larger than one exactly, not as zero decimal places', () => {
+    const eurusd = presentCcxtMarket(
+      fakeMarket({
+        symbol: 'EUR/USD',
+        baseAsset: 'EUR',
+        quoteAsset: 'USD',
+        tickSize: parseAmount('0.00001'),
+        lotSize: parseAmount('1000'),
+        minQty: parseAmount('1000'),
+      }),
+    );
+    expect(marketSchema.safeParse(eurusd).success).toBe(true);
+    expect(eurusd.precision.amount).toBe('1000');
+    expect(eurusd.precision.price).toBe('0.00001');
+    // The old report was the number 0, which reads as "whole units are fine".
+    expect(eurusd.precision.amount).not.toBe(0);
+
+    const natgas = presentCcxtMarket(
+      fakeMarket({ symbol: 'NATGAS/USD', tickSize: parseAmount('0.001'), lotSize: parseAmount('10'), minQty: parseAmount('10') }),
+    );
+    expect(natgas.precision.amount).toBe('10');
+
+    // A quantity built from the reported precision is a multiple of the lot —
+    // the property a client actually depends on to get an order accepted.
+    for (const wire of [eurusd, natgas]) {
+      const lot = parseAmount(wire.precision.amount);
+      expect(parseAmount(wire.limits.amount.min!) % lot).toBe(0n);
+    }
   });
 
   it('presents depth as a CCXT order book with decimal-string levels', () => {
@@ -149,6 +189,7 @@ describe('public REST routes', () => {
         sequence: 7,
       }),
       publicTape: async () => [print],
+      candles: async () => [],
       now: () => 1_700_000_000_000,
       ...overrides,
     };
@@ -189,7 +230,7 @@ describe('public REST routes', () => {
     const app = await build();
     const res = await app.inject({ method: 'GET', url: '/api/v1/orderbook/NOPE%2FUSDT' });
     expect(res.statusCode).toBe(404);
-    expect(res.json().code).toBe('MarketNotFound');
+    expect(res.json().code).toBe('BadSymbol');
     await app.close();
   });
 
@@ -203,7 +244,7 @@ describe('public REST routes', () => {
     );
     const res = await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT' });
     expect(res.statusCode).toBe(502);
-    expect(res.json().code).toBe('MatchingUnavailable');
+    expect(res.json().code).toBe('ExchangeNotAvailable');
     await app.close();
   });
 
@@ -241,7 +282,7 @@ describe('public REST routes', () => {
     const app = await build();
     const res = await app.inject({ method: 'GET', url: '/api/v1/ticker/NOPE%2FUSDT' });
     expect(res.statusCode).toBe(404);
-    expect(res.json().code).toBe('MarketNotFound');
+    expect(res.json().code).toBe('BadSymbol');
     await app.close();
   });
 
@@ -255,7 +296,7 @@ describe('public REST routes', () => {
     );
     const res = await app.inject({ method: 'GET', url: '/api/v1/ticker/BTC%2FUSDT' });
     expect(res.statusCode).toBe(502);
-    expect(res.json().code).toBe('MatchingUnavailable');
+    expect(res.json().code).toBe('ExchangeNotAvailable');
     await app.close();
   });
 
@@ -286,7 +327,7 @@ describe('public REST routes', () => {
     const app = await build();
     const res = await app.inject({ method: 'GET', url: '/api/v1/trades/NOPE%2FUSDT' });
     expect(res.statusCode).toBe(404);
-    expect(res.json().code).toBe('MarketNotFound');
+    expect(res.json().code).toBe('BadSymbol');
     await app.close();
   });
 
@@ -344,7 +385,7 @@ describe('public REST routes', () => {
         url: `/api/v1/trades/BTC%2FUSDT?since=${encodeURIComponent(since)}`,
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json().code).toBe('InvalidSince');
+      expect(res.json().code).toBe('BadRequest');
       expect(called).toBe(false);
     }
     await app.close();
@@ -395,39 +436,183 @@ describe('public REST routes', () => {
     await app.close();
   });
 
-  // No candle aggregation store yet — honest empty until a candle job lands.
-  it('GET /api/v1/ohlcv/:symbol returns empty array with no auth', async () => {
-    const app = await build();
+  // ── OHLCV ────────────────────────────────────────────────────────────────
+
+  const candle = {
+    openTimeMs: 1_700_000_000_000,
+    open: parseAmount('100'),
+    high: parseAmount('105.5'),
+    low: parseAmount('99'),
+    close: parseAmount('101.25'),
+    volume: parseAmount('12.5'),
+  };
+
+  it('GET /api/v1/ohlcv/:symbol serves real candles as CCXT tuples with no auth', async () => {
+    const app = await build(deps({ candles: async () => [candle] }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as unknown[];
+    expect(body).toHaveLength(1);
+    // [timestamp, open, high, low, close, volume] — the contract's own shape.
+    expect(ohlcvSchema.safeParse(body[0]).success).toBe(true);
+    expect(body[0]).toEqual([1_700_000_000_000, '100', '105.5', '99', '101.25', '12.5']);
+    // Every price is a decimal string. A float here would lose the ledger's 18
+    // places on the way to a chart that people trade from.
+    for (const field of (body[0] as unknown[]).slice(1)) expect(typeof field).toBe('string');
+    await app.close();
+  });
+
+  it('GET /api/v1/ohlcv/:symbol passes timeframe, since and limit through to the aggregator', async () => {
+    let seen: { tf: string; limit: number; since?: number } | null = null;
+    const app = await build(
+      deps({
+        candles: async (_id, timeframe, limit, sinceMs) => {
+          seen = { tf: timeframe, limit, since: sinceMs };
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1h&since=1700000000000&limit=100',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual({ tf: '1h', limit: 100, since: 1_700_000_000_000 });
+    await app.close();
+  });
+
+  it('GET /api/v1/ohlcv/:symbol clamps limit and defaults the timeframe', async () => {
+    let seen: { tf: string; limit: number } | null = null;
+    const app = await build(
+      deps({
+        candles: async (_id, timeframe, limit) => {
+          seen = { tf: timeframe, limit };
+          return [];
+        },
+      }),
+    );
+    await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=99999' });
+    expect(seen).toEqual({ tf: '1m', limit: 1000 });
+    await app.close();
+  });
+
+  /**
+   * A market that has never traded has no candles. That is an honest empty
+   * chart — and critically NOT a zero-filled series, which would put a price of
+   * 0 on a chart somebody trades from.
+   */
+  it('GET /api/v1/ohlcv/:symbol returns empty for a market that has never traded', async () => {
+    const app = await build(deps({ candles: async () => [] }));
     const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
     await app.close();
   });
 
-  it('GET /api/v1/ohlcv/:symbol accepts valid timeframe and still returns empty', async () => {
-    const app = await build();
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1h&since=1700000000000&limit=100',
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual([]);
-    await app.close();
-  });
-
-  it('GET /api/v1/ohlcv/:symbol 404s for an unknown market', async () => {
+  it('GET /api/v1/ohlcv/:symbol 404s BadSymbol for an unknown market', async () => {
     const app = await build();
     const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/NOPE%2FUSDT' });
     expect(res.statusCode).toBe(404);
-    expect(res.json().code).toBe('MarketNotFound');
+    expect(res.json().code).toBe('BadSymbol');
     await app.close();
   });
 
-  it('GET /api/v1/ohlcv/:symbol 400s for a bad timeframe', async () => {
-    const app = await build();
+  it('GET /api/v1/ohlcv/:symbol 400s BadRequest for a bad timeframe, without aggregating', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        candles: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
     const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=7m' });
     expect(res.statusCode).toBe(400);
-    expect(res.json().code).toBe('InvalidTimeframe');
+    expect(res.json().code).toBe('BadRequest');
+    expect(res.json().intafacedCode).toBe('trade.invalid_timeframe');
+    expect(called).toBe(false);
+    await app.close();
+  });
+
+  it('GET /api/v1/ohlcv/:symbol 400s for an invalid since, without aggregating', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        candles: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
+    for (const since of ['nope', '-1']) {
+      called = false;
+      const res = await app.inject({ method: 'GET', url: `/api/v1/ohlcv/BTC%2FUSDT?since=${since}` });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('BadRequest');
+      expect(called).toBe(false);
+    }
+    await app.close();
+  });
+
+  // ── Funding rate ─────────────────────────────────────────────────────────
+
+  /**
+   * Declared in REST_ROUTES and previously not mounted at all, so it answered
+   * Fastify's generic 404 — indistinguishable from a bad URL or a broken
+   * deploy. It is now a typed refusal, and above all NOT a fabricated "0".
+   */
+  it('GET /api/v1/funding-rate/:symbol refuses a spot market with NotSupported, not a made-up rate', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/funding-rate/BTC%2FUSDT' });
+    expect(res.statusCode).toBe(501);
+    const body = res.json();
+    expect(body.code).toBe('NotSupported');
+    expect(body.intafacedCode).toBe('trade.funding_rate_spot_market');
+    // The refusal must not carry a number a client could mistake for a rate.
+    expect(body.fundingRate).toBeUndefined();
+    expect(JSON.stringify(body)).not.toMatch(/fundingRate/);
+    await app.close();
+  });
+
+  it('GET /api/v1/funding-rate/:symbol 404s BadSymbol for an unknown market', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/funding-rate/NOPE%2FUSDT' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe('BadSymbol');
+    await app.close();
+  });
+
+  /**
+   * The whole point of the taxonomy: every failure on this surface validates
+   * against `exchangeErrorSchema`, so a CCXT client can branch on the class
+   * instead of pattern-matching our internal strings.
+   */
+  it('answers every public failure in the CCXT error shape', async () => {
+    const app = await build(
+      deps({
+        depth: async () => {
+          throw new MatchingUnavailableError('svc-matching down');
+        },
+      }),
+    );
+    for (const url of [
+      '/api/v1/ticker/NOPE%2FUSDT',
+      '/api/v1/orderbook/NOPE%2FUSDT',
+      '/api/v1/trades/NOPE%2FUSDT',
+      '/api/v1/ohlcv/NOPE%2FUSDT',
+      '/api/v1/funding-rate/NOPE%2FUSDT',
+      '/api/v1/ohlcv/BTC%2FUSDT?timeframe=7m',
+      '/api/v1/trades/BTC%2FUSDT?since=nope',
+      '/api/v1/orderbook/BTC%2FUSDT',
+      '/api/v1/ticker/BTC%2FUSDT',
+      '/api/v1/funding-rate/BTC%2FUSDT',
+    ]) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBeGreaterThanOrEqual(400);
+      const parsed = exchangeErrorSchema.safeParse(res.json());
+      expect(parsed.success, `${url} → ${res.body}`).toBe(true);
+    }
     await app.close();
   });
 });

@@ -66,9 +66,27 @@ export const marketSchema = z.object({
   expiryDatetime: isoDatetime.nullable(),
   strike: decimal.nullable(),
   optionType: z.enum(['call', 'put']).nullable(),
+  /**
+   * CCXT `precisionMode`. Always TICK_SIZE here, because that is what our
+   * engine actually enforces: `snapToTick` rounds a price to a multiple of
+   * `tick_size` and the book rejects a quantity that is not a multiple of
+   * `lot_size`. Neither is a count of decimal places.
+   *
+   * DECIMAL_PLACES cannot express our own live listings. `EUR/USD` has a lot
+   * size of 1000 units and `NATGAS/USD` a lot size of 10; as a decimal-place
+   * count both collapse to 0, so a client rounding to 0 places builds 1500
+   * units of EUR/USD — a number the engine must reject. Reporting the value
+   * is the only report that lets a client construct a fillable order.
+   */
+  precisionMode: z.literal('TICK_SIZE'),
+  /**
+   * The tick and lot themselves, as decimal strings — `price` is the minimum
+   * price increment, `amount` the minimum quantity increment. Round to a
+   * multiple of these, not to a number of decimal places.
+   */
   precision: z.object({
-    amount: z.number().int(),
-    price: z.number().int(),
+    amount: decimal,
+    price: decimal,
   }),
   limits: z.object({
     amount: z.object({ min: decimal.nullable(), max: decimal.nullable() }),
@@ -336,6 +354,14 @@ export const EXCHANGE_ERROR_CODES = [
   'RateLimitExceeded',
   'ExchangeNotAvailable',
   'OnMaintenance',
+  /**
+   * The venue understood the call and will never serve it in its current shape:
+   * a funding rate on a spot market, leverage on a venue with no derivatives.
+   * CCXT's own `NotSupported`, and deliberately distinct from every retryable
+   * code above — a bot that sees this must stop calling, not back off. Answering
+   * 404 instead would say "wrong URL" about a route we mount on purpose.
+   */
+  'NotSupported',
   'ExchangeError',
 ] as const;
 

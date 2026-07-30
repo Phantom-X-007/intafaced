@@ -1163,4 +1163,137 @@ if (!available) {
       });
     });
   });
+
+  // ── OHLCV aggregation ─────────────────────────────────────────────────────
+
+  /**
+   * `fetchOHLCV` used to return `[]` unconditionally. These prove the candles
+   * are measurements of real fills and nothing else.
+   *
+   * Fills are produced by real matched trades, then their `ts` is moved to
+   * chosen instants so bucket boundaries are deterministic rather than
+   * dependent on how fast the suite ran. Prices and quantities are untouched —
+   * they are the values under test.
+   */
+  describe('candles (fetchOHLCV)', () => {
+    /**
+     * 2023-11-14T22:00:00Z — genuinely on a 1m AND a 1h boundary, so every
+     * expected bucket below is arithmetic rather than a guess. (The obvious
+     * round-looking 1_700_000_000_000 is 22:13:20 and is aligned to neither.)
+     */
+    const T0 = 1_699_999_200_000;
+
+    /** Trade `qty` at `price`, then move the resulting fills to `atMs`. */
+    async function tradeOne(price: string, qty: string, atMs: number, tag: string) {
+      const [before] = await sql<Array<{ n: string }>>`
+        SELECT coalesce(max(sequence), -1)::text AS n FROM trade.fills
+      `;
+      const from = Number(before!.n);
+
+      await fund(BOB, 'BTC', qty);
+      await fund(ALICE, 'USDT', String(Number(price) * Number(qty)));
+      const maker = await rest(BOB, btcusdt, 'sell', qty, price, `bob-${tag}`);
+      matching.scriptFills([{ makerOrderId: maker.id, makerAccountId: BOB, price, qty }]);
+      await rest(ALICE, btcusdt, 'buy', qty, price, `alice-${tag}`);
+
+      await sql`UPDATE trade.fills SET ts = ${new Date(atMs)} WHERE sequence > ${from}`;
+    }
+
+    it('returns no candles for a market that has never traded', async () => {
+      expect(await trade.candles(btcusdt.id, '1m')).toEqual([]);
+    });
+
+    it('builds one candle per bucket from real fills, oldest first', async () => {
+      // Three trades, two of them inside the same minute.
+      await tradeOne('100', '1', T0 + 5_000, 'a');
+      await tradeOne('105', '2', T0 + 30_000, 'b');
+      await tradeOne('99', '1', T0 + 65_000, 'c');
+
+      const candles = await trade.candles(btcusdt.id, '1m');
+      expect(candles).toHaveLength(2);
+
+      // CCXT order is oldest → newest.
+      expect(candles[0]!.openTimeMs).toBe(T0);
+      expect(candles[1]!.openTimeMs).toBe(T0 + 60_000);
+
+      // Bucket one: opened at 100, high 105, low 100, closed at 105, volume 3.
+      expect(formatAmount(candles[0]!.open)).toBe('100');
+      expect(formatAmount(candles[0]!.high)).toBe('105');
+      expect(formatAmount(candles[0]!.low)).toBe('100');
+      expect(formatAmount(candles[0]!.close)).toBe('105');
+      expect(formatAmount(candles[0]!.volume)).toBe('3');
+
+      // Bucket two: a single print.
+      expect(formatAmount(candles[1]!.open)).toBe('99');
+      expect(formatAmount(candles[1]!.close)).toBe('99');
+      expect(formatAmount(candles[1]!.volume)).toBe('1');
+    });
+
+    /**
+     * The gap stays a gap. A zero-filled candle at price 0 is a print that
+     * never happened, and an indicator computed across it is a number we made
+     * up and handed to someone who trades on it.
+     */
+    it('omits an empty bucket rather than zero-filling it', async () => {
+      await tradeOne('100', '1', T0 + 1_000, 'a');
+      await tradeOne('110', '1', T0 + 180_000, 'b'); // two minutes later
+
+      const candles = await trade.candles(btcusdt.id, '1m');
+      expect(candles).toHaveLength(2);
+      expect(candles.map((c) => c.openTimeMs)).toEqual([T0, T0 + 180_000]);
+      // No candle exists for the silent minutes in between.
+      expect(candles.some((c) => c.openTimeMs === T0 + 60_000)).toBe(false);
+      expect(candles.every((c) => c.volume > 0n)).toBe(true);
+    });
+
+    it('buckets by the requested timeframe', async () => {
+      await tradeOne('100', '1', T0 + 1_000, 'a');
+      await tradeOne('120', '1', T0 + 1_800_000, 'b'); // +30m — same hour
+
+      expect(await trade.candles(btcusdt.id, '1m')).toHaveLength(2);
+
+      const hourly = await trade.candles(btcusdt.id, '1h');
+      expect(hourly).toHaveLength(1);
+      expect(hourly[0]!.openTimeMs).toBe(T0);
+      expect(formatAmount(hourly[0]!.open)).toBe('100');
+      expect(formatAmount(hourly[0]!.close)).toBe('120');
+      expect(formatAmount(hourly[0]!.high)).toBe('120');
+      expect(formatAmount(hourly[0]!.volume)).toBe('2');
+    });
+
+    it('honours since, and a limit keeps the most recent buckets', async () => {
+      await tradeOne('100', '1', T0 + 1_000, 'a');
+      await tradeOne('101', '1', T0 + 61_000, 'b');
+      await tradeOne('102', '1', T0 + 121_000, 'c');
+
+      const since = await trade.candles(btcusdt.id, '1m', 500, T0 + 60_000);
+      expect(since.map((c) => c.openTimeMs)).toEqual([T0 + 60_000, T0 + 120_000]);
+
+      // A limit keeps the newest buckets — a chart opens on its right edge —
+      // and still hands them back oldest-first.
+      const limited = await trade.candles(btcusdt.id, '1m', 2);
+      expect(limited.map((c) => c.openTimeMs)).toEqual([T0 + 60_000, T0 + 120_000]);
+    });
+
+    it('never mixes another market into a candle', async () => {
+      await tradeOne('100', '1', T0 + 1_000, 'a');
+      expect(await trade.candles(ethusdt.id, '1m')).toEqual([]);
+      expect(await trade.candles(btcusdt.id, '1m')).toHaveLength(1);
+    });
+
+    /**
+     * Each match writes two fill rows, taker and maker. Counting both would
+     * double every candle's volume — the same trap `publicTape` avoids by
+     * filtering to the taker leg.
+     */
+    it('counts each match once, not once per fill leg', async () => {
+      await tradeOne('100', '3', T0 + 1_000, 'a');
+      const [legs] = await sql<Array<{ n: string }>>`SELECT count(*)::text AS n FROM trade.fills`;
+      expect(legs!.n).toBe('2');
+
+      const candles = await trade.candles(btcusdt.id, '1m');
+      expect(candles).toHaveLength(1);
+      expect(formatAmount(candles[0]!.volume)).toBe('3');
+    });
+  });
 }
