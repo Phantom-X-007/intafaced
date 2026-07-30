@@ -11,6 +11,7 @@ import { createLedgerClient } from './ledger-client.js';
 import { subscribeMatchingEvents } from './events.js';
 import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
+import { registerPrivateRest } from './private-rest.js';
 
 /**
  * svc-trade — the product layer over the matching engine (§5.2).
@@ -69,14 +70,24 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true };
 });
 
-// Public CCXT-style REST (markets, orderbook, ticker, trades). No auth —
-// market data is public. Paths match packages/exchange-contract REST_ROUTES;
-// edge routes /api/v1 → here with path preserve.
+// Public CCXT-style REST (markets, orderbook, ticker, tickers, trades). No
+// auth — market data is public. Paths match packages/exchange-contract
+// REST_ROUTES; edge routes /api/v1 → here with path preserve and principal
+// exchange (private routes below verify the edge signature).
 registerPublicRest(app, {
   markets: () => trade.markets(),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit) => trade.publicTape(marketId, limit),
+});
+
+// Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
+registerPrivateRest(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  openOrders: (principal, marketId) => trade.openOrders(principal, marketId),
+  marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
+  marketById: (marketId) => trade.marketById(marketId),
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -97,8 +108,10 @@ app.log.info(
       '/api/v1/markets',
       '/api/v1/orderbook/:symbol',
       '/api/v1/ticker/:symbol',
+      '/api/v1/tickers',
       '/api/v1/trades/:symbol',
     ],
+    privateRest: ['/api/v1/orders/open'],
   },
   'svc-trade ready',
 );

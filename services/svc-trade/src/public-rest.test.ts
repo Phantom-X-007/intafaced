@@ -309,4 +309,49 @@ describe('public REST routes', () => {
     expect(seen).toBe(500);
     await app.close();
   });
+
+  it('GET /api/v1/tickers returns a record of tickers keyed by symbol', async () => {
+    const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    const app = await build(
+      deps({
+        markets: async () => [market, eth],
+        marketBySymbol: async (symbol) => (symbol === 'BTC/USDT' ? market : symbol === 'ETH/USDT' ? eth : null),
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(['BTC/USDT', 'ETH/USDT']);
+    expect(tickerSchema.safeParse(body['BTC/USDT']).success).toBe(true);
+    expect(tickerSchema.safeParse(body['ETH/USDT']).success).toBe(true);
+    expect((body['BTC/USDT'] as { bid: string }).bid).toBe('100');
+    expect(typeof (body['BTC/USDT'] as { last: string }).last).toBe('string');
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers returns empty object when no markets listed', async () => {
+    const app = await build(deps({ markets: async () => [] }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers still returns a market when the book is unavailable', async () => {
+    const app = await build(
+      deps({
+        depth: async () => {
+          throw new MatchingUnavailableError('svc-matching down');
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, { bid: null; last: string }>;
+    expect(tickerSchema.safeParse(body['BTC/USDT']).success).toBe(true);
+    expect(body['BTC/USDT']!.bid).toBeNull();
+    // Tape still available — last print is honest.
+    expect(body['BTC/USDT']!.last).toBe('100.5');
+    await app.close();
+  });
 });

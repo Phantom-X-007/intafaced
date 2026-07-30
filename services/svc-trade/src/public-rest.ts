@@ -5,22 +5,24 @@ import { MatchingUnavailableError } from './spot/matching-client.js';
 import type { Market, PublicTapePrint } from './spot/types.js';
 
 /**
- * Public CCXT-style REST slice (trade.ccxt-api — market data only).
+ * Public CCXT-style REST slice (trade.ccxt-api — market data).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET /api/v1/markets
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
+ *   GET /api/v1/tickers
  *   GET /api/v1/trades/:symbol?limit=
  *
  * No auth — public market data. Amounts are decimal strings on the wire.
- * Private routes (orders, balances, …) are deliberately absent.
+ * Private routes live in `private-rest.ts` (edge-signed principal).
  */
 
 const DEFAULT_DEPTH = 50;
 const MAX_DEPTH = 500;
 const DEFAULT_TRADES = 100;
 const MAX_TRADES = 500;
+const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 
 export interface PublicRestDeps {
   markets(): Promise<Market[]>;
@@ -224,6 +226,34 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       }
       throw err;
     }
+  });
+
+  /**
+   * All-market tickers. Record keyed by unified symbol (CCXT `fetchTickers`).
+   *
+   * Markets with no book (or a matching hop that is down for that market) still
+   * appear — empty BBO + last from the tape if any. Never invent 24h stats.
+   */
+  app.get('/api/v1/tickers', async (_req, reply) => {
+    const markets = await deps.markets();
+    const ts = now();
+    const out: Record<string, ReturnType<typeof presentTicker>> = {};
+
+    await Promise.all(
+      markets.map(async (market) => {
+        let depth: EngineDepth = EMPTY_DEPTH;
+        try {
+          depth = await deps.depth(market.id, 1);
+        } catch (err) {
+          // Bulk path: a missing book must not 502 the whole venue map.
+          if (!(err instanceof MatchingUnavailableError)) throw err;
+        }
+        const tape = await deps.publicTape(market.id, 1);
+        out[market.symbol] = presentTicker(market.symbol, depth, tape[0] ?? null, ts);
+      }),
+    );
+
+    return reply.code(200).send(out);
   });
 
   app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>(
