@@ -146,6 +146,8 @@ describe('event fan-out', () => {
     const fills = await notify.list({ userId: USER, limit: 10, unreadOnly: false });
     expect(fills.items[0]!.sourceSubject).toBe(fillSettled.subject);
     expect(fills.items[0]!.sourceIdempotencyKey).toBe(fillId);
+    expect(fills.items[0]!.titleKey).toBe('notify.trade.fill.title');
+    expect(fills.items[0]!.bodyKey).toBe('notify.trade.fill.body');
 
     const tradeId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
     await bus.publish('p2pEscrowLocked', {
@@ -162,6 +164,9 @@ describe('event fan-out', () => {
     expect(await notify.unreadCount(USER)).toBe(2);
     expect(await notify.unreadCount(BUYER)).toBe(1);
     expect(p2pEscrowLocked.subject).toContain('p2p');
+    const escrow = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find((n) => n.kind === 'p2p.escrow.locked');
+    expect(escrow?.titleKey).toBe('notify.p2p.escrow.locked.title');
+    expect(escrow?.bodyKey).toBe('notify.p2p.escrow.locked.body');
 
     await bus.publish('kycApproved', {
       userId: USER,
@@ -170,6 +175,9 @@ describe('event fan-out', () => {
     });
     expect(await notify.unreadCount(USER)).toBe(3);
     expect(kycApproved.subject).toContain('identity');
+    const kyc = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find((n) => n.kind === 'identity.kyc.approved');
+    expect(kyc?.titleKey).toBe('notify.identity.kyc.approved.title');
+    expect(kyc?.bodyKey).toBe('notify.identity.kyc.approved.body');
   });
 
   it('acks bus events without writing when fan-out is off', async () => {

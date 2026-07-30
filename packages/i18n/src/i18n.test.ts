@@ -67,9 +67,9 @@ beforeEach(() => {
 describe('catalog — the key set is closed and complete', () => {
   it('carries a realistic starter set across every launch surface', () => {
     expect(MESSAGE_KEYS.length).toBeGreaterThanOrEqual(60);
-    expect(MESSAGE_KEYS.length).toBeLessThanOrEqual(100);
+    expect(MESSAGE_KEYS.length).toBeLessThanOrEqual(120);
 
-    for (const surface of ['common.', 'auth.', 'trade.', 'wallet.', 'p2p.', 'error.']) {
+    for (const surface of ['common.', 'auth.', 'trade.', 'wallet.', 'p2p.', 'notify.', 'error.']) {
       expect(
         MESSAGE_KEYS.some((k) => k.startsWith(surface)),
         surface,
