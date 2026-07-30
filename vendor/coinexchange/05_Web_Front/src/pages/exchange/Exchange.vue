@@ -94,8 +94,8 @@
           <span class="ix-num">24h</span>
         </div>
         <div class="ix-scroll">
-          <p class="ix-empty" v-if="marketsLoading">Loading markets…</p>
-          <p class="ix-empty" v-else-if="!marketsReachable">
+          <p class="ix-empty ix-empty-loading" v-if="marketsLoading">Loading markets…</p>
+          <p class="ix-empty ix-empty-error" v-else-if="!marketsReachable">
             Market list unavailable — not empty
           </p>
           <template v-else>
@@ -250,11 +250,11 @@
               <router-link to="/login">Sign in</router-link> to see your balances and orders.
             </p>
 
-            <p class="ix-empty" v-else-if="accountLoading">
+            <p class="ix-empty ix-empty-loading" v-else-if="accountLoading">
               Loading account…
             </p>
 
-            <p class="ix-empty" v-else-if="accountError">
+            <p class="ix-empty ix-empty-error" v-else-if="accountError">
               {{ accountError }}
             </p>
 
@@ -263,7 +263,7 @@
               <p class="ix-empty ix-empty-note">
                 Exchange wallet on this venue · not the platform ledger books
               </p>
-              <p class="ix-empty" v-if="!walletReachable">
+              <p class="ix-empty ix-empty-error" v-if="!walletReachable">
                 Wallet service did not respond — available amounts are unknown, not zero.
               </p>
               <table class="ix-table" v-else>
@@ -294,7 +294,7 @@
             </p>
 
             <!-- Open orders -->
-            <p class="ix-empty" v-else-if="accountTab === 'open' && !ordersReachable">
+            <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'open' && !ordersReachable">
               Order service did not respond — open orders are unknown, not empty.
             </p>
             <table class="ix-table" v-else-if="accountTab === 'open'">
@@ -331,7 +331,7 @@
             </table>
 
             <!-- Trade history (fills) -->
-            <p class="ix-empty" v-else-if="accountTab === 'fills' && !ordersReachable">
+            <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'fills' && !ordersReachable">
               Order service did not respond — trade history is unknown, not empty.
             </p>
             <table class="ix-table" v-else-if="accountTab === 'fills'">
@@ -362,7 +362,7 @@
             </table>
 
             <!-- Order history -->
-            <p class="ix-empty" v-else-if="accountTab === 'history' && !ordersReachable">
+            <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'history' && !ordersReachable">
               Order service did not respond — order history is unknown, not empty.
             </p>
             <table class="ix-table" v-else-if="accountTab === 'history'">
@@ -1969,18 +1969,20 @@ $radius-sm: var(--ix-radius-sm, 8px);
   }
 }
 
-/* ── layout ───────────────────────────────────────────────────────────── */
+/* ── layout ─────────────────────────────────────────────────────────────
+   Density (design bar §3.2): fixed four-column terminal — markets | centre |
+   book rail | order form — shared gap token so panels read as one product. */
 .ix-body {
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr) 252px 296px;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   align-items: stretch;
 }
 
 .ix-centre {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   min-width: 0;
 }
 
@@ -2145,11 +2147,22 @@ $radius-sm: var(--ix-radius-sm, 8px);
   overscroll-behavior: contain;
 }
 
+/* Honesty recipes — loading / empty / error stay visually distinct (§3.1). */
 .ix-empty {
   padding: 22px 12px;
   text-align: center;
   color: $faint;
-  font-size: 11px;
+  font-size: var(--type-11, 11px);
+}
+.ix-empty-error {
+  color: $down;
+  border-left: 2px solid $down;
+  text-align: left;
+  padding-left: var(--space-3, 12px);
+}
+.ix-empty-loading {
+  font-style: italic;
+  color: $dim;
 }
 .ix-empty-note {
   padding: 8px 12px 0;
@@ -2457,19 +2470,27 @@ $radius-sm: var(--ix-radius-sm, 8px);
     }
   }
 }
+/* Order type Limit|Market — one control group, not scattered (§3.2). */
 .ix-type-tabs {
+  margin: 0 var(--space-2, 8px);
+  border: 1px solid $hair;
+  border-radius: $radius-sm;
+  background: rgba(255, 255, 255, 0.03);
   border-bottom: 1px solid $hair;
+  button {
+    flex: 1 1 0;
+  }
 }
 
 .ix-order-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 10px;
+  padding: var(--space-3, 12px) var(--space-2, 10px);
 }
 
 .ix-field {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3, 10px);
   label {
     display: block;
     font-size: 10px;
@@ -2483,10 +2504,12 @@ $radius-sm: var(--ix-radius-sm, 8px);
   position: relative;
   input {
     width: 100%;
-    height: 34px;
+    height: var(--control-h, 34px);
+    min-height: var(--control-h, 34px);
     padding: 0 52px 0 10px;
-    font-size: 13px;
+    font-size: var(--type-13, 13px);
     font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
   }
   &.is-disabled input {
     opacity: 0.5;
@@ -2497,9 +2520,9 @@ $radius-sm: var(--ix-radius-sm, 8px);
   position: absolute;
   right: 10px;
   top: 0;
-  height: 34px;
-  line-height: 34px;
-  font-size: 11px;
+  height: var(--control-h, 34px);
+  line-height: var(--control-h, 34px);
+  font-size: var(--type-11, 11px);
   color: $faint;
   pointer-events: none;
 }

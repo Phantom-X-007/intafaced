@@ -7,7 +7,7 @@
 | Lane id            | Owner session  | Scope                                | Status                        | PR / proof               | Do not touch                   |
 | ------------------ | -------------- | ------------------------------------ | ----------------------------- | ------------------------ | ------------------------------ |
 | denon-nitro-board  | 019fae69       | Parallel board (full backlog expand) | **live**                      | PR #170                  | product features until claimed |
-| stream-a-uiproof   | (open PR lane) | Stream A boot / uiproof              | **PR-1 merged · PR-2 open**   | #169 done · #172 harness | services/**                    |
+| stream-a-uiproof   | closed-floor   | Stream A proof floor (boot→B→Pass3→bar polish) | **floor done · #182 open** | PR #182 · PROOF+Pass3 green | services/** |
 | grind-parallel-ops | 019fae3d       | Multi-agent parallel + AFK grind     | babysit / DRAINED micro-queue | tip ~#169+               | inventing product when drained |
 | stream-a-ui        | 019fb069       | Stream A shell product owner :8090   | live                          | issue #83                | services/** spine              |
 | merge-ready        | 019fae32       | Denon handover / merge (historical)  | idle                          | #101 era                 | —                              |
@@ -20,5 +20,7 @@
 **Denon full backlog:** A1 decisions + A2 spine + A3 tracker mountains in parallel board — he takes these.
 
 ## Last board update
+
+- 2026-07-30 — Stream A **floor closed**: B1–B5 + Pass3 green; design-bar polish on #182. Research may stack leverage on top — do not rebuild harness.
 
 - 2026-07-30 — Stream A uiproof: PR-1 boot **#169 merged**; PR-2 harness **#172** open (PROOF.md needs non-sandboxed Chromium); Denon↔Nitro board #170.

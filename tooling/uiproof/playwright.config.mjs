@@ -28,7 +28,8 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
 
 export default defineConfig({
   testDir: __dirname,
-  testMatch: 'proof.spec.mjs',
+  // proof.spec = B matrix; auth.spec = Pass 3. Scripts pass explicit files.
+  testMatch: /.*\.spec\.mjs$/,
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -46,6 +47,11 @@ export default defineConfig({
     screenshot: 'off', // we take full-page shots ourselves with deterministic names
     video: 'off',
     trace: 'off',
+    // Agent sandboxes + some macOS environments SEGV Chromium under the default
+    // sandbox. Non-sandbox is required for unattended PROOF (Nitro standing order).
+    launchOptions: {
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    },
   },
   // chromium only for PR-2
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],

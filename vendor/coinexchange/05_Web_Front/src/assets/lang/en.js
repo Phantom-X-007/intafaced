@@ -54,8 +54,9 @@ module.exports = {
         platform: "Platform",
         // stream A — plane switch copy
         planeLabel: "Trading plane",
-        planeCex: "CEX",
-        planeDex: "DEX",
+        // Visible risk mode labels (design bar §3.3 plane unity) — not a second app.
+        planeCex: "CEX · custodial",
+        planeDex: "DEX · non-custodial",
         planeCexHint: "Custodial exchange — identity and verification rules apply",
         planeDexHint: "Protocol plane — non-custodial; no KYC for the trade itself (region rules still apply)"
     },

@@ -82,7 +82,24 @@ pnpm ui:proof
 Produces `.artifacts/uiproof/PROOF.md` and 10 screenshots under `.artifacts/uiproof/shots/`.  
 That file is the definition of “the UI works,” not a human opening localhost.
 
+**Pass 3 (auth + empty vs error):**
+
+```bash
+# Real Terminal preferred (agent sandboxes often SEGV Chromium)
+pnpm ui:proof:pass3
+# or: bash tooling/uiproof/run-pass3.sh
+```
+
+Produces `.artifacts/uiproof/pass3-status.txt` (`PASS3_GREEN`) and shots under `shots-auth/`.
+
 **Agents:** never run the proof with a foreground long-lived server. `ui:proof` calls `ui:boot` (detached) first. If Chromium SEGV/EPERM in a sandboxed agent, re-run in a normal Terminal on the same machine — the harness is fine; the sandbox is not.
+
+### Performance budget (known debt)
+
+| Artefact | Note |
+| --- | --- |
+| `app.js` ~12 MB (webpack 3 cold) | Known; no new heavy deps without a budget note |
+| First usable paint | Boot readiness is `/` + `/app.js` 200 — not FCP metrics yet |
 
 ---
 
@@ -94,7 +111,7 @@ That file is the definition of “the UI works,” not a human opening localhost
 | Never claim visual “done” without `PROOF.md` (or say **unverified**)    | Unfalsifiable glances are forbidden                      |
 | Backends-down is a valid fixture for Phase 1                            | Honesty bar / empty states are the product               |
 | Do not invent prices                                                    | S2 waits on market seed #109                             |
-| Auth-gated `/uc/*` empty vs error is **unproven** until an auth fixture | Pass 3 of the operating plan                             |
+| Auth empty-vs-error needs Pass 3 fixture (`ui:proof:auth`)              | Unauthenticated `/uc/*` only proves the login gate       |
 
 ---
 

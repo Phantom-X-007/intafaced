@@ -720,13 +720,14 @@ export default {
     color: #ff6b00;
   }
 }
-/* CEX / DEX plane switch — compact pill matching shell chrome, not a new kit. */
+/* CEX / DEX plane switch — compact pill matching shell chrome, not a new kit.
+   Tokens from intafaced.css (design bar §2 / §3.3 plane unity). */
 .ix-plane {
   display: inline-flex;
   vertical-align: middle;
-  margin: 0 8px 0 12px;
-  border: 1px solid #2a2a2a;
-  border-radius: 4px;
+  margin: 0 var(--space-2, 8px) 0 var(--space-3, 12px);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: var(--radius-sm, 4px);
   overflow: hidden;
   height: 28px;
   line-height: 26px;
@@ -734,17 +735,17 @@ export default {
 .ix-plane-btn {
   display: inline-block;
   padding: 0 10px;
-  font-size: 12px;
-  color: #8a8a8a;
+  font-size: var(--type-12, 12px);
+  color: var(--text-muted, #8a8a8a);
   background: transparent;
   text-decoration: none;
   white-space: nowrap;
   &:hover {
-    color: #ff6b00;
+    color: var(--accent, #ff6b00);
   }
   &.is-active {
     color: #fff;
-    background: #ff6b00;
+    background: var(--accent, #ff6b00);
   }
 }
 @media screen and (max-width: 1100px) {
