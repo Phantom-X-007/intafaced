@@ -80,7 +80,7 @@
                                         <Col span="8">
                                         <input type="hidden" name="aliPreview" :value="aliPreview" />
                                         <img v-if="aliImg" :alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" :src="aliImg">
-                                        <img v-else:alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" src="../../assets/images/upload_placeholder.png">
+                                        <img v-else :alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" src="../../assets/images/upload_placeholder.png">
                                         <div class="acc_sc">
                                           <Upload ref="upload1" :on-success="aliHandleSuccess" :headers="uploadHeaders" :action="uploadUrl">
                                             <Button icon="ios-cloud-upload-outline">{{$t('uc.safe.upload')}}</Button>
@@ -134,7 +134,7 @@
                                         <Col span="8">
                                           <input type="hidden" name="wePreview" :value="wePreview" />
                                           <img v-if="weImg" :alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" :src="weImg" >
-                                          <img v-else:alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" src="../../assets/images/upload_placeholder.png">
+                                          <img v-else :alt="$t('uc.account.imgtip')" style="width: 200px;height: 200px;" src="../../assets/images/upload_placeholder.png">
                                           <div class="acc_sc">
                                             <Upload ref="upload2" :on-success="weHandleSuccess" :headers="uploadHeaders" :action="uploadUrl">
                                               <Button icon="ios-cloud-upload-outline">{{$t('uc.safe.upload')}}</Button>

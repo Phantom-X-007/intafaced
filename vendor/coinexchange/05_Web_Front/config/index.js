@@ -44,10 +44,22 @@ module.exports = {
         // no rewrite is needed: /market/symbol-thumb on the dev server is
         // /market/symbol-thumb on the market service.
         proxyTable: {
+            // `/uc` is BOTH an API context-path and SPA routes (`/uc/account`,
+            // `/uc/*` member center). Same HTML bypass as `/exchange` — without
+            // it a hard navigation to /uc/account 504s when ucenter is down
+            // (backends-down is the Stream A Phase-1 fixture) and the SPA never
+            // mounts, so the auth-redirect proof cannot run.
             '/uc': {
                 target: backend.uc,
                 changeOrigin: true,
-                secure: false
+                secure: false,
+                bypass: function (req) {
+                    const accept = req.headers.accept || '';
+                    if (req.method === 'GET' && accept.indexOf('html') !== -1) {
+                        return '/index.html';
+                    }
+                    return null;
+                }
             },
             '/market': {
                 target: backend.market,

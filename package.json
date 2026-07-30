@@ -43,7 +43,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json,yml,yaml}\"",
     "scan:workspace": "node tooling/ci/workspace-sync.mjs",
     "ui:boot": "node tooling/uiproof/boot.mjs",
-    "ui:proof": "node tooling/uiproof/boot.mjs && playwright test -c tooling/uiproof/playwright.config.mjs && node tooling/uiproof/report.mjs"
+    "ui:proof": "node tooling/uiproof/boot.mjs && playwright test -c tooling/uiproof/playwright.config.mjs tooling/uiproof/proof.spec.mjs && node tooling/uiproof/report.mjs",
+    "ui:proof:auth": "node tooling/uiproof/boot.mjs && playwright test -c tooling/uiproof/playwright.config.mjs tooling/uiproof/auth.spec.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
