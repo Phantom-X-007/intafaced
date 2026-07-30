@@ -93,6 +93,19 @@ export const SUITES = [
     sources: ['AccountFactory.sol', 'SessionKeyLib.sol', 'SmartAccount.sol', 'interfaces/IAccount.sol'],
   },
   {
+    name: 'launch',
+    expect: 'compiles',
+    /**
+     * §8.4 — the token factory (`launch.token-factory`).
+     *
+     * Its own suite rather than folded into `accounts`, for the reason the
+     * `amm` entry below demonstrates: a suite is the blast radius of a broken
+     * contract. It also keeps `sourceHash` separate, so editing a launch
+     * template does not mark every account artefact stale, or the reverse.
+     */
+    sources: ['launch/SovereignToken.sol', 'launch/TokenFactory.sol'],
+  },
+  {
     name: 'amm',
     expect: 'fails',
     /**
