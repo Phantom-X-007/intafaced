@@ -269,3 +269,12 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 | #211 | test DB isolation                   | CI all green                     |
 
 **Agent product micro-queue:** still empty. **Do not re-ship #110–#211.**
+
+## Spine landings #213–#214
+
+| PR   | What                                                  |
+| ---- | ----------------------------------------------------- |
+| #213 | Vendored exchange audit — 0% used, decision open      |
+| #214 | Hosted checkout; sandbox rails refused on public path |
+
+**Do not re-ship #110–#214.** Agent micro still DRAINED.
