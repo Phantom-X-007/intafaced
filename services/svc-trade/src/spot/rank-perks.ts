@@ -1,4 +1,4 @@
-import { BASE_PERKS, rankPerksSchema, type RankPerks } from '@intafaced/contracts';
+import { BASE_PERKS, rankPerksSchema, serviceAuthHeaders, type RankPerks } from '@intafaced/contracts';
 import { TradeError } from './types.js';
 
 /**
@@ -40,8 +40,23 @@ export class BasePerks implements RankPerksSource {
  * has moved at this point in the flow, which is exactly why this is the right
  * place to be strict.
  */
-export function createRankPerksClient(baseUrl: string): RankPerksSource {
+export function createRankPerksClient(baseUrl: string, internalSecret: string): RankPerksSource {
   const url = baseUrl.replace(/\/$/, '');
+
+  /**
+   * SERVICE CREDENTIALS, which this client was calling without.
+   *
+   * `/internal/rank/:userId/perks` hard-401s an unauthenticated caller — it was
+   * unauthenticated once (full audit L2-3) and was fixed. This client was never
+   * updated to match, so every call returned 401, `perksOf` threw
+   * `trade.perks_unavailable`, and because it is awaited BEFORE the hold on the
+   * order-create path, **every order placement failed on the running fleet.**
+   *
+   * It failed closed, which is the correct direction and is why nothing was
+   * mispriced — but the whole spot path was down rather than degraded, and the
+   * error named a dependency rather than a credential.
+   */
+  const authHeaders = () => serviceAuthHeaders('svc-trade', internalSecret);
 
   return {
     async perksOf(userId: string): Promise<RankPerks> {
@@ -51,7 +66,7 @@ export function createRankPerksClient(baseUrl: string): RankPerksSource {
         // on rank.perks while still failing closed on transport/parse errors.
         response = await fetch(`${url}/internal/rank/${encodeURIComponent(userId)}/perks`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...authHeaders() },
         });
       } catch (err) {
         throw new TradeError(`rank perks unavailable: ${(err as Error).message}`, 'trade.perks_unavailable');
