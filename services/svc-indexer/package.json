@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/migrate.ts",
+    "contracts:build": "node scripts/compile-contracts.mjs",
+    "chain:deploy": "tsx scripts/deploy-dev-venue.ts",
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
@@ -23,12 +25,14 @@
     "@trpc/server": "^11.0.0-rc.660",
     "fastify": "^5.2.0",
     "postgres": "^3.4.5",
+    "viem": "^2.21.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@intafaced/auth": "workspace:*",
     "@types/node": "^22.10.2",
     "rimraf": "^6.0.1",
+    "solc": "0.8.28",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
