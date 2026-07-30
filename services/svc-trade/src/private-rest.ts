@@ -62,7 +62,8 @@ export interface PrivateRestDeps {
   cancelOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   /** Cancel every open/pending order (optional market). Sequential money path. */
   cancelAllOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
-  myFills(principal: Principal, limit: number): Promise<FillRecord[]>;
+  /** Optional marketId filters fills in SQL (WHERE market_id = …). */
+  myFills(principal: Principal, limit: number, marketId?: string): Promise<FillRecord[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   /** Resolve symbol for an order's marketId (wire needs the unified form). */
   marketById(marketId: string): Promise<Market | null>;
@@ -471,12 +472,12 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
 
     try {
-      // myFills is user-wide; optional symbol is a client-side filter on marketId.
-      const fills = await deps.myFills(principal, limit);
-      const filtered = filterMarketId ? fills.filter((f) => f.marketId === filterMarketId) : fills;
+      // Symbol resolves like open/closed orders; known market with no fills → [].
+      // Filter is SQL via myFills(…, marketId), not a post-filter of a user-wide page.
+      const fills = await deps.myFills(principal, limit, filterMarketId);
       const symbolByMarket = new Map<string, string>();
       const wire = [];
-      for (const fill of filtered) {
+      for (const fill of fills) {
         let symbol = symbolByMarket.get(fill.marketId);
         if (symbol === undefined) {
           const market = await deps.marketById(fill.marketId);

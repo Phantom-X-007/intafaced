@@ -697,6 +697,96 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /account/trades?symbol=: passes marketId into myFills (SQL filter)', async () => {
+    let seenMarket: string | undefined = 'unset';
+    let seenLimit: number | undefined;
+    const app = await build(
+      deps({
+        myFills: async (_p, limit, marketId) => {
+          seenLimit = limit;
+          seenMarket = marketId;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenMarket).toBe(market.id);
+    expect(seenLimit).toBe(100);
+    const body = res.json() as unknown[];
+    expect(body).toHaveLength(1);
+    expect(tradeSchema.safeParse(body[0]).success).toBe(true);
+    expect((body[0] as { symbol: string }).symbol).toBe('BTC/USDT');
+    await app.close();
+  });
+
+  it('GET /account/trades?symbol=: known market with no fills → 200 []', async () => {
+    let seenMarket: string | undefined = 'unset';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, marketId) => {
+          seenMarket = marketId;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenMarket).toBe(market.id);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /account/trades?symbol=: unknown market → 404 without myFills', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        myFills: async () => {
+          listed = true;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?symbol=NOPE%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe('MarketNotFound');
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
+  it('GET /account/trades without symbol: myFills gets no marketId (unfiltered)', async () => {
+    let seenMarket: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, marketId) => {
+          seenMarket = marketId;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenMarket).toBeUndefined();
+    expect(res.json()).toHaveLength(1);
+    await app.close();
+  });
+
   // ── DELETE /orders (cancel all — money path) ──────────────────────────────
 
   it('DELETE /orders: forged principal never reaches cancelAllOrders', async () => {
