@@ -62,13 +62,28 @@ function forged(p: Principal = principal()) {
   });
 }
 
+const ZERO = '0x0000000000000000000000000000000000000000';
+const OWNER = '0x1111111111111111111111111111111111111111';
+const FACTORY = '0x2222222222222222222222222222222222222222';
+const IMPLEMENTATION = '0x3333333333333333333333333333333333333333';
+
 function stubDeps(overrides: Partial<Record<string, unknown>> = {}): ProtocolRouterDeps {
   return {
-    chain: { config: { chainId: CHAIN_ID } },
+    chain: {
+      config: { chainId: CHAIN_ID, factory: ZERO, implementation: ZERO },
+      isDeployed: async () => false,
+    },
     registry: { accountsOf: async () => [] },
-    relay: {},
+    relay: {
+      buildDeployment: () => ({
+        to: FACTORY,
+        data: '0xdead',
+        value: 0n,
+        summary: 'deploy',
+      }),
+    },
     relayEnabled: () => true,
-    ammFactoryAddress: () => '0x0000000000000000000000000000000000000000' as const,
+    ammFactoryAddress: () => ZERO as `0x${string}`,
     ...overrides,
   } as unknown as ProtocolRouterDeps;
 }
@@ -130,10 +145,41 @@ describe('svc-protocol mount — the public surface', () => {
       chainId: CHAIN_ID,
       custodial: false,
       relayEnabled: true,
+      factoryConfigured: false,
     });
   });
 
   it('serves health even when a forged principal was presented', async () => {
     await expect(createProtocolRouter(stubDeps()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
+  });
+
+  it('reports factoryConfigured when factory and implementation are non-zero', async () => {
+    const deps = stubDeps({
+      chain: {
+        config: { chainId: CHAIN_ID, factory: FACTORY, implementation: IMPLEMENTATION },
+        isDeployed: async () => false,
+      },
+    });
+    await expect(createProtocolRouter(deps).createCaller(anonymous()).health()).resolves.toMatchObject({
+      factoryConfigured: true,
+    });
+  });
+
+  it('refuses predictAddress when factory is zero', async () => {
+    await expect(
+      createProtocolRouter(stubDeps()).createCaller(anonymous()).predictAddress({ owner: OWNER }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  });
+
+  it('refuses buildDeployment when implementation is zero', async () => {
+    const deps = stubDeps({
+      chain: {
+        config: { chainId: CHAIN_ID, factory: FACTORY, implementation: ZERO },
+        isDeployed: async () => false,
+      },
+    });
+    await expect(
+      createProtocolRouter(deps).createCaller(anonymous()).buildDeployment({ owner: OWNER }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
   });
 });

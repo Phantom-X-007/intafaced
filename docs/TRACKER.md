@@ -165,7 +165,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| 🟢 | Passkey smart accounts, session keys (§17.4) <br/>_Core + contracts on main. /trpc mount fixed in full-audit branch (was healthy-empty door L6-1). Remains ready not done until chain RPC + factory are non-propped and edge path is product-verified._ | P |  | `protocol.smart-accounts` |
+| 🟢 | Passkey smart accounts, session keys (§17.4) <br/>_Core + contracts on main; /trpc mounted; edge /api/protocol + web health/predictAddress product path. Factory/impl default 0x0 and PROTOCOL_RPC_URL is outside compose (no chain in stack). predict/buildDeployment refuse zero factory/impl. NOT done until factory+impl non-zero, RPC answers, and product path proves real chain config. Sockets: socket.evm-rpc, socket.contract-toolchain, socket.p256-verifier._ | P |  | `protocol.smart-accounts` |
 | ⛔ | AMM pools from audited templates <br/>_WIP 2026-07-29: ConstantProductPool + PoolFactory Solidity, pure quote math + unsigned calldata builders on svc-protocol (amm.quoteExactIn / buildCreatePool / buildSwapExactIn / buildMintLiquidity). Not done until factory is deployed on a real chain (PROTOCOL_AMM_FACTORY_ADDRESS non-zero) and forge/runtime contract tests run — Foundry still §13 socket.contract-toolchain._ | P | `protocol.smart-accounts` | `protocol.amm` |
 | ⛔ | On-chain lending markets, keeper liquidations | P | `protocol.amm` | `protocol.lending` |
 | ⛔ | Non-custodial P2P escrow contracts | P | `protocol.smart-accounts` | `protocol.escrow` |
