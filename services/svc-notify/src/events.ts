@@ -2,6 +2,7 @@ import {
   fillSettled,
   kycApproved,
   p2pEscrowLocked,
+  p2pEscrowRefunded,
   p2pEscrowReleased,
   rankUpdated,
   stakeCreated,
@@ -21,6 +22,7 @@ import type { NotifyService } from './notify-service.js';
  *
  * Safe to add only when the subject is already published, maps to a userId
  * principal, and has clear user-facing meaning. No invented publishers.
+ * p2pDisputeResolved is skipped: payload has no buyer/seller user ids.
  */
 
 export async function subscribeNotificationEvents(bus: EventBus, notify: NotifyService): Promise<Subscription[]> {
@@ -116,6 +118,39 @@ export async function subscribeNotificationEvents(bus: EventBus, notify: NotifyS
     { durable: 'notify-p2p-escrow-released' },
   );
 
+  const escrowRefundedSub = await bus.subscribe(
+    'p2pEscrowRefunded',
+    async (payload) => {
+      const base = {
+        kind: 'p2p.escrow.refunded',
+        titleKey: 'notify.p2p.escrow.refunded.title',
+        bodyKey: 'notify.p2p.escrow.refunded.body',
+        params: {
+          tradeId: payload.tradeId,
+          asset: payload.asset,
+          amount: payload.amount,
+          resolvedBy: payload.resolvedBy,
+          reason: payload.reason,
+        },
+        href: `/p2p/trades/${payload.tradeId}`,
+        severity: 'action' as const,
+        sourceSubject: p2pEscrowRefunded.subject,
+      };
+
+      await notify.create({
+        ...base,
+        userId: payload.sellerId,
+        sourceIdempotencyKey: `${payload.tradeId}:seller`,
+      });
+      await notify.create({
+        ...base,
+        userId: payload.buyerId,
+        sourceIdempotencyKey: `${payload.tradeId}:buyer`,
+      });
+    },
+    { durable: 'notify-p2p-escrow-refunded' },
+  );
+
   const kycSub = await bus.subscribe(
     'kycApproved',
     async (payload) => {
@@ -182,5 +217,5 @@ export async function subscribeNotificationEvents(bus: EventBus, notify: NotifyS
     { durable: 'notify-stake-created' },
   );
 
-  return [fillSub, escrowSub, escrowReleasedSub, kycSub, rankSub, stakeSub];
+  return [fillSub, escrowSub, escrowReleasedSub, escrowRefundedSub, kycSub, rankSub, stakeSub];
 }

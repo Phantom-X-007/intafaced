@@ -46,6 +46,7 @@ _None in v1._
 | `intafaced.trade.fill.settled`     | `notify-fill-settled`        | Inbox row for the fill owner                |
 | `intafaced.p2p.escrow.locked`      | `notify-p2p-escrow-locked`   | Inbox rows for seller and buyer             |
 | `intafaced.p2p.escrow.released`    | `notify-p2p-escrow-released` | Inbox rows when escrow releases to buyer    |
+| `intafaced.p2p.escrow.refunded`    | `notify-p2p-escrow-refunded` | Inbox rows when escrow returns to seller    |
 | `intafaced.identity.kyc.approved`  | `notify-kyc-approved`        | Inbox row when verification tier is granted |
 | `intafaced.identity.rank.updated`  | `notify-rank-updated`        | Inbox row when rank changes                 |
 | `intafaced.token.stake.created`    | `notify-stake-created`       | Inbox row when a stake is locked            |
