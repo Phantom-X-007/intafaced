@@ -17,7 +17,7 @@ import { subscribeNotificationEvents } from './events.js';
  * balance (Doctrine §0.6).
  *
  * Graph: mount tRPC with edge-signed principal; durable bus consumers for
- * fillSettled, p2pEscrowLocked, p2pEscrowReleased, kycApproved, rankUpdated,
+ * fillSettled, p2pEscrowLocked/Released/Refunded, kycApproved, rankUpdated,
  * stakeCreated.
  */
 
@@ -76,6 +76,7 @@ app.log.info(
       'notify-fill-settled',
       'notify-p2p-escrow-locked',
       'notify-p2p-escrow-released',
+      'notify-p2p-escrow-refunded',
       'notify-kyc-approved',
       'notify-rank-updated',
       'notify-stake-created',

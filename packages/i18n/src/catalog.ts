@@ -129,6 +129,8 @@ export const en = {
   'notify.p2p.escrow.locked.body': '{amount} {asset} locked for {fiatAmount} {fiatCurrency}.',
   'notify.p2p.escrow.released.title': 'Trade completed',
   'notify.p2p.escrow.released.body': '{amount} {asset} released. Fee {fee}.',
+  'notify.p2p.escrow.refunded.title': 'Escrow refunded',
+  'notify.p2p.escrow.refunded.body': '{amount} {asset} returned to the seller ({reason}).',
   'notify.identity.kyc.approved.title': 'Verification approved',
   'notify.identity.kyc.approved.body': 'You are verified at the {tier} tier.',
   'notify.identity.rank.updated.title': 'Rank updated',

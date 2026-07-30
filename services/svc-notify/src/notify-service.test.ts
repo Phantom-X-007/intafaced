@@ -4,6 +4,7 @@ import {
   fillSettled,
   kycApproved,
   p2pEscrowLocked,
+  p2pEscrowRefunded,
   p2pEscrowReleased,
   rankUpdated,
   stakeCreated,
@@ -280,6 +281,44 @@ describe('event fan-out', () => {
     expect(buyerReleased?.sourceIdempotencyKey).toBe(`${tradeId}:buyer`);
   });
 
+  it('writes inbox rows from p2pEscrowRefunded for seller and buyer and dedupes redelivery', async () => {
+    const store = new MemoryNotifyStore();
+    const notify = new NotifyService(store, { fanoutEnabled: true });
+    const bus = new MemoryEventBus('test-producer');
+    await subscribeNotificationEvents(bus, notify);
+
+    const tradeId = '12121212-1212-4121-8121-121212121212';
+    const payload = {
+      tradeId,
+      sellerId: USER,
+      buyerId: BUYER,
+      asset: 'BTC' as const,
+      amount: '2',
+      resolvedBy: 'timeout' as const,
+      reason: 'payment_deadline',
+    };
+    await bus.publish('p2pEscrowRefunded', payload);
+    await bus.publish('p2pEscrowRefunded', payload);
+
+    expect(await notify.unreadCount(USER)).toBe(1);
+    expect(await notify.unreadCount(BUYER)).toBe(1);
+    expect(p2pEscrowRefunded.subject).toContain('p2p');
+
+    const sellerRow = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find(
+      (n) => n.kind === 'p2p.escrow.refunded',
+    );
+    expect(sellerRow?.sourceSubject).toBe(p2pEscrowRefunded.subject);
+    expect(sellerRow?.sourceIdempotencyKey).toBe(`${tradeId}:seller`);
+    expect(sellerRow?.titleKey).toBe('notify.p2p.escrow.refunded.title');
+    expect(sellerRow?.bodyKey).toBe('notify.p2p.escrow.refunded.body');
+    expect(sellerRow?.params).toMatchObject({ amount: '2', reason: 'payment_deadline', resolvedBy: 'timeout' });
+
+    const buyerRow = (await notify.list({ userId: BUYER, limit: 10, unreadOnly: false })).items.find(
+      (n) => n.kind === 'p2p.escrow.refunded',
+    );
+    expect(buyerRow?.sourceIdempotencyKey).toBe(`${tradeId}:buyer`);
+  });
+
   it('acks bus events without writing when fan-out is off', async () => {
     const store = new MemoryNotifyStore();
     const notify = new NotifyService(store, { fanoutEnabled: false });
@@ -303,6 +342,15 @@ describe('event fan-out', () => {
       amount: '50',
       tier: 'flex',
       unlocksAt: null,
+    });
+    await bus.publish('p2pEscrowRefunded', {
+      tradeId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      sellerId: USER,
+      buyerId: BUYER,
+      asset: 'BTC',
+      amount: '1',
+      resolvedBy: 'buyer',
+      reason: 'cancelled',
     });
     expect(await notify.unreadCount(USER)).toBe(0);
   });
