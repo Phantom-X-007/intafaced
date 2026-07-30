@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`███████░░░░░░░░░░░░░` **34%** — 36 of 107 features shipped
+`███████░░░░░░░░░░░░░` **35%** — 37 of 107 features shipped
 
-Phases: **0** 10/11 · **1** ✅ · **2** 5/17 · **3** 4/16 · **3P** 0/7 · **4** 1/5 · **4P** 0/3 · **5** 2/32 · **5P** 0/2
+Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 4/16 · **3P** 0/7 · **4** 1/5 · **4P** 0/3 · **5** 2/32 · **5P** 0/2
 
-**In progress:** One-tap Convert — the retail on-ramp (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
+**In progress:** WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
 
 **🟢 30 ready to claim** — nothing blocks these:
 

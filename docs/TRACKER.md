@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**36 of 107 shipped (34%)** · 3 in progress · 30 ready to claim · 38 blocked · 18 deliberate §13 sockets
+**37 of 107 shipped (35%)** · 2 in progress · 30 ready to claim · 38 blocked · 18 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -75,7 +75,6 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Feature | Owner | Module |
 |---|---|---|
-| One-tap Convert — the retail on-ramp | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
 | Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
 
@@ -118,21 +117,21 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Buyback & burn split <br/>_Live path: tRPC recordBuyback + burnedSupply. tokensBought supplied by operator (pricing is svc-trade — §13 auto market-buy later). admin:treasury + MFA on the mutation._ | F |  | `token.buyback` |
 | ✅ | Proposals + IFC-weighted voting (§4.3) <br/>_PR #97: createProposal / castVote / listProposals / getProposal on mounted /trpc (weight = stakeOf snapshot)._ | F |  | `token.governance` |
 
-### Phase 2 — Trade (5/17)
+### Phase 2 — Trade (6/17)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
 | ✅ | Orderbook + matching engine, journal, replay | F |  | `matching.engine` |
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
-| 🔨 | One-tap Convert — the retail on-ramp <br/>_convert.quote + convert.execute on svc-trade (RFQ + house spread → market IOC, same hold→fill). Money-path suite tests exist (trade-service convert describe). Still wip: CI billing blocked so green-CI DoD not re-proven; edge product-check open._ | F |  | `trade.convert` |
+| ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining._ | F |  | `trade.convert` |
 | 🟢 | Perps: cross/isolated margin, funding, liquidation ladder | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
 | 🟢 | OTC RFQ desk, staked-tier gate | F |  | `trade.otc` |
 | 🟢 | Copy trading, audited leaders, profit share | B |  | `trade.copy` |
 | ⛔ | Fiat pairs on the same engine | F | `pay.rails` | `trade.forex` |
 | 🟢 | TWAP / VWAP / POV execution | F |  | `trade.algo` |
-| 🟢 | CCXT-compatible public API (bots + terminals connect) <br/>_partial — public REST: markets, orderbook, ticker, tickers, trades (tape); private REST (edge-signed principal, fail-closed): GET orders/open|closed, GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills), GET account/fees (published maker/taker bps per symbol; {} when none). Still open: balance, positions/leverage, WS private._ | F |  | `trade.ccxt-api` |
+| 🟢 | CCXT-compatible public API (bots + terminals connect) <br/>_partial — public REST: markets, orderbook, ticker, tickers, trades (tape), ohlcv (route exists, always [] until candle aggregation job — no inventing candles); private REST (edge-signed principal, fail-closed): GET orders/open|closed, GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance. Still open: positions/leverage, WS private._ | F |  | `trade.ccxt-api` |
 | 🟢 | Internal market-maker seeding books at launch | F |  | `trade.mm-bot` |
 | 🟢 | External venue adapters via CCXT (cross-venue) <br/>_Downgraded 2026-07-28: `@intafaced/venue-adapter` is imported by zero files outside its own package. There is no adapter for any real venue — `LiquiditySource` is an interface with no implementation, so nothing is aggregated._ | F |  | `venue.aggregation` |
 | 🟢 | Pro terminal — depth, charts, hotkeys, sub-accounts <br/>_Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. DEPTH is now live too: the terminal streams snapshot+deltas from services/svc-ws and withholds the book on a gap rather than drawing a stale one. Still missing from the four words in the title: CHARTS (no candle or trade-tape source exists anywhere), HOTKEYS and SUB-ACCOUNTS (not started). Those render as §13 sockets with the reason on screen. `dependsOn` moved from `ws.gateway` to `ws.depth`: the book needs depth, not positions, and depending on the umbrella would keep this blocked on streams it does not use._ | F |  | `web.terminal` |
