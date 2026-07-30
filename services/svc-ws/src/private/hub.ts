@@ -24,6 +24,23 @@ export interface PrivateOrderUpdate {
   readonly ts: string;
 }
 
+export interface PrivateFillUpdate {
+  readonly fillId: string;
+  readonly orderId: string;
+  readonly userId: string;
+  readonly marketId: string;
+  readonly side: string;
+  readonly liquidity: string;
+  readonly price: string;
+  readonly qty: string;
+  readonly quoteAmount: string;
+  readonly feeAsset: string;
+  readonly feeAmount: string;
+  readonly feeBps: number;
+  readonly sequence: number;
+  readonly ts: string;
+}
+
 export interface PrivateOrderHubOptions {
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
@@ -80,11 +97,18 @@ export class PrivateOrderHub {
   }
 
   publish(update: PrivateOrderUpdate): void {
+    this.#fanout(update.userId, JSON.stringify({ channel: 'orders', ...update }));
+  }
+
+  publishFill(update: PrivateFillUpdate): void {
+    this.#fanout(update.userId, JSON.stringify({ channel: 'fills', ...update }));
+  }
+
+  #fanout(userId: string, frame: string): void {
     this.#updates++;
-    const frame = JSON.stringify({ channel: 'orders', ...update });
 
     for (const sub of this.#subscriptions) {
-      if (sub.closed || sub.userId !== update.userId) continue;
+      if (sub.closed || sub.userId !== userId) continue;
 
       if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
         sub.lagTicks++;
