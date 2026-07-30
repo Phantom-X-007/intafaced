@@ -71,8 +71,52 @@ export function earnStakeAccount(userId: string, assetId: string, positionId: st
   return userStake(userId, assetId, `bank:earn:${positionId}`);
 }
 
-export function userCollateral(userId: string, assetId: string): AccountRef {
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'collateral' };
+/**
+ * User collateral FOR ONE CLAIM (P0-3, extended to `collateral`).
+ *
+ * `client.ts` used to say "`collateral` remains open until a futures claim key
+ * is designed". §8.1's loans ARE that claim, and the key is `loan:<id>`.
+ *
+ * Until this argument existed there was one collateral pot per (user, asset) —
+ * the same failure the codebase has already fixed three times, for `hold`
+ * (P0-3), `escrow` (L3-4) and `stake` (L1/L3-5). It is at its worst here.
+ * Releasing loan A's collateral could hand back value that was securing loan B:
+ * both postings balance, the journal reconciles, and loan B is quietly unsecured
+ * with nothing in the books recording which lock was whose. The borrower then
+ * owes on a position whose collateral has already walked out of the door.
+ *
+ * A borrower with a BTC-backed loan and an ETH-backed loan is not the
+ * interesting case. A borrower with two BTC-backed loans is, and it is also the
+ * common one.
+ */
+export function userCollateral(userId: string, assetId: string, purpose: string): AccountRef {
+  if (!purpose) throw new Error('userCollateral requires a purpose (P0-3) — e.g. `loan:<id>` or `position:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'collateral', purpose };
+}
+
+/** Collateral securing ONE loan (§8.1). Released only when that loan is settled. */
+export function loanCollateralAccount(userId: string, assetId: string, loanId: string): AccountRef {
+  return userCollateral(userId, assetId, `loan:${loanId}`);
+}
+
+/**
+ * THE LENDING RESERVE (§8.1) — the pot loan principal is drawn FROM.
+ *
+ * The same discipline as `earnPoolReserve`, for the same reason: a loan must
+ * lend value that exists. This is a `module` account, and §4.2's database CHECK
+ * makes every non-treasury account hard non-negative — so an under-funded
+ * reserve makes `loanDraw` fail with insufficient funds rather than conjuring
+ * principal from nothing.
+ *
+ * The reconciliation identity this buys, checkable in one query each side:
+ *
+ *   balance(loanReserve) + Σ(outstanding principal) == Σ(reserve funding)
+ *
+ * A platform that instead credited the borrower against a `treasury` boundary
+ * would be indistinguishable, in the book, from one that had printed the money.
+ */
+export function loanReserve(assetId: string): AccountRef {
+  return moduleAccount('bank', 'loan-reserve', assetId);
 }
 
 export function subAccountAvailable(subAccountId: string, assetId: string): AccountRef {

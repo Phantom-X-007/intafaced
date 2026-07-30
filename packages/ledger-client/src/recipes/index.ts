@@ -2,6 +2,7 @@ import { mulBps, sub, type Amount } from '../money.js';
 import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
 import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
+import { loanCollateralLock, loanCollateralRelease, loanDraw, loanRepay, loanLiquidate, loanBadDebt, loanReserveFund } from './loans.js';
 import {
   burnAccount,
   houseFees,
@@ -11,7 +12,6 @@ import {
   railBoundary,
   rewardsEngine,
   userAvailable,
-  userCollateral,
   tradeEscrowAccount,
   tokenStakeAccount,
   withdrawalHoldAccount,
@@ -637,66 +637,17 @@ export function rewardPay(input: RewardPayInput): PostRequest {
   };
 }
 
-// ── Lending (§8.1) ───────────────────────────────────────────────────────────
-
-export interface CollateralInput {
-  loanId: string;
-  userId: string;
-  assetId: string;
-  amount: Amount;
-}
-
-export function collateralLock(input: CollateralInput): PostRequest {
-  requirePositive('collateral amount', input.amount);
-  return {
-    idempotencyKey: `bank.collateral.lock:${input.loanId}`,
-    module: 'bank',
-    reason: 'loan.collateral.locked',
-    meta: { loanId: input.loanId },
-    entries: [
-      credit(userAvailable(input.userId, input.assetId), input.amount),
-      debit(userCollateral(input.userId, input.assetId), input.amount),
-    ],
-  };
-}
-
-export function collateralRelease(input: CollateralInput): PostRequest {
-  requirePositive('collateral amount', input.amount);
-  return {
-    idempotencyKey: `bank.collateral.release:${input.loanId}`,
-    module: 'bank',
-    reason: 'loan.collateral.released',
-    meta: { loanId: input.loanId },
-    entries: [
-      credit(userCollateral(input.userId, input.assetId), input.amount),
-      debit(userAvailable(input.userId, input.assetId), input.amount),
-    ],
-  };
-}
-
-export interface LiquidationInput extends CollateralInput {
-  /** Collateral seized to cover the debt. */
-  seized: Amount;
-  /** Any surplus returned to the borrower. */
-  returned: Amount;
-}
-
-export function liquidate(input: LiquidationInput): PostRequest {
-  requirePositive('seized amount', input.seized);
-  return {
-    idempotencyKey: `bank.liquidate:${input.loanId}`,
-    module: 'bank',
-    reason: 'loan.liquidated',
-    meta: { loanId: input.loanId },
-    entries: [
-      credit(userCollateral(input.userId, input.assetId), input.seized + input.returned),
-      debit(houseFees('bank', input.assetId), input.seized),
-      ...(input.returned > 0n ? [debit(userAvailable(input.userId, input.assetId), input.returned)] : []),
-    ],
-  };
-}
+// ── Lending (§8.1) ───────────────────────────────────────────────────
+//
+// Moved to ./loans.ts, and REWRITTEN rather than relocated. Three stubs used to
+// live here — `collateralLock`, `collateralRelease` and `liquidate`. Nothing in
+// the monorepo called any of them, and a loan could not have been built on them:
+// there was no way to release principal, no debt for a repayment to reduce, the
+// whole of a seizure was booked as house revenue, and the liquidation key allowed
+// exactly one liquidation per loan for all time. ./loans.ts sets out each one.
 
 export * from './bank.js';
+export * from './loans.js';
 
 export const recipes = {
   deposit,
@@ -720,9 +671,15 @@ export const recipes = {
   feeCharge,
   sweepFeesToRewards,
   rewardPay,
-  collateralLock,
-  collateralRelease,
-  liquidate,
+  // §8.1 loans — see ./loans.ts. Flagged shared-package change; replaces the
+  // three unreachable collateral stubs that used to sit here.
+  loanCollateralLock,
+  loanCollateralRelease,
+  loanDraw,
+  loanRepay,
+  loanLiquidate,
+  loanBadDebt,
+  loanReserveFund,
   // §8.1 svc-bank — see ./bank.ts. Flagged shared-package change.
   bankTransfer,
   earnDeposit,

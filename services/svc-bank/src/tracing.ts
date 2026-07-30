@@ -33,6 +33,10 @@ export interface MoneySpanAttributes {
   positionId?: string;
   /** Accrual day, YYYY-MM-DD. */
   date?: string;
+  /** §8.1 loans. */
+  loanId?: string;
+  /** Which rung of a liquidation ladder — with loanId, this identifies the seizure exactly. */
+  tranche?: number;
 }
 
 export async function withMoneySpan<T>(name: string, attributes: MoneySpanAttributes, fn: (span: Span) => Promise<T>): Promise<T> {
