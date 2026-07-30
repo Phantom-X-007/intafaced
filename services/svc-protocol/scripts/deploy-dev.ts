@@ -33,11 +33,14 @@
  */
 import { getAddress as toChecksum, getContractAddress, isAddress, type Address, type Hex } from 'viem';
 import { computeAccountAddress, DEFAULT_USER_SALT } from '../src/accounts/address.js';
+import { computeTokenAddress, DEFAULT_TOKEN_SALT } from '../src/launch/address.js';
+import { parseTokenParams } from '../src/launch/params.js';
 import { loadArtifact } from '../src/chain/artifacts.js';
 import {
   accountFactoryAt,
   assertDisposableChain,
   deployAccountSuite,
+  deployTokenFactory,
   devChainClients,
   DEV_CHAIN_ID,
   devRpcUrl,
@@ -79,6 +82,11 @@ if (clients.deployer.toLowerCase() !== PUBLIC_ANVIL_DEV_ACCOUNT_0_ADDRESS.toLowe
 const expected = {
   implementation: getContractAddress({ from: clients.deployer, nonce: 0n }),
   factory: getContractAddress({ from: clients.deployer, nonce: 1n }),
+  // APPENDED at nonce 2, and it must stay appended. Nonces 0 and 1 are named as
+  // defaults in docker-compose.apps.yml and .env.example; inserting a
+  // deployment before them would silently move both and point the whole fleet
+  // at addresses with no code.
+  tokenFactory: getContractAddress({ from: clients.deployer, nonce: 2n }),
 };
 
 const factoryArtifact = loadArtifact('AccountFactory');
@@ -145,6 +153,75 @@ if (mismatches > 0) {
   process.exit(1);
 }
 
+/**
+ * The launch factory (§8.4 `launch.token-factory`).
+ *
+ * Idempotent by address, exactly like the suite above: a fresh anvil puts the
+ * deployer back at nonce 0, so re-running lands it at the same place rather
+ * than minting a second factory that orphans every token address anyone was
+ * shown against the first.
+ */
+const existingTokenFactoryCode = await publicClient.getCode({ address: expected.tokenFactory });
+let tokenFactory: Address;
+
+if (existingTokenFactoryCode && existingTokenFactoryCode !== '0x') {
+  console.log('\nTokenFactory already deployed at the deterministic address — reusing, not redeploying');
+  tokenFactory = expected.tokenFactory;
+} else {
+  const launch = await deployTokenFactory(clients);
+  console.log(`\nTokenFactory   ${launch.factory}  tx ${launch.tx}`);
+  tokenFactory = launch.factory;
+}
+
+/**
+ * The same cross-check the accounts suite gets, for the same reason.
+ *
+ * `src/launch/address.ts` derives a token address in TypeScript;
+ * `TokenFactory.getAddress` derives it in Solidity. A creator publishes the
+ * address BEFORE the token exists, so a disagreement means everyone who acts on
+ * that announcement sends funds to a contract that will never be deployed.
+ *
+ * The parameter sets move the encoding around rather than testing one lucky
+ * case: boundary decimals, a fractional supply, and a multi-byte name.
+ */
+const tokenCases = [
+  { name: 'Sovereign One', symbol: 'SOV', decimals: 18, totalSupply: '1000000', note: '18dp, whole supply' },
+  { name: 'Zero Decimals', symbol: 'ZED', decimals: 0, totalSupply: '21000000', note: '0dp' },
+  { name: 'Ünïcödé Tökén', symbol: 'ÜNÏ', decimals: 8, totalSupply: '1234.5678', note: 'multi-byte name, fractional supply' },
+].map((c) => ({
+  note: c.note,
+  params: parseTokenParams({
+    name: c.name,
+    symbol: c.symbol,
+    decimals: c.decimals,
+    totalSupply: c.totalSupply,
+    recipient: PUBLIC_ANVIL_DEV_ACCOUNT_0_ADDRESS,
+  }),
+}));
+
+console.log('\nCREATE2 cross-check — TypeScript derivation vs the TokenFactory itself:');
+let tokenMismatches = 0;
+for (const { params, note } of tokenCases) {
+  const offChain = computeTokenAddress({ factory: tokenFactory, creator: clients.deployer, params });
+  const onChain = (await publicClient.readContract({
+    address: tokenFactory,
+    abi: loadArtifact('TokenFactory').abi,
+    functionName: 'getAddress',
+    args: [clients.deployer, DEFAULT_TOKEN_SALT, params],
+  })) as Address;
+  const agree = offChain.toLowerCase() === onChain.toLowerCase();
+  if (!agree) tokenMismatches += 1;
+  console.log(`  ${agree ? 'OK  ' : 'FAIL'} ${offChain}  ${agree ? '==' : '!='} ${onChain}   ${note}`);
+}
+
+if (tokenMismatches > 0) {
+  console.error(
+    `\n${tokenMismatches} MISMATCH(ES) on the token factory. Stop. A token address shown to a creator is not where the ` +
+      `factory would deploy; anything sent there by an early buyer is unreachable. Do not wire this address anywhere.`,
+  );
+  process.exit(1);
+}
+
 console.log('\nAdd to .env (dev only — these are the deterministic anvil addresses):');
 console.log(`PROTOCOL_CHAIN_ID=${chainId}`);
 console.log(`PROTOCOL_RPC_URL=${rpcUrl}`);
@@ -152,6 +229,7 @@ console.log(`PROTOCOL_RPC_URL=${rpcUrl}`);
 // one a human can eyeball against what the terminal printed.
 console.log(`PROTOCOL_FACTORY_ADDRESS=${toChecksum(deployed.factory)}`);
 console.log(`PROTOCOL_IMPLEMENTATION_ADDRESS=${toChecksum(deployed.implementation)}`);
+console.log(`PROTOCOL_TOKEN_FACTORY_ADDRESS=${toChecksum(tokenFactory)}`);
 console.log(
   `\nNo EntryPoint and no bundler on this chain, so relayUserOperation still refuses. ` +
     `Reads, address prediction, deployment calldata and session state are live.`,

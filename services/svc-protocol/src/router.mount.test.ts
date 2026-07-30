@@ -247,6 +247,12 @@ function deadChain(overrides: Record<string, unknown> = {}) {
       suiteConfigured: true,
       // Configured, never verified: nobody could read the chain to check.
       suiteDeployed: false,
+      // The launch factory is unconfigured in this stub — the zero default.
+      // Kept apart from `suiteConfigured` on purpose: two unrelated features
+      // must not share one boolean, or the more important one goes dark for the
+      // wrong reason.
+      tokenFactoryConfigured: false,
+      tokenFactoryDeployed: false,
       refusalCode: 'protocol.chain_unreachable',
       reason: `status: no answer from the EVM RPC at ${RPC}`,
     }),

@@ -36,6 +36,30 @@ Almost everything is `publicJurisdictionProcedure('protocol', 'protocol')` — *
 | `claimAccount`           | `protocol:read` | `{ owner, address, userSalt?, signature }`         | `{ id, address, owner, deployed }`                         |
 | `myAccounts`             | `protocol:read` | —                                                  | `AccountRecord[]`                                          |
 
+### `launch.*` — ERC-20 deploy from an in-repo template (`launch.token-factory`, §8.4)
+
+| Procedure                     | Guard          | Input                            | Output                                                                                                             |
+| ----------------------------- | -------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `launch.status`               | permissionless | —                                | `{ configured, deployed, usable, template: { sourceHash, audited: false }, limits, mintAuthorityRetained: false }`  |
+| `launch.predictTokenAddress`  | permissionless | `{ creator, userSalt?, params }` | `{ address, chainId, factory, scaledTotalSupply, deployed, templateSourceHash }`                                    |
+| `launch.buildTokenDeployment` | permissionless | `{ creator, userSalt?, params }` | unsigned call + `predictedAddress`, `scaledTotalSupply`                                                             |
+| `launch.tokenInfo`            | permissionless | `{ token }`                      | `{ name, symbol, decimals, totalSupply, initialHolder, creator, fromThisFactory, matchesTemplate }`                 |
+
+`params` is `{ name, symbol, decimals, totalSupply, recipient }`. **`totalSupply` is a decimal string of whole tokens** ("1000000", "21000000.5") and becomes a scaled `bigint` in `src/launch/params.ts` and nowhere else. It is never a JS `number` at any point — 1e21 is already past `MAX_SAFE_INTEGER`, and a rounded supply is permanent.
+
+**The product decisions this surface makes, written down because a launch cannot be undone:**
+
+| Question                               | Answer                                                                                                                                                    |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who may deploy?                        | Anyone. Permissionless per §22 — the platform holds nothing. It never originates the transaction either: it builds bytes the **creator** signs.            |
+| Does the deployer keep mint authority? | **No. Nobody does.** The template has no `mint`, no `owner`, no `pause`, no upgrade path. No API flag can change that.                                     |
+| What decimals are permitted?           | 0–18. Above 18 cannot round-trip through the ledger's `numeric(38,18)`. Enforced in the contract **and** the API.                                          |
+| What supply is permitted?              | Up to 10^20 − 1 whole tokens — where the amount stops being representable in `numeric(38,18)`. **API-only**; the contract allows the full `uint256`.       |
+| Is the template audited?               | **No.** `launch.status` returns `audited: false`. `contracts/out/` is compiler output, not an audit report.                                                |
+| Who charges the launch fee?            | Nobody, here. The factory is not payable and takes no fee — a fee is a Fiat Plane ledger recipe (§0.6), never value held by a contract on this plane.      |
+
+Every launch path **refuses** with `launch.factory_not_configured` when `PROTOCOL_TOKEN_FACTORY_ADDRESS` is the zero default. That is the check that matters most here: CREATE2 against `factory = 0x0` succeeds and returns a real, checksummed, entirely fictional token address — which a creator would then publish.
+
 The two authenticated procedures are the registry ones, and they are authenticated for a mundane reason: attaching an address to an INTAFACED profile requires knowing whose profile it is. They confer no power over the account.
 
 **There is no `protocol:write` scope in `packages/auth`, deliberately — the same way there is no `ledger:write`.** No user token and no platform credential may authorise anything on this plane. The only thing that authorises here is a signature from the user's own key.
@@ -152,11 +176,28 @@ CREATE2 deployment of EIP-1167 clones. `getAddress(owner, userSalt)` answers bef
 
 `src/accounts/address.ts` re-derives the same address in TypeScript, and its tests pin the exact byte constants against the assembly.
 
+### `contracts/launch/` — the token factory (`launch.token-factory`, §8.4)
+
+`SovereignToken.sol` is a **fixed-supply ERC-20**. The entire supply is minted once, in the constructor, to an address named at deployment. After that transaction there is no privileged party anywhere in the contract:
+
+- **No `mint`.** A creator who wants more later cannot have it, ever. They deploy a different token.
+- **No `owner`, no `pause`, no blacklist, no fee switch, no upgrade path, no proxy.**
+- **No transfer hooks, no fee-on-transfer, no rebasing.** Every downstream consumer — the AMM's constant-product accounting, the indexer's read models, any future bridge attestation — assumes `balanceOf` after a transfer of `n` is `before + n`. A template that broke that would corrupt them all, and the corruption would look like a bug in the consumer.
+- **Transfers to `address(0)` revert** rather than burning. To retire supply, send it somewhere nobody holds a key for, which is visible on chain as exactly what it is.
+
+`TokenFactory.sol` deploys it via CREATE2. The salt is `keccak256(creator, userSalt)` and every parameter is a constructor argument, so **both halves of the CREATE2 preimage carry a commitment** — "this address, these parameters, this creator" is one claim rather than three. A single character of the name is a different address.
+
+A repeated launch **reverts** with `TokenAlreadyDeployed`, where `AccountFactory.createAccount` returns the existing account. The asymmetry is deliberate: a second `createAccount` is the same account and nothing happened twice, but a second `createToken` cannot mint a second supply — the first call already did — so returning the existing address would let a caller believe a launch happened when none did.
+
+The factory has no owner, holds no balance and takes no fee.
+
+> **A deployed contract is not byte-identical to `deployedBytecode`.** Solidity `immutable` values are spliced into the runtime by the constructor; the compiler emits zero placeholders. `SovereignToken` has three (`decimals`, `totalSupply`, `initialHolder`), so the obvious equality check is **false for every correct deployment**. `deployedCodeMatches()` in `src/chain/artifacts.ts` masks exactly those ranges using the compiler's `immutableReferences` and requires byte equality everywhere else.
+
 ---
 
 ## Tests
 
-`pnpm --filter @intafaced/svc-protocol test` — **241 tests. No database required. 45 of them need a chain and skip without one.**
+`pnpm --filter @intafaced/svc-protocol test` — **336 tests. No database required. 81 of them need a chain and skip without one** (255 passed / 81 skipped with the chain stopped; 336 passed with it up).
 
 Start the chain first to run all of them:
 
@@ -176,6 +217,10 @@ docker compose up -d evm      # anvil, dev-only, see docker-compose.yml
 | `chain/refusal-without-chain.test.ts` | every chain path refuses with its typed code against a **real closed socket**, not a stub. The dev chain must never become something this service quietly needs |
 | `accounts/create2-onchain.test.ts` | **needs a chain.** The TypeScript derivation against `AccountFactory.getAddress`, 25 owner/salt pairs; the account lands at the predicted address, is owned by the user rather than the relayer, and its runtime is byte-identical to the EIP-1167 proxy the init code hashes |
 | `router.live-chain.test.ts` | **needs a chain.** `predictAddress`, `buildDeployment`, `sessionStatus` and `claimAccount` returning real values through the real `ProtocolChain`, including a session granted on chain and read back with a matching `specHash` |
+| `launch/params.test.ts` | launch policy: supply scaling that must not round (a supply four orders past `MAX_SAFE_INTEGER` survives intact, with the number round-trip that would have destroyed it asserted alongside), byte-counted name limits, and invisible-character refusals built from code points rather than literals |
+| `launch/address.test.ts` | the salt commits to the creator, every parameter is inside the init code, and the zero factory derives a perfectly well-formed **fictional** address — documented as the reason the refusal lives in the router |
+| `launch/token-factory-onchain.test.ts` | **needs a chain.** The TypeScript derivation against `TokenFactory.getAddress` over 20 creator/salt pairs and 5 parameter sets; our init code against the factory's own `initCode()`; the token lands at the predicted address holding the compiled template; the full supply reaches the recipient and nothing reaches the creator; **no mint/owner/pause/upgrade selector is present in the deployed runtime**; a second launch reverts; the `TokenCreated` log decodes with the hand-written ABI |
+| `launch/router-launch-live.test.ts` | **needs a chain.** The whole launch through the router: predict, build, broadcast **exactly the bytes the service returned**, and confirm the token is at the predicted address. Rules out a service that predicts one address and hands out calldata deploying to another — both halves look correct in isolation |
 
 The Solidity/TypeScript cross-checks in the first two files date from before there was a compiler: they assert that the exact selector constants, the 30-day cap, the list caps and the EIP-1167 byte constants appear verbatim in the `.sol` sources. They are still worth having — they are cheap and they run with no chain — but they are no longer the only thing standing between the two languages. `create2-onchain.test.ts` asks the deployed factory.
 
