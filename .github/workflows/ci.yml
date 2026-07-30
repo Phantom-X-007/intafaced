@@ -3,7 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    # Documentation cannot break a typecheck, a test or a doctrine gate, and a
+    # full run is four parallel Linux jobs. On 30 July eight docs-only PRs each
+    # burned the full matrix -- roughly 90 billable minutes spent formatting
+    # Markdown, out of a 2,000-minute monthly pool. The gates that DO apply to
+    # docs (brand-scan, tracker) are cheap and still run on any PR touching code.
+    paths-ignore: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
   pull_request:
+    paths-ignore: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
