@@ -199,8 +199,40 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
       return (await response.json()) as EngineCancelResult;
     },
 
+    /**
+     * AN EMPTY BOOK IS NOT AN UNAVAILABLE ENGINE.
+     *
+     * svc-matching answers 404 for a market it holds no book for, which is the
+     * correct answer and a completely normal state: a listed market that has
+     * never traded has no book. `call` treats every `!response.ok` as
+     * `MatchingUnavailableError`, so that 404 was being reported as "the
+     * matching engine is unavailable" and surfacing as **502 on the public CCXT
+     * contract** — `/api/v1/ticker/:symbol` and `/api/v1/orderbook/:symbol`
+     * returned 502 for every market that had not traded, which right now is all
+     * of them. `/api/v1/trades` and `/api/v1/tickers` were fine only because
+     * they do not read depth.
+     *
+     * "No orders yet" and "the engine is down" need different answers, because a
+     * caller can act on the first and must retry the second.
+     */
     async depth(marketId, limit = 1) {
-      return call<EngineDepth>(`/markets/${encodeURIComponent(marketId)}/depth?limit=${limit}`, { method: 'GET' });
+      const path = `/markets/${encodeURIComponent(marketId)}/depth?limit=${limit}`;
+      let response: Response;
+      try {
+        response = await fetch(`${url}${path}`, { method: 'GET', headers: authHeaders() });
+      } catch (err) {
+        throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
+      }
+
+      // The one status that means "asked and answered: nothing here".
+      if (response.status === 404) return { bids: [], asks: [], sequence: 0 } satisfies EngineDepth;
+
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new MatchingUnavailableError(`svc-matching ${path} failed (${response.status}): ${detail}`);
+      }
+
+      return (await response.json()) as EngineDepth;
     },
   };
 }

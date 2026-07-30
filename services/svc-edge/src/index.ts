@@ -1,6 +1,9 @@
 import Fastify from 'fastify';
 import { assertScreeningConfigured } from '@intafaced/config';
+import { createAdminApi, httpLedgerOperator } from './admin-api.js';
+import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
 import { env } from './env.js';
+import { KillSwitchState } from './kill-switch.js';
 import { exchangePrincipal } from './principal-exchange.js';
 import { resolve, UPSTREAMS } from './routes.js';
 import { withEdgeSpan } from './tracing.js';
@@ -40,6 +43,26 @@ app.log[screening.configured ? 'info' : 'warn'](
 
 const upstreamUrl = (envVar: string, devUrl: string): string => (process.env[envVar] ?? devUrl).replace(/\/$/, '');
 
+const tokenConfig = {
+  secret: env.JWT_ACCESS_SECRET,
+  issuer: env.JWT_ISSUER,
+  audience: env.JWT_AUDIENCE,
+  accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
+};
+
+/** §14.6 — the operator kill-switch, and the first one in the platform anything can reach. */
+const killSwitches = new KillSwitchState();
+
+const admin = createAdminApi(killSwitches, {
+  tokens: tokenConfig,
+  // Null when unset, and the console is told. `LEDGER_URL` is a URL, not a
+  // secret — `env.ts` withholds `DATABASE_URL`, `NATS_URL` and
+  // `INTERNAL_SERVICE_SECRET` from this service, and none of them is needed
+  // here: the edge forwards the operator's own token and holds no credential of
+  // the ledger's.
+  ledger: env.LEDGER_URL ? httpLedgerOperator(env.LEDGER_URL, env.UPSTREAM_TIMEOUT_MS) : null,
+});
+
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 app.get('/ready', async () => ({
@@ -51,7 +74,20 @@ app.get('/ready', async () => ({
   // the codes. An operator needs to see the control is on; an unauthenticated
   // caller does not need our exact configuration read back to them.
   screening: { configured: screening.configured, blockedRegions: screening.blockedRegions.length },
+  // Readiness is about the process, never about the switches: a killed module is
+  // an operator's decision, and taking the edge out of the load balancer because
+  // of it would remove the surface that serves cancels and reads.
+  disabledModules: killSwitches.disabledModules(),
 }));
+
+// ── Operator control plane (§14.6) ─────────────────────────────────
+//
+// Both live in `control-plane.ts` rather than inline here, so the end-to-end
+// test drives THE SAME code this process serves. A kill-switch verified only
+// through a test-only copy of the rule is not verified.
+
+registerKillSwitchGuard(app, killSwitches);
+registerAdminRoutes(app, admin);
 
 /**
  * The proxy.
@@ -69,13 +105,13 @@ app.all('/api/*', async (req, reply) => {
     return reply.code(404).send({ error: 'no route', code: 'edge.no_route' });
   }
 
+  // The kill-switch already ran, in the `onRequest` hook registered above —
+  // before body parsing and before this handler exists. See `control-plane.ts`
+  // for why it is a hook and not a check here: a guard inside one handler
+  // protects that handler, a hook protects the door.
+
   const exchanged = await exchangePrincipal(req.headers, {
-    tokens: {
-      secret: env.JWT_ACCESS_SECRET,
-      issuer: env.JWT_ISSUER,
-      audience: env.JWT_AUDIENCE,
-      accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
-    },
+    tokens: tokenConfig,
     edgeSecret: env.EDGE_PRINCIPAL_SECRET,
     // Resolved here, never read from the request: region drives the
     // jurisdiction matrix, so a caller who could set it would choose its own

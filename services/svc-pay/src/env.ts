@@ -69,6 +69,23 @@ const schema = serviceEnvSchema
             .map((s) => s.trim())
             .filter(Boolean),
         ),
+
+      /**
+       * Let a SANDBOX rail move value in a production-like environment.
+       *
+       * Default false, and the default is the whole point: with it unset, an
+       * `APP_ENV` of `staging` or `prod` refuses to boot while any registered rail
+       * declares itself a sandbox (`rails/posture.ts`). A sandbox payout returns a
+       * provider reference this codebase invented and the user is told their money
+       * moved — so the honest states are "a live rail exists" or "the process does
+       * not start", and this flag is the third one an operator has to ask for by
+       * name.
+       *
+       * Legitimate uses: a pilot, a demo, a load test. It is logged loudly on
+       * every boot, because it means no user of that deployment is being told
+       * anything true about their money leaving the platform.
+       */
+      PAY_ALLOW_SANDBOX_RAILS: z.enum(['true', 'false']).default('false'),
     }),
   );
 

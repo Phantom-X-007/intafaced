@@ -39,7 +39,30 @@ export interface ChainSendRequest {
   readonly idempotencyKey: string;
 }
 
+/**
+ * What is actually behind this port. THREE states, not two, and the third is
+ * the one that matters.
+ *
+ *   live    — a real chain. A returned `txHash` names a transaction anybody can
+ *             look up, and it is irreversible.
+ *   sandbox — a simulator (`MemoryChain`). Every answer is internally
+ *             consistent and none of it is on a chain.
+ *   absent  — NOTHING is configured. Distinct from `sandbox` because a sandbox
+ *             succeeds and an absent chain must refuse: the failure mode a
+ *             simulator has in production is that it SUCCEEDS, hands back a
+ *             fabricated `txHash`, and the user is told their withdrawal was
+ *             sent. `UnconfiguredChain` exists so that state is loud instead.
+ *
+ * This is a property of the implementation, not configuration. A port that had
+ * to be told what it was would be a second copy of the fact, and the copy is
+ * what goes stale.
+ */
+export type ChainPosture = 'live' | 'sandbox' | 'absent';
+
 export interface CryptoChainPort {
+  readonly posture: ChainPosture;
+  /** One line an operator can read in `/ready` or a log. */
+  readonly description: string;
   /** Deterministic per (payment, asset) — the same payment always gets the same address. */
   acceptanceAddress(paymentId: string, assetId: string): Promise<string>;
   /**
@@ -65,6 +88,17 @@ export interface CryptoChainPort {
  * behaves correctly against a chain.
  */
 export class MemoryChain implements CryptoChainPort {
+  /**
+   * SANDBOX, stated on the object rather than known by convention.
+   *
+   * This class is the §13 socket's placeholder, and it is genuinely useful — but
+   * a `txHash` it returns is `0xout00000001`, which is not a transaction. The
+   * only thing that keeps that from reaching a user as "your withdrawal was
+   * sent" is this field and the posture check that reads it.
+   */
+  readonly posture = 'sandbox' as const;
+  readonly description = 'in-memory reference chain (MemoryChain) — no transaction reaches any chain';
+
   private readonly transfers = new Map<string, ConfirmedTransfer>();
   private readonly sent = new Map<string, { txHash: string }>();
   private readonly outbound: Array<ChainSendRequest & { txHash: string }> = [];
@@ -160,5 +194,78 @@ export class MemoryChain implements CryptoChainPort {
     const err = this.callError;
     this.callError = null;
     throw err;
+  }
+}
+
+/**
+ * NO CHAIN IS CONFIGURED, and every call says so.
+ *
+ * THIS CLASS EXISTS BECAUSE THE ALTERNATIVE IS THE WORST BUG IN THE SERVICE.
+ * Wiring `MemoryChain` into a real deployment does not fail — it succeeds. A
+ * user's withdrawal debits their real ledger balance, `MemoryChain.send`
+ * returns `0xout00000003`, svc-pay writes that into `withdrawals.rail_ref`,
+ * posts `withdrawSettle`, and answers `status: 'sent'`. The books balance. The
+ * user is told their money is on its way. Nothing moved, and no reconciliation
+ * against real custody has been run yet to say otherwise.
+ *
+ * So the production default when nothing is configured is not a simulator; it is
+ * this, which refuses. A refusal is recoverable: `crypto-native` turns the throw
+ * into a `chain.unavailable` failure result, `UserMoneyService` reverses the
+ * hold in the same call, and the user has their money back with a failure code
+ * that names the real reason.
+ *
+ * WHAT THE OWNER MUST OBTAIN is in the error message, because the person who
+ * reads it is the person who has to act on it.
+ */
+export class ChainNotConfiguredError extends Error {
+  readonly code = 'pay.chain_not_configured';
+
+  constructor(operation: string) {
+    super(
+      `NO CHAIN IS CONFIGURED — refusing to ${operation}.\n\n` +
+        `\`crypto-native\` is registered but has no chain behind it. §13 lists the chain watcher as ` +
+        `the socket this rail plugs into, and until something implements \`CryptoChainPort\` against a ` +
+        `real node, this rail cannot move value.\n\n` +
+        `THIS IS A REFUSAL ON PURPOSE. The in-memory reference chain would have answered this call ` +
+        `successfully and handed back a transaction hash that is not a transaction. A withdrawal ` +
+        `settled against that reports \`sent\`, and the user has been told their money moved.\n\n` +
+        `TO MAKE THIS RAIL REAL, the owner must obtain and supply:\n` +
+        `  1. A chain node or RPC provider endpoint per supported chain, with archive access deep ` +
+        `enough to serve the confirmation depth in PAY_MIN_CONFIRMATIONS.\n` +
+        `  2. Custody of the signing keys for outbound transfers, and a signing service that will ` +
+        `not broadcast the same business key twice (see ChainSendRequest.idempotencyKey — a repeated ` +
+        `broadcast is money that is not coming back).\n` +
+        `  3. Deterministic acceptance-address derivation per (payment, asset), so a retry never ` +
+        `hands a payer a second address.\n` +
+        `  4. A chain watcher that signs its deliveries with PAY_CRYPTO_WEBHOOK_SECRET.\n\n` +
+        `None of that is an engineering decision this service can make for itself, which is why the ` +
+        `honest state until then is a loud failure rather than a quiet simulation.`,
+    );
+    this.name = 'ChainNotConfiguredError';
+  }
+}
+
+export class UnconfiguredChain implements CryptoChainPort {
+  readonly posture = 'absent' as const;
+  readonly description = 'NO CHAIN CONFIGURED — every call refuses; crypto-native cannot move value';
+
+  async acceptanceAddress(): Promise<string> {
+    // Deliberately refuses even the read. Handing a payer an address derived by
+    // a chain we cannot watch is inviting them to send funds nothing is looking
+    // for — the one outcome worse than declining the payment.
+    throw new ChainNotConfiguredError('derive an acceptance address');
+  }
+
+  async inboundTransfer(): Promise<ConfirmedTransfer | null> {
+    // NOT `null`. Null means "the payer has not sent anything yet", which is a
+    // fact about the payer; this is a fact about us, and collapsing the two
+    // would leave `authorize` reporting `pending` forever on a rail that is
+    // never going to answer.
+    throw new ChainNotConfiguredError('read an inbound transfer');
+  }
+
+  async send(): Promise<{ txHash: string }> {
+    // The one that matters. There is no fabricated hash on this path.
+    throw new ChainNotConfiguredError('broadcast an outbound transfer');
   }
 }

@@ -1,0 +1,161 @@
+import type { FastifyInstance, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { AuthError, bearerToken, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
+import type { LedgerService } from './service.js';
+
+/**
+ * THE LEDGER'S OPERATOR SURFACE — and the switch that was wired to nothing.
+ *
+ * ── The finding this file exists to close ───────────────────────────────────
+ *
+ * `ledger.posting` is described in `packages/config/src/flags.ts` as "the most
+ * consequential switch in the platform", and every piece of it was already
+ * built and correct:
+ *
+ *   · `posting_freeze` is a durable singleton row, not a process field, so
+ *     every replica reads the same answer (migration 0002_durable_freeze).
+ *   · It carries `reason`, `actor` and `changed_at`, and the DATABASE refuses a
+ *     freeze with neither reason nor actor (`posting_freeze_attributed_ck`).
+ *   · `LedgerService.freeze/unfreeze` emit `ledger.freeze.updated`.
+ *   · `createLedgerRouter` exposes `freeze`, `unfreeze` and `reconcile` behind
+ *     `scopedProcedure('admin:treasury')` — an interactive-only scope, so MFA
+ *     is enforced by `requireScope` itself.
+ *
+ * **And none of it was reachable.** `index.ts` builds `appRouter` and exports it
+ * for its TYPE; nothing registers a tRPC plugin, so those three procedures were
+ * served on no port. `s2s-http.ts` already says this out loud about `post` —
+ * "A guard written on one door does not secure the other one" — and the same
+ * sentence was true of the freeze, in the other direction: not an unguarded
+ * door, but no door at all. `svc-ledger` is also deliberately absent from
+ * `svc-edge`'s route table, so there was no path from `apps/admin` either.
+ *
+ * The only way to freeze the ledger was `LEDGER_POSTING_ENABLED=false` and a
+ * restart — and per `service.ts`, that flag "can freeze, and can never thaw".
+ * So the platform's emergency stop was reachable only by redeploying, and
+ * releasing it required a second redeploy. `apps/admin` has shipped a red
+ * "Halt posting" button, with a typed confirmation, that set React state.
+ *
+ * ── Why three raw routes and not a tRPC mount ───────────────────────────────
+ *
+ * Mounting `appRouter` would serve the whole router, including `post`, on a
+ * port. `post` is `serviceProcedure` so it would still refuse a user token —
+ * but the reason svc-ledger has no HTTP router today is a deliberate one, and
+ * widening the money plane's surface to reach one operator switch inverts the
+ * cost. These three handlers mirror `registerS2sHttp`'s shape: explicit,
+ * enumerable, one line each, and nothing reachable that is not named here.
+ *
+ * ── Authentication ─────────────────────────────────────────────────────────
+ *
+ * `admin:treasury`, which is in `INTERACTIVE_ONLY_SCOPES`, so `requireScope`
+ * rejects a token without `mfa` on its own. No session carries it
+ * (`SESSION_SCOPES` excludes every `admin:*` scope and `auth.test.ts` asserts
+ * that), and `assertDelegatableScopes` refuses to mint an API key with it.
+ *
+ * Not the internal service secret, which is what `post` uses. A shared secret
+ * has no subject, and `posting_freeze.actor` is a column whose whole purpose is
+ * to name who halted the platform. "Somebody with the key" is not an audit
+ * trail.
+ */
+
+const freezeSchema = z.object({
+  /**
+   * Required, and required to be useful. The database's own check constraint
+   * refuses an unattributed freeze; this refuses an unexplained one, because
+   * `reason` is what the next operator reads before deciding whether to thaw.
+   */
+  reason: z.string().min(12).max(500),
+});
+
+export interface FreezeSnapshot {
+  readonly frozen: boolean;
+  readonly reason: string | null;
+  readonly actor: string | null;
+  readonly changedAt: string;
+}
+
+/** Map an `AuthError` to a status an operator console can branch on. */
+export function statusForAuthError(err: AuthError): number {
+  switch (err.code) {
+    case 'scope.denied':
+      return 403;
+    // 401 for everything else: expired, malformed, absent, or missing a second
+    // factor are all "come back with a better credential", not "never".
+    default:
+      return 401;
+  }
+}
+
+export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService, tokens: TokenConfig): void {
+  const authenticate = async (header: string | undefined): Promise<Principal> => {
+    const token = bearerToken(header ?? null);
+    if (!token) throw new AuthError('An operator access token is required', 'token.invalid');
+
+    const principal = await verifyAccessToken(token, tokens);
+    // Also enforces MFA, because `admin:treasury` is interactive-only.
+    requireScope(principal, 'admin:treasury');
+    return principal;
+  };
+
+  const guarded =
+    (handle: (operator: Principal, body: unknown) => Promise<unknown>) =>
+    async (req: { headers: Record<string, string | string[] | undefined>; body: unknown }, reply: FastifyReply) => {
+      let operator: Principal;
+      try {
+        const header = req.headers.authorization;
+        operator = await authenticate(typeof header === 'string' ? header : undefined);
+      } catch (err) {
+        if (err instanceof AuthError) return reply.code(statusForAuthError(err)).send({ message: err.message, code: err.code });
+        throw err;
+      }
+
+      try {
+        return await handle(operator, req.body);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'operator request failed';
+        // 400 rather than 500: everything reachable here is either a validation
+        // failure or a constraint the database refused, and both are the
+        // caller's to fix. A thrown freeze must never look like a succeeded one.
+        return reply.code(400).send({ message, code: 'ledger.operator_request_failed' });
+      }
+    };
+
+  const shape = (state: { frozen: boolean; reason: string | null; actor: string | null; changedAt: Date }): FreezeSnapshot => ({
+    frozen: state.frozen,
+    reason: state.reason,
+    actor: state.actor,
+    changedAt: state.changedAt.toISOString(),
+  });
+
+  /**
+   * Read. Behind the same scope as the write, deliberately: whether the
+   * platform's money plane is halted, and who halted it, is operator
+   * information. `/health` already reports `postingEnabled` for anything that
+   * only needs the boolean.
+   */
+  app.get(
+    '/operator/freeze',
+    guarded(async () => shape(await ledger.freezeState())),
+  );
+
+  app.post(
+    '/operator/freeze',
+    guarded(async (operator, body) => {
+      const { reason } = freezeSchema.parse(body);
+      app.log.warn({ actor: operator.userId, reason }, 'LEDGER FREEZE requested by operator — all value movement will stop');
+      return shape(await ledger.freeze(reason, operator.userId));
+    }),
+  );
+
+  /**
+   * A thaw carries only the actor. "Why it is frozen" is meaningless once it is
+   * not, and `writeFreeze` clears the reason for exactly that argument — so
+   * there is no reason field to require here.
+   */
+  app.post(
+    '/operator/unfreeze',
+    guarded(async (operator) => {
+      app.log.warn({ actor: operator.userId }, 'LEDGER THAW requested by operator — value movement resumes');
+      return shape(await ledger.unfreeze(operator.userId));
+    }),
+  );
+}

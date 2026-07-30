@@ -4,6 +4,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { PayError, type PayService } from './payment-service.js';
 import type { UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import type { RailRegistry } from './rails/registry.js';
+import { SandboxRailRefusal } from './rails/posture.js';
 
 /**
  * svc-pay's internal tRPC surface (§2 — cross-service calls go through
@@ -140,13 +141,21 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
       )
       .query(({ input }) => wrap(() => pay.resolvePaymentLink(input.token))),
 
-    /** What an operator dashboard renders, and what routing will read (§6.1). */
+    /**
+     * What an operator dashboard renders, and what routing will read (§6.1).
+     *
+     * `mode` is on the wire because `usable: true, healthy: true` is what this
+     * endpoint said about `card-sandbox` — and it was accurate and useless. A
+     * console cannot answer "can users withdraw today" from health alone; a
+     * sandbox is perfectly healthy at simulating.
+     */
     railHealth: scopedProcedure('pay:read', { module: 'pay' })
       .output(
         z.array(
           z.object({
             id: z.string(),
             capabilities: z.array(z.enum(['authorize', 'capture', 'refund', 'payout', 'webhook'])),
+            mode: z.enum(['live', 'sandbox']),
             usable: z.boolean(),
             healthy: z.boolean(),
             latencyMs: z.number(),
@@ -158,6 +167,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         rails.health().map((h) => ({
           id: h.id,
           capabilities: [...h.capabilities],
+          mode: h.mode,
           usable: h.usable,
           healthy: h.healthy,
           latencyMs: h.latencyMs,
@@ -711,6 +721,19 @@ function toSettlementOut(row: Awaited<ReturnType<PayService['getSettlement']>>):
  * a day guessing.
  */
 function toTrpcError(err: unknown): unknown {
+  /**
+   * A SANDBOX REFUSAL IS NOT A SERVER ERROR.
+   *
+   * It escapes `PayError`, so without this it reaches the client as
+   * INTERNAL_SERVER_ERROR — which reads as "try again", and this is the one
+   * condition retrying can never fix. SERVICE_UNAVAILABLE is the honest code:
+   * the request was well-formed and the platform cannot serve it, because it has
+   * no rail that would actually move the money. The message says so, because a
+   * user staring at a failed withdrawal deserves better than "unknown error".
+   */
+  if (err instanceof SandboxRailRefusal) {
+    return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: `${err.code}: ${err.message}`, cause: err });
+  }
   if (!(err instanceof PayError)) return err;
 
   const code = (() => {

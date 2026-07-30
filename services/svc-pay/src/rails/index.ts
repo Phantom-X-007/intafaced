@@ -9,6 +9,7 @@
 export * from './rail-adapter.js';
 export * from './registry.js';
 export * from './chain-port.js';
+export * from './posture.js';
 export * from './crypto-native.js';
 export * from './card-sandbox.js';
 export { signPayload, verifySignature, type SignatureCheck } from './webhook-signature.js';

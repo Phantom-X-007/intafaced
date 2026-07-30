@@ -133,6 +133,19 @@ export class LedgerService implements LedgerClient {
   }
 
   /**
+   * The whole freeze row, for the operator surface.
+   *
+   * `status()` reshapes it for health checks and drops `changedAt`. An operator
+   * deciding whether to thaw needs to know WHEN the platform was halted as much
+   * as by whom — a freeze from four minutes ago and one from yesterday call for
+   * different actions — so the operator read returns the row rather than the
+   * health projection of it.
+   */
+  async freezeState(): Promise<FreezeState> {
+    return readFreeze(this.sql);
+  }
+
+  /**
    * Reconcile `LEDGER_POSTING_ENABLED` with the database at boot. Call once,
    * before serving traffic.
    *

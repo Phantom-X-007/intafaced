@@ -1,10 +1,20 @@
 import { z } from 'zod';
-import { internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { authEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
 // svc-ledger SERVES the internal money plane, so it must be able to
 // authenticate the services calling it. No default: a ledger that cannot tell
 // a caller from a stranger must refuse to boot (#50).
-const schema = serviceEnvSchema.merge(internalServiceEnvSchema).merge(
+//
+// `authEnvSchema` is merged for the OPERATOR surface only (`operator-http.ts`):
+// the freeze is a human's decision carrying a human's identity, so it is
+// authenticated with the platform's own access tokens rather than the internal
+// service secret — a secret has no subject, and `posting_freeze.actor` must
+// name somebody. It does NOT give a user token any power over `post`; there is
+// still no `ledger:write` scope for one to carry.
+const schema = serviceEnvSchema
+  .merge(internalServiceEnvSchema)
+  .merge(authEnvSchema)
+  .merge(
   z.object({
     SERVICE_NAME: z.string().default('svc-ledger'),
     HTTP_PORT: z.coerce.number().int().default(4001),
@@ -24,8 +34,8 @@ const schema = serviceEnvSchema.merge(internalServiceEnvSchema).merge(
       .union([z.boolean(), z.string()])
       .default(true)
       .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
-  }),
-);
+    }),
+  );
 
 export const env = loadEnv(schema);
 export type Env = typeof env;
