@@ -34,6 +34,47 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     INDEXER_CHAIN_ID: z.coerce.number().int().positive().default(31337),
 
     /**
+     * EVM JSON-RPC endpoint. EMPTY means "there is no chain", and that is the
+     * default on purpose.
+     *
+     * `src/index.ts` picks the source from this: empty → `NullChainSource`, which
+     * reports no chain and says so on `status`. Set → the real `EvmChainSource`.
+     * There is no third state and nothing in between, because the in-between
+     * state is the one where a service quietly indexes nothing and serves the
+     * result as a book.
+     *
+     * A default of `http://localhost:8545` would be worse than empty: on a
+     * machine where something else happens to listen there, the indexer would
+     * start following a chain nobody chose.
+     */
+    INDEXER_RPC_URL: z.string().default(''),
+
+    /**
+     * The venue contract whose logs are this read model's only input.
+     *
+     * Zero-address default, and `EvmChainSource` REFUSES to construct on it.
+     * `eth_getLogs` against `0x0` does not fail — it returns `[]`, forever — so a
+     * plausible-looking default here would fill this database with a confident,
+     * permanent "no liquidity" for every market. A loud zero is the safe default;
+     * see `chain/evm/availability.ts`.
+     */
+    INDEXER_VENUE_ADDRESS: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address')
+      .default('0x0000000000000000000000000000000000000000'),
+
+    /**
+     * First height to index — in practice the venue's deployment block.
+     *
+     * Not cosmetic. Starting from 0 on a chain that has been running a while
+     * means thousands of `eth_getBlockByNumber` + `eth_getLogs` round trips over
+     * blocks that provably cannot hold a venue log, because the contract did not
+     * exist yet. The projection would still be correct; it would just take hours
+     * to say anything.
+     */
+    INDEXER_START_HEIGHT: z.coerce.number().int().min(0).default(0),
+
+    /**
      * How deep a reorg this projection can repair.
      *
      * This is NOT the correctness mechanism — see `projection/store.ts`. Blocks

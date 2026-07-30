@@ -618,10 +618,27 @@ services:
   # No `nats` dependency: this service publishes no subject and consumes none.
   # It reads a chain and writes its own schema, and that is the whole coupling.
   #
-  # It boots with `NullChainSource` (SOCKET §13 `socket.evm-rpc`) — there is no
-  # EVM RPC in this stack, so the honest wiring is a source that reports no
-  # chain rather than a fabricated one. Reads are served from whatever is in
-  # Postgres and `indexer.status` says `chainSource: "null"` out loud.
+  # ── Which chain source it boots with, and why the default is none ─────────
+  #
+  # `INDEXER_RPC_URL` decides, and it is EMPTY by default. Empty means
+  # `NullChainSource`: the ingest loop has nothing to do, reads are served from
+  # whatever is already in Postgres, and `indexer.status` reports
+  # `chainSource: "null"` with a reason. Set it and the real `EvmChainSource`
+  # boots — SOCKET §13 `socket.evm-rpc` is closed and the adapter is real.
+  #
+  # It is empty rather than pointing at `evm` because of the SECOND variable.
+  # `INDEXER_VENUE_ADDRESS` has no honest default: no audited venue contract
+  # exists to point it at (SOCKET §13 `socket.clob-contracts`), and
+  # `contracts/dev/DevVenue.sol` is a test fixture with no access control that
+  # must never be part of a running stack. Wiring an RPC without a venue would
+  # give this service a chain and nothing to read on it — and `eth_getLogs`
+  # against an absent contract returns `[]` rather than failing, which is an
+  # empty book nobody would question. So the adapter REFUSES a zero venue
+  # address, and the default configuration says "no chain" out loud instead.
+  #
+  # To watch it work against the dev chain:
+  #   docker compose up -d evm
+  #   pnpm --filter @intafaced/svc-indexer chain:deploy   # prints all three
   svc-indexer:
     <<: *app
     container_name: intafaced-svc-indexer
@@ -634,6 +651,11 @@ services:
       DATABASE_URL: postgres://svc_indexer:svc_indexer@postgres:5432/intafaced
       # Matches PROTOCOL_CHAIN_ID — the two services describe one chain.
       INDEXER_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-31337}
+      # Empty on purpose — see the note above. `http://evm:8545` is the value to
+      # set, together with a venue address, once there is a venue.
+      INDEXER_RPC_URL: ${INDEXER_RPC_URL:-}
+      INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-0x0000000000000000000000000000000000000000}
+      INDEXER_START_HEIGHT: ${INDEXER_START_HEIGHT:-0}
       INDEXER_FINALITY_DEPTH: ${INDEXER_FINALITY_DEPTH:-64}
       INDEXER_INGEST_ENABLED: ${INDEXER_INGEST_ENABLED:-true}
     # L5-7: S2S — not published on host (compose network only)

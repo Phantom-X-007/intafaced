@@ -176,6 +176,56 @@ services:
       timeout: 5s
       retries: 20
 
+  # § no-deploy: evm-reorg — a SECOND throwaway anvil, and it exists for one
+  # reason: svc-indexer's reorg suite deliberately destroys the chain it runs on.
+  #
+  # ── Why it cannot share `evm` ─────────────────────────────────────────────
+  #
+  # Proving that a projection survives a reorg requires actually reorging, and
+  # the only honest way to do that is `evm_snapshot` / `evm_revert` — which
+  # rewind the WHOLE node, not one caller's view of it. svc-protocol's live
+  # suites deploy contracts to `evm` and then read them back. If those two ran at
+  # the same time, svc-indexer would rewind svc-protocol's factory out of
+  # existence mid-test, and svc-protocol would go red for a reason nobody could
+  # find in its own diff. `pnpm verify` runs package tasks in parallel, so "they
+  # will not overlap" is not something anyone gets to assume.
+  #
+  # One extra dev container is a cheap price for never debugging that.
+  #
+  # ── Same properties as `evm` ──────────────────────────────────────────────
+  #
+  # Pinned image, no volume, genesis on every start, public dev mnemonic, and it
+  # must never appear in any deploy manifest. Nothing in the running stack points
+  # at it: it is a test fixture, addressed by `INDEXER_REORG_RPC_URL`.
+  evm-reorg:
+    image: ghcr.io/foundry-rs/foundry:v1.5.1
+    container_name: intafaced-evm-reorg
+    restart: unless-stopped
+    labels:
+      com.intafaced.environment: 'dev-only'
+      com.intafaced.deploy: 'never'
+    # The image's entrypoint is `/bin/sh -c`, so this is one string, not argv.
+    command:
+      - >-
+        anvil
+        --host 0.0.0.0
+        --port 8545
+        --chain-id ${PROTOCOL_CHAIN_ID:-31337}
+        --accounts 10
+        --balance 10000
+        --block-base-fee-per-gas 0
+        --silent
+    ports:
+      - '${EVM_REORG_HOST_PORT:-8546}:8545'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          cast block-number --rpc-url http://127.0.0.1:8545 > /dev/null 2>&1 || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   grafana:
     image: grafana/grafana:11.4.0
     container_name: intafaced-grafana
