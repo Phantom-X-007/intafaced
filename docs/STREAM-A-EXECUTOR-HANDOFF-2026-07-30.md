@@ -17,7 +17,7 @@
 1. **`PROOF.md` green (B1–B5)** — **unverified**  
    - Chromium **SEGV_ACCERR** in Grok agent sandbox (system Chrome headless same).  
    - Harness code is on main; browser cannot launch *in that sandbox*.  
-   - **Fix:** run outside sandbox (normal Terminal / Claude Desktop with full OS perms):
+   - **Fix:** run outside sandbox (normal Terminal / desktop agent app with full OS perms):
 
 ```bash
 cd /Users/Nitro/projects/Sovereign/.worktrees/feat-uiproof-proof-green
@@ -53,7 +53,7 @@ PATH="$(git rev-parse --show-toplevel)/.tools/node18/bin:$PATH" \
 ## RACI reminder
 
 - Grok/executor: green PROOF, canary, next passes.  
-- Claude/auditor: score #169/#172 method + design bar; do not re-implement boot.  
+- Planner/auditor: score #169/#172 method + design bar; do not re-implement boot.  
 - Nitro: product/taste only — never test runner.
 
 ## Definition of done for “soundproof UI method”
