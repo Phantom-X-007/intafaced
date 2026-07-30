@@ -28,6 +28,7 @@ import {
   type OrderSide,
   type OrderStatus,
   type OrderType,
+  type PublicTapePrint,
   type TimeInForce,
 } from './types.js';
 
@@ -1101,6 +1102,44 @@ export class TradeService {
     `;
     const row = rows[0];
     return row ? toMarket(row) : null;
+  }
+
+  /**
+   * Public trade tape for a market (CCXT `fetchTrades`).
+   *
+   * One print per match — the taker leg only — so the tape is not doubled.
+   * User ids and order ids are intentionally omitted; this is the public print,
+   * not `myFills`. Empty market → empty array (honest 200, not an error).
+   */
+  async publicTape(marketId: string, limit = 100): Promise<PublicTapePrint[]> {
+    const capped = Math.min(Math.max(Math.floor(limit), 1), 500);
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        side: OrderSide;
+        price: string;
+        qty: string;
+        quote_amount: string;
+        sequence: number;
+        ts: Date;
+      }>
+    >`
+      SELECT id, side, price, qty, quote_amount, sequence, ts
+        FROM trade.fills
+       WHERE market_id = ${marketId}
+         AND liquidity = 'taker'
+       ORDER BY sequence DESC
+       LIMIT ${capped}
+    `;
+    return rows.map((row) => ({
+      id: row.id,
+      side: row.side,
+      price: parseAmount(row.price),
+      qty: parseAmount(row.qty),
+      quoteAmount: parseAmount(row.quote_amount),
+      sequence: row.sequence,
+      ts: row.ts,
+    }));
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────

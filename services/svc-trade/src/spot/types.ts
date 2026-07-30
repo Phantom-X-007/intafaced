@@ -90,6 +90,22 @@ export interface FillRecord {
 }
 
 /**
+ * One public tape print — one match, no user or order identity.
+ *
+ * Derived from the taker leg of `trade.fills`. The public REST tape must never
+ * leak who traded; bots only need price, size, side, and when.
+ */
+export interface PublicTapePrint {
+  readonly id: string;
+  readonly side: OrderSide;
+  readonly price: Amount;
+  readonly qty: Amount;
+  readonly quoteAmount: Amount;
+  readonly sequence: number;
+  readonly ts: Date;
+}
+
+/**
  * Every way this service refuses.
  *
  * A closed union rather than free text because an SLO dashboard groups by it
