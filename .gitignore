@@ -39,3 +39,9 @@ Thumbs.db
 # Do not re-add without a named TradingView licence on file.
 vendor/**/charting_library/
 **/charting_library/
+
+# Stream A UI proof artefacts (screenshots, PROOF.md, devserver log/pid)
+.artifacts/
+
+# Local toolchains (Stream A Node 18, agent helpers)
+.tools/
