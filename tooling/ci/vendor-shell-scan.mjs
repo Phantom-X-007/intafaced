@@ -3,24 +3,52 @@
  * Vendor shell residue scan — keep the Java exchange UI from re-introducing
  * known money/CORS hazards that the TS ledger does not own.
  *
- * Residual queue (docs/POST-MERGE-RESIDUAL-AFTER-86.md):
- *   - mass balance credit (unfreezeMore +500 / unfreezeLess bulk)
- *   - TRUNCATE wallet snapshot helpers
+ * Residual queue (docs/POST-MERGE-RESIDUAL-AFTER-86.md + PEACE cleanup):
+ *   - mass balance credit symbols (unfreezeMore / unfreezeLess bulk SQL)
+ *   - TRUNCATE wallet snapshot helpers (dropWeekTable class)
  *   - CORS wildcard origin with credentials
+ *   - dual-book mint paths still present as dead residue elsewhere
  *
  * Brand scan deliberately skips vendor/** (upstream identity lives there).
  * This scan is the complementary check: hazards inside vendor/** only.
+ *
+ * Exit 0 = clean. Exit 1 = a known residual hazard is present.
+ *
+ * Allowlist: keep empty unless a deliberate, reviewable exception is needed.
+ * Every entry must carry a path + reason (same shape as brand-scan ALLOWLIST).
+ * Prefer deleting the hazard over allowlisting it.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
 // Path under repo `vendor/` only — brand-scan forbids naming the upstream tree
 // in source; keep this path as path segments, not a banned token string.
 const VENDOR = join(ROOT, 'vendor');
 
+/**
+ * Paths exempt from the scan. Deliberately empty: residual money mutators
+ * have no legitimate home under vendor/**. If a future exception is required,
+ * add `{ path: 'vendor/...', reason: '...' }` here and justify in the PR.
+ *
+ * @type {{ path: string, reason: string }[]}
+ */
+const ALLOWLIST = [];
+
 /** @type {{ id: string, re: RegExp, reason: string }[]} */
 const FORBIDDEN = [
+  // ── Symbol bans: deleted PEACE residuals must not reappear ──────────────
+  {
+    id: 'symbol-unfreezeMore',
+    re: /\bunfreezeMore\b/,
+    reason: 'deleted PEACE residual — mass +500 balance credit; do not reintroduce',
+  },
+  {
+    id: 'symbol-dropWeekTable',
+    re: /\bdropWeekTable\b/,
+    reason: 'deleted PEACE residual — TRUNCATE of wallet snapshot tables; do not reintroduce',
+  },
+  // ── SQL / body patterns (still live in other residual forms) ────────────
   {
     id: 'mass-credit-plus-500',
     re: /balance\s*=\s*balance\s*\+\s*500/i,
@@ -78,9 +106,14 @@ function walk(dir, out = []) {
       continue;
     }
     if (st.isDirectory()) walk(p, out);
-    else if (/\.(java|js|ts|xml|yml|yaml|properties)$/i.test(name)) out.push(p);
+    // Java primary; shell/config secondary so a cron or XML job cannot sneak back.
+    else if (/\.(java|js|ts|xml|yml|yaml|properties|sh)$/i.test(name)) out.push(p);
   }
   return out;
+}
+
+function isAllowlisted(relPath) {
+  return ALLOWLIST.some((entry) => relPath === entry.path || relPath.startsWith(entry.path + sep));
 }
 
 if (!statSync(VENDOR, { throwIfNoEntry: false })?.isDirectory()) {
@@ -92,8 +125,10 @@ const files = walk(VENDOR);
 const hits = [];
 
 for (const file of files) {
-  const text = readFileSync(file, 'utf8');
   const rel = relative(ROOT, file);
+  if (isAllowlisted(rel)) continue;
+
+  const text = readFileSync(file, 'utf8');
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -116,7 +151,8 @@ if (hits.length) {
     console.error(`  ${h.rel}:${h.line}  [${h.id}] ${h.reason}`);
     console.error(`    ${h.text}`);
   }
-  console.error(`\n${hits.length} hit(s) in ${files.length} file(s). Shell UI must not mass-credit or open CORS "*".`);
+  console.error(`\n${hits.length} hit(s) in ${files.length} file(s). Shell UI must not mass-credit, TRUNCATE wallets, or open CORS "*".`);
+  console.error('  Allowlist (prefer delete): ALLOWLIST in tooling/ci/vendor-shell-scan.mjs\n');
   process.exit(1);
 }
 

@@ -108,20 +108,6 @@ public interface MemberWalletDao extends BaseDao<MemberWallet> {
     @Query(value = "select * from member_wallet WHERE to_released>500",nativeQuery = true)
     List<MemberWallet> findUnfreezeGTE();
 
-    // INTAFACED residual: unfreezeMore mass +500 credit — permanently no-op.
-    @Transactional
-    @Modifying
-    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
-    int unfreezeMore();
-
-
-    // INTAFACED residual: TRUNCATE snapshot helper — permanently no-op (no TRUNCATE).
-    @Transactional
-    @Modifying
-    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
-    int dropWeekTable(@Param("weekDay")int weekDay);
-
-
     // INTAFACED residual: snapshot table create from live wallets — permanently no-op.
     @Transactional
     @Modifying
