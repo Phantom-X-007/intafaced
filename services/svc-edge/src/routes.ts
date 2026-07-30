@@ -40,6 +40,7 @@ export const UPSTREAMS: readonly Upstream[] = [
   // so every chain query 404'd at the edge while the service itself was
   // healthy. A service reachable only from inside the network is not reachable.
   { prefix: '/api/indexer', envVar: 'INDEXER_URL', devUrl: 'http://localhost:4013' },
+  { prefix: '/api/notify', envVar: 'NOTIFY_URL', devUrl: 'http://localhost:4015' },
 ] as const;
 
 export interface Resolved {

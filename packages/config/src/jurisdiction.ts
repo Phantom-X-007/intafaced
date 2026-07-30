@@ -125,6 +125,9 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   'mining-pool': OPEN_BASIC,
   agents: { status: 'open', minTier: 'none' },
   'core-ops': { status: 'open', minTier: 'none' },
+  // Inbox only — no custody, no money movement. minTier none so a user can
+  // always read their own notifications regardless of verification tier.
+  notify: { status: 'open', minTier: 'none' },
   // Protocol Plane — no custody, therefore no tier. Kept explicit so a future
   // edit that raises these trips the custody-scan review.
   chain: { status: 'open', minTier: 'none' },

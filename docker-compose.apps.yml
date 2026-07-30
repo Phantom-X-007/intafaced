@@ -210,6 +210,7 @@ services:
       PROTOCOL_URL: http://svc-protocol:4012
       DEX_URL: http://svc-dex:4010
       INDEXER_URL: http://svc-indexer:4013
+      NOTIFY_URL: http://svc-notify:4015
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are
@@ -483,6 +484,23 @@ services:
       <<: [*needs-schema, *needs-bus]
       svc-ledger:
         condition: service_healthy
+
+  # In-app inbox only. No ledger. Push / email / SMS are §13 sockets.
+  svc-notify:
+    <<: *app
+    container_name: intafaced-svc-notify
+    command: ['node', 'services/svc-notify/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-notify
+      HTTP_PORT: '4015'
+      DATABASE_URL: postgres://svc_notify:svc_notify@postgres:5432/intafaced
+      NOTIFY_FANOUT_ENABLED: ${NOTIFY_FANOUT_ENABLED:-true}
+    # L5-7: S2S — not published on host (compose network only)
+    expose: ['4015']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: [*needs-schema, *needs-bus]
 
   # ── Protocol Plane (§17.4) ─────────────────────────────────────────────────
 
