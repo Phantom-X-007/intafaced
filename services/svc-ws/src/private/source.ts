@@ -41,3 +41,40 @@ export async function subscribePrivateOrders(input: {
       return sub;
     });
 }
+
+export async function subscribePrivateFills(input: {
+  bus: EventBus;
+  hub: PrivateOrderHub;
+  durable: string;
+  log?: HubLogger;
+}): Promise<Subscription> {
+  const { bus, hub, durable, log } = input;
+
+  return bus
+    .subscribe(
+      'fillSettled',
+      (payload) => {
+        hub.publishFill({
+          fillId: payload.fillId,
+          orderId: payload.orderId,
+          userId: payload.userId,
+          marketId: payload.marketId,
+          side: payload.side,
+          liquidity: payload.liquidity,
+          price: payload.price,
+          qty: payload.qty,
+          quoteAmount: payload.quoteAmount,
+          feeAsset: payload.feeAsset,
+          feeAmount: payload.feeAmount,
+          feeBps: payload.feeBps,
+          sequence: payload.sequence,
+          ts: payload.ts,
+        });
+      },
+      { durable },
+    )
+    .then((sub) => {
+      log?.info({ durable, subject: 'fillSettled' }, 'ws: private fills subscribed');
+      return sub;
+    });
+}

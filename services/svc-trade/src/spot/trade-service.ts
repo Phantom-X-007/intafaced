@@ -757,6 +757,32 @@ export class TradeService {
         takerFeeBps: rates.takerFeeBps,
       }),
     );
+
+    // User-visible fill + order snapshots for private WS (not money — ledger already moved).
+    for (const leg of legs) {
+      await this.bus.publish(
+        'fillSettled',
+        {
+          fillId: fillLegIdFor(market.id, fill.sequence, leg.role),
+          orderId: leg.order.id,
+          userId: leg.order.userId,
+          marketId: market.id,
+          side: leg.side,
+          liquidity: leg.role,
+          price: formatAmount(price),
+          qty: formatAmount(qty),
+          quoteAmount: formatAmount(quoteAmount),
+          feeAsset: leg.feeAsset,
+          feeAmount: formatAmount(leg.feeAmount),
+          feeBps: leg.feeBps,
+          sequence: fill.sequence,
+          ts: new Date().toISOString(),
+        },
+        { idempotencyKey: `trade.fill.settled:${market.id}:${fill.sequence}:${leg.role}` },
+      );
+      const latest = await this.findOrder(leg.order.id);
+      if (latest) await this.publishOrderUpdated(latest);
+    }
   }
 
   // ── Holds: the only two things that can happen to one ─────────────────────

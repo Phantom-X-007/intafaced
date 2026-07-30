@@ -50,6 +50,33 @@ describe('PrivateOrderHub', () => {
     expect(bob.sent).toHaveLength(0);
   });
 
+  it('fans fills only to the owning user on channel fills', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    const bob = sink();
+    hub.attach('user-a', alice);
+    hub.attach('user-b', bob);
+    hub.publishFill({
+      fillId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      orderId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      userId: 'user-a',
+      marketId: 'btc-usdt',
+      side: 'buy',
+      liquidity: 'taker',
+      price: '100',
+      qty: '1',
+      quoteAmount: '100',
+      feeAsset: 'USDT',
+      feeAmount: '0.1',
+      feeBps: 10,
+      sequence: 1,
+      ts: '2026-07-30T00:00:00.000Z',
+    });
+    expect(alice.sent).toHaveLength(1);
+    expect(JSON.parse(alice.sent[0]!).channel).toBe('fills');
+    expect(bob.sent).toHaveLength(0);
+  });
+
   it('refuses attach when at capacity', () => {
     const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 1 });
     const first = sink();

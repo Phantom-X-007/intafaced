@@ -8,7 +8,7 @@ import { registerRoutes } from './routes.js';
 import { TradeHub } from './trade/hub.js';
 import { subscribeTradeTape } from './trade/source.js';
 import { PrivateOrderHub } from './private/hub.js';
-import { subscribePrivateOrders } from './private/source.js';
+import { subscribePrivateFills, subscribePrivateOrders } from './private/source.js';
 import { createPrivateWebSocketGateway } from './private/gateway.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 
@@ -129,6 +129,7 @@ await hub.refreshMarkets().catch((err: unknown) => {
 let bus: Awaited<ReturnType<typeof JetStreamEventBus.connect>> | null = null;
 let tradeSub: Subscription | null = null;
 let privateSub: Subscription | null = null;
+let privateFillSub: Subscription | null = null;
 try {
   bus = await JetStreamEventBus.connect({
     servers: env.NATS_URL,
@@ -149,6 +150,12 @@ try {
       durable: env.WS_PRIVATE_ORDERS_DURABLE,
       log: app.log,
     });
+    privateFillSub = await subscribePrivateFills({
+      bus,
+      hub: privateOrderHub,
+      durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-fills`,
+      log: app.log,
+    });
   }
 } catch (err) {
   app.log.warn(
@@ -158,6 +165,7 @@ try {
   bus = null;
   tradeSub = null;
   privateSub = null;
+  privateFillSub = null;
 }
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
@@ -204,6 +212,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       poller.stop();
       if (tradeSub) await tradeSub.unsubscribe().catch(() => undefined);
       if (privateSub) await privateSub.unsubscribe().catch(() => undefined);
+      if (privateFillSub) await privateFillSub.unsubscribe().catch(() => undefined);
       if (bus) await bus.close().catch(() => undefined);
       await gateway.close('gateway shutting down');
       await privateGateway.close('gateway shutting down');

@@ -321,6 +321,34 @@ export const orderUpdated = defineEvent(
   'svc-trade order row changed — private WS fans this to the owning principal only.',
 );
 
+/**
+ * User-visible fill (svc-trade). Private streams fan this to the fill owner only.
+ * Distinct from matching.order.filled (engine fact, no user id on the wire).
+ */
+export const fillSettled = defineEvent(
+  'trade',
+  'fill',
+  'settled',
+  1,
+  z.object({
+    fillId: z.string().uuid(),
+    orderId: z.string().uuid(),
+    userId: z.string().uuid(),
+    marketId: z.string(),
+    side: z.enum(['buy', 'sell']),
+    liquidity: z.enum(['maker', 'taker']),
+    price: amountSchema,
+    qty: amountSchema,
+    quoteAmount: amountSchema,
+    feeAsset: z.string(),
+    feeAmount: amountSchema,
+    feeBps: z.number().int(),
+    sequence: z.number().int(),
+    ts: z.string().datetime({ offset: true }),
+  }),
+  'svc-trade settled a fill for a user — private WS only.',
+);
+
 // ── protocol (§17.4 · Protocol Plane, non-custodial) ─────────────────────────
 //
 // Every event below is an OBSERVATION of chain state, not a record of something
@@ -603,6 +631,7 @@ export const EVENT_CATALOG = {
   orderFilled,
   orderCancelled,
   orderUpdated,
+  fillSettled,
   protocolAccountCreated,
   protocolSessionKeyCreated,
   protocolSessionKeyCancelled,
