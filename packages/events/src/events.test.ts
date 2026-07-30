@@ -75,6 +75,40 @@ describe('event catalog', () => {
     ).toThrow(EventValidationError);
   });
 
+  it('carries a margin call as a fact about a loan, not a claim that anyone was told', () => {
+    const payload = validatePayload('bankMarginCalled', {
+      loanId: crypto.randomUUID(),
+      userId: crypto.randomUUID(),
+      sequence: 3,
+      ltvBps: 8_200,
+      cureCollateralAmount: '0.041500000000000000',
+      collateralAssetId: 'BTC',
+      calledAt: new Date().toISOString(),
+      graceExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    // The cure amount is a decimal string end to end — never a number.
+    expect(payload.cureCollateralAmount).toBe('0.041500000000000000');
+    expect(EVENT_CATALOG.bankMarginCalled.subject).toBe('intafaced.bank.margin_call.created');
+    // Nothing on this payload asserts delivery. Delivery is svc-notify's record.
+    expect(Object.keys(payload)).not.toContain('notifiedAt');
+  });
+
+  it('rejects a margin call with a float cure amount or a zeroth sequence', () => {
+    const base = {
+      loanId: crypto.randomUUID(),
+      userId: crypto.randomUUID(),
+      sequence: 1,
+      ltvBps: 8_200,
+      cureCollateralAmount: '0.0415',
+      collateralAssetId: 'BTC',
+      calledAt: new Date().toISOString(),
+      graceExpiresAt: new Date().toISOString(),
+    };
+    expect(() => validatePayload('bankMarginCalled', { ...base, cureCollateralAmount: 0.0415 })).toThrow(EventValidationError);
+    // Sequence starts at 1: a call numbered 0 would collide with "no call yet".
+    expect(() => validatePayload('bankMarginCalled', { ...base, sequence: 0 })).toThrow(EventValidationError);
+  });
+
   it('accepts 18-decimal precision', () => {
     const payload = validatePayload('stakeCreated', {
       stakeId: crypto.randomUUID(),

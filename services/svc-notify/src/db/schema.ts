@@ -1,11 +1,13 @@
-import { jsonb, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { integer, jsonb, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, pk } from '@intafaced/db';
 
 /**
- * svc-notify schema — in-app inbox only.
+ * svc-notify schema — the inbox, who may be contacted, and what happened.
  *
  * Doctrine §2: this schema is the only one this service may touch. No balances,
- * no money columns, no references into another service's tables.
+ * no money columns, no references into another service's tables. In particular
+ * `channel_targets` is NOT a mirror of `identity.users.email` — svc-notify may
+ * not read that table, and a login address is not consent to be texted anyway.
  */
 
 export const schema = pgSchema('notify');
@@ -25,4 +27,65 @@ export const notifications = schema.table('notifications', {
   createdAt: createdAt(),
 });
 
+/**
+ * An address the user gave us and confirmed.
+ *
+ * `verified_at IS NULL` means nothing is ever sent here. `verify_token_hash`
+ * holds a SHA-256 of the code, never the code — a support engineer reading this
+ * table must not be able to confirm somebody else's phone number.
+ */
+export const channelTargets = schema.table(
+  'channel_targets',
+  {
+    userId: text('user_id').notNull(),
+    channel: text('channel').$type<'email' | 'push' | 'sms'>().notNull(),
+    address: text('address').notNull(),
+    locale: text('locale').notNull().default('en'),
+    verifiedAt: timestamp('verified_at', { withTimezone: true, mode: 'date' }),
+    verifyTokenHash: text('verify_token_hash'),
+    verifyExpiresAt: timestamp('verify_expires_at', { withTimezone: true, mode: 'date' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.channel] })],
+);
+
+/**
+ * One row per (notification, channel) — the attempt AND the outcome.
+ *
+ * `attempted_at` and `delivered_at` are separate columns on purpose, and this is
+ * the single most important line in the schema. "We tried and the gateway was
+ * down" (attempted, not delivered) and "we never had an address" (neither) and
+ * "the user was told" (both) are three different facts about a margin call, and
+ * a borrower disputing a liquidation is entitled to know which one applies.
+ * svc-bank keeps `notified_at` apart from `called_at` for the same reason; this
+ * is that discipline one layer out.
+ *
+ * The unique index is the idempotency guard: at-least-once bus delivery means a
+ * redelivered event tries to send again, and the claim on this key is what turns
+ * the second attempt into a no-op instead of a second email.
+ */
+export const deliveries = schema.table(
+  'deliveries',
+  {
+    id: pk(),
+    notificationId: uuid('notification_id')
+      .notNull()
+      .references(() => notifications.id, { onDelete: 'cascade' }),
+    channel: text('channel').$type<'inapp' | 'email' | 'push' | 'sms'>().notNull(),
+    status: text('status').$type<'pending' | 'delivered' | 'refused' | 'failed' | 'abandoned'>().notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    attemptedAt: timestamp('attempted_at', { withTimezone: true, mode: 'date' }),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true, mode: 'date' }),
+    refusalCode: text('refusal_code'),
+    detail: text('detail'),
+    reference: text('reference'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('deliveries_notification_channel_idx').on(t.notificationId, t.channel)],
+);
+
 export type NotificationRow = typeof notifications.$inferSelect;
+export type ChannelTargetRow = typeof channelTargets.$inferSelect;
+export type DeliveryRow = typeof deliveries.$inferSelect;

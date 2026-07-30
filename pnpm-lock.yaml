@@ -852,6 +852,9 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1

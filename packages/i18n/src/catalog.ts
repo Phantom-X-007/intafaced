@@ -139,6 +139,17 @@ export const en = {
   'notify.identity.rank.updated.body': 'You moved from rank {previousRank} to rank {rank}.',
   'notify.token.stake.created.title': 'Stake locked',
   'notify.token.stake.created.body': '{amount} staked on the {tier} tier.',
+  'notify.bank.margin_call.title': 'Margin call on your loan',
+  'notify.bank.margin_call.body':
+    'Add {cureCollateralAmount} {collateralAssetId} before {graceExpiresAt} or part of your collateral may be sold.',
+
+  // ── notify · out-of-app channels ──────────────────────────────────────────
+  // Rendered server-side by svc-notify for email / SMS / push, from this same
+  // catalog — so an out-of-app message can never carry copy that a screen could
+  // not (§9), and never a provider's name (§0.7).
+  'notify.channel.verify.title': 'Confirm this address',
+  'notify.channel.verify.body': 'Your confirmation code is {code}. It expires in {minutes} minutes.',
+  'notify.channel.footer': 'You are receiving this because you confirmed this address for account alerts.',
 
   // ── errors ────────────────────────────────────────────────────────────────
   'error.insufficientFunds': 'Insufficient balance.',
