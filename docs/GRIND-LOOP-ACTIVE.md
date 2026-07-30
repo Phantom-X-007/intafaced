@@ -1,8 +1,8 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** DRAINED (agent product micro-queue) · Denon spine wave **#201–#211** on main (babysit-merged) · **mega-audit 2026-07-30 ran** (`docs/audit/2026-07-30-afk-cook-mega/`) · **mega-r2 re-prove** (`docs/audit/2026-07-30-mega-r2/`) · 45m scheduler: open PRs / regressions only — product still DRAINED  
+**Status:** DRAINED (agent product micro-queue) · Denon spine wave **#201–#214** on main (babysit-merged) · **mega-audit 2026-07-30 ran** (`docs/audit/2026-07-30-afk-cook-mega/`) · **mega-r2 re-prove** (`docs/audit/2026-07-30-mega-r2/`) · 45m scheduler: open PRs / regressions only — product still DRAINED  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#211** (test DB isolation) + **#209** (venue §27 fabric) · spine **#206–#210** (rank-perks P0, notify channels, academy lobbies, local EVM CREATE2) · agent micro still DRAINED · do not re-ship **#110–#211** · CI live
+**Last tip:** high water through **#214** (pay hosted checkout + public sandbox rail refuse) + **#213** (vendored exchange audit) · spine **#206–#211** · agent micro still DRAINED · do not re-ship **#110–#214** · CI live
 
 ---
 
@@ -59,10 +59,12 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#211** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
+**#110–#214** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
 
 | PR       | What                                                                                    |
 | -------- | --------------------------------------------------------------------------------------- |
+| **#214** | pay hosted checkout + `assertRailMayAcceptPublicPayment` (sandbox never public)         |
+| **#213** | docs(audit): vendored exchange 0% used — decision not taken                             |
 | **#211** | fix(test): isolate every suite from the live database                                   |
 | **#210** | protocol local dev chain + CREATE2 on-chain cross-check                                 |
 | **#209** | venue §27 fabric — sequenced books, gap withholds                                       |
@@ -126,7 +128,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 - Futures · candle aggregation
 - ~~real chain factory + RPC (local dev)~~ → **local EVM + CREATE2 #210** (prod chain still human)
 - ~~Push / email / SMS channel fan-out~~ → **DONE #207** (refuses when unconfigured)
-- `pay.public-api` design beyond links
+- ~~pay hosted checkout / public gate~~ → **DONE #214** (sandbox refuse on public path; live rails only under live-only)
 - ~~venue.aggregation fabric~~ → **DONE #209** (sequenced/gap-withhold; CONNECT)
 - `ops.admin` real wiring (not browser-local pretend kill-switches)
 - Terminal charts / hotkeys / sub-accounts UI (tape is live; chart remains honest empty)
@@ -172,4 +174,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED (agent product micro-queue) — do not re-ship #110–#211; babysit open PRs; spine #206–#211 on main.**
+**Next agent after compact: Status DRAINED (agent product micro-queue) — do not re-ship #110–#214; babysit open PRs; #214 pay public sandbox gate on main.**
