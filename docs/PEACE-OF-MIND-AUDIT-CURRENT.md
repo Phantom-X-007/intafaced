@@ -93,7 +93,10 @@ MID-RUN TIP (rebase base): 36874756c9caec86d46109ce62cdfdae5482f750
 SINCE (cook baseline):     8a8c19bc626e6dada49a33be1f88d17873f42502
 LAST PEACE-AUDITED (#176): d926edfc6479dcb0f8babe226415cf60992b130c
 POST-FIX TIP (#179):       508ac95257d256907d9e0c403f09588ce5109bec
-FINAL main tip:            508ac95257d256907d9e0c403f09588ce5109bec
+TIP-FILL (#180):           4ddf1597de0a8d41dbcb9dbc8df33437f02fcee8
+FINAL main tip (authority): 4ddf1597de0a8d41dbcb9dbc8df33437f02fcee8
 ```
+
+Note: a further tip-fill PR that only rewrites FINAL will move `origin/main` again; **authority is `git rev-parse origin/main` after the last audit merge.** Operator chat records the tip at session exit.
 
 Archive proof: `docs/audit/2026-07-30-mega-r2/01-L0.md` through `06-VERDICT.md`.
