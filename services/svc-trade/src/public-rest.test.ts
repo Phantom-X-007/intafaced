@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
-import { marketSchema, orderBookSchema } from '@intafaced/exchange-contract';
+import { marketSchema, orderBookSchema, tickerSchema, tradeSchema } from '@intafaced/exchange-contract';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
   bpsToRate,
   decimalPlaces,
   fakeMarket,
+  fakePrint,
   presentCcxtMarket,
   presentOrderBook,
+  presentPublicTrade,
+  presentTicker,
   registerPublicRest,
   type PublicRestDeps,
 } from './public-rest.js';
@@ -71,10 +74,75 @@ describe('presenters', () => {
     expect(typeof wire.bids[0]![0]).toBe('string');
     expect(typeof wire.bids[0]![1]).toBe('string');
   });
+
+  it('presents a ticker with BBO + last as decimal strings', () => {
+    const wire = presentTicker(
+      'BTC/USDT',
+      {
+        bids: [['100', '2']],
+        asks: [['101', '1.5']],
+        sequence: 7,
+      },
+      fakePrint({ price: parseAmount('100.25'), qty: parseAmount('0.5'), quoteAmount: parseAmount('50.125') }),
+      1_700_000_000_000,
+    );
+    expect(tickerSchema.safeParse(wire).success).toBe(true);
+    expect(wire.bid).toBe('100');
+    expect(wire.bidVolume).toBe('2');
+    expect(wire.ask).toBe('101');
+    expect(wire.askVolume).toBe('1.5');
+    expect(wire.last).toBe('100.25');
+    expect(wire.close).toBe('100.25');
+    expect(typeof wire.bid).toBe('string');
+    expect(typeof wire.last).toBe('string');
+    // 24h rollups intentionally null — no windowed aggregation yet.
+    expect(wire.high).toBeNull();
+    expect(wire.baseVolume).toBeNull();
+  });
+
+  it('presents a ticker with null last when the tape is empty', () => {
+    const wire = presentTicker(
+      'BTC/USDT',
+      { bids: [], asks: [], sequence: 0 },
+      null,
+      1_700_000_000_000,
+    );
+    expect(tickerSchema.safeParse(wire).success).toBe(true);
+    expect(wire.bid).toBeNull();
+    expect(wire.ask).toBeNull();
+    expect(wire.last).toBeNull();
+  });
+
+  it('presents a public trade without user/order/fee leakage', () => {
+    const wire = presentPublicTrade(
+      'BTC/USDT',
+      fakePrint({
+        id: 'fill-taker-1',
+        side: 'sell',
+        price: parseAmount('99.5'),
+        qty: parseAmount('0.25'),
+        quoteAmount: parseAmount('24.875'),
+      }),
+    );
+    expect(tradeSchema.safeParse(wire).success).toBe(true);
+    expect(wire.id).toBe('fill-taker-1');
+    expect(wire.order).toBeNull();
+    expect(wire.fee).toBeNull();
+    expect(wire.takerOrMaker).toBeNull();
+    expect(wire.side).toBe('sell');
+    expect(wire.price).toBe('99.5');
+    expect(wire.amount).toBe('0.25');
+    expect(wire.cost).toBe('24.875');
+    expect(typeof wire.price).toBe('string');
+    // No private fields on the wire object.
+    expect('userId' in wire).toBe(false);
+    expect('user_id' in wire).toBe(false);
+  });
 });
 
 describe('public REST routes', () => {
   const market = fakeMarket({ id: 'm-btc', symbol: 'BTC/USDT' });
+  const print = fakePrint({ id: 'tape-1', price: parseAmount('100.5'), qty: parseAmount('1'), quoteAmount: parseAmount('100.5') });
 
   function deps(overrides: Partial<PublicRestDeps> = {}): PublicRestDeps {
     return {
@@ -85,6 +153,7 @@ describe('public REST routes', () => {
         asks: [['101', '1.5']],
         sequence: 7,
       }),
+      publicTape: async () => [print],
       now: () => 1_700_000_000_000,
       ...overrides,
     };
@@ -154,6 +223,89 @@ describe('public REST routes', () => {
       }),
     );
     await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT?limit=99999' });
+    expect(seen).toBe(500);
+    await app.close();
+  });
+
+  it('GET /api/v1/ticker/:symbol returns BBO + last with no auth', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ticker/BTC%2FUSDT' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(tickerSchema.safeParse(body).success).toBe(true);
+    expect(body.symbol).toBe('BTC/USDT');
+    expect(body.bid).toBe('100');
+    expect(body.ask).toBe('101');
+    expect(body.last).toBe('100.5');
+    expect(typeof body.bid).toBe('string');
+    expect(typeof body.last).toBe('string');
+    await app.close();
+  });
+
+  it('GET /api/v1/ticker/:symbol 404s for an unknown market', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ticker/NOPE%2FUSDT' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe('MarketNotFound');
+    await app.close();
+  });
+
+  it('GET /api/v1/ticker/:symbol 502s when the engine is unreachable', async () => {
+    const app = await build(
+      deps({
+        depth: async () => {
+          throw new MatchingUnavailableError('svc-matching down');
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ticker/BTC%2FUSDT' });
+    expect(res.statusCode).toBe(502);
+    expect(res.json().code).toBe('MatchingUnavailable');
+    await app.close();
+  });
+
+  it('GET /api/v1/trades/:symbol returns public tape without user ids', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT?limit=10' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as unknown[];
+    expect(body).toHaveLength(1);
+    expect(tradeSchema.safeParse(body[0]).success).toBe(true);
+    const trade = body[0] as { order: null; fee: null; price: string };
+    expect(trade.order).toBeNull();
+    expect(trade.fee).toBeNull();
+    expect(trade.price).toBe('100.5');
+    expect(JSON.stringify(body)).not.toMatch(/user/i);
+    await app.close();
+  });
+
+  it('GET /api/v1/trades/:symbol returns empty array when no prints exist', async () => {
+    const app = await build(deps({ publicTape: async () => [] }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /api/v1/trades/:symbol 404s for an unknown market', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/trades/NOPE%2FUSDT' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe('MarketNotFound');
+    await app.close();
+  });
+
+  it('clamps trades limit to a sane max', async () => {
+    let seen = 0;
+    const app = await build(
+      deps({
+        publicTape: async (_id, limit) => {
+          seen = limit;
+          return [];
+        },
+      }),
+    );
+    await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT?limit=99999' });
     expect(seen).toBe(500);
     await app.close();
   });

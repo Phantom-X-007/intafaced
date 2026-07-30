@@ -69,12 +69,14 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true };
 });
 
-// Public CCXT-style REST (markets + orderbook). No auth — market data is public.
-// Paths match packages/exchange-contract REST_ROUTES; edge routes /api/v1 → here.
+// Public CCXT-style REST (markets, orderbook, ticker, trades). No auth —
+// market data is public. Paths match packages/exchange-contract REST_ROUTES;
+// edge routes /api/v1 → here with path preserve.
 registerPublicRest(app, {
   markets: () => trade.markets(),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   depth: (marketId, limit) => matching.depth(marketId, limit),
+  publicTape: (marketId, limit) => trade.publicTape(marketId, limit),
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -87,7 +89,17 @@ await app.register(fastifyTRPCPlugin, {
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
-  { port: env.HTTP_PORT, spotEnabled: env.TRADE_SPOT_ENABLED, trpc: true, publicRest: ['/api/v1/markets', '/api/v1/orderbook/:symbol'] },
+  {
+    port: env.HTTP_PORT,
+    spotEnabled: env.TRADE_SPOT_ENABLED,
+    trpc: true,
+    publicRest: [
+      '/api/v1/markets',
+      '/api/v1/orderbook/:symbol',
+      '/api/v1/ticker/:symbol',
+      '/api/v1/trades/:symbol',
+    ],
+  },
   'svc-trade ready',
 );
 

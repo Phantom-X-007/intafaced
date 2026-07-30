@@ -272,7 +272,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot'],
-    note: 'partial — markets+orderbook public REST live on svc-trade (/api/v1/markets, /api/v1/orderbook/:symbol) + edge preservePath /api/v1 → TRADE_URL; private routes still open',
+    note: 'partial — public REST on svc-trade: /api/v1/markets, /api/v1/orderbook/:symbol, /api/v1/ticker/:symbol (BBO+last), /api/v1/trades/:symbol (public tape from taker fills, no user ids); edge preservePath /api/v1 → TRADE_URL; private routes still open',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
