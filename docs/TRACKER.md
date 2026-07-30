@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**38 of 107 shipped (36%)** · 2 in progress · 33 ready to claim · 34 blocked · 19 deliberate §13 sockets
+**39 of 107 shipped (36%)** · 2 in progress · 32 ready to claim · 34 blocked · 19 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -37,7 +37,6 @@ pnpm wt feat/<the-thing>
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | Share card render (1080×1350, 1200×630) | `blueprint` | 4 | `blueprint.card` |
-| Crew matching + mentor shortlist | `blueprint` | 4 | `blueprint.crews` |
 | Export + hard delete, cascading | `blueprint` | 4 | `blueprint.ownership` |
 | Collateralised loans, LTV, margin calls, liquidation | `bank` | 5 | `bank.loans` |
 | Flexible + fixed yield pools | `bank` | 5 | `bank.earn` |
@@ -181,14 +180,14 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🔌 | A real EVM ChainSource — RPC + deployed CLOB contracts <br/>_The ChainSource port (services/svc-indexer/src/chain/source.ts) is the shape the adapter must satisfy; MemoryChainSource is the deterministic reference its conformance is judged against. Blocked on there being contracts to read, not on the indexer._ | P |  | `socket.evm-rpc` |
 | 🔌 | Live book/tape feed from the projection (§5.2 ws-gateway) <br/>_The read path is pull-only today. packages/market-data already computes the deltas; what is missing is a subject in packages/events and the transport._ | P |  | `socket.indexer-stream` |
 
-### Phase 4 — Blueprint (1/5)
+### Phase 4 — Blueprint (2/5)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
 | ✅ | Blueprint session → profile JSON <br/>_svc-blueprint on main; self-mounts /trpc with an edge-verified principal_ | F |  | `blueprint.onboarding` |
-| 🟢 | Share card render (1080×1350, 1200×630) | F |  | `blueprint.card` |
-| 🟢 | Crew matching + mentor shortlist | F |  | `blueprint.crews` |
-| 🟢 | Export + hard delete, cascading | F |  | `blueprint.ownership` |
+| 🟢 | Share card render (1080×1350, 1200×630) <br/>_Composition is DONE and is ours: `card/compose.ts` is a pure function from profile+crew to SVG, mounted at `blueprint.card` (blueprint:read, self-only) and carried in the §7.2 export. Both §7.2 canvases are asserted as literals — 1080×1350 and 1200×630, width/height attributes AND a matching viewBox — plus determinism, in-canvas bounds, tag balance, and a palette check that fails on any hex not in packages/ui tokens. §7.2's copy-scan runs on the RENDERED OUTPUT (not only the source) across every profile value the contract allows, with a negative control. The card deliberately carries ZERO personal data — no name, id or date — which is asserted, and is what makes it safe to share. NOT `done` because the "→ PNG" half of §7.1 is a rail this environment does not have: `CardRenderer` is the §0.4 adapter, `UnconfiguredCardRenderer` is what boots without BLUEPRINT_CARD_RENDERER_URL, and it answers `{status:"unavailable", code:"blueprint.card_renderer_unconfigured"}` as DATA so a surface renders the honest state instead of catching a throw. Every HttpCardRenderer failure path is tested to return `unavailable` and NEVER a URL — a fabricated asset URL becomes an og:image and is found as a broken unfurl on someone else's timeline. Done when a rasterizer + object storage exist and a real PNG URL lands in `card_asset_url`. OWNER call outstanding: whether a user-supplied display name may appear on the card (it would make a public renderer of arbitrary text in our branding)._ | F |  | `blueprint.card` |
+| ✅ | Crew matching + mentor shortlist <br/>_The tracker row was stale, the code was not — this is a re-score of work already on main, not new work. Reachable: placement runs inside the mounted `blueprint.onboard`, the shortlist is the mounted `blueprint.mentors`. Placement and mentor scoring are pure deterministic functions (`matching/`), so a re-run lands a user in the SAME crew — asserted, not hoped. Capacity is enforced under `serializable` with the crew row locked; crew ids are derived, so two concurrent "form a crew" calls collide into one instead of stranding two crews of one; and every run writes a `match_runs` row scoring EVERY open crew, so "why am I not with them" is answerable from a row. 38 pure matching tests (28 crew + 10 mentor) plus placement, capacity, concurrency and determinism tests against real Postgres. Self-contained: nothing here waits on another service. `crewMemberCreated` is published for svc-academy lobby routing and has no consumer yet — that is svc-academy's feature, not a hole in this one._ | F |  | `blueprint.crews` |
+| 🟢 | Export + hard delete, cascading <br/>_svc-blueprint's half is complete and mounted; the CASCADE is not, and the title of this feature is the cascade. Not `done` for one reason: `profiles.blueprint_id` lives in svc-identity, §2 forbids us writing it, so erase publishes `blueprintDeleted` and svc-identity is supposed to clear the field — and **no service in this repo subscribes to that event** (`grep -rn blueprintDeleted services/` finds only the catalog and svc-blueprint). The only thing proving the cascade completes is a stand-in consumer inside our own test file, which is rule 3 of `done` (nothing propped up by a mock) failing exactly as written. After an erase today a real `profiles` row keeps a `blueprint_id` pointing at a deleted Blueprint, so §7.2's "deletion truly cascades" is not yet true end to end. What IS true and tested against real Postgres: export follows the TABLES rather than the UI — it includes `mentoringOthers` (the shortlists this user appears ON) and excludes crewmates' profiles, who did not consent to being in someone else's export; schemaVersion 2 adds the card, so §7.2's "export (JSON + card)" is literally true; erase is a hard delete in one serializable transaction covering mentor rows on BOTH sides, match runs, membership, the blueprint and any crew the departure emptied; and erasing twice returns a receipt of zeroes. Done when svc-identity consumes `blueprintCreated`/`blueprintDeleted` — a one-service PR over there, not more work here._ | F |  | `blueprint.ownership` |
 | ⛔ | On-chain rank attestations, zero PII (§19) | B | `protocol.smart-accounts` | `blueprint.attestations` |
 
 ### Phase 4P — INTACHAIN (0/3)

@@ -66,6 +66,14 @@ HTTP: `GET /health`, `GET /ready`. Readiness reports the engine, because a Bluep
 
 `blueprintDeleted` is keyed on the **user**, not the blueprint, so a redelivery clears the field once rather than clobbering a field the user has since legitimately repopulated by onboarding again.
 
+> ### Nothing consumes these events yet — so the cascade does not complete
+>
+> `grep -rn blueprintDeleted services/` finds the catalog and this service, and nothing else. **svc-identity has no subscriber at all.** Our half of the contract is published and tested; the other half does not exist, so after an erase a real `profiles` row still holds a `blueprint_id` pointing at a Blueprint that is gone. §7.2's "deletion truly cascades" is therefore **not true end to end today**.
+>
+> The only thing proving the cascade in this package is `IdentityProjection` in `blueprint-service.test.ts` — a deliberate stand-in for a consumer that has not been written. It is a good test of _our_ half and it is not evidence about svc-identity.
+>
+> This is why `blueprint.ownership` is scored `ready` and not `done` in the tracker. Closing it is a one-service PR in svc-identity (§1: one service per task), not more work here.
+
 ---
 
 ## Ledger
