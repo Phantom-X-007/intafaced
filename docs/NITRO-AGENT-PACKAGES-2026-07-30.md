@@ -18,7 +18,7 @@ those, stop and say so — it is Denon's.
 | endpoint | via | status | notes |
 | --- | --- | --- | --- |
 | `POST /market/symbol-thumb` | :8090 proxy | **200, real data** | BTC/USDT ~118,450 with volume and turnover. Safe to build on. |
-| `GET /market/history` | :8090 proxy | **200 but returns `[]`** | **BROKEN — see Package C.** Denon fixes. |
+| `GET /market/history` | :8090 proxy | **200, real candles** | **Works.** Takes `from`/`to` in **milliseconds**, not seconds. See Package C. |
 | `GET /api/v1/markets` | edge :4000 | **200** | CCXT shape. 16 markets: crypto, commodity, forex. |
 | `GET /api/v1/{ticker,ohlcv,trades,orderbook,tickers,orders,positions,account}` | edge :4000 | **404** | Mounted in `svc-trade` source but not answering. **Denon investigating — do not build against these yet.** |
 | `svc-ws` trades channel | **direct, not the edge** | wired (#162) | The edge buffers and cannot proxy a socket, so the browser reaches svc-ws directly. That is by design, not a bug to fix. |
@@ -130,23 +130,40 @@ data provider.**
 
 **Goal.** The chart shows a real market on every timeframe.
 
-**What is broken, precisely — I found this today.** The candles exist and are
-good: `exchange_kline_BTC/USDT_1hour` holds **8,761 documents**. But
-`GET /market/history` returns `[]`, because:
+### CORRECTION — the candle path is NOT broken. I was wrong.
+
+An earlier version of this package said `GET /market/history` returns `[]` and
+called it a spine bug I would fix. **That was my error, not the code's.** I probed
+it with `from`/`to` in **seconds**, which is the TradingView UDF convention. This
+endpoint takes **milliseconds**.
+
+With the right units it returns real candles:
 
 ```
-stored time      = 1785330000000   (milliseconds)
-query from/to    = 1750000000      (seconds — TradingView convention)
-matches in seconds range: 0
-matches in ms range:      8761
+GET /market/history?symbol=BTC/USDT&from=1785000000000&to=1785400000000&resolution=1H
+→ [[1785002400000,111552.84,111637.73,111048.62,111093.02,575.316536],
+   [1785006000000,111093.02,111903.01,110900.99,111847.90,510.830298], …]
 ```
 
-The seeder wrote milliseconds; the read path passes the caller's seconds straight
-through to Mongo. **That is a spine bug and I am fixing it** — one unit
-conversion, in `MarketController.findKHistory` or the seeder, whichever is
-authoritative.
+**Milliseconds is correct and consistent all the way through**, which is why there
+is nothing to fix:
+- the production writer uses `setTime(calendar.getTimeInMillis())`
+  (`DefaultCoinProcessor.java`) — live klines are ms
+- the seeder wrote ms, matching it
+- `kline.js` sends `Date.now()` and `to - spanSec * 1000` — the datafeed already
+  sends ms
+- `kline.js` then normalises on the way back: `if (t > 1e12) t = Math.floor(t / 1000)`,
+  because lightweight-charts wants seconds
 
-**Your half, which needs neither the fix nor any licence:**
+**How I got it wrong, since it is worth not repeating:** I inferred the contract
+from the stored data and the TradingView convention instead of reading the client
+that actually calls it. Six lines of `kline.js` would have answered it. The
+`[]` I saw was real, but its cause was **MongoDB being down for three hours** — and
+once it was back I re-probed with the same wrong units and blamed the units.
+
+**So Package C is NOT blocked on me at all.** Everything below is available now.
+
+**Your half:**
 
 **In scope**
 - Interval switching in the terminal UI, driving the `resolution` parameter the
@@ -175,9 +192,13 @@ the terminal page and components.
 and an empty range shows the empty state rather than a fabricated line. Browser
 proof.
 
-**Blocked on Denon?** **Partly.** Indicators, interval UI and empty states are
-unblocked now. Bars appearing at all waits on my unit fix — I will land it and
-comment on this file's PR when it is in.
+**Blocked on Denon?** **No — corrected. Nothing here waits on me.** An earlier
+version said bars waited on a unit fix from me; there is no unit fix, the endpoint
+works, and the whole package is available now.
+
+**One thing to check first when the chart looks empty:** `docker ps -a | grep mongo`.
+`intafaced-coinex-mongo` had been `Exited (14)` for three hours today, which makes
+every candle query return `[]` with a 200. That is the failure that fooled me.
 
 ---
 
