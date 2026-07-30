@@ -72,6 +72,7 @@ COPY packages/market-data/package.json       packages/market-data/
 COPY packages/ui/package.json                packages/ui/
 COPY packages/venue-adapter/package.json     packages/venue-adapter/
 
+COPY services/svc-academy/package.json       services/svc-academy/
 COPY services/svc-agents/package.json        services/svc-agents/
 COPY services/svc-bank/package.json          services/svc-bank/
 COPY services/svc-blueprint/package.json     services/svc-blueprint/

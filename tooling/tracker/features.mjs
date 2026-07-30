@@ -527,7 +527,14 @@ export const FEATURES = [
     phase: '5',
     dependsOn: ['agents.gateway', 'trade.copy'],
   }),
-  f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', { module: 'academy', phase: '5', dependsOn: ['identity.rank'] }),
+  f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', {
+    module: 'academy',
+    phase: '5',
+    status: 'done',
+    dependsOn: ['identity.rank'],
+    requires: ['services/svc-academy'],
+    note: 'svc-academy on 4016, mounted at /api/academy. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is now issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here.',
+  }),
   f('academy.spatial', '2D navigable room canvas, VR-ready scene state', { module: 'academy', phase: '5', dependsOn: ['academy.lobbies'] }),
   f('academy.curriculum', 'DERIV//DESK library import — 20 playbooks + 3 workbooks', {
     module: 'academy',
@@ -672,6 +679,13 @@ export const FEATURES = [
     dependsOn: ['pay.rails'],
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
+  f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {
+    module: 'academy',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['academy.lobbies'],
+    note: '§13 — the interface exists (services/svc-academy/src/stream/provider.ts) and lobbies run without it: seats, presence, capacity, invites and the 2D scene need no provider. NullStreamProvider REFUSES a join credential by name rather than returning a plausible one, because a lobby that opens against no SFU fails silently in the browser and reads as a broken platform. Needs a self-hosted LiveKit deployment and its API key — neither exists in this environment.',
+  }),
   f('socket.mpc-custody', 'MPC custody for self-custody wallets', {
     module: 'protocol',
     phase: '5P',

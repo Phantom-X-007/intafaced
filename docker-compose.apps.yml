@@ -211,6 +211,7 @@ services:
       DEX_URL: http://svc-dex:4010
       INDEXER_URL: http://svc-indexer:4013
       NOTIFY_URL: http://svc-notify:4015
+      ACADEMY_URL: http://svc-academy:4016
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are
@@ -507,6 +508,43 @@ services:
     healthcheck: *healthcheck
     depends_on:
       <<: [*needs-schema, *needs-bus]
+
+  # Live lobbies with capacity tiers (§8.3, §XIII). Non-custodial: no
+  # LEDGER_URL, and nothing in this process could reach anything that moves
+  # value.
+  #
+  # No `nats` dependency — this service publishes no subject and consumes none.
+  # It calls svc-token for a staked room's `stakeOf` and svc-identity for §4.1's
+  # `lobbyHostRights`, both over the shared internal service secret.
+  #
+  # ACADEMY_STREAM_PROVIDER is `none`, and that is the honest default rather
+  # than a placeholder: there is no SFU in this stack. Lobbies run as seats,
+  # presence and the 2D scene canvas, and a request for a stream credential is
+  # REFUSED by name rather than answered with a join token that cannot connect
+  # (SOCKET §13 `socket.stream-provider`).
+  svc-academy:
+    <<: *app
+    container_name: intafaced-svc-academy
+    command: ['node', 'services/svc-academy/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-academy
+      # 4016: every port from 4000 to 4015 is already claimed above.
+      HTTP_PORT: '4016'
+      DATABASE_URL: postgres://svc_academy:svc_academy@postgres:5432/intafaced
+      TOKEN_URL: http://svc-token:4003
+      IDENTITY_URL: http://svc-identity:4002
+      ACADEMY_STREAM_PROVIDER: ${ACADEMY_STREAM_PROVIDER:-none}
+      ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-5000}
+    # L5-7: S2S — not published on host (compose network only)
+    expose: ['4016']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: *needs-schema
+      svc-identity:
+        condition: service_healthy
+      svc-token:
+        condition: service_healthy
 
   # ── Protocol Plane (§17.4) ─────────────────────────────────────────────────
 

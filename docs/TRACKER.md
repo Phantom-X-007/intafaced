@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**37 of 107 shipped (35%)** · 2 in progress · 30 ready to claim · 38 blocked · 18 deliberate §13 sockets
+**38 of 107 shipped (36%)** · 2 in progress · 33 ready to claim · 34 blocked · 19 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -45,7 +45,10 @@ pnpm wt feat/<the-thing>
 | Navigator — tool-calling inside user guardrails | `agents` | 5 | `agents.navigator` |
 | Support agent — KB + account-state grounded | `agents` | 5 | `agents.support` |
 | Market Scanner — ranked signals by tier | `agents` | 5 | `agents.scanner` |
-| Live lobbies, LiveKit SFU, capacity tiers | `academy` | 5 | `academy.lobbies` |
+| 2D navigable room canvas, VR-ready scene state | `academy` | 5 | `academy.spatial` |
+| DERIV//DESK library import — 20 playbooks + 3 workbooks | `academy` | 5 | `academy.curriculum` |
+| Residencies, IFC pay, revenue share | `academy` | 5 | `academy.ambassadors` |
+| Seasonal ladders, IFC prize pools | `academy` | 5 | `academy.tournaments` |
 | Paper-trading market flag for workbooks | `academy` | 5 | `academy.paper-trading` |
 | Vendor lifecycle — apply, vet, list, stake-gated slots | `market` | 5 | `market.vendors` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
@@ -66,10 +69,10 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | **14** | Branded gateway, hosted checkout, payment links | 🔨 wip | `pay.gateway` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
 | **7** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
-| **6** | Live lobbies, LiveKit SFU, capacity tiers | 🟢 ready | `academy.lobbies` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **4** | ERC-20 deploy from audited templates | ⛔ blocked | `launch.token-factory` |
 | **3** | Event-driven fan-out: in-app, push, email, SMS | 🟢 ready | `ops.notifications` |
+| **2** | Chain → Postgres read models | ⛔ blocked | `indexer.readmodels` |
 
 ## 🔨 In progress
 
@@ -196,7 +199,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (2/32)
+### Phase 5 — Surfaces (3/32)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -212,12 +215,12 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Market Scanner — ranked signals by tier | F |  | `agents.scanner` |
 | ⛔ | Merchant agent — approval-rate watch | F | `pay.routing` | `agents.merchant` |
 | ⛔ | Copy-Intel — writes audited leader stats | F | `trade.copy` | `agents.copy-intel` |
-| 🟢 | Live lobbies, LiveKit SFU, capacity tiers | F |  | `academy.lobbies` |
-| ⛔ | 2D navigable room canvas, VR-ready scene state | F | `academy.lobbies` | `academy.spatial` |
-| ⛔ | DERIV//DESK library import — 20 playbooks + 3 workbooks | F | `academy.lobbies` | `academy.curriculum` |
+| ✅ | Live lobbies, LiveKit SFU, capacity tiers <br/>_svc-academy on 4016, mounted at /api/academy. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is now issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here._ | F |  | `academy.lobbies` |
+| 🟢 | 2D navigable room canvas, VR-ready scene state | F |  | `academy.spatial` |
+| 🟢 | DERIV//DESK library import — 20 playbooks + 3 workbooks | F |  | `academy.curriculum` |
 | ⛔ | Certifications → XP → real perks | F | `academy.curriculum` | `academy.certs` |
-| ⛔ | Residencies, IFC pay, revenue share | F | `academy.lobbies` | `academy.ambassadors` |
-| ⛔ | Seasonal ladders, IFC prize pools | F | `academy.lobbies` | `academy.tournaments` |
+| 🟢 | Residencies, IFC pay, revenue share | F |  | `academy.ambassadors` |
+| 🟢 | Seasonal ladders, IFC prize pools | F |  | `academy.tournaments` |
 | 🟢 | Paper-trading market flag for workbooks | F |  | `academy.paper-trading` |
 | ⛔ | ERC-20 deploy from audited templates | B | `protocol.smart-accounts` | `launch.token-factory` |
 | ⛔ | One-click meme launch + instant market + LP | P | `launch.token-factory`, `protocol.amm` | `launch.meme-factory` |
@@ -240,6 +243,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🔌 | Live card issuer rail | F |  | `socket.live-issuer` |
 | 🔌 | PayPal / Stripe / live acquiring rails | F |  | `socket.psp-partners` |
 | 🔌 | VR lobby client | F |  | `socket.vr-client` |
+| 🔌 | A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted) <br/>_§13 — the interface exists (services/svc-academy/src/stream/provider.ts) and lobbies run without it: seats, presence, capacity, invites and the 2D scene need no provider. NullStreamProvider REFUSES a join credential by name rather than returning a plausible one, because a lobby that opens against no SFU fails silently in the browser and reads as a broken platform. Needs a self-hosted LiveKit deployment and its API key — neither exists in this environment._ | F |  | `socket.stream-provider` |
 | 🔌 | Per-asset hash chains with cross-shard anchor | F |  | `socket.ledger-sharding` |
 
 ### Phase 5P — Protocol P2–P3 (0/2)

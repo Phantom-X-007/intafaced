@@ -83,6 +83,7 @@ export const UPSTREAMS: readonly Upstream[] = [
   // healthy. A service reachable only from inside the network is not reachable.
   { prefix: '/api/indexer', module: 'indexer', envVar: 'INDEXER_URL', devUrl: 'http://localhost:4013' },
   { prefix: '/api/notify', module: 'notify', envVar: 'NOTIFY_URL', devUrl: 'http://localhost:4015' },
+  { prefix: '/api/academy', module: 'academy', envVar: 'ACADEMY_URL', devUrl: 'http://localhost:4016' },
 ] as const;
 
 export interface Resolved {
