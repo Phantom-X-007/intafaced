@@ -17,9 +17,14 @@ import { earnPoolReserve, earnStakeAccount, houseFees, userAvailable } from '../
  * are kept in their own file so the shared-package diff is reviewable — and
  * revertable — on its own.
  *
- * Everything §8.1 lists that is NOT here already existed: loans use
- * `collateralLock` / `collateralRelease` / `liquidate`, and native staking uses
- * `stake` / `unstake` in svc-token. svc-bank does not duplicate either.
+ * Native staking is NOT here: svc-token owns it via `stake` / `unstake` and
+ * svc-bank does not duplicate it.
+ *
+ * Loans are not here either — and the claim this comment used to make, that they
+ * "already existed" as `collateralLock` / `collateralRelease` / `liquidate`, was
+ * wrong. Those three were unreachable stubs with no principal release, no debt
+ * for a repayment to reduce and no liquidation ladder. §8.1's lending money paths
+ * now live in `./loans.ts`, whose header sets out what each of them got wrong.
  */
 
 const debit = (account: AccountRef, amount: Amount): EntryInput => ({ account, direction: 'debit', amount });

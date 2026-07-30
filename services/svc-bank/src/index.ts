@@ -4,6 +4,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createEdgeContext } from '@intafaced/contracts';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
+import { tickerPriceSource } from './loans/prices.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
 import { createBankRouter, type BankRouter } from './router.js';
 import { withSpan } from './tracing.js';
@@ -34,7 +35,17 @@ await sql`SELECT 1 FROM bank.spaces LIMIT 1`.catch(() => {
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const history = createLedgerHistory(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
-const bank = createBankServices(sql, ledger, history, { nativeAssetId: env.TOKEN_ASSET_ID });
+const bank = createBankServices(sql, ledger, history, {
+  nativeAssetId: env.TOKEN_ASSET_ID,
+  loans: {
+    // Marks are READ from svc-trade's public REST. svc-trade belongs to another
+    // stream; nothing here imports it, shares a table with it, or writes to it.
+    // What loans actually need from it — an index price rather than a last
+    // trade, a depth read, and eventually collateral-funded orders — is written
+    // out in `loans/prices.ts` rather than assumed to exist.
+    priceSource: tickerPriceSource({ baseUrl: env.TRADE_URL }),
+  },
+});
 
 export const appRouter = createBankRouter(bank);
 export type AppRouter = typeof appRouter;
@@ -50,6 +61,10 @@ app.get('/ready', async () => ({
   ready: true,
   scheduledTransfers: env.SCHEDULED_TRANSFERS_ENABLED,
   interestAccrual: env.INTEREST_ACCRUAL_ENABLED,
+  loanAccrual: env.LOAN_ACCRUAL_ENABLED,
+  // Surfaced because "are we liquidating today" is the first question anyone
+  // asks about this service, and it should not require reading an env file.
+  loanRiskSweep: env.LOAN_RISK_SWEEP_ENABLED,
 }));
 
 /**
@@ -105,6 +120,67 @@ app.post('/internal/jobs/accrue-interest', async (req, reply) => {
     const results = await bank.earn.accrueAll();
     return results.map((r) => ({ poolId: r.poolId, date: r.date, recipients: r.recipients, alreadyAccrued: r.alreadyAccrued }));
   });
+});
+
+/**
+ * LOAN INTEREST ACCRUAL (§8.1 "interest accrual daily recipe").
+ *
+ * Its own endpoint and its own flag rather than a branch inside the earn job,
+ * because the two move money in opposite directions: earn accrual PAYS users out
+ * of a funded reserve, loan accrual CHARGES borrowers. An operator halting a
+ * runaway payout should not thereby stop charging every borrower on the book.
+ *
+ * This job posts NOTHING to the ledger. Loan interest capitalises — the day's
+ * charge increases the debt and moves no value — so a re-run is guarded by
+ * `unique(loan_id, accrual_date)` rather than by an idempotency key, and each day
+ * is charged exactly once however many times this fires.
+ */
+app.post('/internal/jobs/accrue-loan-interest', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
+  if (!env.LOAN_ACCRUAL_ENABLED) {
+    return reply.code(503).send({ error: 'loan interest accrual is disabled', code: 'bank.loan_accrual_disabled' });
+  }
+  return withSpan('bank.job.accrueLoanInterest', async () => {
+    const results = await bank.loans.accrueAll();
+    return results.map((r) => ({ loanId: r.loanId, days: r.days }));
+  });
+});
+
+/**
+ * THE RISK SWEEP — mark every open loan, call what needs calling, liquidate what
+ * has been called and has run out of grace.
+ *
+ * Defaults to DISABLED (`LOAN_RISK_SWEEP_ENABLED`), unlike every other job here.
+ * The others move a user's own money between the user's own accounts, or pay out
+ * yield that was funded first. This one sells people's collateral, and a fresh
+ * deployment whose price source, thresholds and liquidation venue have not been
+ * checked by a human must not start doing that on its own.
+ */
+app.post('/internal/jobs/run-risk-sweep', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
+  if (!env.LOAN_RISK_SWEEP_ENABLED) {
+    return reply.code(503).send({ error: 'the loan risk sweep is disabled', code: 'bank.risk_sweep_disabled' });
+  }
+  return withSpan('bank.job.runRiskSweep', async () => bank.loans.runRiskSweep({ limit: env.LOAN_SWEEP_BATCH_SIZE }));
+});
+
+/**
+ * Re-drive loans stuck between the collateral lock and the principal draw.
+ *
+ * The recovery half of the crash story. Both posts are idempotent on business
+ * keys, so this is safe to run at any time and any number of times: a loan whose
+ * collateral was locked before the crash does not lock it twice, and one whose
+ * draw landed does not draw twice.
+ */
+app.post('/internal/jobs/resume-pending-loans', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
+  return withSpan('bank.job.resumePendingLoans', async () => bank.loans.resumePending());
 });
 
 await app.register(fastifyTRPCPlugin, {

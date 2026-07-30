@@ -1,4 +1,4 @@
-import { date, index, integer, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -284,6 +284,333 @@ export const interestAccruals = bank.table(
   ],
 );
 
+// ═════════════════════════════════════════════════════════════════════════════
+// LOANS (§8.1) — collateral lock, LTV marking, margin call, liquidation, accrual
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// THERE IS NO `outstanding` COLUMN. A loan's debt is the number that decides
+// whether someone's collateral is sold, and the obvious schema gives `loans` an
+// `outstanding_principal` that a nightly job adds to. The guard in
+// `bank-service.test.ts` fails the build on that column by name, and it is right
+// to: a mutable money column written by a job is a running total, and a half-run
+// accrual or a repayment racing it leaves a figure nothing can contradict — while
+// every LTV afterwards is computed from it.
+//
+// So the debt is EVENT-SOURCED from the write-once tables below, and
+// `loan-service.ts` derives it in bigint on every read:
+//
+//   outstanding = loans.principal
+//               + Σ loanInterestAccruals.interestAmount
+//               − Σ loanRepayments.(principalAmount + interestAmount)
+//               − Σ loanLiquidations.(principalRepaid + interestRepaid)
+//
+// Not a VIEW either: a view's columns appear in `information_schema.columns`, so
+// exposing this sum as one would either trip the guard or have to be named to
+// dodge it — and dodging a guard that is telling the truth is worse than the
+// column would have been. See 0002_bank_loans.sql for the long form.
+//
+// Basis-point columns here are `integer`, not `bps()`/numeric(8,0) as the earn
+// tables use. Deliberate: a basis point IS an integer, and numeric(8,0)
+// round-trips as a string that every risk call site would then have to `Number()`
+// — exactly the kind of casual parse this module cannot afford. Neither shape is
+// money-typed, so the schema guard is indifferent between them.
+
+export const loanStatusEnum = bank.enum('loan_status', [
+  /**
+   * Collateral is locked; principal has NOT been released.
+   *
+   * The crash-safe state, and the reason lock and draw are separate
+   * transactions. A process that dies here strands nothing: the collateral is in
+   * the borrower's own purposed ledger account and the reserve has not moved, so
+   * re-driving completes the loan and abandoning it releases the collateral.
+   * Draw-then-lock has a window in which the borrower holds principal against no
+   * collateral, and no retry closes it, because they can spend inside it.
+   */
+  'pending',
+  'active',
+  /** LTV crossed the margin-call threshold; the grace clock is running. */
+  'margin_call',
+  'liquidating',
+  'repaid',
+  'liquidated',
+]);
+
+export const collateralDirectionEnum = bank.enum('collateral_direction', ['lock', 'release']);
+
+/** Same three states as `execution_status`, for the same crash-safety reason. */
+export const loanEventStatusEnum = bank.enum('loan_event_status', ['pending', 'settled', 'rejected']);
+
+/**
+ * A LOAN PRODUCT — policy, and nothing but policy.
+ *
+ * Every money column is a limit; no money path writes any of them. The threshold
+ * ordering is a database CHECK rather than a comment, because a product whose
+ * thresholds are incoherent produces a loan that can be liquidated before it is
+ * ever called, and that is not discoverable by reading a row.
+ */
+export const loanProducts = bank.table(
+  'loan_products',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    debtAssetId: text('debt_asset_id').notNull(),
+    collateralAssetId: text('collateral_asset_id').notNull(),
+    /** The asset LTV is measured in. Both marks are taken against it. */
+    quoteAssetId: text('quote_asset_id').notNull(),
+    aprBps: integer('apr_bps').notNull(),
+    /** The most a borrower may draw at open. */
+    maxLtvBps: integer('max_ltv_bps').notNull(),
+    marginCallLtvBps: integer('margin_call_ltv_bps').notNull(),
+    liquidationLtvBps: integer('liquidation_ltv_bps').notNull(),
+    /**
+     * Grace is waived above this — the one place the
+     * margin-call-before-liquidation ordering is knowingly broken. It is a NUMBER
+     * in policy rather than a branch in code, so it is visible per product and
+     * shows up in a diff when someone moves it. `risk.ts` sets out both readings
+     * of the trade-off and why this one was taken.
+     */
+    insolvencyLtvBps: integer('insolvency_ltv_bps').notNull(),
+    /** Where a liquidation STOPS. Must be below margin-call — see the CHECK. */
+    targetLtvBps: integer('target_ltv_bps').notNull(),
+    penaltyBps: integer('penalty_bps').notNull(),
+    /** Ceiling on one rung of the ladder, as a fraction of remaining collateral. */
+    maxTrancheBps: integer('max_tranche_bps').notNull(),
+    graceSeconds: integer('grace_seconds').notNull(),
+    /** A POLICY floor on a single draw. A limit, not a holding. */
+    minPrincipal: amount('min_principal').notNull().default('0'),
+    status: text('status').notNull().default('open'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('loan_products_assets_idx').on(t.debtAssetId, t.collateralAssetId, t.status)],
+);
+
+/**
+ * ONE LOAN.
+ *
+ * `principal` is what was DRAWN at open, recorded once and never revised — the
+ * same shape and reason as `earn_positions.principal`. Interest never touches it;
+ * the day's charge is a row in `loanInterestAccruals`, which is what keeps this
+ * column from quietly becoming the running total the schema forbids.
+ *
+ * Terms are snapshotted from the product at open, so a later product edit cannot
+ * rewrite the terms of a loan somebody already agreed to.
+ */
+export const loans = bank.table(
+  'loans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => loanProducts.id),
+    userId: text('user_id').notNull(),
+    debtAssetId: text('debt_asset_id').notNull(),
+    collateralAssetId: text('collateral_asset_id').notNull(),
+    quoteAssetId: text('quote_asset_id').notNull(),
+    aprBps: integer('apr_bps').notNull(),
+    principal: amount('principal').notNull(),
+    status: loanStatusEnum('status').notNull().default('pending'),
+    /** NULL means the principal has not been released. The crash-safe state. */
+    drawLedgerTxId: text('draw_ledger_tx_id'),
+    openedAt: tstz('opened_at').notNull().defaultNow(),
+    drawnAt: tstz('drawn_at'),
+    /**
+     * When the CURRENT margin call started. NULL = not in one, and
+     * `planLiquidation` refuses to liquidate while it is NULL. This column is
+     * what makes "a margin call precedes liquidation" enforced rather than
+     * intended.
+     */
+    marginCalledAt: tstz('margin_called_at'),
+    /**
+     * The last mark accepted for this loan, for the deviation breaker in
+     * `prices.ts`. A PRICE, not a balance: what one unit of collateral was worth,
+     * never an amount anybody holds.
+     */
+    lastMarkPrice: amount('last_mark_price'),
+    lastMarkedAt: tstz('last_marked_at'),
+    closedAt: tstz('closed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('loans_user_status_idx').on(t.userId, t.status), index('loans_open_idx').on(t.status)],
+);
+
+/**
+ * COLLATERAL MOVEMENTS — a log, not a figure.
+ *
+ * How much collateral a loan holds right now is
+ * `ledger.balance(user/<id>/<asset>/collateral/loan:<loanId>)`. This table exists
+ * so the job is idempotent and a human can read the history.
+ *
+ * `unique(loan_id, sequence)` rather than keying on the loan alone: a borrower
+ * curing a margin call by ADDING collateral is the best outcome available to
+ * everyone involved, so it has to be expressible more than once per loan.
+ */
+export const loanCollateralEvents = bank.table(
+  'loan_collateral_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => loans.id),
+    sequence: integer('sequence').notNull(),
+    direction: collateralDirectionEnum('direction').notNull(),
+    /** A RECORD of one completed movement, written once with its ledger tx id. */
+    amount: amount('amount').notNull(),
+    status: loanEventStatusEnum('status').notNull().default('pending'),
+    ledgerTxId: text('ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [
+    uniqueIndex('loan_collateral_events_seq_idx').on(t.loanId, t.sequence),
+    index('loan_collateral_events_loan_idx').on(t.loanId, t.status),
+  ],
+);
+
+/**
+ * ONE DAY OF INTEREST FOR ONE LOAN — the guard the whole accrual story rests on.
+ *
+ * `unique(loan_id, accrual_date)` makes "a job that runs twice charges once" a
+ * property of the database rather than a hope about timers. Daily compounding
+ * that double-applies is not a reporting error: it is a charge the borrower never
+ * incurred, and from that day forward it compounds.
+ *
+ * THERE IS NO `ledgerTxId`, and its absence is the point. Loan interest
+ * CAPITALISES — the day's charge increases the debt and moves no value — because
+ * a borrower with an empty available balance cannot be debited nightly, and a
+ * design that tried would liquidate people for not holding cash they had just
+ * borrowed against. Value moves at repayment or liquidation; those tables carry
+ * the tx ids.
+ *
+ * `principalBasis` is the debt the day was computed against, snapshotted so any
+ * past day's arithmetic can be re-derived from its own row.
+ */
+export const loanInterestAccruals = bank.table(
+  'loan_interest_accruals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => loans.id),
+    accrualDate: date('accrual_date').notNull(),
+    /** Snapshotted so a later APR change cannot rewrite history. */
+    rateBps: integer('rate_bps').notNull(),
+    principalBasis: amount('principal_basis').notNull(),
+    interestAmount: amount('interest_amount').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    /** ONE ACCRUAL PER LOAN PER DAY, forever. */
+    uniqueIndex('loan_interest_accruals_day_idx').on(t.loanId, t.accrualDate),
+    index('loan_interest_accruals_date_idx').on(t.accrualDate),
+  ],
+);
+
+/** REPAYMENTS. Partial repayment is normal, so the key is (loan, sequence). */
+export const loanRepayments = bank.table(
+  'loan_repayments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => loans.id),
+    sequence: integer('sequence').notNull(),
+    /** RECORDS of one completed repayment. Interest settles before principal. */
+    interestAmount: amount('interest_amount').notNull(),
+    principalAmount: amount('principal_amount').notNull(),
+    status: loanEventStatusEnum('status').notNull().default('pending'),
+    ledgerTxId: text('ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [uniqueIndex('loan_repayments_seq_idx').on(t.loanId, t.sequence), index('loan_repayments_loan_idx').on(t.loanId, t.status)],
+);
+
+/**
+ * MARGIN CALLS — one row per call, so "was the borrower warned before their
+ * collateral was sold" is a row you can point at.
+ *
+ * A margin call that exists only as a status on `loans` cannot answer that: the
+ * status is cleared when the call is cured and the evidence goes with it. On the
+ * day a borrower disputes a liquidation, the status says nothing; this table says
+ * when they were told, at what LTV, and whether delivery was even attempted.
+ */
+export const loanMarginCalls = bank.table(
+  'loan_margin_calls',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => loans.id),
+    sequence: integer('sequence').notNull(),
+    ltvBps: integer('ltv_bps').notNull(),
+    /**
+     * What the borrower must post to clear the call — a FIGURE quoted at one
+     * instant, written once and never revised. The next mark writes a new row.
+     */
+    cureCollateralAmount: amount('cure_collateral_amount').notNull(),
+    calledAt: tstz('called_at').notNull().defaultNow(),
+    graceExpiresAt: tstz('grace_expires_at').notNull(),
+    /**
+     * Delivery is a separate fact from the call. A call raised but not delivered
+     * is still a call, and must be visible as such rather than
+     * indistinguishable from one the borrower actually read.
+     */
+    notifiedAt: tstz('notified_at'),
+    notifyError: text('notify_error'),
+    clearedAt: tstz('cleared_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('loan_margin_calls_seq_idx').on(t.loanId, t.sequence), index('loan_margin_calls_open_idx').on(t.loanId)],
+);
+
+/**
+ * ONE RUNG OF A LIQUIDATION LADDER.
+ *
+ * `unique(loan_id, tranche)` is what makes the ladder both possible and safe. The
+ * recipe this replaces keyed on the loan alone — one liquidation per loan for all
+ * time — which forbade partial liquidation outright and left dumping the whole
+ * position into whatever book existed as the only legal action. That is the
+ * behaviour that manufactures the bad debt a liquidation exists to prevent.
+ *
+ * The four allocations must sum to `proceeds`, checked in the database as well as
+ * in `loanLiquidate`: every unit a borrower's collateral realised belongs to
+ * someone, and an unallocated remainder is value nobody has claimed.
+ */
+export const loanLiquidations = bank.table(
+  'loan_liquidations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => loans.id),
+    tranche: integer('tranche').notNull(),
+    ltvBps: integer('ltv_bps').notNull(),
+    /** The mark this rung executed at, for the dispute nobody wants to have. */
+    markPrice: amount('mark_price').notNull(),
+    /** Grace waived rather than served. Auditable per event, not inferred. */
+    graceWaived: boolean('grace_waived').notNull().default(false),
+    collateralSold: amount('collateral_sold').notNull(),
+    proceeds: amount('proceeds').notNull(),
+    principalRepaid: amount('principal_repaid').notNull(),
+    interestRepaid: amount('interest_repaid').notNull(),
+    penalty: amount('penalty').notNull(),
+    surplusReturned: amount('surplus_returned').notNull(),
+    /** Principal the proceeds could not cover on a CLOSING rung — the bad debt. */
+    shortfall: amount('shortfall').notNull().default('0'),
+    status: loanEventStatusEnum('status').notNull().default('pending'),
+    ledgerTxId: text('ledger_tx_id'),
+    badDebtLedgerTxId: text('bad_debt_ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [uniqueIndex('loan_liquidations_tranche_idx').on(t.loanId, t.tranche), index('loan_liquidations_loan_idx').on(t.loanId, t.status)],
+);
+
 export const schema = {
   spaces,
   scheduledTransfers,
@@ -291,4 +618,11 @@ export const schema = {
   earnPools,
   earnPositions,
   interestAccruals,
+  loanProducts,
+  loans,
+  loanCollateralEvents,
+  loanInterestAccruals,
+  loanRepayments,
+  loanMarginCalls,
+  loanLiquidations,
 };

@@ -160,17 +160,25 @@ export function assertPairedLocks(entries: readonly EntryInput[]): void {
  * only physically possible one.
  *
  * Purpose is required on every *lock pot* that is not fungible with itself:
- * `hold` (P0-3), `escrow` (L3-4), and `stake` (L1 / L3-5). `available` stays
- * unpurposed — it is fungible with itself. `collateral` remains open until a
- * futures claim key is designed.
+ * `hold` (P0-3), `escrow` (L3-4), `stake` (L1 / L3-5) and `collateral` (§8.1).
+ * `available` stays unpurposed — it is fungible with itself.
+ *
+ * `collateral` was the last kind left open, on the stated grounds that no
+ * futures claim key had been designed yet. §8.1's loans supplied one: a
+ * collateral pot secures ONE loan, and its purpose is `loan:<id>`. Leaving it
+ * open meant a borrower's second loan in the same asset shared the first's
+ * collateral, so releasing one could unsecure the other with every posting
+ * balancing — the `hold` bug again, on the one lock kind whose entire job is to
+ * still be there when the position goes wrong. Futures positions take
+ * `position:<id>` when they arrive; the shape is already right for them.
  */
 export function assertPurposedHolds(entries: readonly EntryInput[]): void {
   assertPurposedLockKinds(entries, ['hold'], 'hold', 'P0-3, §4.2');
 }
 
-/** Escrow + stake purpose check (same force as holds). */
+/** Every lock kind names its claim. `available` is the only unpurposed pot left. */
 export function assertPurposedLocks(entries: readonly EntryInput[]): void {
-  assertPurposedLockKinds(entries, ['hold', 'escrow', 'stake'], 'lock pot', 'P0-3 / L3-4 / L1-L3-5');
+  assertPurposedLockKinds(entries, ['hold', 'escrow', 'stake', 'collateral'], 'lock pot', 'P0-3 / L3-4 / L1-L3-5 / §8.1');
 }
 
 function assertPurposedLockKinds(entries: readonly EntryInput[], kinds: readonly string[], label: string, doctrine: string): void {

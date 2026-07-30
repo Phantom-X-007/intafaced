@@ -40,6 +40,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.schedule_not_found':
       case 'bank.pool_not_found':
       case 'bank.position_not_found':
+      case 'bank.loan_not_found':
+      case 'bank.loan_product_not_found':
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
       case 'bank.not_owner':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
@@ -47,6 +49,35 @@ function toTrpcError(err: unknown): TRPCError {
         // Not the caller's fault and not something a retry fixes — the pool
         // needs funding before this day can accrue.
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+
+      // ── Loans: refusals that are NOT the caller's fault ───────────────────
+      //
+      // Each of these is the platform declining to act, and every one of them
+      // would be a lie as a 400. A borrower told "bad request" when the lending
+      // reserve is empty, or when the price feed is too stale to seize collateral
+      // on, will retry the request forever and learn nothing.
+      case 'bank.loan_reserve_underfunded':
+      case 'bank.mark_unusable':
+      case 'bank.mark_missing':
+      case 'bank.mark_invalid':
+      case 'bank.no_liquidation_counterparty':
+      case 'bank.accrual_backlog':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+
+      // The loudest one. Collateral was exhausted and the insurance fund could
+      // not make the reserve whole — a platform-side loss, not a client error.
+      case 'bank.bad_debt_uncovered':
+      case 'bank.policy_incoherent':
+        return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+
+      // Ordering refusals. Genuinely the caller's request being wrong for the
+      // current state of the loan, so 409 rather than 400: nothing about the
+      // input is malformed, and the same request may succeed later.
+      case 'bank.loan_not_settled':
+      case 'bank.loan_not_drawable':
+      case 'bank.margin_call_required':
+      case 'bank.loan_closed':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
     }
@@ -428,6 +459,235 @@ export function createBankRouter(bank: BankServices) {
   });
 
   /**
+   * LOANS (§8.1).
+   *
+   * ── WHAT IS DELIBERATELY NOT HERE ──────────────────────────────────────────
+   *
+   * There is no user-callable `liquidate`, and no user-callable `mark`. Both are
+   * operator surface, in `ops`, for the same reason the standing-order runner and
+   * the accrual are: a user who can choose WHEN a mark is taken is a user who can
+   * choose the price their own — or somebody else's — collateral is valued at.
+   * The whole point of the deviation breaker and the staleness window in
+   * `prices.ts` is that the mark is not the caller's to pick.
+   *
+   * There is also no `releaseCollateral` that takes an amount. Release is
+   * all-or-nothing on a settled loan (`close`), because a partial release is
+   * indistinguishable in its effect from an unsecured top-up of leverage, and it
+   * would need its own LTV check to be safe. `addCollateral` covers the direction
+   * a borrower actually needs in a hurry.
+   */
+  const loans = router({
+    products: scopedProcedure('bank:read', { module: 'bank' })
+      .input(z.object({ assetId: z.string().min(1).max(16).optional() }))
+      .output(
+        z.array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            debtAssetId: z.string(),
+            collateralAssetId: z.string(),
+            quoteAssetId: z.string(),
+            aprBps: z.number().int(),
+            maxLtvBps: z.number().int(),
+            marginCallLtvBps: z.number().int(),
+            liquidationLtvBps: z.number().int(),
+            minPrincipal: amountString,
+          }),
+        ),
+      )
+      .query(async ({ input }) =>
+        guard(async () => {
+          const products = await bank.loans.listProducts(input.assetId);
+          return products.map((p) => ({
+            id: p.id,
+            name: p.name,
+            debtAssetId: p.debtAssetId,
+            collateralAssetId: p.collateralAssetId,
+            quoteAssetId: p.quoteAssetId,
+            aprBps: p.aprBps,
+            maxLtvBps: p.maxLtvBps,
+            // The two thresholds a borrower must be able to see BEFORE they
+            // borrow. Publishing the liquidation level is not a courtesy: a
+            // leveraged product whose liquidation price is discoverable only by
+            // being liquidated is not a product anyone can manage.
+            marginCallLtvBps: p.policy.marginCallLtvBps,
+            liquidationLtvBps: p.policy.liquidationLtvBps,
+            minPrincipal: formatAmount(p.minPrincipal),
+          }));
+        }),
+      ),
+
+    /**
+     * `loanId` is supplied by the client so a retried request is the same loan,
+     * not a second one (§5). A timeout on this call must not leave a borrower with
+     * two leveraged positions against collateral they meant to pledge once.
+     */
+    open: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          loanId: z.string().uuid(),
+          productId: z.string().uuid(),
+          collateralAmount: amountString,
+          principal: amountString,
+        }),
+      )
+      .output(z.object({ loanId: z.string(), status: z.string(), ltvBps: z.number().int(), drawLedgerTxId: z.string() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const result = await bank.loans.open({
+            loanId: input.loanId,
+            productId: input.productId,
+            userId: ctx.principal.userId,
+            collateralAmount: parseAmount(input.collateralAmount),
+            principal: parseAmount(input.principal),
+          });
+          return {
+            loanId: result.loan.id,
+            status: result.loan.status,
+            ltvBps: result.ltvBps,
+            drawLedgerTxId: result.drawLedgerTxId,
+          };
+        }),
+      ),
+
+    list: scopedProcedure('bank:read', { module: 'bank' })
+      .output(
+        z.array(
+          z.object({
+            id: z.string(),
+            productId: z.string(),
+            debtAssetId: z.string(),
+            collateralAssetId: z.string(),
+            principal: amountString,
+            outstandingPrincipal: amountString,
+            outstandingInterest: amountString,
+            collateral: amountString,
+            aprBps: z.number().int(),
+            status: z.string(),
+            marginCalledAt: z.string().nullable(),
+          }),
+        ),
+      )
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const rows = await bank.loans.loansOf(ctx.principal.userId);
+          return Promise.all(
+            rows.map(async (loan) => {
+              const debt = await bank.loans.outstanding(loan.id);
+              return {
+                id: loan.id,
+                productId: loan.productId,
+                debtAssetId: loan.debtAssetId,
+                collateralAssetId: loan.collateralAssetId,
+                principal: formatAmount(loan.principal),
+                // Derived at read time from write-once rows. There is no
+                // `outstanding` column, and the schema comments say why.
+                outstandingPrincipal: formatAmount(debt.principal),
+                outstandingInterest: formatAmount(debt.interest),
+                collateral: formatAmount(await bank.loans.collateralOf(loan)),
+                aprBps: loan.aprBps,
+                status: loan.status,
+                marginCalledAt: loan.marginCalledAt?.toISOString() ?? null,
+              };
+            }),
+          );
+        }),
+      ),
+
+    /**
+     * The borrower's own risk view.
+     *
+     * Read-only and portfolio-wide, so someone can see a margin call coming
+     * rather than learning about it from the liquidation. It marks; it never acts.
+     */
+    health: scopedProcedure('bank:read', { module: 'bank' })
+      .output(
+        z.object({
+          debtValue: amountString,
+          collateralValue: amountString,
+          portfolioLtvBps: z.number().int(),
+          loans: z.array(
+            z.object({
+              loanId: z.string(),
+              debtValue: amountString,
+              collateralValue: amountString,
+              ltvBps: z.number().int(),
+            }),
+          ),
+        }),
+      )
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const mark = await bank.loans.markUser(ctx.principal.userId);
+          return {
+            debtValue: formatAmount(mark.debtValue),
+            collateralValue: formatAmount(mark.collateralValue),
+            portfolioLtvBps: mark.portfolioLtvBps,
+            loans: mark.loans.map((l) => ({
+              loanId: l.loanId,
+              debtValue: formatAmount(l.debtValue),
+              collateralValue: formatAmount(l.collateralValue),
+              ltvBps: l.ltvBps,
+            })),
+          };
+        }),
+      ),
+
+    /** The cheapest way out of a margin call, and the one everyone wants taken. */
+    addCollateral: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ loanId: z.string().uuid(), amount: amountString }))
+      .output(z.object({ ledgerTxId: z.string(), sequence: z.number().int() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const loan = await bank.loans.loan(input.loanId);
+          assertSelf(ctx.principal.userId, loan.userId);
+          return bank.loans.addCollateral({ loanId: input.loanId, amount: parseAmount(input.amount) });
+        }),
+      ),
+
+    repay: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ loanId: z.string().uuid(), amount: amountString }))
+      .output(
+        z.object({
+          ledgerTxId: z.string(),
+          interestPaid: amountString,
+          principalPaid: amountString,
+          remainingPrincipal: amountString,
+          remainingInterest: amountString,
+          closed: z.boolean(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const loan = await bank.loans.loan(input.loanId);
+          assertSelf(ctx.principal.userId, loan.userId);
+          const result = await bank.loans.repay({ loanId: input.loanId, amount: parseAmount(input.amount) });
+          return {
+            ledgerTxId: result.ledgerTxId,
+            interestPaid: formatAmount(result.interestPaid),
+            principalPaid: formatAmount(result.principalPaid),
+            remainingPrincipal: formatAmount(result.remaining.principal),
+            remainingInterest: formatAmount(result.remaining.interest),
+            closed: result.closed,
+          };
+        }),
+      ),
+
+    /** Release collateral on a loan that owes nothing. Refuses otherwise. */
+    close: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ loanId: z.string().uuid() }))
+      .output(z.object({ released: amountString, ledgerTxId: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const loan = await bank.loans.loan(input.loanId);
+          assertSelf(ctx.principal.userId, loan.userId);
+          const result = await bank.loans.releaseSettled(input.loanId);
+          return { released: formatAmount(result.released), ledgerTxId: result.ledgerTxId };
+        }),
+      ),
+  });
+
+  /**
    * Operator surface. The jobs live behind `admin:treasury` — a scope §4.1 marks
    * interactive-only, so it can never be held by a long-lived API key.
    */
@@ -479,6 +739,101 @@ export function createBankRouter(bank: BankServices) {
       .mutation(async ({ input }) =>
         guard(async () => bank.earn.fundPool({ poolId: input.poolId, fundingId: input.fundingId, amount: parseAmount(input.amount) })),
       ),
+
+    // ── Loans (§8.1) ─────────────────────────────────────────────────────────
+    //
+    // THE RISK SWEEP AND THE LADDER ARE OPERATOR SURFACE, NOT USER SURFACE.
+    //
+    // A user able to trigger a mark is a user able to choose when their own — or
+    // a rival's — collateral is priced, which is precisely what the staleness
+    // window and the deviation breaker exist to take out of anyone's hands. Same
+    // reasoning as the standing-order runner above: safe to run twice is not a
+    // reason to let an untrusted caller choose when.
+
+    fundLoanReserve: scopedProcedure('admin:treasury')
+      .input(z.object({ debtAssetId: z.string().min(1).max(16), fundingId: z.string().min(4).max(64), amount: amountString }))
+      .output(z.object({ ledgerTxId: z.string() }))
+      .mutation(async ({ input }) =>
+        guard(async () =>
+          bank.loans.fundReserve({ debtAssetId: input.debtAssetId, fundingId: input.fundingId, amount: parseAmount(input.amount) }),
+        ),
+      ),
+
+    accrueLoanInterest: scopedProcedure('admin:treasury')
+      .input(z.object({ loanId: z.string().uuid().optional(), at: z.string().datetime({ offset: true }).optional() }))
+      .output(z.array(z.object({ loanId: z.string(), charged: amountString, days: z.number().int() })))
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const at = input.at ? new Date(input.at) : new Date();
+          if (input.loanId) {
+            const one = await bank.loans.accrue({ loanId: input.loanId, until: at });
+            return [{ loanId: one.loanId, charged: formatAmount(one.charged), days: one.days.length }];
+          }
+          const all = await bank.loans.accrueAll(at);
+          return all.map((r) => ({ loanId: r.loanId, charged: formatAmount(r.charged), days: r.days }));
+        }),
+      ),
+
+    runRiskSweep: scopedProcedure('admin:treasury')
+      .input(z.object({ limit: z.number().int().min(1).max(10_000).optional() }))
+      .output(
+        z.object({
+          marked: z.number().int(),
+          called: z.number().int(),
+          liquidated: z.number().int(),
+          cleared: z.number().int(),
+          // Loans the sweep declined to act on — an unusable mark, no
+          // counterparty, a reserve that cannot cover. Surfaced rather than
+          // swallowed: a silent refusal is a position nobody is watching.
+          refused: z.array(z.object({ loanId: z.string(), reason: z.string() })),
+        }),
+      )
+      .mutation(async ({ input }) => guard(async () => bank.loans.runRiskSweep(input.limit === undefined ? {} : { limit: input.limit }))),
+
+    /** Re-drive loans stuck between the collateral lock and the draw. */
+    resumePendingLoans: scopedProcedure('admin:treasury')
+      .input(z.object({ limit: z.number().int().min(1).max(1_000).optional() }))
+      .output(z.array(z.object({ loanId: z.string(), outcome: z.string(), reason: z.string().optional() })))
+      .mutation(async ({ input }) => guard(async () => bank.loans.resumePending(input.limit))),
+
+    /** Give up on a pending loan and give the borrower their collateral back. */
+    abandonPendingLoan: scopedProcedure('admin:treasury')
+      .input(z.object({ loanId: z.string().uuid() }))
+      .output(z.object({ released: amountString, ledgerTxId: z.string().nullable() }))
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const result = await bank.loans.abandonPending(input.loanId);
+          return { released: formatAmount(result.released), ledgerTxId: result.ledgerTxId };
+        }),
+      ),
+
+    /**
+     * The reserve identity, as a query rather than an investigation:
+     * `balance(loanReserve) + Σ outstanding principal` against what was funded.
+     */
+    reconcileLoanReserve: scopedProcedure('admin:treasury')
+      .input(z.object({ debtAssetId: z.string().min(1).max(16) }))
+      .output(
+        z.object({
+          reserveBalance: amountString,
+          outstandingPrincipal: amountString,
+          badDebt: amountString,
+          funded: amountString,
+          insuranceCapacity: amountString,
+        }),
+      )
+      .query(async ({ input }) =>
+        guard(async () => {
+          const r = await bank.loans.reconcileReserve(input.debtAssetId);
+          return {
+            reserveBalance: formatAmount(r.reserveBalance),
+            outstandingPrincipal: formatAmount(r.outstandingPrincipal),
+            badDebt: formatAmount(r.badDebt),
+            funded: formatAmount(r.funded),
+            insuranceCapacity: formatAmount(await bank.loans.insuranceCapacity(input.debtAssetId)),
+          };
+        }),
+      ),
   });
 
   return router({
@@ -488,6 +843,7 @@ export function createBankRouter(bank: BankServices) {
     spaces,
     transfers,
     earn,
+    loans,
     analytics,
     ops,
   });

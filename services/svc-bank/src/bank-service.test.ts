@@ -48,6 +48,7 @@ const URL = process.env.TEST_DATABASE_URL_BANK ?? 'postgres://svc_bank:svc_bank@
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_bank_init.sql'), 'utf8');
 const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
+const migrationLoans = readFileSync(join(here, '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -82,6 +83,11 @@ if (!available) {
 
   await sql.unsafe(migration);
   await sql.unsafe(migrationPending);
+  // 0002 is applied here so THE SCHEMA GUARD BELOW SEES THE LOAN TABLES. The
+  // loans suite has its own dedicated database (see loans/loans.test.ts and why);
+  // what this file still owns is the money-column allowlist, and a guard that
+  // cannot see half the schema is not guarding it.
+  await sql.unsafe(migrationLoans);
 
   let ledger: MemoryLedger;
   let bank: BankServices;
@@ -1019,6 +1025,35 @@ if (!available) {
         'earn_pools.min_deposit': 'a POLICY floor on a single deposit',
         'earn_positions.principal': 'the deposit RECORD; interest is paid to available, never added here',
         'interest_accruals.paid_amount': 'a RECORD of one day; summing the table is the lifetime figure',
+
+        // ── Loans (§8.1) ─────────────────────────────────────────────────────
+        //
+        // Note what is NOT in this list, because it is the whole design: there is
+        // no `loans.outstanding_principal`. A loan's debt is the number that
+        // decides whether someone's collateral is sold, and a mutable money
+        // column that a nightly job adds to is a figure nothing can contradict.
+        // It is derived instead, in bigint, from the write-once rows below —
+        // `LoanService.outstanding()`. The FORBIDDEN list above already fails the
+        // build on /outstanding/ by name; this is the positive half of the same
+        // rule.
+        'loan_products.min_principal': 'a POLICY floor on a single draw; no money path writes it',
+        'loans.principal': 'the amount DRAWN at open; recorded once, never revised — interest lives in its own table',
+        'loans.last_mark_price': 'a PRICE, not a holding — what one unit of collateral was worth at the last accepted mark',
+        'loan_collateral_events.amount': 'a RECORD of one completed lock or release; written once with its ledger tx id',
+        'loan_interest_accruals.principal_basis': 'the debt one day was computed against; a SNAPSHOT so that day is re-derivable',
+        'loan_interest_accruals.interest_amount': "a RECORD of one day's charge; summing the table is the lifetime figure",
+        'loan_repayments.interest_amount': 'a RECORD of one completed repayment; written once',
+        'loan_repayments.principal_amount': 'a RECORD of one completed repayment; written once',
+        'loan_margin_calls.cure_collateral_amount':
+          'a FIGURE quoted at one instant; the next mark writes a new row rather than revising this one',
+        'loan_liquidations.mark_price': 'the PRICE one rung executed at, for the dispute nobody wants to have',
+        'loan_liquidations.collateral_sold': 'a RECORD of one completed rung; written once',
+        'loan_liquidations.proceeds': 'a RECORD of one completed rung; the four allocations below must sum to it',
+        'loan_liquidations.principal_repaid': 'a RECORD of one completed rung; written once',
+        'loan_liquidations.interest_repaid': 'a RECORD of one completed rung; written once',
+        'loan_liquidations.penalty': 'a RECORD of one completed rung; written once',
+        'loan_liquidations.surplus_returned': 'a RECORD of what went back to the borrower; written once',
+        'loan_liquidations.shortfall': 'a RECORD of bad debt crystallised on a closing rung; written once',
       };
 
       const moneyColumns = columns

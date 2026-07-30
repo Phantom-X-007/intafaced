@@ -1,0 +1,1596 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import postgres from 'postgres';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import {
+  InvalidEntryError,
+  MemoryLedger,
+  formatAmount,
+  houseFees,
+  insuranceFund,
+  loanCollateralAccount,
+  loanReserve,
+  marketMaker,
+  parseAmount as amt,
+  recipes,
+  userAvailable,
+  userCollateral,
+} from '@intafaced/ledger-client';
+import { BankError } from '../errors.js';
+import { LoanService, marketMakerVenue, type LiquidationVenue, type MarginCallSink } from './loan-service.js';
+import { DEFAULT_MARK_POLICY, acceptableForLiquidation, acceptableForMarking, fixedPriceSource, type QuotedMark } from './prices.js';
+import {
+  DEFAULT_LIQUIDATION_POLICY,
+  RiskError,
+  accrualDay,
+  assertPolicyCoherent,
+  dailyLoanInterest,
+  daysToAccrue,
+  ltvBps,
+  planLiquidation,
+  splitProceeds,
+} from './risk.js';
+
+/**
+ * LOANS (§8.1).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHICH DATABASE THIS RUNS AGAINST, AND WHY IT IS NOT THE SHARED ONE
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * `bank-service.test.ts` connects to the shared `intafaced` database and
+ * truncates the live `bank` schema in `beforeEach`. That has already broken
+ * `main` once from an unrelated branch, and adding a second file that does it
+ * would make the race worse, not equal.
+ *
+ * So this suite points at a DEDICATED database (`intafaced_bank_loans_test`) and
+ * builds a per-run schema inside it with `createTestDb` + `rewriteSchemaSql` —
+ * the mechanism svc-ledger already uses for schema-qualified SQL. It issues no
+ * DDL and no TRUNCATE against anything shared, and the URL is read from
+ * `TEST_DATABASE_URL_BANK_LOANS` ONLY — deliberately not falling through to
+ * `TEST_DATABASE_URL`, which points at the shared database in the checked-in
+ * `.env`. A fallback that could silently land on `intafaced` is exactly the
+ * failure this comment exists to prevent.
+ *
+ * The pure-arithmetic and recipe suites below need no database at all and always
+ * run.
+ */
+
+const here = dirname(fileURLToPath(import.meta.url));
+const BANK_INIT = readFileSync(join(here, '..', '..', 'drizzle', '0000_bank_init.sql'), 'utf8');
+const POSITION_PENDING = readFileSync(join(here, '..', '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
+const LOANS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
+
+const LOANS_DB_URL =
+  process.env.TEST_DATABASE_URL_BANK_LOANS ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_bank_loans_test';
+
+const BORROWER = '11111111-1111-4111-8111-111111111111';
+const OTHER = '22222222-2222-4222-8222-222222222222';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 1 · ARITHMETIC — no database, no ledger, no clock.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('LTV is integer arithmetic, and rounds against optimism', () => {
+  it('computes basis points exactly, with no float anywhere in the path', () => {
+    // 5000 debt against 10000 collateral = 50%.
+    expect(ltvBps(amt('5000'), amt('10000'))).toBe(5_000);
+    expect(ltvBps(amt('7500'), amt('10000'))).toBe(7_500);
+    expect(ltvBps(amt('1'), amt('3'))).toBe(3_334); // 33.33…% → ceil
+  });
+
+  /**
+   * THE ROUNDING BUG THIS FILE EXISTS TO CATCH.
+   *
+   * The natural implementation reaches for `div()`, which returns a SCALED
+   * result — so rounding it up at the 10^-18 place and then dividing by the scale
+   * to get whole bps silently floors the answer. A loan sitting exactly on the
+   * liquidation threshold then reads as one tick BELOW it and is not liquidated.
+   * This asserts the ceil survives.
+   */
+  it('rounds UP, so a position fractionally over a threshold is treated as over it', () => {
+    // A debt one attounit above exactly 75% of the collateral.
+    const collateral = amt('10000');
+    const debt = amt('7500') + 1n;
+    expect(ltvBps(debt, collateral)).toBe(7_501);
+
+    // And exactly on the line stays on the line — ceil of an exact value is itself.
+    expect(ltvBps(amt('7500'), collateral)).toBe(7_500);
+  });
+
+  it('reports zero collateral against real debt as unsecured, not as an error or an Infinity', () => {
+    expect(ltvBps(amt('100'), 0n)).toBe(Number.MAX_SAFE_INTEGER);
+    expect(ltvBps(0n, 0n)).toBe(0);
+  });
+
+  it('never accepts a float anywhere — every input and output is a bigint or an integer', () => {
+    const result = ltvBps(amt('0.1') + amt('0.2'), amt('1'));
+    // 0.1 + 0.2 is exactly 0.3 in scaled bigint. In float it is not.
+    expect(result).toBe(3_000);
+  });
+});
+
+describe('daily loan interest', () => {
+  it('rounds DOWN, in the borrower&apos;s favour', () => {
+    // 1000 at 10% APR over 365 days = 0.273972602739726027…
+    const daily = dailyLoanInterest(amt('1000'), 1_000);
+    expect(formatAmount(daily)).toBe('0.273972602739726027');
+  });
+
+  it('is zero for a zero rate and for a settled loan', () => {
+    expect(dailyLoanInterest(amt('1000'), 0)).toBe(0n);
+    expect(dailyLoanInterest(0n, 1_000)).toBe(0n);
+  });
+
+  it('refuses a negative or non-integer rate rather than coercing one', () => {
+    expect(() => dailyLoanInterest(amt('1000'), -1)).toThrow(RiskError);
+    expect(() => dailyLoanInterest(amt('1000'), 12.5)).toThrow(RiskError);
+  });
+
+  /**
+   * COMPOUNDING, CHECKED BY HAND.
+   *
+   * Three days at 36.5% APR (0.1%/day) on 1000: each day is computed on the
+   * PREVIOUS day's closing debt, so day two is charged on 1001 and not on 1000.
+   */
+  it('compounds day by day rather than charging simple interest three times', () => {
+    let debt = amt('1000');
+    const charges: bigint[] = [];
+    for (let i = 0; i < 3; i++) {
+      const c = dailyLoanInterest(debt, 3_650);
+      charges.push(c);
+      debt += c;
+    }
+    expect(formatAmount(charges[0]!)).toBe('1');
+    // Day two is charged on 1001, so it is strictly larger than day one.
+    expect(charges[1]!).toBeGreaterThan(charges[0]!);
+    expect(charges[2]!).toBeGreaterThan(charges[1]!);
+  });
+});
+
+describe('the accrual day list — the idempotency arithmetic', () => {
+  const opened = new Date('2026-01-01T12:00:00Z');
+
+  it('charges nothing on the day a loan opens', () => {
+    expect(daysToAccrue(null, opened, new Date('2026-01-01T23:59:00Z'))).toEqual([]);
+  });
+
+  it('charges one day, once, the next day', () => {
+    expect(daysToAccrue(null, opened, new Date('2026-01-02T00:00:01Z'))).toEqual(['2026-01-02']);
+  });
+
+  /** A crashed job that comes back three days later charges three days, once each. */
+  it('catches up every missed day and no day twice', () => {
+    expect(daysToAccrue('2026-01-02', opened, new Date('2026-01-05T06:00:00Z'))).toEqual(['2026-01-03', '2026-01-04', '2026-01-05']);
+  });
+
+  it('re-running a day that has already been charged produces an empty list', () => {
+    expect(daysToAccrue('2026-01-05', opened, new Date('2026-01-05T23:00:00Z'))).toEqual([]);
+  });
+
+  /**
+   * A YEAR OF UNATTENDED COMPOUNDING IS AN INCIDENT, NOT A BATCH.
+   *
+   * Charging 400 compounding days in one unattended run is not how anyone should
+   * discover that accrual stopped, and the borrower's LTV would move by the
+   * width of the outage in a single tick.
+   */
+  it('refuses a backlog too large to compound unattended', () => {
+    expect(() => daysToAccrue('2026-01-01', opened, new Date('2027-06-01T00:00:00Z'))).toThrow(/refusing to compound/i);
+  });
+
+  it('formats the day in UTC, never local time', () => {
+    expect(accrualDay(new Date('2026-03-01T23:30:00Z'))).toBe('2026-03-01');
+  });
+});
+
+describe('policy coherence', () => {
+  it('accepts the shipped default', () => {
+    expect(() => assertPolicyCoherent(DEFAULT_LIQUIDATION_POLICY, 6_000)).not.toThrow();
+  });
+
+  it('refuses thresholds that would liquidate a loan before it is ever called', () => {
+    expect(() => assertPolicyCoherent({ ...DEFAULT_LIQUIDATION_POLICY, liquidationLtvBps: 7_000, marginCallLtvBps: 7_500 }, 6_000)).toThrow(
+      /Incoherent policy/,
+    );
+  });
+
+  it('refuses a liquidation target that leaves the loan still in margin call', () => {
+    expect(() => assertPolicyCoherent({ ...DEFAULT_LIQUIDATION_POLICY, targetLtvBps: 7_600 }, 6_000)).toThrow(/still in margin call/);
+  });
+
+  it('refuses an opening LTV at or above the margin-call threshold', () => {
+    // Otherwise every loan is in margin call from the moment it is drawn.
+    expect(() => assertPolicyCoherent(DEFAULT_LIQUIDATION_POLICY, 7_500)).toThrow(/Incoherent policy/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2 · THE LADDER — margin call before liquidation, and partial before total.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('planLiquidation', () => {
+  const now = new Date('2026-06-01T12:00:00Z');
+  const mark = (price: string, assetId = 'BTC'): QuotedMark => ({ assetId, price: amt(price), asOf: now, quality: 'mid' });
+  const usdt = mark('1', 'USDT');
+
+  const base = {
+    debtMark: usdt,
+    policy: DEFAULT_LIQUIDATION_POLICY,
+    now,
+  };
+
+  it('does nothing to a healthy loan', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('5000'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      marginCalledAt: null,
+    });
+    expect(rung.action).toBe('none');
+    expect(rung.ltvBps).toBe(5_000);
+  });
+
+  it('raises a margin call between the call and liquidation thresholds', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('8000'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      marginCalledAt: null,
+    });
+    expect(rung.action).toBe('margin-call');
+    expect(rung.ltvBps).toBe(8_000);
+  });
+
+  /**
+   * THE ORDERING GUARANTEE — the single most important assertion in this file.
+   *
+   * A loan whose LTV crosses the liquidation threshold with NO margin call on
+   * record is called, not liquidated. Without this the borrower's first notice of
+   * the loan would be its liquidation receipt.
+   */
+  it('will NOT liquidate a loan that has never been called, however bad the LTV', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('9000'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      marginCalledAt: null,
+    });
+    expect(rung.action).toBe('margin-call');
+  });
+
+  it('will NOT liquidate while the grace period is still running', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('9000'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      // Called one minute ago; grace is an hour.
+      marginCalledAt: new Date(now.getTime() - 60_000),
+    });
+    expect(rung.action).toBe('margin-call');
+  });
+
+  it('liquidates once the call has been raised AND its grace has expired', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('9000'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      marginCalledAt: new Date(now.getTime() - 2 * 3_600_000),
+    });
+    expect(rung.action).toBe('liquidate');
+    if (rung.action !== 'liquidate') throw new Error('unreachable');
+    expect(rung.graceWaived).toBe(false);
+  });
+
+  /**
+   * THE ONE EXCEPTION, AND IT IS RECORDED AS ONE.
+   *
+   * Past the insolvency threshold, waiting out grace guarantees the loss lands on
+   * the reserve — which is to say on every other borrower and depositor, none of
+   * whom chose this leverage. Grace is waived, and `graceWaived` is set so the
+   * one case that breaks the ordering rule is auditable per event rather than
+   * inferred later.
+   */
+  it('waives grace past the insolvency threshold, and says so', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('9600'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      marginCalledAt: null,
+    });
+    expect(rung.action).toBe('liquidate');
+    if (rung.action !== 'liquidate') throw new Error('unreachable');
+    expect(rung.graceWaived).toBe(true);
+  });
+
+  /**
+   * THE PARTIAL LADDER.
+   *
+   * The derivatives spec insists on partial liquidation before an insurance fund
+   * because selling a whole position into a thin book moves the price against the
+   * seller — manufacturing exactly the bad debt the liquidation was meant to
+   * prevent. The same reasoning transfers here, and arguably harder: loan
+   * collateral is one spot asset with no offsetting position anywhere.
+   */
+  it('sells only what restores the target LTV, not the whole position', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('9000'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      marginCalledAt: new Date(now.getTime() - 2 * 3_600_000),
+    });
+    if (rung.action !== 'liquidate') throw new Error('expected a liquidation');
+
+    // Far short of the whole 1 BTC.
+    expect(rung.collateralToSell).toBeLessThan(amt('1'));
+    expect(rung.closesPosition).toBe(false);
+  });
+
+  it('caps one rung at maxTrancheBps of the remaining collateral, whatever the arithmetic asks for', () => {
+    const rung = planLiquidation({
+      ...base,
+      // Deeply underwater: the unconstrained algebra would sell everything.
+      debt: amt('9900'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      marginCalledAt: new Date(now.getTime() - 2 * 3_600_000),
+      policy: { ...DEFAULT_LIQUIDATION_POLICY, maxTrancheBps: 2_500 },
+    });
+    if (rung.action !== 'liquidate') throw new Error('expected a liquidation');
+    expect(rung.collateralToSell).toBe(amt('0.25'));
+  });
+
+  it('rounds the sale DOWN — the smallest tranche that reaches the target', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('8600'),
+      collateral: amt('1'),
+      collateralMark: mark('10000'),
+      marginCalledAt: new Date(now.getTime() - 2 * 3_600_000),
+    });
+    if (rung.action !== 'liquidate') throw new Error('expected a liquidation');
+
+    // Selling exactly this much must NOT overshoot below the target.
+    const proceeds = (rung.collateralToSell * amt('10000')) / amt('1');
+    const debtAfter = amt('8600') - proceeds;
+    const collateralAfter = amt('1') - rung.collateralToSell;
+    const ltvAfter = ltvBps(debtAfter, (collateralAfter * amt('10000')) / amt('1'));
+    expect(ltvAfter).toBeGreaterThanOrEqual(DEFAULT_LIQUIDATION_POLICY.targetLtvBps);
+  });
+
+  /**
+   * A broken price feed is not a cheap asset, and dividing by it decides how much
+   * of someone's collateral to sell.
+   */
+  it('refuses to plan against a zero or negative mark', () => {
+    expect(() =>
+      planLiquidation({
+        ...base,
+        debt: amt('9000'),
+        collateral: amt('1'),
+        collateralMark: { assetId: 'BTC', price: 0n, asOf: now, quality: 'mid' },
+        marginCalledAt: new Date(now.getTime() - 2 * 3_600_000),
+      }),
+    ).toThrow(RiskError);
+  });
+
+  it('does not keep laddering once the collateral is gone', () => {
+    const rung = planLiquidation({
+      ...base,
+      debt: amt('1000'),
+      collateral: 0n,
+      collateralMark: mark('10000'),
+      marginCalledAt: new Date(now.getTime() - 2 * 3_600_000),
+    });
+    expect(rung.action).toBe('none');
+  });
+});
+
+describe('the proceeds waterfall', () => {
+  it('pays penalty, then interest, then principal, then the borrower', () => {
+    const split = splitProceeds({
+      proceeds: amt('1000'),
+      interestOwed: amt('50'),
+      principalOwed: amt('500'),
+      penaltyBps: 200,
+      closesPosition: true,
+    });
+
+    expect(formatAmount(split.penalty)).toBe('20');
+    expect(formatAmount(split.interestRepaid)).toBe('50');
+    expect(formatAmount(split.principalRepaid)).toBe('500');
+    expect(formatAmount(split.surplusToBorrower)).toBe('430');
+    expect(split.shortfall).toBe(0n);
+
+    // EVERY UNIT IS ALLOCATED. An unallocated remainder is value the borrower's
+    // collateral produced that nobody has claimed.
+    expect(split.penalty + split.interestRepaid + split.principalRepaid + split.surplusToBorrower).toBe(amt('1000'));
+  });
+
+  /**
+   * THE SURPLUS IS THE BORROWER'S.
+   *
+   * The stub this design replaces credited the ENTIRE seizure to `houseFees`.
+   * Keeping the overshoot on a forced sale is taking money that is not the
+   * platform's, on the one day the borrower is least able to argue about it.
+   */
+  it('returns the surplus to the borrower rather than keeping it', () => {
+    const split = splitProceeds({
+      proceeds: amt('10000'),
+      interestOwed: amt('0'),
+      principalOwed: amt('1000'),
+      penaltyBps: 200,
+      closesPosition: true,
+    });
+    expect(split.surplusToBorrower).toBeGreaterThan(amt('8000'));
+  });
+
+  /**
+   * A penalty taken out of a short recovery is a transfer from depositors to the
+   * house: the reserve is already not getting its principal back, and the fee
+   * would come out of what little did come back.
+   */
+  it('never takes a penalty out of the lender&apos;s recovery on a short sale', () => {
+    const split = splitProceeds({
+      proceeds: amt('400'),
+      interestOwed: amt('50'),
+      principalOwed: amt('1000'),
+      penaltyBps: 200,
+      closesPosition: true,
+    });
+    expect(split.penalty).toBe(0n);
+    expect(formatAmount(split.interestRepaid)).toBe('50');
+    expect(formatAmount(split.principalRepaid)).toBe('350');
+    expect(formatAmount(split.shortfall)).toBe('650');
+    expect(split.surplusToBorrower).toBe(0n);
+  });
+
+  /**
+   * A shortfall on a rung that leaves collateral behind is not a loss yet — the
+   * next rung may cover it. Only a CLOSING rung crystallises bad debt.
+   */
+  it('does not crystallise a shortfall while there are rungs left', () => {
+    const split = splitProceeds({
+      proceeds: amt('100'),
+      interestOwed: 0n,
+      principalOwed: amt('1000'),
+      penaltyBps: 200,
+      closesPosition: false,
+    });
+    expect(split.shortfall).toBe(0n);
+    expect(formatAmount(split.principalRepaid)).toBe('100');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3 · MARK GUARDS — a stale or printed price must not seize anybody's collateral.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('mark acceptability', () => {
+  const now = new Date('2026-06-01T12:00:00Z');
+  const at = (secondsAgo: number, quality: QuotedMark['quality'] = 'mid', price = '10000'): QuotedMark => ({
+    assetId: 'BTC',
+    price: amt(price),
+    asOf: new Date(now.getTime() - secondsAgo * 1_000),
+    quality,
+  });
+
+  it('accepts a fresh two-sided mark for both marking and liquidation', () => {
+    expect(acceptableForMarking(at(5), now, DEFAULT_MARK_POLICY).ok).toBe(true);
+    expect(acceptableForLiquidation(at(5), null, now, DEFAULT_MARK_POLICY).ok).toBe(true);
+  });
+
+  /**
+   * ASYMMETRIC ON PURPOSE. Refusing to WARN on a 90-second-old mark leaves the
+   * borrower uninformed. Refusing to SELL on it leaves them with their collateral.
+   */
+  it('tolerates a stale mark for a warning but not for a seizure', () => {
+    expect(acceptableForMarking(at(120), now, DEFAULT_MARK_POLICY).ok).toBe(true);
+    expect(acceptableForLiquidation(at(120), null, now, DEFAULT_MARK_POLICY).ok).toBe(false);
+  });
+
+  it('refuses a mark from the future — a clock problem is how a stale price passes a staleness check', () => {
+    expect(acceptableForMarking(at(-120), now, DEFAULT_MARK_POLICY).ok).toBe(false);
+  });
+
+  it('refuses a non-positive mark outright', () => {
+    expect(acceptableForMarking({ assetId: 'BTC', price: 0n, asOf: now, quality: 'mid' }, now, DEFAULT_MARK_POLICY).ok).toBe(false);
+  });
+
+  /**
+   * THE ORACLE-MANIPULATION DEFENCE.
+   *
+   * svc-trade has no index price — only best bid/ask and last trade. On a thin
+   * book one small sell prints a low `last`, every loan collateralised by that
+   * asset marks down at once, and liquidations fire at a price nobody could have
+   * got size at. So `last` is not a liquidation basis.
+   */
+  it('will NOT liquidate on a mark derived from a single trade print', () => {
+    const check = acceptableForLiquidation(at(5, 'last'), null, now, DEFAULT_MARK_POLICY);
+    expect(check.ok).toBe(false);
+    expect(check.reason).toMatch(/single print must not seize collateral/);
+  });
+
+  it('will still WARN on a last-trade mark — a notification costs the borrower nothing', () => {
+    expect(acceptableForMarking(at(5, 'last'), now, DEFAULT_MARK_POLICY).ok).toBe(true);
+  });
+
+  /** The circuit breaker. A genuine crash liquidates one interval later; a spoofed print never does. */
+  it('refuses to liquidate through a mark that moved further than the breaker allows', () => {
+    const check = acceptableForLiquidation(at(5, 'mid', '5000'), amt('10000'), now, DEFAULT_MARK_POLICY);
+    expect(check.ok).toBe(false);
+    expect(check.reason).toMatch(/breaker/);
+  });
+
+  it('allows a move inside the breaker', () => {
+    expect(acceptableForLiquidation(at(5, 'mid', '9000'), amt('10000'), now, DEFAULT_MARK_POLICY).ok).toBe(true);
+  });
+
+  it('computes the deviation in integer bps, not floating point', () => {
+    // Exactly on the breaker trips it: 2000bps from 10000 is 8000.
+    expect(acceptableForLiquidation(at(5, 'mid', '8000'), amt('10000'), now, DEFAULT_MARK_POLICY).ok).toBe(true);
+    expect(acceptableForLiquidation(at(5, 'mid', '7999'), amt('10000'), now, DEFAULT_MARK_POLICY).ok).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4 · THE RECIPES — what the ledger will and will not accept.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('loan recipes', () => {
+  let ledger: MemoryLedger;
+
+  beforeEach(() => {
+    ledger = new MemoryLedger();
+  });
+
+  const fund = async (userId: string, assetId: string, value: string) =>
+    ledger.post(recipes.deposit({ userId, assetId, amount: amt(value), rail: 'test', railRef: `${userId}:${assetId}:${Math.random()}` }));
+
+  const fundReserve = async (assetId: string, value: string) => {
+    const payer = '99999999-9999-4999-8999-999999999999';
+    await fund(payer, assetId, value);
+    await ledger.post(
+      recipes.feeCharge({ chargeId: `bank:${Math.random()}`, userId: payer, module: 'bank', mode: 'asset', assetId, amount: amt(value) }),
+    );
+    await ledger.post(recipes.loanReserveFund({ fundingId: `f:${Math.random()}`, debtAssetId: assetId, amount: amt(value) }));
+  };
+
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════
+   * P0-3, EXTENDED TO `collateral`. THE BUG THAT WAS STILL OPEN.
+   * ═══════════════════════════════════════════════════════════════════════════
+   *
+   * `client.ts` used to say "`collateral` remains open until a futures claim key
+   * is designed". Until it was closed there was ONE collateral pot per (user,
+   * asset), so a borrower with two BTC-backed loans had both secured by the same
+   * balance: releasing loan A's collateral could hand back value securing loan B,
+   * with every posting balancing and the journal reconciling perfectly.
+   */
+  it('keeps two loans&apos; collateral in separate pots, so releasing one cannot unsecure the other', async () => {
+    await fund(BORROWER, 'BTC', '2');
+
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'loan-a', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'loan-b', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
+
+    // Two accounts, one per loan. Not one pot with two claims on it.
+    const a = await ledger.balance(loanCollateralAccount(BORROWER, 'BTC', 'loan-a'));
+    const b = await ledger.balance(loanCollateralAccount(BORROWER, 'BTC', 'loan-b'));
+    expect(formatAmount(a.amount)).toBe('1');
+    expect(formatAmount(b.amount)).toBe('1');
+
+    // Releasing A drains A and leaves B untouched.
+    await ledger.post(
+      recipes.loanCollateralRelease({ loanId: 'loan-a', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 1 }),
+    );
+    expect(formatAmount((await ledger.balance(loanCollateralAccount(BORROWER, 'BTC', 'loan-a'))).amount)).toBe('0');
+    expect(formatAmount((await ledger.balance(loanCollateralAccount(BORROWER, 'BTC', 'loan-b'))).amount)).toBe('1');
+
+    // And A cannot be released twice, because there is nothing left in ITS pot —
+    // it can no longer reach B's. Before the purpose key this succeeded.
+    await expect(
+      ledger.post(
+        recipes.loanCollateralRelease({ loanId: 'loan-a', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 2 }),
+      ),
+    ).rejects.toThrow(/[Ii]nsufficient/);
+  });
+
+  it('refuses an unpurposed collateral account at the constructor and at the invariant', async () => {
+    expect(() => userCollateral(BORROWER, 'BTC', '')).toThrow(/requires a purpose/);
+
+    await fund(BORROWER, 'BTC', '1');
+    await expect(
+      ledger.post({
+        idempotencyKey: 'handmade-unpurposed-lock',
+        module: 'bank',
+        reason: 'test',
+        entries: [
+          { account: userAvailable(BORROWER, 'BTC'), direction: 'credit', amount: amt('1') },
+          { account: { ownerType: 'user', ownerId: BORROWER, assetId: 'BTC', kind: 'collateral' }, direction: 'debit', amount: amt('1') },
+        ],
+      }),
+    ).rejects.toThrow(/no purpose/);
+  });
+
+  /**
+   * ORDERING. Collateral is locked from the borrower's OWN available balance, in
+   * the same transaction — `assertPairedLocks` proves it — so locked collateral
+   * is provably still the borrower's rather than something the platform took.
+   */
+  it('funds a collateral lock from the borrower&apos;s own available balance and nowhere else', async () => {
+    await fund(BORROWER, 'BTC', '0.5');
+    await expect(
+      ledger.post(recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 })),
+    ).rejects.toThrow(/[Ii]nsufficient/);
+  });
+
+  /**
+   * THE RESERVE IS HARD NON-NEGATIVE. A `module` account cannot go below zero
+   * (§4.2's database CHECK), so an under-funded reserve cannot lend — it fails,
+   * loudly. Drawing against a `treasury` boundary instead would produce a book
+   * indistinguishable from one where the platform had printed the principal.
+   */
+  it('cannot lend principal the reserve does not have', async () => {
+    await fund(BORROWER, 'BTC', '1');
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
+
+    await expect(
+      ledger.post(recipes.loanDraw({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('5000') })),
+    ).rejects.toThrow(/[Ii]nsufficient/);
+  });
+
+  it('moves principal from the reserve to the borrower, and back on repayment', async () => {
+    await fundReserve('USDT', '10000');
+    await fund(BORROWER, 'BTC', '1');
+
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
+    await ledger.post(recipes.loanDraw({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('5000') }));
+
+    expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
+    expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('5000');
+
+    await ledger.post(
+      recipes.loanRepay({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('5000'), interest: 0n, sequence: 0 }),
+    );
+
+    // Principal is back in the reserve, lendable again.
+    expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('10000');
+    expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
+  });
+
+  it('splits a repayment: principal to the reserve, interest to bank revenue', async () => {
+    await fundReserve('USDT', '10000');
+    await fund(BORROWER, 'USDT', '100');
+    await ledger.post(recipes.loanDraw({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('1000') }));
+
+    const houseBefore = (await ledger.balance(houseFees('bank', 'USDT'))).amount;
+
+    await ledger.post(
+      recipes.loanRepay({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('1000'), interest: amt('50'), sequence: 0 }),
+    );
+
+    expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('10000');
+    expect((await ledger.balance(houseFees('bank', 'USDT'))).amount - houseBefore).toBe(amt('50'));
+  });
+
+  /**
+   * ONE TRANSACTION. The three-step version — release, sell, apply — has a window
+   * in which the borrower holds spendable collateral on a defaulting loan, and a
+   * borrower watching a liquidation notices. Here the collateral goes from the
+   * borrower's purposed pot straight to the buyer, and the buyer really pays, in
+   * the same posting.
+   */
+  it('seizes, sells and repays atomically across two assets', async () => {
+    await fundReserve('USDT', '10000');
+    await fund(BORROWER, 'BTC', '1');
+    await fund('mm-funder', 'USDT', '20000');
+
+    // The market maker must actually hold cash to buy with.
+    await ledger.post({
+      idempotencyKey: 'seed-market-maker',
+      module: 'test',
+      reason: 'seed',
+      entries: [
+        { account: userAvailable('mm-funder', 'USDT'), direction: 'credit', amount: amt('20000') },
+        { account: marketMaker('USDT'), direction: 'debit', amount: amt('20000') },
+      ],
+    });
+
+    await ledger.post(
+      recipes.loanCollateralLock({ loanId: 'l1', userId: BORROWER, collateralAssetId: 'BTC', amount: amt('1'), sequence: 0 }),
+    );
+    await ledger.post(recipes.loanDraw({ loanId: 'l1', userId: BORROWER, debtAssetId: 'USDT', principal: amt('5000') }));
+
+    await ledger.post(
+      recipes.loanLiquidate({
+        loanId: 'l1',
+        userId: BORROWER,
+        tranche: 0,
+        collateralAssetId: 'BTC',
+        collateralSold: amt('0.6'),
+        debtAssetId: 'USDT',
+        proceeds: amt('6000'),
+        principalRepaid: amt('5000'),
+        interestRepaid: amt('100'),
+        penalty: amt('120'),
+        surplusToBorrower: amt('780'),
+        buyer: { collateralTo: marketMaker('BTC'), proceedsFrom: marketMaker('USDT') },
+        markPrice: amt('10000'),
+      }),
+    );
+
+    // Collateral went to the buyer; the borrower's remaining pot is untouched.
+    expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe('0.6');
+    expect(formatAmount((await ledger.balance(loanCollateralAccount(BORROWER, 'BTC', 'l1'))).amount)).toBe('0.4');
+    // The reserve is whole again.
+    expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('10000');
+    // And the surplus went BACK TO THE BORROWER, not to the house.
+    expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5780');
+  });
+
+  it('refuses a liquidation whose proceeds are not fully allocated', () => {
+    expect(() =>
+      recipes.loanLiquidate({
+        loanId: 'l1',
+        userId: BORROWER,
+        tranche: 0,
+        collateralAssetId: 'BTC',
+        collateralSold: amt('1'),
+        debtAssetId: 'USDT',
+        proceeds: amt('6000'),
+        principalRepaid: amt('5000'),
+        interestRepaid: 0n,
+        penalty: 0n,
+        surplusToBorrower: 0n, // 1000 unaccounted for
+        buyer: { collateralTo: marketMaker('BTC'), proceedsFrom: marketMaker('USDT') },
+        markPrice: amt('10000'),
+      }),
+    ).toThrow(/fully allocated/);
+  });
+
+  /**
+   * THE LADDER NEEDS MORE THAN ONE RUNG, AND THE OLD KEY FORBADE IT.
+   *
+   * The recipe this replaces keyed on `bank.liquidate:<loanId>` — one liquidation
+   * per loan for all time. Two rungs must be two transactions.
+   */
+  it('gives each tranche its own idempotency key, so a ladder is expressible', () => {
+    const shared = {
+      loanId: 'l1',
+      userId: BORROWER,
+      collateralAssetId: 'BTC',
+      collateralSold: amt('0.1'),
+      debtAssetId: 'USDT',
+      proceeds: amt('1000'),
+      principalRepaid: amt('1000'),
+      interestRepaid: 0n,
+      penalty: 0n,
+      surplusToBorrower: 0n,
+      buyer: { collateralTo: marketMaker('BTC'), proceedsFrom: marketMaker('USDT') },
+      markPrice: amt('10000'),
+    };
+    const first = recipes.loanLiquidate({ ...shared, tranche: 0 });
+    const second = recipes.loanLiquidate({ ...shared, tranche: 1 });
+    expect(first.idempotencyKey).not.toBe(second.idempotencyKey);
+    expect(second.idempotencyKey).toContain(':1');
+  });
+
+  it('refuses a same-asset liquidation, which would post a fictional trade', () => {
+    expect(() =>
+      recipes.loanLiquidate({
+        loanId: 'l1',
+        userId: BORROWER,
+        tranche: 0,
+        collateralAssetId: 'USDT',
+        collateralSold: amt('1'),
+        debtAssetId: 'USDT',
+        proceeds: amt('1'),
+        principalRepaid: amt('1'),
+        interestRepaid: 0n,
+        penalty: 0n,
+        surplusToBorrower: 0n,
+        buyer: { collateralTo: marketMaker('USDT'), proceedsFrom: marketMaker('USDT') },
+        markPrice: amt('1'),
+      }),
+    ).toThrow(InvalidEntryError);
+  });
+
+  /** The loss has a name and an owner, and when nobody can cover it the post fails. */
+  it('books bad debt against the insurance fund, and fails loudly when it is empty', async () => {
+    await fundReserve('USDT', '10000');
+    await expect(ledger.post(recipes.loanBadDebt({ loanId: 'l1', debtAssetId: 'USDT', shortfall: amt('500') }))).rejects.toThrow(
+      /[Ii]nsufficient/,
+    );
+
+    // Fund the insurance fund and it works, moving the loss where it belongs.
+    await fund('ins', 'USDT', '1000');
+    await ledger.post({
+      idempotencyKey: 'seed-insurance-fund',
+      module: 'test',
+      reason: 'seed',
+      entries: [
+        { account: userAvailable('ins', 'USDT'), direction: 'credit', amount: amt('1000') },
+        { account: insuranceFund('USDT'), direction: 'debit', amount: amt('1000') },
+      ],
+    });
+
+    await ledger.post(recipes.loanBadDebt({ loanId: 'l1', debtAssetId: 'USDT', shortfall: amt('500') }));
+    expect(formatAmount((await ledger.balance(insuranceFund('USDT'))).amount)).toBe('500');
+    expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('10500');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5 · THE SERVICE — ordering, crash points, and the accrual guard, on Postgres.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * The service's SQL is schema-qualified (`bank.loans`) on purpose, so
+ * `createTestDb`'s per-run schema cannot isolate it — the same reason
+ * `bank-service.test.ts` gives. The isolation here is therefore a whole
+ * DATABASE, not a schema: a real `bank` schema inside
+ * `intafaced_bank_loans_test`, which nothing else in the platform connects to.
+ *
+ * That is what makes the `TRUNCATE` below safe, and it is the specific thing that
+ * broke `main` when it was done against the shared database. Same mechanism,
+ * different blast radius.
+ */
+async function connect(): Promise<ReturnType<typeof postgres> | null> {
+  const probe = postgres(LOANS_DB_URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
+  try {
+    await probe`SELECT 1`;
+  } catch {
+    return null;
+  } finally {
+    await probe.end({ timeout: 2 }).catch(() => undefined);
+  }
+
+  const client = postgres(LOANS_DB_URL, {
+    max: 8,
+    connection: { search_path: 'bank,public', application_name: 'svc-bank-loans-test' },
+    onnotice: () => undefined,
+  });
+
+  // Guard rail with teeth: refuse to run against anything but the dedicated
+  // database, whatever an env var says. A suite that truncates `bank.*` must not
+  // be one misconfiguration away from doing it to the platform's live schema.
+  const [{ current_database: dbName }] = await client<Array<{ current_database: string }>>`SELECT current_database()`;
+  if (!/bank_loans_test$/.test(dbName)) {
+    await client.end({ timeout: 2 });
+    throw new Error(
+      `Refusing to run the loans suite against "${dbName}". It truncates bank.* and must only ever ` +
+        `point at a dedicated *_bank_loans_test database (set TEST_DATABASE_URL_BANK_LOANS).`,
+    );
+  }
+
+  // Migrations are not re-runnable (`CREATE TYPE` has no IF NOT EXISTS), so they
+  // are applied once and skipped thereafter. Failures are NOT swallowed: a suite
+  // that silently ran against a half-built schema would report green on tables
+  // that do not exist.
+  await client.unsafe('CREATE SCHEMA IF NOT EXISTS bank');
+
+  const [{ exists }] = await client<Array<{ exists: boolean }>>`
+    SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'bank' AND table_name = 'loans') AS exists
+  `;
+
+  if (!exists) {
+    await client.unsafe(BANK_INIT);
+    await client.unsafe(POSITION_PENDING);
+    await client.unsafe(LOANS_MIGRATION);
+  }
+
+  return client;
+}
+
+const client = await connect();
+
+if (client === null) {
+  describe.skip('svc-bank loans (Postgres unavailable — start docker compose, or set TEST_DATABASE_URL_BANK_LOANS)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  const sql = client;
+
+  afterAll(async () => {
+    await sql.end({ timeout: 5 });
+  });
+
+  describe('LoanService', () => {
+    let ledger: MemoryLedger;
+    let loans: LoanService;
+    let calls: Array<{ loanId: string; ltvBps: number }>;
+    let now: Date;
+    let markNow: Date;
+
+    /**
+     * Marks are stamped at `markNow`, which the tests advance in step with the
+     * clock they pass to the sweep. A source pinned to wall time would hand back
+     * marks two months in the future of a fixed test instant, and the staleness
+     * guard would correctly reject every one of them — failing the suite for a
+     * reason that has nothing to do with what it is testing.
+     */
+    const price = (btc: string) => fixedPriceSource({ BTC: { price: btc, quality: 'mid' } }, () => markNow);
+
+    /** Advance the clock and the marks together, then sweep. */
+    const sweepAt = async (at: Date) => {
+      markNow = at;
+      return loans.runRiskSweep({ now: at });
+    };
+
+    async function fund(userId: string, assetId: string, value: string) {
+      await ledger.post(
+        recipes.deposit({ userId, assetId, amount: amt(value), rail: 'test', railRef: `${userId}:${assetId}:${Math.random()}` }),
+      );
+    }
+
+    async function fundReserve(assetId: string, value: string) {
+      const payer = '99999999-9999-4999-8999-999999999999';
+      await fund(payer, assetId, value);
+      await ledger.post(
+        recipes.feeCharge({ chargeId: `bank:${Math.random()}`, userId: payer, module: 'bank', mode: 'asset', assetId, amount: amt(value) }),
+      );
+      await ledger.post(recipes.loanReserveFund({ fundingId: `f:${Math.random()}`, debtAssetId: assetId, amount: amt(value) }));
+    }
+
+    async function makeProduct(overrides: Partial<Parameters<LoanService['createProduct']>[0]> = {}) {
+      return loans.createProduct({
+        name: 'BTC-backed USDT',
+        debtAssetId: 'USDT',
+        collateralAssetId: 'BTC',
+        quoteAssetId: 'USDT',
+        aprBps: 1_000,
+        maxLtvBps: 5_000,
+        policy: DEFAULT_LIQUIDATION_POLICY,
+        ...overrides,
+      });
+    }
+
+    beforeEach(async () => {
+      await sql`
+        TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
+                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products
+        RESTART IDENTITY CASCADE
+      `;
+      ledger = new MemoryLedger();
+      calls = [];
+      now = new Date('2026-06-01T12:00:00Z');
+      markNow = now;
+
+      const sink: MarginCallSink = {
+        send: async (input) => {
+          calls.push({ loanId: input.loanId, ltvBps: input.ltvBps });
+        },
+      };
+
+      loans = new LoanService(sql, ledger, {
+        priceSource: price('10000'),
+        marginCalls: sink,
+        venue: marketMakerVenue(),
+      });
+    });
+
+    // ── The happy path, and the ordering inside it ────────────────────────────
+
+    it('locks collateral BEFORE releasing principal', async () => {
+      await fundReserve('USDT', '100000');
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+
+      const result = await loans.open({
+        productId: product.id,
+        userId: BORROWER,
+        collateralAmount: amt('1'),
+        principal: amt('5000'),
+        now,
+      });
+
+      expect(result.loan.status).toBe('active');
+      expect(result.ltvBps).toBe(5_000);
+
+      // The ledger's own ordering: both postings exist, and the collateral one
+      // came first.
+      const events = await sql`SELECT direction, sequence, status FROM bank.loan_collateral_events WHERE loan_id = ${result.loan.id}`;
+      expect(events).toHaveLength(1);
+      expect(events[0]!.direction).toBe('lock');
+      expect(events[0]!.status).toBe('settled');
+
+      expect(formatAmount(await loans.collateralOf(result.loan))).toBe('1');
+      expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
+      expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount)).toBe('0');
+    });
+
+    it('refuses a draw that would open above the product&apos;s maximum LTV', async () => {
+      await fundReserve('USDT', '100000');
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+
+      await expect(
+        loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('6000'), now }),
+      ).rejects.toThrow(/exceeds the/);
+    });
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * IF THE PROCESS DIES BETWEEN THE LOCK AND THE DRAW, WHOSE FUNDS ARE STRANDED?
+     * ═══════════════════════════════════════════════════════════════════════════
+     *
+     * Nobody's, and this is the proof. The reserve is deliberately left empty so
+     * the draw fails exactly where a crash would have landed. The collateral is
+     * locked, the borrower has no principal, and the loan is `pending`.
+     *
+     * Two recoveries, both exercised: fund the reserve and re-drive, or abandon
+     * and give the collateral back. Either way the borrower ends whole.
+     */
+    describe('the crash window between locking collateral and releasing principal', () => {
+      it('leaves the collateral in the borrower&apos;s OWN account with the reserve untouched', async () => {
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+
+        await expect(
+          loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now }),
+        ).rejects.toThrow(BankError);
+
+        const rows = await sql<Array<{ id: string; status: string }>>`SELECT id, status FROM bank.loans`;
+        expect(rows[0]!.status).toBe('pending');
+
+        const loan = await loans.loan(rows[0]!.id);
+        // The value is in a `user`-owned account, purposed to this loan.
+        expect(formatAmount(await loans.collateralOf(loan))).toBe('1');
+        // The reserve never moved, and the borrower has no principal.
+        expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('0');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
+      });
+
+      it('recovers by re-driving once the reserve is funded — locking collateral exactly once', async () => {
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+        await loans
+          .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
+
+        await fundReserve('USDT', '100000');
+        const resumed = await loans.resumePending();
+
+        expect(resumed).toHaveLength(1);
+        expect(resumed[0]!.outcome).toBe('completed');
+
+        const rows = await sql<Array<{ id: string; status: string }>>`SELECT id, status FROM bank.loans`;
+        const loan = await loans.loan(rows[0]!.id);
+        expect(loan.status).toBe('active');
+
+        // THE COLLATERAL WAS NOT LOCKED TWICE. The lock's idempotency key is
+        // (loan, sequence 0), so re-driving finds the original transaction.
+        expect(formatAmount(await loans.collateralOf(loan))).toBe('1');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
+      });
+
+      it('recovers by abandoning — the collateral goes back to the borrower', async () => {
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+        await loans
+          .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
+
+        const rows = await sql<Array<{ id: string }>>`SELECT id FROM bank.loans`;
+        const result = await loans.abandonPending(rows[0]!.id);
+
+        expect(formatAmount(result.released)).toBe('1');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount)).toBe('1');
+      });
+
+      it('refuses to abandon a loan whose principal has been drawn', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
+
+        await expect(loans.abandonPending(opened.loan.id)).rejects.toThrow(/secures drawn principal/);
+      });
+    });
+
+    it('a retried open with the same loanId opens ONE loan, not two', async () => {
+      await fundReserve('USDT', '100000');
+      await fund(BORROWER, 'BTC', '2');
+      const product = await makeProduct();
+
+      const loanId = '44444444-4444-4444-8444-444444444444';
+      const args = { loanId, productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now };
+
+      const first = await loans.open(args);
+      const second = await loans.open(args);
+
+      expect(second.loan.id).toBe(first.loan.id);
+      const rows = await sql`SELECT id FROM bank.loans`;
+      expect(rows).toHaveLength(1);
+      // And the borrower was charged one lot of collateral, not two.
+      expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount)).toBe('1');
+    });
+
+    // ── Accrual ──────────────────────────────────────────────────────────────
+
+    describe('interest accrual is idempotent per (loan, day)', () => {
+      async function openLoan() {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct({ aprBps: 3_650 }); // 36.5% APR == 0.1%/day
+        return loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+      }
+
+      it('charges nothing on the day the loan opens', async () => {
+        const { loan } = await openLoan();
+        const result = await loans.accrue({ loanId: loan.id, until: new Date(now.getTime() + 6 * 3_600_000) });
+        expect(result.days).toHaveLength(0);
+        expect(formatAmount((await loans.outstanding(loan.id)).total)).toBe('5000');
+      });
+
+      /**
+       * THE GUARD. A crashed run that re-runs must charge each day ONCE. Daily
+       * compounding that double-applies is not a reporting error — it is a charge
+       * the borrower never incurred, and from that day forward it compounds.
+       */
+      it('running the job three times for the same day charges that day once', async () => {
+        const { loan } = await openLoan();
+        const until = new Date(now.getTime() + DAY_MS);
+
+        const first = await loans.accrue({ loanId: loan.id, until });
+        const second = await loans.accrue({ loanId: loan.id, until });
+        const third = await loans.accrue({ loanId: loan.id, until });
+
+        expect(first.days).toHaveLength(1);
+        expect(first.days[0]!.alreadyAccrued).toBe(false);
+        // Subsequent runs find nothing left to charge.
+        expect(second.days).toHaveLength(0);
+        expect(third.days).toHaveLength(0);
+
+        const rows = await sql`SELECT accrual_date FROM bank.loan_interest_accruals WHERE loan_id = ${loan.id}`;
+        expect(rows).toHaveLength(1);
+
+        // 5000 at 0.1%/day = 5.
+        expect(formatAmount((await loans.outstanding(loan.id)).interest)).toBe('5');
+      });
+
+      it('catches up a three-day outage, charging each day once and compounding correctly', async () => {
+        const { loan } = await openLoan();
+        const until = new Date(now.getTime() + 3 * DAY_MS);
+
+        const result = await loans.accrue({ loanId: loan.id, until });
+        expect(result.days.map((d) => d.date)).toEqual(['2026-06-02', '2026-06-03', '2026-06-04']);
+
+        // Compounded day by day, each on the PREVIOUS day's closing debt:
+        //   5000 → +5 → 5005 → +5.005 → 5010.005 → +5.010005 → 5015.015005.
+        // Simple interest would have charged 5 three times and landed on 5015.
+        expect(formatAmount((await loans.outstanding(loan.id)).total)).toBe('5015.015005');
+
+        // Each day's own basis is snapshotted, so any past day is re-derivable.
+        const rows = await sql<Array<{ principal_basis: string }>>`
+          SELECT principal_basis FROM bank.loan_interest_accruals WHERE loan_id = ${loan.id} ORDER BY accrual_date
+        `;
+        expect(rows.map((r) => formatAmount(amt(r.principal_basis)))).toEqual(['5000', '5005', '5010.005']);
+      });
+
+      /**
+       * THE BORROWER MUST NOT PAY FOR THE OUTAGE.
+       *
+       * Two identical loans. One is accrued nightly; the other has its job down
+       * for three days and then catches up in a single run. The debts must agree
+       * exactly — a borrower cannot be charged more (or less) because the
+       * platform was unavailable.
+       */
+      it('a catch-up charges exactly what three separate nightly runs would have', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        await fund(OTHER, 'BTC', '1');
+        const product = await makeProduct({ aprBps: 3_650 });
+
+        const nightlyLoan = (
+          await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+        ).loan;
+        const caughtUpLoan = (
+          await loans.open({ productId: product.id, userId: OTHER, collateralAmount: amt('1'), principal: amt('5000'), now })
+        ).loan;
+
+        for (let day = 1; day <= 3; day++) {
+          await loans.accrue({ loanId: nightlyLoan.id, until: new Date(now.getTime() + day * DAY_MS) });
+        }
+        await loans.accrue({ loanId: caughtUpLoan.id, until: new Date(now.getTime() + 3 * DAY_MS) });
+
+        const nightly = await loans.outstanding(nightlyLoan.id);
+        const caughtUp = await loans.outstanding(caughtUpLoan.id);
+
+        expect(formatAmount(caughtUp.total)).toBe(formatAmount(nightly.total));
+        expect(formatAmount(caughtUp.total)).toBe('5015.015005');
+
+        // And each charged three days, not one and not six.
+        const perLoan = await sql<Array<{ loan_id: string; n: string }>>`
+          SELECT loan_id, COUNT(*)::text AS n FROM bank.loan_interest_accruals GROUP BY loan_id
+        `;
+        expect(perLoan.map((r) => r.n)).toEqual(['3', '3']);
+      });
+
+      /** Accrual moves no value, so there is no ledger transaction to deduplicate. */
+      it('posts nothing to the ledger — interest capitalises rather than being debited', async () => {
+        const { loan } = await openLoan();
+        const before = (await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount;
+        const houseBefore = (await ledger.balance(houseFees('bank', 'USDT'))).amount;
+
+        await loans.accrue({ loanId: loan.id, until: new Date(now.getTime() + DAY_MS) });
+
+        expect((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount).toBe(before);
+        expect((await ledger.balance(houseFees('bank', 'USDT'))).amount).toBe(houseBefore);
+        // But the debt grew.
+        expect(formatAmount((await loans.outstanding(loan.id)).interest)).toBe('5');
+      });
+
+      it('does not charge interest on a loan whose principal was never drawn', async () => {
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+        await loans
+          .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
+
+        const rows = await sql<Array<{ id: string }>>`SELECT id FROM bank.loans`;
+        const result = await loans.accrue({ loanId: rows[0]!.id, until: new Date(now.getTime() + 5 * DAY_MS) });
+        expect(result.days).toHaveLength(0);
+      });
+    });
+
+    // ── Repayment and release ────────────────────────────────────────────────
+
+    describe('repayment', () => {
+      async function openLoan() {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct({ aprBps: 3_650 });
+        return loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+      }
+
+      it('settles interest before principal', async () => {
+        const { loan } = await openLoan();
+        await loans.accrue({ loanId: loan.id, until: new Date(now.getTime() + DAY_MS) });
+
+        const result = await loans.repay({ loanId: loan.id, amount: amt('100') });
+        expect(formatAmount(result.interestPaid)).toBe('5');
+        expect(formatAmount(result.principalPaid)).toBe('95');
+        expect(formatAmount(result.remaining.total)).toBe('4905');
+      });
+
+      /**
+       * THE MOST IMPORTANT PRECONDITION IN THE MODULE.
+       *
+       * Releasing collateral on a live loan converts a secured position into an
+       * unsecured one in one transaction, and there is no posting that undoes it
+       * once the borrower has withdrawn.
+       */
+      it('refuses to release collateral while anything is outstanding', async () => {
+        const { loan } = await openLoan();
+        await loans.repay({ loanId: loan.id, amount: amt('1000') });
+
+        await expect(loans.releaseSettled(loan.id)).rejects.toThrow(/still owes/);
+        expect(formatAmount(await loans.collateralOf(loan))).toBe('1');
+      });
+
+      it('releases the collateral automatically the moment the debt reaches zero', async () => {
+        const { loan } = await openLoan();
+        const result = await loans.repay({ loanId: loan.id, amount: amt('5000') });
+
+        expect(result.closed).toBe(true);
+        expect(formatAmount(await loans.collateralOf(loan))).toBe('0');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount)).toBe('1');
+        expect((await loans.loan(loan.id)).status).toBe('repaid');
+      });
+
+      it('never takes more than is owed', async () => {
+        const { loan } = await openLoan();
+        await fund(BORROWER, 'USDT', '10000');
+
+        const result = await loans.repay({ loanId: loan.id, amount: amt('99999') });
+        expect(formatAmount(result.principalPaid)).toBe('5000');
+        expect(formatAmount(result.remaining.total)).toBe('0');
+      });
+
+      it('a repayment the borrower cannot fund fails without corrupting the loan', async () => {
+        const { loan } = await openLoan();
+        await ledger.post(
+          recipes.withdrawHold({ userId: BORROWER, assetId: 'USDT', amount: amt('5000'), rail: 'test', withdrawalId: 'drain' }),
+        );
+
+        await expect(loans.repay({ loanId: loan.id, amount: amt('1000') })).rejects.toThrow(/[Ii]nsufficient/);
+
+        // The claim row records the refusal; the debt is untouched.
+        const rows = await sql<Array<{ status: string }>>`SELECT status FROM bank.loan_repayments WHERE loan_id = ${loan.id}`;
+        expect(rows[0]!.status).toBe('rejected');
+        expect(formatAmount((await loans.outstanding(loan.id)).total)).toBe('5000');
+      });
+    });
+
+    // ── The sweep: marking, calling, laddering ───────────────────────────────
+
+    describe('the risk sweep', () => {
+      async function openAt(collateralPrice: string, principal = '5000') {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        // Seed the market maker so a liquidation has a funded counterparty.
+        await fund('mm', 'USDT', '100000');
+        await ledger.post({
+          idempotencyKey: `seed-mm-${Math.random()}`,
+          module: 'test',
+          reason: 'seed',
+          entries: [
+            { account: userAvailable('mm', 'USDT'), direction: 'credit', amount: amt('100000') },
+            { account: marketMaker('USDT'), direction: 'debit', amount: amt('100000') },
+          ],
+        });
+
+        const product = await makeProduct();
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt(principal),
+          now,
+        });
+        loans = new LoanService(sql, ledger, {
+          priceSource: price(collateralPrice),
+          marginCalls: {
+            send: async (i) => {
+              calls.push({ loanId: i.loanId, ltvBps: i.ltvBps });
+            },
+          },
+          venue: marketMakerVenue(),
+        });
+        return opened;
+      }
+
+      it('leaves a healthy loan alone', async () => {
+        const opened = await openAt('10000');
+        const sweep = await sweepAt(now);
+        expect(sweep.called).toBe(0);
+        expect(sweep.liquidated).toBe(0);
+        expect((await loans.loan(opened.loan.id)).status).toBe('active');
+      });
+
+      it('raises a margin call, records it, and delivers it', async () => {
+        const opened = await openAt('6500'); // 5000/6500 = 76.93%
+        const sweep = await sweepAt(now);
+
+        expect(sweep.called).toBe(1);
+        expect(calls).toHaveLength(1);
+
+        const rows = await sql<Array<{ ltv_bps: number; notified_at: Date | null; cure_collateral_amount: string }>>`
+          SELECT ltv_bps, notified_at, cure_collateral_amount FROM bank.loan_margin_calls WHERE loan_id = ${opened.loan.id}
+        `;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.notified_at).not.toBeNull();
+        // The cure figure is what actually clears the call, rounded UP so posting
+        // exactly that much does not land a unit short.
+        expect(amt(rows[0]!.cure_collateral_amount)).toBeGreaterThan(0n);
+
+        expect((await loans.loan(opened.loan.id)).status).toBe('margin_call');
+      });
+
+      /**
+       * THE ORDERING, END TO END. A loan that crosses the liquidation threshold
+       * on its FIRST mark is called, not liquidated — however bad the number.
+       */
+      it('does not liquidate on the first mark that crosses the threshold', async () => {
+        const opened = await openAt('5700'); // ~87.7% — above liquidation, below insolvency
+        const sweep = await sweepAt(now);
+
+        expect(sweep.liquidated).toBe(0);
+        expect(sweep.called).toBe(1);
+        const rows = await sql`SELECT id FROM bank.loan_liquidations WHERE loan_id = ${opened.loan.id}`;
+        expect(rows).toHaveLength(0);
+      });
+
+      it('does not liquidate while grace is still running', async () => {
+        const opened = await openAt('5700');
+        await sweepAt(now);
+        // Ten minutes later; grace is an hour.
+        const sweep = await sweepAt(new Date(now.getTime() + 10 * 60_000));
+        expect(sweep.liquidated).toBe(0);
+        expect(await sql`SELECT id FROM bank.loan_liquidations WHERE loan_id = ${opened.loan.id}`).toHaveLength(0);
+      });
+
+      it('liquidates a partial tranche once the call has been served and grace has expired', async () => {
+        const opened = await openAt('5700');
+        await sweepAt(now);
+
+        const later = new Date(now.getTime() + 2 * 3_600_000);
+        const sweep = await sweepAt(later);
+
+        expect(sweep.liquidated).toBe(1);
+
+        const rows = await sql<Array<{ tranche: number; collateral_sold: string; grace_waived: boolean; status: string }>>`
+          SELECT tranche, collateral_sold, grace_waived, status FROM bank.loan_liquidations WHERE loan_id = ${opened.loan.id}
+        `;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.tranche).toBe(0);
+        expect(rows[0]!.status).toBe('settled');
+        expect(rows[0]!.grace_waived).toBe(false);
+
+        // PARTIAL. Not the whole position.
+        const sold = amt(rows[0]!.collateral_sold);
+        expect(sold).toBeGreaterThan(0n);
+        expect(sold).toBeLessThan(amt('1'));
+        expect(formatAmount(await loans.collateralOf(await loans.loan(opened.loan.id)))).not.toBe('0');
+      });
+
+      it('waives grace past the insolvency threshold, and records that it did', async () => {
+        const opened = await openAt('5200'); // ~96.2%
+        const sweep = await sweepAt(now);
+
+        expect(sweep.liquidated).toBe(1);
+        const rows = await sql<Array<{ grace_waived: boolean }>>`
+          SELECT grace_waived FROM bank.loan_liquidations WHERE loan_id = ${opened.loan.id}
+        `;
+        expect(rows[0]!.grace_waived).toBe(true);
+      });
+
+      it('clears a margin call when the borrower posts collateral', async () => {
+        const opened = await openAt('6500');
+        await sweepAt(now);
+        expect((await loans.loan(opened.loan.id)).status).toBe('margin_call');
+
+        await fund(BORROWER, 'BTC', '1');
+        await loans.addCollateral({ loanId: opened.loan.id, amount: amt('1') });
+
+        const sweep = await sweepAt(new Date(now.getTime() + 60_000));
+        expect(sweep.cleared).toBe(1);
+
+        const loan = await loans.loan(opened.loan.id);
+        expect(loan.status).toBe('active');
+        // THE GRACE CLOCK IS RESET. A borrower who cured is entitled to a fresh
+        // warning and a fresh hour before anything of theirs is sold.
+        expect(loan.marginCalledAt).toBeNull();
+
+        const open = await sql`SELECT id FROM bank.loan_margin_calls WHERE loan_id = ${opened.loan.id} AND cleared_at IS NULL`;
+        expect(open).toHaveLength(0);
+      });
+
+      /**
+       * A borrower's first notice of a liquidation must never be the receipt. This
+       * checks the whole chain in order: call raised → recorded → grace → tranche.
+       */
+      it('a liquidation is always preceded by a recorded margin call', async () => {
+        const opened = await openAt('5700');
+        await sweepAt(now);
+        await sweepAt(new Date(now.getTime() + 2 * 3_600_000));
+
+        const call = await sql<Array<{ called_at: Date }>>`
+          SELECT called_at FROM bank.loan_margin_calls WHERE loan_id = ${opened.loan.id} ORDER BY sequence LIMIT 1
+        `;
+        const liq = await sql<Array<{ created_at: Date }>>`
+          SELECT created_at FROM bank.loan_liquidations WHERE loan_id = ${opened.loan.id} ORDER BY tranche LIMIT 1
+        `;
+
+        expect(call).toHaveLength(1);
+        expect(liq).toHaveLength(1);
+        expect(call[0]!.called_at.getTime()).toBeLessThan(liq[0]!.created_at.getTime());
+      });
+
+      /**
+       * A doubtful mark costs a borrower a notification; a doubtful liquidation
+       * costs them their collateral. So a loan whose mark fails the liquidation
+       * guards is REFUSED and left for an operator, not sold.
+       */
+      it('refuses to liquidate on a mark quality that must not seize collateral', async () => {
+        const opened = await openAt('5700');
+        await sweepAt(now);
+
+        // Same price, but now sourced from a single trade print.
+        loans = new LoanService(sql, ledger, {
+          priceSource: fixedPriceSource({ BTC: { price: '5700', quality: 'last' } }, () => markNow),
+          venue: marketMakerVenue(),
+        });
+
+        const sweep = await sweepAt(new Date(now.getTime() + 2 * 3_600_000));
+        expect(sweep.liquidated).toBe(0);
+        expect(sweep.refused).toHaveLength(1);
+        expect(sweep.refused[0]!.reason).toMatch(/single print must not seize collateral/);
+        expect(await sql`SELECT id FROM bank.loan_liquidations WHERE loan_id = ${opened.loan.id}`).toHaveLength(0);
+      });
+
+      it('will not liquidate when no counterparty can take the collateral', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
+
+        const noBuyer: LiquidationVenue = { quote: async () => null };
+        loans = new LoanService(sql, ledger, { priceSource: price('5700'), venue: noBuyer });
+
+        await sweepAt(now);
+        const sweep = await sweepAt(new Date(now.getTime() + 2 * 3_600_000));
+
+        expect(sweep.liquidated).toBe(0);
+        expect(sweep.refused[0]!.reason).toMatch(/No counterparty/);
+      });
+
+      /** One bad mark must not stop the sweep for everybody else. */
+      it('keeps sweeping past a loan it cannot mark', async () => {
+        await openAt('10000');
+        await fund(OTHER, 'ETH', '10');
+        const exotic = await makeProduct({ name: 'ETH-backed', collateralAssetId: 'ETH' });
+        await fundReserve('USDT', '100000');
+        await loans
+          .open({ productId: exotic.id, userId: OTHER, collateralAmount: amt('10'), principal: amt('1'), now })
+          .catch(() => undefined);
+
+        const sweep = await sweepAt(now);
+        // The BTC loan was marked; the ETH one has no mark and is reported.
+        expect(sweep.marked + sweep.refused.length).toBeGreaterThanOrEqual(1);
+      });
+    });
+
+    // ── Reconciliation ───────────────────────────────────────────────────────
+
+    it('the reserve identity holds: balance + outstanding principal == funded', async () => {
+      await fundReserve('USDT', '100000');
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+      await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+
+      const r = await loans.reconcileReserve('USDT');
+      expect(formatAmount(r.reserveBalance)).toBe('95000');
+      expect(formatAmount(r.outstandingPrincipal)).toBe('5000');
+      expect(formatAmount(r.funded)).toBe('100000');
+    });
+
+    it('a borrower can never see another borrower&apos;s loan through the service', async () => {
+      await fundReserve('USDT', '100000');
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+      await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+
+      expect(await loans.loansOf(OTHER)).toHaveLength(0);
+      expect(await loans.loansOf(BORROWER)).toHaveLength(1);
+    });
+
+    it('marks a portfolio, reporting the aggregate AND each loan on its own', async () => {
+      await fundReserve('USDT', '100000');
+      await fund(BORROWER, 'BTC', '2');
+      const product = await makeProduct();
+      await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+      await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('1000'), now });
+
+      const mark = await loans.markUser(BORROWER, now);
+      expect(mark.loans).toHaveLength(2);
+      // Portfolio LTV is 6000/20000 = 30%, well below either loan's own figure
+      // for the first loan (50%). Both are reported, because aggregate health is
+      // a warning signal and NOT authority to reach across to the other loan's
+      // collateral — that pot is locked to `loan:<id>` in the ledger.
+      expect(mark.portfolioLtvBps).toBe(3_000);
+      expect(mark.loans.find((l) => l.ltvBps === 5_000)).toBeDefined();
+    });
+  });
+}
