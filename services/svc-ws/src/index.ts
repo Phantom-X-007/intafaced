@@ -7,6 +7,9 @@ import { HttpDepthSource } from './depth/source.js';
 import { registerRoutes } from './routes.js';
 import { TradeHub } from './trade/hub.js';
 import { subscribeTradeTape } from './trade/source.js';
+import { PrivateOrderHub } from './private/hub.js';
+import { subscribePrivateOrders } from './private/source.js';
+import { createPrivateWebSocketGateway } from './private/gateway.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 
 /**
@@ -63,6 +66,25 @@ const tradeHub = new TradeHub(
   app.log,
 );
 
+const privateOrderHub = new PrivateOrderHub(
+  {
+    highWaterBytes: env.WS_HIGH_WATER_BYTES,
+    maxLagTicks: env.WS_MAX_LAG_TICKS,
+    maxConnections: env.WS_MAX_CONNECTIONS,
+  },
+  app.log,
+);
+
+const privateTokens =
+  env.JWT_ACCESS_SECRET === undefined
+    ? null
+    : {
+        secret: env.JWT_ACCESS_SECRET,
+        issuer: env.JWT_ISSUER,
+        audience: env.JWT_AUDIENCE,
+        accessTtlSeconds: 900,
+      };
+
 let enabled = env.WS_GATEWAY_ENABLED;
 const isEnabled = () => enabled;
 
@@ -106,6 +128,7 @@ await hub.refreshMarkets().catch((err: unknown) => {
  */
 let bus: Awaited<ReturnType<typeof JetStreamEventBus.connect>> | null = null;
 let tradeSub: Subscription | null = null;
+let privateSub: Subscription | null = null;
 try {
   bus = await JetStreamEventBus.connect({
     servers: env.NATS_URL,
@@ -119,6 +142,14 @@ try {
     durable: env.WS_TRADES_DURABLE,
     log: app.log,
   });
+  if (privateTokens) {
+    privateSub = await subscribePrivateOrders({
+      bus,
+      hub: privateOrderHub,
+      durable: env.WS_PRIVATE_ORDERS_DURABLE,
+      log: app.log,
+    });
+  }
 } catch (err) {
   app.log.warn(
     { err: String(err), nats: env.NATS_URL },
@@ -126,6 +157,7 @@ try {
   );
   bus = null;
   tradeSub = null;
+  privateSub = null;
 }
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
@@ -139,6 +171,15 @@ const gateway = createWebSocketGateway({
   enabled: isEnabled,
 });
 
+const privateGateway = createPrivateWebSocketGateway({
+  server: app.server,
+  hub: privateOrderHub,
+  heartbeatMs: env.WS_HEARTBEAT_MS,
+  log: app.log,
+  enabled: isEnabled,
+  tokens: privateTokens,
+});
+
 poller.start();
 
 app.log.info(
@@ -148,9 +189,10 @@ app.log.info(
     depthLimit: env.WS_DEPTH_LIMIT,
     pollMs: env.WS_POLL_INTERVAL_MS,
     trades: tradeSub !== null,
+    privateOrders: privateSub !== null && privateTokens !== null,
     enabled,
   },
-  'svc-ws ready — depth + trade tape',
+  'svc-ws ready — depth + trade tape + private orders',
 );
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
@@ -161,8 +203,10 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       enabled = false;
       poller.stop();
       if (tradeSub) await tradeSub.unsubscribe().catch(() => undefined);
+      if (privateSub) await privateSub.unsubscribe().catch(() => undefined);
       if (bus) await bus.close().catch(() => undefined);
       await gateway.close('gateway shutting down');
+      await privateGateway.close('gateway shutting down');
       await app.close();
       process.exit(0);
     })();

@@ -355,6 +355,9 @@ export class TradeService {
         const order = await this.placeOrderInner(principal, input);
         span.setAttribute('intafaced.order_id', order.id);
         span.setAttribute('intafaced.order_status', order.status);
+        // User-visible lifecycle (private WS). Idempotent on open snapshot so a
+        // placeOrder retry that re-finds the same row does not spam the bus.
+        await this.publishOrderUpdated(order);
         return order;
       },
     );
@@ -846,7 +849,11 @@ export class TradeService {
     // Published outside the transaction. An XP award is not money and must not
     // be able to roll back a release, nor hold a database transaction open
     // across a broker round trip.
-    if (outcome && outcome.order.filledQty > 0n) await this.publishXp(outcome.order, outcome.status);
+    if (outcome) {
+      const latest = (await this.findOrder(orderId)) ?? { ...outcome.order, status: outcome.status };
+      await this.publishOrderUpdated({ ...latest, status: outcome.status });
+      if (outcome.order.filledQty > 0n) await this.publishXp(outcome.order, outcome.status);
+    }
   }
 
   /** Close out an order that filled completely — no cancellation is emitted for one. */
@@ -884,6 +891,31 @@ export class TradeService {
         meta: { orderId: order.id, marketId: order.marketId },
       },
       { idempotencyKey: `trade.order.xp:${order.id}` },
+    );
+  }
+
+  /**
+   * Private order stream feed. Not a money path — the ledger already moved.
+   * Keyed on (order, status, filledQty) so redelivery of the same snapshot is
+   * a bus no-op while a fill that advances filledQty still ships.
+   */
+  private async publishOrderUpdated(order: OrderRecord): Promise<void> {
+    await this.bus.publish(
+      'orderUpdated',
+      {
+        orderId: order.id,
+        userId: order.userId,
+        marketId: order.marketId,
+        status: order.status,
+        side: order.side,
+        type: order.type,
+        qty: formatAmount(order.qty),
+        filledQty: formatAmount(order.filledQty),
+        price: order.price == null ? null : formatAmount(order.price),
+        clientOrderId: order.clientOrderId,
+        ts: new Date().toISOString(),
+      },
+      { idempotencyKey: `trade.order.updated:${order.id}:${order.status}:${formatAmount(order.filledQty)}` },
     );
   }
 

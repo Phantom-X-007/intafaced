@@ -1124,6 +1124,9 @@ importers:
 
   services/svc-ws:
     dependencies:
+      '@intafaced/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@intafaced/config':
         specifier: workspace:*
         version: link:../../packages/config

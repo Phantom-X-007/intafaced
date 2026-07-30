@@ -41,7 +41,8 @@ const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
   producer: env.SERVICE_NAME,
   streamPrefix: env.NATS_STREAM_PREFIX,
-  ownedStreams: [],
+  // Hosts `orderUpdated` (user-visible lifecycle for private streams).
+  ownedStreams: ['trade'],
 });
 
 const trade = new TradeService(sql, ledger, matching, perks, bus, {
