@@ -131,6 +131,8 @@ export const en = {
   'notify.p2p.escrow.released.body': '{amount} {asset} released. Fee {fee}.',
   'notify.p2p.escrow.refunded.title': 'Escrow refunded',
   'notify.p2p.escrow.refunded.body': '{amount} {asset} returned to the seller ({reason}).',
+  'notify.p2p.trade.disputed.title': 'Trade disputed',
+  'notify.p2p.trade.disputed.body': 'Dispute opened on trade {tradeId}. Reason: {reason}.',
   'notify.identity.kyc.approved.title': 'Verification approved',
   'notify.identity.kyc.approved.body': 'You are verified at the {tier} tier.',
   'notify.identity.rank.updated.title': 'Rank updated',
