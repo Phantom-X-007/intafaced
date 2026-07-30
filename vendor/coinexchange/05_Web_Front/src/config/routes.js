@@ -80,8 +80,8 @@ export default [
     { path: '/chain', component: resolve=>(require(["../pages/intafaced/Chain"],resolve)) },
     // Two modules with no service behind them at all. Same component, told
     // which one it is — see pages/intafaced/NotBuilt.vue.
-    { path: '/academy', component: resolve=>(require(["../pages/intafaced/NotBuilt"],resolve)), props: { moduleKey: 'academy' } },
-    { path: '/launch', component: resolve=>(require(["../pages/intafaced/NotBuilt"],resolve)), props: { moduleKey: 'launch' } },
+    { path: '/academy', component: resolve=>(require(["../pages/intafaced/Academy"],resolve)) },
+    { path: '/launch', component: resolve=>(require(["../pages/intafaced/Launch"],resolve)) },
 
     { path: '*', component: resolve=>(require(["../pages/index/index"],resolve)) },
     { path: '/envelope/:eno', component: resolve=>(require(["../pages/envelope/Envelope"],resolve)) },

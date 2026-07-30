@@ -146,7 +146,7 @@ module.exports = {
             pay: {
                 title: "Pay",
                 blurb: "Withdrawable balance and withdrawal history, read from the ledger rather than summed anywhere else.",
-                note: "The withdrawal surfaces answer a normal session. Merchant, payment and settlement need pay:* scopes that are issued to nobody."
+                note: "Health lists configured rails publicly. Withdrawal surfaces answer a normal session. Merchant rails and live checkout still need real pay infrastructure — sandbox must not take a stranger's money."
             },
             p2p: {
                 title: "OTC / P2P",
@@ -166,12 +166,12 @@ module.exports = {
             blueprint: {
                 title: "Blueprint",
                 blurb: "Your sovereign profile — portable, exportable, erasable, and never a balance.",
-                note: "Behind the front door and mounted. Every procedure demands blueprint:read or blueprint:write, and neither is issued to an interactive session."
+                note: "Behind the front door and mounted, including share-card composition. Procedures demand blueprint:read or blueprint:write — if your session lacks them, the refusal is the honest answer. PNG raster is a separate rail and may report unavailable."
             },
             protocol: {
                 title: "Protocol",
-                blurb: "Self-custody smart accounts and session keys. Non-custodial by construction — we relay, we never hold.",
-                note: "The service is up and behind the front door, but it never registers its tRPC router. Only /health and /ready are served; every procedure written in its router is unreachable."
+                blurb: "Self-custody smart accounts, session keys, and token-factory status. Non-custodial by construction — we relay, we never hold.",
+                note: "tRPC is mounted. Public health and chainStatus report factory/config honesty; private account actions still need a configured chain and product path."
             },
             dex: {
                 title: "DEX",
@@ -181,17 +181,17 @@ module.exports = {
             chain: {
                 title: "Chain",
                 blurb: "INTACHAIN read models — indexed height, markets, book, fills and positions.",
-                note: "svc-indexer is running and serves its router, but there is no /api/indexer in svc-edge's route table. The edge answers 404, so no browser can reach it."
+                note: "svc-indexer is behind /api/indexer. Status is public; heights stay blank when no chain is attached rather than inventing numbers."
             },
             academy: {
                 title: "Academy",
-                blurb: "Courses, workbooks, live lobbies and paper trading.",
-                note: "The service does not exist. There is no svc-academy in the monorepo, no route at the edge, and no endpoint to call."
+                blurb: "Live lobbies, seats by stake/rank, and paper trading — no fabricated stream credentials.",
+                note: "svc-academy is on main and routed. Room list needs academy:read. Stream join credentials refuse when no SFU is configured."
             },
             launch: {
                 title: "Launch",
-                blurb: "Token factory, launchpad and vesting from audited templates.",
-                note: "The service does not exist. There is no svc-launch in the monorepo, no route at the edge, and no endpoint to call."
+                blurb: "Token factory status from the protocol plane — creator-signed deploys, no platform mint authority.",
+                note: "Status is public under svc-protocol launch.status. Template is not audited until a real audit. This screen never signs a deploy."
             }
         },
         bank: {
@@ -219,6 +219,10 @@ module.exports = {
             days: "days"
         },
         pay: {
+            healthTitle: "Pay service",
+            healthLead: "Public health — which rails are configured (ids only). Live money movement is a separate decision.",
+            rails: "Configured rails",
+            noRails: "None registered",
             balanceTitle: "Withdrawable balance",
             balanceLead: "Read from svc-ledger, not from svc-pay's own tables. The ledger is the balance.",
             asset: "Asset",
@@ -262,15 +266,24 @@ module.exports = {
             noActions: "No agent has acted on this account."
         },
         blueprint: {
-            lead: "Your profile, as svc-blueprint holds it."
+            lead: "Your profile, as svc-blueprint holds it.",
+            meTitle: "My blueprint",
+            cardTitle: "Share card",
+            cardLead: "Vector composition from your profile. Raster URL stays unavailable until a PNG rail is configured — never a fabricated og:image.",
+            cardSize: "Size",
+            raster: "Raster",
+            svgBytes: "SVG length",
+            mentorsTitle: "Mentor shortlist"
         },
         protocol: {
             healthTitle: "Service health",
-            healthLead: "The only surface svc-protocol serves today.",
+            healthLead: "Public tRPC health — chain id, custodial flag, relay, factory config.",
             chainId: "Chain id",
             custodial: "Custodial",
             relayEnabled: "Relay enabled",
-            unreachableList: "Written, and unreachable from any browser:"
+            factoryConfigured: "Smart-account factory configured",
+            chainStatusTitle: "Chain status",
+            chainStatusLead: "Live probe of reachability and launch factory deployment. usable=false is honest, not a crash."
         },
         dex: {
             healthTitle: "Service health",
@@ -279,7 +292,30 @@ module.exports = {
             quoteLead: "svc-dex splits a size across venue quotes you supply. It has no venue feed of its own, so this is the arithmetic without a market behind it."
         },
         chain: {
-            wouldServe: "What svc-indexer serves on its own port, and the edge does not forward:"
+            statusTitle: "Indexer status",
+            statusLead: "How far the projection is behind the chain, and whether it has halted itself."
+        },
+        academy: {
+            rooms: "Lobbies",
+            roomsLead: "Rooms the academy service will list for a scoped session. Join and host are write paths and are not offered here.",
+            name: "Name",
+            kind: "Kind",
+            access: "Access",
+            capacity: "Capacity",
+            minStake: "Min stake"
+        },
+        launch: {
+            statusTitle: "Token factory status",
+            statusLead: "Whether a creator can launch on this chain right now. Template is marked audited:false until a real audit exists.",
+            usable: "Usable",
+            configured: "Factory configured",
+            deployed: "Factory deployed on chain",
+            factory: "Factory address",
+            audited: "Template audited",
+            mintAuthority: "Mint authority retained by platform",
+            sourceHash: "Template source hash",
+            refusal: "Refusal",
+            maxSupply: "Max whole supply (API cap)"
         }
     },
     sectionPage: {

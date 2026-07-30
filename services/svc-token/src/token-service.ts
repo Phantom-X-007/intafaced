@@ -365,15 +365,32 @@ export class TokenService {
       }),
     );
 
-    await this.sql`UPDATE token.stakes SET status = 'closed' WHERE id = ${claimed.id}`;
+    // Close is conditional so concurrent unstakes cannot both report success.
+    // Ledger key is idempotent (second post is a no-op); only one UPDATE from
+    // `unstaking` → `closed` may win. Losers see 0 rows and refuse — crash
+    // recovery still works: a lone retry on an `unstaking` row posts (no-op if
+    // already applied) and closes.
+    const closed = await this.sql<
+      Array<{ id: string; user_id: string; amount: string; tier: StakeTier; started_at: Date; unlocks_at: Date | null; status: string }>
+    >`
+      UPDATE token.stakes
+         SET status = 'closed'
+       WHERE id = ${claimed.id} AND status = 'unstaking'
+   RETURNING id, user_id, amount, tier, started_at, unlocks_at, status
+    `;
 
+    if (closed.length === 0) {
+      throw new TokenError('Stake is already closed', 'token.stake_closed');
+    }
+
+    const done = closed[0]!;
     return {
-      id: claimed.id,
-      userId: claimed.userId,
-      amount: claimed.amount,
-      tier: claimed.tier,
-      startedAt: claimed.startedAt,
-      unlocksAt: claimed.unlocksAt,
+      id: done.id,
+      userId: done.user_id,
+      amount: parseAmount(done.amount),
+      tier: done.tier,
+      startedAt: done.started_at,
+      unlocksAt: done.unlocks_at,
       status: 'closed' as const,
     };
   }
