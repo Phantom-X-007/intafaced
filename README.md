@@ -12,7 +12,7 @@
 
 `████████░░░░░░░░░░░░` **39%** — 42 of 108 features shipped
 
-Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 4/16 · **3P** 1/8 · **4** 2/5 · **4P** 0/3 · **5** 5/32 · **5P** 0/2
+Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 4/16 · **3P** 1/8 · **4** 3/5 · **4P** 0/3 · **5** 5/32 · **5P** 0/2
 
 **In progress:** WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
 
