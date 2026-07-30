@@ -70,10 +70,33 @@ export interface HaltState {
   readonly at: Date;
 }
 
+/**
+ * The last thing that ended a pass badly, kept so a stalled cursor can say why.
+ *
+ * Before the EVM adapter existed this was unnecessary: `NullChainSource` cannot
+ * fail, `MemoryChainSource` cannot fail, and the only error the loop could hit
+ * was a reorg deeper than retained history — which already sets `halted`. A real
+ * RPC introduces a whole class of pass that ends in neither progress nor a halt:
+ * the endpoint is down, the venue holds no code, the node is answering for
+ * another chain. Every one of those leaves `indexedHeight` frozen at a perfectly
+ * plausible number.
+ *
+ * A frozen cursor with no stated reason is the failure this service exists to
+ * prevent, arriving from underneath it. `code` carries the typed refusal where
+ * there is one (`chain/evm/availability.ts`), so a caller can tell "we cannot
+ * reach the chain" from "this service has a bug".
+ */
+export interface SyncFailure {
+  readonly code: string | null;
+  readonly message: string;
+  readonly at: Date;
+}
+
 export class Indexer {
   #timer: NodeJS.Timeout | null = null;
   #running = false;
   #halted: HaltState | null = null;
+  #lastError: SyncFailure | null = null;
 
   constructor(private readonly deps: IndexerDeps) {}
 
@@ -90,12 +113,43 @@ export class Indexer {
     return this.#halted;
   }
 
+  /**
+   * Why the last pass did not get anywhere, if it did not.
+   *
+   * Cleared by the next pass that completes, so it describes the present rather
+   * than an incident from an hour ago that has since resolved itself.
+   */
+  get lastError(): SyncFailure | null {
+    return this.#lastError;
+  }
+
   /** Clears the halt. An operator calls this AFTER re-indexing, not instead. */
   resume(): void {
     this.#halted = null;
+    this.#lastError = null;
   }
 
+  /**
+   * One pass. Wrapped so a failure is RECORDED as well as thrown.
+   *
+   * Recorded here rather than in the poll loop's `catch` because a direct caller
+   * — every test in this service, and any future admin action — must leave the
+   * same trace behind as the timer does. Two places to record a failure is one
+   * place to forget.
+   */
   async sync(): Promise<SyncResult> {
+    try {
+      const result = await this.#sync();
+      this.#lastError = null;
+      return result;
+    } catch (err) {
+      const code = typeof (err as { code?: unknown }).code === 'string' ? (err as { code: string }).code : null;
+      this.#lastError = { code, message: (err as Error).message, at: new Date() };
+      throw err;
+    }
+  }
+
+  async #sync(): Promise<SyncResult> {
     if (this.#halted) return idleResult('halted', await this.deps.store.head());
     if (!this.deps.ingestEnabled()) return idleResult('disabled', await this.deps.store.head());
 

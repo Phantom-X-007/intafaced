@@ -94,6 +94,40 @@ function toTrpcError(err: unknown): TRPCError {
   return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Indexer request failed', cause: err });
 }
 
+/**
+ * A live look at the chain behind the projection. Produced by
+ * `EvmChainSource.probe()`, which never throws — "the chain is down" is an
+ * answer a status surface has to render, not an exception it has to catch.
+ *
+ * `NullChainSource` fills this in too, with `kind: 'null'` and a reason, because
+ * "we were never given a chain" is a fact a caller needs as much as "the chain
+ * is down" and the two must not render the same.
+ */
+export interface ChainProbe {
+  readonly kind: 'null' | 'evm';
+  readonly rpcUrl: string | null;
+  readonly venue: string | null;
+  readonly reachable: boolean;
+  readonly observedChainId: number | null;
+  /** The chain's own tip. Half of the staleness answer; the cursor is the other. */
+  readonly chainHeight: number | null;
+  readonly venueDeployed: boolean;
+  readonly refusalCode: string | null;
+  readonly reason: string | null;
+}
+
+const chainProbeSchema = z.object({
+  kind: z.enum(['null', 'evm']),
+  rpcUrl: z.string().nullable(),
+  venue: z.string().nullable(),
+  reachable: z.boolean(),
+  observedChainId: z.number().int().nullable(),
+  chainHeight: z.number().int().nullable(),
+  venueDeployed: z.boolean(),
+  refusalCode: z.string().nullable(),
+  reason: z.string().nullable(),
+});
+
 export interface IndexerRouterDeps {
   readonly store: ProjectionStore;
   readonly indexer: Indexer;
@@ -101,8 +135,14 @@ export interface IndexerRouterDeps {
   readonly finalityDepth: number;
   /** Mirrors the `indexer.ingest` kill-switch (§14). */
   readonly ingestEnabled: () => boolean;
-  /** Which `ChainSource` is wired. `'null'` until `socket.evm-rpc` closes. */
+  /** Which `ChainSource` is wired: `'null'` or `'evm'`. */
   readonly chainSource: string;
+  /**
+   * Live probe of the chain, for `status`. Optional so a router can be mounted
+   * without one; when it is absent `status.chain` is `null`, which reads as
+   * "nobody asked" and never as "the chain is fine".
+   */
+  readonly chainProbe?: () => Promise<ChainProbe>;
 }
 
 export function createIndexerRouter(deps: IndexerRouterDeps) {
@@ -128,13 +168,24 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       })),
 
     /**
-     * How far behind the chain this projection is, and whether it trusts
-     * itself.
+     * How far behind the chain this projection is, and whether it trusts itself.
      *
-     * `halted` is the field that matters and it is deliberately not buried:
-     * a projection that has hit a reorg deeper than its retained history knows
-     * it is wrong, and every caller is entitled to be told before it renders a
-     * price. `indexedHeight` alone would look perfectly healthy in that state.
+     * ── The three fields that matter, and why none of them is optional ───────
+     *
+     * `halted` — a projection that has hit a reorg deeper than its retained
+     * history knows it is wrong. `indexedHeight` looks perfectly healthy in that
+     * state, so the halt is published beside it rather than left to `/ready`.
+     *
+     * `behindBy` — the cursor alone cannot say how stale it is. "Height 8412"
+     * means nothing without the chain's own tip next to it, and a read model that
+     * cannot state its staleness gets trusted at exactly the moment it should not
+     * be. `null` here means we could not ask, which is itself the answer: it is
+     * never zero-by-default, because zero would read as "current".
+     *
+     * `lastError` — the pass that ends in neither progress nor a halt. The
+     * endpoint is down, the venue holds no code, the node is on another chain:
+     * the cursor freezes at a plausible number and nothing else on this response
+     * would change. See `Indexer.lastError`.
      */
     status: publicJurisdictionProcedure('indexer', 'protocol')
       .output(
@@ -149,21 +200,31 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
           finalizedHeight: z.number().int().nullable(),
           ingestEnabled: z.boolean(),
           halted: z.object({ reason: z.string(), at: z.string() }).nullable(),
+          /** Live, per request. `null` when no probe is wired — never a guess. */
+          chain: chainProbeSchema.nullable(),
+          /** Chain tip minus our cursor. `null` when either is unknown. */
+          behindBy: z.number().int().nullable(),
+          lastError: z.object({ code: z.string().nullable(), message: z.string(), at: z.string() }).nullable(),
         }),
       )
       .query(async () => {
-        const [head, earliest] = await Promise.all([store.head(), store.earliestHeight()]);
+        const [head, earliest, chain] = await Promise.all([store.head(), store.earliestHeight(), deps.chainProbe?.() ?? null]);
         const halt = indexer.halted;
+        const failure = indexer.lastError;
+        const indexedHeight = head?.height ?? null;
         return {
           chainId: deps.chainId,
           chainSource: deps.chainSource,
-          indexedHeight: head?.height ?? null,
+          indexedHeight,
           indexedHash: head?.hash ?? null,
           earliestHeight: earliest,
           finalityDepth: deps.finalityDepth,
           finalizedHeight: head ? Math.max(0, head.height - deps.finalityDepth) : null,
           ingestEnabled: deps.ingestEnabled(),
           halted: halt ? { reason: halt.reason, at: halt.at.toISOString() } : null,
+          chain,
+          behindBy: chain?.chainHeight != null && indexedHeight != null ? chain.chainHeight - indexedHeight : null,
+          lastError: failure ? { code: failure.code, message: failure.message, at: failure.at.toISOString() } : null,
         };
       }),
 

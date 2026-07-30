@@ -116,7 +116,22 @@ export interface ChainBlock {
 export interface ChainSource {
   readonly chainId: number;
 
-  /** The canonical tip. `null` when the source has no chain to report. */
+  /**
+   * The canonical tip. `null` when the source has no chain to report.
+   *
+   * ── `null` IS NOT WHERE A FAILURE GOES ────────────────────────────────────
+   *
+   * The ingest loop reads `null` as *nothing to do*: no error, no halt, no
+   * alert. That is exactly right for `NullChainSource`, which genuinely has no
+   * chain to report.
+   *
+   * An adapter that swallowed a connection refusal into `null` would therefore
+   * be indistinguishable from one that was never given a chain — the cursor
+   * would stop moving without saying why and every read would keep serving the
+   * last projection as though it were current. Any implementation backed by a
+   * real endpoint MUST THROW instead. See `evm/availability.ts` for the codes
+   * and `evm/source.ts` for the argument at length.
+   */
   head(): Promise<ChainHead | null>;
 
   /**
@@ -125,6 +140,9 @@ export interface ChainSource {
    * This is the method fork detection turns on: asking the same height twice
    * across a reorg must return two different hashes. An implementation that
    * memoises by height is not an implementation of this interface.
+   *
+   * `null` means the chain has no block at that height — which is how the loop
+   * discovers it has caught up. It does not mean "we could not ask".
    */
   blockAt(height: number): Promise<ChainBlock | null>;
 }
