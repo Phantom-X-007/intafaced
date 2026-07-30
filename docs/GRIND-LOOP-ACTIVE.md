@@ -2,7 +2,7 @@
 
 **Status:** DRAINED (agent product queue) · **mega-audit 2026-07-30 ran** (`docs/audit/2026-07-30-afk-cook-mega/`) · **mega-r2 re-prove** (`docs/audit/2026-07-30-mega-r2/`) · 45m scheduler: open PRs / regressions only — product still DRAINED  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#196** (+ format:check fix PR if landed) · **#188–#196** spine · product micro-queue still **DRAINED** · do not re-ship **#110–#196** · main CI runs but was red on `format:check` (18 files) — agent fix, not only billing
+**Last tip:** high water through **#199** (prettier format:check) + **#198** (CI path-filter / matrix cost) · **#188–#199** spine · product micro-queue still **DRAINED** · do not re-ship **#110–#199** · main CI **running** (billing no longer silent) — #199 made format:check green on tip
 
 ---
 
@@ -59,7 +59,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#196** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
+**#110–#199** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
 
 | PR       | What                                                                                    |
 | -------- | --------------------------------------------------------------------------------------- |
@@ -135,7 +135,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## Human-only (never fake done)
 
-- GitHub Actions **billing** / spending limit (jobs never start)
+- GitHub Actions **billing / spending limit** (was silent; **jobs now start** after budget set — still watch minutes; path filters #198 cut docs-only burn)
 - Real chain factory + RPC for smart-accounts **done**
 - Licences, wallet secrets, counsel list, kill drill, multi-asset rails
 - Push / email / SMS notification channels (§13 sockets)
@@ -161,4 +161,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED (agent product queue) — do not re-ship #110–#196; babysit open PRs; format:check was CI red (fix shipped); spine #183–#196 on main.**
+**Next agent after compact: Status DRAINED (agent product queue) — do not re-ship #110–#199; babysit open PRs; format:check fixed #199; CI path filters #198; product queue empty.**
