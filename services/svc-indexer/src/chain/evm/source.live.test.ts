@@ -171,6 +171,49 @@ if (!reachable) {
     });
 
     /**
+     * THE MOST IMPORTANT LINE IN THE ADAPTER, PINNED.
+     *
+     * Logs must be fetched by `blockHash`, never by `fromBlock`/`toBlock`.
+     * Reading a header at height N and then logs "at height N" asks about height
+     * N twice, and a reorg between the two calls has the node answer both
+     * correctly about two different blocks — stapling branch B's logs onto branch
+     * A's header. The result is a block that never existed, carrying a hash that
+     * says it did, recorded canonical, with nothing left to detect it by.
+     *
+     * That race cannot be staged deterministically, so this asserts the SHAPE of
+     * the call instead: it proves the adapter asks the reorg-safe question. It
+     * does not prove the node is honest about it, which is not something a test
+     * can establish. Without this, swapping the two is a one-line change nothing
+     * in the suite notices.
+     */
+    it('fetches logs by block hash, never by block number', async () => {
+      const requests: Array<{ method: string; params?: unknown }> = [];
+      const client = source.client as unknown as { request: (...args: never[]) => Promise<unknown> };
+      const original = client.request.bind(client);
+      client.request = (async (args: { method: string; params?: unknown }, ...rest: never[]) => {
+        requests.push(args);
+        return original(args as never, ...rest);
+      }) as never;
+
+      try {
+        const head = await source.head();
+        await source.blockAt(head!.height);
+      } finally {
+        client.request = original as never;
+      }
+
+      const getLogs = requests.filter((r) => r.method === 'eth_getLogs');
+      expect(getLogs).toHaveLength(1);
+      const filter = (getLogs[0]!.params as [Record<string, unknown>])[0];
+      expect(filter).toHaveProperty('blockHash');
+      expect(filter).not.toHaveProperty('fromBlock');
+      expect(filter).not.toHaveProperty('toBlock');
+      // …and it is scoped to the venue, which is the other half of "these logs
+      // are ours".
+      expect(String(filter.address).toLowerCase()).toBe(venue.toLowerCase());
+    });
+
+    /**
      * A venue emits events this adapter never claimed. Stopping the projection
      * on one would be a service outage caused by a log that was none of its
      * business.
