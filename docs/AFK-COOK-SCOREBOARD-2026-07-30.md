@@ -53,3 +53,12 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 3. protocol.smart-accounts non-propped slice  
 4. secret-scan CI (needs Nitro go)  
 5. Human: **fix GitHub Actions billing**
+
+## Grind continuation (same AFK)
+
+| PR | What |
+| --- | --- |
+| #122 | Private **fills** stream (`fillSettled` + channel=fills) |
+| #123 | **orders.history** terminal orders |
+| #124 | Payment links **list + deactivate** |
+
