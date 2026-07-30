@@ -476,7 +476,7 @@ export const FEATURES = [
     status: 'done',
     dependsOn: ['blueprint.onboarding'],
     requires: ['services/svc-blueprint', 'services/svc-identity'],
-    note: "2026-07-31: cascade closed. svc-blueprint still owns erase/export; svc-identity now subscribes to blueprintCreated/blueprintDeleted and sets/clears profiles.blueprint_id (match-guarded clear so a redelivered delete cannot wipe a newer blueprint). Wired in index.ts with durable JetStream consumers + MemoryEventBus tests. Export/erase Postgres proofs already on main.",
+    note: '2026-07-31: cascade closed. svc-blueprint still owns erase/export; svc-identity now subscribes to blueprintCreated/blueprintDeleted and sets/clears profiles.blueprint_id (match-guarded clear so a redelivered delete cannot wipe a newer blueprint). Wired in index.ts with durable JetStream consumers + MemoryEventBus tests. Export/erase Postgres proofs already on main.',
   }),
   f('blueprint.attestations', 'On-chain rank attestations, zero PII (§19)', {
     module: 'blueprint',
