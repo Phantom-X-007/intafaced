@@ -1,218 +1,256 @@
-# Denon ↔ Nitro parallel board
+# Denon ↔ Nitro parallel board (full backlog)
 
-**Snapshot:** 2026-07-30 · live-checked against `origin/main`  
-**Main tip at write:** `2fec526` (**#168** grind high-water after **#167** fleet migration fix)  
-**Open PRs:** none  
-**Agent AFK queue:** **DRAINED** (`docs/GRIND-LOOP-ACTIVE.md`) — micro-features agents can invent are largely gone  
-**If this file disagrees with live git/PRs/tracker:** live wins — re-fetch, then fix this file.
+**Snapshot:** 2026-07-30 · expand pass (full Denon load + agent-safe Nitro lane)  
+**Main tip at first write:** `2fec526` (~**#168**); re-check `git fetch && git log origin/main -1`  
+**Open PRs at expand:** re-check `gh pr list` (board PR + any Stream A uiproof)  
+**Agent micro-queue:** was **DRAINED** — easy agent invent-work is thin; real mountains remain  
+**If this file disagrees with live git / PRs / tracker:** **live wins** — fix this file after.
 
-**Purpose:** one light two-column board so Denon and Nitro work in parallel without double-building or over-engineering a third project system.
+**Purpose:** give Denon a **full real spine backlog**, and keep Nitro’s agents only on work that does **not** need Nitro’s product judgment.
 
 ---
 
-## How to use this (do not invent tooling)
+## One-screen split
+
+| Who | What they own | Volume |
+| --- | --- | --- |
+| **Denon** | Decisions + spine product + ops/licence/money architecture | **Large** — this is the heavy column on purpose |
+| **Nitro agents (no Nitro judgment)** | Stream A shell polish, honesty UI, WAVE-AUDIT, tracker honesty, already-specified wire-ups | **Medium** — continuous, not empty |
+| **Nitro human only** | Visual product sign-off, counsel/sanctions content, dual-book *policy* under live demo, go-live yes/no | **Tiny** — few buttons, high stakes |
+
+**Rule:** if an agent would have to invent a product, legal, ops, or money-model answer → **Denon**.  
+If the work is “make the already-decided shell honest and usable” → **Nitro agents**.  
+If only Nitro can say “this looks/feels like our product” → **Nitro human**.
+
+---
+
+## How to use (no new tooling)
 
 | Surface | Job |
 | --- | --- |
-| **This file** | Who should do *what class* of work *now* (judgment split) |
-| **`docs/TRACKER.md` / `pnpm tracker ready`** | Full feature scoreboard (generated from `tooling/tracker/features.mjs`) |
-| **`docs/SPLIT-BOARD.md` + `docs/NITRO-STREAM-A-CLAIM.md`** | File territory (Stream A shell vs Stream B spine) |
-| **`docs/LIVE-LANES.md`** | Which *agent sessions* currently claim a lane |
-| **`gh pr list`** | What is in flight on GitHub |
-
-**Rule of thumb:** Denon gets decisions + money/spine product that needs a human builder. Nitro + agents get autonomous-safe work that does not invent product/tech forks.
+| **This file** | Judgment split + full ordered backlogs |
+| **`docs/TRACKER.md` / `pnpm tracker ready`** | Generated feature scoreboard |
+| **`docs/SPLIT-BOARD.md` + `docs/NITRO-STREAM-A-CLAIM.md`** | File territory (paths / branch prefixes) |
+| **`docs/LIVE-LANES.md`** | Which agent session owns a coding lane *right now* |
+| **`gh pr list` + `origin/main`** | What already shipped / is in flight |
 
 ---
 
-## Live truth (one screen)
+## Live truth
 
 | Fact | State |
 | --- | --- |
-| Product UI | Vendored exchange shell `vendor/coinexchange/05_Web_Front` → **:8090** — **not** `apps/web` |
-| Money books | TypeScript ledger only — shell never sells balances as truth |
-| Audit program | Closed (#80/#81/#86 + wave cleanups). After Denon waves: **WAVE-AUDIT only** |
-| AFK cook (Nitro agents) | Huge ship wave **#110–#168** on main (CCXT REST, notify fans, private streams, payment links, honesty empties, OTEL, sub-account revoke, tape, etc.) |
-| CI | May be **billing-blocked** on GitHub Actions — do not claim CI green without live check |
-| Multi-asset | Branch `feat/multi-asset-instruments` still **unmerged** — **Denon-only** money-enum merge |
-| Local main checkout | Often **behind** `origin/main` — always `git fetch` before claiming work |
+| Product UI | Vendored exchange shell under `vendor/…/05_Web_Front` → **:8090** — **not** `apps/web` |
+| Money books | TypeScript ledger only — shell must never sell balances as truth |
+| Audit program | Closed for full archaeology; after Denon waves → **WAVE-AUDIT only** |
+| AFK cook | Large agent ship wave roughly **#110–#168** on main — **do not rebuild** (see AFK scoreboard + grind loop) |
+| Multi-asset | `feat/multi-asset-instruments` still **Denon-only** money-enum merge |
+| CI | Re-check live; do not claim green from memory |
 
 ---
 
-## Column A — DENON (human judgment / spine)
+# COLUMN A — DENON (full real backlog)
 
-Work that needs Denon’s product sense, ops access, licence choice, or money-path ownership.  
-**Agents must not invent the answer and mark it done.**
+Work Denon (and his agents under his direction) should absorb.  
+**Ordered:** finish higher bands before spraying lower bands across many branches.  
+**Cadence suggestion for his speed:** up to **2 active coding mountains** + any pure decisions in parallel — not five half-ships.
 
-### Priority 1 — decisions that unblock go-live shape
+### A0 · Orient (30–60 min, once)
 
-| # | Task | Why Denon | Source |
+| # | Task |
+| --- | --- |
+| D0.1 | Read this file + `docs/AFK-COOK-SCOREBOARD-2026-07-30.md` + `docs/GRIND-LOOP-ACTIVE.md` — map what agents already shipped |
+| D0.2 | Skim `docs/PEACE-OF-MIND-AUDIT-CURRENT.md` + `docs/POST-MERGE-RESIDUAL-AFTER-86.md` |
+| D0.3 | `git fetch && gh pr list && git log origin/main -25` — refuse to rebuild tip |
+
+### A1 · Decisions that unblock go-live shape (do these; do not agent-fake)
+
+| # | Task | Why only Denon |
+| --- | --- | --- |
+| D1 | **Chart stack licence path** — commercial chart grant **or** move to the Apache path named in `docs/TERMINAL.md` | Legal/product fork → two different workstreams |
+| D2 | **MySQL Connector/J GPL** in proprietary product — swap path (e.g. MariaDB Connector/J) or other allowed plan | Licence in money path |
+| D3 | **Merge or refuse** `feat/multi-asset-instruments` | Ledger asset enum — owner merges money personally |
+| D4 | **Wallet secrets / empty keystores / host perimeter** | Ops secrets, not a drive-by PR |
+| D5 | **Real payment rails + live chain** (not propped stubs) | Product infra |
+| D6 | **Kill / freeze drill end-to-end** (Nitro only signs off the drill result) | Proof path |
+| D7 | **GitHub Actions billing / spending** if CI still dead | Org human |
+| D8 | **Bank / blueprint scope policy** — who gets which scopes (if still a product call anywhere residual) | Policy, not a blind patch |
+| D9 | **P2P jurisdiction tier policy** — is `basic` KYC required for offers; honesty of refusal reasons | Policy + product |
+
+### A2 · Platform spine that must stay honest (ops + custody class)
+
+| # | Task | Notes |
+| --- | --- | --- |
+| D10 | Fleet redeploy / runtime truth for protocol · indexer · token mounts and ports | Shell screens stay dark if fleet lagging code |
+| D11 | Pay **rail double-submit** contract when rails become real | Residual money item |
+| D12 | **L2-6 S2S body-bind** design (not drive-by) | Before hard multi-service prod |
+| D13 | Java **custody-first then package rename** strategy (Mongo `_class`, live DB names) | SPLIT-BOARD hazard — scriptable but migration-dangerous |
+| D14 | `ops.admin` — listings, fee params, treasury, **kill-switches** | Operator power surface |
+| D15 | `ops.compliance` — screening queues, geo-block, VPN/Tor detection **mechanism** (list *content* still counsel+Nitro) | Spine mechanism |
+| D16 | Secret-scan in CI **when** you choose tooling | Optional Track A |
+
+### A3 · Highest-leverage product mountains (tracker)
+
+These are **real multi-PR programs**. Denon owns design + first honest cut.
+
+| # | Tracker id | Why Denon | Leverage hint |
 | --- | --- | --- | --- |
-| D1 | **Chart licence path** — keep TradingView (get grant) **or** switch to lightweight-charts per `TERMINAL.md` | Legal/product fork; two different workstreams | Residual #6 · PEACE · STATUS evening |
-| D2 | **MySQL Connector/J GPL** — swap to MariaDB Connector/J (or other allowed path) | Licence in money path | Residual #7 · LICENCE-POSITION |
-| D3 | **Merge or refuse `feat/multi-asset-instruments`** | Changes ledger asset enum — owner merges money personally | SPLIT-BOARD · residual |
-| D4 | **Wallet secrets / empty keystores / host perimeter** | Ops secrets, not a code PR | Residual #5 |
-| D5 | **Real rails + live chain** (not propped) | Product infra; not agent fiction | Residual #12 · PEACE |
-| D6 | **Kill / freeze drill end-to-end** + Nitro sign-off | Proof path, not a patch | Residual #13 |
-| D7 | **GitHub Actions billing / spending limit** (if still red) | Org billing — human only | AFK scoreboard |
+| D20 | `protocol.smart-accounts` | Real chain RPC/factory, not propped honesty | Unblocks **~27** features |
+| D21 | `pay.rails` | Deposit/withdraw rails — money design | Unblocks user-money path |
+| D22 | `pay.gateway` completion | Hosted checkout / merchant path beyond agent partials | High money surface |
+| D23 | `trade.futures` | Perps margin / funding / liquidation | Core trade expansion |
+| D24 | `trade.otc` | OTC RFQ + staked-tier gate | Desk design |
+| D25 | `trade.copy` | Copy trading + profit share | Risk + audit design |
+| D26 | `trade.algo` | TWAP / VWAP / POV | Execution design |
+| D27 | `trade.mm-bot` | Internal MM seeding books | Launch critical |
+| D28 | `trade.ccxt-api` remaining honesty | Agents partialled a lot — finish as **product-complete** CCXT, not “route exists” | Bots |
+| D29 | `venue.aggregation` | External venue adapters | Fabric design |
+| D30 | `ws.gateway` remaining streams | Public depth/tape exist; private/orders/positions posture is security design | Careful |
+| D31 | `web.terminal` **backend contracts** charts/hotkeys/sub-accounts need | Shell UI is Nitro; missing *sources* and spine sockets are Denon | Split carefully |
+| D32 | `p2p.merchants` | Merchant programme | Product rules |
+| D33 | `token.*` remaining live paths you still want | Stake/gov partially cooked — Denon sets what “done” means | Money |
+| D34 | `bank.loans` / `bank.earn` / `bank.cards` | Bank plane product | Money + policy |
+| D35 | `blueprint.card` / `crews` / `ownership` | Blueprint product | Product |
+| D36 | `agents.navigator` / `support` / `scanner` | Agent fleet product (model-agnostic gateway already doctrine) | Product |
+| D37 | `academy.lobbies` / `paper-trading` | Academy | Product |
+| D38 | `market.vendors` | Vendor lifecycle + stake slots | Product |
+| D39 | `mining.pool` | Stratum / PPLNS | Product |
+| D40 | `ops.support` / `ops.affiliates` / `ops.analytics` | Ops plane | Product |
+| D41 | `ops.notifications` beyond in-app fans | Push / email / SMS providers — vendor choice | Ops decision |
+| D42 | `infra.i18n` platform keys (if you want spine-owned i18n law) | Can share with Stream A for shell strings — Denon owns system law | Shared |
 
-### Priority 2 — high-leverage spine product (tracker ready / near-ready)
+### A4 · Absorb + gatekeep
 
-These are large or architectural. Denon owns design + first honest implementation; agents may assist *after* he sets the path.
+| # | Task |
+| --- | --- |
+| D50 | Self-audit every money PR (recipes, failure tests, no balances outside ledger-client) |
+| D51 | Squash-merge on green CI; delete branch |
+| D52 | After each wave: expect Nitro agents to run **WAVE-AUDIT only** — not full archaeology |
 
-| # | Tracker id | Why not pure agent-cook |
-| --- | --- | --- |
-| D8 | `protocol.smart-accounts` | Unblocks **~27** features; needs real chain RPC/factory, not propped honesty |
-| D9 | `pay.rails` | Deposit/withdraw rails — money path design |
-| D10 | `trade.futures` | Perps margin/funding/liquidation — money model |
-| D11 | `trade.otc` / `trade.copy` / `trade.algo` / `trade.mm-bot` | Trade expansion — desk design + risk |
-| D12 | `venue.aggregation` | External venue fabric — adapter contracts |
-| D13 | `ops.admin` kill-switches / treasury params | Operator power surface |
-| D14 | Java package / Mongo `_class` rebrand strategy | Live data migration hazard (SPLIT-BOARD §5) |
+### Suggested attack order (so “fast” ≠ chaos)
 
-### Priority 3 — review / absorb what Nitro agents already shipped
-
-| # | Task | Note |
-| --- | --- | --- |
-| D15 | Read `docs/AFK-COOK-SCOREBOARD-2026-07-30.md` + `docs/GRIND-LOOP-ACTIVE.md` | Map of #110–#168 so he does not rebuild |
-| D16 | Skim PEACE + residual after agent waves | Confirm leftover list matches his taste |
-| D17 | Self-audit any spine PR he opens; merge on green CI + doctrine (asymmetric review) | AGENTS.md |
-
-**Suggested first three for Denon today:** **D1, D2, D3** (or D15 orient → then D1–D3). Everything else waits on those forks cleanly.
+1. **D0 orient**  
+2. **D1–D3** (licences + multi-asset) — pure decisions / merge  
+3. **D10 fleet truth** if anything still 404s at runtime  
+4. **D20 smart-accounts** *or* **D21 rails** *or* **D23 futures** — pick **one** primary mountain  
+5. Parallel **only** if second mountain does not touch the same services as the first  
+6. Fill A2/A3 from leverage table in tracker (“unblocks N”)
 
 ---
 
-## Column B — NITRO + agents (autonomous-safe)
+# COLUMN B — NITRO AGENTS (no Nitro judgment required)
 
-Work that keeps product moving **without** inventing Denon’s decisions.
+Agents may **claim and ship** these without asking Nitro for product taste.  
+Still: worktree, one concern per PR, `pnpm verify`, no Stream B edits, no inventing Denon answers.
 
-### B1 — Stream A (app surface) — Nitro’s home lane
-
-Territory: `docs/NITRO-STREAM-A-CLAIM.md` · issue **#83** · branches `feat/app-*`  
-**May edit:** vendor shell pages / components / images / `App.vue` / `routes.js`  
-**Must not edit:** `services/`, `packages/`, edge, compose, Java, proxy `config/index.js`, `main.js` — open `[cross-stream]` instead.
+### B1 · Stream A shell (territory: `feat/app-*` only)
 
 | # | Task | Done when |
 | --- | --- | --- |
-| N1 | Human (or screenshot) **browser pass** of terminal | Layout/chart/depth seen; bugs listed |
-| N2 | **Visual sign-off** on rebrand (black/orange English shell) | Nitro yes/no on “this is the product look” |
-| N3 | Order-entry polish | Validation, precision, fee preview, confirm states |
-| N4 | Account panes honesty | Balances / positions / open orders / history — real data or honest empty/unknown |
-| N5 | Mobile drawer after retheme | Usable small screen |
-| N6 | Empty + error states | Backend down never blank-screens |
-| N7 | Cross-stream issue for anything blocked on proxy/edge | `[cross-stream]` issues, not silent spine edits |
+| N1 | Browser pass of terminal (screenshots OK) | Layout / chart chrome / depth seen; bugs filed or fixed |
+| N2 | Order-entry polish | Validation, precision, fee preview, confirm states |
+| N3 | Account panes against **existing** endpoints | Balances / positions / open orders / history — real data **or** honest empty/unknown (never fake numbers) |
+| N4 | Mobile drawer after retheme | Usable small screen |
+| N5 | Empty + error states every screen | Backend down never blank-screens |
+| N6 | DEX/CEX UI toggle if still incomplete | Uses existing backend plane rules — no new custody policy |
+| N7 | Shell copy / i18n keys **inside Stream A regions only** | No full-file prettier sweeps of shared lang/css |
+| N8 | Cross-stream issues when blocked on proxy/edge/`main.js` | Title: `[cross-stream] <file> — <what>` |
 
-### B2 — Agent cook (only when not inventing “done”)
+**Not agent-autonomous if it needs spine:** candle **seed job** in Java/market, new edge routes, multi-asset, chart **licence** choice → file for Denon or issue #109 class.
 
-| # | Task | Rule |
+### B2 · Hygiene & trust (always safe)
+
+| # | Task |
+| --- | --- |
+| N10 | After Denon merges a wave → run `docs/WAVE-AUDIT.md` (delta only) and update PEACE/residual if scoreboard changes |
+| N11 | Tracker honesty — notes match main; never mark Denon-only residual “done” |
+| N12 | Brand / custody / workspace-sync reds that are pure doc or known mechanical fixes |
+| N13 | Babysit open Nitro PRs (CI, conflicts) without expanding scope |
+| N14 | Keep this board + LIVE-LANES current when claims move |
+
+### B3 · Explicitly forbidden to “finish” as agent-done
+
+| Item | Who |
+| --- | --- |
+| Licence path answers | Denon |
+| Multi-asset merge | Denon |
+| Real rails / live chain / kill drill | Denon |
+| Invented candles, balances, factory addresses, CI green | Nobody |
+| Sanctions **list content** | Nitro + counsel |
+| “Shell balance is the real book” demos | Forbidden for all |
+
+---
+
+# COLUMN C — NITRO HUMAN ONLY (tiny)
+
+Agents prepare evidence; **Nitro decides**.
+
+| # | Task | Why human |
 | --- | --- | --- |
-| N8 | Re-read `GRIND-LOOP-ACTIVE.md` on tip | If **DRAINED** → babysit PRs / tracker honesty / brand red only — **no ceremony pad** |
-| N9 | WAVE-AUDIT after Denon merges | Delta only — not full archaeology |
-| N10 | Tracker / residual honesty | Notes match main; never mark human-only items done |
-| N11 | Stream A / terminal surface that is already contracted | Small PRs; one concern each; `pnpm verify` |
-| N12 | Docs that orient Nitro (START-HERE, PEACE tip SHA) | After real main moves only |
-
-### B3 — Explicitly **not** agent-done (leave for Denon / counsel)
-
-Licences · multi-asset merge · rails/chain · kill drill · sanctions **list content** · inventing candle/balance/factory data · faking CI green · dual-book habit sold as real money.
+| H1 | **Visual sign-off** on rebrand / shell look | Taste |
+| H2 | **S8 look tour** (Stream A claim) | Taste |
+| H3 | Dual-book **discipline under live demo** (policy habit) | Business risk |
+| H4 | Sanctions list **content** with counsel | Legal |
+| H5 | Go-live / real customer money yes-no | Owner |
+| H6 | Kill-drill **sign-off** after Denon runs it | Owner |
 
 ---
 
-## Classification rule (for every new task)
+## Tracker ready list — routing (snapshot; re-run on tip)
 
-When an agent finds work, classify before coding:
-
-1. **Needs a product/legal/ops fork Denon would argue about?** → Column A. Stop. Put it on this board.
-2. **Touches ledger enum, custody perimeter, real rails, Java money DAO, licence?** → Column A.
-3. **Is it shell look/feel, honesty empty states, wired-to-existing-contract UI, tracker honesty, wave audit?** → Column B.
-4. **Unclear?** Prefer Column A (ask / list for Denon) over inventing.
-
----
-
-## Live Grok sessions (Sovereign) — do not steal their mountain
-
-Checked 2026-07-30 from `~/.grok/active_sessions.json` + session summaries. Titles are approximate; re-check dashboard.
-
-| Session (short id) | Role (from summary) | Implication |
-| --- | --- | --- |
-| `019fae69…` | **This coordination chat** — Denon parallel board | Air-traffic / board owner |
-| `019fae3d…` | Multi-agent parallel + AFK grind cook | Heavy ship history; may still babysit loop |
-| `019fb069…` | Stream A product owner (shell :8090) | Prefer Stream A UI here |
-| `019fae32…` | Denon handover / merge-ready | Historical merge lane |
-| `019fae30…` | Mega audit of Denon shipments | Audit lane — not product features |
-| Subagents under grind | AFK grind loop (45m scheduler) | Only when queue not DRAINED |
-
-**Before any agent edits code:** claim a row in `docs/LIVE-LANES.md` and avoid the other sessions’ scopes.
+| Tracker id | Route |
+| --- | --- |
+| `infra.i18n` | Shared — Denon system law / Nitro shell strings |
+| `trade.futures` `trade.otc` `trade.copy` `trade.algo` `trade.mm-bot` `trade.ccxt-api` `venue.aggregation` | **Denon** |
+| `web.terminal` | **Split** — shell UI Nitro; missing sources/spine Denon |
+| `p2p.merchants` | **Denon** |
+| `protocol.smart-accounts` | **Denon** |
+| `blueprint.*` `bank.*` `agents.*` `academy.*` `market.vendors` `mining.pool` | **Denon** |
+| `ops.support` `ops.affiliates` `ops.compliance` `ops.analytics` `ops.admin` `ops.notifications` | **Denon** (Nitro agents may do pure UI later when APIs exist) |
 
 ---
 
-## Tracker ready list (snapshot — re-run on tip)
+## Message Denon can paste (full backlog version)
 
-From `origin/main` `docs/TRACKER.md` (~37/107 shipped · ~30 ready · 2 wip):
-
-**Wip:** `ws.gateway` (Nitro) · `pay.gateway` (Nitro)
-
-**Ready (pick carefully):**  
-`infra.i18n` · `trade.futures` · `trade.otc` · `trade.copy` · `trade.algo` · `trade.ccxt-api` · `trade.mm-bot` · `venue.aggregation` · `web.terminal` · `p2p.merchants` · `protocol.smart-accounts` · blueprint/bank/agents/academy/market/mining/ops\* cluster · `ops.notifications` …
-
-**Routing hint:** most Phase-2 trade / protocol / rails-adjacent ready items → **Denon column** unless a thin honesty/wire PR is obvious and already contracted. Stream A + residual polish → **Nitro column**.
+See bottom of PR description / Telegram pack Nitro sends — keep this file as SoT.
 
 ---
 
-## Message Denon can paste (Telegram / chat)
+## Enhanced director prompt (Nitro → any agent)
 
 ```
-Parallel board is live: docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md
+You work for Nitro on INTAFACED (Phantom-X-007/intafaced). Non-technical director; you run git/PR (operator mode). Denon = experienced spine builder.
 
-You: Column A — decisions + spine (licences, multi-asset merge, rails/chain, kill drill, big trade/protocol).
-Me + agents: Column B — Stream A shell (:8090), honesty UI, wave audits, no inventing your forks.
-
-Main has a big agent cook through ~#168. Open PRs were empty at board write — re-check gh.
-Please don’t rebuild what AFK-COOK-SCOREBOARD already lists as shipped.
-First three asks for you: chart licence path, MySQL/MariaDB licence path, multi-asset merge/refuse.
-```
-
----
-
-## Enhanced director prompt (for Nitro → any new agent)
-
-Use this when opening a session that must *understand* Nitro’s parallel intent (not only code):
-
-```
-You work for Nitro on INTAFACED (Phantom-X-007/intafaced). He is non-technical director; you run git/PR (operator mode). Denon is the experienced builder.
-
-GOAL OF THIS MODE
-- Parallel with Denon without over-engineering.
-- Denon gets high human-reasoning tasks (money, licences, rails/chain, multi-asset, architecture forks).
-- Nitro+agents keep autonomous-safe work (Stream A shell, honesty UI, tracker truth, wave audits).
-- Cognitive depth stays on: classify hard vs safe, never invent Denon decisions, never fake done.
+GOAL
+- Give Denon the FULL real spine backlog (decisions + mountains).
+- Nitro agents only ship work that needs NO Nitro product judgment.
+- Never invent Denon answers (licences, multi-asset, rails/chain, kill drill, money models).
 
 SOURCE ORDER (live wins)
-1) docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md (this split)
-2) docs/LIVE-LANES.md (who is coding what session)
-3) docs/START-HERE.md · PEACE · residual · GRIND-LOOP-ACTIVE on origin/main
-4) docs/TRACKER.md + gh pr list / git fetch origin/main
-5) Law: INTAFACED_DEFINITIVE_BUILD.md · AGENTS.md · agent protocol
-6) Grok sibling sessions only if board is missing/stale
+1) docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md
+2) docs/LIVE-LANES.md
+3) START-HERE · PEACE · residual · GRIND-LOOP / AFK scoreboard on origin/main
+4) TRACKER + gh pr list + git fetch origin/main
+5) Law + AGENTS.md + agent protocol
+
+CLASSIFY BEFORE CODING
+- Needs product/legal/ops/money-model fork? → Denon column. Stop. Update board if missing.
+- Stream A shell polish / honesty / WAVE-AUDIT / tracker honesty? → Nitro agent column. Ship.
+- Needs Nitro taste (look sign-off, go-live, sanctions content)? → prepare evidence, ask Nitro once.
 
 TERRITORY
-- Stream A (Nitro): vendor shell pages/components/images, App.vue, routes.js — feat/app-*
-- Stream B (Denon): services, packages, tooling, edge, compose, Java, proxy, main.js
-- Never merge multi-asset without Denon. Shell ≠ books.
+- Nitro agents: vendor shell pages/components/images, App.vue, routes.js — feat/app-*
+- Never services/packages/edge/compose/Java/proxy/main.js without [cross-stream] issue
+- Shell ≠ books. No fake candles/balances/CI.
 
-DO / DON’T
-- DO claim one lane, worktree only, one concern per PR, pnpm verify, plain-language status.
-- DO put judgment forks on Denon’s column and stop.
-- DON’T rebuild main services, reopen closed audits, pad ceremony when queue is DRAINED.
-- DON’T invent CI green, candles, balances, factory addresses, licence answers, or rails.
-
-WHEN I SAY “what should we do?”
-- Refresh live state → update board if needed → give me: Denon’s top 3, my top 3 agent-safe, one recommended move.
+WHEN ASKED “what should we do?”
+Refresh live state → Denon’s next recommended mountain + our next agent-safe item + one recommended move.
 ```
 
 ---
 
 ## Maintenance
 
-- After Denon accepts a D-row or ships a wave: move row to “done” here + residual/PEACE if trust floor changes.
-- After agent ships: high water lives in GRIND-LOOP / scoreboard — don’t duplicate PR tables here.
+- After Denon closes a D-row: mark done here + residual/PEACE if trust floor changes.  
+- After agent ships: high water in grind/scoreboard — don’t duplicate full PR tables here.  
 - Re-verify SHA + open PRs every orient (60s).

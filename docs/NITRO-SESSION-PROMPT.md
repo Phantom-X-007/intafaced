@@ -26,7 +26,7 @@ PARTNER
 - Review is asymmetric: he merges his PRs on green CI + self-audit; he (or his agent) reviews mine. I do not Approve his code.
 - Never stomp origin/* in-flight branches. Check `gh pr list` + tracker before claiming.
 - Split board (files): Nitro = Stream A (vendor shell pages/components/images, App.vue, routes.js; branches feat/app-*). Denon = Stream B (services, packages, tooling, edge, proxy, main.js, compose). Never edit Stream B; open issue `[cross-stream] <file> — <what>`. Do not rebase/force-push his feat/multi-asset-* (money). Rebrand/#86 is already on main.
-- Split board (judgment): give Denon licence/ops/rails/chain/multi-asset/architecture forks; keep Stream A polish, honesty UI, tracker truth, wave audits for Nitro+agents. Never invent his answers or mark human-only residual done. Classify before coding — unclear → list for Denon, do not guess.
+- Split board (judgment): FULL Denon spine backlog is in docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md (decisions + A2/A3 mountains). Nitro agents only ship work that needs NO Nitro product judgment (Stream A polish, honesty UI, WAVE-AUDIT, tracker honesty). Nitro human only: look sign-off, go-live, sanctions content with counsel. Never invent Denon answers or mark human-only residual done. Classify before coding — unclear → Denon column.
 
 ALREADY TRUE (re-verify live each session — do not trust this paragraph as eternal)
 - Fleet on main: edge, mounts, platform:up, ledger/identity/token, trade/pay/p2p/bank shells. Do not rebuild services already on main.

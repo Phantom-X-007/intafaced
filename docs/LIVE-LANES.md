@@ -2,30 +2,23 @@
 
 **Rule:** No code edits until your lane is on this board. First claimer wins.  
 **How to use:** `docs/NITRO-PARALLEL-OPS.md`.  
-**Denon ↔ Nitro task split (judgment columns):** `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md`
+**Full Denon ↔ Nitro backlog:** `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md`
 
 | Lane id | Owner session | Scope | Status | PR / proof | Do not touch |
 | --- | --- | --- | --- | --- | --- |
-| denon-nitro-board | 019fae69 (this) | Parallel board + Denon handoff | **live** | docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md | product features until board claims |
-| grind-parallel-ops | 019fae3d | Multi-agent parallel + AFK grind cook | idle/babysit | GRIND-LOOP **DRAINED** · tip ~#168 | inventing product when drained |
-| stream-a-ui | 019fb069 | Stream A shell product owner :8090 | live | issue #83 · NITRO-STREAM-A-CLAIM | services/** spine |
-| merge-ready | 019fae32 | Denon handover / merge branches | mostly historical | #101 era | — |
-| mega-audit | 019fae30 | Denon ship audit | mostly historical | #105 era | product features |
+| denon-nitro-board | 019fae69 | Parallel board (full backlog expand) | **live** | PR #170 | product features until claimed |
+| stream-a-uiproof | (open PR lane) | Stream A boot / uiproof | **PR open** | #169 | services/** |
+| grind-parallel-ops | 019fae3d | Multi-agent parallel + AFK grind | babysit / DRAINED micro-queue | tip ~#168 | inventing product when drained |
+| stream-a-ui | 019fb069 | Stream A shell product owner :8090 | live | issue #83 | services/** spine |
+| merge-ready | 019fae32 | Denon handover / merge (historical) | idle | #101 era | — |
+| mega-audit | 019fae30 | Denon ship audit (historical) | idle | #105 era | product features |
 
-## Free mountains (next front-run)
+## Free mountains
 
-**Agent-safe only if contracted and not Denon-judgment.** Prefer:
+**Nitro agents (no Nitro judgment):** Stream A polish N1–N8 · WAVE-AUDIT after Denon merges · tracker honesty · babysit open Nitro PRs.
 
-- Stream A polish (N1–N7 on parallel board)
-- WAVE-AUDIT after Denon merges
-- Tracker honesty if notes lie about main
-
-**Denon-first (do not steal):**
-
-- Chart licence path · MySQL/MariaDB licence · multi-asset merge
-- Real rails / live chain · kill drill · wallet ops secrets
-- protocol.smart-accounts (real chain) · trade.futures / otc / copy / algo / mm-bot design
+**Denon full backlog:** A1 decisions + A2 spine + A3 tracker mountains in parallel board — he takes these.
 
 ## Last board update
 
-- 2026-07-30 — Denon returning; parallel board written; open PRs empty at check; agent queue DRAINED through #168; local main often behind origin.
+- 2026-07-30 — expanded full Denon backlog; Nitro agents restricted to no-judgment work; PR #170 carries board.
