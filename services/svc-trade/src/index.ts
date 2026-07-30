@@ -37,7 +37,7 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 // The book lives in svc-matching. This service never runs one of its own —
 // §5.1 draws that line and a second book would be a second truth.
 const matching = createMatchingClient(env.MATCHING_URL, env.INTERNAL_SERVICE_SECRET);
-const perks = createRankPerksClient(env.IDENTITY_URL);
+const perks = createRankPerksClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
