@@ -612,28 +612,28 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['infra.events'],
     requires: ['services/svc-notify'],
-    note: 'In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers: fillSettled, p2pEscrowLocked, p2pEscrowReleased, p2pEscrowRefunded, p2pTradeDisputed (openedBy only #157), kycApproved, rankUpdated, stakeCreated; ON CONFLICT dedupe). Push / email / SMS remain §13 sockets — no channel senders in this service. Not done until those channels exist.',
+    note: 'In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers: fillSettled, p2pEscrowLocked, p2pEscrowReleased, p2pEscrowRefunded, p2pTradeDisputed (openedBy only #157), kycApproved, rankUpdated, stakeCreated, bankMarginCalled; ON CONFLICT dedupe). Multi-channel fan-out now exists: one NotificationChannel adapter interface, per-channel delivery rows with attempted_at kept apart from delivered_at, claim-per-(notification,channel) idempotency, confirmed-address targets, and a retryable/permanent split that decides whether the bus redelivers. NOT done: no out-of-app channel can actually deliver until the owner supplies gateway credentials — until then email, push and SMS refuse every message with channel.not_configured and the refusal is on the record. In-app is the honest fallback and is genuinely delivering.',
   }),
   f('socket.notify-push', 'Push notification channel (device tokens + provider)', {
     module: 'notify',
     phase: '5',
     status: 'socket',
     dependsOn: ['ops.notifications'],
-    note: '§13 — interface is the in-app inbox row; push delivery not in v1.',
+    note: '§13 — adapter shipped (GatewayChannel over an owner-configured URL, device token registered and confirmed per user). Blocked on credentials the owner must obtain, not on code: with none set it refuses every message with channel.not_configured and records it.',
   }),
   f('socket.notify-email', 'Email notification channel', {
     module: 'notify',
     phase: '5',
     status: 'socket',
     dependsOn: ['ops.notifications'],
-    note: '§13 — outbound mail rail not wired.',
+    note: '§13 — adapter shipped (GatewayChannel over NOTIFY_EMAIL_GATEWAY_URL/TOKEN, address confirmed by a code sent through the channel itself, copy rendered server-side from @intafaced/i18n). Blocked on an outbound mail rail the owner must supply; unconfigured it refuses by name.',
   }),
   f('socket.notify-sms', 'SMS notification channel', {
     module: 'notify',
     phase: '5',
     status: 'socket',
     dependsOn: ['ops.notifications'],
-    note: '§13 — outbound SMS rail not wired.',
+    note: '§13 — adapter shipped (GatewayChannel over NOTIFY_SMS_GATEWAY_URL/TOKEN, E.164 addresses confirmed by code). Blocked on an outbound SMS rail the owner must supply; unconfigured it refuses by name.',
   }),
 
   // ── PHASE 5P · PROTOCOL P2–P3 ────────────────────────────────────────────

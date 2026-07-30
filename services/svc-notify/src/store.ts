@@ -51,6 +51,18 @@ export interface ListResult {
 
 export interface NotifyStore {
   insert(input: InsertNotificationInput): Promise<{ inserted: boolean; notification: Notification | null }>;
+  /**
+   * The row a redelivered event would have inserted.
+   *
+   * Needed because a crash between "inbox row written" and "email sent" must not
+   * lose the email: on redelivery the insert is a no-op, and without this the
+   * dispatcher would have nothing to fan out. Looking it up by the same natural
+   * key the insert deduped on is what makes the two halves independently
+   * recoverable — which is the entire reason they are two halves.
+   */
+  findBySource(userId: string, sourceSubject: string, sourceIdempotencyKey: string): Promise<Notification | null>;
+  /** Self-only by construction: the caller's id is part of the query, not a filter applied after. */
+  findById(userId: string, id: string): Promise<Notification | null>;
   list(query: ListQuery): Promise<ListResult>;
   unreadCount(userId: string): Promise<number>;
   markRead(userId: string, ids: readonly string[]): Promise<number>;
@@ -88,6 +100,16 @@ export class MemoryNotifyStore implements NotifyStore {
     this.byId.set(row.id, row);
     this.byDedupe.set(key, row.id);
     return { inserted: true, notification: row };
+  }
+
+  async findBySource(userId: string, sourceSubject: string, sourceIdempotencyKey: string): Promise<Notification | null> {
+    const id = this.byDedupe.get(dedupeKey(userId, sourceSubject, sourceIdempotencyKey));
+    return id ? (this.byId.get(id) ?? null) : null;
+  }
+
+  async findById(userId: string, id: string): Promise<Notification | null> {
+    const row = this.byId.get(id);
+    return row && row.userId === userId ? row : null;
   }
 
   async list(query: ListQuery): Promise<ListResult> {
@@ -204,6 +226,30 @@ export class PostgresNotifyStore implements NotifyStore {
 
     if (rows.length === 0) return { inserted: false, notification: null };
     return { inserted: true, notification: fromPg(rows[0]!) };
+  }
+
+  async findBySource(userId: string, sourceSubject: string, sourceIdempotencyKey: string): Promise<Notification | null> {
+    const rows = await this.sql<PgRow[]>`
+      SELECT id, user_id, kind, title_key, body_key, params, href, severity,
+             read_at, source_subject, source_idempotency_key, created_at
+      FROM notify.notifications
+      WHERE user_id = ${userId}
+        AND source_subject = ${sourceSubject}
+        AND source_idempotency_key = ${sourceIdempotencyKey}
+      LIMIT 1
+    `;
+    return rows[0] ? fromPg(rows[0]) : null;
+  }
+
+  async findById(userId: string, id: string): Promise<Notification | null> {
+    const rows = await this.sql<PgRow[]>`
+      SELECT id, user_id, kind, title_key, body_key, params, href, severity,
+             read_at, source_subject, source_idempotency_key, created_at
+      FROM notify.notifications
+      WHERE id = ${id} AND user_id = ${userId}
+      LIMIT 1
+    `;
+    return rows[0] ? fromPg(rows[0]) : null;
   }
 
   async list(query: ListQuery): Promise<ListResult> {

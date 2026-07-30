@@ -1,0 +1,144 @@
+/**
+ * THE CHANNEL INTERFACE — Doctrine §0.4, "adapters, not integrations".
+ *
+ * Every way of reaching a user is one of these. The in-app inbox is a channel
+ * like any other; email, push and SMS are channels that need credentials the
+ * owner may not have yet. That symmetry is the point: the dispatcher has one
+ * code path, and "we cannot reach you by email" is a first-class recorded
+ * outcome rather than a branch someone forgot.
+ *
+ * THE THREE OUTCOMES, AND WHY THEY ARE THREE
+ *
+ *   delivered  The adapter handed the message to its transport and the
+ *              transport accepted it. This is the ONLY outcome that may read as
+ *              "the user was told", and even it means "accepted for delivery",
+ *              which is what we say.
+ *   refused    The adapter declined BEFORE attempting anything: no credentials,
+ *              no address on file, address never confirmed. Terminal, and the
+ *              reason is recorded. A refusal is never a silent drop — the code
+ *              is on the delivery row and readable through the API.
+ *   failed     It was attempted and it did not work. Retryable or not.
+ *
+ * A design where "refused" and "delivered" are both `void` is how an undelivered
+ * margin call comes to look like a delivered one. svc-bank already keeps
+ * `notifiedAt` separate from `calledAt` for exactly this reason; this is the
+ * same discipline one layer out.
+ *
+ * PROVIDER NAMES LIVE IN CONFIGURATION, NOT HERE (§0.7). No adapter in this
+ * directory names a vendor, and none ever should — the transport is a URL and a
+ * credential the owner sets, and whoever is behind that URL is the owner's
+ * business, not this codebase's.
+ */
+
+/** Every way of reaching a user. `inapp` is always available; the rest are adapters. */
+export const CHANNEL_IDS = ['inapp', 'email', 'push', 'sms'] as const;
+export type ChannelId = (typeof CHANNEL_IDS)[number];
+
+/** Channels that leave the platform and therefore need an address and credentials. */
+export const OUT_OF_APP_CHANNELS = ['email', 'push', 'sms'] as const satisfies readonly ChannelId[];
+export type OutOfAppChannel = (typeof OUT_OF_APP_CHANNELS)[number];
+
+export function isChannelId(value: string): value is ChannelId {
+  return (CHANNEL_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Why a channel declined without attempting anything.
+ *
+ * These are codes, not sentences: they cross the wire to a client that renders
+ * its own copy from `@intafaced/i18n`, and a code cannot accidentally ship an
+ * untranslated string or a vendor's name.
+ */
+export type RefusalCode =
+  /** No credentials configured for this channel. The owner has not obtained them. */
+  | 'channel.not_configured'
+  /** The user has no address registered for this channel. */
+  | 'channel.no_target'
+  /** An address is registered but was never confirmed. We do not send to unconfirmed addresses. */
+  | 'channel.target_unverified'
+  /** Out-of-app sending is switched off by the operator. The inbox still fills. */
+  | 'channel.disabled'
+  /** Attempted the configured maximum times and never succeeded. Terminal by policy. */
+  | 'channel.attempts_exhausted';
+
+/** A channel declining before it attempted anything. Terminal — never retried. */
+export class ChannelRefusal extends Error {
+  readonly code: RefusalCode;
+  readonly channel: ChannelId;
+
+  constructor(channel: ChannelId, code: RefusalCode, detail?: string) {
+    super(detail ? `${channel}: ${code} (${detail})` : `${channel}: ${code}`);
+    this.name = 'ChannelRefusal';
+    this.channel = channel;
+    this.code = code;
+  }
+}
+
+/**
+ * A channel that tried and failed.
+ *
+ * `retryable` decides whether the bus message is nak'd. A gateway that is down
+ * is retryable; a gateway that says the address is malformed is not, and
+ * retrying it forever would be a busy-loop against someone else's server whose
+ * only effect is to hide the problem.
+ */
+export class ChannelDeliveryError extends Error {
+  readonly channel: ChannelId;
+  readonly retryable: boolean;
+  readonly status: number | null;
+
+  constructor(channel: ChannelId, message: string, opts: { retryable: boolean; status?: number }) {
+    super(message);
+    this.name = 'ChannelDeliveryError';
+    this.channel = channel;
+    this.retryable = opts.retryable;
+    this.status = opts.status ?? null;
+  }
+}
+
+/**
+ * A message on its way out of the platform.
+ *
+ * `title` and `body` are RENDERED here, server-side, from `@intafaced/i18n` —
+ * an email cannot carry copy a screen could not (§9), and cannot carry copy the
+ * brand scan has not seen (§0.7). The i18n keys ride along so a gateway that
+ * wants to re-render in its own template system can.
+ */
+export interface OutboundMessage {
+  readonly notificationId: string;
+  readonly userId: string;
+  readonly channel: ChannelId;
+  readonly kind: string;
+  readonly severity: 'info' | 'action' | 'critical';
+  readonly titleKey: string;
+  readonly bodyKey: string;
+  readonly title: string;
+  readonly body: string;
+  readonly href: string | null;
+  readonly locale: string;
+  /** Where it goes on this channel: an address, a number, a device token. */
+  readonly address: string;
+  /**
+   * Business key for the transport's own dedupe. `<notificationId>:<channel>`.
+   * At-least-once means this arrives twice; a gateway that honours it sends once.
+   */
+  readonly idempotencyKey: string;
+}
+
+export interface DeliveryReceipt {
+  /** The transport's handle for the message, when it gives one. Null is allowed and honest. */
+  readonly reference: string | null;
+}
+
+export interface NotificationChannel {
+  readonly channel: ChannelId;
+  /**
+   * Non-null when this channel cannot deliver anything at all right now — no
+   * credentials, typically. Read at boot and reported on `/ready`, so "email is
+   * not wired" is visible from outside the process rather than discovered by a
+   * user who never got their margin call.
+   */
+  readonly unavailableReason: RefusalCode | null;
+  /** Throws `ChannelRefusal` (terminal) or `ChannelDeliveryError` (attempted). */
+  deliver(message: OutboundMessage): Promise<DeliveryReceipt>;
+}
