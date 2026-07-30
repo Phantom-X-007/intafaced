@@ -22,7 +22,7 @@ import { reconcileBalances, verifyChain, totalsByAsset, runReconciliation } from
 
 // Ops role can CREATE SCHEMA; the service role cannot. Host port is 5433
 // (docker-compose); override with TEST_DATABASE_URL when needed.
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced';
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
 

@@ -11,6 +11,7 @@ export * from './columns.js';
 export * from './connection.js';
 export * from './migrate.js';
 export {
+  assertTestDatabase,
   createTestDb,
   postgresAvailable,
   postgresRequired,

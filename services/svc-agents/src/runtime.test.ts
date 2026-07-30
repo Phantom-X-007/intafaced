@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
@@ -28,7 +29,7 @@ import { hashAction } from './fleet/audit.js';
  * would test the fake.
  */
 
-const URL = process.env.TEST_DATABASE_URL_AGENTS ?? 'postgres://svc_agents:svc_agents@localhost:5433/intafaced';
+const URL = process.env.TEST_DATABASE_URL_AGENTS ?? 'postgres://svc_agents:svc_agents@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_agents_init.sql'), 'utf8');
 
@@ -124,6 +125,9 @@ if (!available) {
     connection: { search_path: 'agents,public', application_name: 'svc-agents-test' },
     onnotice: () => undefined,
   });
+
+  // Owns its database, or does not run. Must precede the first migration.
+  await assertTestDatabase(sql, 'svc-agents');
 
   await sql.unsafe(migration);
 

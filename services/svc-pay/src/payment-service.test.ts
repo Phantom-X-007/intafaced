@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import {
   MemoryLedger,
@@ -83,6 +84,10 @@ if (!available) {
     connection: { search_path: 'pay,public', application_name: 'svc-pay-test' },
     onnotice: () => undefined,
   });
+
+  // Owns its database, or does not run. This suite TRUNCATEs — pointed at the
+  // shared database that is destruction of live rows, which has happened here.
+  await assertTestDatabase(sql, 'svc-pay (payments)');
 
   // Under an advisory lock: vitest runs test FILES in parallel, and the other
   // svc-pay suite brings the same schema up on the same database. The migration
