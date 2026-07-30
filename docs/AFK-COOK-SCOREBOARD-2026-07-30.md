@@ -97,3 +97,39 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | #140 | CCXT private REST **create/cancel/get/closed/trades** |
 
 **Continue:** `docs/GRIND-LOOP-ACTIVE.md` · scheduler every 45m
+
+## Wave D (bots trade + notify + honest empties)
+
+| PR | What |
+| --- | --- |
+| #141–#144 | Loop docs after checkout/REST; cancel-all + fees; fills.forOrder; pre-compact high water |
+| #145 | **Private REST account/balance** (ledger projection, self-only) |
+| #146 | **Public OHLCV** — honest empty until candle job |
+| #147 | **GET /positions** — honest `[]` until futures |
+| #148 | Notify fans: rankUpdated · stakeCreated · p2pEscrowReleased |
+| #149 | Tracker: **trade.convert** done (mounted + money-path tests) |
+| #150 | Notify fan: **p2pEscrowRefunded** |
+
+**Audit:** `docs/audit/WAVE-D-2026-07-30.md` — light gates this docs PR; full monorepo scans if install allows, else run-on-return.
+
+### Unspoken needs (Wave D progress)
+
+| Need | Status after #145–#150 |
+| --- | --- |
+| Volume + quality without Nitro | Continuous product PRs through #150; loop file is compaction survival |
+| Bots can trade (CCXT public+private) | Balance + positions empty + OHLCV empty on tip; write path already on main |
+| In-app notifications | Fans expanded (rank/stake/p2p release+refund); dispute-resolved still skipped (no userIds) |
+| Continuous light gates + wave audits | Policy still every PR / every 3–4 ships; Wave D audit doc |
+| Peace-of-mind scoreboard | This table + GRIND-LOOP-ACTIVE high water |
+| Never fake human blockers | CI billing still human; factory/rails/futures still human or later |
+
+### Still agent-cookable (see loop NEXT QUEUE)
+
+1. `account/trades?symbol=` if filter still missing  
+2. Tracker note hygiene (notify fans under-listed)  
+3. Safe notify fans only  
+4. Private balance WS only if event path is safe — else skip  
+5. Thin `pay.public-api` only if cheap  
+6. Wave audits + DRAINED reassess  
+
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: RUNNING** · scheduler 45m
