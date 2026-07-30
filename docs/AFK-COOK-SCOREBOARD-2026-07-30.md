@@ -278,3 +278,15 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 | #214 | Hosted checkout; sandbox rails refused on public path |
 
 **Do not re-ship #110–#214.** Agent micro still DRAINED.
+
+## Spine landings #216–#218 + O1+O2 overnight (2026-07-30)
+
+| PR | What |
+| --- | --- |
+| #216 | Blueprint share card + false ownership `done` corrected |
+| #217 | Token factory on dev chain (immutables ≠ artefact bytecode) |
+| #218 | Indexer read models on real chain + wire-level test fix |
+
+**Overnight posture (Nitro):** **O1+O2** — babysit with hard merge matrix (money / review-hold = no Nitro merge) + Stream A / hygiene parallel. Backend micro still **DRAINED**. Law: `docs/GRIND-LOOP-ACTIVE.md`. Plan: `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`.
+
+**Do not re-ship #110–#218.**

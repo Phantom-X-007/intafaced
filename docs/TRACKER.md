@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**40 of 108 shipped (37%)** · 2 in progress · 33 ready to claim · 33 blocked · 19 deliberate §13 sockets
+**41 of 108 shipped (38%)** · 2 in progress · 32 ready to claim · 33 blocked · 19 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -38,7 +38,6 @@ pnpm wt feat/<the-thing>
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | Share card render (1080×1350, 1200×630) | `blueprint` | 4 | `blueprint.card` |
 | Export + hard delete, cascading | `blueprint` | 4 | `blueprint.ownership` |
-| Collateralised loans, LTV, margin calls, liquidation | `bank` | 5 | `bank.loans` |
 | Flexible + fixed yield pools | `bank` | 5 | `bank.earn` |
 | CardIssuerAdapter + card-sim, <2s auth decision | `bank` | 5 | `bank.cards` |
 | Navigator — tool-calling inside user guardrails | `agents` | 5 | `agents.navigator` |
@@ -65,7 +64,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
-| **28** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
+| **24** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
 | **14** | Branded gateway, hosted checkout, payment links | 🔨 wip | `pay.gateway` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
 | **7** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
@@ -200,12 +199,12 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (3/32)
+### Phase 5 — Surfaces (4/32)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
 | ✅ | Multi-currency account UX over the ledger <br/>_svc-bank on main; self-mounts /trpc with an edge-verified principal; UX product may expand_ | F |  | `bank.accounts` |
-| 🟢 | Collateralised loans, LTV, margin calls, liquidation | F |  | `bank.loans` |
+| ✅ | Collateralised loans, LTV, margin calls, liquidation <br/>_DONE on main #202 (2026-07-30). Collateral is purposed per loan (assertPurposedLocks covers collateral) so two loans in one asset cannot unsecure each other. Principal draws from loanReserve (module account, hard non-negative — underfunded reserve fails to lend rather than printing). No stored outstanding column — debt event-sourced. Liquidation ladder + accrual with per-(loan,day) idempotency. Value only via ledger-client recipes; amounts decimal strings / scaled bigint, never money-as-number for principal. Residual product: bank.earn / bank.cards / live go-live policy still separate._ | F |  | `bank.loans` |
 | 🟢 | Flexible + fixed yield pools | F |  | `bank.earn` |
 | 🟢 | CardIssuerAdapter + card-sim, <2s auth decision | F |  | `bank.cards` |
 | ⛔ | Self-custody funded card, JIT conversion (§18) | P | `bank.cards`, `protocol.smart-accounts` | `bank.sovereign-card` |
