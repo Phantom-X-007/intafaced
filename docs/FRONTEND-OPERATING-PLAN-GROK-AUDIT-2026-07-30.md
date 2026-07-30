@@ -1,19 +1,19 @@
-# Frontend Operating Plan — Grok audit + world-class layer
+# Frontend Operating Plan — executor audit + world-class layer
 
-**Status:** addendum to Claude’s `FRONTEND-OPERATING-PLAN-2026-07-30.md` · 2026-07-30  
-**Author role:** Grok = adversarial auditor + senior frontend product craft (planning only; no implementation this turn)  
-**Claude plan home (branch not yet on main):** `sovereign-worktrees/docs-frontend-operating-plan/docs/FRONTEND-OPERATING-PLAN-2026-07-30.md`  
-**Verdict for Nitro:** Claude’s plan is **the right spine for proof**. Adopt GO packet PR-1/PR-2 **as written**. Add the layers below **after** PR-2 so “world-class UI” is a system, not random component shopping.
+**Status:** addendum to planner's `FRONTEND-OPERATING-PLAN-2026-07-30.md` · 2026-07-30  
+**Author role:** executor = adversarial auditor + senior frontend product craft (planning only; no implementation this turn)  
+**Planner plan home (branch not yet on main):** `sovereign-worktrees/docs-frontend-operating-plan/docs/FRONTEND-OPERATING-PLAN-2026-07-30.md`  
+**Verdict for Nitro:** planner's plan is **the right spine for proof**. Adopt GO packet PR-1/PR-2 **as written**. Add the layers below **after** PR-2 so “world-class UI” is a system, not random component shopping.
 
 ---
 
 ## 0 · One-sentence audit
 
-Claude fixed **how we know the UI works**. This addendum fixes **how we get it to feel like a serious exchange** without abandoning #86 or inventing a second design system mid-flight.
+Planner fixed **how we know the UI works**. This addendum fixes **how we get it to feel like a serious exchange** without abandoning #86 or inventing a second design system mid-flight.
 
 ---
 
-## 1 · Scorecard of Claude’s plan
+## 1 · Scorecard of planner's plan
 
 | Area                                            | Score  | Notes                                                                                            |
 | ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
@@ -24,7 +24,7 @@ Claude fixed **how we know the UI works**. This addendum fixes **how we get it t
 | Backends-down as Phase 1 fixture                | **A**  | Matches honesty bar already shipped                                                              |
 | Auth fixture deferred, marked unproven          | **A**  | Honest; do not paper over                                                                        |
 | Pass order 1→2 before 3                         | **A**  | Non-negotiable                                                                                   |
-| RACI Claude plans / Grok executes               | **A**  | Keep “writer ≠ certifier”                                                                        |
+| RACI planner plans / Executor executes               | **A**  | Keep “writer ≠ certifier”                                                                        |
 | World-class **product UI craft**                | **C+** | Under-specified — pattern/density/tokens/performance almost absent                               |
 | Component strategy beyond “keep iView”          | **B−** | Right reject list; missing **what to build on top of iView**                                     |
 | Performance / bundle reality (12.5 MB `app.js`) | **D**  | Not addressed; world-class terminals care                                                        |
@@ -129,14 +129,14 @@ These checkboxes belong in **Pass 6 (S8 pack)** and Phase 2 polish PRs — not i
 
 ---
 
-## 5 · Gaps to add to Claude’s pass ladder
+## 5 · Gaps to add to planner's pass ladder
 
 | Pass    | Name                                               | Why                                                                                                         |
 | ------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | **2.5** | **Design bar doc** (`docs/STREAM-A-DESIGN-BAR.md`) | Density, tokens, pattern checklist, motion ban — so polish PRs have a law                                   |
 | **3**   | Auth fixture                                       | Unchanged — required for real S5/S7                                                                         |
 | **3.5** | **Route fixtures** (Playwright `page.route`)       | Deterministic wallet-down / orders-down / markets-down without depending on global fleet state              |
-| **4**   | Pixel baselines                                    | Claude’s rules + **run in official Playwright Docker image** when CI flake appears (industry standard 2026) |
+| **4**   | Pixel baselines                                    | planner's rules + **run in official Playwright Docker image** when CI flake appears (industry standard 2026) |
 | **4.5** | **Performance budget**                             | First contentful usable terminal; flag 12 MB `app.js` as known debt; no new heavy deps without budget       |
 | **5**   | Prices after #109                                  | Unchanged                                                                                                   |
 | **6**   | S8 human taste                                     | Elective                                                                                                    |
@@ -147,7 +147,7 @@ These checkboxes belong in **Pass 6 (S8 pack)** and Phase 2 polish PRs — not i
 
 ## 6 · Harness refinements (keep GO packet; tighten later)
 
-Claude’s PR-1/PR-2 stay. Add these as **PR-2 follow-ups or PR-2.1**, not as blockers:
+planner's PR-1/PR-2 stay. Add these as **PR-2 follow-ups or PR-2.1**, not as blockers:
 
 1. **Screenshot contract:** always hide volatile regions (clocks, websocket flicker) via `data-uiproof-ignore` once stable.
 2. **Matrix grows by concern:** not only routes — include “order form invalid”, “plane toggle active state”, “drawer open” as named cases.
@@ -176,9 +176,9 @@ World-class teams on legacy shells almost always win by **tokens + patterns + ru
 
 ---
 
-## 8 · Claude vs Grok vs Nitro (refined)
+## 8 · Planner vs executor vs Nitro (refined)
 
-|                             | Claude                               | Grok                            | Nitro                            |
+|                             | planner                               | executor                            | Nitro                            |
 | --------------------------- | ------------------------------------ | ------------------------------- | -------------------------------- |
 | Operating plan / design bar | **Plans & audits**                   | Contributes adversarial addenda | Approves product taste           |
 | PR-1 boot / PR-2 harness    | Audits after                         | **Builds**                      | Does not run commands            |
@@ -190,9 +190,9 @@ World-class teams on legacy shells almost always win by **tokens + patterns + ru
 
 ## 9 · What we should do next (ordered)
 
-1. **Land the plan pair as a docs PR** (Claude plan + this audit) on main.
-2. **Grok executes GO packet PR-1 then PR-2** exactly.
-3. **Claude audits** both with the six acceptance rows.
+1. **Land the plan pair as a docs PR** (planner plan + this audit) on main.
+2. **Executor executes GO packet PR-1 then PR-2** exactly.
+3. **Planner audits** both with the six acceptance rows.
 4. **Pass 2.5 design bar** doc (short, scoreable).
 5. **Only then** Phase 2 polish: tokens, density, plane unity, optional icon set, chart polish after #109.
 6. **S8** when Nitro wants taste — with screenshot pack, not a raw “open the link” homework.
@@ -210,13 +210,13 @@ Unspoken needs (treat as standing orders):
 1) I must never be the test runner. Agents boot, screenshot, score, and fix until PROOF.md is green.
 2) I want a world-class trading UI feel — density, trust, calm, plane unity — without looking like generic AI chrome or an "ice club" template.
 3) Denon already set English + black/orange (#86). Do not propose Tailwind/shadcn/Element as a rewrite. One kit: iView. Upgrade via tokens + patterns.
-4) Claude = planner/auditor. Grok = executor. Writer of code never certifies alone.
+4) Planner agent = planner/auditor. Executor agent = executor. Writer of code never certifies alone.
 5) Prefer leverage: Playwright harness, design bar, pattern checklists, route fixtures. No long-lived foreground servers.
 6) Fake prices forbidden. S2 waits on seed #109. Mark unproven what needs auth.
 7) When you say "done", attach PROOF.md or say unverified.
 
 Laws: FRONTEND-OPERATING-PLAN-2026-07-30.md + FRONTEND-OPERATING-PLAN-GROK-AUDIT-2026-07-30.md.
-Now: [Claude audit | Grok execute PR-1 | Grok execute PR-2 | write design bar].
+Now: [Planner audit | executor execute PR-1 | executor execute PR-2 | write design bar].
 ```
 
 ---
@@ -226,7 +226,7 @@ Now: [Claude audit | Grok execute PR-1 | Grok execute PR-2 | write design bar].
 - **Disagree with expanding GO packet before proof:** world-class craft without a harness becomes taste theatre.
 - **Risk if we shop component libs now:** second visual language + Vue 2 traps + brand undo of #86.
 - **Risk if we only ship harness and never design bar:** UI stays “honest but amateur.”
-- **Concession:** account empty-vs-error remains **unproven** until auth fixture — Claude is right; do not claim otherwise.
+- **Concession:** account empty-vs-error remains **unproven** until auth fixture — planner is right; do not claim otherwise.
 
 ---
 
@@ -234,8 +234,8 @@ Now: [Claude audit | Grok execute PR-1 | Grok execute PR-2 | write design bar].
 
 | Decision                                               | Recommendation                                                       |
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
-| Adopt Claude’s PR-1 / PR-2 GO packet?                  | **Yes**                                                              |
+| Adopt planner's PR-1 / PR-2 GO packet?                  | **Yes**                                                              |
 | Adopt this audit’s design-bar / tokens / pattern path? | **Yes, after PR-2**                                                  |
 | Install a new UI component framework now?              | **No**                                                               |
 | Send exchange screenshots as references?               | **Optional**, only for Pass 6 / Phase 2 scoring against §4 checklist |
-| Your next click                                        | Tell Grok: **docs PR then execute GO packet PR-1**                   |
+| Your next click                                        | Tell executor: **docs PR then execute GO packet PR-1**                   |

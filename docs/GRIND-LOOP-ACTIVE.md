@@ -2,7 +2,7 @@
 
 **Status:** DRAINED (agent queue) · Nitro AFK · 45m scheduler re-checks for open PRs / regressions / honest tracker lies only  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#163** on tip · product high water **#163** (CCXT `since` filters) + **#162** (terminal public trade tape) · shipped **after** first DRAINED claim (#159/#161) · queue re-checked still empty of micro product · **#161** drain honesty · **#160** Wave E · earlier product drain floor **#158**
+**Last tip:** high water through **#138** (late-merged frontend operating plan docs, brand-scrubbed) + **#165** (ccxt tracker note) · product high water still **#162–#163** · Status **DRAINED (agent queue)** · do not re-ship **#110–#165**
 
 ---
 
@@ -59,7 +59,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#163** on main. Product high water **#163**; first DRAINED claim was after **#158** product / **#159–#161** drain docs — then **#162–#163** product landed and queue was re-checked **still DRAINED**.
+**#110–#165** on main (+ late **#138** docs merge). Product high water **#162–#163**; tip includes **#164** loop re-check · **#165** tracker ccxt note · **#138** frontend operating plan (brand-scrub follow-up if needed). First DRAINED after **#158**; post-drain product **#162–#163**; queue remains **DRAINED**.
 
 | PR | What |
 | --- | --- |
@@ -146,7 +146,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## Exit (DRAINED) — met
 
-Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · tip high water **#163** · product high water **#162–#163** after first drain claim · scoreboard updated · no open agent-owned product PRs rotting.
+Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · tip high water **#165 / #138** · product high water **#162–#163** · scoreboard updated · open product PRs: none (babysit only).
 
 **First DRAINED claim** was after **#158** product / **#159–#161** docs. **Terminal public trade tape (#162)** and **CCXT since filters (#163)** shipped afterward; queue was **re-checked** and remains empty of agent micro product (no un-drain).
 
@@ -161,4 +161,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.  
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED (agent queue) — do not re-ship #110–#163; only babysit / honest fixes.**
+**Next agent after compact: Status DRAINED (agent queue) — do not re-ship #110–#165 / #138; only babysit / honest brand/tracker fixes.**
