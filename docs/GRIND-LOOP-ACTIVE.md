@@ -2,7 +2,7 @@
 
 **Status:** DRAINED (agent product micro-queue) · Denon spine **#201–#202** merged this fire · **mega-audit 2026-07-30 ran** (`docs/audit/2026-07-30-afk-cook-mega/`) · **mega-r2 re-prove** (`docs/audit/2026-07-30-mega-r2/`) · 45m scheduler: open PRs / regressions only — product still DRAINED  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#202** (bank loans) + **#201** (CCXT contract truth) · **#198–#200** CI format/path-filter/loop · product micro-queue re-checked after Denon spine merge — still no agent micro leftovers · do not re-ship **#110–#202** · main CI live
+**Last tip:** high water through **#203** (verify includes format:check + .mjs) · **#201–#202** Denon spine CCXT+loans · **#198–#200** CI · agent micro still DRAINED · do not re-ship **#110–#203**
 
 ---
 
@@ -59,7 +59,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#202** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
+**#110–#203** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
 
 | PR       | What                                                                                    |
 | -------- | --------------------------------------------------------------------------------------- |
@@ -163,4 +163,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED (agent product queue) — do not re-ship #110–#202; babysit open PRs; Denon spine #201 CCXT + #202 bank loans on main; CI live.**
+**Next agent after compact: Status DRAINED (agent product micro-queue) — do not re-ship #110–#203; babysit open PRs; spine #201–#203 on main.**
