@@ -190,7 +190,10 @@ console.log('\n══ DEFINITION OF DONE GATE (§14) ══\n');
 
 // Repo-wide gates first.
 let repoFailed = false;
-for (const script of ['brand-scan.mjs', 'custody-scan.mjs', 'migration-check.mjs']) {
+// `killswitch-reachability.mjs` turns §14.6 from a manual sign-off item into a
+// machine check. Kept as its own script rather than inlined here so two agents
+// editing this file collide on one line instead of a hundred.
+for (const script of ['brand-scan.mjs', 'custody-scan.mjs', 'migration-check.mjs', 'killswitch-reachability.mjs']) {
   try {
     const out = execFileSync(process.execPath, [join(ROOT, 'tooling', 'ci', script)], { encoding: 'utf8' });
     process.stdout.write('  ' + out.trim() + '\n');
