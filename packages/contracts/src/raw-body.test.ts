@@ -1,0 +1,146 @@
+import { describe, expect, it } from 'vitest';
+import { rawBodyOf, retainRawBody, type RawBodyHost } from './raw-body.js';
+import { serviceBodyDigest } from './service-auth.js';
+
+/**
+ * These test the tri-state and the parser's contract in isolation.
+ *
+ * The integration against a REAL Fastify instance lives in
+ * `services/svc-ledger/src/s2s-http.test.ts` and
+ * `services/svc-matching/src/router.test.ts` — this package has no `fastify`
+ * dependency, and the two money-path services are where it actually matters that
+ * the bytes being digested are the bytes Fastify received.
+ *
+ * The host below reproduces Fastify 5's documented call pattern, which was
+ * verified by probing Fastify 5.10.0 directly before any of this was written:
+ * `parseAs: 'buffer'` hands the parser `(request, payload, done)` with the wire
+ * bytes verbatim, and an `onRequest` hook runs for every request including the
+ * bodyless ones no parser ever sees.
+ */
+function fakeHost() {
+  let parser: ((req: object, body: Buffer, done: (err: Error | null, body?: unknown) => void) => void) | null = null;
+  let hook: ((req: object, reply: unknown, done: (err?: Error) => void) => void) | null = null;
+
+  const host: RawBodyHost = {
+    addContentTypeParser(_contentType, _options, handler) {
+      parser = handler;
+      return undefined;
+    },
+    addHook(_name, h) {
+      hook = h;
+      return undefined;
+    },
+  };
+
+  return {
+    host,
+    /** Every request runs the hook. Only a request with a body runs the parser. */
+    request(body?: string) {
+      const req = {};
+      hook?.(req, {}, () => undefined);
+
+      if (body === undefined) return { req, error: null as Error | null, parsed: undefined as unknown };
+
+      let error: Error | null = null;
+      let parsed: unknown;
+      parser?.(req, Buffer.from(body, 'utf8'), (err, value) => {
+        error = err;
+        parsed = value;
+      });
+      return { req, error, parsed };
+    },
+  };
+}
+
+describe('raw body retention — the three states', () => {
+  it('reports not-retained for a request nobody kept bytes for', () => {
+    // A service that never installed retention. This must NOT look like "no body":
+    // under `require` it has to fail closed, because nothing verified anything.
+    expect(rawBodyOf({})).toEqual({ retained: false });
+  });
+
+  it('reports an empty body as retained, not as absent', () => {
+    const { host, request } = fakeHost();
+    retainRawBody(host);
+
+    // A GET, or a POST with no content-type — the parser never runs, the hook does.
+    const { req } = request();
+
+    const raw = rawBodyOf(req);
+    expect(raw.retained).toBe(true);
+    expect(raw.retained && raw.bytes.length).toBe(0);
+    // And it verifies against the digest a bodyless caller would have signed.
+    expect(raw.retained && serviceBodyDigest(raw.bytes)).toBe(serviceBodyDigest(''));
+  });
+
+  it('reports the exact bytes a request carried', () => {
+    const { host, request } = fakeHost();
+    retainRawBody(host);
+
+    // Key order, a double space, and a multi-byte character: 48 characters, 49 bytes.
+    const body = '{"b":1,"a":"café  x","n":"1.000000000000000001"}';
+    const { req, parsed } = request(body);
+
+    const raw = rawBodyOf(req);
+    expect(raw.retained && raw.bytes.toString('utf8')).toBe(body);
+    expect(raw.retained && raw.bytes.length).toBe(49);
+    expect(raw.retained && serviceBodyDigest(raw.bytes)).toBe(serviceBodyDigest(body));
+    // The route still gets its parsed body.
+    expect(parsed).toEqual({ b: 1, a: 'café  x', n: '1.000000000000000001' });
+  });
+
+  it('keeps each request separate', () => {
+    const { host, request } = fakeHost();
+    retainRawBody(host);
+
+    const a = request('{"a":1}');
+    const b = request('{"b":2}');
+
+    expect(rawBodyOf(a.req).retained && rawBodyOf(a.req).bytes.toString('utf8')).toBe('{"a":1}');
+    expect(rawBodyOf(b.req).retained && rawBodyOf(b.req).bytes.toString('utf8')).toBe('{"b":2}');
+  });
+});
+
+describe('raw body retention — the parser it replaces', () => {
+  /**
+   * Swapping Fastify's built-in JSON parser means owning its error cases. These
+   * are the two answers the default gives, reproduced status AND code, because a
+   * silent 400→500 change on the money path would be a poor trade for a security
+   * fix.
+   */
+  it('answers 400 with Fastify’s own code for malformed JSON', () => {
+    const { host, request } = fakeHost();
+    retainRawBody(host);
+
+    const { error } = request('{not json');
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error as unknown as { statusCode: number }).toMatchObject({
+      statusCode: 400,
+      code: 'FST_ERR_CTP_INVALID_JSON_BODY',
+    });
+  });
+
+  it('answers 400 with Fastify’s own code for an empty body', () => {
+    const { host, request } = fakeHost();
+    retainRawBody(host);
+
+    const { error } = request('');
+
+    expect(error as unknown as { statusCode: number }).toMatchObject({
+      statusCode: 400,
+      code: 'FST_ERR_CTP_EMPTY_JSON_BODY',
+    });
+  });
+
+  it('retains the bytes even when they fail to parse', () => {
+    // A body that arrived is a body that arrived. Retaining before parsing keeps
+    // a digest mismatch on malformed JSON attributable rather than invisible.
+    const { host, request } = fakeHost();
+    retainRawBody(host);
+
+    const { req } = request('{not json');
+
+    expect(rawBodyOf(req).retained && rawBodyOf(req).bytes.toString('utf8')).toBe('{not json');
+  });
+});

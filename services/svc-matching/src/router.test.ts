@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { registerRoutes } from './router.js';
 
 // ── Order writes are service-only ────────────────────────────────────────────
@@ -14,122 +15,207 @@ import { registerRoutes } from './router.js';
 //   · Any resting order could be cancelled by id. The engine publishes
 //     `orderCancelled`, svc-trade releases that user's hold. A for-loop over
 //     ids empties a book.
+//
+// Mounted on a REAL Fastify instance, because `registerRoutes` now installs a
+// content-type parser to retain the raw bytes, and a digest is only worth
+// something if the bytes it is checked against are the ones Fastify received.
 
 describe('order writes require service credentials', () => {
   const SECRET = 'matching-internal-service-secret-32c';
 
-  function fakeApp() {
-    const routes = new Map<string, (req: unknown, reply: unknown) => Promise<unknown>>();
-    return {
-      routes,
-      post(path: string, h: (req: never, reply: never) => Promise<unknown>) {
-        routes.set(`POST ${path}`, h as (req: unknown, reply: unknown) => Promise<unknown>);
-      },
-      delete(path: string, h: (req: never, reply: never) => Promise<unknown>) {
-        routes.set(`DELETE ${path}`, h as (req: unknown, reply: unknown) => Promise<unknown>);
-      },
-      get(path: string, h: (req: never, reply: never) => Promise<unknown>) {
-        routes.set(`GET ${path}`, h as (req: unknown, reply: unknown) => Promise<unknown>);
-      },
-    };
-  }
-
-  function fakeReply() {
-    const captured = { status: 200, body: undefined as unknown };
-    const reply = {
-      code(s: number) {
-        captured.status = s;
-        return reply;
-      },
-      send(b: unknown) {
-        captured.body = b;
-        return reply;
-      },
-    };
-    return { reply, captured };
-  }
-
-  function mount(engine: unknown) {
-    const app = fakeApp();
-    registerRoutes(app as never, engine as never, SECRET);
+  async function mount(engine: unknown, options?: { bodyBind?: 'accept-both' | 'require' }) {
+    const app = Fastify({ logger: false });
+    registerRoutes(app, engine as never, SECRET, options ?? {});
+    await app.ready();
     return app;
   }
 
+  const validSubmit = {
+    orderId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    accountId: 'acct-1',
+    type: 'limit' as const,
+    side: 'buy' as const,
+    qty: '1.5',
+    price: '30000',
+    tif: 'GTC' as const,
+  };
+
+  const submit = (app: FastifyInstance, headers: Record<string, string>, payload: string) =>
+    app.inject({
+      method: 'POST',
+      url: '/markets/BTC-USDT/orders',
+      headers: { 'content-type': 'application/json', ...headers },
+      payload,
+    });
+
+  const cancel = (app: FastifyInstance, headers: Record<string, string>) =>
+    app.inject({ method: 'DELETE', url: '/markets/m/orders/o', headers });
+
   it('refuses an unauthenticated submit, and the engine is never called', async () => {
     let submitted = false;
-    const engine = { submit: async () => ((submitted = true), { accepted: true }), markets: [] };
-    const app = mount(engine);
-    const { reply, captured } = fakeReply();
+    const app = await mount({ submit: async () => ((submitted = true), { accepted: true }), markets: [] });
 
-    await app.routes.get('POST /markets/:marketId/orders')!(
-      { headers: {}, params: { marketId: 'BTC-USDT' }, body: {} } as never,
-      reply as never,
-    );
+    const res = await submit(app, {}, JSON.stringify(validSubmit));
 
-    expect(captured.status).toBe(401);
+    expect(res.statusCode).toBe(401);
     expect(submitted).toBe(false);
+    await app.close();
   });
 
   it('refuses an unauthenticated cancel, and the engine is never called', async () => {
     let cancelled = false;
-    const engine = { cancel: async () => ((cancelled = true), { cancelled: true }), markets: [] };
-    const app = mount(engine);
-    const { reply, captured } = fakeReply();
+    const app = await mount({ cancel: async () => ((cancelled = true), { cancelled: true }), markets: [] });
 
-    await app.routes.get('DELETE /markets/:marketId/orders/:orderId')!(
-      { headers: {}, params: { marketId: 'BTC-USDT', orderId: 'someone-elses-order' } } as never,
-      reply as never,
-    );
+    const res = await cancel(app, {});
 
-    expect(captured.status).toBe(401);
+    expect(res.statusCode).toBe(401);
     expect(cancelled).toBe(false);
+    await app.close();
   });
 
   it('refuses a forged signature', async () => {
-    const app = mount({ cancel: async () => ({ cancelled: true }), markets: [] });
-    const { reply, captured } = fakeReply();
+    const app = await mount({ cancel: async () => ({ cancelled: true }), markets: [] });
 
-    await app.routes.get('DELETE /markets/:marketId/orders/:orderId')!(
-      {
-        headers: {
-          'x-intafaced-service': 'svc-trade',
-          'x-intafaced-service-ts': String(Math.floor(Date.now() / 1000)),
-          'x-intafaced-service-sig': 'a'.repeat(64),
-        },
-        params: { marketId: 'm', orderId: 'o' },
-      } as never,
-      reply as never,
-    );
+    const res = await cancel(app, {
+      'x-intafaced-service': 'svc-trade',
+      'x-intafaced-service-ts': String(Math.floor(Date.now() / 1000)),
+      'x-intafaced-service-sig': 'a'.repeat(64),
+    });
 
-    expect(captured.status).toBe(401);
+    expect(res.statusCode).toBe(401);
+    await app.close();
   });
 
-  it('accepts a properly signed cancel from svc-trade', async () => {
+  it('accepts a properly signed submit that binds its body', async () => {
+    let submitted: unknown = null;
+    const app = await mount({
+      submit: async (_m: string, o: unknown) => {
+        submitted = o;
+        return { accepted: true, sequence: 1, fills: [], resting: null, cancellations: [], triggered: [] };
+      },
+      markets: [],
+    });
+
+    const payload = JSON.stringify(validSubmit);
+    const res = await submit(app, serviceAuthHeadersForBody('svc-trade', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(submitted).not.toBeNull();
+    await app.close();
+  });
+
+  /**
+   * A bodyless request still binds — as the digest of the empty body. So the
+   * cancel route cannot have a body bolted onto it, and its credentials cannot
+   * be lifted onto the submit route.
+   */
+  it('accepts a properly signed cancel from svc-trade, binding the absent body', async () => {
     let cancelled = false;
-    const engine = {
+    const app = await mount({
       cancel: async () => ((cancelled = true), { cancelled: true, orderId: 'o', sequence: 1, cancellation: null }),
       markets: [],
-    };
-    const app = mount(engine);
-    const { reply } = fakeReply();
+    });
 
-    await app.routes.get('DELETE /markets/:marketId/orders/:orderId')!(
-      { headers: serviceAuthHeaders('svc-trade', SECRET), params: { marketId: 'm', orderId: 'o' } } as never,
-      reply as never,
+    const res = await cancel(app, serviceAuthHeadersForBody('svc-trade', SECRET, ''));
+
+    expect(res.statusCode).toBe(200);
+    expect(cancelled).toBe(true);
+    await app.close();
+  });
+
+  // ── L2-6: the replay this closes ───────────────────────────────────────────
+
+  /**
+   * THE TEST THE CHANGE EXISTS FOR, on the mounted path.
+   *
+   * svc-trade places the ledger hold and only then calls here, which is why the
+   * engine is allowed to be pure. Credentials captured from one funded order,
+   * replayed against a different one, broke that invariant from outside: the
+   * engine would match an order svc-trade has no record of and no hold for.
+   */
+  it('refuses captured credentials replayed over a mutated order, and the engine is never called', async () => {
+    let submitted = false;
+    const app = await mount({
+      submit: async () => ((submitted = true), { accepted: true, sequence: 1, fills: [], resting: null, cancellations: [], triggered: [] }),
+      markets: [],
+    });
+
+    const honest = JSON.stringify(validSubmit);
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, honest);
+
+    // Same credentials, 1000x the quantity.
+    const tampered = JSON.stringify({ ...validSubmit, qty: '1500' });
+    const res = await submit(app, headers, tampered);
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().message).toMatch(/body-mismatch/);
+    expect(submitted).toBe(false);
+    await app.close();
+  });
+
+  it('refuses cancel credentials lifted onto a submit', async () => {
+    let submitted = false;
+    const app = await mount({
+      submit: async () => ((submitted = true), { accepted: true, sequence: 1, fills: [], resting: null, cancellations: [], triggered: [] }),
+      markets: [],
+    });
+
+    // Minted for the bodyless cancel, pointed at the write that carries a body.
+    const res = await submit(app, serviceAuthHeadersForBody('svc-trade', SECRET, ''), JSON.stringify(validSubmit));
+
+    expect(res.statusCode).toBe(401);
+    expect(submitted).toBe(false);
+    await app.close();
+  });
+
+  // ── The migration, both directions ─────────────────────────────────────────
+
+  it('accept-both admits a legacy v1 caller that has not been redeployed', async () => {
+    const app = await mount(
+      { cancel: async () => ({ cancelled: true, orderId: 'o', sequence: 1, cancellation: null }), markets: [] },
+      { bodyBind: 'accept-both' },
     );
 
-    expect(cancelled).toBe(true);
+    const res = await cancel(app, serviceAuthHeaders('svc-trade', SECRET));
+
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('require refuses that same legacy caller, naming why', async () => {
+    const app = await mount(
+      { cancel: async () => ({ cancelled: true, orderId: 'o', sequence: 1, cancellation: null }), markets: [] },
+      { bodyBind: 'require' },
+    );
+
+    const res = await cancel(app, serviceAuthHeaders('svc-trade', SECRET));
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().message).toMatch(/missing-body-digest/);
+    await app.close();
+  });
+
+  it('require still admits a redeployed v2 caller — the destination state works', async () => {
+    const app = await mount(
+      { cancel: async () => ({ cancelled: true, orderId: 'o', sequence: 1, cancellation: null }), markets: [] },
+      { bodyBind: 'require' },
+    );
+
+    const res = await cancel(app, serviceAuthHeadersForBody('svc-trade', SECRET, ''));
+
+    expect(res.statusCode).toBe(200);
+    await app.close();
   });
 
   // Depth and the market list stay open. A price is not a secret, and market
   // data being public is the point of a public market.
   it('leaves market data readable without credentials', async () => {
-    const app = mount({ depth: () => ({ bids: [], asks: [], sequence: 0 }), markets: [] });
-    const { reply, captured } = fakeReply();
+    const app = await mount({ depth: () => ({ bids: [], asks: [], sequence: 0 }), markets: [] });
 
-    await app.routes.get('GET /markets/:marketId/depth')!({ headers: {}, params: { marketId: 'm' }, query: {} } as never, reply as never);
+    const res = await app.inject({ method: 'GET', url: '/markets/m/depth' });
 
-    expect(captured.status).toBe(200);
+    expect(res.statusCode).toBe(200);
+    await app.close();
   });
 });
 

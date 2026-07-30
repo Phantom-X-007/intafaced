@@ -53,7 +53,7 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true };
 });
 
-registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET);
+registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERNAL_SERVICE_BODY_BIND });
 
 const reconcileTimer = setInterval(() => {
   void (async () => {

@@ -1,8 +1,14 @@
 import { z } from 'zod';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
 import type { CancelledRef, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
 
@@ -124,13 +130,6 @@ function presentSubmit(result: SubmitResult) {
  * Reads stay open: depth and the market list are public market data, and a
  * price is not a secret. Writes are not.
  */
-function requireService(req: { headers: Record<string, string | string[] | undefined> }, secret: string): void {
-  const { service } = verifyServiceHeaders(req.headers, secret);
-  if (!service) {
-    throw new MatchingAuthError('Order writes are callable only by another INTAFACED service with valid credentials (§2)');
-  }
-}
-
 export class MatchingAuthError extends Error {
   constructor(message: string) {
     super(message);
@@ -138,11 +137,58 @@ export class MatchingAuthError extends Error {
   }
 }
 
-export function registerRoutes(app: FastifyInstance, engine: MatchingEngine, internalSecret: string): void {
+export interface MatchingRouteOptions {
+  /**
+   * How strictly to enforce S2S body binding (L2-6). Defaults to `accept-both`,
+   * the setting that cannot 401 a caller that has not been redeployed yet.
+   *
+   * An order submit is a money instruction: svc-trade has already placed the
+   * ledger hold by the time it calls here, so a signature replayable against a
+   * different body is a replayable order against someone else's funded hold.
+   */
+  bodyBind?: ServiceBodyBindMode;
+}
+
+export function registerRoutes(
+  app: FastifyInstance,
+  engine: MatchingEngine,
+  internalSecret: string,
+  options: MatchingRouteOptions = {},
+): void {
+  const mode = options.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
+
+  /**
+   * Keep the exact request bytes so the signed digest can be checked against
+   * them (L2-6). Installed here rather than in `index.ts` so that mounting these
+   * routes and being able to verify their bodies cannot come apart.
+   */
+  retainRawBody(app);
+
+  const requireService = (req: FastifyRequest): void => {
+    const { service, rejected, scheme } = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode });
+
+    if (!service) {
+      throw new MatchingAuthError(
+        `Order writes are callable only by another INTAFACED service with valid credentials (§2): ${rejected}`,
+      );
+    }
+
+    // THE MIGRATION SIGNAL (L2-6). A v1 accept is an authenticated caller whose
+    // signature is still replayable against any order body for 300 seconds. When
+    // this has gone quiet for every caller, INTERNAL_SERVICE_BODY_BIND=require is
+    // safe to set here.
+    if (scheme === 'v1') {
+      app.log.warn(
+        { callingService: service, scheme, bodyBind: mode },
+        's2s caller did not bind its order body (L2-6) — its signature is replayable; redeploy it before setting INTERNAL_SERVICE_BODY_BIND=require',
+      );
+    }
+  };
+
   app.post('/markets/:marketId/orders', async (req, reply) => {
     // 401, not 403: the caller has not said who it is.
     try {
-      requireService(req, internalSecret);
+      requireService(req);
     } catch (err) {
       return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
     }
@@ -161,7 +207,7 @@ export function registerRoutes(app: FastifyInstance, engine: MatchingEngine, int
 
   app.delete('/markets/:marketId/orders/:orderId', async (req, reply) => {
     try {
-      requireService(req, internalSecret);
+      requireService(req);
     } catch (err) {
       return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
     }

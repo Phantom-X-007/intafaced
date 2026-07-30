@@ -1,5 +1,11 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import {
   formatAmount,
   parseAmount,
@@ -102,22 +108,70 @@ export async function handleS2sBalances(ledger: LedgerService, body: unknown) {
  *
  * A guard written on one door does not secure the other one.
  */
-export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, internalSecret: string): void {
+export interface S2sHttpOptions {
+  /**
+   * How strictly to enforce body binding (L2-6). Defaults to `accept-both`, the
+   * setting that cannot 401 a caller that has not been redeployed yet.
+   */
+  bodyBind?: ServiceBodyBindMode;
+}
+
+export function registerS2sHttp(
+  app: FastifyInstance,
+  ledger: LedgerService,
+  internalSecret: string,
+  options: S2sHttpOptions = {},
+): void {
+  const mode = options.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
+
+  /**
+   * Keep the exact request bytes, so the signed digest can be checked against
+   * them. This is the plumbing L2-6 was deferred for; see `raw-body.ts` for what
+   * was measured about Fastify's parser lifecycle.
+   *
+   * If this were omitted, `require` would refuse every caller with
+   * `body-unavailable` rather than quietly accepting bodies it cannot verify.
+   */
+  retainRawBody(app);
+
   /**
    * Refuse before the handler runs, so an unauthenticated request never reaches
    * `ledger.post` at all — not even to be rejected by it later.
    */
-  const authenticate = (req: { headers: Record<string, string | string[] | undefined> }): string => {
-    const { service } = verifyServiceHeaders(req.headers, internalSecret);
+  const authenticate = (req: FastifyRequest): string => {
+    const { service, rejected, scheme } = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode });
+
     if (!service) {
-      throw new LedgerError('Service credentials are required on the internal ledger API (§2)', 'ledger.unauthenticated');
+      // The reason travels to the caller. None of them disclose secret material,
+      // and `body-mismatch` versus `stale` is the difference between diagnosing
+      // an incident and guessing at one.
+      throw new LedgerError(
+        `Service credentials are required on the internal ledger API (§2): ${rejected}`,
+        'ledger.unauthenticated',
+      );
     }
+
+    // THE MIGRATION SIGNAL (L2-6).
+    //
+    // A v1 accept is an authenticated caller that has NOT bound its body, so its
+    // signature is still replayable against any body on any of these three
+    // routes for 300 seconds. It is tolerated only so the fleet can roll one
+    // service at a time. This warning naming the caller is what makes
+    // `INTERNAL_SERVICE_BODY_BIND=require` a decision an operator can justify:
+    // when it has gone quiet for every caller, flipping is safe.
+    if (scheme === 'v1') {
+      app.log.warn(
+        { callingService: service, scheme, bodyBind: mode },
+        's2s caller did not bind its request body (L2-6) — its signature is replayable; redeploy it before setting INTERNAL_SERVICE_BODY_BIND=require',
+      );
+    }
+
     return service;
   };
 
   const guarded =
     <T>(handle: (ledger: LedgerService, body: unknown) => Promise<T>) =>
-    async (req: { headers: Record<string, string | string[] | undefined>; body: unknown }, reply: FastifyReply) => {
+    async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         authenticate(req);
         return await handle(ledger, req.body);
