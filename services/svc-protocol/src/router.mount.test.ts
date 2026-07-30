@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { ChainUnavailableError } from './chain/availability.js';
 import { createProtocolRouter } from './router.js';
 import type { ProtocolRouterDeps } from './router.js';
 
@@ -180,6 +181,241 @@ describe('svc-protocol mount — the public surface', () => {
     });
     await expect(createProtocolRouter(deps).createCaller(anonymous()).buildDeployment({ owner: OWNER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+    });
+  });
+});
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * NO CHAIN — WHAT EVERY CHAIN-DEPENDENT PATH DOES ABOUT IT
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * This is the real state of this environment: `PROTOCOL_RPC_URL` defaults to a
+ * localhost port with nothing behind it, and there is no EVM RPC anywhere in the
+ * stack (SOCKET §13 `socket.evm-rpc`).
+ *
+ * Note that `stubDeps` above defines `isDeployed: async () => false`. That stub
+ * is why none of this was caught before: it makes a chain read *succeed* with a
+ * plausible answer in every existing test, so no test ever observed what a real
+ * unreachable RPC produces. The suite below supplies a chain whose reads throw
+ * the way the real one does.
+ *
+ * The contract being asserted: **503 with a code, never 500, and never a
+ * value.** A path that cannot reach a chain must refuse. A smart-account claim
+ * that "succeeds" against no chain is worse than an outage, because a user will
+ * believe it and may fund an address on the strength of it.
+ */
+const RPC = 'http://localhost:8545';
+
+function unreachable(what: string): ChainUnavailableError {
+  return new ChainUnavailableError('protocol.chain_unreachable', `${what}: no answer from the EVM RPC at ${RPC}`);
+}
+
+/** A chain that behaves as the configured one does today: it cannot be read. */
+function deadChain(overrides: Record<string, unknown> = {}) {
+  return {
+    config: { chainId: CHAIN_ID, factory: FACTORY, implementation: IMPLEMENTATION, rpcUrl: RPC },
+    isDeployed: async () => {
+      throw unreachable('isDeployed');
+    },
+    sessionOf: async () => {
+      throw unreachable('sessionOf');
+    },
+    isSessionLive: async () => {
+      throw unreachable('isSessionLive');
+    },
+    ownerOf: async () => {
+      throw unreachable('ownerOf');
+    },
+    poolReserves: async () => {
+      throw unreachable('poolReserves');
+    },
+    poolToken0: async () => {
+      throw unreachable('poolToken0');
+    },
+    poolToken1: async () => {
+      throw unreachable('poolToken1');
+    },
+    poolFeeBps: async () => {
+      throw unreachable('poolFeeBps');
+    },
+    status: async () => ({
+      reachable: false,
+      configuredChainId: CHAIN_ID,
+      observedChainId: null,
+      blockNumber: null,
+      suiteDeployed: true,
+      refusalCode: 'protocol.chain_unreachable',
+      reason: `status: no answer from the EVM RPC at ${RPC}`,
+    }),
+    ...overrides,
+  };
+}
+
+const SESSION_KEY = '0x4444444444444444444444444444444444444444';
+const POOL = '0x5555555555555555555555555555555555555555';
+const TOKEN_A = '0x6666666666666666666666666666666666666666';
+const TOKEN_B = '0x7777777777777777777777777777777777777777';
+
+describe('no chain — every dependent path refuses with a typed reason', () => {
+  const caller = () => createProtocolRouter(stubDeps({ chain: deadChain() })).createCaller(anonymous());
+
+  it('refuses predictAddress rather than returning an address it could not confirm', async () => {
+    await expect(caller().predictAddress({ owner: OWNER })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.stringContaining('protocol.chain_unreachable'),
+    });
+  });
+
+  /**
+   * THE ONE THAT MATTERS.
+   *
+   * Before this change `sessionStatus` had no try/catch at all, so an
+   * unreachable RPC escaped as a raw viem error and became a 500 whose message
+   * was a stack trace about HTTP. The shape it returns on a *successful* read of
+   * an account with no session — `exists: false, live: false` — is what makes
+   * getting this wrong dangerous: those two answers are indistinguishable to a
+   * client, and one of them is a lie.
+   */
+  it('refuses sessionStatus instead of reporting "no session"', async () => {
+    await expect(caller().sessionStatus({ account: OWNER, sessionKey: SESSION_KEY })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+  });
+
+  it('never answers sessionStatus with exists:false when it could not read the chain', async () => {
+    const result = await caller()
+      .sessionStatus({ account: OWNER, sessionKey: SESSION_KEY })
+      .then(
+        (value) => ({ resolved: true, value }),
+        () => ({ resolved: false, value: null }),
+      );
+    expect(result.resolved).toBe(false);
+  });
+
+  /**
+   * A deployed account that genuinely has no session for a key is the ONLY case
+   * allowed to answer `exists: false`. Proving the negative is reachable matters
+   * as much as proving the refusal is: a guard that refused everything would
+   * pass the test above and be useless.
+   */
+  it('does answer exists:false for a deployed account whose owner granted nothing', async () => {
+    const chain = deadChain({ isDeployed: async () => true, sessionOf: async () => null });
+    const router = createProtocolRouter(stubDeps({ chain })).createCaller(anonymous());
+    await expect(router.sessionStatus({ account: OWNER, sessionKey: SESSION_KEY })).resolves.toMatchObject({
+      exists: false,
+      live: false,
+      spentWei: null,
+    });
+  });
+
+  it('refuses sessionStatus for an address that holds no contract code', async () => {
+    const chain = deadChain({ isDeployed: async () => false });
+    const router = createProtocolRouter(stubDeps({ chain })).createCaller(anonymous());
+    await expect(router.sessionStatus({ account: OWNER, sessionKey: SESSION_KEY })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.stringContaining('protocol.contract_not_deployed'),
+    });
+  });
+
+  it('refuses the AMM quote that sources its own reserves', async () => {
+    await expect(caller().amm.quoteFromPool({ pool: POOL, tokenIn: TOKEN_A, amountIn: '1000' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.stringContaining('protocol.chain_unreachable'),
+    });
+  });
+
+  it('refuses poolReserves rather than reporting zero liquidity', async () => {
+    await expect(caller().amm.poolReserves({ pool: POOL })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+  });
+
+  /**
+   * Zero reserves would be read downstream as `amm.no_liquidity` — i.e. the
+   * confident claim "this pool is empty" about a pool nobody has looked at.
+   */
+  it('does not fall back to zero reserves', async () => {
+    await expect(caller().amm.poolReserves({ pool: POOL })).rejects.toSatisfy(
+      (err: { message?: string }) => !/"?reserve0"?\s*[:=]\s*"?0"?/.test(err.message ?? ''),
+    );
+  });
+
+  it('reports the outage as data on chainStatus, so a surface can render it', async () => {
+    await expect(caller().chainStatus()).resolves.toMatchObject({
+      reachable: false,
+      observedChainId: null,
+      blockNumber: null,
+      refusalCode: 'protocol.chain_unreachable',
+      usable: false,
+    });
+  });
+
+  /**
+   * `usable` is the field a product surface should branch on. `suiteDeployed`
+   * alone is not enough — contracts configured on a chain nobody can reach are
+   * still unusable — and `health.ok` is not enough either, since it is true
+   * whenever the process is running.
+   */
+  it('reports usable:false when the suite is deployed but the chain is unreachable', async () => {
+    await expect(caller().chainStatus()).resolves.toMatchObject({ suiteDeployed: true, usable: false });
+  });
+
+  it('still serves health as ok, because liveness is not chain reachability', async () => {
+    await expect(caller().health()).resolves.toMatchObject({ ok: true, factoryConfigured: true });
+  });
+});
+
+describe('the AMM will not quote a side the pool does not trade', () => {
+  it('refuses a tokenIn that is neither pool token, rather than assuming token1', async () => {
+    const chain = deadChain({
+      poolReserves: async () => ({ reserve0: 1_000_000n, reserve1: 2_000_000n, blockTimestampLast: 1 }),
+      poolToken0: async () => TOKEN_A,
+      poolToken1: async () => TOKEN_B,
+      poolFeeBps: async () => 30,
+    });
+    const router = createProtocolRouter(stubDeps({ chain })).createCaller(anonymous());
+
+    await expect(
+      router.amm.quoteFromPool({ pool: POOL, tokenIn: '0x8888888888888888888888888888888888888888', amountIn: '1000' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('amm.token_not_in_pool') });
+  });
+
+  it('orients the reserves by token0 and quotes both directions differently', async () => {
+    const chain = deadChain({
+      poolReserves: async () => ({ reserve0: 1_000_000n, reserve1: 2_000_000n, blockTimestampLast: 7 }),
+      poolToken0: async () => TOKEN_A,
+      poolToken1: async () => TOKEN_B,
+      poolFeeBps: async () => 30,
+    });
+    const router = createProtocolRouter(stubDeps({ chain })).createCaller(anonymous());
+
+    const aToB = await router.amm.quoteFromPool({ pool: POOL, tokenIn: TOKEN_A, amountIn: '10000' });
+    const bToA = await router.amm.quoteFromPool({ pool: POOL, tokenIn: TOKEN_B, amountIn: '10000' });
+
+    expect(aToB.reserveIn).toBe('1000000');
+    expect(aToB.reserveOut).toBe('2000000');
+    expect(bToA.reserveIn).toBe('2000000');
+    expect(bToA.reserveOut).toBe('1000000');
+    // Selling into the deeper side must return less, or the orientation is inverted.
+    expect(BigInt(bToA.amountOut)).toBeLessThan(BigInt(aToB.amountOut));
+  });
+
+  /** The provenance flag is the point: a caller can tell a real quote from arithmetic. */
+  it('marks a chain-sourced quote as such, and a caller-supplied one as not', async () => {
+    const chain = deadChain({
+      poolReserves: async () => ({ reserve0: 1_000_000n, reserve1: 2_000_000n, blockTimestampLast: 7 }),
+      poolToken0: async () => TOKEN_A,
+      poolToken1: async () => TOKEN_B,
+      poolFeeBps: async () => 30,
+    });
+    const router = createProtocolRouter(stubDeps({ chain })).createCaller(anonymous());
+
+    await expect(router.amm.quoteFromPool({ pool: POOL, tokenIn: TOKEN_A, amountIn: '10000' })).resolves.toMatchObject({
+      reservesFromChain: true,
+    });
+    await expect(router.amm.quoteExactIn({ amountIn: '10000', reserveIn: '1000000', reserveOut: '2000000' })).resolves.toMatchObject({
+      reservesFromChain: false,
     });
   });
 });
