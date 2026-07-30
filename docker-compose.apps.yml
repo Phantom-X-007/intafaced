@@ -428,6 +428,14 @@ services:
       # traffic at an engine that cannot answer.
       BLUEPRINT_ENGINE_MODE: ${BLUEPRINT_ENGINE_MODE:-mock}
       BLUEPRINT_ENGINE_URL: ${BLUEPRINT_ENGINE_URL:-http://host.docker.internal:4108}
+      # The card rasterizer. DELIBERATELY has no default: unset means this
+      # deployment has no renderer, and the service says so with a typed code
+      # while still serving the full vector card. A default pointing at a host
+      # that is not there would turn that honest answer into a timeout on every
+      # card request. There is no rasterizer and no object storage in this
+      # stack, so it is empty here and `blueprint.card` reports
+      # `blueprint.card_renderer_unconfigured`.
+      BLUEPRINT_CARD_RENDERER_URL: ${BLUEPRINT_CARD_RENDERER_URL:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4011']
     healthcheck: *healthcheck

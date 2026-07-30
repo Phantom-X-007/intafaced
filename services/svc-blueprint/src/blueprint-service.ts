@@ -3,10 +3,13 @@ import { transaction } from '@intafaced/db';
 import type { EventBus } from '@intafaced/events';
 import {
   blueprintProfileSchema,
+  CARD_DIMENSIONS,
   type BlueprintContract,
   type BlueprintExport,
   type BlueprintProfile,
   type BlueprintRecord,
+  type CardRender,
+  type CardSize,
   type CrewRole,
   type EraseReceipt,
   type MentorMatch,
@@ -15,10 +18,12 @@ import {
   type Placement,
   type Visibility,
 } from '@intafaced/contracts';
+import { composeCard } from './card/compose.js';
+import type { CardRenderer } from './card/card-renderer.js';
 import { EngineProtocolError, EngineUnavailableError, type BlueprintRequest, type NeuralEngineClient } from './engine/neural-engine.js';
 import { chooseCrew, crewName, newCrewId, rankCrews, type CrewCandidate, type MatchableProfile } from './matching/crew-matching.js';
 import { shortlistMentors, type MentorCandidate, type MentorProfile } from './matching/mentor-matching.js';
-import { withBlueprintSpan } from './tracing.js';
+import { setBlueprintSpanAttribute, withBlueprintSpan } from './tracing.js';
 
 /**
  * svc-blueprint — THE IDENTITY BLUEPRINT (§7.1).
@@ -101,6 +106,13 @@ export class BlueprintService implements BlueprintContract {
     private readonly sql: Sql,
     private readonly engine: NeuralEngineClient,
     private readonly bus: EventBus,
+    /**
+     * The card rasterizer. Required rather than optional, and defaulted by the
+     * caller to `UnconfiguredCardRenderer` — so a deployment without a renderer
+     * is an explicit choice at the composition root (`index.ts`) rather than an
+     * `undefined` this class quietly works around.
+     */
+    private readonly renderer: CardRenderer,
     options: BlueprintServiceOptions = {},
   ) {
     this.crewCapacity = options.crewCapacity ?? 6;
@@ -479,6 +491,102 @@ export class BlueprintService implements BlueprintContract {
     return row ? toBlueprintRecord(row) : null;
   }
 
+  // ── The share card (§7.1 acquisition artifact, §7.2 exit criterion) ────────
+
+  /**
+   * Compose the caller's share card, and raster it if a renderer exists.
+   *
+   * Three properties, each of which is a decision:
+   *
+   * 1. **The card is derived on read, never stored.** It is a pure function of
+   *    the profile and the crew name (`card/compose.ts`), so a stored copy would
+   *    be a second copy of personal data that erasure has to chase and that goes
+   *    stale the moment a user re-runs onboarding. What IS stored is the hosted
+   *    PNG's URL, because that is a fact about the outside world we cannot
+   *    recompute.
+   *
+   * 2. **The vector card always succeeds; only the raster can be absent.** A
+   *    missing renderer returns the `unavailable` arm with a code — it does not
+   *    throw, does not degrade the SVG, and above all does not invent a URL.
+   *    See `card/card-renderer.ts` for why that is the sharpest rule here.
+   *
+   * 3. **`card_asset_url` is written only on a real render, and only for the
+   *    portrait.** §7.1's schema has one column and portrait is the primary
+   *    artifact; the landscape unfurl is rendered on demand. Writing the column
+   *    on an `unavailable` result would persist a lie, and clearing it on one
+   *    would throw away a perfectly good URL from the last time the renderer was
+   *    up.
+   */
+  async card(input: { userId: string; size: CardSize }): Promise<CardRender> {
+    return withBlueprintSpan('blueprint.card', { stage: 'card', userId: input.userId }, async (span) => {
+      const blueprint = await this.get(input);
+      if (!blueprint) {
+        throw new BlueprintError('No Blueprint to render a card for — run the Blueprint session first', 'blueprint.not_found');
+      }
+
+      const render = await this.renderCard(blueprint, input.size);
+      setBlueprintSpanAttribute(span, 'cardRaster', render.raster.status);
+
+      if (render.raster.status === 'rendered' && input.size === 'portrait') {
+        await this.sql`
+          UPDATE blueprint.blueprints SET card_asset_url = ${render.raster.url}, updated_at = now()
+           WHERE user_id = ${blueprint.userId}
+        `;
+      }
+
+      return render;
+    });
+  }
+
+  /**
+   * Compose the card and ask the renderer for a raster. **Writes nothing.**
+   *
+   * Split out of `card()` so `export()` can carry the same artifact without
+   * inheriting the side effect. `export` is a tRPC `.query()` — retried,
+   * prefetched, and cached by any sane client — and a read path that persists a
+   * column on every call is a write path wearing a read's clothes. `card()` is
+   * the one place `card_asset_url` is written, because it is the one call a
+   * caller makes *in order to* get an asset.
+   */
+  private async renderCard(blueprint: BlueprintRecord, size: CardSize): Promise<CardRender> {
+    // The crew name is the only thing on the card this service does not already
+    // hold in the profile. Absent rows mean "unplaced", which is a real state
+    // the card renders honestly rather than a reason to fail.
+    const placed = await this.sql<Array<{ name: string; season: number }>>`
+      SELECT c.name, c.season
+        FROM blueprint.crew_members m
+        JOIN blueprint.crews c ON c.id = m.crew_id
+       WHERE m.user_id = ${blueprint.userId}
+    `;
+    const crew = placed[0] ?? null;
+
+    const svg = composeCard({ profile: blueprint.profile, crewName: crew?.name ?? null, season: crew?.season ?? null }, size);
+    const { width, height } = CARD_DIMENSIONS[size];
+
+    const raster = await this.renderer.rasterize({ svg, size, width, height, blueprintId: blueprint.id });
+
+    return { size, width, height, svg, raster };
+  }
+
+  /**
+   * The caller's mentor shortlist.
+   *
+   * Its own query rather than a field plucked off `export()`. `export` reads six
+   * tables and — since the card joined it — composes an SVG and calls an
+   * external rasterizer with a ten-second budget. Reading a shortlist through
+   * that would make a cheap list depend on a rail it has nothing to do with,
+   * and time out behind one.
+   */
+  async mentors(input: { userId: string }): Promise<MentorMatch[]> {
+    return withBlueprintSpan('blueprint.mentors', { stage: 'mentors', userId: input.userId }, async () => {
+      const rows = await this.sql<Array<{ student_id: string; mentor_id: string; fit_score: number; status: string }>>`
+        SELECT student_id, mentor_id, fit_score, status
+          FROM blueprint.mentor_matches WHERE student_id = ${input.userId} ORDER BY fit_score DESC, mentor_id ASC
+      `;
+      return rows.map(toMentorMatch);
+    });
+  }
+
   // ── Ownership: export (§7.2) ───────────────────────────────────────────────
 
   /**
@@ -544,10 +652,21 @@ export class BlueprintService implements BlueprintContract {
           FROM blueprint.mentor_matches WHERE mentor_id = ${input.userId} ORDER BY fit_score DESC, student_id ASC
       `;
 
+      // §7.2 says "export (JSON + card)". The portrait is the primary artifact,
+      // and composing it here costs one pure function call — the raster is
+      // whatever the renderer can honestly say, which in a deployment with no
+      // renderer is `unavailable`. An export is a snapshot of what the user
+      // has, and "you have a vector card and no hosted PNG" is what they have.
+      //
+      // `renderCard`, not `card()`: the blueprint is already in hand, and an
+      // export must not write `card_asset_url` as a side effect of being read.
+      const card = blueprint ? await this.renderCard(blueprint, 'portrait') : null;
+
       return {
         exportedAt: new Date().toISOString(),
-        schemaVersion: 1 as const,
+        schemaVersion: 2 as const,
         blueprint,
+        card,
         crew: crew
           ? {
               id: crew.id,

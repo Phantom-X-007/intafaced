@@ -8,6 +8,8 @@ import { BlueprintService } from './blueprint-service.js';
 import { HttpNeuralEngineClient } from './engine/http-engine.js';
 import { MockNeuralEngine } from './engine/mock-engine.js';
 import { isUsable, type NeuralEngineClient } from './engine/neural-engine.js';
+import { UnconfiguredCardRenderer, type CardRenderer } from './card/card-renderer.js';
+import { HttpCardRenderer } from './card/http-renderer.js';
 import { createBlueprintRouter, type BlueprintRouter } from './router.js';
 
 /**
@@ -52,7 +54,22 @@ const engine: NeuralEngineClient =
         ...(env.BLUEPRINT_ENGINE_API_KEY ? { apiKey: env.BLUEPRINT_ENGINE_API_KEY } : {}),
       });
 
-const blueprint = new BlueprintService(sql, engine, bus, {
+/**
+ * The card rasterizer, chosen the same way and for the same reason.
+ *
+ * Unset URL is not an error and not a degraded mode — the vector card is
+ * complete without it (see `card/compose.ts`). What `UnconfiguredCardRenderer`
+ * guarantees is that nobody downstream receives a PNG URL that does not resolve.
+ */
+const cardRenderer: CardRenderer = env.BLUEPRINT_CARD_RENDERER_URL
+  ? new HttpCardRenderer({
+      baseUrl: env.BLUEPRINT_CARD_RENDERER_URL,
+      timeoutMs: env.BLUEPRINT_CARD_RENDERER_TIMEOUT_MS,
+      ...(env.BLUEPRINT_CARD_RENDERER_API_KEY ? { apiKey: env.BLUEPRINT_CARD_RENDERER_API_KEY } : {}),
+    })
+  : new UnconfiguredCardRenderer();
+
+const blueprint = new BlueprintService(sql, engine, bus, cardRenderer, {
   crewCapacity: env.BLUEPRINT_CREW_CAPACITY,
   mentorShortlistSize: env.BLUEPRINT_MENTOR_SHORTLIST_SIZE,
   season: env.BLUEPRINT_SEASON,
@@ -74,9 +91,17 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
  * it. Reporting ready while the engine is down would route onboarding traffic
  * at a service that can only fail it.
  */
+/**
+ * The card renderer is reported but does NOT gate readiness. A Blueprint cannot
+ * be produced without the engine; a card can be produced without a rasterizer,
+ * and refusing traffic because the PNG rail is absent would take down onboarding
+ * over a share image. It is on this response so an operator can see which
+ * renderer is live without reading the deployment's environment.
+ */
 app.get('/ready', async () => ({
   ready: true,
   engine: { id: engine.id, usable: isUsable(engine), mode: env.BLUEPRINT_ENGINE_MODE },
+  cardRenderer: { id: cardRenderer.id, configured: Boolean(env.BLUEPRINT_CARD_RENDERER_URL) },
 }));
 
 await app.register(fastifyTRPCPlugin, {

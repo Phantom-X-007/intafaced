@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Principal } from '@intafaced/auth';
+import { SESSION_SCOPES, issueAccessToken, verifyAccessToken, type Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createBlueprintRouter } from './router.js';
 import type { BlueprintService } from './blueprint-service.js';
@@ -122,6 +122,143 @@ describe('svc-blueprint mount — authorisation', () => {
 
     await expect(createBlueprintRouter(blueprint).createCaller(signed()).me()).resolves.toBeNull();
     expect(readFor).toBe(USER);
+  });
+});
+
+/**
+ * WHAT A REAL LOGIN CAN REACH ON THIS ROUTER.
+ *
+ * Every test above hands the router the scopes it wants. That is the right test
+ * for a guard, and it is exactly how `blueprint:read` / `blueprint:write` were
+ * once issued to nobody while this suite stayed green — the door worked and no
+ * one on the platform had a key.
+ *
+ * `packages/contracts/src/session-access.test.ts` closed that, but it does so
+ * against procedures that MIRROR these ones. A mirror can drift: add a
+ * procedure here on a scope no session carries, and the mirror still passes.
+ *
+ * So this block starts from a token minted the way `AuthService.issueSession`
+ * mints one — `SESSION_SCOPES`, through `issueAccessToken` and back out of
+ * `verifyAccessToken` — and drives THE REAL ROUTER with it.
+ */
+describe('svc-blueprint mount — a real session, on the real router', () => {
+  const authConfig = {
+    secret: 'a-blueprint-session-signing-secret-long',
+    issuer: 'intafaced',
+    audience: 'intafaced.api',
+    accessTtlSeconds: 900,
+  };
+
+  /** The context the edge would build for a genuinely logged-in account. */
+  async function loggedIn() {
+    const { token } = await issueAccessToken(
+      { userId: USER, sessionId: '22222222-2222-4222-8222-222222222222', scopes: SESSION_SCOPES, tier: 'none' },
+      authConfig,
+    );
+    const verified = await verifyAccessToken(token, authConfig);
+    const raw = encodePrincipal(verified);
+    return edgeContext({
+      headers: {
+        'x-intafaced-principal': raw,
+        'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+        'x-intafaced-region': 'DE',
+      },
+      id: 'req-real-session',
+    });
+  }
+
+  it('mints blueprint scopes into a session at all', async () => {
+    // The precondition. Without it every assertion below could pass for the
+    // wrong reason on a router that had stopped guarding anything.
+    expect(SESSION_SCOPES).toContain('blueprint:read');
+    expect(SESSION_SCOPES).toContain('blueprint:write');
+  });
+
+  it('reaches every procedure on this router — no scope is issued to nobody', async () => {
+    // The stubs return schema-valid envelopes, because every procedure here
+    // validates its OUTPUT too — a thinner stub fails on the response shape
+    // and would tell us nothing about authorisation.
+    const emptyExport = {
+      exportedAt: new Date().toISOString(),
+      schemaVersion: 2 as const,
+      blueprint: null,
+      card: null,
+      crew: null,
+      membership: null,
+      crewmates: [],
+      matchRuns: [],
+      mentorMatches: [],
+      mentoringOthers: [],
+    };
+    // Counted so `mentors` can be shown NOT to route through the export — see
+    // the assertion after the calls.
+    let exports = 0;
+    const caller = createBlueprintRouter(
+      stubBlueprint({
+        get: async () => null,
+        card: async () => ({
+          size: 'portrait',
+          width: 1080,
+          height: 1350,
+          svg: '<svg/>',
+          raster: { status: 'unavailable', code: 'blueprint.card_renderer_unconfigured', reason: 'no renderer' },
+        }),
+        mentors: async () => [],
+        export: async () => {
+          exports += 1;
+          return emptyExport;
+        },
+        erase: async () => ({
+          userId: USER,
+          erasedAt: new Date().toISOString(),
+          removed: { blueprints: 0, crewMemberships: 0, matchRuns: 0, mentorMatches: 0, emptiedCrews: 0 },
+        }),
+      }),
+    ).createCaller(await loggedIn());
+
+    // Each of these is a 403 the day someone removes a scope from the issuing
+    // list, or adds a procedure here gated on one that is not issued.
+    await expect(caller.me()).resolves.toBeNull();
+    await expect(caller.card({ size: 'portrait' })).resolves.toMatchObject({ width: 1080 });
+    await expect(caller.mentors()).resolves.toEqual([]);
+    await expect(caller.export()).resolves.toBeDefined();
+    await expect(caller.erase()).resolves.toMatchObject({ userId: USER });
+
+    // Exactly one — the `export()` call above. A shortlist must not drag six
+    // table reads and an external rasterizer behind it.
+    expect(exports).toBe(1);
+  });
+
+  it('acts on the token’s own userId, never on one the caller could choose', async () => {
+    // The privacy guarantee restated against a real token: `export` has no
+    // userId input, so the only id it can reach is the signed one.
+    let readFor: string | null = null;
+    const caller = createBlueprintRouter(
+      stubBlueprint({
+        get: async ({ userId }: { userId: string }) => {
+          readFor = userId;
+          return null;
+        },
+      }),
+    ).createCaller(await loggedIn());
+
+    await caller.me();
+    expect(readFor).toBe(USER);
+  });
+
+  it('still refuses that same real token once the edge signature is stripped', async () => {
+    // A valid session is not authority on its own — the edge's signature over
+    // the principal is what this service trusts.
+    const { token } = await issueAccessToken(
+      { userId: USER, sessionId: '22222222-2222-4222-8222-222222222222', scopes: SESSION_SCOPES, tier: 'none' },
+      authConfig,
+    );
+    const raw = encodePrincipal(await verifyAccessToken(token, authConfig));
+    const unsigned = edgeContext({ headers: { 'x-intafaced-principal': raw, 'x-intafaced-region': 'DE' }, id: 'req-unsigned' });
+
+    await expect(createBlueprintRouter(stubBlueprint()).createCaller(unsigned).card({ size: 'portrait' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
   });
 });
 
