@@ -24,7 +24,7 @@ Planner fixed **how we know the UI works**. This addendum fixes **how we get it 
 | Backends-down as Phase 1 fixture                | **A**  | Matches honesty bar already shipped                                                              |
 | Auth fixture deferred, marked unproven          | **A**  | Honest; do not paper over                                                                        |
 | Pass order 1→2 before 3                         | **A**  | Non-negotiable                                                                                   |
-| RACI planner plans / Executor executes               | **A**  | Keep “writer ≠ certifier”                                                                        |
+| RACI planner plans / Executor executes          | **A**  | Keep “writer ≠ certifier”                                                                        |
 | World-class **product UI craft**                | **C+** | Under-specified — pattern/density/tokens/performance almost absent                               |
 | Component strategy beyond “keep iView”          | **B−** | Right reject list; missing **what to build on top of iView**                                     |
 | Performance / bundle reality (12.5 MB `app.js`) | **D**  | Not addressed; world-class terminals care                                                        |
@@ -131,15 +131,15 @@ These checkboxes belong in **Pass 6 (S8 pack)** and Phase 2 polish PRs — not i
 
 ## 5 · Gaps to add to planner's pass ladder
 
-| Pass    | Name                                               | Why                                                                                                         |
-| ------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **2.5** | **Design bar doc** (`docs/STREAM-A-DESIGN-BAR.md`) | Density, tokens, pattern checklist, motion ban — so polish PRs have a law                                   |
-| **3**   | Auth fixture                                       | Unchanged — required for real S5/S7                                                                         |
-| **3.5** | **Route fixtures** (Playwright `page.route`)       | Deterministic wallet-down / orders-down / markets-down without depending on global fleet state              |
+| Pass    | Name                                               | Why                                                                                                          |
+| ------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **2.5** | **Design bar doc** (`docs/STREAM-A-DESIGN-BAR.md`) | Density, tokens, pattern checklist, motion ban — so polish PRs have a law                                    |
+| **3**   | Auth fixture                                       | Unchanged — required for real S5/S7                                                                          |
+| **3.5** | **Route fixtures** (Playwright `page.route`)       | Deterministic wallet-down / orders-down / markets-down without depending on global fleet state               |
 | **4**   | Pixel baselines                                    | planner's rules + **run in official Playwright Docker image** when CI flake appears (industry standard 2026) |
-| **4.5** | **Performance budget**                             | First contentful usable terminal; flag 12 MB `app.js` as known debt; no new heavy deps without budget       |
-| **5**   | Prices after #109                                  | Unchanged                                                                                                   |
-| **6**   | S8 human taste                                     | Elective                                                                                                    |
+| **4.5** | **Performance budget**                             | First contentful usable terminal; flag 12 MB `app.js` as known debt; no new heavy deps without budget        |
+| **5**   | Prices after #109                                  | Unchanged                                                                                                    |
+| **6**   | S8 human taste                                     | Elective                                                                                                     |
 
 **Do not insert 2.5 before PR-2.** Proof first; design bar second; polish third.
 
@@ -178,7 +178,7 @@ World-class teams on legacy shells almost always win by **tokens + patterns + ru
 
 ## 8 · Planner vs executor vs Nitro (refined)
 
-|                             | planner                               | executor                            | Nitro                            |
+|                             | planner                              | executor                        | Nitro                            |
 | --------------------------- | ------------------------------------ | ------------------------------- | -------------------------------- |
 | Operating plan / design bar | **Plans & audits**                   | Contributes adversarial addenda | Approves product taste           |
 | PR-1 boot / PR-2 harness    | Audits after                         | **Builds**                      | Does not run commands            |
@@ -234,8 +234,8 @@ Now: [Planner audit | executor execute PR-1 | executor execute PR-2 | write desi
 
 | Decision                                               | Recommendation                                                       |
 | ------------------------------------------------------ | -------------------------------------------------------------------- |
-| Adopt planner's PR-1 / PR-2 GO packet?                  | **Yes**                                                              |
+| Adopt planner's PR-1 / PR-2 GO packet?                 | **Yes**                                                              |
 | Adopt this audit’s design-bar / tokens / pattern path? | **Yes, after PR-2**                                                  |
 | Install a new UI component framework now?              | **No**                                                               |
 | Send exchange screenshots as references?               | **Optional**, only for Pass 6 / Phase 2 scoring against §4 checklist |
-| Your next click                                        | Tell executor: **docs PR then execute GO packet PR-1**                   |
+| Your next click                                        | Tell executor: **docs PR then execute GO packet PR-1**               |

@@ -5,85 +5,92 @@
 
 ## Shipped this cook
 
-| PR | What |
-| --- | --- |
-| #118 | Brand-scan fix (PARALLEL-OPS model vendor name) + delta audit docs |
+| PR   | What                                                                                  |
+| ---- | ------------------------------------------------------------------------------------- |
+| #118 | Brand-scan fix (PARALLEL-OPS model vendor name) + delta audit docs                    |
 | #119 | **Private order stream** — `orderUpdated` event, trade publish, `/private/stream` JWT |
-| #120 | **Payment links** — createLink + public resolveLink + migration 0002 |
+| #120 | **Payment links** — createLink + public resolveLink + migration 0002                  |
 
 Plus prior night still on main: #110–#117 (yield/buyback, apikeys, edge ifc_, subaccounts, parallel-ops).
 
 ## Audit (local)
 
-- Brand: **was red on main** → fixed #118  
-- Custody / vendor-shell / tracker: green (re-check after product ships; tracker:check may still want `pnpm tracker` if markdown stale)  
-- GitHub Actions: **still billing-blocked** (jobs never start) — human Billing & plans  
+- Brand: **was red on main** → fixed #118
+- Custody / vendor-shell / tracker: green (re-check after product ships; tracker:check may still want `pnpm tracker` if markdown stale)
+- GitHub Actions: **still billing-blocked** (jobs never start) — human Billing & plans
 - Residual money table unchanged for Denon-owned items (rails, licences, counsel list)
 
 Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 
 ## Unspoken needs addressed
 
-| Need | What we did |
-| --- | --- |
-| Don't leave red doctrine | Fixed brand scan failure introduced by ops docs |
-| Front-run Denon product holes | Private orders + payment links |
-| Peace of mind without reading code | Scoreboards + claim board |
-| More volume than 10-minute cook | Multiple sequential product PRs + audit |
+| Need                               | What we did                                     |
+| ---------------------------------- | ----------------------------------------------- |
+| Don't leave red doctrine           | Fixed brand scan failure introduced by ops docs |
+| Front-run Denon product holes      | Private orders + payment links                  |
+| Peace of mind without reading code | Scoreboards + claim board                       |
+| More volume than 10-minute cook    | Multiple sequential product PRs + audit         |
 
 ## Still open (honest)
 
-| Item | Why |
-| --- | --- |
-| GitHub CI green | Org payment / spending limit — **not agent-fixable** |
-| Positions product | Honest `[]` REST only; futures later |
-| Hosted checkout UI | Links + minimal HTML exist; full merchant UI does not |
-| protocol.smart-accounts | Chain non-propped |
-| Real rails / kill drill / licences | Denon + counsel |
-| DoD gate svc-notify OTEL | Pre-existing red — agent queue #1 |
-| tracker:check | May still be red if TRACKER.md markdown stale — agent queue #2 |
+| Item                               | Why                                                            |
+| ---------------------------------- | -------------------------------------------------------------- |
+| GitHub CI green                    | Org payment / spending limit — **not agent-fixable**           |
+| Positions product                  | Honest `[]` REST only; futures later                           |
+| Hosted checkout UI                 | Links + minimal HTML exist; full merchant UI does not          |
+| protocol.smart-accounts            | Chain non-propped                                              |
+| Real rails / kill drill / licences | Denon + counsel                                                |
+| DoD gate svc-notify OTEL           | Pre-existing red — agent queue #1                              |
+| tracker:check                      | May still be red if TRACKER.md markdown stale — agent queue #2 |
 
 ## Config notes for Denon
 
 - svc-ws private path needs `JWT_ACCESS_SECRET` (same as identity/edge)
 - pay links need migration `0002_pay_payment_links.sql` applied on deploy
 
-## Free mountains next
+## Free mountains next (historical — FOSSIL; do not treat as open queue)
 
-1. svc-notify OTEL (DoD gate)  
-2. tracker:check if TRACKER.md stale  
-3. p2pTradeDisputed notify (openedBy only)  
-4. identity subAccounts.revoke if cheap  
-5. Human: **fix GitHub Actions billing**  
-6. Prefer skip: private balance WS, pay.public-api  
+Items 1–4 below shipped during the AFK cook (#156 OTEL, tracker honesty waves, #157 disputed fan, #158 revoke). Kept only so earlier scoreboard links do not 404 meaning. **Living open list is the post-DRAINED table at the end of this file + human blockers.**
+
+1. ~~svc-notify OTEL~~ → **DONE #156**
+2. ~~tracker:check stale~~ → honesty waves **DONE**
+3. ~~p2pTradeDisputed notify~~ → **DONE #157** (openedBy only — intentional)
+4. ~~identity subAccounts.revoke~~ → **DONE #158**
+5. Human: **fix GitHub Actions billing** (still open)
+6. Prefer skip: private balance WS, pay.public-api (product)
+
+## Living free mountains (2026-07-30 mega-audit)
+
+- Human: GitHub Actions billing / zero-step CI failures
+- Product: candle aggregation, futures positions, real pay rails, chain factory deploy
+- Residual agent: identity S2S ownership gate for sub-account orders (fail-closed until then)
 
 ## Grind continuation (same AFK)
 
-| PR | What |
-| --- | --- |
+| PR   | What                                                     |
+| ---- | -------------------------------------------------------- |
 | #122 | Private **fills** stream (`fillSettled` + channel=fills) |
-| #123 | **orders.history** terminal orders |
-| #124 | Payment links **list + deactivate** |
-
+| #123 | **orders.history** terminal orders                       |
+| #124 | Payment links **list + deactivate**                      |
 
 ## Wave B (parallel agents + continuous audit)
 
-| PR | What |
-| --- | --- |
-| #126 | Grind plan + audit cadence |
-| #127 | **orders.cancelAll** |
+| PR   | What                                             |
+| ---- | ------------------------------------------------ |
+| #126 | Grind plan + audit cadence                       |
+| #127 | **orders.cancelAll**                             |
 | #128 | **protocol factory honesty** (no fake addresses) |
-| #129 | **svc-notify** in-app inbox + 3 event fans |
+| #129 | **svc-notify** in-app inbox + 3 event fans       |
 
 **Audit:** `docs/audit/WAVE-B-2026-07-30.md` — all local doctrine gates green.
 
 ## Wave C (parallel)
 
-| PR | What |
-| --- | --- |
-| #130 | Wave B audit gates green |
-| #131 | **Public REST** `/api/v1/markets` + orderbook (ccxt-api partial) |
-| #127–#129 | cancelAll · protocol honesty · svc-notify |
+| PR        | What                                                             |
+| --------- | ---------------------------------------------------------------- |
+| #130      | Wave B audit gates green                                         |
+| #131      | **Public REST** `/api/v1/markets` + orderbook (ccxt-api partial) |
+| #127–#129 | cancelAll · protocol honesty · svc-notify                        |
 
 **Audit policy in force:** light gates every PR; wave audit every 3–4 ships (`docs/GRIND-PLAN-2026-07-30.md`).
 
@@ -93,126 +100,126 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 
 ## Loop after compact
 
-| PR | What |
-| --- | --- |
-| #135–#137 | Grind loop docs + queue refresh |
-| #139 | Pay **hosted checkout** HTML for payment links |
-| #140 | CCXT private REST **create/cancel/get/closed/trades** |
+| PR        | What                                                  |
+| --------- | ----------------------------------------------------- |
+| #135–#137 | Grind loop docs + queue refresh                       |
+| #139      | Pay **hosted checkout** HTML for payment links        |
+| #140      | CCXT private REST **create/cancel/get/closed/trades** |
 
 **Continue:** `docs/GRIND-LOOP-ACTIVE.md` · scheduler every 45m
 
 ## Wave D (bots trade + notify + honest empties)
 
-| PR | What |
-| --- | --- |
+| PR        | What                                                                                     |
+| --------- | ---------------------------------------------------------------------------------------- |
 | #141–#144 | Loop docs after checkout/REST; cancel-all + fees; fills.forOrder; pre-compact high water |
-| #145 | **Private REST account/balance** (ledger projection, self-only) |
-| #146 | **Public OHLCV** — honest empty until candle job |
-| #147 | **GET /positions** — honest `[]` until futures |
-| #148 | Notify fans: rankUpdated · stakeCreated · p2pEscrowReleased |
-| #149 | Tracker: **trade.convert** done (mounted + money-path tests) |
-| #150 | Notify fan: **p2pEscrowRefunded** |
-| #151 | Docs: Wave D grind loop high-water + compaction survival |
-| #152 | Tracker honesty wave D — notes match main code |
-| #153 | Docs(audit): Wave D doctrine scan log with real exit codes |
-| #154 | SQL **symbol filter** on account/trades + positions health log |
+| #145      | **Private REST account/balance** (ledger projection, self-only)                          |
+| #146      | **Public OHLCV** — honest empty until candle job                                         |
+| #147      | **GET /positions** — honest `[]` until futures                                           |
+| #148      | Notify fans: rankUpdated · stakeCreated · p2pEscrowReleased                              |
+| #149      | Tracker: **trade.convert** done (mounted + money-path tests)                             |
+| #150      | Notify fan: **p2pEscrowRefunded**                                                        |
+| #151      | Docs: Wave D grind loop high-water + compaction survival                                 |
+| #152      | Tracker honesty wave D — notes match main code                                           |
+| #153      | Docs(audit): Wave D doctrine scan log with real exit codes                               |
+| #154      | SQL **symbol filter** on account/trades + positions health log                           |
 
 **Audit:** `docs/audit/WAVE-D-2026-07-30.md` · scan log: `docs/audit/WAVE-D-SCANS-2026-07-30.md` — brand/custody/vendor-shell/workspace green at Wave D; OTEL/tracker reds cleared in Wave E.
 
 ## Wave E (queue clear → DRAINED)
 
-| PR | What |
-| --- | --- |
-| #155 | Docs: grind loop high water past #154 + AFK scoreboard |
-| #156 | **svc-notify OpenTelemetry** + tracker:check green |
-| #157 | Notify fan: **p2pTradeDisputed** (openedBy only) |
-| #158 | Identity **subAccounts.revoke** soft-disable |
-| #159 | Loop + scoreboard **DRAINED**; sub-account tracker honesty |
-| #160 | Docs(audit): Wave E doctrine scan log with real exit codes |
-| #161 | Tracker honesty: ops.notifications lists **p2pTradeDisputed**; Status **DRAINED (agent queue)** |
+| PR   | What                                                                                                                           |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------ |
+| #155 | Docs: grind loop high water past #154 + AFK scoreboard                                                                         |
+| #156 | **svc-notify OpenTelemetry** + tracker:check green                                                                             |
+| #157 | Notify fan: **p2pTradeDisputed** (openedBy only)                                                                               |
+| #158 | Identity **subAccounts.revoke** soft-disable                                                                                   |
+| #159 | Loop + scoreboard **DRAINED**; sub-account tracker honesty                                                                     |
+| #160 | Docs(audit): Wave E doctrine scan log with real exit codes                                                                     |
+| #161 | Tracker honesty: ops.notifications lists **p2pTradeDisputed**; Status **DRAINED (agent queue)**                                |
 | #162 | **Terminal public trade tape** — `LiveTradeTape` ← svc-ws `channel=trades` (decimal-string prints; charts still honest socket) |
-| #163 | CCXT optional **`since` (ms)** on account/trades · closed orders · public trades |
+| #163 | CCXT optional **`since` (ms)** on account/trades · closed orders · public trades                                               |
 
 ### Post-DRAINED product (queue re-checked)
 
 First DRAINED claim was after product **#158** / drain docs **#159–#161**. Then:
 
-| PR | What |
-| --- | --- |
+| PR   | What                                                                          |
+| ---- | ----------------------------------------------------------------------------- |
 | #162 | **web.terminal** public trade tape wired (tracker note already honest on tip) |
-| #163 | Bot history paging: `since` filters on private + public trade REST |
+| #163 | Bot history paging: `since` filters on private + public trade REST            |
 
 **Reassess:** still **DRAINED (agent queue)** — no further agent micro product; next fire = babysit open PRs / human blockers only.
 
 ### Unspoken needs (post-#163 / tip ≥ #163)
 
-| Need | Status |
-| --- | --- |
-| Volume + quality without Nitro | Product through **#163** after drain re-check; no padding ceremony |
+| Need                                 | Status                                                                                                                                          |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Volume + quality without Nitro       | Product through **#163** after drain re-check; no padding ceremony                                                                              |
 | Bots can trade (CCXT public+private) | Balance · positions empty · OHLCV empty · mytrades `?symbol=` + **`since`** · closed **`since`** · public tape **`since`** · write path on main |
-| Terminal surface | Depth live · **public trade tape live (#162)** · charts still honest empty (no candle invent) |
-| In-app notifications | Fans include rank/stake/p2p lock/release/refund + **dispute opened** (openedBy) |
-| Continuous light gates + wave audits | Local green at drain: brand/custody/vendor-shell/workspace/dod-gate/tracker:check |
-| Peace-of-mind scoreboard | This file + GRIND-LOOP-ACTIVE product high water **#162–#163** · tip **#163** · **Status DRAINED (agent queue)** |
-| Compaction survival | Loop file still law for every 45m fire |
-| Never fake human blockers | CI billing · chain factory · futures · candles · push/email/SMS still human/later |
+| Terminal surface                     | Depth live · **public trade tape live (#162)** · charts still honest empty (no candle invent)                                                   |
+| In-app notifications                 | Fans include rank/stake/p2p lock/release/refund + **dispute opened** (openedBy)                                                                 |
+| Continuous light gates + wave audits | Local green at drain: brand/custody/vendor-shell/workspace/dod-gate/tracker:check                                                               |
+| Peace-of-mind scoreboard             | This file + GRIND-LOOP-ACTIVE product high water **#162–#163** · tip **#163** · **Status DRAINED (agent queue)**                                |
+| Compaction survival                  | Loop file still law for every 45m fire                                                                                                          |
+| Never fake human blockers            | CI billing · chain factory · futures · candles · push/email/SMS still human/later                                                               |
 
 ### Agent queue disposition
 
-| Item | Result |
-| --- | --- |
-| svc-notify OTEL | **DONE** #156 |
-| tracker:check | **DONE** #156 (+ sub-account note #159; p2pTradeDisputed consumer note #161) |
-| p2pTradeDisputed fan | **DONE** #157 |
-| pay.public-api | **SKIP** |
-| Private balance WS | **SKIP** |
-| subAccounts.revoke | **DONE** #158 |
-| Terminal public trade tape | **DONE** #162 (post-DRAINED) |
-| CCXT `since` filters | **DONE** #163 (post-DRAINED) |
-| Reassess DRAINED | **Met again** — **DRAINED (agent queue)** after #162/#163 re-check |
+| Item                       | Result                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| svc-notify OTEL            | **DONE** #156                                                                |
+| tracker:check              | **DONE** #156 (+ sub-account note #159; p2pTradeDisputed consumer note #161) |
+| p2pTradeDisputed fan       | **DONE** #157                                                                |
+| pay.public-api             | **SKIP**                                                                     |
+| Private balance WS         | **SKIP**                                                                     |
+| subAccounts.revoke         | **DONE** #158                                                                |
+| Terminal public trade tape | **DONE** #162 (post-DRAINED)                                                 |
+| CCXT `since` filters       | **DONE** #163 (post-DRAINED)                                                 |
+| Reassess DRAINED           | **Met again** — **DRAINED (agent queue)** after #162/#163 re-check           |
 
 ### Still open (honest — not agent product)
 
-| Item | Why |
-| --- | --- |
-| GitHub CI green | Org billing / spending limit — **human** |
-| Futures / real positions | Honest `[]` only |
-| Candle aggregation / OHLCV data | Honest empty until real job |
-| Terminal charts / hotkeys / sub-accounts | Tape live; chart socket remains honest |
-| protocol.smart-accounts chain | Factory honesty only — not propped |
-| Push / email / SMS | §13 sockets |
-| venue.aggregation implementations | Large phase |
-| ops.admin real wiring | Browser-local only — large phase |
-| Real rails / kill drill / licences / counsel | Denon + counsel |
+| Item                                         | Why                                      |
+| -------------------------------------------- | ---------------------------------------- |
+| GitHub CI green                              | Org billing / spending limit — **human** |
+| Futures / real positions                     | Honest `[]` only                         |
+| Candle aggregation / OHLCV data              | Honest empty until real job              |
+| Terminal charts / hotkeys / sub-accounts     | Tape live; chart socket remains honest   |
+| protocol.smart-accounts chain                | Factory honesty only — not propped       |
+| Push / email / SMS                           | §13 sockets                              |
+| venue.aggregation implementations            | Large phase                              |
+| ops.admin real wiring                        | Browser-local only — large phase         |
+| Real rails / kill drill / licences / counsel | Denon + counsel                          |
 
 ## 45m re-check (post-#165 / #138)
 
-| Event | Result |
-| --- | --- |
-| Local doctrine gates | brand/custody/vendor-shell/workspace/dod-gate/tracker:check **green** after brand scrub of #138 docs |
-| Open PRs babysit | **#138** admin-merged (was only open product-adjacent docs PR) |
-| Brand regression | #138 landed with model-provider + upstream-shell path names → **scrubbed same fire** (planner/executor · `vendor/*/`) |
-| Agent product queue | still **empty** — DRAINED |
+| Event                | Result                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Local doctrine gates | brand/custody/vendor-shell/workspace/dod-gate/tracker:check **green** after brand scrub of #138 docs                  |
+| Open PRs babysit     | **#138** admin-merged (was only open product-adjacent docs PR)                                                        |
+| Brand regression     | #138 landed with model-provider + upstream-shell path names → **scrubbed same fire** (planner/executor · `vendor/*/`) |
+| Agent product queue  | still **empty** — DRAINED                                                                                             |
 
 **Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED (agent queue)** · product high water **#162–#163** · tip through **#165 + #138** · scheduler 45m re-check only
 
 ## 45m re-check (post-#167)
 
-| Event | Result |
-| --- | --- |
-| Open PR babysit | **#167** admin-merged — trade migration backfill `display_name` before CHECK (fleet-down on non-empty markets) |
-| Local verify | migration-check green; brand green; CI billing-blocked |
-| Agent product queue | still **DRAINED** — ops fix only |
+| Event               | Result                                                                                                         |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Open PR babysit     | **#167** admin-merged — trade migration backfill `display_name` before CHECK (fleet-down on non-empty markets) |
+| Local verify        | migration-check green; brand green; CI billing-blocked                                                         |
+| Agent product queue | still **DRAINED** — ops fix only                                                                               |
 
 **Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · tip **#167** · Status **DRAINED (agent queue)**
 
 ## 45m re-check (post-#169 / #172)
 
-| Event | Result |
-| --- | --- |
-| #169 | Admin-merged after main conflict resolve — Stream A `ui:boot` |
-| #172 | Admin-merged after conflict resolve — Playwright harness + design bar |
-| PROOF.md | **Honest unverified** in agent sandbox (Chromium SEGV) — needs desktop Terminal run |
-| Backend micro-queue | still **DRAINED** |
+| Event               | Result                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| #169                | Admin-merged after main conflict resolve — Stream A `ui:boot`                       |
+| #172                | Admin-merged after conflict resolve — Playwright harness + design bar               |
+| PROOF.md            | **Honest unverified** in agent sandbox (Chromium SEGV) — needs desktop Terminal run |
+| Backend micro-queue | still **DRAINED**                                                                   |
 
 **Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · tip **#172** · Status **DRAINED (backend micro-queue)**

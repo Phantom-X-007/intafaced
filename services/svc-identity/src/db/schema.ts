@@ -217,10 +217,7 @@ export const subAccounts = identity.table(
     revoked: boolean('revoked').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [
-    index('sub_accounts_parent_idx').on(t.parentUserId),
-    index('sub_accounts_parent_revoked_idx').on(t.parentUserId, t.revoked),
-  ],
+  (t) => [index('sub_accounts_parent_idx').on(t.parentUserId), index('sub_accounts_parent_revoked_idx').on(t.parentUserId, t.revoked)],
 );
 
 export const schema = { users, profiles, kycRecords, rankState, xpEvents, rankThresholds, sessions, apiKeys, subAccounts };

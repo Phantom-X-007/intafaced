@@ -19,11 +19,7 @@ export interface NotifySpanAttributes {
   sourceSubject?: string;
 }
 
-export async function withNotifySpan<T>(
-  name: string,
-  attributes: NotifySpanAttributes,
-  fn: (span: Span) => Promise<T>,
-): Promise<T> {
+export async function withNotifySpan<T>(name: string, attributes: NotifySpanAttributes, fn: (span: Span) => Promise<T>): Promise<T> {
   return tracer.startActiveSpan(name, async (span) => {
     span.setAttribute('intafaced.money_path', false);
     span.setAttribute('intafaced.module', 'notify');

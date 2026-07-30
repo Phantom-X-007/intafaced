@@ -947,9 +947,7 @@ export class AuthService {
   async listSubAccounts(
     userId: string,
   ): Promise<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; createdAt: Date }>> {
-    const rows = await this.sql<
-      Array<{ id: string; label: string; purpose: string | null; revoked: boolean; created_at: Date }>
-    >`
+    const rows = await this.sql<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; created_at: Date }>>`
       SELECT id, label, purpose, revoked, created_at FROM identity.sub_accounts
        WHERE parent_user_id = ${userId}
        ORDER BY created_at DESC

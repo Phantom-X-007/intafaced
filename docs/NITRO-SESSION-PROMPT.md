@@ -62,7 +62,6 @@ SESSION DEFAULT
 
 When Nitro wants full parallel intent (Denon online), also paste the fenced “Enhanced director prompt” at the bottom of `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md`.
 
-
 ---
 
 ## Why this prompt is shaped this way

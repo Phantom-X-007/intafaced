@@ -347,6 +347,12 @@ services:
       WS_DEPTH_LIMIT: ${WS_DEPTH_LIMIT:-50}
       WS_POLL_INTERVAL_MS: ${WS_POLL_INTERVAL_MS:-250}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
+      # Private /private/stream (#119/#122) needs the SAME JWT material as
+      # svc-identity / svc-edge. Without these, privateTokens stays null and
+      # every private upgrade returns 403 (mega-audit L5-4 / WS-JWT).
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
     ports: ['4014:4014']
     healthcheck: *healthcheck
     depends_on:

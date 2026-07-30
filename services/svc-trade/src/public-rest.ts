@@ -203,28 +203,25 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     return reply.code(200).send(markets.map(presentCcxtMarket));
   });
 
-  app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>(
-    '/api/v1/orderbook/:symbol',
-    async (req, reply) => {
-      // Fastify already percent-decodes params (BTC%2FUSDT → BTC/USDT).
-      const symbol = decodeURIComponent(req.params.symbol);
-      const market = await deps.marketBySymbol(symbol);
-      if (!market) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
-      }
+  app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>('/api/v1/orderbook/:symbol', async (req, reply) => {
+    // Fastify already percent-decodes params (BTC%2FUSDT → BTC/USDT).
+    const symbol = decodeURIComponent(req.params.symbol);
+    const market = await deps.marketBySymbol(symbol);
+    if (!market) {
+      return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+    }
 
-      const limit = parseLimit(req.query.limit, DEFAULT_DEPTH, MAX_DEPTH);
-      try {
-        const depth = await deps.depth(market.id, limit);
-        return reply.code(200).send(presentOrderBook(market.symbol, depth, now()));
-      } catch (err) {
-        if (err instanceof MatchingUnavailableError) {
-          return reply.code(502).send({ code: 'MatchingUnavailable', message: err.message });
-        }
-        throw err;
+    const limit = parseLimit(req.query.limit, DEFAULT_DEPTH, MAX_DEPTH);
+    try {
+      const depth = await deps.depth(market.id, limit);
+      return reply.code(200).send(presentOrderBook(market.symbol, depth, now()));
+    } catch (err) {
+      if (err instanceof MatchingUnavailableError) {
+        return reply.code(502).send({ code: 'MatchingUnavailable', message: err.message });
       }
-    },
-  );
+      throw err;
+    }
+  });
 
   app.get<{ Params: { symbol: string } }>('/api/v1/ticker/:symbol', async (req, reply) => {
     const symbol = decodeURIComponent(req.params.symbol);
@@ -273,25 +270,22 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     return reply.code(200).send(out);
   });
 
-  app.get<{ Params: { symbol: string }; Querystring: { limit?: string; since?: string } }>(
-    '/api/v1/trades/:symbol',
-    async (req, reply) => {
-      const symbol = decodeURIComponent(req.params.symbol);
-      const market = await deps.marketBySymbol(symbol);
-      if (!market) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
-      }
+  app.get<{ Params: { symbol: string }; Querystring: { limit?: string; since?: string } }>('/api/v1/trades/:symbol', async (req, reply) => {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const market = await deps.marketBySymbol(symbol);
+    if (!market) {
+      return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+    }
 
-      const limit = parseLimit(req.query.limit, DEFAULT_TRADES, MAX_TRADES);
-      const sinceParsed = parseSince(req.query.since);
-      if (!sinceParsed.ok) {
-        return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
-      }
-      // since → SQL on fills.ts (timestamptz) via publicTape.sinceMs.
-      const tape = await deps.publicTape(market.id, limit, sinceParsed.sinceMs);
-      return reply.code(200).send(tape.map((print) => presentPublicTrade(market.symbol, print)));
-    },
-  );
+    const limit = parseLimit(req.query.limit, DEFAULT_TRADES, MAX_TRADES);
+    const sinceParsed = parseSince(req.query.since);
+    if (!sinceParsed.ok) {
+      return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
+    }
+    // since → SQL on fills.ts (timestamptz) via publicTape.sinceMs.
+    const tape = await deps.publicTape(market.id, limit, sinceParsed.sinceMs);
+    return reply.code(200).send(tape.map((print) => presentPublicTrade(market.symbol, print)));
+  });
 
   /**
    * GET /api/v1/ohlcv/:symbol — REST_ROUTES.fetchOHLCV.

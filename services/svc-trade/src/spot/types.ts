@@ -141,7 +141,9 @@ export type TradeErrorCode =
   | 'trade.convert_invalid_qty'
   | 'trade.convert_bad_depth'
   | 'trade.convert_bad_spread'
-  | 'trade.convert_spread_too_high';
+  | 'trade.convert_spread_too_high'
+  /** subAccountId supplied but ownership/revoked gate is not wired yet — refuse rather than store an unvalidated id */
+  | 'trade.sub_account_ungated';
 
 export class TradeError extends Error {
   constructor(

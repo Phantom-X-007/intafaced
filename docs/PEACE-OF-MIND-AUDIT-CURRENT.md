@@ -1,70 +1,78 @@
 # Peace of mind — current floor (Nitro)
 
-**Date:** 2026-07-29 evening  
-**Main tip at write:** re-check `git rev-parse origin/main` (this PR updates residual after proper-cleanup)  
-**Proper definition:** [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md)  
-**Wave archive:** [`audit/2026-07-29-wave/`](audit/2026-07-29-wave/)  
-**Claim tags:** `[VERIFIED 2026-07-29]` mega-wave + proper Track-1 cleanup PR
+**Date:** 2026-07-30  
+**Main tip (literal SHA this audit closed against after fix PR merges — refresh on next fetch):** see bottom **TIP block**  
+**Pre-fix cook tip audited:** `2d1582143b0c1a95e8250a2f53f68fa71eb6b9ad` (#174)  
+**SINCE baseline:** `8a8c19bc626e6dada49a33be1f88d17873f42502` (#107)  
+**Archive:** [`audit/2026-07-30-afk-cook-mega/`](audit/2026-07-30-afk-cook-mega/)  
+**Claim tags:** `[VERIFIED 2026-07-30]` mega-audit AFK cook (local gates + code-path L3; **not** Actions green; **not** money e2e without Postgres)
 
-**Stream A:** issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83) · [NITRO-STREAM-A-CLAIM.md](NITRO-STREAM-A-CLAIM.md)
+**Stream A:** [NITRO-STREAM-A-CLAIM.md](NITRO-STREAM-A-CLAIM.md) · uiproof PROOF **UNVERIFIED** this tip
 
 ---
 
 ## Verdict (one breath)
 
-**His ship wave is audited and code-cleaned for agent-owned residual.** Keep building. **Not go-live.** Leftover is people/ops/law (licences, rails, chain, counsel list, kill drill) — not mystery doors we were too tired to name.
+**Cook delta is sound for Denon to open GitHub without flinching on money/auth/migrate/brand — agent P0s fixed; honest residuals named.** Keep building product. **Not go-live.** Actions still fail in seconds (billing). Money PG suites never ran on this host. OHLCV/positions honestly empty. Chain/rails sandbox.
 
 ---
 
 ## Scoreboard
 
-| System         | Risk now                                        | Status                       |
-| -------------- | ----------------------------------------------- | ---------------------------- |
-| Ledger         | Low if perimeter holds                          | OK                           |
-| Identity       | WebAuthn UV + rank self-only                    | OK                           |
-| Pay            | Rail double-submit residual                     | OK · residual                |
-| Token          | Stake conflict + unstake claim-before-post      | OK                           |
-| Trade          | Convert bind + market hours on create           | OK                           |
-| Protocol / DEX | Shells; quote fail-closed                       | Build · not product-complete |
-| Vendor shell   | Mint jobs/DAO paths killed; still not the books | UI only                      |
-| Deploy         | S2S not host-published                          | Usable with care             |
-| CI             | Brand/custody/vendor-shell law                  | OK                           |
+| System         | Risk now                                                                       | Status                                       |
+| -------------- | ------------------------------------------------------------------------------ | -------------------------------------------- |
+| Ledger         | Low if perimeter holds                                                         | OK · PG suite **SKIPPED** local              |
+| Identity       | Soft revoke + apiKeys.exchange                                                 | OK · CODE-REVIEWED                           |
+| Pay            | Links + hosted HTML; no card invent; rails sandbox                             | OK · residual rails                          |
+| Token          | Yield/buyback in delta                                                         | OK · CODE-REVIEWED                           |
+| Trade          | Convert + private REST; subAccount fail-closed; market buy cost via protection | OK · PG suite **SKIPPED**                    |
+| Protocol / DEX | Factory honesty; not chain-done                                                | Build · not product-complete                 |
+| Vendor shell   | UI only                                                                        | OK                                           |
+| Deploy         | notify in fleet; private WS JWT **wired** this audit                           | Usable with care                             |
+| CI             | Doctrine law local green                                                       | **Actions red** (run 30518194347 zero steps) |
+| Migrations     | 0002 trade backfill for #167 applied-DBs                                       | **M1 fixed** this audit                      |
 
 ---
 
-## Closed (do not re-open without regression)
+## Closed this audit (agent)
 
-- #80 · #81 · #86 custody/shell
-- #96 CORS / unfreeze / TRUNCATE
-- #99 CI money Postgres
-- #101 market seed + dex.quote honesty + screening **mechanism**
-- #102 trading hours on order create
-- #105 mega-wave P1s (stake conflict, convert bind, token matrix, WebAuthn UV, stakeOf self-only)
-- **Proper Track 1:** MiningsJob + shell mint DAO paths · unstake claim-before-post · rank get/perks self-only · scan law extended
+- Brand red on plan overlay (model-provider name scrub)
+- format:check red
+- M1: new `svc-trade` `0002_display_name_backfill` (do not re-edit applied 0001)
+- R5: `subAccountId` fail-closed until ownership gate
+- R6: filled market buy cost no longer silent `"0"` (protection ceiling; sell residual)
+- WS-JWT: compose + audience default for private stream
+- Free-mountains scoreboard fossils labeled
 
----
+## Closed earlier (do not re-open without regression)
 
-## Still open (only true leftovers)
-
-| Item                                            | Who                         | Why not “agent bug”                      |
-| ----------------------------------------------- | --------------------------- | ---------------------------------------- |
-| Dual-book **policy discipline** under live demo | All agents + you            | Code hardens shell; habit still required |
-| Sanctions **list content**                      | You + counsel               | Mechanism ≠ countries                    |
-| Licences (chart · MySQL connector)              | **Denon**                   | Path choice                              |
-| Wallet secrets / keystore ops                   | **Denon ops**               | Host secrets                             |
-| Real rails + live chain                         | **Denon**                   | Product infra                            |
-| Freeze/kill drill e2e                           | Denon + you sign-off        | Proof, not a patch                       |
-| Multi-asset owner merge rule                    | **Denon** if more           | Money enum                               |
-| Pay rail double-submit                          | Money agent when rails real | Adapter contract                         |
-| L2-6 S2S body-bind                              | Design                      | Not drive-by                             |
-| Secret scan in CI                               | You authorize tooling       | Optional Track A                         |
-| Stream A polish                                 | You                         | Product                                  |
-
-Full table: [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
+- #80 · #81 · #86 · #96 · #99 · #101 · #102 · #105 · Proper Track 1 · cook #110–#174 surfaces per archive
 
 ---
 
-## After next ship
+## Still open (honest residuals)
 
-Paste [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md) or [`WAVE-AUDIT.md`](WAVE-AUDIT.md).  
-Proper bar: [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md).
+| Item                                                  | Verdict                                                          | Who                           |
+| ----------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------- |
+| GitHub Actions zero-step failures (billing)           | **CANNOT VERIFY green** — runs fail in seconds, e.g. 30518194347 | **Human**                     |
+| Money e2e / PG suites local                           | **SKIPPED** — no Docker/Postgres                                 | Human install or CI when paid |
+| OHLCV / positions                                     | **HOLDS** honest empty                                           | Product (candles / futures)   |
+| Factory / chain                                       | **HOLDS** honesty; not deployed                                  | **Denon**                     |
+| Pay rails sandbox                                     | residual double-submit until real rails                          | Money agent when rails real   |
+| Market sell CCXT `cost` still `"0"` without fill load | residual after R6 nit                                            | Agent later                   |
+| Sub-account ownership S2S                             | fail-closed now; wire identity later                             | Agent                         |
+| Stream A PROOF / Chromium                             | **UNVERIFIED**                                                   | Nitro desktop                 |
+| Licences · wallet secrets · counsel list · kill drill | human/ops/law                                                    | Denon + you                   |
+| Dual-book policy discipline                           | habit                                                            | All                           |
+
+---
+
+## TIP block (literal)
+
+```
+PRE-FIX TIP (audit start): 2d1582143b0c1a95e8250a2f53f68fa71eb6b9ad
+SINCE:                   8a8c19bc626e6dada49a33be1f88d17873f42502
+POST-FIX TIP:            (filled after squash-merge of mega-audit fix PR — see 06-VERDICT.md)
+```
+
+Archive proof: `docs/audit/2026-07-30-afk-cook-mega/01-L0.md` through `06-VERDICT.md`.
