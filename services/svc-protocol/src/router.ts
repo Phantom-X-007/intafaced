@@ -14,14 +14,7 @@ import { AmmMathError } from './amm/math.js';
 import { buildCreatePool, buildMintLiquidity, buildSwapExactIn, quoteExactIn } from './amm/build.js';
 import { computeTokenAddress, DEFAULT_TOKEN_SALT, templateArtifact, TokenAddressError } from './launch/address.js';
 import { buildCreateToken } from './launch/build.js';
-import {
-  MAX_DECIMALS,
-  MAX_NAME_BYTES,
-  MAX_SYMBOL_BYTES,
-  MAX_WHOLE_SUPPLY,
-  parseTokenParams,
-  TokenParamsError,
-} from './launch/params.js';
+import { MAX_DECIMALS, MAX_NAME_BYTES, MAX_SYMBOL_BYTES, MAX_WHOLE_SUPPLY, parseTokenParams, TokenParamsError } from './launch/params.js';
 
 /**
  * svc-protocol's API.

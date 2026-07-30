@@ -138,15 +138,13 @@ describe('malformed input is refused, not coerced', () => {
   it('rejects a non-address factory, creator or recipient', () => {
     expect(() => computeTokenAddress({ factory: 'not-an-address' as Address, creator: CREATOR, params })).toThrow(TokenAddressError);
     expect(() => computeTokenAddress({ factory: FACTORY, creator: '0x123' as Address, params })).toThrow(TokenAddressError);
-    expect(() =>
-      computeTokenAddress({ factory: FACTORY, creator: CREATOR, params: { ...params, recipient: '0xzz' as Address } }),
-    ).toThrow(TokenAddressError);
+    expect(() => computeTokenAddress({ factory: FACTORY, creator: CREATOR, params: { ...params, recipient: '0xzz' as Address } })).toThrow(
+      TokenAddressError,
+    );
   });
 
   it('rejects a userSalt that is not 32 bytes', () => {
-    expect(() => computeTokenAddress({ factory: FACTORY, creator: CREATOR, userSalt: '0x11' as Hex, params })).toThrow(
-      TokenAddressError,
-    );
+    expect(() => computeTokenAddress({ factory: FACTORY, creator: CREATOR, userSalt: '0x11' as Hex, params })).toThrow(TokenAddressError);
   });
 
   it('is stable — the same inputs give the same address every time', () => {
