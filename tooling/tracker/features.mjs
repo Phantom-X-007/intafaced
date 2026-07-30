@@ -396,7 +396,7 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['identity.accounts'],
     requires: ['services/svc-protocol'],
-    note: 'Core + contracts on main. /trpc mount fixed in full-audit branch (was healthy-empty door L6-1). Remains ready not done until chain RPC + factory are non-propped and edge path is product-verified.',
+    note: 'Core + contracts on main; /trpc mounted; edge /api/protocol + web health/predictAddress product path. Factory/impl default 0x0 and PROTOCOL_RPC_URL is outside compose (no chain in stack). predict/buildDeployment refuse zero factory/impl. NOT done until factory+impl non-zero, RPC answers, and product path proves real chain config. Sockets: socket.evm-rpc, socket.contract-toolchain, socket.p256-verifier.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
     module: 'protocol',

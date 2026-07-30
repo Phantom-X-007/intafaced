@@ -83,6 +83,23 @@ const unsignedCallOutput = z.object({
   summary: z.string(),
 });
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+function isZeroAddress(addr: string): boolean {
+  return addr.toLowerCase() === ZERO_ADDRESS;
+}
+
+/** Refuse create2 arithmetic against an unconfigured factory/impl (defaults are 0x0). */
+function requireAccountFactoryConfigured(factory: string, implementation: string): void {
+  if (isZeroAddress(factory) || isZeroAddress(implementation)) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message:
+        'Smart account factory/implementation is not configured (PROTOCOL_FACTORY_ADDRESS / PROTOCOL_IMPLEMENTATION_ADDRESS).',
+    });
+  }
+}
+
 /** Every domain error becomes a client error with its own code intact. */
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof SessionScopeError) {
@@ -141,6 +158,8 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
           chainId: z.number(),
           custodial: z.literal(false),
           relayEnabled: z.boolean(),
+          /** Both PROTOCOL_FACTORY_ADDRESS and PROTOCOL_IMPLEMENTATION_ADDRESS are non-zero. */
+          factoryConfigured: z.boolean(),
         }),
       )
       .query(() => ({
@@ -149,11 +168,14 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         chainId: chain.config.chainId,
         custodial: false as const,
         relayEnabled: deps.relayEnabled(),
+        factoryConfigured:
+          !isZeroAddress(chain.config.factory) && !isZeroAddress(chain.config.implementation),
       })),
 
     /**
      * The address a key will own, before anything is deployed. Permissionless:
      * this is arithmetic over public constants, and gating it would be theatre.
+     * Refuses when factory/impl are still the zero-address defaults.
      */
     predictAddress: publicJurisdictionProcedure('protocol', 'protocol')
       .input(z.object({ owner: addressSchema, userSalt: bytes32Schema.default(DEFAULT_USER_SALT) }))
@@ -167,6 +189,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         }),
       )
       .query(async ({ input }) => {
+        requireAccountFactoryConfigured(chain.config.factory, chain.config.implementation);
         try {
           const address = computeAccountAddress({
             factory: chain.config.factory,
@@ -191,6 +214,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
       .input(z.object({ owner: addressSchema, userSalt: bytes32Schema.default(DEFAULT_USER_SALT) }))
       .output(unsignedCallOutput.extend({ predictedAddress: z.string() }))
       .query(({ input }) => {
+        requireAccountFactoryConfigured(chain.config.factory, chain.config.implementation);
         const call = relay.buildDeployment(input.owner as Address, input.userSalt as Hex);
         return {
           to: call.to,
