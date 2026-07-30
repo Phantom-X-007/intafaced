@@ -15,13 +15,13 @@ those, stop and say so — it is Denon's.
 
 ## Ground truth: what the shell can actually call today
 
-| endpoint | via | status | notes |
-| --- | --- | --- | --- |
-| `POST /market/symbol-thumb` | :8090 proxy | **200, real data** | BTC/USDT ~118,450 with volume and turnover. Safe to build on. |
-| `GET /market/history` | :8090 proxy | **200, real candles** | **Works.** Takes `from`/`to` in **milliseconds**, not seconds. See Package C. |
-| `GET /api/v1/markets` | edge :4000 | **200** | CCXT shape. 16 markets: crypto, commodity, forex. |
-| `GET /api/v1/{ticker,ohlcv,trades,orderbook,tickers,orders,positions,account}` | edge :4000 | **404** | Mounted in `svc-trade` source but not answering. **Denon investigating — do not build against these yet.** |
-| `svc-ws` trades channel | **direct, not the edge** | wired (#162) | The edge buffers and cannot proxy a socket, so the browser reaches svc-ws directly. That is by design, not a bug to fix. |
+| endpoint                                                                       | via                      | status                | notes                                                                                                                    |
+| ------------------------------------------------------------------------------ | ------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `POST /market/symbol-thumb`                                                    | :8090 proxy              | **200, real data**    | BTC/USDT ~118,450 with volume and turnover. Safe to build on.                                                            |
+| `GET /market/history`                                                          | :8090 proxy              | **200, real candles** | **Works.** Takes `from`/`to` in **milliseconds**, not seconds. See Package C.                                            |
+| `GET /api/v1/markets`                                                          | edge :4000               | **200**               | CCXT shape. 16 markets: crypto, commodity, forex.                                                                        |
+| `GET /api/v1/{ticker,ohlcv,trades,orderbook,tickers,orders,positions,account}` | edge :4000               | **404**               | Mounted in `svc-trade` source but not answering. **Denon investigating — do not build against these yet.**               |
+| `svc-ws` trades channel                                                        | **direct, not the edge** | wired (#162)          | The edge buffers and cannot proxy a socket, so the browser reaches svc-ws directly. That is by design, not a bug to fix. |
 
 **Two infrastructure facts that will waste your day if you do not know them:**
 
@@ -42,6 +42,7 @@ those, stop and say so — it is Denon's.
 endpoints that actually answer, so nothing displays a number it did not receive.
 
 **In scope**
+
 - Order entry: validation, precision from the market's real tick/lot, fee
   preview, confirmation and error states.
 - Account panes (Balances, Positions, Open Orders, Trade History, Order
@@ -51,11 +52,13 @@ endpoints that actually answer, so nothing displays a number it did not receive.
 - Empty and error states everywhere. The backend goes down — see the Mongo note.
 
 **Out of scope**
+
 - Anything that needs a new proxy prefix or edge route → **Package B**.
 - The candle path → **Package C**.
 - Money models, licences, rails.
 
 **Paths you may touch**
+
 ```
 vendor/coinexchange/05_Web_Front/src/pages/**
 vendor/coinexchange/05_Web_Front/src/components/**
@@ -64,9 +67,11 @@ vendor/coinexchange/05_Web_Front/src/App.vue
 vendor/coinexchange/05_Web_Front/src/config/routes.js
 vendor/coinexchange/05_Web_Front/src/assets/lang/en.js   (append-only region)
 ```
+
 Branch prefix `feat/app-*`.
 
 **Contracts that already exist**
+
 - `POST /market/symbol-thumb` — the market list and 24h stats. Real.
 - `GET /api/v1/markets` — tick size, lot size, min notional, maker/taker, per
   market. **Use this for order-entry precision instead of hardcoding decimals.**
@@ -75,6 +80,7 @@ Branch prefix `feat/app-*`.
   to tier basic" is actionable; "forbidden" is not.
 
 **Done when**
+
 - Browser proof (screenshot or recording) of each screen with data, and each
   screen with the backend stopped.
 - Shell compiles: `docker logs intafaced-shell-web --since 3m | grep -E "Compiled|error  in"` → the only warning is the pre-existing `InnovationMinings.vue` v-for key.
@@ -111,7 +117,7 @@ Why the shell needs it: <one line>
 ```
 
 **Why I do not just hand you the files:** a wrong upstream port does not fail
-cleanly — it reaches a *live service that answers a different API*. `svc-dex` once
+cleanly — it reaches a _live service that answers a different API_. `svc-dex` once
 called `svc-matching` on `svc-trade`'s port and the gate stayed green. There is now
 a `workspace-sync` check for it, and it belongs on my side of the line.
 
@@ -147,6 +153,7 @@ GET /market/history?symbol=BTC/USDT&from=1785000000000&to=1785400000000&resoluti
 
 **Milliseconds is correct and consistent all the way through**, which is why there
 is nothing to fix:
+
 - the production writer uses `setTime(calendar.getTimeInMillis())`
   (`DefaultCoinProcessor.java`) — live klines are ms
 - the seeder wrote ms, matching it
@@ -166,6 +173,7 @@ once it was back I re-probed with the same wrong units and blamed the units.
 **Your half:**
 
 **In scope**
+
 - Interval switching in the terminal UI, driving the `resolution` parameter the
   endpoint expects. Note the mapping the Java side performs: `1H → 1hour`,
   `1D → 1day`, `1W → 1week`; bare numbers are minutes.
@@ -179,6 +187,7 @@ once it was back I re-probed with the same wrong units and blamed the units.
 - Loading and reconnect states.
 
 **Out of scope**
+
 - Choosing or integrating a market-data provider. **Mine.**
 - The seconds/milliseconds fix. **Mine, shipping first.**
 - Restoring the proprietary charting library — purged in #106 and blocked in
@@ -210,16 +219,18 @@ not a re-archaeology of the repo.
 **Trigger.** A PR of mine merges with `spine` in the branch name.
 
 **What to refresh, and nothing else**
+
 1. **Tracker honesty for the touched features only.** Re-probe the endpoints that
    PR claims, with a real token, and correct `docs/TRACKER.md` where the claim and
    the response disagree. **A tracker that says "shipped" for a 404 is the single
    most expensive lie in this repo** — it has already cost a full session.
 2. **The shell against the new surface.** If I landed a procedure your screens
    call, confirm the screen still renders and its refusal states still read true.
-3. **Residual.** Append what my wave did *not* finish. Do not re-litigate what it
+3. **Residual.** Append what my wave did _not_ finish. Do not re-litigate what it
    deliberately left — read the PR body, which states scope and omissions.
 
 **Explicitly NOT in a wave audit**
+
 - Re-auditing the agent wave ~#110–#168. **Do not rebuild it.**
 - Money-path correctness. That is my self-audit; if you think a money path is
   wrong, **say so in an issue** rather than changing it.

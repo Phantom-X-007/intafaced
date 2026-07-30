@@ -1,6 +1,6 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** DRAINED (agent product queue) · **mega-audit 2026-07-30 ran** (archive `docs/audit/2026-07-30-afk-cook-mega/`) · 45m scheduler: open PRs / regressions only — **pause product grind during audit; product still DRAINED**  
+**Status:** DRAINED (agent product queue) · **mega-audit 2026-07-30 ran** (`docs/audit/2026-07-30-afk-cook-mega/`) · **mega-r2 re-prove** (`docs/audit/2026-07-30-mega-r2/`) · 45m scheduler: open PRs / regressions only — product still DRAINED  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
 **Last tip:** high water through **#175** (Nitro agent packages for Stream A) · **#176–#177** mega-audit P0/P1 archive + PEACE tip · **#169/#172** uiproof · **#167** fleet-down · backend micro-queue **DRAINED** · do not re-ship **#110–#177**
 
