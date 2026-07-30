@@ -7,6 +7,7 @@ import { PayError, type PayService, type PaymentView, type SettlementRecord } fr
 import type { DepositRecord, UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import { RailRegistry } from './rails/registry.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
+import { PublicCheckoutUnavailable } from './rails/posture.js';
 
 /**
  * The tRPC boundary.
@@ -78,6 +79,25 @@ function paymentView(overrides: Partial<PaymentView> = {}): PaymentView {
     capturedAmount: 0n,
     refundedAmount: 0n,
     createdAt: new Date('2026-07-27T12:00:00.000Z'),
+    ...overrides,
+  };
+}
+
+const LINK = '88888888-8888-4888-8888-888888888888';
+const SESSION = '99999999-9999-4999-8999-999999999999';
+
+function checkoutSession(overrides: Record<string, unknown> = {}) {
+  return {
+    id: SESSION,
+    status: 'open' as const,
+    label: 'Invoice',
+    // A DECIMAL STRING, because that is what `CheckoutSessionView` carries.
+    // A bigint here would be caught by the output schema, which is the point.
+    amount: '19.99',
+    currency: 'USDT',
+    method: 'crypto',
+    expiresAt: '2026-07-30T12:15:00.000Z',
+    instruction: { reference: '0xacceptance01', amount: '19.99', currency: 'USDT' },
     ...overrides,
   };
 }
@@ -154,6 +174,30 @@ function stubService(): Stub {
       settlementRecord({ status: 'paid_out', payoutMethod: 'card-sandbox', payoutRef: 'po_1' }),
     ),
     getSettlement: record('getSettlement', () => settlementRecord()),
+    createPaymentLink: record('createPaymentLink', () => ({
+      id: LINK,
+      token: 'pl_generated_token',
+      prefix: 'pl_generat',
+      label: 'Invoice',
+      expiresAt: new Date('2026-08-29T00:00:00.000Z'),
+      maxUses: null,
+    })),
+    resolvePaymentLink: record('resolvePaymentLink', () => ({
+      id: LINK,
+      merchantId: MERCHANT,
+      profileId: null,
+      label: 'Invoice',
+      amount: '19.99',
+      currency: 'USDT',
+      expiresAt: '2026-08-29T00:00:00.000Z',
+      remainingUses: null,
+      checkoutConfig: {},
+    })),
+    openCheckoutSession: record('openCheckoutSession', () => ({
+      sessionToken: 'cs_generated_session_token',
+      session: checkoutSession(),
+    })),
+    getCheckoutSession: record('getCheckoutSession', () => checkoutSession()),
   } as unknown as PayService;
 
   return {
@@ -946,5 +990,136 @@ describe('withdrawal reads', () => {
     const api = await caller(['pay:read']);
     expect(codeOf(await api.withdrawal.get({ withdrawalId: WITHDRAWAL }).catch((e: unknown) => e))).toBe('FORBIDDEN');
     expect(codeOf(await api.withdrawal.balance({ assetId: 'USDT' }).catch((e: unknown) => e))).toBe('FORBIDDEN');
+  });
+});
+
+// ── The public checkout contract ─────────────────────────────────────────────
+//
+// `checkout.open` is a `publicProcedure` that takes money from somebody who is
+// not logged in. There is no principal, so there is no scope to protect it with
+// — which means the CONTRACT is the protection, and these tests are what say so.
+
+describe('hosted checkout is public, and safe because of its shape', () => {
+  const codeOf = (err: unknown) => (err as { code?: string }).code;
+
+  it('serves an anonymous caller with no principal at all', async () => {
+    const api = await caller([]);
+    await expect(api.checkout.open({ token: 'pl_a_link_token_value' })).resolves.toMatchObject({
+      sessionToken: 'cs_generated_session_token',
+    });
+    await expect(api.checkout.status({ sessionToken: 'cs_generated_session_token' })).resolves.toMatchObject({ status: 'open' });
+  });
+
+  /**
+   * THE INPUT THAT DOES NOT EXIST. There is no `railAdapter` on `checkout.open`
+   * and there will not be one — a hosted checkout that can name a rail is the
+   * route back to the sandbox-withdrawal P0, this time with a stranger's money.
+   * zod strips it, and this test fails the day somebody adds it.
+   */
+  it('gives the caller no way to name a rail', async () => {
+    const api = await caller([]);
+    await api.checkout.open({ token: 'pl_a_link_token_value', railAdapter: 'card-sandbox' } as never);
+
+    const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
+    expect(call.args[0]).toEqual({ linkToken: 'pl_a_link_token_value', amount: undefined, assetId: undefined });
+    expect(JSON.stringify(call.args[0])).not.toContain('card-sandbox');
+  });
+
+  it('takes a payer amount as a decimal string and hands the service a scaled bigint', async () => {
+    const api = await caller([]);
+    await api.checkout.open({ token: 'pl_a_link_token_value', amount: '7.25', assetId: 'USDT' });
+
+    const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
+    expect(call.args[0]).toMatchObject({ amount: amt('7.25'), assetId: 'USDT' });
+  });
+
+  it('refuses a JSON number for an amount, on the public surface as everywhere else', async () => {
+    const api = await caller([]);
+    const err = await api.checkout.open({ token: 'pl_a_link_token_value', amount: 7.25 as never }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+  });
+
+  /** Nothing in the response identifies anything but this session. */
+  it('returns no merchant, payment, link or rail identifier to an anonymous caller', async () => {
+    const api = await caller([]);
+    const { session } = await api.checkout.open({ token: 'pl_a_link_token_value' });
+
+    const body = JSON.stringify(session);
+    expect(body).not.toContain(MERCHANT);
+    expect(body).not.toContain(PAYMENT);
+    expect(body).not.toContain(LINK);
+    expect(body).not.toContain('crypto-native');
+    expect(body).not.toContain('card-sandbox');
+  });
+
+  /**
+   * SERVICE_UNAVAILABLE, not BAD_REQUEST and not INTERNAL_SERVER_ERROR.
+   *
+   * The request was well-formed and the platform cannot serve it, because it has
+   * no rail that would actually take the payer's money. BAD_REQUEST sends a
+   * merchant's engineer hunting a bug that is not in their integration; a 500
+   * reads as "retry", which is the one thing that can never fix this.
+   */
+  it('maps a posture refusal to SERVICE_UNAVAILABLE', async () => {
+    stub.fail(new PublicCheckoutUnavailable(null, 'sandbox'));
+    const api = await caller([]);
+    const err = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('SERVICE_UNAVAILABLE');
+  });
+
+  it('maps an exhausted link to CONFLICT and a busy one to TOO_MANY_REQUESTS', async () => {
+    const api = await caller([]);
+
+    stub.fail(new PayError('used up', 'pay.link_exhausted'));
+    expect(codeOf(await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e))).toBe('CONFLICT');
+
+    stub.fail(new PayError('too many', 'pay.checkout_busy'));
+    expect(codeOf(await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e))).toBe('TOO_MANY_REQUESTS');
+  });
+
+  it('maps an unknown session token to NOT_FOUND', async () => {
+    stub.fail(new PayError('nope', 'pay.checkout_session_not_found'));
+    const api = await caller([]);
+    expect(codeOf(await api.checkout.status({ sessionToken: 'cs_unknown_token' }).catch((e: unknown) => e))).toBe('NOT_FOUND');
+  });
+});
+
+describe('payment links are capability URLs on the wire too', () => {
+  const codeOf = (err: unknown) => (err as { code?: string }).code;
+
+  /**
+   * The bug this test exists for: `createLink` used to pass `expiresAt: null`
+   * when the caller omitted one, and the service reads `null` as "never
+   * expires". An omitted expiry has to mean the DEFAULT lifetime, not forever.
+   */
+  it('passes an omitted expiry through as undefined, never as null', async () => {
+    const api = await caller(['pay:write']);
+    await api.merchant.createLink({ merchantId: MERCHANT, label: 'Invoice' });
+
+    const call = stub.calls.find((c) => c.method === 'createPaymentLink')!;
+    expect((call.args[0] as { expiresAt?: unknown }).expiresAt).toBeUndefined();
+  });
+
+  it('returns an expiry the merchant can show, and the bound they asked for', async () => {
+    const api = await caller(['pay:write']);
+    await expect(api.merchant.createLink({ merchantId: MERCHANT, label: 'Invoice', maxUses: 1 })).resolves.toMatchObject({
+      expiresAt: '2026-08-29T00:00:00.000Z',
+      maxUses: null,
+    });
+
+    const call = stub.calls.find((c) => c.method === 'createPaymentLink')!;
+    expect((call.args[0] as { maxUses?: unknown }).maxUses).toBe(1);
+  });
+
+  it('refuses a maxUses of zero rather than creating a link nobody can pay', async () => {
+    const api = await caller(['pay:write']);
+    const err = await api.merchant.createLink({ merchantId: MERCHANT, label: 'Invoice', maxUses: 0 }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+  });
+
+  it('still needs pay:write to mint one — a link is a bearer credential', async () => {
+    const api = await caller(['pay:read']);
+    const err = await api.merchant.createLink({ merchantId: MERCHANT, label: 'Invoice' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
   });
 });

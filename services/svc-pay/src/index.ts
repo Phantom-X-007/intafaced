@@ -7,7 +7,7 @@ import { createLedgerClient } from './ledger-client.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { RailRegistry } from './rails/registry.js';
-import { assertRailPosture, defaultChainFor, railPostureStatus } from './rails/posture.js';
+import { assertRailPosture, defaultChainFor, railPostureStatus, selectPublicCheckoutRail } from './rails/posture.js';
 import { createPayRouter } from './router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
@@ -88,9 +88,31 @@ const rails = new RailRegistry([
 const railPosture = assertRailPosture(rails, { ...process.env, PAY_ALLOW_SANDBOX_RAILS: env.PAY_ALLOW_SANDBOX_RAILS });
 const railStatus = railPostureStatus(rails, railPosture.policy);
 
+/**
+ * A rail named in `PAY_CHECKOUT_RAILS` that is not registered would mean the
+ * public checkout silently falling through to the next entry — or, on a
+ * single-entry list, refusing every payer with "no rail configured" while the
+ * operator believes one is. That is a deployment mistake and it belongs at boot,
+ * exactly like `PAY_OPERATOR_CREDIT_RAILS` below.
+ */
+for (const { railId } of env.PAY_CHECKOUT_RAILS) {
+  if (!rails.has(railId)) {
+    throw new Error(`PAY_CHECKOUT_RAILS names "${railId}", which is not a registered rail. Registered: ${rails.ids().join(', ')}`);
+  }
+}
+
 const pay = new PayService(sql, ledger, rails, {
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
   valueMovement: railPosture.policy,
+  // NOT `railPosture.policy`. `PAY_ALLOW_SANDBOX_RAILS` relaxes the payout gate
+  // for a pilot or a demo — a statement about people inside this deployment. A
+  // hosted checkout is reachable by strangers, so it follows the environment.
+  publicCheckoutMovement: railPosture.publicCheckoutPolicy,
+  checkoutRails: env.PAY_CHECKOUT_RAILS,
+  checkoutSessionTtlSeconds: env.PAY_CHECKOUT_SESSION_TTL_SECONDS,
+  linkDefaultTtlDays: env.PAY_LINK_DEFAULT_TTL_DAYS,
+  linkMaxTtlDays: env.PAY_LINK_MAX_TTL_DAYS,
+  maxOpenSessionsPerLink: env.PAY_CHECKOUT_MAX_OPEN_SESSIONS,
 });
 
 /**
@@ -135,6 +157,29 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
  * what is added is the only part that matters when somebody asks "can users
  * withdraw".
  */
+/**
+ * `publicCheckout` IS ITS OWN QUESTION, and it is not answered by `liveRails`.
+ *
+ * "Which rails are live" and "can an anonymous person on the hosted checkout
+ * actually pay this merchant right now" are different, because the public
+ * surface is gated more strictly than the merchant integration path is: a
+ * sandbox rail that is perfectly usable for `payment.create` is refused for a
+ * hosted checkout under `live-only`. An operator console that renders the first
+ * and infers the second will tell somebody the checkout works when every payer
+ * is getting a 503.
+ */
+function publicCheckoutStatus(): { rails: string[]; acceptable: boolean; reason?: string } {
+  const configured = env.PAY_CHECKOUT_RAILS.map((r) => r.railId);
+  try {
+    // The SAME policy the request path uses, or `/ready` would report a
+    // checkout as working that every payer is being refused from.
+    const adapter = selectPublicCheckoutRail(rails, configured, railPosture.publicCheckoutPolicy);
+    return { rails: configured, acceptable: true, reason: `would open on ${adapter.id}` };
+  } catch (err) {
+    return { rails: configured, acceptable: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 app.get('/ready', async () => ({
   ready: true,
   rails: rails.ids(),
@@ -143,13 +188,14 @@ app.get('/ready', async () => ({
   sandboxRails: railStatus.sandbox,
   valueMovement: railStatus.policy,
   chain: chain.description,
+  publicCheckout: publicCheckoutStatus(),
 }));
 
 /**
  * Hosted payment-link checkout (HTML). Public — the token is the capability.
  * Browser reaches it via edge `/api/pay/checkout?token=…` (prefix stripped).
  */
-await registerCheckoutRoutes(app, pay);
+await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
 
 /**
  * THE WEBHOOK ENDPOINT.
