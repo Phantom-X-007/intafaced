@@ -623,10 +623,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         throw err;
       }
 
-      return sendCcxt(
-        reply,
-        notSupported(`${what} is not available: this venue lists spot markets only`, intafacedCode),
-      );
+      return sendCcxt(reply, notSupported(`${what} is not available: this venue lists spot markets only`, intafacedCode));
     };
 
   app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', 'trade.leverage_unsupported'));

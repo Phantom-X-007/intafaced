@@ -1296,5 +1296,4 @@ if (!available) {
       expect(formatAmount(candles[0]!.volume)).toBe('3');
     });
   });
-
 }

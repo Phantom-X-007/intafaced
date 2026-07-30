@@ -390,10 +390,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     const rawTf = req.query.timeframe ?? DEFAULT_OHLCV_TIMEFRAME;
     const tf = timeframeSchema.safeParse(rawTf);
     if (!tf.success) {
-      return sendCcxt(
-        reply,
-        badRequest(`timeframe must be one of: ${TIMEFRAMES.join(', ')}`, 'trade.invalid_timeframe'),
-      );
+      return sendCcxt(reply, badRequest(`timeframe must be one of: ${TIMEFRAMES.join(', ')}`, 'trade.invalid_timeframe'));
     }
 
     const sinceParsed = parseSince(req.query.since);
@@ -432,22 +429,10 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     // Guard on the listing kind, not on "we have no futures yet", so this arm
     // keeps telling the truth once swap markets exist.
     if (market.kind === 'spot') {
-      return sendCcxt(
-        reply,
-        notSupported(
-          `${market.symbol} is a spot market and has no funding rate`,
-          'trade.funding_rate_spot_market',
-        ),
-      );
+      return sendCcxt(reply, notSupported(`${market.symbol} is a spot market and has no funding rate`, 'trade.funding_rate_spot_market'));
     }
 
-    return sendCcxt(
-      reply,
-      notSupported(
-        `funding rates are not served yet for ${market.symbol}`,
-        'trade.funding_rate_unavailable',
-      ),
-    );
+    return sendCcxt(reply, notSupported(`funding rates are not served yet for ${market.symbol}`, 'trade.funding_rate_unavailable'));
   });
 }
 
