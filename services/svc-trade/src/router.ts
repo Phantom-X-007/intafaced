@@ -308,6 +308,13 @@ export function createTradeRouter(trade: TradeService) {
         .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
         .output(z.array(fillOutput))
         .query(({ ctx, input }) => guard(async () => (await trade.myFills(ctx.principal, input?.limit ?? 100)).map(presentFill))),
+
+      forOrder: scopedProcedure('trade:read')
+        .input(z.object({ orderId: z.string().uuid() }))
+        .output(z.array(fillOutput))
+        .query(({ ctx, input }) =>
+          guard(async () => (await trade.fillsForOrder(ctx.principal, input.orderId)).map(presentFill)),
+        ),
     }),
 
     /**

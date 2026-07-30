@@ -1076,6 +1076,18 @@ export class TradeService {
     return rows.map(toFill);
   }
 
+  async fillsForOrder(principal: Principal, orderId: string): Promise<FillRecord[]> {
+    requireScope(principal, 'trade:read');
+    const order = await this.findOrder(orderId);
+    if (!order || order.userId !== principal.userId) {
+      throw new TradeError(`order ${orderId} not found`, 'trade.order_not_found');
+    }
+    const rows = await this.sql<FillRow[]>`
+      SELECT * FROM trade.fills WHERE order_id = ${orderId} AND user_id = ${principal.userId} ORDER BY ts ASC
+    `;
+    return rows.map(toFill);
+  }
+
   async findOrder(orderId: string): Promise<OrderRecord | null> {
     const rows = await this.sql<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId}`;
     const row = rows[0];
