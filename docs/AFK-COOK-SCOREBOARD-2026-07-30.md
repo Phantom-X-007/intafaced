@@ -127,9 +127,11 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | #156 | **svc-notify OpenTelemetry** + tracker:check green |
 | #157 | Notify fan: **p2pTradeDisputed** (openedBy only) |
 | #158 | Identity **subAccounts.revoke** soft-disable |
-| (this) | Loop + scoreboard **DRAINED**; tracker note honesty for sub-accounts create/list/revoke |
+| #159 | Loop + scoreboard **DRAINED**; sub-account tracker honesty |
+| #160 | Docs(audit): Wave E doctrine scan log with real exit codes |
+| (later) | Tracker honesty: ops.notifications lists **p2pTradeDisputed**; Status **DRAINED (agent queue)** |
 
-### Unspoken needs (post-#158)
+### Unspoken needs (post-#158 / tip ≥ #160)
 
 | Need | Status |
 | --- | --- |
@@ -137,7 +139,7 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | Bots can trade (CCXT public+private) | Balance · positions empty · OHLCV empty · mytrades `?symbol=` · write path on main |
 | In-app notifications | Fans include rank/stake/p2p lock/release/refund + **dispute opened** (openedBy) |
 | Continuous light gates + wave audits | Local green at drain: brand/custody/vendor-shell/workspace/dod-gate/tracker:check |
-| Peace-of-mind scoreboard | This file + GRIND-LOOP-ACTIVE high water **#158** · **Status DRAINED** |
+| Peace-of-mind scoreboard | This file + GRIND-LOOP-ACTIVE product high water **#158** · tip **#160** · **Status DRAINED (agent queue)** |
 | Compaction survival | Loop file still law for every 45m fire |
 | Never fake human blockers | CI billing · chain factory · futures · candles · push/email/SMS still human/later |
 
@@ -146,12 +148,12 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | Item | Result |
 | --- | --- |
 | svc-notify OTEL | **DONE** #156 |
-| tracker:check | **DONE** #156 (+ note honesty this PR) |
+| tracker:check | **DONE** #156 (+ sub-account note #159; p2pTradeDisputed consumer note this PR) |
 | p2pTradeDisputed fan | **DONE** #157 |
 | pay.public-api | **SKIP** |
 | Private balance WS | **SKIP** |
 | subAccounts.revoke | **DONE** #158 |
-| Reassess DRAINED | **Met** |
+| Reassess DRAINED | **Met** — **DRAINED (agent queue)** |
 
 ### Still open (honest — not agent product)
 
@@ -162,6 +164,8 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | Candle aggregation / OHLCV data | Honest empty until real job |
 | protocol.smart-accounts chain | Factory honesty only — not propped |
 | Push / email / SMS | §13 sockets |
+| venue.aggregation implementations | Large phase |
+| ops.admin real wiring | Browser-local only — large phase |
 | Real rails / kill drill / licences / counsel | Denon + counsel |
 
-**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED** · high water **#158** · scheduler 45m re-check only
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED (agent queue)** · product high water **#158** · tip through **#160** · scheduler 45m re-check only

@@ -1,8 +1,8 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** DRAINED · Nitro AFK · 45m scheduler re-checks for regressions / open PRs only  
-**Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work  
-**Last tip:** high water through **#158** (identity subAccounts soft-revoke). Prior: **#155–#157** (loop docs · notify OTEL + tracker green · p2pTradeDisputed fan)
+**Status:** DRAINED (agent queue) · Nitro AFK · 45m scheduler re-checks for open PRs / regressions / honest tracker lies only  
+**Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
+**Last tip:** high water through **#160** on tip · product high water **#158** (subAccounts soft-revoke) · **#155–#157** (loop docs · notify OTEL · p2pTradeDisputed) · **#159** DRAINED loop · **#160** Wave E scan log
 
 ---
 
@@ -59,7 +59,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#158** on main. Latest agent-cookable wave:
+**#110–#160** on main. Product high water **#158**; drain docs **#159–#160**.
 
 | PR | What |
 | --- | --- |
@@ -77,6 +77,8 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 | **#156** | **svc-notify OpenTelemetry** + `tracker:check` green |
 | **#157** | Notify fan: **`p2pTradeDisputed`** (openedBy only) |
 | **#158** | Identity **`subAccounts.revoke`** soft-disable (`revoked=true`) |
+| **#159** | Docs: loop **DRAINED** + sub-account tracker honesty |
+| **#160** | Docs(audit): Wave E doctrine scan log with real exit codes |
 
 **Earlier in the same cook (do not redo):**
 
@@ -85,11 +87,11 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 - Trade WS: private orders + fills streams
 - Trade: history, cancelAll, fills.forOrder
 - Pay: payment links create/list/deactivate + **hosted checkout HTML**
-- Notify: svc-notify inbox + i18n + edge + fans above
+- Notify: svc-notify inbox + i18n + edge + fans above (incl. disputed)
 - Protocol: factory honesty (still not chain-done)
 - **CCXT REST public:** markets, orderbook, ticker, tickers, trades (tape), ohlcv (empty)
 - **CCXT REST private:** open/create/cancel/get/closed, account/trades (+ symbol filter), cancel-all, fees, balance, positions empty
-- Docs: grind plan, loop files, wave A–D audits, scoreboards
+- Docs: grind plan, loop files, wave A–E audits, scoreboards
 
 ---
 
@@ -105,14 +107,20 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 | 4 | pay.public-api thin slice | **SKIP** — public resolve via payment links / hosted checkout |
 | 5 | Private balance WS | **SKIP** — no safe ledger projection event path; do not invent poll from svc-ws |
 | 6 | identity subAccounts.revoke | **DONE** #158 · soft `revoked`; no hard delete |
-| 7 | Reassess DRAINED | **THIS FILE** — Status **DRAINED** |
+| 7 | Reassess DRAINED | **Met** — Status **DRAINED (agent queue)** |
+
+**Not agent micro-queue (large phase / design — do not fake done):**
+
+- Futures · candle aggregation · real chain factory + RPC  
+- Push / email / SMS · `pay.public-api` design beyond links · venue.aggregation implementations  
+- `ops.admin` real wiring (not browser-local pretend kill-switches)  
 
 **Drained-mode work only (each fire):**
 
 1. `gh pr list --state open` — babysit; local verify + admin-merge if CI billing-stuck  
 2. Local doctrine: brand / custody / vendor-shell / workspace / dod-gate / tracker:check  
 3. Honest tracker lies only if `--check` red or notes contradict main code  
-4. Do **not** invent product surface for futures, candles, chain factory, push/email/SMS  
+4. Do **not** invent product surface for futures, candles, chain factory, push/email/SMS, ops.admin  
 
 ---
 
@@ -129,7 +137,9 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## Exit (DRAINED) — met
 
-Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED · scoreboard Wave row updated · no open agent-owned product PRs (only long-lived docs PR if any).
+Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · scoreboard Wave E updated · no open agent-owned product PRs rotting.
+
+**45m scheduler still re-checks** for open PRs · regressions · new honest tracker lies. Does **not** invent product to un-drain.
 
 ---
 
@@ -137,7 +147,7 @@ Agent queue empty · remaining items human-blocked / safety-skipped / large phas
 
 Every **45 minutes:** re-read this file on `origin/main`.
 
-- If **DRAINED:** babysit open PRs + scan for real regressions only; update high water if something merged.  
+- If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.  
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED — do not re-ship #110–#158; only babysit / honest fixes.**
+**Next agent after compact: Status DRAINED (agent queue) — do not re-ship #110–#160; only babysit / honest fixes.**
