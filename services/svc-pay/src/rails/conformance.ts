@@ -2,6 +2,8 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { formatAmount, parseAmount as amt, type Amount } from '@intafaced/ledger-client';
 import {
   RAIL_CAPABILITIES,
+  RAIL_MODES,
+  isLive,
   isUsable,
   supports,
   type PaymentIntent,
@@ -136,6 +138,28 @@ export function runRailAdapterConformance(name: string, createHarness: () => Pro
       it('reports the same id every time — it is a stored key, not a label', () => {
         expect(adapter.id).toBe(adapter.id);
         expect(adapter.id.trim()).toBe(adapter.id);
+      });
+
+      /**
+       * THE HONESTY DECLARATION. A new adapter cannot merge without answering it.
+       *
+       * `mode` is what stops a rail with a simulated counterparty being asked to
+       * send a user's money. An adapter that forgot to declare it would default to
+       * whatever TypeScript's absence means at runtime — `undefined`, which is not
+       * `'sandbox'`, which means the posture check would wave it through. So the
+       * kit asserts the value is one of exactly two strings rather than merely
+       * truthy.
+       */
+      it('DECLARES WHETHER IT IS LIVE OR A SANDBOX', () => {
+        expect(RAIL_MODES).toContain(adapter.mode);
+      });
+
+      it('does not change its mind about being live between calls', () => {
+        // Read twice through the interface: a rail whose honesty depends on when
+        // it is asked cannot be gated on.
+        const first = adapter.mode;
+        expect(adapter.mode).toBe(first);
+        expect(isLive(adapter)).toBe(adapter.mode === 'live');
       });
 
       it('declares only known capabilities, without duplicates', () => {

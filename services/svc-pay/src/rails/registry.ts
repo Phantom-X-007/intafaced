@@ -1,4 +1,4 @@
-import { isUsable, supports, type RailAdapter, type RailCapability } from './rail-adapter.js';
+import { isLive, isUsable, supports, type RailAdapter, type RailCapability } from './rail-adapter.js';
 
 export class UnknownRailError extends Error {
   readonly code = 'pay.rail_unknown';
@@ -81,6 +81,14 @@ export class RailRegistry {
   }
 
   health(now: Date = new Date()) {
-    return this.list().map((a) => ({ id: a.id, capabilities: a.capabilities, usable: isUsable(a, now), ...a.health() }));
+    // `mode` travels with health because every consumer of health is deciding
+    // whether to send traffic somewhere, and "healthy" says nothing about
+    // whether the rail has a counterparty. A sandbox is reliably healthy.
+    return this.list().map((a) => ({ id: a.id, capabilities: a.capabilities, mode: a.mode, usable: isUsable(a, now), ...a.health() }));
+  }
+
+  /** Rails with a real counterparty. What "can users withdraw" actually depends on. */
+  live(): RailAdapter[] {
+    return this.list().filter(isLive);
   }
 }

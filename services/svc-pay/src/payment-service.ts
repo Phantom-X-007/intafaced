@@ -13,6 +13,7 @@ import {
 } from '@intafaced/ledger-client';
 import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequest } from './rails/rail-adapter.js';
 import type { RailRegistry } from './rails/registry.js';
+import { assertRailMayMoveValue, type ValueMovementPolicy } from './rails/posture.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
 
 /**
@@ -194,6 +195,16 @@ export interface PayServiceOptions {
    * refuses to run.
    */
   readonly defaultFeeBps?: number;
+
+  /**
+   * Whether a SANDBOX rail may be asked to send money out of the platform —
+   * a merchant payout, or a refund to a payer.
+   *
+   * See `rails/posture.ts`. `allow-sandbox` in dev and test, where the sandbox
+   * rails are the fixture; `live-only` in staging and prod, decided once at boot
+   * so the boot refusal and the runtime check cannot disagree.
+   */
+  readonly valueMovement?: ValueMovementPolicy;
 }
 
 interface PaymentRow {
@@ -247,6 +258,7 @@ const TRANSITIONS: Readonly<Record<PaymentStatus, readonly PaymentStatus[]>> = {
 
 export class PayService {
   private readonly defaultFeeBps: number | undefined;
+  private readonly valueMovement: ValueMovementPolicy;
 
   constructor(
     private readonly sql: Sql,
@@ -255,6 +267,7 @@ export class PayService {
     options: PayServiceOptions = {},
   ) {
     this.defaultFeeBps = options.defaultFeeBps;
+    this.valueMovement = options.valueMovement ?? 'allow-sandbox';
   }
 
   // ── Merchants ──────────────────────────────────────────────────────────────
@@ -807,6 +820,15 @@ export class PayService {
           );
         }
 
+        // BEFORE THE LEDGER MOVES, not at the rail call in Phase 2. This
+        // transaction is about to debit the merchant and commit "a refund is on
+        // its way out"; refusing after that leaves a `refund.posted` event with
+        // no rail behind it, which is the `pay.refund_in_flight` state — and that
+        // state deliberately blocks every further refund on the payment until an
+        // operator reconciles it. A refusal that was knowable here must not cost
+        // the merchant that.
+        assertRailMayMoveValue(this.rails.require(row.rail_adapter, 'refund'), 'refund', this.valueMovement);
+
         const sequence = await countEvents(tx, row.id, 'refund.posted');
         const refundId = options.refundId ?? `${row.id}:${sequence + 1}`;
         const merchant = await this.getMerchant(row.merchant_id);
@@ -1278,6 +1300,11 @@ export class PayService {
       { operation: 'payout', settlementId: input.settlementId, rail: input.railId },
       async () => {
         const adapter = this.rails.require(input.railId, 'payout');
+
+        // Before the settlement is read and long before `withdrawHold` posts. A
+        // sandbox payout would answer `paid_out` with a reference this process
+        // invented, and the merchant would be told their window was settled out.
+        assertRailMayMoveValue(adapter, 'payout', this.valueMovement);
 
         const settlement = await this.getSettlement(input.settlementId);
         if (settlement.status === 'paid_out') return settlement;

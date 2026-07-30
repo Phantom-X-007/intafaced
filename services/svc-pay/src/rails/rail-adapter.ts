@@ -30,6 +30,32 @@ export const RAIL_CAPABILITIES = ['authorize', 'capture', 'refund', 'payout', 'w
 export type RailCapability = (typeof RAIL_CAPABILITIES)[number];
 
 /**
+ * WHETHER THIS RAIL MOVES REAL MONEY. The most important field on the interface.
+ *
+ *   live    — a real counterparty is at the other end. A `paid_out` result means
+ *             funds actually left, and the `railRef` names a movement somebody
+ *             outside this company can be asked about.
+ *   sandbox — the counterparty is simulated. Everything on this side of the
+ *             interface is real, and NOTHING on the other side is.
+ *
+ * WHY IT IS ON THE INTERFACE AND NOT IN A CONFIG FILE. An adapter is the only
+ * thing that knows whether it has a counterparty; a deployment list of "which
+ * rails are real" is a second copy of that fact, and the copy is what goes stale.
+ * `card-sandbox` is `sandbox` by construction and cannot be configured otherwise.
+ * `crypto-native` is `live` exactly when the chain behind it is live, and it
+ * derives its own answer rather than being told.
+ *
+ * WHAT IT PREVENTS. A withdrawal settled against a sandbox rail debits the user's
+ * real ledger balance, returns a fabricated provider reference, and reports
+ * `sent`. The user has been told their money moved. There is no worse bug
+ * available in this service, and it is not detectable after the fact — the books
+ * balance perfectly, because the only thing missing is the money. `posture.ts`
+ * is what refuses it; this field is what makes the refusal possible.
+ */
+export const RAIL_MODES = ['live', 'sandbox'] as const;
+export type RailMode = (typeof RAIL_MODES)[number];
+
+/**
  * Health, in the shape `LiquiditySource` uses.
  *
  * `lastUpdate` matters for the same reason it does for a venue: a rail that has
@@ -175,6 +201,15 @@ export interface RailAdapter {
   readonly id: string;
   readonly capabilities: readonly RailCapability[];
 
+  /**
+   * `live` or `sandbox`. See `RailMode`.
+   *
+   * Required, and deliberately not defaulted. A new adapter has to state this,
+   * because the alternative is an adapter author forgetting and the default
+   * being the answer that loses money.
+   */
+  readonly mode: RailMode;
+
   health(): RailHealth;
 
   authorize(p: PaymentIntent): Promise<RailResult>;
@@ -201,6 +236,28 @@ export interface RailAdapter {
 export function supports(adapter: RailAdapter, capability: RailCapability): boolean {
   return adapter.capabilities.includes(capability);
 }
+
+/** True when this rail has a real counterparty at the other end. */
+export function isLive(adapter: RailAdapter): boolean {
+  return adapter.mode === 'live';
+}
+
+/**
+ * THE CAPABILITIES THAT MOVE REAL MONEY IN THE REAL WORLD.
+ *
+ * `payout` sends funds out of the platform's custody; `refund` sends captured
+ * funds back to a payer. Both are irreversible at the rail and both are the
+ * subject of a sentence we say to a user ("your money is on its way"), which is
+ * why a sandbox behind either of them is a lie rather than a limitation.
+ *
+ * `authorize` and `capture` are deliberately NOT on this list. They move value
+ * INTO the book from a counterparty, and a sandbox authorize is how the whole
+ * lifecycle is exercised in CI without a sponsor bank. If a sandbox capture
+ * credits a merchant who was never paid, the platform is short — bad, and
+ * caught by reconciliation against the rail boundary, which is exactly the
+ * figure that exists for it. Nobody has been told their own money left.
+ */
+export const VALUE_LEAVING_CAPABILITIES: readonly RailCapability[] = ['payout', 'refund'];
 
 /**
  * A rail is usable only when it is healthy AND its health is fresh.

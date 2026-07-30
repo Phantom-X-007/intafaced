@@ -6,8 +6,8 @@ import { UserMoneyService } from './user-money-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
-import { MemoryChain } from './rails/chain-port.js';
 import { RailRegistry } from './rails/registry.js';
+import { assertRailPosture, defaultChainFor, railPostureStatus } from './rails/posture.js';
 import { createPayRouter } from './router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
@@ -43,11 +43,21 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
  *
  * §13 socket: the production chain watcher implements `CryptoChainPort` and is
  * swapped in here — one line, no change to the adapter and none to the core.
- * Until it lands, dev runs against the in-memory reference chain, which models
- * confirmation depth and idempotent broadcast so the adapter's behaviour is the
- * same either way.
+ *
+ * WHAT CHANGED, AND WHY IT MATTERED. This line used to read `new MemoryChain()`
+ * unconditionally. In a production deployment that is not a placeholder, it is a
+ * money bug: `MemoryChain.send` SUCCEEDS and returns `0xout00000001`, so a user's
+ * withdrawal on `crypto-native` debited their real ledger balance, stored that
+ * string as the rail reference, and answered `sent`. The user was told their
+ * money was on its way and nothing had been broadcast anywhere.
+ *
+ * So dev and test get the in-memory reference chain — which models confirmation
+ * depth and idempotent broadcast, and is what the whole suite runs on — and
+ * `staging`/`prod` get `UnconfiguredChain`, which refuses every call with a
+ * message naming what the owner has to obtain. A refusal reverses the hold in the
+ * same call and gives the user their money back; a fabricated success does not.
  */
-const chain = new MemoryChain();
+const chain = defaultChainFor(process.env);
 
 const rails = new RailRegistry([
   new CryptoNativeAdapter({
@@ -62,8 +72,25 @@ const rails = new RailRegistry([
   }),
 ]);
 
+/**
+ * IS THIS DEPLOYMENT ALLOWED TO MOVE REAL MONEY THROUGH A RAIL THAT IS NOT REAL?
+ *
+ * Asserted before the listener opens, in the same spirit as `createEdgeContext`
+ * below and `assertScreeningConfigured` in packages/config: a property the
+ * platform claims is checked at startup, and the process refuses to run rather
+ * than quietly mislead users about their money.
+ *
+ * Throws in `staging`/`prod` while any registered rail is a sandbox, unless an
+ * operator has said `PAY_ALLOW_SANDBOX_RAILS=true` by name. The returned policy
+ * is handed to both services below, so the boot refusal and the per-call refusal
+ * are one decision rather than two that can drift apart.
+ */
+const railPosture = assertRailPosture(rails, { ...process.env, PAY_ALLOW_SANDBOX_RAILS: env.PAY_ALLOW_SANDBOX_RAILS });
+const railStatus = railPostureStatus(rails, railPosture.policy);
+
 const pay = new PayService(sql, ledger, rails, {
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
+  valueMovement: railPosture.policy,
 });
 
 /**
@@ -83,6 +110,7 @@ for (const railId of env.PAY_OPERATOR_CREDIT_RAILS) {
 
 const userMoney = new UserMoneyService(sql, ledger, rails, {
   operatorCreditRails: env.PAY_OPERATOR_CREDIT_RAILS,
+  valueMovement: railPosture.policy,
 });
 
 export const appRouter = createPayRouter(pay, rails, userMoney);
@@ -97,7 +125,25 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({ ready: true, rails: rails.ids() }));
+
+/**
+ * `/ready` NAMES WHICH RAILS ARE REAL.
+ *
+ * It used to answer `rails: ['crypto-native', 'card-sandbox']`, which reads as
+ * two working rails. An operator dashboard rendering that has no way to know
+ * that neither of them can send a payment anywhere. The list of ids is the same;
+ * what is added is the only part that matters when somebody asks "can users
+ * withdraw".
+ */
+app.get('/ready', async () => ({
+  ready: true,
+  rails: rails.ids(),
+  railModes: Object.fromEntries(rails.list().map((r) => [r.id, r.mode])),
+  liveRails: railStatus.live,
+  sandboxRails: railStatus.sandbox,
+  valueMovement: railStatus.policy,
+  chain: chain.description,
+}));
 
 /**
  * Hosted payment-link checkout (HTML). Public — the token is the capability.
@@ -192,7 +238,27 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, rails: rails.ids(), trpc: true }, 'svc-pay ready');
+
+/**
+ * The posture goes in the log on every start. In dev, where `assertRailPosture`
+ * does not throw, THIS LINE IS THE CONTROL'S ONLY VISIBILITY — the same reason
+ * `screeningStatus` returns a summary string rather than just a boolean.
+ */
+if (railStatus.sandbox.length > 0) {
+  app.log.warn({ ...railStatus, chain: chain.description, appEnv: railPosture.appEnv }, railStatus.summary);
+}
+if (railPosture.sandboxOverride) {
+  app.log.warn(
+    { appEnv: railPosture.appEnv, sandboxRails: railStatus.sandbox },
+    'PAY_ALLOW_SANDBOX_RAILS=true — sandbox rails may move value in a production-like environment. ' +
+      'No user of this deployment is being told anything true about their money leaving the platform.',
+  );
+}
+
+app.log.info(
+  { port: env.HTTP_PORT, rails: rails.ids(), liveRails: railStatus.live, valueMovement: railStatus.policy, trpc: true },
+  'svc-pay ready',
+);
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {

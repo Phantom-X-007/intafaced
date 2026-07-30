@@ -42,7 +42,22 @@ import { MemoryChain } from './rails/chain-port.js';
  * Postgres engine (§4.4).
  */
 
-const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@localhost:5433/intafaced';
+/**
+ * `intafaced_test`, NOT `intafaced`.
+ *
+ * This suite APPLIES A MIGRATION and TRUNCATES TABLES. Pointed at the shared
+ * `intafaced` database it does both to the schema and the rows every other
+ * worktree and the running docker stack are using — which is how a branch broke
+ * `main`'s tests from a different checkout. It was pointed there by default
+ * until now, and `pay.deposits`/`pay.withdrawals` on the running stack had live
+ * rows in them.
+ *
+ * `intafaced_test` is stood up by `tooling/infra/postgres-init/02-intafaced-test-db.sh`
+ * with a `pay` schema owned by `svc_pay`. Same convention as
+ * `TEST_DATABASE_URL_TRADE`, and `turbo.json` already passes the variable
+ * through, so an override is honoured everywhere.
+ */
+const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 /**
  * 0001 only, and deliberately not 0000.
@@ -530,6 +545,164 @@ if (!available) {
 
     it('reports a missing withdrawal rather than returning nothing', async () => {
       await expect(money.getWithdrawal('00000000-0000-4000-8000-000000000000')).rejects.toBeInstanceOf(PayError);
+    });
+  });
+
+  // ══ DOUBLE SUBMIT ══════════════════════════════════════════════════════════
+
+  /**
+   * THE SAME REQUEST, TWICE, AT THE SAME MOMENT.
+   *
+   * Everything above drives a retry SEQUENTIALLY — call, await, call again. That
+   * is the impatient-user case and the job-that-woke-up case, and it is covered.
+   * It is not the case a real client produces: a request times out at the edge
+   * while it is still running, the client retries, and now two requests are
+   * inside this service at once carrying the same business key.
+   *
+   * The sequential tests cannot see that. `claimWithdrawal` takes `FOR UPDATE`
+   * and then RETURNS — the row lock dies with the claim transaction, so both
+   * requests get past the claim and both proceed to hold, rail and settle. What
+   * makes that safe is not the unique index alone (both callers find the same
+   * row) but the layered idempotency underneath it: the ledger keys on
+   * `withdraw.*:<id>:<attempt>` and the rail keys on the same string.
+   *
+   * These tests exist because that is currently an ARGUMENT, and an argument
+   * about whether a user can be debited twice should be a passing test instead.
+   */
+  describe('double submit — the same key arriving twice at once', () => {
+    it('CREDITS ONCE when a webhook is redelivered concurrently', async () => {
+      const [a, b] = await Promise.all([deposit({ amount: amt('100') }), deposit({ amount: amt('100') })]);
+
+      expect(b.id).toBe(a.id);
+      // 100, not 200. The unique index on (rail, rail_ref) collapses the claim,
+      // and the `deposit:<rail>:<railRef>` ledger key collapses the booking.
+      expect(await availableOf()).toBe('100');
+      expect(await boundaryOf()).toBe('-100');
+      expect(await sql`SELECT id FROM pay.deposits`).toHaveLength(1);
+    });
+
+    it('DEBITS ONCE when a withdrawal is submitted twice at once', async () => {
+      await deposit({ amount: amt('100') });
+
+      const results = await Promise.allSettled([
+        withdraw({ amount: amt('40'), clientRef: 'w-race' }),
+        withdraw({ amount: amt('40'), clientRef: 'w-race' }),
+      ]);
+
+      // Whatever each caller was told, the BOOK is what matters: 40 left once.
+      expect(await availableOf()).toBe('60');
+      expect(await boundaryOf()).toBe('-60');
+      expect(await sql`SELECT id FROM pay.withdrawals`).toHaveLength(1);
+
+      // At least one caller got a definite answer. A pair of failures would mean
+      // a client that retried correctly cannot find out what happened.
+      expect(results.filter((r) => r.status === 'fulfilled').length).toBeGreaterThanOrEqual(1);
+
+      const record = (await money.listWithdrawals(USER))[0]!;
+      expect(record.status).toBe('sent');
+      // Nothing left immobilised in either attempt's hold.
+      expect(await holdOf(record.id, 0)).toBe('0');
+      expect(await holdOf(record.id, 1)).toBe('0');
+    });
+
+    it('PAYS THE RAIL ONCE, not twice, when both submissions reach it', async () => {
+      // The assertion the ledger cannot make for us. Double-BOOKING is caught by
+      // the idempotency key; double-PAYING is caught by nothing on our side —
+      // the money has already left. So the rail's own key is inspected directly.
+      await deposit({ amount: amt('100') });
+
+      const payoutKeys: string[] = [];
+      const spy = new Proxy(card, {
+        get(target, prop, receiver) {
+          if (prop === 'payout') {
+            return async (...args: Parameters<CardSandboxAdapter['payout']>) => {
+              payoutKeys.push(args[0]!.settlementId);
+              return target.payout(...args);
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+      money = new UserMoneyService(sql, ledger, new RailRegistry([spy]), { operatorCreditRails: ['card-sandbox'] });
+
+      await Promise.allSettled([
+        withdraw({ amount: amt('40'), clientRef: 'w-race-2' }),
+        withdraw({ amount: amt('40'), clientRef: 'w-race-2' }),
+      ]);
+
+      // The rail may legitimately be ASKED twice — that is what a retry is. What
+      // must be true is that both asks carry the SAME idempotency key, because
+      // that key is the only thing between the user and two real payouts.
+      expect(new Set(payoutKeys).size).toBe(1);
+      expect(await availableOf()).toBe('60');
+    });
+
+    it('refuses the second submission when the two disagree about the money', async () => {
+      await deposit({ amount: amt('100') });
+
+      const results = await Promise.allSettled([
+        withdraw({ amount: amt('40'), clientRef: 'w-race-3' }),
+        withdraw({ amount: amt('50'), clientRef: 'w-race-3' }),
+      ]);
+
+      // Exactly one wins; the other is a conflict, not a second withdrawal. A
+      // client reusing a key for different numbers has a bug, and resuming it
+      // against the original numbers would send money nobody just asked for.
+      const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]!.reason).toMatchObject({ code: 'pay.withdrawal_conflict' });
+      expect(await sql`SELECT id FROM pay.withdrawals`).toHaveLength(1);
+    });
+
+    it('keeps two DIFFERENT client references independent under concurrency', async () => {
+      // The control for the tests above: idempotency must not have quietly become
+      // "one withdrawal at a time per user".
+      await deposit({ amount: amt('100') });
+
+      await Promise.all([withdraw({ amount: amt('30'), clientRef: 'w-indep-a' }), withdraw({ amount: amt('20'), clientRef: 'w-indep-b' })]);
+
+      expect(await availableOf()).toBe('50');
+      expect(await sql`SELECT id FROM pay.withdrawals`).toHaveLength(2);
+    });
+
+    it('does not let two concurrent submissions overdraw the user', async () => {
+      // Two DIFFERENT keys, each affordable alone, together more than the user
+      // has. The ledger is the only thing that can arbitrate this, which is
+      // exactly why the balance is read from it and not from these tables.
+      await deposit({ amount: amt('100') });
+
+      const results = await Promise.allSettled([
+        withdraw({ amount: amt('80'), clientRef: 'w-over-a' }),
+        withdraw({ amount: amt('80'), clientRef: 'w-over-b' }),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      // 100 − 80. Never negative, and never 100 − 160.
+      expect(await availableOf()).toBe('20');
+      const failed = (await money.listWithdrawals(USER)).find((w) => w.status === 'failed');
+      expect(failed?.failureCode).toBe('ledger.insufficient_funds');
+    });
+
+    /**
+     * THE SANDBOX REFUSAL, on the path a user actually reaches.
+     *
+     * `rails/posture.test.ts` proves the guard refuses. This proves it refuses
+     * BEFORE anything moves — no row, no hold, no rail call. A guard that fired
+     * after the hold was posted would immobilise a user's funds for a reason that
+     * was knowable before the first write.
+     */
+    it('REFUSES A SANDBOX RAIL UNDER live-only, before a row or a hold exists', async () => {
+      await deposit({ amount: amt('100') });
+      money = new UserMoneyService(sql, ledger, rails, {
+        operatorCreditRails: ['card-sandbox'],
+        valueMovement: 'live-only',
+      });
+
+      await expect(withdraw({ amount: amt('40'), clientRef: 'w-sandbox' })).rejects.toMatchObject({ code: 'pay.rail_not_live' });
+
+      // Untouched, and nothing to reconcile.
+      expect(await availableOf()).toBe('100');
+      expect(await sql`SELECT id FROM pay.withdrawals`).toHaveLength(0);
     });
   });
 
