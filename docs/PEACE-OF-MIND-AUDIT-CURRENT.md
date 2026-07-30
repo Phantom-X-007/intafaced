@@ -72,7 +72,7 @@
 ```
 PRE-FIX TIP (audit start): 2d1582143b0c1a95e8250a2f53f68fa71eb6b9ad
 SINCE:                   8a8c19bc626e6dada49a33be1f88d17873f42502
-POST-FIX TIP:            (filled after squash-merge of mega-audit fix PR — see 06-VERDICT.md)
+POST-FIX TIP:            d926edfc6479dcb0f8babe226415cf60992b130c (#176)
 ```
 
 Archive proof: `docs/audit/2026-07-30-afk-cook-mega/01-L0.md` through `06-VERDICT.md`.
