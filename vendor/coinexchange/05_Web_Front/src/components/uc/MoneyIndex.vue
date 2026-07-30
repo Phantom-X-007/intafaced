@@ -17,6 +17,9 @@
             </div>
             <Input style="float:right;" class="search" search :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
             </div>
+            <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0; clear: both;">
+              Venue exchange wallet only — not the platform ledger books.
+            </p>
             <p v-if="walletError" class="ix-empty ix-empty-error">{{ walletError }}</p>
             <p v-else-if="!loading && walletReachable && tableMoneyShow.length === 0" class="ix-empty">No balances yet</p>
             <Table v-if="!walletError" :columns="tableColumnsMoney" :data="tableMoneyShow" :loading="loading" :disabled-hover="true"></Table>

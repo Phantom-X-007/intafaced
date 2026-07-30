@@ -31,10 +31,15 @@
             <Button type="warning" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#ff6b00;border-color:#ff6b00">{{$t('uc.finance.record.search')}}</Button>
           </div>
           <div class="order-table">
-            <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :disabled-hover="true" :loading="loading"></Table>
-            <div style="margin: 10px;overflow: hidden">
+            <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
+              Venue exchange wallet ledger only — not the platform TypeScript ledger books.
+            </p>
+            <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+            <p v-else-if="!loading && listReachable && tableRecord.length === 0" class="ix-empty">No transactions yet</p>
+            <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :disabled-hover="true" :loading="loading"></Table>
+            <div style="margin: 10px;overflow: hidden" v-if="!listError">
               <div style="float: right;">
-                <Page :total="total" :pageSize="pageSize" show-total:current="page" @on-change="changePage" id="record_pages"></Page>
+                <Page :total="total" :pageSize="pageSize" show-total :current="page" @on-change="changePage" id="record_pages"></Page>
               </div>
             </div>
           </div>
@@ -48,7 +53,9 @@ export default {
   components: {},
   data() {
     return {
-      loading: false,
+      loading: true,
+      listReachable: false,
+      listError: "",
       ordKeyword: "",
       rangeDate: "",
       startTime: "",
@@ -162,16 +169,21 @@ export default {
       }
     },
     getAddrList() {
-      this.$http.post(this.host + "/uc/withdraw/support/coin/info").then(response => {
+      this.$http
+        .post(this.host + "/uc/withdraw/support/coin/info")
+        .then(response => {
           var resp = response.body;
-          if (resp.code == 0 && resp.data.length > 0) {
+          if (resp && resp.code == 0 && resp.data && resp.data.length > 0) {
             this.coinList = resp.data;
             if (this.coinType) {
               this.coinType = this.coinType;
             }
-          } else {
+          } else if (resp && resp.message) {
             this.$Message.error(resp.message);
           }
+        })
+        .catch(() => {
+          /* Coin filter is optional; do not invent options. */
         });
     },
     getType() {
@@ -209,6 +221,8 @@ export default {
       }
       // this.recordValue!="" || this.recordValue!=undefined && (type = this.recordValue);
       this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       let params = {
         pageNo: pageNo,
         pageSize: this.pageSize,
@@ -218,18 +232,32 @@ export default {
         symbol,
         type
       };
-      this.$http.post(this.host + "/uc/asset/transaction/all", params).then(response => {
+      this.$http
+        .post(this.host + "/uc/asset/transaction/all", params)
+        .then(response => {
           var resp = response.body;
-          if (resp.code == 0) {
-            this.loading = false;
+          if (resp && resp.code == 0) {
             if (resp.data) {
               let trueData = resp.data;
-              this.total = trueData.totalElements;
-              this.tableRecord = trueData.content;
+              this.total = trueData.totalElements || 0;
+              this.tableRecord = trueData.content || [];
+            } else {
+              this.total = 0;
+              this.tableRecord = [];
             }
+            this.listReachable = true;
+            this.loading = false;
           } else {
-            this.$Message.error(resp.message);
+            /* Failed fetch must not look like an empty history. */
+            this.listError =
+              "Transaction history did not answer — list is unknown, not empty.";
+            this.loading = false;
+            if (resp && resp.message) this.$Message.error(resp.message);
           }
+        })
+        .catch(() => {
+          this.listError =
+            "Transaction history service did not respond — list is unknown, not empty.";
           this.loading = false;
         });
     },
