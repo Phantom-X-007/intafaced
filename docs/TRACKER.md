@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**41 of 108 shipped (38%)** · 2 in progress · 32 ready to claim · 33 blocked · 19 deliberate §13 sockets
+**43 of 108 shipped (40%)** · 2 in progress · 36 ready to claim · 27 blocked · 19 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -29,17 +29,21 @@ pnpm wt feat/<the-thing>
 | Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
 | OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
+| Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
 | TWAP / VWAP / POV execution | `trade` | 2 | `trade.algo` |
 | CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
 | Internal market-maker seeding books at launch | `trade` | 2 | `trade.mm-bot` |
 | External venue adapters via CCXT (cross-venue) | `trade` | 2 | `venue.aggregation` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
+| Smart routing — geo, method, risk, approval rate | `pay` | 3 | `pay.routing` |
+| Dual settlement — bank or crypto | `pay` | 3 | `pay.settlement` |
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | Share card render (1080×1350, 1200×630) | `blueprint` | 4 | `blueprint.card` |
 | Export + hard delete, cascading | `blueprint` | 4 | `blueprint.ownership` |
 | Flexible + fixed yield pools | `bank` | 5 | `bank.earn` |
 | CardIssuerAdapter + card-sim, <2s auth decision | `bank` | 5 | `bank.cards` |
+| Fiat on/off ramp reusing svc-pay adapters | `bank` | 5 | `bank.ramps` |
 | Navigator — tool-calling inside user guardrails | `agents` | 5 | `agents.navigator` |
 | Support agent — KB + account-state grounded | `agents` | 5 | `agents.support` |
 | Market Scanner — ranked signals by tier | `agents` | 5 | `agents.scanner` |
@@ -65,13 +69,13 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
 | **24** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
-| **14** | Branded gateway, hosted checkout, payment links | 🔨 wip | `pay.gateway` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
-| **7** | RailAdapter interface + crypto-native + card-sandbox | ⛔ blocked | `pay.rails` |
+| **6** | Branded gateway, hosted checkout, payment links | 🔨 wip | `pay.gateway` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **4** | ERC-20 deploy from audited templates | 🟢 ready | `launch.token-factory` |
 | **3** | Chain → Postgres read models | ⛔ blocked | `indexer.readmodels` |
 | **3** | Event-driven fan-out: in-app, push, email, SMS | 🟢 ready | `ops.notifications` |
+| **2** | CardIssuerAdapter + card-sim, <2s auth decision | 🟢 ready | `bank.cards` |
 
 ## 🔨 In progress
 
@@ -131,7 +135,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
 | 🟢 | OTC RFQ desk, staked-tier gate | F |  | `trade.otc` |
 | 🟢 | Copy trading, audited leaders, profit share | B |  | `trade.copy` |
-| ⛔ | Fiat pairs on the same engine <br/>_NOT started as a product. What exists: the instrument model (asset_class + schedule on trade.markets) and venue-hours enforcement on order-create — #102 added assertMarketOpen before the hold, so a weekend EUR/USD order is refused with trade.market_closed rather than funded. Hours coverage completed since: the unrecognised-schedule fail-safe (rows.ts casts the DB enum with no runtime parse, so an enum added without a TRADING_SCHEDULES entry must refuse, not throw), the cme-globex daily settlement break, Chicago DST, and an end-to-end proof that a closed venue takes no hold and writes no intent row. Still missing for the actual feature: fiat settlement rails, so no forex market is listed in production._ | F | `pay.rails` | `trade.forex` |
+| 🟢 | Fiat pairs on the same engine <br/>_NOT started as a product. What exists: the instrument model (asset_class + schedule on trade.markets) and venue-hours enforcement on order-create — #102 added assertMarketOpen before the hold, so a weekend EUR/USD order is refused with trade.market_closed rather than funded. Hours coverage completed since: the unrecognised-schedule fail-safe (rows.ts casts the DB enum with no runtime parse, so an enum added without a TRADING_SCHEDULES entry must refuse, not throw), the cme-globex daily settlement break, Chicago DST, and an end-to-end proof that a closed venue takes no hold and writes no intent row. Still missing for the actual feature: fiat settlement rails, so no forex market is listed in production._ | F |  | `trade.forex` |
 | 🟢 | TWAP / VWAP / POV execution | F |  | `trade.algo` |
 | 🟢 | CCXT-compatible public API (bots + terminals connect) <br/>_partial — public REST: markets, orderbook, ticker, tickers, trades (tape; ?since= ms), ohlcv (route exists, always [] until candle aggregation job — no inventing candles; ohlcv empty); private REST (edge-signed principal, fail-closed): GET orders/open|closed (?since= ms on closed), GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills; ?symbol= filter + ?since= ms), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance (ledger projection, real self-only balances — not stub), GET positions (positions empty [] until trade.futures; setLeverage/setMarginMode not mounted). Still open: OHLCV empty (no candle job), futures leverage/margin when trade.futures exists. Private WS is under `ws.gateway` (/private/stream), not this REST surface. LIVE PROBE 2026-07-30 found orderbook/ticker **502 MatchingUnavailable** when matching returned 404 for never-journalled markets; **#185** fixed that code path — empty/missing book is now honest empty depth `[]` (not engine-down 502). Residual: svc-matching still derives markets from journal replay only, so books stay empty until an order lands or trade.mm-bot seeds depth — bots may still see empty books, not "exchange down", until seeding. OHLCV remains [] until candle job._ | F |  | `trade.ccxt-api` |
 | 🟢 | Internal market-maker seeding books at launch | F |  | `trade.mm-bot` |
@@ -141,17 +145,17 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Live order book — snapshot + sequenced deltas to the browser <br/>_services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; apps/web applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them._ | F |  | `ws.depth` |
 | 🔨 | WebSocket fan-out: depth, trades, orders, positions <br/>_Depth done + public TRADE tape + private orders/fills on /private/stream (orderUpdated+fillSettled, JWT). Futures positions still missing — title names four streams; three of four is not done._ | F |  | `ws.gateway` |
 
-### Phase 3 — Pay + P2P (4/16)
+### Phase 3 — Pay + P2P (6/16)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| 🔨 | Branded gateway, hosted checkout, payment links <br/>_Updated 2026-07-30 (2): the hosted PAGE is now a hosted CHECKOUT — pay.checkout_sessions turns a link into a payment. checkout.open / checkout.status on tRPC (publicProcedure — no principal, because a hosted checkout takes money from someone who is not logged in) plus POST /checkout/session and GET /checkout/session/:token as HTML. THE SESSION IS THE FRAUD BOUNDARY: the amount is frozen server-side at open and a payer-supplied amount on a fixed-amount link is IGNORED, not compared; there is no rail input anywhere and the rail comes from PAY_CHECKOUT_RAILS (default crypto-native ONLY — card-sandbox is deliberately absent); a session completes only when a verified rail webhook drives the payment to captured, never from the browser. NEW POSTURE GATE assertRailMayAcceptPublicPayment, stricter than assertRailMayMoveValue: sandbox authorize/capture stay allowed for a MERCHANT integration (platform goes short, reconciliation catches it) but are refused for an anonymous payer who is shown "paid" while the merchant is credited clearing they can settle and withdraw. So under live-only the public path refuses with pay.checkout_rail_not_live -> SERVICE_UNAVAILABLE BEFORE any row is written — meaning hosted checkout refuses every payer in staging/prod today. That is the honest state, not a regression. Links hardened: expiry defaulted (30d) and capped (365d), "never expires" refused, opt-in maxUses, revocation one-way and deliberately non-cancelling for payers already in flight. Page: no script at all (CSP default-src none, meta-refresh poll), frame-ancestors none, no-store, no-referrer, still no card fields. A SESSION EXPIRING DOES NOT EXPIRE THE PAYMENT — a late payer still books, proven end to end. Still wip: no live rail, no card acquiring, merchant onboarding still blocked on pay:write._ | F |  | `pay.gateway` |
+| 🔨 | Branded gateway, hosted checkout, payment links <br/>_Updated 2026-07-31: hosted checkout + links remain; live crypto rail (`pay.rails`) now exists — with PAY_CRYPTO_* configured, public checkout can open on crypto-native under live-only (was hard-refused). Still wip: no card acquiring, merchant onboarding still blocked on pay:write, production RPC/custody are owner-supplied, multi-replica broadcast store not yet durable._ | F |  | `pay.gateway` |
 | ⛔ | PSP mode — own the merchant, digital KYB, custom pricing | F | `pay.gateway` | `pay.psp` |
 | ⛔ | PayFac mode — sub-merchant trees, 14 permission areas | F | `pay.psp` | `pay.payfac` |
-| ⛔ | RailAdapter interface + crypto-native + card-sandbox <br/>_Updated 2026-07-30: interface + conformance kit are real and tested; NEITHER v1 RAIL MOVES REAL VALUE and the code now says so. Every adapter declares `mode: live|sandbox` (conformance kit refuses one that does not); crypto-native derives its mode from the chain port, so MemoryChain makes it a sandbox whatever §13 says. Two gates in rails/posture.ts: APP_ENV staging/prod REFUSES TO BOOT with any sandbox rail registered unless PAY_ALLOW_SANDBOX_RAILS=true, and payout/refund re-check at the call site before the ledger moves (pay.rail_not_live -> SERVICE_UNAVAILABLE). Production chain default is now UnconfiguredChain, which refuses every call instead of returning a fabricated txHash. /ready and railHealth carry mode. Still `ready` not `done`: no live rail exists — see README for exactly what the owner must obtain._ | F | `pay.gateway` | `pay.rails` |
-| ⛔ | User deposit + withdrawal — the two paths off the merchant path <br/>_Updated 2026-07-30: deposit.credit (admin:treasury) and withdrawal.* (trade:withdraw INTERACTIVE_ONLY + 2FA / trade:read) are reachable on mounted /trpc via svc-edge /api/pay — edge-signed principal required (router.mount.test.ts). Double-submit now proven under CONCURRENCY, not just sequential retry: two identical withdrawals in flight at once debit once and carry ONE rail idempotency key; a redelivered deposit credits once; two concurrent affordable-alone withdrawals cannot overdraw. Money-path suite against real Postgres, now on intafaced_test (it was defaulting to the shared intafaced DB and TRUNCATE-ing live rows). Still not `done`: depends on pay.rails, which has no live rail — a sandbox payout is refused before anything moves rather than fabricating a `sent`._ | F | `pay.rails` | `pay.user-money` |
-| ⛔ | Smart routing — geo, method, risk, approval rate | F | `pay.rails` | `pay.routing` |
-| ⛔ | Dual settlement — bank or crypto | F | `pay.rails` | `pay.settlement` |
+| ✅ | RailAdapter interface + crypto-native + card-sandbox <br/>_Updated 2026-07-31: LIVE crypto rail exists. `EvmLiveChain` implements CryptoChainPort with posture:live (viem Public+Wallet client, HD acceptance addresses from PAY_CRYPTO_DEPOSIT_MNEMONIC, hot-wallet outbound via PAY_CRYPTO_HOT_WALLET_KEY, asset map PAY_CRYPTO_ASSETS, idempotent BroadcastStore). defaultChainFor builds it when PAY_CRYPTO_RPC_URL(+keys) are set; otherwise UnconfiguredChain in staging/prod and MemoryChain in dev/test. In-process CryptoChainWatcher POSTs signed webhooks. staging/prod omit card-sandbox by default (shouldRegisterCardSandbox) so boot posture passes with only live crypto. Proven: unit tests + optional anvil suite (evm-chain.live.test.ts). Residuals (honest, not blockers for this row): MemoryBroadcastStore is single-instance; production chain/RPC/custody are owner-supplied (anvil is not a chain decision); card acquiring remains a §13 commercial socket._ | F |  | `pay.rails` |
+| ✅ | User deposit + withdrawal — the two paths off the merchant path <br/>_Updated 2026-07-31: unblocked by live crypto-native. deposit.credit + withdrawal.* remain mounted; under live-only a crypto-native withdrawal can now pass assertRailMayMoveValue when EvmLiveChain is configured (sandbox still refused). Concurrent double-submit + conservation suites unchanged. Residual: operator hand-credit still defaults to card-sandbox (skipped when that adapter is not registered); on-chain user deposits for the retail path are the watcher→webhook→capture loop, not deposit.credit._ | F |  | `pay.user-money` |
+| 🟢 | Smart routing — geo, method, risk, approval rate | F |  | `pay.routing` |
+| 🟢 | Dual settlement — bank or crypto | F |  | `pay.settlement` |
 | ⛔ | Risk scoring, chargebacks, decline recovery | F | `pay.gateway` | `pay.fraud` |
 | ⛔ | Recurring — card and crypto | F | `pay.gateway` | `pay.subscriptions` |
 | ⛔ | Woo / Magento / OpenCart plugins | F | `pay.gateway` | `pay.plugins` |
@@ -208,7 +212,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Flexible + fixed yield pools | F |  | `bank.earn` |
 | 🟢 | CardIssuerAdapter + card-sim, <2s auth decision | F |  | `bank.cards` |
 | ⛔ | Self-custody funded card, JIT conversion (§18) | P | `bank.cards`, `protocol.smart-accounts` | `bank.sovereign-card` |
-| ⛔ | Fiat on/off ramp reusing svc-pay adapters | F | `pay.rails` | `bank.ramps` |
+| 🟢 | Fiat on/off ramp reusing svc-pay adapters | F |  | `bank.ramps` |
 | ✅ | Model-agnostic gateway, per-user metering <br/>_Reference mount — the /trpc + createEdgeContext recipe every other service copies_ | F |  | `agents.gateway` |
 | 🟢 | Navigator — tool-calling inside user guardrails | F |  | `agents.navigator` |
 | 🟢 | Support agent — KB + account-state grounded | F |  | `agents.support` |

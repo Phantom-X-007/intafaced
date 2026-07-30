@@ -90,26 +90,38 @@ A user who can call the thing that credits their own balance does not need to de
 
 ### Which rails are real — read this before believing a `sent`
 
-**Neither v1 rail can move real money today.** Both declare `payout`; neither has a counterparty.
+| rail            | `mode`                      | counterparty                                                                                  | what a `payout` returns                                       |
+| --------------- | --------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `card-sandbox`  | `sandbox`, permanently      | a `Map` in `card-sandbox.ts`                                                                  | `po_<settlementId>` — a string this file invented             |
+| `crypto-native` | derived from the chain port | `EvmLiveChain` when configured; else `MemoryChain` (dev) / `UnconfiguredChain` (staging/prod) | a real `txHash` on a live chain; `0xout…` / refusal otherwise |
 
-| rail            | `mode`                      | counterparty                                           | what a `payout` returns                                         |
-| --------------- | --------------------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
-| `card-sandbox`  | `sandbox`, permanently      | a `Map` in `card-sandbox.ts`                           | `po_<settlementId>` — a string this file invented               |
-| `crypto-native` | derived from the chain port | `MemoryChain` in dev/test; **nothing** in staging/prod | `0xout…` from `MemoryChain`; a refusal from `UnconfiguredChain` |
+**Live crypto-native** is wired when all of these are set:
 
-**Why this is stated so loudly.** A withdrawal settled against a sandbox rail debits the user's real ledger balance, writes a fabricated reference into `withdrawals.rail_ref`, and answers `status: 'sent'`. The user is told their money moved. **Every invariant still holds** — double entry is satisfied by a fabricated settlement exactly as well as by a real one — so nothing inside the books can detect it. Only a reconciliation of the rail boundary against real custody can, and by then the platform has been lying for as long as it has been up.
+```bash
+PAY_CRYPTO_RPC_URL=…          # archive-capable JSON-RPC
+PAY_CRYPTO_CHAIN_ID=…
+PAY_CRYPTO_DEPOSIT_MNEMONIC=… # HD acceptance addresses (not the hot wallet)
+PAY_CRYPTO_HOT_WALLET_KEY=0x… # outbound signing key
+PAY_CRYPTO_ASSETS=ETH:native  # or ETH:native,USDT:0x…:6
+```
+
+That builds `EvmLiveChain` (`src/rails/evm-chain.ts`, `posture: 'live'`), starts the in-process watcher that POSTs signed webhooks with `PAY_CRYPTO_WEBHOOK_SECRET`, and makes `crypto-native` a live rail. Staging/prod then **omit** `card-sandbox` by default (`shouldRegisterCardSandbox`) so the boot posture gate can pass without `PAY_ALLOW_SANDBOX_RAILS`.
+
+**Why sandbox gates still matter.** A withdrawal settled against a sandbox rail debits the user's real ledger balance, writes a fabricated reference into `withdrawals.rail_ref`, and answers `status: 'sent'`. The books still balance — only custody reconciliation can see the lie.
 
 **The two gates** (`src/rails/posture.ts`):
 
-1. **Boot.** `APP_ENV` of `staging` or `prod` with any sandbox rail registered **refuses to start**, unless `PAY_ALLOW_SANDBOX_RAILS=true` says so by name (logged loudly on every boot). Modelled on `assertScreeningConfigured` in `packages/config`.
-2. **Runtime.** `payout` and `refund` re-check at the call site, **before** the ledger moves — `withdrawal.create` refuses with `pay.rail_not_live` before a row or a hold exists. `authorize`/`capture` are deliberately allowed: they bring value **in**, and a sandbox capture leaves the platform short (visible at the boundary) rather than telling a user their own money left.
+1. **Boot.** `APP_ENV` of `staging` or `prod` with any sandbox rail registered **refuses to start**, unless `PAY_ALLOW_SANDBOX_RAILS=true` says so by name (logged loudly on every boot).
+2. **Runtime.** `payout` and `refund` re-check at the call site, **before** the ledger moves — `withdrawal.create` refuses with `pay.rail_not_live` before a row or a hold exists.
 
-`dev` and `test` are unaffected. The sandbox rails **are** the fixture there.
+`dev` and `test` without live config keep `MemoryChain` + `card-sandbox` as the fixture.
 
-**What the owner must obtain to make a rail real:**
+**What the owner must still obtain for production money:**
 
-- **`crypto-native`** — a chain node/RPC endpoint per supported chain (archive depth ≥ `PAY_MIN_CONFIRMATIONS`), custody of outbound signing keys behind a signing service that will not broadcast one business key twice, deterministic acceptance-address derivation, and a chain watcher signing with `PAY_CRYPTO_WEBHOOK_SECRET`. Implement `CryptoChainPort`; `index.ts` swaps it in on one line. Until then production gets `UnconfiguredChain`, which **refuses every call** — `crypto-native` turns that into a `chain.not_configured` failure and `UserMoneyService` reverses the hold in the same call, so the user keeps their money.
-- **Card acquiring** — a sponsor bank / acquiring BIN. §13 lists this as a socket because it is a commercial relationship, not code. Write a new adapter, pass `src/rails/conformance.ts`; `card-sandbox` is not it with a flag flipped.
+- A **production** (or public testnet) RPC, not only compose anvil — anvil proves the wiring; it is not a chain decision (`docs/decisions/local-dev-chain.md`).
+- Custody of the hot wallet / deposit mnemonic outside the repo (HSM or signing service preferred; the in-process key is the v1 minimum).
+- Durable broadcast idempotency across multiple svc-pay replicas (today: in-process `MemoryBroadcastStore` — fine for single-instance; multi-instance needs a shared store).
+- **Card acquiring** — sponsor bank / BIN. Still a §13 commercial socket; `card-sandbox` is never it.
 
 `/ready` and `railHealth` both carry `mode` now, because `healthy: true` was accurate and useless — a sandbox is reliably healthy at simulating.
 

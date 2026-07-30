@@ -7,7 +7,15 @@ import { createLedgerClient } from './ledger-client.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { RailRegistry } from './rails/registry.js';
-import { assertRailPosture, defaultChainFor, railPostureStatus, selectPublicCheckoutRail } from './rails/posture.js';
+import { CryptoChainWatcher } from './rails/chain-watcher.js';
+import { EvmLiveChain } from './rails/evm-chain.js';
+import {
+  assertRailPosture,
+  defaultChainFor,
+  railPostureStatus,
+  selectPublicCheckoutRail,
+  shouldRegisterCardSandbox,
+} from './rails/posture.js';
 import { createPayRouter } from './router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
@@ -41,35 +49,34 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 /**
  * The chain behind `crypto-native`.
  *
- * §13 socket: the production chain watcher implements `CryptoChainPort` and is
- * swapped in here — one line, no change to the adapter and none to the core.
+ * `defaultChainFor` picks:
+ *   · `EvmLiveChain` when `PAY_CRYPTO_RPC_URL` (+ keys/assets) are set — LIVE
+ *   · `UnconfiguredChain` in staging/prod with nothing set — refuses
+ *   · `MemoryChain` in dev/test with nothing set — suite fixture
  *
- * WHAT CHANGED, AND WHY IT MATTERED. This line used to read `new MemoryChain()`
- * unconditionally. In a production deployment that is not a placeholder, it is a
- * money bug: `MemoryChain.send` SUCCEEDS and returns `0xout00000001`, so a user's
- * withdrawal on `crypto-native` debited their real ledger balance, stored that
- * string as the rail reference, and answered `sent`. The user was told their
- * money was on its way and nothing had been broadcast anywhere.
- *
- * So dev and test get the in-memory reference chain — which models confirmation
- * depth and idempotent broadcast, and is what the whole suite runs on — and
- * `staging`/`prod` get `UnconfiguredChain`, which refuses every call with a
- * message naming what the owner has to obtain. A refusal reverses the hold in the
- * same call and gives the user their money back; a fabricated success does not.
+ * `card-sandbox` is registered only when `shouldRegisterCardSandbox` says so
+ * (dev/test by default). A staging/prod deployment with a live crypto rail must
+ * not also register the sandbox acquirer, or boot fails unless the operator
+ * deliberately sets `PAY_ALLOW_SANDBOX_RAILS=true`.
  */
 const chain = defaultChainFor(process.env);
 
+const cryptoRail = new CryptoNativeAdapter({
+  chain,
+  secret: env.PAY_CRYPTO_WEBHOOK_SECRET,
+  minConfirmations: env.PAY_MIN_CONFIRMATIONS,
+  toleranceSeconds: env.PAY_WEBHOOK_TOLERANCE_SECONDS,
+});
 const rails = new RailRegistry([
-  new CryptoNativeAdapter({
-    chain,
-    secret: env.PAY_CRYPTO_WEBHOOK_SECRET,
-    minConfirmations: env.PAY_MIN_CONFIRMATIONS,
-    toleranceSeconds: env.PAY_WEBHOOK_TOLERANCE_SECONDS,
-  }),
-  new CardSandboxAdapter({
-    secret: env.PAY_CARD_SANDBOX_WEBHOOK_SECRET,
-    toleranceSeconds: env.PAY_WEBHOOK_TOLERANCE_SECONDS,
-  }),
+  cryptoRail,
+  ...(shouldRegisterCardSandbox(process.env)
+    ? [
+        new CardSandboxAdapter({
+          secret: env.PAY_CARD_SANDBOX_WEBHOOK_SECRET,
+          toleranceSeconds: env.PAY_WEBHOOK_TOLERANCE_SECONDS,
+        }),
+      ]
+    : []),
 ]);
 
 /**
@@ -123,15 +130,25 @@ const pay = new PayService(sql, ledger, rails, {
  * a rail that is not registered would mean every operator deposit on it failing
  * at request time with an error about a rail id, which reads like a caller
  * mistake; it is a deployment one, and it belongs at boot.
+ *
+ * Exception: the default list includes `card-sandbox`, and a live staging/prod
+ * deployment deliberately does not register that adapter. Skipping the default
+ * entry is correct; naming any OTHER missing rail is still a boot failure.
  */
+const operatorCreditRails: string[] = [];
 for (const railId of env.PAY_OPERATOR_CREDIT_RAILS) {
-  if (!rails.has(railId)) {
-    throw new Error(`PAY_OPERATOR_CREDIT_RAILS names "${railId}", which is not a registered rail. Registered: ${rails.ids().join(', ')}`);
+  if (rails.has(railId)) {
+    operatorCreditRails.push(railId);
+    continue;
   }
+  if (railId === 'card-sandbox' && !shouldRegisterCardSandbox(process.env)) {
+    continue;
+  }
+  throw new Error(`PAY_OPERATOR_CREDIT_RAILS names "${railId}", which is not a registered rail. Registered: ${rails.ids().join(', ')}`);
 }
 
 const userMoney = new UserMoneyService(sql, ledger, rails, {
-  operatorCreditRails: env.PAY_OPERATOR_CREDIT_RAILS,
+  operatorCreditRails,
   valueMovement: railPosture.policy,
 });
 
@@ -286,6 +303,24 @@ await app.register(fastifyTRPCPlugin, {
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 
 /**
+ * In-process watcher: when the chain is live, poll for finalized deposits and
+ * POST signed webhooks to ourselves. Disabled when the chain is MemoryChain /
+ * UnconfiguredChain, or when `PAY_CRYPTO_WATCHER_ENABLED=false`.
+ */
+let watcher: CryptoChainWatcher | null = null;
+if (chain instanceof EvmLiveChain && env.PAY_CRYPTO_WATCHER_ENABLED === 'true') {
+  watcher = new CryptoChainWatcher({
+    chain,
+    secret: env.PAY_CRYPTO_WEBHOOK_SECRET,
+    webhookUrl: `http://127.0.0.1:${env.HTTP_PORT}/webhooks/crypto-native`,
+    pollIntervalMs: env.PAY_CRYPTO_WATCHER_INTERVAL_MS,
+    log: (msg, extra) => app.log.info(extra ?? {}, msg),
+  });
+  watcher.start();
+  app.log.info({ intervalMs: env.PAY_CRYPTO_WATCHER_INTERVAL_MS }, 'crypto chain watcher started');
+}
+
+/**
  * The posture goes in the log on every start. In dev, where `assertRailPosture`
  * does not throw, THIS LINE IS THE CONTROL'S ONLY VISIBILITY — the same reason
  * `screeningStatus` returns a summary string rather than just a boolean.
@@ -302,13 +337,22 @@ if (railPosture.sandboxOverride) {
 }
 
 app.log.info(
-  { port: env.HTTP_PORT, rails: rails.ids(), liveRails: railStatus.live, valueMovement: railStatus.policy, trpc: true },
+  {
+    port: env.HTTP_PORT,
+    rails: rails.ids(),
+    liveRails: railStatus.live,
+    valueMovement: railStatus.policy,
+    cryptoMode: cryptoRail.mode,
+    watcher: watcher !== null,
+    trpc: true,
+  },
   'svc-pay ready',
 );
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
+      watcher?.stop();
       // Draining, not dropping: an in-flight capture finishes before the
       // process exits, because the alternative is a payment captured at a rail
       // that this service never got to book.
