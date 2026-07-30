@@ -88,13 +88,40 @@ A user who can call the thing that credits their own balance does not need to de
 - **`clientRef` is required, not optional.** A timed-out request retried without one opens a second withdrawal, and a second withdrawal is a second debit. `clientOrderId` is merely recommended on an order because a duplicate order can be cancelled; there is no cancelling a payout.
 - **The account comes from the token.** There is no `userId` input, so there is nothing to forge.
 
+### Which rails are real — read this before believing a `sent`
+
+**Neither v1 rail can move real money today.** Both declare `payout`; neither has a counterparty.
+
+| rail            | `mode`                      | counterparty                                           | what a `payout` returns                                         |
+| --------------- | --------------------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| `card-sandbox`  | `sandbox`, permanently      | a `Map` in `card-sandbox.ts`                           | `po_<settlementId>` — a string this file invented               |
+| `crypto-native` | derived from the chain port | `MemoryChain` in dev/test; **nothing** in staging/prod | `0xout…` from `MemoryChain`; a refusal from `UnconfiguredChain` |
+
+**Why this is stated so loudly.** A withdrawal settled against a sandbox rail debits the user's real ledger balance, writes a fabricated reference into `withdrawals.rail_ref`, and answers `status: 'sent'`. The user is told their money moved. **Every invariant still holds** — double entry is satisfied by a fabricated settlement exactly as well as by a real one — so nothing inside the books can detect it. Only a reconciliation of the rail boundary against real custody can, and by then the platform has been lying for as long as it has been up.
+
+**The two gates** (`src/rails/posture.ts`):
+
+1. **Boot.** `APP_ENV` of `staging` or `prod` with any sandbox rail registered **refuses to start**, unless `PAY_ALLOW_SANDBOX_RAILS=true` says so by name (logged loudly on every boot). Modelled on `assertScreeningConfigured` in `packages/config`.
+2. **Runtime.** `payout` and `refund` re-check at the call site, **before** the ledger moves — `withdrawal.create` refuses with `pay.rail_not_live` before a row or a hold exists. `authorize`/`capture` are deliberately allowed: they bring value **in**, and a sandbox capture leaves the platform short (visible at the boundary) rather than telling a user their own money left.
+
+`dev` and `test` are unaffected. The sandbox rails **are** the fixture there.
+
+**What the owner must obtain to make a rail real:**
+
+- **`crypto-native`** — a chain node/RPC endpoint per supported chain (archive depth ≥ `PAY_MIN_CONFIRMATIONS`), custody of outbound signing keys behind a signing service that will not broadcast one business key twice, deterministic acceptance-address derivation, and a chain watcher signing with `PAY_CRYPTO_WEBHOOK_SECRET`. Implement `CryptoChainPort`; `index.ts` swaps it in on one line. Until then production gets `UnconfiguredChain`, which **refuses every call** — `crypto-native` turns that into a `chain.not_configured` failure and `UserMoneyService` reverses the hold in the same call, so the user keeps their money.
+- **Card acquiring** — a sponsor bank / acquiring BIN. §13 lists this as a socket because it is a commercial relationship, not code. Write a new adapter, pass `src/rails/conformance.ts`; `card-sandbox` is not it with a flag flipped.
+
+`/ready` and `railHealth` both carry `mode` now, because `healthy: true` was accurate and useless — a sandbox is reliably healthy at simulating.
+
 > **Interface mismatch, flagged not papered over.** `RailAdapter.payout` takes a `SettlementInstruction`, which is merchant-shaped — it is the only payout shape §6.1 has. Every adapter uses `settlementId` purely as the payout idempotency key and reads `merchantId` not at all, so a user withdrawal passes its own id and the user id and works correctly. Generalising it to a `PayoutInstruction` is a change to a reviewed interface plus its conformance kit, so it belongs in its own PR (§15.2).
 
 ### Error codes
 
-`pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`, `pay.rail_unknown`, `pay.rail_not_creditable`, `pay.deposit_conflict`, `pay.withdrawal_not_found`, `pay.withdrawal_conflict`.
+`pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`, `pay.rail_unknown`, `pay.rail_not_creditable`, `pay.deposit_conflict`, `pay.withdrawal_not_found`, `pay.withdrawal_conflict`, `pay.rail_not_live`.
 
 `pay.deposit_conflict` and `pay.withdrawal_conflict` map to **CONFLICT**, never BAD_REQUEST: the caller reused a business key for different numbers, and nothing they resend fixes it.
+
+`pay.rail_not_live` maps to **SERVICE_UNAVAILABLE**, never INTERNAL_SERVER_ERROR. The request was well-formed; the platform has no rail that would actually move the money. A 500 reads as "try again", and this is the one condition retrying can never fix.
 
 ---
 

@@ -33,7 +33,22 @@ import { signPayload } from './rails/webhook-signature.js';
  * would quietly not have.
  */
 
-const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@localhost:5433/intafaced';
+/**
+ * `intafaced_test`, NOT `intafaced`.
+ *
+ * This suite APPLIES A MIGRATION and TRUNCATES TABLES. Pointed at the shared
+ * `intafaced` database it does both to the schema and the rows every other
+ * worktree and the running docker stack are using — which is how a branch broke
+ * `main`'s tests from a different checkout. It was pointed there by default
+ * until now, and `pay.deposits`/`pay.withdrawals` on the running stack had live
+ * rows in them.
+ *
+ * `intafaced_test` is stood up by `tooling/infra/postgres-init/02-intafaced-test-db.sh`
+ * with a `pay` schema owned by `svc_pay`. Same convention as
+ * `TEST_DATABASE_URL_TRADE`, and `turbo.json` already passes the variable
+ * through, so an override is honoured everywhere.
+ */
+const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_pay_init.sql'), 'utf8');
 

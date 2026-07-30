@@ -11,6 +11,7 @@ import {
 } from '@intafaced/ledger-client';
 import { PayError } from './payment-service.js';
 import type { RailRegistry } from './rails/registry.js';
+import { assertRailMayMoveValue, type ValueMovementPolicy } from './rails/posture.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
 
 /**
@@ -117,10 +118,25 @@ export interface UserMoneyOptions {
    * discrepancy that is really a typo.
    */
   readonly operatorCreditRails: readonly string[];
+
+  /**
+   * Whether a SANDBOX rail may be asked to send a user's money out.
+   *
+   * `allow-sandbox` in dev and test — the sandbox rails are the fixture the whole
+   * suite runs on. `live-only` in staging and prod, decided once at boot by
+   * `assertRailPosture` so the boot refusal and this runtime check cannot come to
+   * different conclusions.
+   *
+   * Defaulted to `allow-sandbox` because every construction in a test is a
+   * development one; the enforced environments do not rely on this default, they
+   * are handed the policy explicitly by `index.ts`.
+   */
+  readonly valueMovement?: ValueMovementPolicy;
 }
 
 export class UserMoneyService {
   private readonly creditableRails: ReadonlySet<string>;
+  private readonly valueMovement: ValueMovementPolicy;
 
   constructor(
     private readonly sql: Sql,
@@ -129,6 +145,7 @@ export class UserMoneyService {
     options: UserMoneyOptions,
   ) {
     this.creditableRails = new Set(options.operatorCreditRails);
+    this.valueMovement = options.valueMovement ?? 'allow-sandbox';
   }
 
   // ── Deposit ────────────────────────────────────────────────────────────────
@@ -306,6 +323,13 @@ export class UserMoneyService {
     // Resolved before a row exists, so an unknown or payout-incapable rail fails
     // before anything is claimed — and long before anything is held.
     const adapter = this.rails.require(input.rail, 'payout');
+
+    // AND BEFORE ANYTHING IS HELD: a sandbox rail cannot send a user's money
+    // anywhere, so in an enforced posture asking it is refused here rather than
+    // discovered as a fabricated `railRef` in `withdrawals.rail_ref` after the
+    // user has been told `sent`. Refusing at this line means no row exists, no
+    // hold was placed, and nothing has to be unwound.
+    assertRailMayMoveValue(adapter, 'payout', this.valueMovement);
 
     return withMoneySpan('pay.withdraw', { operation: 'withdraw', rail: input.rail, amount: formatAmount(input.amount) }, async (span) => {
       let claimed = await this.claimWithdrawal(input);

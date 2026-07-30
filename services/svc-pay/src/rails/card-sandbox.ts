@@ -55,6 +55,17 @@ export class CardSandboxAdapter implements RailAdapter {
   readonly id = 'card-sandbox';
   readonly capabilities: readonly RailCapability[] = ['authorize', 'capture', 'refund', 'payout', 'webhook'];
 
+  /**
+   * SANDBOX, permanently, and not configurable.
+   *
+   * There is no option that makes this class live, because the counterparty it
+   * talks to is the `charges` map twelve lines below. `po_<settlementId>` is not
+   * a payout reference — it is a string this file made up. A live card rail is a
+   * DIFFERENT adapter that passes the same conformance kit; it is not this one
+   * with a flag flipped.
+   */
+  readonly mode = 'sandbox' as const;
+
   /** The mock acquirer's books. A real adapter holds no state; this one is the counterparty. */
   private readonly charges = new Map<string, AcquirerCharge>();
   private readonly payouts = new Map<string, { ref: string; amount: Amount; assetId: string }>();

@@ -1,5 +1,5 @@
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
-import type { CryptoChainPort } from './chain-port.js';
+import { ChainNotConfiguredError, type CryptoChainPort } from './chain-port.js';
 import {
   railFailure,
   type PaymentIntent,
@@ -7,6 +7,7 @@ import {
   type RailCapability,
   type RailEvent,
   type RailHealth,
+  type RailMode,
   type RailResult,
   type RailWebhookRequest,
   type SettlementInstruction,
@@ -65,6 +66,19 @@ export class CryptoNativeAdapter implements RailAdapter {
   readonly id = 'crypto-native';
   readonly capabilities: readonly RailCapability[] = ['authorize', 'capture', 'refund', 'payout', 'webhook'];
 
+  /**
+   * DERIVED FROM THE CHAIN, never configured.
+   *
+   * §13 says "`crypto-native` is real from day one". That is true of the ADAPTER
+   * and false of the deployment until a chain watcher exists: this file is
+   * correct on-chain logic pointed at whatever implements `CryptoChainPort`, and
+   * pointed at `MemoryChain` it is a sandbox no matter what the spec says.
+   *
+   * Reading it off the port rather than off configuration is the whole point. A
+   * `PAY_CRYPTO_RAIL_IS_LIVE=true` would be a claim; this is a fact.
+   */
+  readonly mode: RailMode;
+
   private readonly chain: CryptoChainPort;
   private readonly minConfirmations: number;
   private readonly now: () => Date;
@@ -86,13 +100,25 @@ export class CryptoNativeAdapter implements RailAdapter {
 
   constructor(private readonly options: CryptoNativeOptions) {
     this.chain = options.chain;
+    this.mode = options.chain.posture === 'live' ? 'live' : 'sandbox';
     this.minConfirmations = options.minConfirmations ?? 6;
     this.now = options.now ?? (() => new Date());
     this.toleranceSeconds = options.toleranceSeconds ?? 300;
     this.lastContact = this.now();
   }
 
+  /**
+   * An ABSENT chain is reported unhealthy, always.
+   *
+   * `isUsable` is what routing and the operator console read, and a rail whose
+   * every call is going to throw must not appear on either as available. A
+   * sandbox chain is reported healthy on purpose — it genuinely works, which is
+   * what dev and CI need; `mode` is what stops it moving real money.
+   */
   health(): RailHealth {
+    if (this.chain.posture === 'absent') {
+      return { healthy: false, latencyMs: 0, lastUpdate: this.now(), reason: this.chain.description };
+    }
     return {
       healthy: this.up,
       latencyMs: 40,
@@ -146,7 +172,7 @@ export class CryptoNativeAdapter implements RailAdapter {
         railRef: '',
         amount: p.amount,
         assetId: p.assetId,
-        failureCode: 'chain.unavailable',
+        failureCode: this.chainFailureCode(err, 'chain.unavailable'),
         failureReason: err instanceof Error ? err.message : String(err),
         at: this.now(),
       });
@@ -238,7 +264,7 @@ export class CryptoNativeAdapter implements RailAdapter {
         railRef: ref,
         amount: 0n,
         assetId: '',
-        failureCode: 'chain.unavailable',
+        failureCode: this.chainFailureCode(err, 'chain.unavailable'),
         failureReason: err instanceof Error ? err.message : String(err),
         at: this.now(),
       });
@@ -288,7 +314,7 @@ export class CryptoNativeAdapter implements RailAdapter {
         railRef: ref,
         amount,
         assetId: '',
-        failureCode: 'chain.unavailable',
+        failureCode: this.chainFailureCode(err, 'chain.unavailable'),
         failureReason: err instanceof Error ? err.message : String(err),
         at: this.now(),
       });
@@ -363,7 +389,7 @@ export class CryptoNativeAdapter implements RailAdapter {
         railRef: ref,
         amount,
         assetId: transfer.assetId,
-        failureCode: 'chain.broadcast_failed',
+        failureCode: this.chainFailureCode(err, 'chain.broadcast_failed'),
         failureReason: err instanceof Error ? err.message : String(err),
         at: this.now(),
       });
@@ -419,7 +445,7 @@ export class CryptoNativeAdapter implements RailAdapter {
         railRef: '',
         amount: s.amount,
         assetId: s.assetId,
-        failureCode: 'chain.broadcast_failed',
+        failureCode: this.chainFailureCode(err, 'chain.broadcast_failed'),
         failureReason: err instanceof Error ? err.message : String(err),
         at: this.now(),
       });
@@ -495,6 +521,23 @@ export class CryptoNativeAdapter implements RailAdapter {
   }
 
   // ── internals ──────────────────────────────────────────────────────────────
+
+  /**
+   * WHICH KIND OF "the chain did not answer" THIS WAS.
+   *
+   * `chain.unavailable` and `chain.broadcast_failed` both read as transient: an
+   * operator seeing either goes and looks at the node, and a retry policy keeps
+   * trying. Neither is true when nothing is configured — that will never fix
+   * itself, and the work that fixes it is commercial rather than operational.
+   *
+   * So an absent chain gets its own code. The distinction is the difference
+   * between paging somebody at 3am and filing a procurement task, and it is also
+   * the code an operator console should render as "this rail cannot pay out"
+   * rather than "this rail is having a bad minute".
+   */
+  private chainFailureCode(err: unknown, transient: 'chain.unavailable' | 'chain.broadcast_failed'): string {
+    return err instanceof ChainNotConfiguredError ? 'chain.not_configured' : transient;
+  }
 
   /**
    * A rail reference for this adapter is an acceptance address. The chain says

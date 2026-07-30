@@ -332,7 +332,7 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['pay.gateway'],
     requires: ['services/svc-pay/src/rails'],
-    note: 'Interface + conformance kit are real and tested; neither v1 rail moves real value — crypto-native runs on `MemoryChain` (index.ts, §13 socket), the other is card-SANDBOX. Merchant payments and webhooks can exercise these adapters now that /trpc is mounted; production rails are still sockets.',
+    note: 'Updated 2026-07-30: interface + conformance kit are real and tested; NEITHER v1 RAIL MOVES REAL VALUE and the code now says so. Every adapter declares `mode: live|sandbox` (conformance kit refuses one that does not); crypto-native derives its mode from the chain port, so MemoryChain makes it a sandbox whatever §13 says. Two gates in rails/posture.ts: APP_ENV staging/prod REFUSES TO BOOT with any sandbox rail registered unless PAY_ALLOW_SANDBOX_RAILS=true, and payout/refund re-check at the call site before the ledger moves (pay.rail_not_live -> SERVICE_UNAVAILABLE). Production chain default is now UnconfiguredChain, which refuses every call instead of returning a fabricated txHash. /ready and railHealth carry mode. Still `ready` not `done`: no live rail exists — see README for exactly what the owner must obtain.',
   }),
   f('pay.user-money', 'User deposit + withdrawal — the two paths off the merchant path', {
     module: 'pay',
@@ -340,7 +340,7 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['pay.rails', 'ledger.recipes'],
     requires: ['services/svc-pay'],
-    note: 'Updated 2026-07-29: deposit.credit (admin:treasury) and withdrawal.* (trade:withdraw INTERACTIVE_ONLY + 2FA / trade:read) are reachable on mounted /trpc via svc-edge /api/pay — edge-signed principal required (router.mount.test.ts). Money-path suite against real Postgres remains. Still not `done`: depends on pay.rails which is MemoryChain + card-sandbox, so real value cannot leave/enter production rails.',
+    note: 'Updated 2026-07-30: deposit.credit (admin:treasury) and withdrawal.* (trade:withdraw INTERACTIVE_ONLY + 2FA / trade:read) are reachable on mounted /trpc via svc-edge /api/pay — edge-signed principal required (router.mount.test.ts). Double-submit now proven under CONCURRENCY, not just sequential retry: two identical withdrawals in flight at once debit once and carry ONE rail idempotency key; a redelivered deposit credits once; two concurrent affordable-alone withdrawals cannot overdraw. Money-path suite against real Postgres, now on intafaced_test (it was defaulting to the shared intafaced DB and TRUNCATE-ing live rows). Still not `done`: depends on pay.rails, which has no live rail — a sandbox payout is refused before anything moves rather than fabricating a `sent`.',
   }),
   f('pay.routing', 'Smart routing — geo, method, risk, approval rate', { module: 'pay', phase: '3', dependsOn: ['pay.rails'] }),
   f('pay.settlement', 'Dual settlement — bank or crypto', { module: 'pay', phase: '3', dependsOn: ['pay.rails'] }),
