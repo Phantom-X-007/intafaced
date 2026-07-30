@@ -40,8 +40,8 @@ import styles from './terminal.module.css';
  * Sockets, each with the reason on screen:
  *   · the chart — public tape is live above; candles still have no store
  *     (CCXT OHLCV is always empty until a candle aggregation job exists)
- *   · account equity — svc-ledger is deliberately absent from the edge route
- *     table, and no other service exposes a balance read
+ *   · account equity — balance REST exists on trade (`GET /api/v1/account/balance`,
+ *     self-only ledger projection); this terminal panel is not wired to it yet
  *   · everything on the Protocol Plane that needs a chain
  *
  * The count is deliberate. Real panels and honest holes is a truthful
@@ -58,8 +58,8 @@ const copy = {
   chartBlocked: 'trade.candles · candle aggregation job',
   equityTitle: 'Account equity',
   equityReason:
-    'Balances live in svc-ledger, which svc-edge deliberately does not route — `ledger.post` moves value on a module’s own authority, so no browser token carries a ledger scope. A balance read for users has to be a procedure on a mounted service, and there is not one.',
-  equityBlocked: 'trade.balances · svc-edge route table',
+    'A self-only balance read exists on svc-trade (`GET /api/v1/account/balance` via edge `/api/v1`, trade:read) as a ledger projection — not a direct ledger browser scope. This terminal panel is not wired to that route yet; it will not invent numbers meanwhile.',
+  equityBlocked: 'terminal equity panel · wire to account/balance',
   select: 'Select',
   selected: 'Selected',
 } as const;
