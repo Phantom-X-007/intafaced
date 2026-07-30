@@ -1,3 +1,5 @@
+**A+B fire merged:** #229–#235 (cascade, tracker, Stream A, vendor-shell).
+
 **Tip after overnight fire:** `d5ab759` (#223 merged).
 
 # Overnight run status — 2026-07-30 (compaction brace)
