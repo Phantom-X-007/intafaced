@@ -5,13 +5,7 @@
  * Proves: staging live posture → merchant create → crypto payment → on-chain
  * deposit → authorize/capture → withdrawal payout with real txHash.
  */
-import {
-  createPublicClient,
-  createWalletClient,
-  defineChain,
-  http,
-  parseEther,
-} from 'viem';
+import { createPublicClient, createWalletClient, defineChain, http, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 
@@ -78,11 +72,7 @@ async function main() {
   if (ready.valueMovement !== 'live-only') fail('not live-only', ready);
   ok('svc-pay ready live-only', { liveRails: ready.liveRails });
 
-  const merchant = await trpc(
-    'merchant.create',
-    { userId: USER, mode: 'gateway', pricing: { feeBps: 50 } },
-    ['pay:write'],
-  );
+  const merchant = await trpc('merchant.create', { userId: USER, mode: 'gateway', pricing: { feeBps: 50 } }, ['pay:write']);
   ok('merchant.create', merchant);
 
   const payment = await trpc(
@@ -139,11 +129,7 @@ async function main() {
   // Window defaults to the UTC calendar day named by `window`. Use today so the
   // just-captured payment is inside the freeze bounds.
   const window = new Date().toISOString().slice(0, 10);
-  const settlement = await trpc(
-    'settlement.run',
-    { merchantId: merchant.id, window, assetId: 'ETH' },
-    ['pay:write'],
-  );
+  const settlement = await trpc('settlement.run', { merchantId: merchant.id, window, assetId: 'ETH' }, ['pay:write']);
   ok('settlement.run', settlement);
 
   const dest = privateKeyToAccount('0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a').address;
