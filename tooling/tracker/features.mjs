@@ -252,7 +252,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade'],
-    note: 'WIP 2026-07-29: convert.quote + convert.execute on svc-trade (RFQ against book + house spread → market IOC on the same hold→fill path). PR feat/trade-convert. Not done until Postgres money-path suite green in CI and edge path product-checked.',
+    note: 'convert.quote + convert.execute on svc-trade (RFQ + house spread → market IOC, same hold→fill). Money-path suite tests exist (trade-service convert describe). Still wip: CI billing blocked so green-CI DoD not re-proven; edge product-check open.',
   }),
   f('trade.futures', 'Perps: cross/isolated margin, funding, liquidation ladder', {
     module: 'trade',
@@ -323,7 +323,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
-    note: 'Updated 2026-07-29: /trpc is mounted (createEdgeContext + fastifyTRPCPlugin, webhook raw-body parser encapsulated so it does not break tRPC). Edge already routes /api/pay → svc-pay. Merchant payment procedures are on the wire. Still not `done`: hosted checkout and payment links do not exist in the repo — the title is only partially delivered. Rails remain sandbox (MemoryChain + card-sandbox). Payment links: merchant.createLink + public resolveLink (token shown once). Hosted checkout UI still thin.',
+    note: 'Updated 2026-07-29: /trpc is mounted (createEdgeContext + fastifyTRPCPlugin, webhook raw-body parser encapsulated so it does not break tRPC). Edge already routes /api/pay → svc-pay. Merchant payment procedures are on the wire. Payment links: merchant.createLink + public resolveLink (token once). Still not `done`: hosted checkout *UI* is thin; rails remain sandbox (MemoryChain + card-sandbox).',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', { module: 'pay', phase: '3', dependsOn: ['pay.psp'] }),

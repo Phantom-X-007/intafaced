@@ -125,7 +125,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Orderbook + matching engine, journal, replay | F |  | `matching.engine` |
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
-| 🔨 | One-tap Convert — the retail on-ramp <br/>_WIP 2026-07-29: convert.quote + convert.execute on svc-trade (RFQ against book + house spread → market IOC on the same hold→fill path). PR feat/trade-convert. Not done until Postgres money-path suite green in CI and edge path product-checked._ | F |  | `trade.convert` |
+| 🔨 | One-tap Convert — the retail on-ramp <br/>_convert.quote + convert.execute on svc-trade (RFQ + house spread → market IOC, same hold→fill). Money-path suite tests exist (trade-service convert describe). Still wip: CI billing blocked so green-CI DoD not re-proven; edge product-check open._ | F |  | `trade.convert` |
 | 🟢 | Perps: cross/isolated margin, funding, liquidation ladder | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
 | 🟢 | OTC RFQ desk, staked-tier gate | F |  | `trade.otc` |
@@ -144,7 +144,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| 🔨 | Branded gateway, hosted checkout, payment links <br/>_Updated 2026-07-29: /trpc is mounted (createEdgeContext + fastifyTRPCPlugin, webhook raw-body parser encapsulated so it does not break tRPC). Edge already routes /api/pay → svc-pay. Merchant payment procedures are on the wire. Still not `done`: hosted checkout and payment links do not exist in the repo — the title is only partially delivered. Rails remain sandbox (MemoryChain + card-sandbox). Payment links: merchant.createLink + public resolveLink (token shown once). Hosted checkout UI still thin._ | F |  | `pay.gateway` |
+| 🔨 | Branded gateway, hosted checkout, payment links <br/>_Updated 2026-07-29: /trpc is mounted (createEdgeContext + fastifyTRPCPlugin, webhook raw-body parser encapsulated so it does not break tRPC). Edge already routes /api/pay → svc-pay. Merchant payment procedures are on the wire. Payment links: merchant.createLink + public resolveLink (token once). Still not `done`: hosted checkout *UI* is thin; rails remain sandbox (MemoryChain + card-sandbox)._ | F |  | `pay.gateway` |
 | ⛔ | PSP mode — own the merchant, digital KYB, custom pricing | F | `pay.gateway` | `pay.psp` |
 | ⛔ | PayFac mode — sub-merchant trees, 14 permission areas | F | `pay.psp` | `pay.payfac` |
 | ⛔ | RailAdapter interface + crypto-native + card-sandbox <br/>_Interface + conformance kit are real and tested; neither v1 rail moves real value — crypto-native runs on `MemoryChain` (index.ts, §13 socket), the other is card-SANDBOX. Merchant payments and webhooks can exercise these adapters now that /trpc is mounted; production rails are still sockets._ | F | `pay.gateway` | `pay.rails` |
