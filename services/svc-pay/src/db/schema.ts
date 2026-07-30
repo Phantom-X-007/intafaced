@@ -1,4 +1,4 @@
-import { bigserial, index, integer, jsonb, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigserial, boolean, index, integer, jsonb, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { amount, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -359,4 +359,37 @@ export const withdrawals = pay.table(
   ],
 );
 
-export const schema = { merchants, paymentProfiles, payments, paymentEvents, settlements, deposits, withdrawals };
+/**
+ * Shareable payment link (§6.1). The raw token is shown once; only the hash
+ * is stored. Public resolve returns checkout intent, never merchant secrets.
+ */
+export const paymentLinks = pay.table(
+  'payment_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    profileId: uuid('profile_id').references(() => paymentProfiles.id),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: text('token_prefix').notNull(),
+    label: text('label').notNull(),
+    amount: amount('amount'),
+    currency: text('currency'),
+    active: boolean('active').notNull().default(true),
+    expiresAt: tstz('expires_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('payment_links_token_hash_idx').on(t.tokenHash), index('payment_links_merchant_idx').on(t.merchantId)],
+);
+
+export const schema = {
+  merchants,
+  paymentProfiles,
+  paymentLinks,
+  payments,
+  paymentEvents,
+  settlements,
+  deposits,
+  withdrawals,
+};
