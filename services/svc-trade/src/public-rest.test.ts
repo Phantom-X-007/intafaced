@@ -310,6 +310,51 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/trades/:symbol?since=: passes sinceMs into publicTape', async () => {
+    let seenLimit = 0;
+    let seenSince: number | undefined = -1;
+    const app = await build(
+      deps({
+        publicTape: async (_id, limit, sinceMs) => {
+          seenLimit = limit;
+          seenSince = sinceMs;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/trades/BTC%2FUSDT?since=1700000000000&limit=50',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenLimit).toBe(50);
+    expect(seenSince).toBe(1_700_000_000_000);
+    await app.close();
+  });
+
+  it('GET /api/v1/trades/:symbol?since=: invalid (NaN / negative) → 400 without publicTape', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        publicTape: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
+    for (const since of ['nope', '-1']) {
+      called = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/trades/BTC%2FUSDT?since=${encodeURIComponent(since)}`,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('InvalidSince');
+      expect(called).toBe(false);
+    }
+    await app.close();
+  });
+
   it('GET /api/v1/tickers returns a record of tickers keyed by symbol', async () => {
     const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
     const app = await build(

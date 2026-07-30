@@ -79,7 +79,7 @@ registerPublicRest(app, {
   markets: () => trade.markets(),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   depth: (marketId, limit) => matching.depth(marketId, limit),
-  publicTape: (marketId, limit) => trade.publicTape(marketId, limit),
+  publicTape: (marketId, limit, sinceMs) => trade.publicTape(marketId, limit, sinceMs),
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
@@ -94,7 +94,7 @@ registerPrivateRest(app, {
   placeOrder: (principal, input) => trade.placeOrder(principal, input),
   cancelOrder: (principal, orderId) => trade.cancelOrder(principal, orderId),
   cancelAllOrders: (principal, marketId) => trade.cancelAllOrders(principal, marketId),
-  myFills: (principal, limit, marketId) => trade.myFills(principal, limit, marketId),
+  myFills: (principal, limit, marketId, sinceMs) => trade.myFills(principal, limit, marketId, sinceMs),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   marketById: (marketId) => trade.marketById(marketId),
   markets: () => trade.markets(),

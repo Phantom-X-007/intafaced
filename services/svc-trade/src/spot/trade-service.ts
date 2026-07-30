@@ -1045,26 +1045,55 @@ export class TradeService {
     return rows.map(toOrder);
   }
 
-  /** Terminal orders for the principal (filled / cancelled / rejected / expired). */
-  async orderHistory(principal: Principal, input: { marketId?: string; limit?: number } = {}): Promise<OrderRecord[]> {
+  /**
+   * Terminal orders for the principal (filled / cancelled / rejected / expired).
+   * Optional `sinceMs` (unix ms) is applied in SQL on `orders.created_at >= since`
+   * (CCXT convention). `created_at` is timestamptz — convert ms via `Date`.
+   */
+  async orderHistory(
+    principal: Principal,
+    input: { marketId?: string; limit?: number; sinceMs?: number } = {},
+  ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
-    const rows = input.marketId
-      ? await this.sql<OrderRow[]>`
-          SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId}
-             AND market_id = ${input.marketId}
-             AND status IN ('filled', 'cancelled', 'rejected', 'expired')
-           ORDER BY created_at DESC
-           LIMIT ${limit}
-        `
-      : await this.sql<OrderRow[]>`
-          SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId}
-             AND status IN ('filled', 'cancelled', 'rejected', 'expired')
-           ORDER BY created_at DESC
-           LIMIT ${limit}
-        `;
+    // timestamptz compare: Date carries ms precision into postgres.js.
+    const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
+    const rows =
+      input.marketId && sinceDate
+        ? await this.sql<OrderRow[]>`
+            SELECT * FROM trade.orders
+             WHERE user_id = ${principal.userId}
+               AND market_id = ${input.marketId}
+               AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+               AND created_at >= ${sinceDate}
+             ORDER BY created_at DESC
+             LIMIT ${limit}
+          `
+        : input.marketId
+          ? await this.sql<OrderRow[]>`
+              SELECT * FROM trade.orders
+               WHERE user_id = ${principal.userId}
+                 AND market_id = ${input.marketId}
+                 AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+               ORDER BY created_at DESC
+               LIMIT ${limit}
+            `
+          : sinceDate
+            ? await this.sql<OrderRow[]>`
+                SELECT * FROM trade.orders
+                 WHERE user_id = ${principal.userId}
+                   AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+                   AND created_at >= ${sinceDate}
+                 ORDER BY created_at DESC
+                 LIMIT ${limit}
+              `
+            : await this.sql<OrderRow[]>`
+                SELECT * FROM trade.orders
+                 WHERE user_id = ${principal.userId}
+                   AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+                 ORDER BY created_at DESC
+                 LIMIT ${limit}
+              `;
     return rows.map(toOrder);
   }
 
@@ -1072,21 +1101,40 @@ export class TradeService {
    * User fills, newest first. Optional `marketId` pushes the symbol filter into
    * SQL (`fills.market_id`) so a per-market limit is honest — not a post-filter
    * of a user-wide page that can under-fill the limit.
+   * Optional `sinceMs` (unix ms) filters `fills.ts >= since` in SQL (CCXT).
+   * `ts` is timestamptz — convert ms via `Date`, never raw int compare.
    */
-  async myFills(principal: Principal, limit = 100, marketId?: string): Promise<FillRecord[]> {
+  async myFills(principal: Principal, limit = 100, marketId?: string, sinceMs?: number): Promise<FillRecord[]> {
     requireScope(principal, 'trade:read');
     const capped = Math.min(Math.max(limit, 1), 500);
-    const rows = marketId
-      ? await this.sql<FillRow[]>`
-          SELECT * FROM trade.fills
-           WHERE user_id = ${principal.userId} AND market_id = ${marketId}
-           ORDER BY ts DESC LIMIT ${capped}
-        `
-      : await this.sql<FillRow[]>`
-          SELECT * FROM trade.fills
-           WHERE user_id = ${principal.userId}
-           ORDER BY ts DESC LIMIT ${capped}
-        `;
+    const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
+    const rows =
+      marketId && sinceDate
+        ? await this.sql<FillRow[]>`
+            SELECT * FROM trade.fills
+             WHERE user_id = ${principal.userId}
+               AND market_id = ${marketId}
+               AND ts >= ${sinceDate}
+             ORDER BY ts DESC LIMIT ${capped}
+          `
+        : marketId
+          ? await this.sql<FillRow[]>`
+              SELECT * FROM trade.fills
+               WHERE user_id = ${principal.userId} AND market_id = ${marketId}
+               ORDER BY ts DESC LIMIT ${capped}
+            `
+          : sinceDate
+            ? await this.sql<FillRow[]>`
+                SELECT * FROM trade.fills
+                 WHERE user_id = ${principal.userId}
+                   AND ts >= ${sinceDate}
+                 ORDER BY ts DESC LIMIT ${capped}
+              `
+            : await this.sql<FillRow[]>`
+                SELECT * FROM trade.fills
+                 WHERE user_id = ${principal.userId}
+                 ORDER BY ts DESC LIMIT ${capped}
+              `;
     return rows.map(toFill);
   }
 
@@ -1136,27 +1184,38 @@ export class TradeService {
    * One print per match — the taker leg only — so the tape is not doubled.
    * User ids and order ids are intentionally omitted; this is the public print,
    * not `myFills`. Empty market → empty array (honest 200, not an error).
+   * Optional `sinceMs` filters `fills.ts >= since` in SQL (timestamptz via Date).
    */
-  async publicTape(marketId: string, limit = 100): Promise<PublicTapePrint[]> {
+  async publicTape(marketId: string, limit = 100, sinceMs?: number): Promise<PublicTapePrint[]> {
     const capped = Math.min(Math.max(Math.floor(limit), 1), 500);
-    const rows = await this.sql<
-      Array<{
-        id: string;
-        side: OrderSide;
-        price: string;
-        qty: string;
-        quote_amount: string;
-        sequence: number;
-        ts: Date;
-      }>
-    >`
-      SELECT id, side, price, qty, quote_amount, sequence, ts
-        FROM trade.fills
-       WHERE market_id = ${marketId}
-         AND liquidity = 'taker'
-       ORDER BY sequence DESC
-       LIMIT ${capped}
-    `;
+    const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
+    type TapeRow = {
+      id: string;
+      side: OrderSide;
+      price: string;
+      qty: string;
+      quote_amount: string;
+      sequence: number;
+      ts: Date;
+    };
+    const rows = sinceDate
+      ? await this.sql<TapeRow[]>`
+          SELECT id, side, price, qty, quote_amount, sequence, ts
+            FROM trade.fills
+           WHERE market_id = ${marketId}
+             AND liquidity = 'taker'
+             AND ts >= ${sinceDate}
+           ORDER BY sequence DESC
+           LIMIT ${capped}
+        `
+      : await this.sql<TapeRow[]>`
+          SELECT id, side, price, qty, quote_amount, sequence, ts
+            FROM trade.fills
+           WHERE market_id = ${marketId}
+             AND liquidity = 'taker'
+           ORDER BY sequence DESC
+           LIMIT ${capped}
+        `;
     return rows.map((row) => ({
       id: row.id,
       side: row.side,

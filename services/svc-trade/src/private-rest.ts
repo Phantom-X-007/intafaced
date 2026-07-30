@@ -21,12 +21,12 @@ import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderS
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET    /api/v1/orders/open     scope: trade:read
- *   GET    /api/v1/orders/closed   scope: trade:read
+ *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
- *   GET    /api/v1/account/trades  scope: trade:read
+ *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (honest [] until trade.futures)
@@ -56,14 +56,17 @@ export interface PrivateRestDeps {
   edgeSecret: string;
   serviceName: string;
   openOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
-  orderHistory(principal: Principal, input: { marketId?: string; limit?: number }): Promise<OrderRecord[]>;
+  orderHistory(principal: Principal, input: { marketId?: string; limit?: number; sinceMs?: number }): Promise<OrderRecord[]>;
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   placeOrder(principal: Principal, input: PlaceOrderInput): Promise<OrderRecord>;
   cancelOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   /** Cancel every open/pending order (optional market). Sequential money path. */
   cancelAllOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
-  /** Optional marketId filters fills in SQL (WHERE market_id = …). */
-  myFills(principal: Principal, limit: number, marketId?: string): Promise<FillRecord[]>;
+  /**
+   * Optional marketId filters fills in SQL (WHERE market_id = …).
+   * Optional sinceMs (unix ms) filters fills.ts >= since in SQL.
+   */
+  myFills(principal: Principal, limit: number, marketId?: string, sinceMs?: number): Promise<FillRecord[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   /** Resolve symbol for an order's marketId (wire needs the unified form). */
   marketById(marketId: string): Promise<Market | null>;
@@ -258,6 +261,19 @@ function parseLimit(raw: unknown, fallback: number, max: number): number {
 }
 
 /**
+ * Optional CCXT `since` (unix ms). Absent/empty → no filter.
+ * NaN or negative → invalid (caller returns 400). Zero is valid (epoch).
+ */
+export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, sinceMs: undefined };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    return { ok: false, message: 'since must be a non-negative unix timestamp in milliseconds' };
+  }
+  return { ok: true, sinceMs: Math.floor(n) };
+}
+
+/**
  * Map CCXT create body → PlaceOrderInput (decimal strings → Amount).
  * Only market/limit; postOnly becomes tif PO when no other tif is set.
  */
@@ -423,76 +439,95 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
-  app.get<{ Querystring: { symbol?: string; limit?: string } }>('/api/v1/orders/closed', async (req, reply) => {
-    const principal = requirePrincipal(req, reply);
-    if (!principal) return;
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>(
+    '/api/v1/orders/closed',
+    async (req, reply) => {
+      const principal = requirePrincipal(req, reply);
+      if (!principal) return;
 
-    let marketId: string | undefined;
-    const symbolRaw = req.query.symbol;
-    if (symbolRaw !== undefined && symbolRaw !== '') {
-      const symbol = decodeURIComponent(symbolRaw);
-      const market = await deps.marketBySymbol(symbol);
-      if (!market) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
-      }
-      marketId = market.id;
-    }
-    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
-
-    try {
-      const orders = await deps.orderHistory(principal, { marketId, limit });
-      const symbolByMarket = new Map<string, string>();
-      const wire = [];
-      for (const order of orders) {
-        const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
-        wire.push(presentCcxtOrder(order, symbol));
-      }
-      return reply.code(200).send(wire);
-    } catch (err) {
-      const sent = sendDomainError(reply, err);
-      if (sent) return sent;
-      throw err;
-    }
-  });
-
-  app.get<{ Querystring: { symbol?: string; limit?: string } }>('/api/v1/account/trades', async (req, reply) => {
-    const principal = requirePrincipal(req, reply);
-    if (!principal) return;
-
-    const limit = parseLimit(req.query.limit, DEFAULT_FILLS, MAX_FILLS);
-    let filterMarketId: string | undefined;
-    const symbolRaw = req.query.symbol;
-    if (symbolRaw !== undefined && symbolRaw !== '') {
-      const symbol = decodeURIComponent(symbolRaw);
-      const market = await deps.marketBySymbol(symbol);
-      if (!market) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
-      }
-      filterMarketId = market.id;
-    }
-
-    try {
-      // Symbol resolves like open/closed orders; known market with no fills → [].
-      // Filter is SQL via myFills(…, marketId), not a post-filter of a user-wide page.
-      const fills = await deps.myFills(principal, limit, filterMarketId);
-      const symbolByMarket = new Map<string, string>();
-      const wire = [];
-      for (const fill of fills) {
-        let symbol = symbolByMarket.get(fill.marketId);
-        if (symbol === undefined) {
-          const market = await deps.marketById(fill.marketId);
-          symbol = market?.symbol ?? fill.marketId;
-          symbolByMarket.set(fill.marketId, symbol);
+      let marketId: string | undefined;
+      const symbolRaw = req.query.symbol;
+      if (symbolRaw !== undefined && symbolRaw !== '') {
+        const symbol = decodeURIComponent(symbolRaw);
+        const market = await deps.marketBySymbol(symbol);
+        if (!market) {
+          return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
         }
-        wire.push(presentCcxtMyTrade(fill, symbol));
+        marketId = market.id;
       }
-      return reply.code(200).send(wire);
-    } catch (err) {
-      const sent = sendDomainError(reply, err);
-      if (sent) return sent;
-      throw err;
-    }
-  });
+      const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+      const sinceParsed = parseSince(req.query.since);
+      if (!sinceParsed.ok) {
+        return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
+      }
+
+      try {
+        // since → SQL on orders.created_at (timestamptz) via orderHistory.sinceMs.
+        const orders = await deps.orderHistory(principal, {
+          marketId,
+          limit,
+          sinceMs: sinceParsed.sinceMs,
+        });
+        const symbolByMarket = new Map<string, string>();
+        const wire = [];
+        for (const order of orders) {
+          const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
+          wire.push(presentCcxtOrder(order, symbol));
+        }
+        return reply.code(200).send(wire);
+      } catch (err) {
+        const sent = sendDomainError(reply, err);
+        if (sent) return sent;
+        throw err;
+      }
+    },
+  );
+
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>(
+    '/api/v1/account/trades',
+    async (req, reply) => {
+      const principal = requirePrincipal(req, reply);
+      if (!principal) return;
+
+      const limit = parseLimit(req.query.limit, DEFAULT_FILLS, MAX_FILLS);
+      const sinceParsed = parseSince(req.query.since);
+      if (!sinceParsed.ok) {
+        return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
+      }
+      let filterMarketId: string | undefined;
+      const symbolRaw = req.query.symbol;
+      if (symbolRaw !== undefined && symbolRaw !== '') {
+        const symbol = decodeURIComponent(symbolRaw);
+        const market = await deps.marketBySymbol(symbol);
+        if (!market) {
+          return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+        }
+        filterMarketId = market.id;
+      }
+
+      try {
+        // Symbol + since resolve in SQL via myFills (fills.market_id, fills.ts),
+        // not a post-filter of a user-wide page.
+        const fills = await deps.myFills(principal, limit, filterMarketId, sinceParsed.sinceMs);
+        const symbolByMarket = new Map<string, string>();
+        const wire = [];
+        for (const fill of fills) {
+          let symbol = symbolByMarket.get(fill.marketId);
+          if (symbol === undefined) {
+            const market = await deps.marketById(fill.marketId);
+            symbol = market?.symbol ?? fill.marketId;
+            symbolByMarket.set(fill.marketId, symbol);
+          }
+          wire.push(presentCcxtMyTrade(fill, symbol));
+        }
+        return reply.code(200).send(wire);
+      } catch (err) {
+        const sent = sendDomainError(reply, err);
+        if (sent) return sent;
+        throw err;
+      }
+    },
+  );
 
   /**
    * Published maker/taker from `trade.markets`. No ledger, no rank perk

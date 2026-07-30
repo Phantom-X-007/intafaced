@@ -787,6 +787,99 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /account/trades?since=: passes sinceMs into myFills (SQL filter)', async () => {
+    let seenSince: number | undefined = -1;
+    let seenMarket: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, marketId, sinceMs) => {
+          seenMarket = marketId;
+          seenSince = sinceMs;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?since=1700000000000&symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenSince).toBe(1_700_000_000_000);
+    expect(seenMarket).toBe(market.id);
+    expect(res.json()).toHaveLength(1);
+    await app.close();
+  });
+
+  it('GET /account/trades?since=: invalid (NaN / negative) → 400 without myFills', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        myFills: async () => {
+          listed = true;
+          return [fill];
+        },
+      }),
+    );
+    for (const since of ['not-a-number', '-1', 'NaN']) {
+      listed = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/account/trades?since=${encodeURIComponent(since)}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('InvalidSince');
+      expect(listed).toBe(false);
+    }
+    await app.close();
+  });
+
+  it('GET /orders/closed?since=: passes sinceMs into orderHistory', async () => {
+    let seen: { marketId?: string; limit?: number; sinceMs?: number } | null = null;
+    const app = await build(
+      deps({
+        orderHistory: async (_p, input) => {
+          seen = input;
+          return [closed];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?since=1700000000000&symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual({ marketId: market.id, limit: 100, sinceMs: 1_700_000_000_000 });
+    expect(res.json()).toHaveLength(1);
+    await app.close();
+  });
+
+  it('GET /orders/closed?since=: invalid (NaN / negative) → 400 without orderHistory', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        orderHistory: async () => {
+          listed = true;
+          return [closed];
+        },
+      }),
+    );
+    for (const since of ['abc', '-5']) {
+      listed = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/orders/closed?since=${encodeURIComponent(since)}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('InvalidSince');
+      expect(listed).toBe(false);
+    }
+    await app.close();
+  });
+
   // ── DELETE /orders (cancel all — money path) ──────────────────────────────
 
   it('DELETE /orders: forged principal never reaches cancelAllOrders', async () => {
