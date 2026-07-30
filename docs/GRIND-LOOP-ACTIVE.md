@@ -3,15 +3,16 @@
 **Status:** **O1+O2 OVERNIGHT** · backend micro-queue still **DRAINED** (do not invent Denon product) · **O1 babysit** + **O2 Stream A / hygiene** only  
 **Operator decision:** 2026-07-30 Nitro chose **O1+O2** (see `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`)  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
-**Last tip:** high water through **#221** (CI fix for #217/#218 artefacts) + **#218** (indexer read models / real chain) + **#217** (token factory on dev chain) + **#216** blueprint card · do not re-ship **#110–#221** · CI live on tip
+**Last tip:** high water through **#220** (bank shell loans UI) + **#221** (CI fix) + **#219** (O1+O2 law) + Denon spine **#207–#218** · do not re-ship **#110–#221** · CI **SUCCESS** on tip `2e0bb87`
 
 ```
-STATUS 2026-07-30T14:20Z
-tip: 2f6ab47 #221 (post #217/#218 CI fix)
-open PRs: (re-check live)
-merged this fire: law PR (this update) pending
+STATUS 2026-07-30T15:10Z
+tip: 2e0bb87 #220
+open PRs: (re-check live — was zero at fire start)
+merged this fire: hygiene wave-audit + high water (this PR); Stream A spine-surfaces sibling
 money holds: default NO Nitro merge on money paths
-next: O1 babysit · O2 stream-a / tracker honesty
+CI tip: SUCCESS (Actions after #220)
+next: O1 babysit · merge Class N Stream A · no Denon invent
 ```
 
 ---
