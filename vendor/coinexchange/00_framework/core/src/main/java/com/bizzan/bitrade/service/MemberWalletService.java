@@ -466,22 +466,9 @@ public class MemberWalletService extends BaseService {
                 "unfreezeLess is disabled: Java shell must not mass-credit balances (INTAFACED residual)");
     }
 
-    /** Disabled 2026-07-29 — upstream mass +500 balance credit. */
-    public int unfreezeMore(){
-        throw new IllegalStateException(
-                "unfreezeMore is disabled: Java shell must not mass-credit balances (INTAFACED residual)");
-    }
-    
-    
 //    public int initSuperPaterner(long memberId){
 //        return memberWalletDao.initSuperPaterner(memberId);
 //    }
-    
-    /** Disabled 2026-07-29 — upstream TRUNCATE of wallet snapshot tables. */
-    public int dropWeekTable(int weekDay){
-        throw new IllegalStateException(
-                "dropWeekTable is disabled: Java shell must not TRUNCATE wallet tables (INTAFACED residual)");
-    }
 
     /** Disabled 2026-07-29 — snapshot copy of live wallets. */
     public int createWeekTable(int weekDay){
