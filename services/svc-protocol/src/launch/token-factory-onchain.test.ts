@@ -388,17 +388,21 @@ describe.skipIf(!reachable)('the predicted address is where the token actually l
     const token = computeTokenAddress({ factory, creator: clients.deployer, userSalt, params });
     await launch(userSalt, params);
 
-    expect(((await clients.publicClient.readContract({
-      address: factory,
-      abi,
-      functionName: 'creatorOf',
-      args: [token],
-    })) as string).toLowerCase()).toBe(clients.deployer.toLowerCase());
+    expect(
+      (
+        (await clients.publicClient.readContract({
+          address: factory,
+          abi,
+          functionName: 'creatorOf',
+          args: [token],
+        })) as string
+      ).toLowerCase(),
+    ).toBe(clients.deployer.toLowerCase());
 
     // The factory itself was not launched through the factory.
-    expect(
-      await clients.publicClient.readContract({ address: factory, abi, functionName: 'creatorOf', args: [factory] }),
-    ).toBe('0x0000000000000000000000000000000000000000');
+    expect(await clients.publicClient.readContract({ address: factory, abi, functionName: 'creatorOf', args: [factory] })).toBe(
+      '0x0000000000000000000000000000000000000000',
+    );
   }, 60_000);
 
   /**
