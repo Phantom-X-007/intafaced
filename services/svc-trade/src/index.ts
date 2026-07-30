@@ -82,7 +82,7 @@ registerPublicRest(app, {
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
-// Create/cancel are the money path: they call TradeService only (no second hold).
+// Create/cancel/cancelAll are the money path: TradeService only (no second hold).
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
@@ -91,9 +91,11 @@ registerPrivateRest(app, {
   getOrder: (principal, orderId) => trade.getOrder(principal, orderId),
   placeOrder: (principal, input) => trade.placeOrder(principal, input),
   cancelOrder: (principal, orderId) => trade.cancelOrder(principal, orderId),
+  cancelAllOrders: (principal, marketId) => trade.cancelAllOrders(principal, marketId),
   myFills: (principal, limit) => trade.myFills(principal, limit),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   marketById: (marketId) => trade.marketById(marketId),
+  markets: () => trade.markets(),
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -113,11 +115,13 @@ app.log.info(
     publicRest: ['/api/v1/markets', '/api/v1/orderbook/:symbol', '/api/v1/ticker/:symbol', '/api/v1/tickers', '/api/v1/trades/:symbol'],
     privateRest: [
       'POST /api/v1/orders',
+      'DELETE /api/v1/orders',
       'DELETE /api/v1/orders/:id',
       'GET /api/v1/orders/:id',
       'GET /api/v1/orders/open',
       'GET /api/v1/orders/closed',
       'GET /api/v1/account/trades',
+      'GET /api/v1/account/fees',
     ],
   },
   'svc-trade ready',

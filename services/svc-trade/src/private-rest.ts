@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { AuthError, type Principal } from '@intafaced/auth';
+import { AuthError, requireScope, type Principal } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext, type Context, type EdgeRequest } from '@intafaced/contracts';
 import { createOrderRequestSchema, type CreateOrderRequest } from '@intafaced/exchange-contract';
@@ -16,15 +16,17 @@ import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderS
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
+ *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
  *   GET    /api/v1/account/trades  scope: trade:read
+ *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *
  * Auth is the mount boundary: edge terminates the bearer (JWT or API key) and
  * forwards a signed principal on every `/api/*` hop. This service never parses
  * the caller's token — it verifies the edge signature via `createEdgeContext`,
  * exactly like the tRPC mount. A self-asserted principal header is anonymous.
  *
- * Money path: create/cancel call `TradeService.placeOrder` / `cancelOrder`
- * only — no second hold path, no balances outside the ledger.
+ * Money path: create/cancel/cancelAll call TradeService only — no second hold
+ * path, no balances outside the ledger.
  */
 
 const DEFAULT_HISTORY = 100;
@@ -46,10 +48,17 @@ export interface PrivateRestDeps {
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   placeOrder(principal: Principal, input: PlaceOrderInput): Promise<OrderRecord>;
   cancelOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
+  /** Cancel every open/pending order (optional market). Sequential money path. */
+  cancelAllOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
   myFills(principal: Principal, limit: number): Promise<FillRecord[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   /** Resolve symbol for an order's marketId (wire needs the unified form). */
   marketById(marketId: string): Promise<Market | null>;
+  /**
+   * All listed markets — source of published maker/taker bps for
+   * `GET /account/fees`. Empty list → honest `{}` on the wire.
+   */
+  markets(): Promise<Market[]>;
 }
 
 /** Map internal order status → CCXT `orderSchema.status`. */
@@ -114,6 +123,34 @@ export function bpsToFeeRate(bps: number): string {
   const frac = bps % 10_000;
   if (frac === 0) return String(whole);
   return `${whole}.${String(frac).padStart(4, '0')}`.replace(/0+$/, '');
+}
+
+/**
+ * CCXT `TradingFee` from a market's published maker/taker bps.
+ * `percentage: true` — maker/taker are rate fractions (10 bps → "0.001").
+ * Rank/IFC effective rates are not applied here; bots re-read after fills.
+ */
+export function presentCcxtTradingFee(market: Market) {
+  return {
+    symbol: market.symbol,
+    maker: bpsToFeeRate(market.makerBps),
+    taker: bpsToFeeRate(market.takerBps),
+    percentage: true as const,
+  };
+}
+
+/**
+ * Build `Record<symbol, TradingFee>` from markets that expose integer bps.
+ * Markets without usable rates are skipped; zero markets → `{}` (honest empty).
+ */
+export function presentTradingFees(markets: Market[]): Record<string, ReturnType<typeof presentCcxtTradingFee>> {
+  const out: Record<string, ReturnType<typeof presentCcxtTradingFee>> = {};
+  for (const market of markets) {
+    if (!Number.isInteger(market.makerBps) || market.makerBps < 0) continue;
+    if (!Number.isInteger(market.takerBps) || market.takerBps < 0) continue;
+    out[market.symbol] = presentCcxtTradingFee(market);
+  }
+  return out;
 }
 
 /**
@@ -385,6 +422,27 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
+  /**
+   * Published maker/taker from `trade.markets`. No ledger, no rank perk
+   * personalization — same numbers as public market.taker/maker. Empty
+   * listing (or no usable bps) → `{}`, never a fabricated schedule.
+   */
+  app.get('/api/v1/account/fees', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      // Contract scope trade:read — markets() itself is public data; gate here.
+      requireScope(principal, 'trade:read');
+      const listed = await deps.markets();
+      return reply.code(200).send(presentTradingFees(listed));
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
   // ── Create (money path) ───────────────────────────────────────────────────
 
   app.post('/api/v1/orders', async (req, reply) => {
@@ -415,6 +473,45 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const market = await deps.marketById(order.marketId);
       const symbol = market?.symbol ?? parsed.data.symbol;
       return reply.code(201).send(presentCcxtOrder(order, symbol));
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  // ── Cancel all (static path — before :id is fine; Fastify matches exact) ──
+
+  /**
+   * DELETE /api/v1/orders[?symbol=] → TradeService.cancelAllOrders.
+   * Same money path as single cancel (engine first, finalize second), sequential.
+   * trade:write is enforced inside TradeService; jurisdiction here matches create/cancel.
+   */
+  app.delete<{ Querystring: { symbol?: string } }>('/api/v1/orders', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    let marketId: string | undefined;
+    const symbolRaw = req.query.symbol;
+    if (symbolRaw !== undefined && symbolRaw !== '') {
+      const symbol = decodeURIComponent(symbolRaw);
+      const market = await deps.marketBySymbol(symbol);
+      if (!market) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+      }
+      marketId = market.id;
+    }
+
+    try {
+      const cancelled = await deps.cancelAllOrders(principal, marketId);
+      const symbolByMarket = new Map<string, string>();
+      const wire = [];
+      for (const order of cancelled) {
+        const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
+        wire.push(presentCcxtOrder(order, symbol));
+      }
+      return reply.code(200).send(wire);
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;

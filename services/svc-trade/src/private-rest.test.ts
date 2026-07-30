@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import type { Principal } from '@intafaced/auth';
 import { AuthError } from '@intafaced/auth';
 import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { orderSchema, tradeSchema } from '@intafaced/exchange-contract';
+import { orderSchema, tradeSchema, tradingFeeSchema } from '@intafaced/exchange-contract';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
   fakeFill,
@@ -11,6 +11,8 @@ import {
   mapCreateOrderBody,
   presentCcxtMyTrade,
   presentCcxtOrder,
+  presentCcxtTradingFee,
+  presentTradingFees,
   registerPrivateRest,
   toCcxtOrderStatus,
   type PrivateRestDeps,
@@ -53,7 +55,7 @@ function signedHeaders(p: Principal = principal(), region = 'DE'): Record<string
   };
 }
 
-describe('toCcxtOrderStatus / presentCcxtOrder / presentCcxtMyTrade', () => {
+describe('toCcxtOrderStatus / presentCcxtOrder / presentCcxtMyTrade / fees', () => {
   it('maps internal statuses onto the CCXT order schema vocabulary', () => {
     expect(toCcxtOrderStatus('pending')).toBe('open');
     expect(toCcxtOrderStatus('open')).toBe('open');
@@ -97,6 +99,24 @@ describe('toCcxtOrderStatus / presentCcxtOrder / presentCcxtMyTrade', () => {
     expect(wire.amount).toBe('1.2');
     expect(wire.fee?.rate).toBe('0.001');
     expect(typeof wire.cost).toBe('string');
+  });
+
+  it('presents TradingFee from market maker/taker bps (decimal rates, percentage true)', () => {
+    const m = fakeMarket({ symbol: 'BTC/USDT', makerBps: 10, takerBps: 20 });
+    const wire = presentCcxtTradingFee(m);
+    expect(tradingFeeSchema.safeParse(wire).success).toBe(true);
+    expect(wire.maker).toBe('0.001');
+    expect(wire.taker).toBe('0.002');
+    expect(wire.percentage).toBe(true);
+    expect(typeof wire.maker).toBe('string');
+  });
+
+  it('presentTradingFees keys by symbol and returns {} when listing is empty', () => {
+    expect(presentTradingFees([])).toEqual({});
+    const m = fakeMarket({ symbol: 'ETH/USDT', makerBps: 5, takerBps: 15 });
+    const fees = presentTradingFees([m]);
+    expect(Object.keys(fees)).toEqual(['ETH/USDT']);
+    expect(tradingFeeSchema.safeParse(fees['ETH/USDT']).success).toBe(true);
   });
 });
 
@@ -179,9 +199,11 @@ describe('private REST — mount boundary + order write path', () => {
       getOrder: async () => open,
       placeOrder: async () => open,
       cancelOrder: async () => ({ ...open, status: 'cancelled' }),
+      cancelAllOrders: async () => [{ ...open, status: 'cancelled' }],
       myFills: async () => [fill],
       marketBySymbol: async (symbol) => (symbol === 'BTC/USDT' ? market : null),
       marketById: async (id) => (id === market.id ? market : null),
+      markets: async () => [market],
       ...overrides,
     };
   }
@@ -614,6 +636,154 @@ describe('private REST — mount boundary + order write path', () => {
     expect(body).toHaveLength(1);
     expect(tradeSchema.safeParse(body[0]).success).toBe(true);
     expect(typeof (body[0] as { price: string }).price).toBe('string');
+    await app.close();
+  });
+
+  // ── DELETE /orders (cancel all — money path) ──────────────────────────────
+
+  it('DELETE /orders: forged principal never reaches cancelAllOrders', async () => {
+    let cancelled = false;
+    const app = await build(
+      deps({
+        cancelAllOrders: async () => {
+          cancelled = true;
+          return [];
+        },
+      }),
+    );
+    const forged = encodePrincipal(principal({ scopes: ['trade:write'], tier: 'full', mfa: true }));
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/orders',
+      headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(cancelled).toBe(false);
+    await app.close();
+  });
+
+  it('DELETE /orders: signed cancel-all returns CCXT canceled order list', async () => {
+    let seenUser: string | null = null;
+    let seenMarket: string | undefined = 'unset';
+    const app = await build(
+      deps({
+        cancelAllOrders: async (p, marketId) => {
+          seenUser = p.userId;
+          seenMarket = marketId;
+          return [{ ...open, status: 'cancelled' }];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/orders',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenUser).toBe(USER);
+    expect(seenMarket).toBeUndefined();
+    const body = res.json() as unknown[];
+    expect(body).toHaveLength(1);
+    expect(orderSchema.safeParse(body[0]).success).toBe(true);
+    expect((body[0] as { status: string }).status).toBe('canceled');
+    await app.close();
+  });
+
+  it('DELETE /orders?symbol=: filters market; unknown symbol → 404 without cancelAll', async () => {
+    let seenMarket: string | undefined = 'unset';
+    let cancelled = false;
+    const app = await build(
+      deps({
+        cancelAllOrders: async (_p, marketId) => {
+          cancelled = true;
+          seenMarket = marketId;
+          return [];
+        },
+      }),
+    );
+    const ok = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/orders?symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(cancelled).toBe(true);
+    expect(seenMarket).toBe(market.id);
+
+    cancelled = false;
+    const miss = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/orders?symbol=NOPE%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(miss.statusCode).toBe(404);
+    expect(miss.json().code).toBe('MarketNotFound');
+    expect(cancelled).toBe(false);
+    await app.close();
+  });
+
+  it('DELETE /orders: empty open book returns [] (honest empty)', async () => {
+    const app = await build(deps({ cancelAllOrders: async () => [] }));
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/orders',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  // ── GET /account/fees ─────────────────────────────────────────────────────
+
+  it('GET /account/fees: forged → 401; never lists markets', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+      }),
+    );
+    const forged = encodePrincipal(principal({ scopes: ['trade:read'] }));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/fees',
+      headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
+  it('GET /account/fees: signed returns per-symbol TradingFee from market bps', async () => {
+    const rich = fakeMarket({ id: market.id, symbol: 'BTC/USDT', makerBps: 10, takerBps: 20 });
+    const app = await build(deps({ markets: async () => [rich] }));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/fees',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body['BTC/USDT']).toBeDefined();
+    expect(tradingFeeSchema.safeParse(body['BTC/USDT']).success).toBe(true);
+    expect((body['BTC/USDT'] as { maker: string; taker: string }).maker).toBe('0.001');
+    expect((body['BTC/USDT'] as { taker: string }).taker).toBe('0.002');
+    expect(typeof (body['BTC/USDT'] as { maker: string }).maker).toBe('string');
+    await app.close();
+  });
+
+  it('GET /account/fees: empty markets → honest empty object', async () => {
+    const app = await build(deps({ markets: async () => [] }));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/fees',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({});
     await app.close();
   });
 });
