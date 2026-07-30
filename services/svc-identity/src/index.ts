@@ -8,11 +8,14 @@ import { AuthService } from './auth/auth-service.js';
 import { RankService } from './rank/rank-service.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
+import { subscribeBlueprintProfileEvents } from './events.js';
 
 /**
  * svc-identity — one account, one verification, one rank (§4.1).
  *
  * Graph W1-C: mount tRPC; verify edge-signed principal (mount-boundary #48).
+ * Blueprint cascade: subscribe to blueprintCreated/Deleted so profiles.blueprint_id
+ * tracks svc-blueprint without writing across service tables (§2 / §7.2).
  */
 
 if (env.APP_ENV === 'prod') await assertArgon2Available();
@@ -37,6 +40,9 @@ const bus = await JetStreamEventBus.connect({
 
 const rank = new RankService(sql, bus);
 await rank.seedTiers();
+
+/** §7.2 cascade — must be wired before traffic; durable consumers catch up on restart. */
+const blueprintSubs = await subscribeBlueprintProfileEvents(bus, sql);
 
 const auth = new AuthService(
   sql,
@@ -105,6 +111,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       await app.close();
+      await Promise.all(blueprintSubs.map((s) => s.unsubscribe()));
       await bus.close();
       await sql.end({ timeout: 5 });
       process.exit(0);

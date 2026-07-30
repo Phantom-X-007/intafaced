@@ -473,9 +473,10 @@ export const FEATURES = [
   f('blueprint.ownership', 'Export + hard delete, cascading', {
     module: 'blueprint',
     phase: '4',
+    status: 'done',
     dependsOn: ['blueprint.onboarding'],
-    requires: ['services/svc-blueprint'],
-    note: "svc-blueprint's half is complete and mounted; the CASCADE is not, and the title of this feature is the cascade. Not `done` for one reason: `profiles.blueprint_id` lives in svc-identity, §2 forbids us writing it, so erase publishes `blueprintDeleted` and svc-identity is supposed to clear the field — and **no service in this repo subscribes to that event** (`grep -rn blueprintDeleted services/` finds only the catalog and svc-blueprint). The only thing proving the cascade completes is a stand-in consumer inside our own test file, which is rule 3 of `done` (nothing propped up by a mock) failing exactly as written. After an erase today a real `profiles` row keeps a `blueprint_id` pointing at a deleted Blueprint, so §7.2's \"deletion truly cascades\" is not yet true end to end. What IS true and tested against real Postgres: export follows the TABLES rather than the UI — it includes `mentoringOthers` (the shortlists this user appears ON) and excludes crewmates' profiles, who did not consent to being in someone else's export; schemaVersion 2 adds the card, so §7.2's \"export (JSON + card)\" is literally true; erase is a hard delete in one serializable transaction covering mentor rows on BOTH sides, match runs, membership, the blueprint and any crew the departure emptied; and erasing twice returns a receipt of zeroes. Done when svc-identity consumes `blueprintCreated`/`blueprintDeleted` — a one-service PR over there, not more work here.",
+    requires: ['services/svc-blueprint', 'services/svc-identity'],
+    note: '2026-07-31: cascade closed. svc-blueprint still owns erase/export; svc-identity now subscribes to blueprintCreated/blueprintDeleted and sets/clears profiles.blueprint_id (match-guarded clear so a redelivered delete cannot wipe a newer blueprint). Wired in index.ts with durable JetStream consumers + MemoryEventBus tests. Export/erase Postgres proofs already on main.',
   }),
   f('blueprint.attestations', 'On-chain rank attestations, zero PII (§19)', {
     module: 'blueprint',
