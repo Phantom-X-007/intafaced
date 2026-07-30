@@ -65,11 +65,24 @@ pnpm ui:boot
 
 ## Proof (after PR-2)
 
+One-time browser install (Chromium only):
+
 ```bash
-pnpm ui:proof
+export PLAYWRIGHT_BROWSERS_PATH="$(pwd)/.tools/ms-playwright"
+pnpm exec playwright install chromium
 ```
 
-Produces `.artifacts/uiproof/PROOF.md` and screenshots. That file is the definition of “the UI works,” not a human opening localhost.
+Then:
+
+```bash
+pnpm ui:proof
+# or: PORT=8090 pnpm ui:proof
+```
+
+Produces `.artifacts/uiproof/PROOF.md` and 10 screenshots under `.artifacts/uiproof/shots/`.  
+That file is the definition of “the UI works,” not a human opening localhost.
+
+**Agents:** never run the proof with a foreground long-lived server. `ui:proof` calls `ui:boot` (detached) first. If Chromium SEGV/EPERM in a sandboxed agent, re-run in a normal Terminal on the same machine — the harness is fine; the sandbox is not.
 
 ---
 
