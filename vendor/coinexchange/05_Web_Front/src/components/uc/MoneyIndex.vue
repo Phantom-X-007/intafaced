@@ -7,12 +7,19 @@
             <div style="width: 100%;height: 50px;">
             <div style="float:left;letter-spacing:1px;padding-top: 5px;">
                 <span style="font-size:12px;color:#8a8a8a;">{{$t('uc.finance.money.totalassets')}}</span>
-                <span style="font-size: 18px;color:#D8E1EB;">${{totalUSDT}}</span>
-                <span style="font-size:10px;color:#8a8a8a;margin-left: 5px;"> ≈ ¥{{totalCny}}</span>
+                <!-- Design bar: empty ≠ zero. Only show $ totals when wallet answered. -->
+                <span v-if="loading" class="ix-empty-loading" style="font-size: 14px;margin-left:6px;">Loading…</span>
+                <template v-else-if="walletReachable">
+                  <span class="ix-num" style="font-size: 18px;color:#D8E1EB;">${{totalUSDT}}</span>
+                  <span class="ix-num" style="font-size:10px;color:#8a8a8a;margin-left: 5px;"> ≈ ¥{{totalCny}}</span>
+                </template>
+                <span v-else class="ix-dim" style="font-size: 14px;margin-left:6px;">— unknown</span>
             </div>
-            <Input style="float:right;" class="search" search:placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
+            <Input style="float:right;" class="search" search :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
             </div>
-            <Table :columns="tableColumnsMoney" :data="tableMoneyShow" :loading="loading" :disabled-hover="true"></Table>
+            <p v-if="walletError" class="ix-empty ix-empty-error">{{ walletError }}</p>
+            <p v-else-if="!loading && walletReachable && tableMoneyShow.length === 0" class="ix-empty">No balances yet</p>
+            <Table v-if="!walletError" :columns="tableColumnsMoney" :data="tableMoneyShow" :loading="loading" :disabled-hover="true"></Table>
           </div>
         </div>
       </div>
@@ -39,6 +46,8 @@ export default {
       modal: false,
       loginmsg: this.$t("common.logintip"),
       loading: true,
+      walletReachable: false,
+      walletError: "",
       ordKeyword: "",
       tableMoney: [],
       tableMoneyShow: [],
@@ -53,19 +62,34 @@ export default {
       this.tableMoneyShow = this.tableMoney.filter(item => item["coinType"].indexOf(this.searchKey) == 0);
     },
     getMoney() {
-      this.$http.post(this.host + "/uc/asset/wallet").then(response => {
-        var resp = response.body;
-        if (resp.code == 0) {
-          this.tableMoney = resp.data;
-          for (let i = 0; i < this.tableMoney.length; i++) {
-            this.tableMoney[i]["coinType"] = this.tableMoney[i].coin.unit;
+      this.loading = true;
+      this.walletReachable = false;
+      this.walletError = "";
+      this.$http
+        .post(this.host + "/uc/asset/wallet")
+        .then(response => {
+          var resp = response.body;
+          if (resp && resp.code == 0) {
+            this.tableMoney = resp.data || [];
+            for (let i = 0; i < this.tableMoney.length; i++) {
+              this.tableMoney[i]["coinType"] = this.tableMoney[i].coin.unit;
+            }
+            this.walletReachable = true;
+            this.tableMoneyShow = this.tableMoney;
+            this.loading = false;
+          } else {
+            /* Failed fetch must not look like $0 — design bar non-negotiable. */
+            this.walletError =
+              "Wallet did not answer — totals are unknown, not zero.";
+            this.loading = false;
+            this.$Message.error(this.loginmsg);
           }
+        })
+        .catch(() => {
+          this.walletError =
+            "Wallet service did not respond — totals are unknown, not zero.";
           this.loading = false;
-          this.tableMoneyShow = this.tableMoney;
-        } else {
-          this.$Message.error(this.loginmsg);
-        }
-      });
+        });
     },
     getGCCMatchAmount() {
       this.$http
