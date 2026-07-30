@@ -213,7 +213,9 @@ export function signServiceCall(service: string, secret: string, timestamp: numb
 /** v2. Signs identity, freshness, and a digest of the exact request bytes. */
 export function signServiceCallWithBody(service: string, secret: string, timestamp: number, bodyDigest: string): string {
   assertSecret(secret, 'signServiceCallWithBody');
-  return createHmac('sha256', secret).update(serviceCallPreimage(service, timestamp, bodyDigest), 'utf8').digest('hex');
+  return createHmac('sha256', secret)
+    .update(serviceCallPreimage(service, timestamp, bodyDigest), 'utf8')
+    .digest('hex');
 }
 
 export interface ServiceAuthHeaderOptions {

@@ -284,7 +284,11 @@ describe('who can actually reach the switch', () => {
 
   it('refuses an anonymous caller', async () => {
     const h = await edge();
-    const res = await h.app.inject({ method: 'POST', url: '/admin/kill-switches', payload: { module: 'trade', disabled: true, reason: WHY } });
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/admin/kill-switches',
+      payload: { module: 'trade', disabled: true, reason: WHY },
+    });
     expect(res.statusCode).toBe(401);
     expect(h.state.isKilled('trade')).toBe(false);
   });
@@ -388,7 +392,9 @@ describe('the audit trail, read back over HTTP', () => {
   it('is operator-only — an incident timeline is not public', async () => {
     const h = await edge();
     expect((await h.app.inject({ method: 'GET', url: '/admin/kill-switches' })).statusCode).toBe(401);
-    expect((await h.app.inject({ method: 'GET', url: '/admin/kill-switches', headers: { authorization: await asUser() } })).statusCode).toBe(403);
+    expect(
+      (await h.app.inject({ method: 'GET', url: '/admin/kill-switches', headers: { authorization: await asUser() } })).statusCode,
+    ).toBe(403);
   });
 });
 
@@ -428,7 +434,12 @@ describe('the ledger freeze — the switch that halts all value movement', () =>
     const h = await edge(call);
     const auth = await asTreasury();
 
-    const res = await h.app.inject({ method: 'POST', url: '/admin/ledger/freeze', headers: { authorization: auth }, payload: { reason: WHY } });
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/admin/ledger/freeze',
+      headers: { authorization: auth },
+      payload: { reason: WHY },
+    });
     expect(res.statusCode).toBe(200);
 
     // svc-ledger writes `posting_freeze.actor` from ITS OWN verification of this
@@ -463,7 +474,12 @@ describe('the ledger freeze — the switch that halts all value movement', () =>
     const { calls, call } = stubLedger();
     const h = await edge(call);
 
-    const res = await h.app.inject({ method: 'POST', url: '/admin/ledger/post', headers: { authorization: await asTreasury() }, payload: {} });
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/admin/ledger/post',
+      headers: { authorization: await asTreasury() },
+      payload: {},
+    });
     expect(res.statusCode).toBe(404);
     expect(calls).toEqual([]);
   });

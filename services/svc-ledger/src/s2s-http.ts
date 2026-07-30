@@ -116,12 +116,7 @@ export interface S2sHttpOptions {
   bodyBind?: ServiceBodyBindMode;
 }
 
-export function registerS2sHttp(
-  app: FastifyInstance,
-  ledger: LedgerService,
-  internalSecret: string,
-  options: S2sHttpOptions = {},
-): void {
+export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, internalSecret: string, options: S2sHttpOptions = {}): void {
   const mode = options.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
 
   /**
@@ -145,10 +140,7 @@ export function registerS2sHttp(
       // The reason travels to the caller. None of them disclose secret material,
       // and `body-mismatch` versus `stale` is the difference between diagnosing
       // an incident and guessing at one.
-      throw new LedgerError(
-        `Service credentials are required on the internal ledger API (§2): ${rejected}`,
-        'ledger.unauthenticated',
-      );
+      throw new LedgerError(`Service credentials are required on the internal ledger API (§2): ${rejected}`, 'ledger.unauthenticated');
     }
 
     // THE MIGRATION SIGNAL (L2-6).

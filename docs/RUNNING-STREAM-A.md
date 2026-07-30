@@ -96,22 +96,22 @@ Produces `.artifacts/uiproof/pass3-status.txt` (`PASS3_GREEN`) and shots under `
 
 ### Performance budget (known debt)
 
-| Artefact | Note |
-| --- | --- |
-| `app.js` ~12 MB (webpack 3 cold) | Known; no new heavy deps without a budget note |
-| First usable paint | Boot readiness is `/` + `/app.js` 200 — not FCP metrics yet |
+| Artefact                         | Note                                                        |
+| -------------------------------- | ----------------------------------------------------------- |
+| `app.js` ~12 MB (webpack 3 cold) | Known; no new heavy deps without a budget note              |
+| First usable paint               | Boot readiness is `/` + `/app.js` 200 — not FCP metrics yet |
 
 ---
 
 ## Rules agents must not break
 
-| Rule                                                                    | Why                                                      |
-| ----------------------------------------------------------------------- | -------------------------------------------------------- |
-| Never `npm run dev` in the **foreground** of a chat turn                | Freezes the session (see `STREAM-A-UNSTICK-CONTINUE.md`) |
-| Never claim visual “done” without `PROOF.md` (or say **unverified**)    | Unfalsifiable glances are forbidden                      |
-| Backends-down is a valid fixture for Phase 1                            | Honesty bar / empty states are the product               |
-| Do not invent prices                                                    | S2 waits on market seed #109                             |
-| Auth empty-vs-error needs Pass 3 fixture (`ui:proof:auth`)              | Unauthenticated `/uc/*` only proves the login gate       |
+| Rule                                                                 | Why                                                      |
+| -------------------------------------------------------------------- | -------------------------------------------------------- |
+| Never `npm run dev` in the **foreground** of a chat turn             | Freezes the session (see `STREAM-A-UNSTICK-CONTINUE.md`) |
+| Never claim visual “done” without `PROOF.md` (or say **unverified**) | Unfalsifiable glances are forbidden                      |
+| Backends-down is a valid fixture for Phase 1                         | Honesty bar / empty states are the product               |
+| Do not invent prices                                                 | S2 waits on market seed #109                             |
+| Auth empty-vs-error needs Pass 3 fixture (`ui:proof:auth`)           | Unauthenticated `/uc/*` only proves the login gate       |
 
 ---
 

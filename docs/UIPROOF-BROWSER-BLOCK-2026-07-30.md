@@ -2,13 +2,13 @@
 
 ## B1–B5 — GREEN (outside-sandbox session)
 
-| Gate | Result |
-| --- | --- |
-| B1 `ui:proof` | **PASS** — PROOF.md Overall PASS |
-| B2 screenshots | **10/10** under `.artifacts/uiproof/shots/` |
-| B3 `/uc/account` login gate | **PASS** |
-| B4 canary | **PASS** — red then revert then re-green (`b1b5-status.txt`: `ALL_GREEN B1-B5`) |
-| B5 fleet down | **PASS** (backends down during run) |
+| Gate                        | Result                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| B1 `ui:proof`               | **PASS** — PROOF.md Overall PASS                                                |
+| B2 screenshots              | **10/10** under `.artifacts/uiproof/shots/`                                     |
+| B3 `/uc/account` login gate | **PASS**                                                                        |
+| B4 canary                   | **PASS** — red then revert then re-green (`b1b5-status.txt`: `ALL_GREEN B1-B5`) |
+| B5 fleet down               | **PASS** (backends down during run)                                             |
 
 Artefacts: `.artifacts/uiproof/PROOF.md`, `b1b5-run.log`, `b1b5-status.txt`.
 

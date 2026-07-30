@@ -168,9 +168,7 @@ export function registerRoutes(
     const { service, rejected, scheme } = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode });
 
     if (!service) {
-      throw new MatchingAuthError(
-        `Order writes are callable only by another INTAFACED service with valid credentials (§2): ${rejected}`,
-      );
+      throw new MatchingAuthError(`Order writes are callable only by another INTAFACED service with valid credentials (§2): ${rejected}`);
     }
 
     // THE MIGRATION SIGNAL (L2-6). A v1 accept is an authenticated caller whose
