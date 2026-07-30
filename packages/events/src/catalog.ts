@@ -392,6 +392,43 @@ export const fillSettled = defineEvent(
   'svc-trade settled a fill for a user — private WS only.',
 );
 
+/**
+ * User-visible futures position (svc-trade). Private WS fans this to the owner.
+ *
+ * Publisher is `trade.futures`. Until that engine exists nothing emits this
+ * event — the `/private/stream` positions channel still mounts and stays silent
+ * rather than inventing rows (same honesty as REST GET /positions → []).
+ */
+export const positionUpdated = defineEvent(
+  'trade',
+  'position',
+  'updated',
+  1,
+  z.object({
+    positionId: z.string().uuid(),
+    userId: userIdSchema,
+    marketId: z.string().min(1),
+    symbol: z.string().min(1),
+    status: z.enum(['open', 'closed', 'liquidated']),
+    side: z.enum(['long', 'short']),
+    /** Absolute contract size — decimal string, never a JS number. */
+    contracts: amountSchema,
+    entryPrice: amountSchema,
+    markPrice: amountSchema.nullable(),
+    notional: amountSchema,
+    leverage: amountSchema.nullable(),
+    collateral: amountSchema.nullable(),
+    unrealizedPnl: amountSchema.nullable(),
+    realizedPnl: amountSchema.nullable(),
+    liquidationPrice: amountSchema.nullable(),
+    marginMode: z.enum(['cross', 'isolated']).nullable(),
+    /** Cumulative funding paid (positive) or received (negative) as decimal string. */
+    fundingPaid: amountSchema,
+    ts: z.string().datetime({ offset: true }),
+  }),
+  'svc-trade futures position changed — private WS fans this to the owning principal only.',
+);
+
 // ── protocol (§17.4 · Protocol Plane, non-custodial) ─────────────────────────
 //
 // Every event below is an OBSERVATION of chain state, not a record of something
@@ -676,6 +713,7 @@ export const EVENT_CATALOG = {
   orderCancelled,
   orderUpdated,
   fillSettled,
+  positionUpdated,
   protocolAccountCreated,
   protocolSessionKeyCreated,
   protocolSessionKeyCancelled,

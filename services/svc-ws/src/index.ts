@@ -8,7 +8,7 @@ import { registerRoutes } from './routes.js';
 import { TradeHub } from './trade/hub.js';
 import { subscribeTradeTape } from './trade/source.js';
 import { PrivateOrderHub } from './private/hub.js';
-import { subscribePrivateFills, subscribePrivateOrders } from './private/source.js';
+import { subscribePrivateFills, subscribePrivateOrders, subscribePrivatePositions } from './private/source.js';
 import { createPrivateWebSocketGateway } from './private/gateway.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 
@@ -130,6 +130,7 @@ let bus: Awaited<ReturnType<typeof JetStreamEventBus.connect>> | null = null;
 let tradeSub: Subscription | null = null;
 let privateSub: Subscription | null = null;
 let privateFillSub: Subscription | null = null;
+let privatePositionSub: Subscription | null = null;
 try {
   bus = await JetStreamEventBus.connect({
     servers: env.NATS_URL,
@@ -156,6 +157,12 @@ try {
       durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-fills`,
       log: app.log,
     });
+    privatePositionSub = await subscribePrivatePositions({
+      bus,
+      hub: privateOrderHub,
+      durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-positions`,
+      log: app.log,
+    });
   }
 } catch (err) {
   app.log.warn(
@@ -166,6 +173,7 @@ try {
   tradeSub = null;
   privateSub = null;
   privateFillSub = null;
+  privatePositionSub = null;
 }
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
@@ -198,9 +206,10 @@ app.log.info(
     pollMs: env.WS_POLL_INTERVAL_MS,
     trades: tradeSub !== null,
     privateOrders: privateSub !== null && privateTokens !== null,
+    privatePositions: privatePositionSub !== null && privateTokens !== null,
     enabled,
   },
-  'svc-ws ready — depth + trade tape + private orders',
+  'svc-ws ready — depth + trade tape + private orders/fills/positions',
 );
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
@@ -213,6 +222,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       if (tradeSub) await tradeSub.unsubscribe().catch(() => undefined);
       if (privateSub) await privateSub.unsubscribe().catch(() => undefined);
       if (privateFillSub) await privateFillSub.unsubscribe().catch(() => undefined);
+      if (privatePositionSub) await privatePositionSub.unsubscribe().catch(() => undefined);
       if (bus) await bus.close().catch(() => undefined);
       await gateway.close('gateway shutting down');
       await privateGateway.close('gateway shutting down');

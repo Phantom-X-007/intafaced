@@ -3,10 +3,10 @@ import type { HubLogger } from '../depth/hub.js';
 import type { PrivateOrderHub } from './hub.js';
 
 /**
- * Bus → private order hub.
+ * Bus → private hub.
  *
- * Consumes `orderUpdated` (svc-trade). Failures are redelivered by JetStream;
- * this handler is pure fan-out.
+ * Consumes trade-owned private signals. Failures are redelivered by JetStream;
+ * these handlers are pure fan-out (no money path).
  */
 export async function subscribePrivateOrders(input: {
   bus: EventBus;
@@ -75,6 +75,47 @@ export async function subscribePrivateFills(input: {
     )
     .then((sub) => {
       log?.info({ durable, subject: 'fillSettled' }, 'ws: private fills subscribed');
+      return sub;
+    });
+}
+
+export async function subscribePrivatePositions(input: {
+  bus: EventBus;
+  hub: PrivateOrderHub;
+  durable: string;
+  log?: HubLogger;
+}): Promise<Subscription> {
+  const { bus, hub, durable, log } = input;
+
+  return bus
+    .subscribe(
+      'positionUpdated',
+      (payload) => {
+        hub.publishPosition({
+          positionId: payload.positionId,
+          userId: payload.userId,
+          marketId: payload.marketId,
+          symbol: payload.symbol,
+          status: payload.status,
+          side: payload.side,
+          contracts: payload.contracts,
+          entryPrice: payload.entryPrice,
+          markPrice: payload.markPrice,
+          notional: payload.notional,
+          leverage: payload.leverage,
+          collateral: payload.collateral,
+          unrealizedPnl: payload.unrealizedPnl,
+          realizedPnl: payload.realizedPnl,
+          liquidationPrice: payload.liquidationPrice,
+          marginMode: payload.marginMode,
+          fundingPaid: payload.fundingPaid,
+          ts: payload.ts,
+        });
+      },
+      { durable },
+    )
+    .then((sub) => {
+      log?.info({ durable, subject: 'positionUpdated' }, 'ws: private positions subscribed');
       return sub;
     });
 }

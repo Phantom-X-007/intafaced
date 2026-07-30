@@ -1,11 +1,11 @@
 import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 
 /**
- * PRIVATE ORDER FAN-OUT.
+ * PRIVATE ORDER / FILL / POSITION FAN-OUT.
  *
- * Fans `orderUpdated` frames to sockets authenticated as that user only.
- * This hub never places orders and never holds balances — it is a mirror of
- * trade-owned lifecycle events for clients that already know the user.
+ * Fans trade-owned lifecycle frames to sockets authenticated as that user only.
+ * This hub never places orders, never opens positions, and never holds balances —
+ * it is a mirror of events for clients that already know the user.
  */
 
 export type PrivateSink = DepthSink;
@@ -38,6 +38,27 @@ export interface PrivateFillUpdate {
   readonly feeAmount: string;
   readonly feeBps: number;
   readonly sequence: number;
+  readonly ts: string;
+}
+
+export interface PrivatePositionUpdate {
+  readonly positionId: string;
+  readonly userId: string;
+  readonly marketId: string;
+  readonly symbol: string;
+  readonly status: 'open' | 'closed' | 'liquidated';
+  readonly side: 'long' | 'short';
+  readonly contracts: string;
+  readonly entryPrice: string;
+  readonly markPrice: string | null;
+  readonly notional: string;
+  readonly leverage: string | null;
+  readonly collateral: string | null;
+  readonly unrealizedPnl: string | null;
+  readonly realizedPnl: string | null;
+  readonly liquidationPrice: string | null;
+  readonly marginMode: 'cross' | 'isolated' | null;
+  readonly fundingPaid: string;
   readonly ts: string;
 }
 
@@ -102,6 +123,10 @@ export class PrivateOrderHub {
 
   publishFill(update: PrivateFillUpdate): void {
     this.#fanout(update.userId, JSON.stringify({ channel: 'fills', ...update }));
+  }
+
+  publishPosition(update: PrivatePositionUpdate): void {
+    this.#fanout(update.userId, JSON.stringify({ channel: 'positions', ...update }));
   }
 
   #fanout(userId: string, frame: string): void {

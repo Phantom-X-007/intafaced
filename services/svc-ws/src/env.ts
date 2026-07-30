@@ -108,8 +108,8 @@ const schema = baseEnvSchema
 
       /**
        * Optional. When set, `/private/stream` accepts `access_token` and fans
-       * `orderUpdated` to that user. When unset, private upgrades return 403 —
-       * public market data is unaffected.
+       * `orderUpdated` / `fillSettled` / `positionUpdated` to that user. When
+       * unset, private upgrades return 403 — public market data is unaffected.
        */
       JWT_ACCESS_SECRET: z.string().min(32).optional(),
       JWT_ISSUER: z.string().default('intafaced'),

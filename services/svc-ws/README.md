@@ -253,11 +253,29 @@ stale numbers.
 
 ---
 
+## Private stream (`/private/stream`)
+
+JWT-authenticated, push-only. Query `?access_token=` (or `Authorization: Bearer`). Requires `trade:read` or
+`trade:write`. Disabled (403) when `JWT_ACCESS_SECRET` is unset — public depth/tape are unaffected.
+
+On connect the server sends three ready frames, then live updates:
+
+```jsonc
+{ "channel": "orders", "type": "ready", "userId": "<uuid>" }
+{ "channel": "fills", "type": "ready", "userId": "<uuid>" }
+{ "channel": "positions", "type": "ready", "userId": "<uuid>" }
+{ "channel": "orders", "orderId": "...", /* orderUpdated fields */ }
+{ "channel": "fills", "fillId": "...", /* fillSettled fields */ }
+{ "channel": "positions", "positionId": "...", /* positionUpdated fields */ }
+```
+
+Positions updates are emitted only when `trade.futures` publishes `positionUpdated`. Until then the channel is
+mounted and silent — same honesty as REST `GET /positions → []`. Never invent a position frame.
+
 ## Not built
 
-- **Orders and positions.** `ws.gateway`'s title in the tracker names four streams; this ships **depth** and the
-  public **trade tape**. Orders and positions need a principal, which is a different security posture from this
-  port's and probably a different port — leave them off the unauthenticated socket.
+- **Futures engine / live position publishers.** The positions _socket_ is done; non-empty updates need
+  `trade.futures` to publish `positionUpdated`.
 - **Aggressor side on the tape.** `orderFilled` has no side field today. Adding one is a `packages/events` PR
   (§15.2), not a silent invention here.
 - **Rate limiting.** There is none anywhere in the platform (svc-edge's README says so too). `WS_MAX_CONNECTIONS` is
