@@ -286,7 +286,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.depth'],
-    note: 'Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. DEPTH is live: terminal streams snapshot+deltas from services/svc-ws and withholds the book on a gap. Public TRADE tape exists on svc-ws (`channel=trades`) but the terminal UI does not wire it yet. Still missing from the four words in the title: CHARTS (no candle store / OHLCV always []; tape source exists, not chart-wired), HOTKEYS and SUB-ACCOUNTS (not started). Those render as §13 sockets with the reason on screen. `dependsOn` is `ws.depth` not `ws.gateway` so the book is not blocked on positions.',
+    note: 'Order entry, market list, open orders and fills are wired to svc-trade through svc-edge, and the DEX/CEX plane switch is live against svc-protocol. DEPTH is live: terminal streams snapshot+deltas from services/svc-ws and withholds the book on a gap. Public TRADE tape is now wired in the terminal (`LiveTradeTape` → svc-ws `channel=trades`, decimal-string prints only, no candles). Still missing from the four words in the title: CHARTS (no candle store / OHLCV always []; tape is live, chart socket remains honest), HOTKEYS and SUB-ACCOUNTS (not started). Those render as §13 sockets with the reason on screen. `dependsOn` is `ws.depth` not `ws.gateway` so the book is not blocked on positions.',
   }),
   f('web.shell', 'apps/web scaffold on the design system', {
     module: 'core-ops',

@@ -12,8 +12,7 @@
   position: absolute;
   inset: -1px;
   background-image:
-    linear-gradient(to right, var(--if-border) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--if-border) 1px, transparent 1px);
+    linear-gradient(to right, var(--if-border) 1px, transparent 1px), linear-gradient(to bottom, var(--if-border) 1px, transparent 1px);
   background-size: 64px 64px;
   opacity: 0.35;
   mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, var(--if-base) 0%, transparent 75%);
