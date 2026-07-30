@@ -54,7 +54,7 @@ Internal tRPC (`src/router.ts`). Money is a **decimal string** in both direction
 
 Refunds and payouts carry their own scopes. Taking a payment and sending money back out are not the same authority.
 
-**HTTP:** `POST /webhooks/:railId` (public, signature-authenticated), `GET /health`, `GET /ready`.
+**HTTP:** `POST /webhooks/:railId` (public, signature-authenticated), `GET /health`, `GET /ready`, hosted checkout `GET /checkout?token=` / `GET /pay/link/:token` (public HTML; browser via edge `/api/pay/checkout?token=`).
 
 ### User money in and out
 
