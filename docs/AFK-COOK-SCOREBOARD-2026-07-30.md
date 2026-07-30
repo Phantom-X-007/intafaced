@@ -247,3 +247,12 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 | Open | none                                                                       |
 
 **Loop:** tip **#186** · Status **DRAINED (agent product queue)** · human: CI billing still
+
+## Spine landings #201–#202 (2026-07-30 AFK babysit)
+
+| PR   | What                                                      | Proof                                               |
+| ---- | --------------------------------------------------------- | --------------------------------------------------- |
+| #201 | CCXT contract truth (errors, TICK_SIZE, OHLCV from fills) | CI all green · local svc-trade 161 pass             |
+| #202 | Bank loans (purposed collateral, LTV ladder, loanReserve) | CI all green · local bank 58 + ledger 99 · DoD gate |
+
+**Agent product micro-queue:** still empty. **Do not re-ship #110–#202.**
