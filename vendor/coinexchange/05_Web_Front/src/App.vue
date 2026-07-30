@@ -200,7 +200,11 @@
                 <MenuItem name="nav-platform" class="lang-item" style="padding-left:20px!important;">{{$t("intafaced.hub.title")}}</MenuItem>
               </router-link>
               <router-link v-for="m in ixModules" :key="m.key" :to="m.route">
-                <MenuItem :name="'nav-ix-' + m.key" class="lang-item" style="padding-left:20px!important;">{{$t("intafaced.modules." + m.key + ".title")}}</MenuItem>
+                <MenuItem :name="'nav-ix-' + m.key" class="lang-item" style="padding-left:20px!important;">
+                  {{$t("intafaced.modules." + m.key + ".title")}}
+                  <span v-if="m.state === 'partial'" style="opacity:0.55;font-size:11px;"> · partial</span>
+                  <span v-else-if="m.state === 'absent'" style="opacity:0.55;font-size:11px;"> · offline</span>
+                </MenuItem>
               </router-link>
             </Submenu>
             <Submenu name="nav-login" id="login_register_theme" v-if="!isLogin">
