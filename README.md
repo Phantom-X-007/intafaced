@@ -10,13 +10,13 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **39%** — 42 of 108 features shipped
+`████████░░░░░░░░░░░░` **40%** — 43 of 108 features shipped
 
 Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 4/16 · **3P** 1/8 · **4** 3/5 · **4P** 0/3 · **5** 5/32 · **5P** 0/2
 
 **In progress:** WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
 
-**🟢 31 ready to claim** — nothing blocks these:
+**🟢 30 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
@@ -26,7 +26,7 @@ Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 4/16 · **3P** 1/8 · **
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
 - `trade.mm-bot` — Internal market-maker seeding books at launch
 - `venue.aggregation` — External venue adapters via CCXT (cross-venue)
-- …and 23 more
+- …and 22 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
