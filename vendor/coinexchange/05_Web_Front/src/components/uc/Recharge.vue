@@ -9,7 +9,12 @@
         <section>
           <div class="table-inner action-box open">
             <!-- <i class="angle" style="right: 71px;"></i> -->
-            <div class="action-inner">
+            <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
+              Deposit addresses are for this venue’s exchange wallet — not the platform ledger books.
+            </p>
+            <p v-if="walletError" class="ix-empty ix-empty-error">{{ walletError }}</p>
+            <p v-else-if="walletLoading" class="ix-empty ix-empty-loading">Loading wallet…</p>
+            <div class="action-inner" v-if="!walletError">
               <div class="inner-left">
                 <p class="describe">{{$t('uc.finance.recharge.symbol')}}</p>
                 <Select v-model="coinType" style="width:100px;margin-top: 23px;" @on-change="changeCoin">
@@ -51,8 +56,10 @@
               <div class="action-body">
                 <p class="acb-p1">{{$t('uc.finance.recharge.record')}}</p>
                 <div class="order-table">
-                  <Table :columns="tableColumnsRecharge" :data="tableRecharge" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
-                  <div style="margin: 10px;overflow: hidden">
+                  <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+                  <p v-else-if="!loading && listReachable && tableRecharge.length === 0" class="ix-empty">No deposits yet</p>
+                  <Table v-if="!listError" :columns="tableColumnsRecharge" :data="tableRecharge" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
+                  <div style="margin: 10px;overflow: hidden" v-if="!listError">
                     <div style="float: right;">
                       <Page :total="dataCount" :current="1" @on-change="changePage" class="recharge_btn"></Page>
                     </div>
@@ -85,6 +92,11 @@ export default {
       isShowEwm: false,
       dataCount: 0,
       loading: true,
+      walletLoading: true,
+      walletReachable: false,
+      walletError: "",
+      listReachable: false,
+      listError: "",
       qrcode: {
         value: "",
         size: 220,
@@ -188,20 +200,38 @@ export default {
       }
     },
     getMoney() {
-      this.$http.post(this.host + this.api.uc.wallet).then(response => {
-        var resp = response.body;
-        if (resp.code == 0) {
-          for (let i = 0; i < resp.data.length; i++) {
-            var coin = resp.data[i];
-            if (coin.coin.canRecharge == 1) {
-              this.coinList.push(coin);
+      this.walletLoading = true;
+      this.walletReachable = false;
+      this.walletError = "";
+      this.coinList = [];
+      this.$http
+        .post(this.host + this.api.uc.wallet)
+        .then(response => {
+          var resp = response.body;
+          if (resp && resp.code == 0) {
+            var data = resp.data || [];
+            for (let i = 0; i < data.length; i++) {
+              var coin = data[i];
+              if (coin.coin && coin.coin.canRecharge == 1) {
+                this.coinList.push(coin);
+              }
             }
+            this.walletReachable = true;
+            this.walletLoading = false;
+            this.changeCoin(this.coinType);
+          } else {
+            /* Failed wallet must not look like empty deposit options. */
+            this.walletError =
+              "Wallet did not answer — deposit options are unknown, not empty.";
+            this.walletLoading = false;
+            if (resp && resp.message) this.$Message.error(resp.message);
           }
-          this.changeCoin(this.coinType);
-        } else {
-          this.$Message.error(resp.message);
-        }
-      });
+        })
+        .catch(() => {
+          this.walletError =
+            "Wallet service did not respond — deposit options are unknown, not empty.";
+          this.walletLoading = false;
+        });
     },
     getList(pageN) {
       // tableRecharge
@@ -212,19 +242,37 @@ export default {
         pageSize = 10,
         type = 0,
         params = { memberId, pageNo, pageSize, type };
-      this.$http.post(this.host + "/uc/asset/transaction/all", params).then(response => {
+      this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
+      this.$http
+        .post(this.host + "/uc/asset/transaction/all", params)
+        .then(response => {
           var resp = response.body;
-          if (resp.code == 0) {
+          if (resp && resp.code == 0) {
             if (resp.data) {
               let trueData = resp.data;
               this.allTableRecharge = trueData.content || [];
               this.dataCount = trueData.totalElements || 0;
               this.getCurrentCoinRecharge();
+            } else {
+              this.allTableRecharge = [];
+              this.dataCount = 0;
+              this.tableRecharge = [];
             }
+            this.listReachable = true;
             this.loading = false;
           } else {
-            this.$Message.error(resp.message);
+            this.listError =
+              "Deposit history did not answer — list is unknown, not empty.";
+            this.loading = false;
+            if (resp && resp.message) this.$Message.error(resp.message);
           }
+        })
+        .catch(() => {
+          this.listError =
+            "Deposit history service did not respond — list is unknown, not empty.";
+          this.loading = false;
         });
     },
     getMember() {

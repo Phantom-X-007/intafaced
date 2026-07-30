@@ -67,8 +67,10 @@
       </FormItem>
     </Form>
     <div class="table">
-      <Table :no-data-text="$t('common.nodata')" :columns="columns" :data="orders" :loading="loading"></Table>
-      <div class="page">
+      <p v-if="ordersError" class="ix-empty ix-empty-error">{{ ordersError }}</p>
+      <p v-else-if="!loading && ordersReachable && orders.length === 0" class="ix-empty">No order history</p>
+      <Table v-if="!ordersError" :no-data-text="$t('common.nodata')" :columns="columns" :data="orders" :loading="loading"></Table>
+      <div class="page" v-if="!ordersError">
         <Page :total="total" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
       </div>
     </div>
@@ -83,10 +85,12 @@ export default {
   data() {
     const self = this;
     return {
-      loading: false,
+      loading: true,
+      ordersReachable: false,
+      ordersError: "",
       pageSize: 10,
       pageNo: 1,
-      total: 10,
+      total: 0,
       symbol: [],
       formItem: {
         symbol: "",
@@ -280,8 +284,10 @@ export default {
       };
     },
     getHistoryOrder() {
-      // Order History
+      // Order history — fail must not look like "no history"
       this.loading = true;
+      this.ordersReachable = false;
+      this.ordersError = "";
       const { symbol, type, direction, date: rangeDate } = this.formItem,
         startTime = new Date(rangeDate[0]).getTime() || "",
         endTime = new Date(rangeDate[1]).getTime() || "";
@@ -300,28 +306,40 @@ export default {
 .then(response => {
           var resp = response.body;
           let rows = [];
-          if (resp.content.length > 0) {
-            this.total = resp.totalElements;
-            for (var i = 0; i < resp.content.length; i++) {
-              var row = resp.content[i];
-              row.price =
-                row.type == "MARKET_PRICE"
+          if (resp && Array.isArray(resp.content)) {
+            this.total = resp.totalElements || 0;
+            if (resp.content.length > 0) {
+              for (var i = 0; i < resp.content.length; i++) {
+                var row = resp.content[i];
+                row.price =
+                  row.type == "MARKET_PRICE"
 ? that.$t("exchange.marketprice")
 : row.price;
-              rows.push(row);
+                rows.push(row);
+              }
             }
             this.orders = rows;
+            this.ordersReachable = true;
+            this.loading = false;
+          } else {
+            this.ordersError =
+              "Order service did not answer — order history is unknown, not empty.";
+            this.loading = false;
           }
+        })
+        .catch(() => {
+          this.ordersError =
+            "Order service did not respond — order history is unknown, not empty.";
           this.loading = false;
         });
     },
     getSymbol() {
       this.$http.post(this.host + this.api.market.thumb, {}).then(response => {
         var resp = response.body;
-        if (resp.length > 0) {
+        if (resp && resp.length > 0) {
           this.symbol = resp;
         }
-      });
+      }).catch(() => {});
     },
     updateLangData(){
       this.columns[1].title = this.$t("exchange.time");

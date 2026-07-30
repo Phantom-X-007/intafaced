@@ -32,8 +32,10 @@
               <div class="form-group form-amount">
                 <label class="label-amount"> {{$t('uc.finance.withdraw.num')}}
                   <p class="label-fr">
-                    <span>[{{$t('uc.finance.withdraw.avabalance')}}]: 
-                      <span class="label-pointer" id="valueAvailable">{{currentCoin.balance|toFloor}}</span>
+                    <span>[{{$t('uc.finance.withdraw.avabalance')}}]:
+                      <span v-if="walletLoading" class="ix-empty-loading" id="valueAvailable">Loading…</span>
+                      <span v-else-if="walletReachable" class="label-pointer" id="valueAvailable">{{currentCoin.balance|toFloor}}</span>
+                      <span v-else class="ix-dim" id="valueAvailable">— unknown</span>
                     </span>
                     <span v-if="currentCoin.enableAutoWithdraw == 0">[{{$t('common.tip')}}]: {{$t('uc.finance.withdraw.msg1')}} {{currentCoin.threshold}} {{$t('uc.finance.withdraw.msg2')}}</span>
                     <span>
@@ -41,6 +43,10 @@
                     </span>
                   </p>
                 </label>
+                <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
+                  Venue exchange wallet only — not the platform ledger books.
+                </p>
+                <p v-if="walletError" class="ix-empty ix-empty-error">{{ walletError }}</p>
                 <div class="input-group">
                   <Poptip trigger="focus" :content="$t('uc.finance.withdraw.tip1')+currentCoin.withdrawScale+$t('uc.finance.withdraw.tip11')+currentCoin.minAmount+','+$t('uc.finance.withdraw.tip2')+currentCoin.maxAmount" style="width: 100%;">
                     <InputNumber @on-change="computerAmount" v-model="withdrawAmount" :placeholder="$t('uc.finance.withdraw.numtip1')" size="large" :min="currentCoin.minAmount" :max="currentCoin.maxAmount"></InputNumber>
@@ -88,8 +94,10 @@
                 <div class="order-table">
                   <p class="acb-p2" style="margin-bottom:10px;">• {{$t('uc.finance.withdraw.click')}}
                     <i class="ivu-icon ivu-icon-funnel"></i>{{$t('uc.finance.withdraw.filtrate')}}</p>
-                  <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsWithdraw" :data="tableWithdraw" :loading="loading"></Table>
-                  <div id="pages">
+                  <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+                  <p v-else-if="!loading && listReachable && tableWithdraw.length === 0" class="ix-empty">No withdrawals yet</p>
+                  <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsWithdraw" :data="tableWithdraw" :loading="loading"></Table>
+                  <div id="pages" v-if="!listError">
                     <div style="float: right;">
                       <Page class="pages_a" :total="transaction.total" :current="transaction.page + 1" @on-change="changePage"></Page>
                     </div>
@@ -151,6 +159,11 @@ export default {
         total: 0
       },
       loading: true,
+      walletLoading: true,
+      walletReachable: false,
+      walletError: "",
+      listReachable: false,
+      listError: "",
       withdrawAdress: "",
       inputAddress: "", //address entered by the user
       withdrawAmount: 0,
@@ -281,11 +294,14 @@ export default {
     },
     getAddrList() {
       this.clearValues();
+      this.walletLoading = true;
+      this.walletReachable = false;
+      this.walletError = "";
       this.$http
 .post(this.host + "/uc/withdraw/support/coin/info")
 .then(response => {
           var resp = response.body;
-          if (resp.code == 0 && resp.data.length > 0) {
+          if (resp && resp.code == 0 && resp.data && resp.data.length > 0) {
             this.coinList = resp.data;
             if (this.coinType) {
               for (let i = 0; i < resp.data.length; i++) {
@@ -298,13 +314,26 @@ export default {
               this.currentCoin = this.coinList[0];
               this.coinType = this.currentCoin.unit;
             }
+            this.walletReachable = true;
+            this.walletLoading = false;
           } else {
-            this.$Message.error(resp.message);
+            /* Failed fetch must not look like $0 balance available. */
+            this.walletError =
+              "Wallet did not answer — available balance is unknown, not zero.";
+            this.walletLoading = false;
+            if (resp && resp.message) this.$Message.error(resp.message);
           }
+        })
+        .catch(() => {
+          this.walletError =
+            "Wallet service did not respond — available balance is unknown, not zero.";
+          this.walletLoading = false;
         });
     },
     getList() {
       this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       // tableWithdraw
       let params = {};
       params["page"] = this.transaction.page;
@@ -313,13 +342,22 @@ export default {
 .post(this.host + "/uc/withdraw/record", params)
 .then(response => {
           var resp = response.body;
-          if (resp.code == 0) {
-            this.tableWithdraw = resp.data.content;
-            this.transaction.total = resp.data.totalElements;
-            this.transaction.page = resp.data.number;
+          if (resp && resp.code == 0) {
+            this.tableWithdraw = (resp.data && resp.data.content) || [];
+            this.transaction.total = (resp.data && resp.data.totalElements) || 0;
+            this.transaction.page = (resp.data && resp.data.number) || 0;
+            this.listReachable = true;
+            this.loading = false;
           } else {
-            this.$Message.error(resp.message);
+            this.listError =
+              "Withdraw history did not answer — list is unknown, not empty.";
+            this.loading = false;
+            if (resp && resp.message) this.$Message.error(resp.message);
           }
+        })
+        .catch(() => {
+          this.listError =
+            "Withdraw history service did not respond — list is unknown, not empty.";
           this.loading = false;
         });
     },
