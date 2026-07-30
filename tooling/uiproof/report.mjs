@@ -2,13 +2,7 @@
 /**
  * Writes .artifacts/uiproof/PROOF.md from the matrix + screenshot inventory + playwright JSON.
  */
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-} from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { ROUTES, VIEWPORTS, shotName } from './matrix.mjs';
@@ -59,9 +53,7 @@ function findResult(pw, routeId, vpName) {
 }
 
 const pw = loadPlaywright();
-const shotsOnDisk = existsSync(SHOTS)
-  ? new Set(readdirSync(SHOTS).filter((f) => f.endsWith('.png')))
-  : new Set();
+const shotsOnDisk = existsSync(SHOTS) ? new Set(readdirSync(SHOTS).filter((f) => f.endsWith('.png'))) : new Set();
 
 const rows = [];
 let allPass = true;

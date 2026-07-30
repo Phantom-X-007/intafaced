@@ -253,15 +253,14 @@ if (initSql === null) {
   if (composeRoles.size > 0) {
     failures.push({
       file: 'tooling/infra/postgres-init/01-service-schemas.sql',
-      reason: 'missing entirely, but compose names database roles — every service with a DATABASE_URL would fail to authenticate on a clean clone',
+      reason:
+        'missing entirely, but compose names database roles — every service with a DATABASE_URL would fail to authenticate on a clean clone',
     });
   }
 } else {
   // The array holds the SUFFIX (`'identity'`), the URL holds the full role
   // (`svc_identity`). Compare on the full name so a typo in either is caught.
-  const declared = new Set(
-    [...initSql.matchAll(/'([a-z0-9_]+)'/g)].map(([, s]) => (s.startsWith('svc_') ? s : `svc_${s}`)),
-  );
+  const declared = new Set([...initSql.matchAll(/'([a-z0-9_]+)'/g)].map(([, s]) => (s.startsWith('svc_') ? s : `svc_${s}`)));
   for (const [svc, role] of composeRoles) {
     if (!declared.has(role)) {
       failures.push({
@@ -362,9 +361,7 @@ if (compose !== null) {
   if (routes === null) {
     failures.push({ file: 'services/svc-edge/src/routes.ts', reason: 'missing entirely — the front door has no route table' });
   } else {
-    for (const [, prefix, envVar, devUrl] of routes.matchAll(
-      /\{\s*prefix: '([^']+)',\s*envVar: '(\w+)',\s*devUrl: '([^']+)'/g,
-    )) {
+    for (const [, prefix, envVar, devUrl] of routes.matchAll(/\{\s*prefix: '([^']+)',\s*envVar: '(\w+)',\s*devUrl: '([^']+)'/g)) {
       const deployed = new RegExp(`${envVar}: http://(svc-[a-z0-9-]+):(\\d+)`).exec(edgeEnv);
       if (!deployed) {
         failures.push({

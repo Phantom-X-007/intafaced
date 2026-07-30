@@ -10,13 +10,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import {
-  ROUTES,
-  VIEWPORTS,
-  NETWORK_ALLOW_PREFIXES,
-  FORBIDDEN_DOM,
-  shotName,
-} from './matrix.mjs';
+import { ROUTES, VIEWPORTS, NETWORK_ALLOW_PREFIXES, FORBIDDEN_DOM, shotName } from './matrix.mjs';
 
 const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -150,10 +144,7 @@ for (const route of ROUTES) {
           .isVisible()
           .catch(() => false);
         // Prefer redirect; accept login surface if SPA rewrote in place.
-        expect(
-          onLogin || loginFormVisible,
-          `auth-gated ${route.path} must redirect to /login or show login form; url=${url}`,
-        ).toBeTruthy();
+        expect(onLogin || loginFormVisible, `auth-gated ${route.path} must redirect to /login or show login form; url=${url}`).toBeTruthy();
       }
 
       // 1. page errors

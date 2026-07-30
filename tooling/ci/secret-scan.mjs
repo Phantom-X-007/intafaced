@@ -260,7 +260,8 @@ for (const rel of tracked()) {
         line: lineNo,
         key: '(URL)',
         reason: 'a URL on this line embeds `user:password@host`',
-        detail: 'Put the whole URL in the environment with no default. A credential hidden inside a connection string is still a committed credential.',
+        detail:
+          'Put the whole URL in the environment with no default. A credential hidden inside a connection string is still a committed credential.',
       });
     }
   });
@@ -276,7 +277,9 @@ if (violations.length > 0) {
     console.error(`      ${v.detail}\n`);
   }
   console.error('  A committed credential is invisible in review and permanent in history.');
-  console.error('  If a value here is genuinely not a secret, make it say so (see PLACEHOLDER_VALUES\n  in tooling/ci/secret-scan.mjs) rather than widening the rule.\n');
+  console.error(
+    '  If a value here is genuinely not a secret, make it say so (see PLACEHOLDER_VALUES\n  in tooling/ci/secret-scan.mjs) rather than widening the rule.\n',
+  );
   process.exit(1);
 }
 
