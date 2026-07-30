@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Address, Abi } from 'viem';
 import { EvmChainSource } from './source.js';
@@ -41,6 +43,60 @@ if (!reachable && devChainRequired()) {
 }
 
 const MARKET = 'ETH-USD';
+
+interface RecordedCall {
+  readonly method: string;
+  readonly params: readonly unknown[];
+}
+
+/**
+ * A JSON-RPC endpoint that forwards to `target` and records every call.
+ *
+ * Exists because there is no reliable way to observe what viem sends by patching
+ * the client object — see the test that uses it. Recording on the wire is what
+ * the assertion actually wants to be about.
+ */
+async function recordingProxy(target: string): Promise<{ url: string; calls: RecordedCall[]; close: () => Promise<void> }> {
+  const calls: RecordedCall[] = [];
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      const body = chunks.length > 0 ? Buffer.concat(chunks).toString('utf8') : '';
+      try {
+        const parsed: unknown = JSON.parse(body);
+        // JSON-RPC permits a batch; record either shape rather than assuming one.
+        for (const entry of Array.isArray(parsed) ? parsed : [parsed]) {
+          const call = entry as { method?: unknown; params?: unknown };
+          if (typeof call.method === 'string') {
+            calls.push({ method: call.method, params: Array.isArray(call.params) ? call.params : [] });
+          }
+        }
+      } catch {
+        // Not JSON-RPC. Forward it untouched and record nothing — a proxy that
+        // threw here would fail the test for the wrong reason.
+      }
+      void fetch(target, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
+        .then(async (upstream) => {
+          const text = await upstream.text();
+          res.writeHead(upstream.status, { 'content-type': 'application/json' });
+          res.end(text);
+        })
+        .catch(() => {
+          res.writeHead(502, { 'content-type': 'application/json' });
+          res.end('{"error":"proxy upstream failed"}');
+        });
+    });
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as AddressInfo).port;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    calls,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
 
 if (!reachable) {
   describe.skip(`svc-indexer · EVM adapter (no chain at ${rpcUrl} — docker compose up -d evm)`, () => {
@@ -185,32 +241,42 @@ if (!reachable) {
      * does not prove the node is honest about it, which is not something a test
      * can establish. Without this, swapping the two is a one-line change nothing
      * in the suite notices.
+     *
+     * ── Recorded on the WIRE, and the first attempt was not ──────────────────
+     *
+     * The obvious way to do this is to wrap `source.client.request`. It does not
+     * work, and worse, it does not work SILENTLY: viem's `createPublicClient`
+     * builds a base client and then `.extend()`s it, which returns a NEW object
+     * whose actions have closed over the base. Patching the extended client's
+     * `request` therefore intercepts nothing, `requests` stays empty, and the
+     * assertion fails for a reason that has nothing to do with the adapter.
+     *
+     * So the recording happens in a proxy the adapter actually talks to. That is
+     * strictly better evidence anyway: it asserts what goes over the wire rather
+     * than what a client object was asked to do.
      */
     it('fetches logs by block hash, never by block number', async () => {
-      const requests: Array<{ method: string; params?: unknown }> = [];
-      const client = source.client as unknown as { request: (...args: never[]) => Promise<unknown> };
-      const original = client.request.bind(client);
-      client.request = (async (args: { method: string; params?: unknown }, ...rest: never[]) => {
-        requests.push(args);
-        return original(args as never, ...rest);
-      }) as never;
-
+      const proxy = await recordingProxy(rpcUrl);
       try {
-        const head = await source.head();
-        await source.blockAt(head!.height);
+        const proxied = new EvmChainSource({ chainId: DEV_CHAIN_ID, rpcUrl: proxy.url, venue });
+        const head = await proxied.head();
+        await proxied.blockAt(head!.height);
       } finally {
-        client.request = original as never;
+        await proxy.close();
       }
 
-      const getLogs = requests.filter((r) => r.method === 'eth_getLogs');
+      const getLogs = proxy.calls.filter((r) => r.method === 'eth_getLogs');
       expect(getLogs).toHaveLength(1);
-      const filter = (getLogs[0]!.params as [Record<string, unknown>])[0];
+      const filter = getLogs[0]!.params[0] as Record<string, unknown>;
       expect(filter).toHaveProperty('blockHash');
       expect(filter).not.toHaveProperty('fromBlock');
       expect(filter).not.toHaveProperty('toBlock');
       // …and it is scoped to the venue, which is the other half of "these logs
       // are ours".
       expect(String(filter.address).toLowerCase()).toBe(venue.toLowerCase());
+      // The control: the proxy really did see traffic, so an empty `calls` array
+      // could never make the assertions above pass vacuously.
+      expect(proxy.calls.map((c) => c.method)).toContain('eth_getBlockByNumber');
     });
 
     /**
