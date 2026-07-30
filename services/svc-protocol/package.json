@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/migrate.ts",
+    "contracts:build": "node scripts/compile-contracts.mjs",
+    "chain:deploy": "tsx scripts/deploy-dev.ts",
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
@@ -32,6 +34,7 @@
     "@types/node": "^22.10.2",
     "drizzle-kit": "^0.30.1",
     "rimraf": "^6.0.1",
+    "solc": "0.8.28",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"

@@ -17,7 +17,9 @@
     "TEST_DATABASE_URL_BLUEPRINT",
     "TEST_DATABASE_URL_AGENTS",
     "REDIS_URL",
-    "NATS_URL"
+    "NATS_URL",
+    "REQUIRE_EVM_CHAIN",
+    "PROTOCOL_RPC_URL"
   ],
   "tasks": {
     "build": {

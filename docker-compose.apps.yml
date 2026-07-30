@@ -511,10 +511,30 @@ services:
   # ── Protocol Plane (§17.4) ─────────────────────────────────────────────────
 
   # Non-custodial and permissionless: no ledger connection, no signing key.
-  # PROTOCOL_RPC_URL points OUTSIDE the compose network on purpose — the chain
-  # is not ours to run, and a clean clone has none. Without one this service
-  # still boots and still serves `/health`; `/ready` reports 503 until an RPC
-  # answers, which is the honest state.
+  #
+  # ── The chain, and what changed ────────────────────────────────────────────
+  #
+  # PROTOCOL_RPC_URL used to point OUTSIDE the compose network at a node the
+  # developer had to run themselves, with `0x0` factory addresses, because the
+  # stack had no chain at all. `docker-compose.yml` now carries a `# no-deploy`
+  # anvil (service `evm`), and the defaults below describe THAT — a throwaway
+  # local chain and nothing else. `host.docker.internal` still works: override
+  # PROTOCOL_RPC_URL and the service points wherever you say.
+  #
+  # The addresses are not magic constants. Anvil starts at genesis with the
+  # deployer at nonce 0, so `pnpm --filter @intafaced/svc-protocol chain:deploy`
+  # lands the implementation and the factory at the same two CREATE addresses
+  # every time. They mean nothing on any chain but this one.
+  #
+  # ── Configured is not deployed ────────────────────────────────────────────
+  #
+  # Naming an address here does NOT make svc-protocol claim the contracts
+  # exist. `protocol.chainStatus` reads `eth_getCode` at both addresses and
+  # reports `suiteDeployed` from what came back, so a stack pointed at a chain
+  # where nothing was deployed — or at a restarted anvil that lost its state —
+  # answers `usable: false` instead of a confident lie. Bring the stack up
+  # without `evm`, or before running the deploy, and every chain path refuses
+  # exactly as it did before with `protocol.chain_unreachable`.
   svc-protocol:
     <<: *app
     container_name: intafaced-svc-protocol
@@ -526,10 +546,17 @@ services:
       HTTP_PORT: '4012'
       DATABASE_URL: postgres://svc_protocol:svc_protocol@postgres:5432/intafaced
       PROTOCOL_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-31337}
-      PROTOCOL_RPC_URL: ${PROTOCOL_RPC_URL:-http://host.docker.internal:8545}
+      # `evm` is the dev anvil in docker-compose.yml; 8545 is its container port.
+      PROTOCOL_RPC_URL: ${PROTOCOL_RPC_URL:-http://evm:8545}
+      # A public singleton we do not own, and NOT deployed on the dev chain —
+      # so relaying still refuses here. Reads and address prediction do not
+      # need it.
       PROTOCOL_ENTRYPOINT_ADDRESS: ${PROTOCOL_ENTRYPOINT_ADDRESS:-0x0000000071727De22E5E9d8BAf0edAc6f37da032}
-      PROTOCOL_FACTORY_ADDRESS: ${PROTOCOL_FACTORY_ADDRESS:-0x0000000000000000000000000000000000000000}
-      PROTOCOL_IMPLEMENTATION_ADDRESS: ${PROTOCOL_IMPLEMENTATION_ADDRESS:-0x0000000000000000000000000000000000000000}
+      # Deterministic dev-chain addresses: CREATE from anvil account #0 at
+      # nonce 1 and nonce 0. See `chain:deploy`. Zero these to get the old
+      # "nothing is configured" refusal back.
+      PROTOCOL_FACTORY_ADDRESS: ${PROTOCOL_FACTORY_ADDRESS:-0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512}
+      PROTOCOL_IMPLEMENTATION_ADDRESS: ${PROTOCOL_IMPLEMENTATION_ADDRESS:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4012']
     extra_hosts:
