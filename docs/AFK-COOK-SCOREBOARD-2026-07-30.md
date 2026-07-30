@@ -290,3 +290,5 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 **Overnight posture (Nitro):** **O1+O2** — babysit with hard merge matrix (money / review-hold = no Nitro merge) + Stream A / hygiene parallel. Backend micro still **DRAINED**. Law: `docs/GRIND-LOOP-ACTIVE.md`. Plan: `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`.
 
 **Do not re-ship #110–#218.**
+
+| #221 | fix(ci): main red from missing DevVenue artefacts (#217/#218) |

@@ -3,11 +3,11 @@
 **Status:** **O1+O2 OVERNIGHT** · backend micro-queue still **DRAINED** (do not invent Denon product) · **O1 babysit** + **O2 Stream A / hygiene** only  
 **Operator decision:** 2026-07-30 Nitro chose **O1+O2** (see `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`)  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
-**Last tip:** high water through **#218** (indexer read models / real chain) + **#217** (token factory on dev chain) + **#216** blueprint card · do not re-ship **#110–#218** · CI live on tip
+**Last tip:** high water through **#221** (CI fix for #217/#218 artefacts) + **#218** (indexer read models / real chain) + **#217** (token factory on dev chain) + **#216** blueprint card · do not re-ship **#110–#221** · CI live on tip
 
 ```
 STATUS 2026-07-30T14:20Z
-tip: 0f5c43b #217 (includes #218 parent)
+tip: 2f6ab47 #221 (post #217/#218 CI fix)
 open PRs: (re-check live)
 merged this fire: law PR (this update) pending
 money holds: default NO Nitro merge on money paths
@@ -22,7 +22,7 @@ next: O1 babysit · O2 stream-a / tracker honesty
 2. Read `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md` + `docs/GRIND-LOOP-WHAT-IT-DOES-AND-PROMPT-FIX-2026-07-30.md`.
 3. `git fetch origin main && git log --oneline origin/main -25`
 4. `gh pr list --state open` and `gh pr list --state merged --limit 20`
-5. **Never re-ship MERGED** (#110–#218 high water).
+5. **Never re-ship MERGED** (#110–#221 high water).
 6. **Worktree only.** Never edit the main checkout. Never push main.
 7. Light gates every product PR; wave audit every 3–4 product ships.
 8. **Update this file** before you stop (queue + high water + STATUS block).
@@ -119,7 +119,7 @@ For each open PR → class M/H/P/N/X per this file.
 - X: never mark done.
 
 If no open PRs: honesty scans optional; update high water; stop.
-Never invent product. Never re-ship #110–#218.
+Never invent product. Never re-ship #110–#221.
 Update STATUS block before stop.
 ```
 
@@ -149,10 +149,11 @@ If queue empty → set DRAINED / return to O1+O2. Do not invent.
 
 ## MERGED (do not redo) — high water
 
-**#110–#218** on main. Agent micro high water **#162–#163**; Stream A **#169/#172/#182** floor; mega-audit **#176–#177**; Denon spine wave **#201–#218**.
+**#110–#221** on main. Agent micro high water **#162–#163**; Stream A **#169/#172/#182** floor; mega-audit **#176–#177**; Denon spine wave **#201–#218**.
 
 | PR | What |
 | --- | --- |
+| **#221** | fix(ci): DevVenue artefacts + invisible main reds |
 | **#218** | indexer read models against a real chain + harness watching the wire |
 | **#217** | token factory on dev chain; deployed bytecode ≠ artefact (immutables) |
 | **#216** | blueprint share card + false `done` corrected on ownership |
@@ -229,4 +230,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - Update high water if tip moved (#218+)  
 - Do **not** open Denon mountains  
 
-**Next agent after compact:** O1+O2 · money = no Nitro merge · do not re-ship #110–#218 · Stream A / hygiene only for product volume.
+**Next agent after compact:** O1+O2 · money = no Nitro merge · do not re-ship #110–#221 · Stream A / hygiene only for product volume.
