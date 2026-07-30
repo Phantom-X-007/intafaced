@@ -77,6 +77,27 @@ export const edgeEnvSchema = z.object({
  */
 export const internalServiceEnvSchema = z.object({
   INTERNAL_SERVICE_SECRET: z.string().min(32),
+
+  /**
+   * How strictly this service enforces S2S body binding (L2-6).
+   *
+   *   `accept-both`  verify v2 body digests when a caller sends one, and still
+   *                  accept a legacy v1 caller that does not. The migration
+   *                  setting: nothing 401s while the fleet is redeployed one
+   *                  service at a time.
+   *   `require`      a caller MUST bind its body. The setting under which the
+   *                  replay this closes is actually closed.
+   *
+   * Defaults to `accept-both` — deliberately the weaker value, because a default
+   * of `require` would 401 every caller still running the previous build the
+   * moment the first service rolled, and every service here shares one secret.
+   *
+   * This mirrors `ServiceBodyBindMode` in `@intafaced/contracts`; it is restated
+   * rather than imported because contracts depends on config and not the reverse.
+   * The flip procedure and the signal that says it is safe are in
+   * `docs/decisions/s2s-body-bind.md`.
+   */
+  INTERNAL_SERVICE_BODY_BIND: z.enum(['accept-both', 'require']).default('accept-both'),
 });
 
 export const authEnvSchema = z.object({

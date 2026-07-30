@@ -7,7 +7,8 @@ import {
   userAvailable,
   orderHoldAccount,
 } from '@intafaced/ledger-client';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { handleS2sBalance, handleS2sPost, httpError, registerS2sHttp } from './s2s-http.js';
 import type { LedgerService } from './service.js';
 
@@ -76,43 +77,29 @@ describe('s2s-http (graph W1-C money surface)', () => {
 // The lesson, written down: a guard is worth exactly as much as the route that
 // runs it. Test the mounted path, not the one you edited.
 
+//
+// They now run against a REAL Fastify instance rather than a hand-rolled stand-in.
+// That is not tidiness: `registerS2sHttp` installs a content-type parser to keep
+// the raw request bytes, and body binding is only meaningful if the bytes being
+// digested are the ones Fastify actually received. A fake `app` that records
+// route handlers would verify a digest against a body the test handed it
+// directly, which is the one thing that cannot go wrong in production.
+
 describe('s2s HTTP — service credentials', () => {
-  /** A minimal Fastify stand-in that records what got registered. */
-  function fakeApp() {
-    const routes = new Map<string, (req: unknown, reply: unknown) => Promise<unknown>>();
-    return {
-      routes,
-      post(path: string, handler: (req: never, reply: never) => Promise<unknown>) {
-        routes.set(path, handler as (req: unknown, reply: unknown) => Promise<unknown>);
-      },
-    };
-  }
-
-  function fakeReply() {
-    const captured = { status: 200, body: undefined as unknown };
-    const reply = {
-      code(status: number) {
-        captured.status = status;
-        return reply;
-      },
-      send(body: unknown) {
-        captured.body = body;
-        return reply;
-      },
-    };
-    return { reply, captured };
-  }
-
   const SECRET = 'ledger-internal-service-secret-32ch!';
 
-  async function callRoute(path: string, headers: Record<string, string>, body: unknown, service?: LedgerService) {
-    const app = fakeApp();
-    registerS2sHttp(app as never, service ?? stubService(), SECRET);
-    const handler = app.routes.get(path)!;
-    const { reply, captured } = fakeReply();
-    const result = await handler({ headers, body } as never, reply as never);
-    return { result, captured };
+  async function mount(service?: LedgerService, options?: { bodyBind?: 'accept-both' | 'require' }) {
+    const app = Fastify({ logger: false });
+    registerS2sHttp(app, service ?? stubService(), SECRET, options ?? {});
+    await app.ready();
+    return app;
   }
+
+  /** Post exactly `payload` — the same bytes the caller signed. */
+  const send = (app: FastifyInstance, path: string, headers: Record<string, string>, payload: string) =>
+    app.inject({ method: 'POST', url: path, headers: { 'content-type': 'application/json', ...headers }, payload });
+
+  const wire = (body: unknown) => JSON.stringify(body);
 
   /**
    * THE ATTACK. A stranger reaching the port posts a balanced transaction
@@ -123,48 +110,180 @@ describe('s2s HTTP — service credentials', () => {
    */
   it('refuses an unauthenticated post, and never reaches the ledger', async () => {
     let posted = false;
-    const service = stubService({
-      post: async () => {
-        posted = true;
-        return { id: 'tx-1', hash: 'h', postedAt: new Date() };
-      },
-    });
+    const app = await mount(
+      stubService({
+        post: async () => {
+          posted = true;
+          return { id: 'tx-1', hash: 'h', postedAt: new Date() };
+        },
+      }),
+    );
 
-    const { captured } = await callRoute('/trpc/post', { 'content-type': 'application/json' }, validPost, service);
+    const res = await send(app, '/trpc/post', {}, wire(validPost));
 
-    expect(captured.status).toBe(401);
+    expect(res.statusCode).toBe(401);
     expect(posted).toBe(false);
+    await app.close();
   });
 
   it('refuses a forged signature', async () => {
-    const { captured } = await callRoute(
+    const app = await mount();
+
+    const res = await send(
+      app,
       '/trpc/post',
       {
         'x-intafaced-service': 'svc-trade',
         'x-intafaced-service-ts': String(Math.floor(Date.now() / 1000)),
         'x-intafaced-service-sig': 'f'.repeat(64),
       },
-      validPost,
+      wire(validPost),
     );
 
-    expect(captured.status).toBe(401);
+    expect(res.statusCode).toBe(401);
+    await app.close();
   });
 
-  it('accepts a properly signed service call', async () => {
-    const { result, captured } = await callRoute('/trpc/post', serviceAuthHeaders('svc-trade', SECRET), validPost);
+  it('accepts a properly signed service call that binds its body', async () => {
+    const app = await mount();
+    const payload = wire(validPost);
 
-    expect(captured.status).toBe(200);
-    expect(result).toMatchObject({ txId: 'tx-s2s', hash: 'deadbeef' });
+    const res = await send(app, '/trpc/post', serviceAuthHeadersForBody('svc-trade', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ txId: 'tx-s2s', hash: 'deadbeef' });
+    await app.close();
+  });
+
+  // ── L2-6: the replay this closes ───────────────────────────────────────────
+
+  /**
+   * THE TEST THE CHANGE EXISTS FOR, on the mounted path.
+   *
+   * Credentials captured from a legitimate 10-unit transfer, replayed byte for
+   * byte against a 99999-unit one. Under the old scheme the signature covered
+   * only `service` and a timestamp, so this succeeded for 300 seconds — and
+   * `/trpc/post` reaches `ledger.post()` directly, which is what made a
+   * replayable signature a replayable money instruction.
+   */
+  it('refuses captured credentials replayed over a mutated body, and never reaches the ledger', async () => {
+    let posted = false;
+    const app = await mount(
+      stubService({
+        post: async () => {
+          posted = true;
+          return { id: 'tx-forged', hash: 'h', postedAt: new Date() };
+        },
+      }),
+    );
+
+    const honest = wire(validPost);
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, honest);
+
+    const tampered = honest.replace(/"amount":"10"/g, '"amount":"99999"');
+    expect(tampered).not.toBe(honest);
+
+    const res = await send(app, '/trpc/post', headers, tampered);
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().message).toMatch(/body-mismatch/);
+    // The assertion that matters: the ledger was never asked to post it.
+    expect(posted).toBe(false);
+    await app.close();
+  });
+
+  it('refuses a body altered by a single byte', async () => {
+    const app = await mount();
+    const honest = wire(validPost);
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, honest);
+
+    // A trailing space. Semantically the same JSON, different bytes, and the
+    // digest commits to bytes.
+    const res = await send(app, '/trpc/post', headers, `${honest} `);
+
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('binds each route separately — a signature for one body does not travel to another', async () => {
+    const app = await mount();
+    const balanceBody = wire(userAvailable(USER, 'USDT'));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, balanceBody);
+
+    // Credentials minted for a harmless balance read, pointed at the write.
+    const res = await send(app, '/trpc/post', headers, wire(validPost));
+
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  // ── The migration, both directions ─────────────────────────────────────────
+
+  it('accept-both admits a legacy v1 caller that has not been redeployed', async () => {
+    const app = await mount(undefined, { bodyBind: 'accept-both' });
+    const payload = wire(validPost);
+
+    // No body digest — the old client, still in the fleet.
+    const res = await send(app, '/trpc/post', serviceAuthHeaders('svc-trade', SECRET), payload);
+
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('require refuses that same legacy caller, naming why', async () => {
+    const app = await mount(undefined, { bodyBind: 'require' });
+
+    const res = await send(app, '/trpc/post', serviceAuthHeaders('svc-trade', SECRET), wire(validPost));
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().message).toMatch(/missing-body-digest/);
+    await app.close();
+  });
+
+  it('require still admits a redeployed v2 caller — the destination state works', async () => {
+    const app = await mount(undefined, { bodyBind: 'require' });
+    const payload = wire(validPost);
+
+    const res = await send(app, '/trpc/post', serviceAuthHeadersForBody('svc-trade', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    await app.close();
   });
 
   // Reads leak too. `balances` for a `treasury` or `house` owner is the
   // platform's own position; the tRPC twin restricts a user to their own
   // accounts and this route had no equivalent.
   it('refuses unauthenticated reads on every route, not just the write', async () => {
+    const app = await mount();
+
     for (const path of ['/trpc/balance', '/trpc/balances']) {
-      const { captured } = await callRoute(path, {}, { ownerType: 'treasury', ownerId: 'rail:crypto-native' });
-      expect(captured.status).toBe(401);
+      const res = await send(app, path, {}, wire({ ownerType: 'treasury', ownerId: 'rail:crypto-native' }));
+      expect(res.statusCode).toBe(401);
     }
+    await app.close();
+  });
+
+  // ── The parser this change swapped in must not have changed anything else ──
+
+  it('still answers 400 for malformed JSON, with Fastify’s own code', async () => {
+    const app = await mount();
+    const payload = '{not json';
+
+    const res = await send(app, '/trpc/post', serviceAuthHeadersForBody('svc-trade', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('FST_ERR_CTP_INVALID_JSON_BODY');
+    await app.close();
+  });
+
+  it('still answers 400 for an empty JSON body', async () => {
+    const app = await mount();
+
+    const res = await send(app, '/trpc/post', serviceAuthHeadersForBody('svc-trade', SECRET, ''), '');
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('FST_ERR_CTP_EMPTY_JSON_BODY');
+    await app.close();
   });
 
   it('maps an unauthenticated caller to 401, distinct from 412 frozen and 400 funds', () => {

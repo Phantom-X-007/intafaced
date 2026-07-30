@@ -7,7 +7,7 @@ import {
   type LedgerTx,
   type PostRequest,
 } from '@intafaced/ledger-client';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 
 /**
  * HTTP client for svc-ledger.
@@ -31,16 +31,26 @@ export function createLedgerClient(baseUrl: string, internalSecret: string): Led
    * Signed per request rather than once at construction, because the signature
    * covers a timestamp: a captured header stops working after the skew window
    * instead of being a permanent bearer token.
+   *
+   * It also covers the body (L2-6). Identity plus a timestamp left a captured
+   * signature replayable against ANY body for 300 seconds — on this path, any
+   * stake, unstake or epoch mint.
    */
-  const authHeaders = () => serviceAuthHeaders('svc-token', internalSecret);
+  const authHeaders = (payload: string) => serviceAuthHeadersForBody('svc-token', internalSecret, payload);
 
   const url = baseUrl.replace(/\/$/, '');
 
   async function call<T>(path: string, body: unknown): Promise<T> {
+    // Serialised ONCE, and the same string is both signed and sent. Signing
+    // `JSON.stringify(body)` and then handing `body` to fetch to re-serialise
+    // would digest bytes the server never sees; it presents as a 401 that
+    // reproduces only under whatever key order the two calls happened to differ on.
+    const payload = JSON.stringify(body);
+
     const response = await fetch(`${url}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...authHeaders() },
-      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json', ...authHeaders(payload) },
+      body: payload,
     });
 
     if (!response.ok) {
