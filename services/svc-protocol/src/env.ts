@@ -36,6 +36,15 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     PROTOCOL_IMPLEMENTATION_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
     /** Constant-product PoolFactory (protocol.amm). Zero until deployed on the target chain. */
     PROTOCOL_AMM_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
+    /**
+     * `TokenFactory` for `launch.token-factory` (§8.4). Zero until deployed.
+     *
+     * A loud zero, for the same reason as the two above: deriving a CREATE2
+     * address from `factory = 0x0` yields a real, checksummed, entirely
+     * fictional token address — and a creator can publish it and take money at
+     * it. Every launch path refuses on this check before any arithmetic runs.
+     */
+    PROTOCOL_TOKEN_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
 
     /**
      * Public ERC-4337 bundler. Optional: without it the service still builds

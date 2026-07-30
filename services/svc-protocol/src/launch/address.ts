@@ -31,6 +31,25 @@ import type { TokenParams } from './params.js';
  * whole chain of reasoning.
  */
 
+/**
+ * Read ONCE, at import, and deliberately so.
+ *
+ * `artifacts.ts` was able to say that nothing loaded a compiled artefact at
+ * boot, so a missing `contracts/out/` was only ever a build-time problem. This
+ * module is the first thing that breaks that, because a token's init code
+ * genuinely IS compiler output — so the property has to be preserved a
+ * different way rather than quietly lost.
+ *
+ * Loading at module scope buys both halves of it back:
+ *   · a missing or unreadable artefact throws while the router is being
+ *     imported, so the service fails to START. It never becomes a 500 on a
+ *     creator's first launch, and — the part that matters — it can never become
+ *     an address derived from bytecode nobody has.
+ *   · no `readFileSync` on a request path. A per-call `loadArtifact` would put a
+ *     synchronous disk read inside every address prediction.
+ */
+const TEMPLATE = loadArtifact('SovereignToken');
+
 /** Default salt — one token per creator per parameter set unless they ask for more. */
 export const DEFAULT_TOKEN_SALT: Hex = `0x${'00'.repeat(32)}`;
 
@@ -72,12 +91,20 @@ export function tokenSalt(creator: Address, userSalt: Hex = DEFAULT_TOKEN_SALT):
  * inferring an encoding bug from an address that came out wrong.
  */
 export function tokenInitCode(params: TokenParams): Hex {
-  const { bytecode } = loadArtifact('SovereignToken');
   const args = encodeAbiParameters(
     [{ type: 'string' }, { type: 'string' }, { type: 'uint8' }, { type: 'uint256' }, { type: 'address' }],
     [params.name, params.symbol, params.decimals, params.totalSupply, requireAddress(params.recipient, 'recipient')],
   );
-  return concatHex([bytecode, args]);
+  return concatHex([TEMPLATE.bytecode, args]);
+}
+
+/**
+ * The template the addresses above are derived from — exposed so a caller can
+ * report WHICH template it is committing to, and so a test can compare the
+ * runtime of a deployed token against what the compiler produced.
+ */
+export function templateArtifact(): typeof TEMPLATE {
+  return TEMPLATE;
 }
 
 export interface TokenAddressInput {

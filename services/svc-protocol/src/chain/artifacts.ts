@@ -11,17 +11,30 @@ import type { Abi, Hex } from 'viem';
  * and the tests that check the TypeScript in this service against the Solidity
  * it claims to mirror.
  *
- * It is NOT on any request path. The running service reads chain state through
- * `client.ts` using the hand-written ABI in `abi.ts`; nothing here is imported
- * at boot. That is why a missing `contracts/out` is a build-time problem and
- * never a runtime one.
+ * ── One caller IS on a request path now, and has to be ─────────────────────
+ *
+ * This used to say "not on any request path": the service read chain state
+ * through the hand-written ABI in `abi.ts`, nothing here was imported at boot,
+ * and a missing `contracts/out` could therefore only ever be a build-time
+ * problem.
+ *
+ * `src/launch/address.ts` changes that, unavoidably. A smart account is an
+ * EIP-1167 clone whose creation code is 55 bytes derivable from constants; a
+ * launched token is a full contract, so its CREATE2 init code IS the compiler's
+ * `bytecode` output. There is no way to predict a token address without it.
+ *
+ * The guarantee is preserved rather than dropped: that module calls
+ * `loadArtifact` ONCE at import, so a missing artefact fails the service at
+ * BOOT rather than surfacing as a 500 on a creator's first launch — or, far
+ * worse, as an address derived from bytecode that is not there. Read its header
+ * before adding a second request-path caller.
  *
  * The path is resolved from `import.meta.url` rather than `process.cwd()` so it
  * works the same from `src/` under vitest, from `dist/` under node, and from
  * `scripts/` under tsx — all three sit exactly two levels below the service root.
  */
 
-export type ArtifactName = 'AccountFactory' | 'SmartAccount' | 'SessionKeyLib';
+export type ArtifactName = 'AccountFactory' | 'SmartAccount' | 'SessionKeyLib' | 'SovereignToken' | 'TokenFactory';
 
 export interface ContractArtifact {
   readonly contractName: string;
