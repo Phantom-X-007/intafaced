@@ -1,18 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { AuthError, requireScope, type Principal } from '@intafaced/auth';
+import { requireScope, type Principal } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext, type Context, type EdgeRequest } from '@intafaced/contracts';
 import { createOrderRequestSchema, type CreateOrderRequest } from '@intafaced/exchange-contract';
+import { formatAmount, mul, parseAmount, type AccountKind, type Balance } from '@intafaced/ledger-client';
 import {
-  formatAmount,
-  mul,
-  parseAmount,
-  InsufficientFundsError,
-  LedgerError,
-  MoneyError,
-  type AccountKind,
-  type Balance,
-} from '@intafaced/ledger-client';
+  UNAUTHENTICATED,
+  badRequest,
+  badSymbol,
+  invalidOrder,
+  notSupported,
+  permissionDenied,
+  toCcxtError,
+  type CcxtErrorResponse,
+} from './ccxt-errors.js';
 import type { PlaceOrderInput } from './spot/trade-service.js';
 import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus } from './spot/types.js';
 
@@ -326,40 +327,32 @@ async function symbolForOrder(
   return symbol;
 }
 
+/** Send an already-mapped CCXT error. */
+function sendCcxt(reply: FastifyReply, res: CcxtErrorResponse): FastifyReply {
+  return reply.code(res.status).send(res.body);
+}
+
 /**
- * Domain → HTTP for private REST. Same branching as the tRPC guard so bots
- * retry on the right codes (insufficient funds is NOT retryable).
+ * Domain → CCXT wire error for private REST.
+ *
+ * This used to publish our own internal codes (`trade.below_min_notional`,
+ * `LedgerError`, `Unauthorized`) straight onto a surface whose entire purpose
+ * is that an off-the-shelf CCXT client can read it. A client branches on the
+ * error *class* to decide whether to retry, so an unrecognised code left it
+ * with only the HTTP status — and the statuses alone cannot tell
+ * `InsufficientFunds` (never retry) from `perks_unavailable` (retry) since both
+ * arrived as 400/500 with an opaque label.
+ *
+ * The whole mapping, and the reasoning for each arm, is in `ccxt-errors.ts`.
+ * `intafacedCode` still carries our finer-grained code for support and logs.
+ *
+ * Returns null when the error is not one we recognise, so the caller rethrows
+ * and it surfaces as a real 500 rather than a relabelled retry instruction.
  */
 function sendDomainError(reply: FastifyReply, err: unknown): FastifyReply | null {
-  if (err instanceof AuthError) {
-    const status = err.code === 'mfa.required' ? 401 : 403;
-    return reply.code(status).send({ code: err.code, message: err.message });
-  }
-  if (err instanceof TradeError) {
-    switch (err.code) {
-      case 'trade.market_not_found':
-      case 'trade.order_not_found':
-        return reply.code(404).send({ code: err.code, message: err.message });
-      case 'trade.not_owner':
-      case 'trade.spot_disabled':
-      case 'trade.market_not_tradable':
-      case 'trade.market_kind_unsupported':
-        return reply.code(403).send({ code: err.code, message: err.message });
-      case 'trade.perks_unavailable':
-      case 'trade.dust_fill':
-      case 'trade.hold_uncovered':
-        return reply.code(500).send({ code: err.code, message: err.message });
-      default:
-        return reply.code(400).send({ code: err.code, message: err.message });
-    }
-  }
-  if (err instanceof InsufficientFundsError) {
-    return reply.code(400).send({ code: err.code, message: err.message });
-  }
-  if (err instanceof LedgerError || err instanceof MoneyError) {
-    return reply.code(400).send({ code: err.name, message: err.message });
-  }
-  return null;
+  const mapped = toCcxtError(err);
+  if (!mapped) return null;
+  return sendCcxt(reply, mapped);
 }
 
 /**
@@ -381,7 +374,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   function requirePrincipal(req: FastifyRequest, reply: FastifyReply): Principal | null {
     const principal = contextFrom(req).principal;
     if (!principal) {
-      void reply.code(401).send({ code: 'Unauthorized', message: 'Authentication required' });
+      void sendCcxt(reply, UNAUTHENTICATED);
       return null;
     }
     return principal;
@@ -400,9 +393,11 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       kycTier: principal.tier,
     });
     if (!decision.allowed) {
+      // Credentials were fine; this principal may not trade from here. CCXT
+      // `PermissionDenied` — a bot must stop, not re-sign and retry. The tier
+      // requirement rides along so a client can tell the user what to do.
       void reply.code(403).send({
-        code: decision.code,
-        message: decision.reason,
+        ...permissionDenied(decision.reason, decision.code).body,
         ...(decision.requiredTier ? { requiredTier: decision.requiredTier } : {}),
       });
       return false;
@@ -422,7 +417,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const symbol = decodeURIComponent(symbolRaw);
       const market = await deps.marketBySymbol(symbol);
       if (!market) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+        return sendCcxt(reply, badSymbol(symbol));
       }
       marketId = market.id;
     }
@@ -453,14 +448,14 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const symbol = decodeURIComponent(symbolRaw);
       const market = await deps.marketBySymbol(symbol);
       if (!market) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+        return sendCcxt(reply, badSymbol(symbol));
       }
       marketId = market.id;
     }
     const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
     const sinceParsed = parseSince(req.query.since);
     if (!sinceParsed.ok) {
-      return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
+      return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
     }
 
     try {
@@ -491,7 +486,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     const limit = parseLimit(req.query.limit, DEFAULT_FILLS, MAX_FILLS);
     const sinceParsed = parseSince(req.query.since);
     if (!sinceParsed.ok) {
-      return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
+      return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
     }
     let filterMarketId: string | undefined;
     const symbolRaw = req.query.symbol;
@@ -499,7 +494,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const symbol = decodeURIComponent(symbolRaw);
       const market = await deps.marketBySymbol(symbol);
       if (!market) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+        return sendCcxt(reply, badSymbol(symbol));
       }
       filterMarketId = market.id;
     }
@@ -578,7 +573,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
    * Edge-signed principal + trade:read required (same fail-closed gate as open
    * orders). Always 200 + []. Optional ?symbol= is accepted and ignored so
    * CCXT clients that pass a filter still get a valid empty list, not 404.
-   * Does NOT invent leverage/margin state (setLeverage/setMarginMode not mounted).
+   * Does NOT invent leverage/margin state — see the two routes below.
    */
   app.get<{ Querystring: { symbol?: string } }>('/api/v1/positions', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
@@ -596,6 +591,47 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
+  /**
+   * POST /api/v1/positions/leverage   — REST_ROUTES.setLeverage
+   * POST /api/v1/positions/margin-mode — REST_ROUTES.setMarginMode
+   *
+   * Both are declared in the contract and were not mounted at all, so a CCXT
+   * client calling either got Fastify's generic 404. That is the wrong answer
+   * twice over: it reads as a bad URL rather than an unsupported capability,
+   * and it is indistinguishable from a routing or deploy fault — an integrator
+   * spends the afternoon checking the edge instead of reading one line.
+   *
+   * `NotSupported` (501) is the honest answer. This venue is spot-only:
+   * `/positions` is permanently `[]`, so there is no position to lever and no
+   * margin mode to set. Accepting either call and returning 200 would be worse
+   * than the 404 — a bot would believe it had set 10x leverage and size its
+   * next order against margin that does not exist.
+   *
+   * Auth is still enforced first. An unauthenticated caller must not be able to
+   * enumerate which capabilities a venue supports.
+   */
+  const derivativesNotSupported = (what: string, intafacedCode: string) =>
+    async function handler(req: FastifyRequest, reply: FastifyReply) {
+      const principal = requirePrincipal(req, reply);
+      if (!principal) return;
+
+      try {
+        requireScope(principal, 'trade:write');
+      } catch (err) {
+        const sent = sendDomainError(reply, err);
+        if (sent) return sent;
+        throw err;
+      }
+
+      return sendCcxt(
+        reply,
+        notSupported(`${what} is not available: this venue lists spot markets only`, intafacedCode),
+      );
+    };
+
+  app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', 'trade.leverage_unsupported'));
+  app.post('/api/v1/positions/margin-mode', derivativesNotSupported('setMarginMode', 'trade.margin_mode_unsupported'));
+
   // ── Create (money path) ───────────────────────────────────────────────────
 
   app.post('/api/v1/orders', async (req, reply) => {
@@ -605,9 +641,11 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
 
     const parsed = createOrderRequestSchema.safeParse(req.body);
     if (!parsed.success) {
+      // CCXT `InvalidOrder`, not `BadRequest`: it is specifically the order
+      // that is wrong, and that is the branch a client's order-builder listens
+      // on. `issues` rides alongside so the integrator sees which field.
       return reply.code(400).send({
-        code: 'ValidationError',
-        message: parsed.error.issues[0]?.message ?? 'invalid create order body',
+        ...invalidOrder(parsed.error.issues[0]?.message ?? 'invalid create order body').body,
         issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
       });
     }
@@ -651,7 +689,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const symbol = decodeURIComponent(symbolRaw);
       const market = await deps.marketBySymbol(symbol);
       if (!market) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+        return sendCcxt(reply, badSymbol(symbol));
       }
       marketId = market.id;
     }

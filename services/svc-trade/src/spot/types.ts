@@ -106,6 +106,27 @@ export interface PublicTapePrint {
 }
 
 /**
+ * One aggregated candle, derived from the same taker fills as the public tape.
+ *
+ * Every field is a measurement of real trades: open/close are the first and
+ * last traded price in the bucket by engine sequence, high/low the extremes,
+ * volume the summed base quantity. There is no modelled or carried-forward
+ * value anywhere in this shape — a bucket in which nothing traded produces no
+ * Candle at all rather than a flat one, because a flat candle is a print that
+ * never happened.
+ *
+ * `openTimeMs` is the bucket's opening boundary in unix ms (CCXT convention).
+ */
+export interface Candle {
+  readonly openTimeMs: number;
+  readonly open: Amount;
+  readonly high: Amount;
+  readonly low: Amount;
+  readonly close: Amount;
+  readonly volume: Amount;
+}
+
+/**
  * Every way this service refuses.
  *
  * A closed union rather than free text because an SLO dashboard groups by it

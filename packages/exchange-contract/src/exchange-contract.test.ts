@@ -8,6 +8,8 @@ import {
   TIMEFRAME_MS,
   TIMEFRAMES,
   EXCHANGE_ERROR_CODES,
+  exchangeErrorSchema,
+  marketSchema,
 } from './schemas.js';
 import { REST_ROUTES, WS_CHANNELS } from './api.js';
 
@@ -184,5 +186,82 @@ describe('API surface', () => {
     for (const code of ['InsufficientFunds', 'InvalidOrder', 'OrderNotFound', 'RateLimitExceeded'] as const) {
       expect(EXCHANGE_ERROR_CODES).toContain(code);
     }
+  });
+
+  /**
+   * A capability this venue will never serve in its current shape is not a
+   * retryable outage and not a bad request. Without its own class, a spot-only
+   * venue has to answer `setLeverage` with something that reads as either
+   * "try again" or "you sent that wrong", and a client acts on both.
+   */
+  it('carries NotSupported, distinct from every retryable class', () => {
+    expect(EXCHANGE_ERROR_CODES).toContain('NotSupported');
+    const parsed = exchangeErrorSchema.safeParse({
+      code: 'NotSupported',
+      message: 'BTC/USDT is a spot market and has no funding rate',
+      intafacedCode: 'trade.funding_rate_spot_market',
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('rejects an error code that is not in the CCXT taxonomy', () => {
+    // Publishing our internal code as the class is the exact regression the
+    // schema exists to stop.
+    expect(exchangeErrorSchema.safeParse({ code: 'trade.market_not_found', message: 'x' }).success).toBe(false);
+    expect(exchangeErrorSchema.safeParse({ code: 'MarketNotFound', message: 'x' }).success).toBe(false);
+  });
+});
+
+describe('market precision', () => {
+  function market(precision: { amount: unknown; price: unknown }) {
+    return {
+      id: 'm-1',
+      symbol: 'EUR/USD',
+      base: 'EUR',
+      quote: 'USD',
+      settle: null,
+      baseId: 'EUR',
+      quoteId: 'USD',
+      type: 'spot',
+      spot: true,
+      swap: false,
+      future: false,
+      option: false,
+      contract: false,
+      linear: null,
+      inverse: null,
+      active: true,
+      taker: '0.001',
+      maker: '0.0005',
+      contractSize: null,
+      expiry: null,
+      expiryDatetime: null,
+      strike: null,
+      optionType: null,
+      precisionMode: 'TICK_SIZE',
+      precision,
+      limits: {
+        amount: { min: '1000', max: null },
+        price: { min: '0.00001', max: null },
+        cost: { min: '1000', max: null },
+        leverage: { min: null, max: null },
+      },
+    };
+  }
+
+  /**
+   * Precision must be able to carry a lot size of 1000 — six of our own live
+   * forex listings have exactly that. As a count of decimal places it collapses
+   * to 0, and a client that rounds an amount to 0 places builds a quantity the
+   * engine has to reject.
+   */
+  it('carries a tick and a lot as decimal strings, including values above one', () => {
+    expect(marketSchema.safeParse(market({ amount: '1000', price: '0.00001' })).success).toBe(true);
+    expect(marketSchema.safeParse(market({ amount: '10', price: '0.001' })).success).toBe(true);
+    expect(marketSchema.safeParse(market({ amount: '0.0001', price: '0.01' })).success).toBe(true);
+  });
+
+  it('refuses a decimal-places integer where a tick size belongs', () => {
+    expect(marketSchema.safeParse(market({ amount: 4, price: 2 })).success).toBe(false);
   });
 });

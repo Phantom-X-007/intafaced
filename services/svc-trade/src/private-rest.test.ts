@@ -303,7 +303,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({ method: 'GET', url: '/api/v1/orders/open' });
     expect(res.statusCode).toBe(401);
-    expect(res.json().code).toBe('Unauthorized');
+    expect(res.json().code).toBe('AuthenticationError');
     expect(read).toBe(false);
     await app.close();
   });
@@ -415,7 +415,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(404);
-    expect(res.json().code).toBe('MarketNotFound');
+    expect(res.json().code).toBe('BadSymbol');
     await app.close();
   });
 
@@ -433,7 +433,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(principal({ scopes: [] })),
     });
     expect(res.statusCode).toBe(403);
-    expect(res.json().code).toBe('scope.denied');
+    expect(res.json().code).toBe('PermissionDenied');
     await app.close();
   });
 
@@ -522,7 +522,7 @@ describe('private REST — mount boundary + order write path', () => {
       payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1' },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().code).toBe('ValidationError');
+    expect(res.json().code).toBe('InvalidOrder');
     expect(placed).toBe(false);
     await app.close();
   });
@@ -541,8 +541,12 @@ describe('private REST — mount boundary + order write path', () => {
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
       payload: { symbol: 'BTC/USDT', type: 'market', side: 'buy', amount: '1' },
     });
-    expect(res.statusCode).toBe(403);
-    expect(res.json().code).toBe('trade.spot_disabled');
+    // The operator kill-switch is a temporary, venue-wide condition, so CCXT
+    // `OnMaintenance` + 503 — a retryable state. It used to answer 403, which a
+    // bot reads as "your key may not do this" and gives up on permanently.
+    expect(res.statusCode).toBe(503);
+    expect(res.json().code).toBe('OnMaintenance');
+    expect(res.json().intafacedCode).toBe('trade.spot_disabled');
     await app.close();
   });
 
@@ -639,7 +643,8 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(miss.statusCode).toBe(404);
-    expect(miss.json().code).toBe('trade.order_not_found');
+    expect(miss.json().code).toBe('OrderNotFound');
+    expect(miss.json().intafacedCode).toBe('trade.order_not_found');
     await appMiss.close();
   });
 
@@ -777,7 +782,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(404);
-    expect(res.json().code).toBe('MarketNotFound');
+    expect(res.json().code).toBe('BadSymbol');
     expect(listed).toBe(false);
     await app.close();
   });
@@ -845,7 +850,7 @@ describe('private REST — mount boundary + order write path', () => {
         headers: signedHeaders(),
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json().code).toBe('InvalidSince');
+      expect(res.json().code).toBe('BadRequest');
       expect(listed).toBe(false);
     }
     await app.close();
@@ -890,7 +895,7 @@ describe('private REST — mount boundary + order write path', () => {
         headers: signedHeaders(),
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json().code).toBe('InvalidSince');
+      expect(res.json().code).toBe('BadRequest');
       expect(listed).toBe(false);
     }
     await app.close();
@@ -974,7 +979,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(miss.statusCode).toBe(404);
-    expect(miss.json().code).toBe('MarketNotFound');
+    expect(miss.json().code).toBe('BadSymbol');
     expect(cancelled).toBe(false);
     await app.close();
   });
@@ -1083,7 +1088,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(principal({ scopes: [] })),
     });
     expect(res.statusCode).toBe(403);
-    expect(res.json().code).toBe('scope.denied');
+    expect(res.json().code).toBe('PermissionDenied');
     expect(read).toBe(false);
     await app.close();
   });
@@ -1144,7 +1149,7 @@ describe('private REST — mount boundary + order write path', () => {
     const app = await build();
     const res = await app.inject({ method: 'GET', url: '/api/v1/positions' });
     expect(res.statusCode).toBe(401);
-    expect(res.json().code).toBe('Unauthorized');
+    expect(res.json().code).toBe('AuthenticationError');
     await app.close();
   });
 
@@ -1157,7 +1162,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
     });
     expect(res.statusCode).toBe(401);
-    expect(res.json().code).toBe('Unauthorized');
+    expect(res.json().code).toBe('AuthenticationError');
     await app.close();
   });
 
@@ -1169,7 +1174,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(principal({ scopes: [] })),
     });
     expect(res.statusCode).toBe(403);
-    expect(res.json().code).toBe('scope.denied');
+    expect(res.json().code).toBe('PermissionDenied');
     await app.close();
   });
 
@@ -1184,6 +1189,62 @@ describe('private REST — mount boundary + order write path', () => {
     expect(res.json()).toEqual([]);
     await app.close();
   });
+
+  // ── setLeverage / setMarginMode ───────────────────────────────────────────
+
+  /**
+   * Both are declared in REST_ROUTES and were not mounted at all, so a CCXT
+   * client got Fastify's generic 404 — which reads as a bad URL or a broken
+   * deploy rather than an unsupported capability.
+   *
+   * Accepting them with a 200 would be far worse than either: a bot would
+   * believe it had set 10x leverage and size its next order against margin
+   * that does not exist.
+   */
+  for (const [path, intafacedCode] of [
+    ['/api/v1/positions/leverage', 'trade.leverage_unsupported'],
+    ['/api/v1/positions/margin-mode', 'trade.margin_mode_unsupported'],
+  ] as const) {
+    it(`POST ${path}: signed → 501 NotSupported, never a silent success`, async () => {
+      const app = await build();
+      const res = await app.inject({
+        method: 'POST',
+        url: path,
+        headers: { ...signedHeaders(), 'content-type': 'application/json' },
+        payload: { symbol: 'BTC/USDT', leverage: '10', marginMode: 'cross' },
+      });
+      expect(res.statusCode).toBe(501);
+      expect(res.json().code).toBe('NotSupported');
+      expect(res.json().intafacedCode).toBe(intafacedCode);
+      await app.close();
+    });
+
+    it(`POST ${path}: anonymous → 401 (capabilities are not enumerable unauthenticated)`, async () => {
+      const app = await build();
+      const res = await app.inject({
+        method: 'POST',
+        url: path,
+        headers: { 'content-type': 'application/json' },
+        payload: { symbol: 'BTC/USDT' },
+      });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().code).toBe('AuthenticationError');
+      await app.close();
+    });
+
+    it(`POST ${path}: scope miss → 403 before the capability answer`, async () => {
+      const app = await build();
+      const res = await app.inject({
+        method: 'POST',
+        url: path,
+        headers: { ...signedHeaders(principal({ scopes: ['trade:read'] })), 'content-type': 'application/json' },
+        payload: { symbol: 'BTC/USDT' },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('PermissionDenied');
+      await app.close();
+    });
+  }
 
   it('GET /positions?symbol=: still returns [] (filter accepted, no invent)', async () => {
     const app = await build();

@@ -74,12 +74,14 @@ app.get('/ready', async (_req, reply) => {
 // No auth — market data is public. Paths match packages/exchange-contract
 // REST_ROUTES; edge routes /api/v1 → here with path preserve and principal
 // exchange (private routes below verify the edge signature).
-// OHLCV returns [] until a candle aggregation job exists (no inventing candles).
+// OHLCV is aggregated in SQL from the real taker fill tape — no candle is
+// invented, and a bucket with no fills is absent rather than zero-filled.
 registerPublicRest(app, {
   markets: () => trade.markets(),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit, sinceMs) => trade.publicTape(marketId, limit, sinceMs),
+  candles: (marketId, timeframe, limit, sinceMs) => trade.candles(marketId, timeframe, limit, sinceMs),
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
@@ -123,6 +125,7 @@ app.log.info(
       '/api/v1/tickers',
       '/api/v1/trades/:symbol',
       '/api/v1/ohlcv/:symbol',
+      '/api/v1/funding-rate/:symbol',
     ],
     privateRest: [
       'POST /api/v1/orders',
@@ -135,6 +138,8 @@ app.log.info(
       'GET /api/v1/account/fees',
       'GET /api/v1/account/balance',
       'GET /api/v1/positions',
+      'POST /api/v1/positions/leverage',
+      'POST /api/v1/positions/margin-mode',
     ],
   },
   'svc-trade ready',
