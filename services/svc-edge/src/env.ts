@@ -54,6 +54,21 @@ const schema = baseEnvSchema
        * Matches routes.ts IDENTITY_URL default.
        */
       IDENTITY_URL: z.string().url().default('http://localhost:4002'),
+
+      /**
+       * svc-ledger's OPERATOR surface, for `/admin/ledger/*` (§14.6).
+       *
+       * A URL, not a credential — which is why it does not violate the rule at
+       * the top of this file. The edge holds no secret of the ledger's and
+       * cannot post to the money plane; it forwards the operator's own bearer
+       * token to two named paths, and svc-ledger verifies it independently.
+       * `/api/ledger` is still deliberately absent from the route table.
+       *
+       * Optional. Unset means the console is told the money-plane control is
+       * unreachable, which is the honest answer and not the same as reporting
+       * the platform healthy.
+       */
+      LEDGER_URL: z.string().url().optional(),
     }),
   );
 

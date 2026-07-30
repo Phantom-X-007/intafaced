@@ -6,6 +6,7 @@ import { LedgerService } from './service.js';
 import { createLedgerRouter } from './router.js';
 import { writeSnapshots } from './ledger/reconcile.js';
 import { registerS2sHttp } from './s2s-http.js';
+import { registerOperatorHttp } from './operator-http.js';
 
 /**
  * svc-ledger — THE BALANCE (§4.2).
@@ -54,6 +55,21 @@ app.get('/ready', async (_req, reply) => {
 });
 
 registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERNAL_SERVICE_BODY_BIND });
+
+/**
+ * §14.6 — the operator surface, and the first thing that can reach the freeze.
+ *
+ * `appRouter` above is exported for its TYPE and served on no port, so
+ * `freeze`/`unfreeze`/`reconcile` — already written, already scoped to
+ * `admin:treasury`, already durable and attributed in `posting_freeze` — were
+ * callable by nothing. See the header of `operator-http.ts`.
+ */
+registerOperatorHttp(app, ledger, {
+  secret: env.JWT_ACCESS_SECRET,
+  issuer: env.JWT_ISSUER,
+  audience: env.JWT_AUDIENCE,
+  accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
+});
 
 const reconcileTimer = setInterval(() => {
   void (async () => {
