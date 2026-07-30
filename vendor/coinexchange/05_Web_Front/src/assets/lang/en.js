@@ -140,8 +140,8 @@ module.exports = {
         modules: {
             bank: {
                 title: "Bank",
-                blurb: "Multi-currency spaces, standing orders and earn pools — every figure read from the ledger at request time.",
-                note: "Behind the front door and mounted. Every procedure demands bank:read or bank:write, and an interactive session is issued neither, so no user can read a space today."
+                blurb: "Multi-currency spaces, standing orders, earn pools and loan products — every figure read from the ledger at request time.",
+                note: "Behind the front door and mounted. Every procedure demands bank:read or bank:write, and an interactive session is issued neither, so no user can read a space today. Loan open/draw is bank:write and is not offered here."
             },
             pay: {
                 title: "Pay",
@@ -199,6 +199,14 @@ module.exports = {
             unnamed: "Assets without a space",
             pools: "Earn pools",
             schedules: "Standing orders",
+            loanProducts: "Loan products",
+            myLoans: "My loans",
+            debt: "Debt asset",
+            collateral: "Collateral",
+            principal: "Principal",
+            outstanding: "Outstanding",
+            maxLtv: "Max LTV",
+            liqLtv: "Liquidation LTV",
             balance: "Balance",
             goal: "Goal",
             lockedUntil: "Locked until",
