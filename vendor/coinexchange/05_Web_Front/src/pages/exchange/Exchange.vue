@@ -597,12 +597,13 @@
             type="button"
             class="ix-submit"
             :class="side === 'BUY' ? 'is-buy' : 'is-sell'"
-            :disabled="!tradable || submitting"
+            :disabled="!tradable || submitting || !!orderBlockReason"
             @click="submitOrder"
           >
             {{ submitting ? 'Placing…' : submitLabel }}
           </button>
 
+          <p class="ix-order-note ix-order-error" v-if="orderValidationError">{{ orderValidationError }}</p>
           <p class="ix-order-note" v-if="!isLogin">
             <router-link to="/login">Sign in</router-link> or
             <router-link to="/register">register</router-link> to trade.
@@ -614,6 +615,7 @@
           <p class="ix-order-note" v-else-if="!feedLive">
             Market feed is down — double-check size before confirming any order.
           </p>
+          <p class="ix-order-note" v-else-if="orderBlockReason">{{ orderBlockReason }}</p>
         </div>
       </aside>
     </div>
@@ -747,7 +749,9 @@ export default {
       form: { price: '', amount: '' },
 
       trend: 0,
-      submitting: false
+      submitting: false,
+      /** Inline field validation message; empty when fields look usable. */
+      orderValidationError: ''
     };
   },
 
@@ -886,6 +890,15 @@ export default {
       if (this.exchangeable != 1) return false;
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) return false;
       return true;
+    },
+    /** Structural block (halt/market type) — separate from field validation. */
+    orderBlockReason() {
+      if (!this.isLogin) return '';
+      if (this.exchangeable != 1) return 'This market is halted.';
+      if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) {
+        return 'Market ' + (this.side === 'BUY' ? 'buy' : 'sell') + ' is disabled for this pair.';
+      }
+      return '';
     },
     submitLabel() {
       const verb = this.side === 'BUY' ? 'Buy' : 'Sell';
@@ -1540,6 +1553,7 @@ export default {
 
     onPriceInput() {
       this.form.price = this.clamp(this.form.price, this.baseCoinScale);
+      this.orderValidationError = '';
       if (this.percent > 0) {
         this.applyPercent();
       }
@@ -1548,26 +1562,57 @@ export default {
     onAmountInput() {
       this.form.amount = this.clamp(this.form.amount, this.quoteSized ? this.baseCoinScale : this.coinScale);
       this.percent = 0;
+      this.orderValidationError = '';
+    },
+
+    /**
+     * Inline validation — prefer a named reason over a silent disabled button.
+     * Never invent fees or balances; wallet unknown stays "unknown", not zero.
+     */
+    validateOrderFields() {
+      const amountRaw = String(this.form.amount || '').trim();
+      const priceRaw = String(this.form.price || '').trim();
+      if (!amountRaw) return 'Enter an amount.';
+      if (/[eE]/.test(amountRaw) || /[eE]/.test(priceRaw)) {
+        return 'Scientific notation is not accepted — use a plain decimal.';
+      }
+      const amount = this.num(amountRaw);
+      const price = this.num(priceRaw);
+      if (!isFinite(amount) || amount <= 0) return 'Enter a valid amount greater than zero.';
+      if (amount > 1e12) return 'Amount is too large.';
+      if (this.orderType === 'LIMIT_PRICE') {
+        if (!priceRaw) return 'Enter a limit price.';
+        if (!isFinite(price) || price <= 0) return 'Enter a valid limit price greater than zero.';
+        if (price > 1e12) return 'Price is too large.';
+      }
+      const cost = this.quoteSized ? amount : this.side === 'BUY' ? price * amount : amount;
+      if (this.isLogin && this.walletReachable && isFinite(cost) && cost > this.availableBalance) {
+        return 'Insufficient balance. Available ' + this.fmt(this.availableBalance, 8) + '.';
+      }
+      if (this.isLogin && !this.walletReachable) {
+        // Allow submit attempt — venue may still accept; do not invent a balance.
+        return '';
+      }
+      return '';
     },
 
     submitOrder() {
       if (!this.tradable || this.submitting) {
         return;
       }
+      if (this.orderBlockReason) {
+        this.orderValidationError = this.orderBlockReason;
+        return this.warn(this.orderBlockReason);
+      }
+      const fieldErr = this.validateOrderFields();
+      if (fieldErr) {
+        this.orderValidationError = fieldErr;
+        return this.warn(fieldErr);
+      }
+      this.orderValidationError = '';
+
       const amount = this.num(this.form.amount);
       const price = this.num(this.form.price);
-
-      if (amount <= 0) {
-        return this.warn('Enter an amount.');
-      }
-      if (this.orderType === 'LIMIT_PRICE' && price <= 0) {
-        return this.warn('Enter a price.');
-      }
-
-      const cost = this.quoteSized ? amount : this.side === 'BUY' ? price * amount : amount;
-      if (this.isLogin && this.walletReachable && cost > this.availableBalance) {
-        return this.warn('Insufficient balance. Available ' + this.fmt(this.availableBalance, 8) + '.');
-      }
 
       const side = this.side === 'BUY' ? 'Buy' : 'Sell';
       const type = this.orderType === 'MARKET_PRICE' ? 'Market' : 'Limit';
@@ -1582,6 +1627,9 @@ export default {
         ' ' +
         (this.amountUnit || '');
       const feeLine = 'Fee (est.): ' + this.feeLabel;
+      const walletLine = this.walletReachable
+        ? 'Available (venue wallet): ' + this.fmt(this.availableBalance, 8)
+        : 'Available: unknown — venue wallet did not answer (not the platform ledger).';
       const pair = (this.currentCoin.coin || '') + '/' + (this.currentCoin.base || '');
 
       this.$Modal.confirm({
@@ -1599,7 +1647,9 @@ export default {
           amountLine +
           '</p><p>' +
           feeLine +
-          '</p><p style="margin-top:8px;opacity:0.75;">Orders only succeed if the exchange accepts them. No response means not placed.</p>',
+          '</p><p>' +
+          walletLine +
+          '</p><p style="margin-top:8px;opacity:0.75;">Orders only succeed if the exchange accepts them. No response means not placed. Venue wallet balance is not the TypeScript ledger book.</p>',
         okText: side,
         cancelText: 'Cancel',
         onOk: () => this.placeOrder(amount, price)
@@ -2655,6 +2705,10 @@ $radius-sm: var(--ix-radius-sm, 8px);
   text-align: center;
   font-size: 11px;
   color: $faint;
+}
+.ix-order-note.ix-order-error {
+  color: #ff6b6b;
+  font-weight: 500;
 }
 
 /* ── shared atoms ─────────────────────────────────────────────────────── */
