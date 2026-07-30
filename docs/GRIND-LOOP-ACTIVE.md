@@ -2,7 +2,7 @@
 
 **Status:** DRAINED (agent queue) · Nitro AFK · 45m scheduler re-checks for open PRs / regressions / honest tracker lies only  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#167** (trade migration backfill `display_name` — fleet-down fix) · prior **#166** brand-scrub · product high water still **#162–#163** · Status **DRAINED (agent queue)** · do not re-ship **#110–#167**
+**Last tip:** high water through **#172** (uiproof PR-2 harness + design bar) + **#169** (ui:boot) · prior **#167** fleet-down migration · **#170–#171** parallel/mega-audit docs · backend micro-queue still **DRAINED** · do not re-ship **#110–#172**
 
 ---
 
@@ -59,7 +59,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#167** on main. Product high water **#162–#163**; tip **#167** fleet-down migration fix (backfill `markets.display_name` before CHECK). **#166** brand-scrub after late **#138**. First DRAINED after **#158**; post-drain product **#162–#163**; queue remains **DRAINED** (agent micro-queue still empty — #167 is ops fix not new product surface).
+**#110–#172** on main. Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
 
 | PR | What |
 | --- | --- |
@@ -146,7 +146,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## Exit (DRAINED) — met
 
-Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · tip high water **#167** · product high water **#162–#163** · #167 fleet-down migration fixed on main · open PRs: none.
+Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · tip high water **#172** · backend product **#162–#163** · Stream A uiproof **#169/#172** on main · open agent product PRs: none.
 
 **First DRAINED claim** was after **#158** product / **#159–#161** docs. **Terminal public trade tape (#162)** and **CCXT since filters (#163)** shipped afterward; queue was **re-checked** and remains empty of agent micro product (no un-drain).
 
@@ -161,4 +161,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.  
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED (agent queue) — do not re-ship #110–#167; only babysit / honest brand/tracker/migration fixes.**
+**Next agent after compact: Status DRAINED (backend micro-queue) — do not re-ship #110–#172; babysit open PRs; PROOF.md needs human/desktop Chromium not agent invent.**
