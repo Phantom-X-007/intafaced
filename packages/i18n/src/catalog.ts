@@ -127,8 +127,14 @@ export const en = {
   'notify.trade.fill.body': '{side} {qty} on {marketId} at {price}.',
   'notify.p2p.escrow.locked.title': 'Escrow locked',
   'notify.p2p.escrow.locked.body': '{amount} {asset} locked for {fiatAmount} {fiatCurrency}.',
+  'notify.p2p.escrow.released.title': 'Trade completed',
+  'notify.p2p.escrow.released.body': '{amount} {asset} released. Fee {fee}.',
   'notify.identity.kyc.approved.title': 'Verification approved',
   'notify.identity.kyc.approved.body': 'You are verified at the {tier} tier.',
+  'notify.identity.rank.updated.title': 'Rank updated',
+  'notify.identity.rank.updated.body': 'You moved from rank {previousRank} to rank {rank}.',
+  'notify.token.stake.created.title': 'Stake locked',
+  'notify.token.stake.created.body': '{amount} staked on the {tier} tier.',
 
   // ── errors ────────────────────────────────────────────────────────────────
   'error.insufficientFunds': 'Insufficient balance.',

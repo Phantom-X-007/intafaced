@@ -1,5 +1,13 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { MemoryEventBus, fillSettled, kycApproved, p2pEscrowLocked } from '@intafaced/events';
+import {
+  MemoryEventBus,
+  fillSettled,
+  kycApproved,
+  p2pEscrowLocked,
+  p2pEscrowReleased,
+  rankUpdated,
+  stakeCreated,
+} from '@intafaced/events';
 import { MemoryNotifyStore } from './store.js';
 import { NotifyService } from './notify-service.js';
 import { subscribeNotificationEvents } from './events.js';
@@ -180,6 +188,98 @@ describe('event fan-out', () => {
     expect(kyc?.bodyKey).toBe('notify.identity.kyc.approved.body');
   });
 
+  it('writes inbox rows from rankUpdated / stakeCreated / p2pEscrowReleased and dedupes redelivery', async () => {
+    const store = new MemoryNotifyStore();
+    const notify = new NotifyService(store, { fanoutEnabled: true });
+    const bus = new MemoryEventBus('test-producer');
+    await subscribeNotificationEvents(bus, notify);
+
+    await bus.publish('rankUpdated', {
+      userId: USER,
+      rank: 2,
+      previousRank: 1,
+      xp: '1500',
+    });
+    await bus.publish('rankUpdated', {
+      userId: USER,
+      rank: 2,
+      previousRank: 1,
+      xp: '1500',
+    });
+    expect(await notify.unreadCount(USER)).toBe(1);
+    expect(rankUpdated.subject).toContain('identity');
+    const rank = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find(
+      (n) => n.kind === 'identity.rank.updated',
+    );
+    expect(rank?.sourceSubject).toBe(rankUpdated.subject);
+    expect(rank?.sourceIdempotencyKey).toBe(`${USER}:1:2`);
+    expect(rank?.titleKey).toBe('notify.identity.rank.updated.title');
+    expect(rank?.bodyKey).toBe('notify.identity.rank.updated.body');
+    expect(rank?.params).toMatchObject({ rank: 2, previousRank: 1, xp: '1500' });
+
+    const stakeId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    await bus.publish('stakeCreated', {
+      stakeId,
+      userId: USER,
+      amount: '100',
+      tier: 'm3',
+      unlocksAt: new Date(Date.now() + 86_400_000 * 90).toISOString(),
+    });
+    await bus.publish('stakeCreated', {
+      stakeId,
+      userId: USER,
+      amount: '100',
+      tier: 'm3',
+      unlocksAt: new Date(Date.now() + 86_400_000 * 90).toISOString(),
+    });
+    expect(await notify.unreadCount(USER)).toBe(2);
+    expect(stakeCreated.subject).toContain('token');
+    const stake = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find(
+      (n) => n.kind === 'token.stake.created',
+    );
+    expect(stake?.sourceSubject).toBe(stakeCreated.subject);
+    expect(stake?.sourceIdempotencyKey).toBe(stakeId);
+    expect(stake?.titleKey).toBe('notify.token.stake.created.title');
+    expect(stake?.bodyKey).toBe('notify.token.stake.created.body');
+    expect(stake?.params).toMatchObject({ amount: '100', tier: 'm3' });
+
+    const tradeId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    await bus.publish('p2pEscrowReleased', {
+      tradeId,
+      sellerId: USER,
+      buyerId: BUYER,
+      asset: 'BTC',
+      amount: '1',
+      fee: '0.01',
+      resolvedBy: 'seller',
+      releaseSeconds: 120,
+    });
+    await bus.publish('p2pEscrowReleased', {
+      tradeId,
+      sellerId: USER,
+      buyerId: BUYER,
+      asset: 'BTC',
+      amount: '1',
+      fee: '0.01',
+      resolvedBy: 'seller',
+      releaseSeconds: 120,
+    });
+    expect(await notify.unreadCount(USER)).toBe(3);
+    expect(await notify.unreadCount(BUYER)).toBe(1);
+    expect(p2pEscrowReleased.subject).toContain('p2p');
+    const released = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find(
+      (n) => n.kind === 'p2p.escrow.released',
+    );
+    expect(released?.sourceSubject).toBe(p2pEscrowReleased.subject);
+    expect(released?.sourceIdempotencyKey).toBe(`${tradeId}:seller`);
+    expect(released?.titleKey).toBe('notify.p2p.escrow.released.title');
+    expect(released?.bodyKey).toBe('notify.p2p.escrow.released.body');
+    const buyerReleased = (await notify.list({ userId: BUYER, limit: 10, unreadOnly: false })).items.find(
+      (n) => n.kind === 'p2p.escrow.released',
+    );
+    expect(buyerReleased?.sourceIdempotencyKey).toBe(`${tradeId}:buyer`);
+  });
+
   it('acks bus events without writing when fan-out is off', async () => {
     const store = new MemoryNotifyStore();
     const notify = new NotifyService(store, { fanoutEnabled: false });
@@ -190,6 +290,19 @@ describe('event fan-out', () => {
       userId: USER,
       tier: 'full',
       jurisdiction: 'GB',
+    });
+    await bus.publish('rankUpdated', {
+      userId: USER,
+      rank: 3,
+      previousRank: 2,
+      xp: '3000',
+    });
+    await bus.publish('stakeCreated', {
+      stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      userId: USER,
+      amount: '50',
+      tier: 'flex',
+      unlocksAt: null,
     });
     expect(await notify.unreadCount(USER)).toBe(0);
   });
