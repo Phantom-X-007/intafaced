@@ -272,7 +272,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot'],
-    note: 'partial — public REST: markets, orderbook, ticker, tickers (all-market BBO+last; empty book when matching down), trades (public tape); private REST: GET /api/v1/orders/open (edge-signed principal, trade:read, CCXT order shape); edge preservePath /api/v1 → TRADE_URL + principal exchange; remaining private (balance, create/cancel, positions, …) still open',
+    note: 'partial — public REST: markets, orderbook, ticker, tickers, trades (tape); private REST (edge-signed principal, fail-closed): GET orders/open|closed, GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), GET account/trades (myFills). Still open: balance, fees, positions/leverage, cancel-all, WS private.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {

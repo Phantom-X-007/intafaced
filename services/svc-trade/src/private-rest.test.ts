@@ -3,15 +3,20 @@ import Fastify from 'fastify';
 import type { Principal } from '@intafaced/auth';
 import { AuthError } from '@intafaced/auth';
 import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { orderSchema } from '@intafaced/exchange-contract';
+import { orderSchema, tradeSchema } from '@intafaced/exchange-contract';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
+  fakeFill,
   fakeOrder,
+  mapCreateOrderBody,
+  presentCcxtMyTrade,
   presentCcxtOrder,
   registerPrivateRest,
   toCcxtOrderStatus,
   type PrivateRestDeps,
 } from './private-rest.js';
+import { TradeError } from './spot/types.js';
+import type { PlaceOrderInput } from './spot/trade-service.js';
 import { fakeMarket } from './public-rest.js';
 
 /**
@@ -19,18 +24,19 @@ import { fakeMarket } from './public-rest.js';
  *
  * Principal arrives the way index.ts builds it — through createEdgeContext
  * over real headers — not as a Context literal. Unsigned self-asserted
- * principals must stay anonymous and never reach openOrders.
+ * principals must stay anonymous and never reach placeOrder / openOrders.
  */
 
 const SECRET = 'a-trade-private-rest-edge-secret-long-enough';
 const USER = '11111111-1111-4111-8111-111111111111';
+const ORDER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
     sub: USER,
     userId: USER,
     sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['trade:read'],
+    scopes: ['trade:read', 'trade:write'],
     tier: 'basic',
     mfa: false,
     expiresAt: new Date(Date.now() + 60_000),
@@ -47,7 +53,7 @@ function signedHeaders(p: Principal = principal(), region = 'DE'): Record<string
   };
 }
 
-describe('toCcxtOrderStatus / presentCcxtOrder', () => {
+describe('toCcxtOrderStatus / presentCcxtOrder / presentCcxtMyTrade', () => {
   it('maps internal statuses onto the CCXT order schema vocabulary', () => {
     expect(toCcxtOrderStatus('pending')).toBe('open');
     expect(toCcxtOrderStatus('open')).toBe('open');
@@ -76,16 +82,92 @@ describe('toCcxtOrderStatus / presentCcxtOrder', () => {
     expect(typeof wire.price).toBe('string');
     expect(typeof wire.amount).toBe('string');
   });
+
+  it('presents a fill that validates against tradeSchema with decimal strings', () => {
+    const fill = fakeFill({
+      price: parseAmount('100.5'),
+      qty: parseAmount('1.2'),
+      quoteAmount: parseAmount('120.6'),
+      feeAmount: parseAmount('0.12'),
+      feeBps: 10,
+    });
+    const wire = presentCcxtMyTrade(fill, 'BTC/USDT');
+    expect(tradeSchema.safeParse(wire).success).toBe(true);
+    expect(wire.price).toBe('100.5');
+    expect(wire.amount).toBe('1.2');
+    expect(wire.fee?.rate).toBe('0.001');
+    expect(typeof wire.cost).toBe('string');
+  });
 });
 
-describe('private REST — GET /api/v1/orders/open', () => {
+describe('mapCreateOrderBody', () => {
+  it('maps CCXT create body to PlaceOrderInput with Amount qty/price', () => {
+    const input = mapCreateOrderBody({
+      symbol: 'BTC/USDT',
+      type: 'limit',
+      side: 'buy',
+      amount: '1.5',
+      price: '100',
+      timeInForce: 'GTC',
+      clientOrderId: 'bot-1',
+    });
+    expect(input.symbol).toBe('BTC/USDT');
+    expect(input.side).toBe('buy');
+    expect(input.type).toBe('limit');
+    expect(input.qty).toBe(parseAmount('1.5'));
+    expect(input.price).toBe(parseAmount('100'));
+    expect(input.tif).toBe('GTC');
+    expect(input.clientOrderId).toBe('bot-1');
+  });
+
+  it('maps postOnly to tif PO', () => {
+    const input = mapCreateOrderBody({
+      symbol: 'BTC/USDT',
+      type: 'limit',
+      side: 'sell',
+      amount: '1',
+      price: '100',
+      postOnly: true,
+    });
+    expect(input.tif).toBe('PO');
+  });
+
+  it('rejects stop types at the REST boundary', () => {
+    expect(() =>
+      mapCreateOrderBody({
+        symbol: 'BTC/USDT',
+        type: 'stop',
+        side: 'buy',
+        amount: '1',
+        stopPrice: '90',
+      }),
+    ).toThrow(TradeError);
+  });
+});
+
+describe('private REST — mount boundary + order write path', () => {
   const market = fakeMarket({ id: 'm-btc', symbol: 'BTC/USDT' });
   const open = fakeOrder({
-    id: 'ord-1',
+    id: ORDER_ID,
     marketId: market.id,
     qty: parseAmount('2'),
     filledQty: parseAmount('0'),
     price: parseAmount('100'),
+  });
+  const closed = fakeOrder({
+    id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    marketId: market.id,
+    status: 'filled',
+    qty: parseAmount('1'),
+    filledQty: parseAmount('1'),
+    price: parseAmount('100'),
+  });
+  const fill = fakeFill({
+    orderId: ORDER_ID,
+    marketId: market.id,
+    qty: parseAmount('1'),
+    price: parseAmount('100'),
+    quoteAmount: parseAmount('100'),
   });
 
   function deps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
@@ -93,6 +175,11 @@ describe('private REST — GET /api/v1/orders/open', () => {
       edgeSecret: SECRET,
       serviceName: 'svc-trade',
       openOrders: async () => [open],
+      orderHistory: async () => [closed],
+      getOrder: async () => open,
+      placeOrder: async () => open,
+      cancelOrder: async () => ({ ...open, status: 'cancelled' }),
+      myFills: async () => [fill],
       marketBySymbol: async (symbol) => (symbol === 'BTC/USDT' ? market : null),
       marketById: async (id) => (id === market.id ? market : null),
       ...overrides,
@@ -105,6 +192,8 @@ describe('private REST — GET /api/v1/orders/open', () => {
     await app.ready();
     return app;
   }
+
+  // ── GET /orders/open (existing) ───────────────────────────────────────────
 
   it('refuses an anonymous caller and does not read open orders', async () => {
     let read = false;
@@ -131,27 +220,36 @@ describe('private REST — GET /api/v1/orders/open', () => {
    */
   it('refuses a self-asserted principal, however privileged it claims to be', async () => {
     let read = false;
+    let placed = false;
     const app = await build(
       deps({
         openOrders: async () => {
           read = true;
           return [];
         },
+        placeOrder: async () => {
+          placed = true;
+          return open;
+        },
       }),
     );
-    const forged = encodePrincipal(
-      principal({ scopes: ['trade:read', 'trade:write', 'admin:treasury'], tier: 'full', mfa: true }),
-    );
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/orders/open',
-      headers: {
-        'x-intafaced-principal': forged,
-        'x-intafaced-region': 'DE',
-      },
-    });
-    expect(res.statusCode).toBe(401);
+    const forged = encodePrincipal(principal({ scopes: ['trade:read', 'trade:write', 'admin:treasury'], tier: 'full', mfa: true }));
+    const headers = {
+      'x-intafaced-principal': forged,
+      'x-intafaced-region': 'DE',
+    };
+    const openRes = await app.inject({ method: 'GET', url: '/api/v1/orders/open', headers });
+    expect(openRes.statusCode).toBe(401);
     expect(read).toBe(false);
+
+    const placeRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders',
+      headers: { ...headers, 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100' },
+    });
+    expect(placeRes.statusCode).toBe(401);
+    expect(placed).toBe(false);
     await app.close();
   });
 
@@ -193,7 +291,7 @@ describe('private REST — GET /api/v1/orders/open', () => {
     await app.close();
   });
 
-  it('filters by symbol when provided', async () => {
+  it('filters open orders by symbol when provided', async () => {
     let seenMarket: string | undefined = 'unset';
     const app = await build(
       deps({
@@ -233,15 +331,289 @@ describe('private REST — GET /api/v1/orders/open', () => {
         },
       }),
     );
-    // Signed but missing trade:read — service still enforces requireScope.
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/orders/open',
       headers: signedHeaders(principal({ scopes: [] })),
     });
-    // openOrders is stubbed to throw; real TradeService would throw the same way.
     expect(res.statusCode).toBe(403);
     expect(res.json().code).toBe('scope.denied');
+    await app.close();
+  });
+
+  // ── POST /orders (create — money path) ────────────────────────────────────
+
+  it('POST /orders: forged principal never reaches placeOrder', async () => {
+    let placed = false;
+    const app = await build(
+      deps({
+        placeOrder: async () => {
+          placed = true;
+          return open;
+        },
+      }),
+    );
+    const forged = encodePrincipal(principal({ scopes: ['trade:write'], tier: 'full', mfa: true }));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders',
+      headers: {
+        'x-intafaced-principal': forged,
+        'x-intafaced-region': 'DE',
+        'content-type': 'application/json',
+      },
+      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(placed).toBe(false);
+    await app.close();
+  });
+
+  it('POST /orders: signed principal places via placeOrder with Amounts (not numbers)', async () => {
+    let seen: PlaceOrderInput | null = null;
+    let seenUser: string | null = null;
+    const app = await build(
+      deps({
+        placeOrder: async (p, input) => {
+          seenUser = p.userId;
+          seen = input;
+          return open;
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: {
+        symbol: 'BTC/USDT',
+        type: 'limit',
+        side: 'buy',
+        amount: '1.5',
+        price: '100.25',
+        clientOrderId: 'bot-42',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(seenUser).toBe(USER);
+    expect(seen).not.toBeNull();
+    expect(seen!.qty).toBe(parseAmount('1.5'));
+    expect(seen!.price).toBe(parseAmount('100.25'));
+    expect(typeof seen!.qty).toBe('bigint');
+    expect(typeof seen!.price).toBe('bigint');
+    expect(seen!.clientOrderId).toBe('bot-42');
+    const body = res.json() as { symbol: string; amount: string; status: string };
+    expect(orderSchema.safeParse(body).success).toBe(true);
+    expect(body.symbol).toBe('BTC/USDT');
+    expect(typeof body.amount).toBe('string');
+    await app.close();
+  });
+
+  it('POST /orders: 400 when limit has no price', async () => {
+    let placed = false;
+    const app = await build(
+      deps({
+        placeOrder: async () => {
+          placed = true;
+          return open;
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('ValidationError');
+    expect(placed).toBe(false);
+    await app.close();
+  });
+
+  it('POST /orders: maps TradeError from placeOrder (insufficient path uses domain codes)', async () => {
+    const app = await build(
+      deps({
+        placeOrder: async () => {
+          throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', type: 'market', side: 'buy', amount: '1' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('trade.spot_disabled');
+    await app.close();
+  });
+
+  // ── DELETE /orders/:id ────────────────────────────────────────────────────
+
+  it('DELETE /orders/:id: forged → 401, never cancelOrder', async () => {
+    let cancelled = false;
+    const app = await build(
+      deps({
+        cancelOrder: async () => {
+          cancelled = true;
+          return open;
+        },
+      }),
+    );
+    const forged = encodePrincipal(principal({ scopes: ['trade:write'] }));
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/orders/${ORDER_ID}`,
+      headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(cancelled).toBe(false);
+    await app.close();
+  });
+
+  it('DELETE /orders/:id: signed cancel returns CCXT canceled order', async () => {
+    let seenId: string | null = null;
+    const app = await build(
+      deps({
+        cancelOrder: async (_p, id) => {
+          seenId = id;
+          return { ...open, status: 'cancelled' };
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/orders/${ORDER_ID}`,
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenId).toBe(ORDER_ID);
+    const body = res.json() as { status: string };
+    expect(orderSchema.safeParse(body).success).toBe(true);
+    expect(body.status).toBe('canceled');
+    await app.close();
+  });
+
+  // ── GET /orders/:id ───────────────────────────────────────────────────────
+
+  it('GET /orders/:id: forged → 401', async () => {
+    let fetched = false;
+    const app = await build(
+      deps({
+        getOrder: async () => {
+          fetched = true;
+          return open;
+        },
+      }),
+    );
+    const forged = encodePrincipal(principal());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/orders/${ORDER_ID}`,
+      headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(fetched).toBe(false);
+    await app.close();
+  });
+
+  it('GET /orders/:id: signed returns order; not found → 404', async () => {
+    const appOk = await build();
+    const ok = await appOk.inject({
+      method: 'GET',
+      url: `/api/v1/orders/${ORDER_ID}`,
+      headers: signedHeaders(),
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(orderSchema.safeParse(ok.json()).success).toBe(true);
+    await appOk.close();
+
+    const appMiss = await build(
+      deps({
+        getOrder: async () => {
+          throw new TradeError('order missing', 'trade.order_not_found');
+        },
+      }),
+    );
+    const miss = await appMiss.inject({
+      method: 'GET',
+      url: `/api/v1/orders/${ORDER_ID}`,
+      headers: signedHeaders(),
+    });
+    expect(miss.statusCode).toBe(404);
+    expect(miss.json().code).toBe('trade.order_not_found');
+    await appMiss.close();
+  });
+
+  // ── GET /orders/closed ────────────────────────────────────────────────────
+
+  it('GET /orders/closed: forged → 401; signed returns closed list', async () => {
+    let hist = false;
+    const app = await build(
+      deps({
+        orderHistory: async () => {
+          hist = true;
+          return [closed];
+        },
+      }),
+    );
+    const forged = encodePrincipal(principal());
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed',
+      headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
+    });
+    expect(denied.statusCode).toBe(401);
+    expect(hist).toBe(false);
+
+    const ok = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed',
+      headers: signedHeaders(),
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(hist).toBe(true);
+    const body = ok.json() as unknown[];
+    expect(body).toHaveLength(1);
+    expect(orderSchema.safeParse(body[0]).success).toBe(true);
+    expect((body[0] as { status: string }).status).toBe('closed');
+    await app.close();
+  });
+
+  // ── GET /account/trades ───────────────────────────────────────────────────
+
+  it('GET /account/trades: forged → 401; signed returns my fills as tradeSchema', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        myFills: async () => {
+          listed = true;
+          return [fill];
+        },
+      }),
+    );
+    const forged = encodePrincipal(principal());
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades',
+      headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
+    });
+    expect(denied.statusCode).toBe(401);
+    expect(listed).toBe(false);
+
+    const ok = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades',
+      headers: signedHeaders(),
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(listed).toBe(true);
+    const body = ok.json() as unknown[];
+    expect(body).toHaveLength(1);
+    expect(tradeSchema.safeParse(body[0]).success).toBe(true);
+    expect(typeof (body[0] as { price: string }).price).toBe('string');
     await app.close();
   });
 });

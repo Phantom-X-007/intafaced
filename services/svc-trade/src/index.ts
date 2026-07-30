@@ -82,10 +82,16 @@ registerPublicRest(app, {
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
+// Create/cancel are the money path: they call TradeService only (no second hold).
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
   openOrders: (principal, marketId) => trade.openOrders(principal, marketId),
+  orderHistory: (principal, input) => trade.orderHistory(principal, input),
+  getOrder: (principal, orderId) => trade.getOrder(principal, orderId),
+  placeOrder: (principal, input) => trade.placeOrder(principal, input),
+  cancelOrder: (principal, orderId) => trade.cancelOrder(principal, orderId),
+  myFills: (principal, limit) => trade.myFills(principal, limit),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   marketById: (marketId) => trade.marketById(marketId),
 });
@@ -104,14 +110,15 @@ app.log.info(
     port: env.HTTP_PORT,
     spotEnabled: env.TRADE_SPOT_ENABLED,
     trpc: true,
-    publicRest: [
-      '/api/v1/markets',
-      '/api/v1/orderbook/:symbol',
-      '/api/v1/ticker/:symbol',
-      '/api/v1/tickers',
-      '/api/v1/trades/:symbol',
+    publicRest: ['/api/v1/markets', '/api/v1/orderbook/:symbol', '/api/v1/ticker/:symbol', '/api/v1/tickers', '/api/v1/trades/:symbol'],
+    privateRest: [
+      'POST /api/v1/orders',
+      'DELETE /api/v1/orders/:id',
+      'GET /api/v1/orders/:id',
+      'GET /api/v1/orders/open',
+      'GET /api/v1/orders/closed',
+      'GET /api/v1/account/trades',
     ],
-    privateRest: ['/api/v1/orders/open'],
   },
   'svc-trade ready',
 );
