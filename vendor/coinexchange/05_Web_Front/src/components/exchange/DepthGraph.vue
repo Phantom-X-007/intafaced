@@ -2,7 +2,7 @@
   <div class="ix-depth" ref="host">
     <canvas class="ix-depth-canvas" ref="base"></canvas>
     <canvas class="ix-depth-canvas ix-depth-hit" ref="cover"></canvas>
-    <div class="ix-depth-empty" v-show="empty">No depth data</div>
+    <div class="ix-depth-empty" v-show="empty">{{ emptyLabel }}</div>
   </div>
 </template>
 
@@ -35,7 +35,19 @@ export default {
        and the raw plate stay off the reactive graph — a full plate is ~240
        objects arriving once a second, and observing it every time would cost
        far more than the drawing does. */
-    return { empty: true };
+    return {
+      empty: true,
+      /** 'waiting' | 'no-book' — never invent a book when the feed is silent. */
+      emptyKind: 'waiting'
+    };
+  },
+  computed: {
+    emptyLabel() {
+      if (this.emptyKind === 'no-book') {
+        return this.$t('exchange.depthEmptyBook');
+      }
+      return this.$t('exchange.depthWaiting');
+    }
   },
   created() {
     this.width = 0;
@@ -104,6 +116,10 @@ export default {
        payload. Tolerates a partial or empty body. */
     draw(plate) {
       this.plate = plate || null;
+      if (!plate) {
+        this.empty = true;
+        this.emptyKind = 'waiting';
+      }
       if (!this.measure()) {
         return;
       }
@@ -118,10 +134,17 @@ export default {
       ctx.clearRect(0, 0, this.width, this.height);
       this.clearOverlay();
 
+      if (!this.plate) {
+        this.empty = true;
+        this.emptyKind = 'waiting';
+        return;
+      }
+
       const bids = this.cumulative(this.pick(this.plate, 'bid'));
       const asks = this.cumulative(this.pick(this.plate, 'ask'));
       this.empty = bids.length === 0 && asks.length === 0;
       if (this.empty) {
+        this.emptyKind = 'no-book';
         return;
       }
 
@@ -131,6 +154,7 @@ export default {
       );
       if (peak <= 0) {
         this.empty = true;
+        this.emptyKind = 'no-book';
         return;
       }
 
