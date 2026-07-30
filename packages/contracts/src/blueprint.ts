@@ -80,12 +80,90 @@ export const blueprintSchema = z.object({
   /** Which engine build produced this profile — a re-run is comparable only within a version. */
   engineVersion: z.string().min(1),
   profile: blueprintProfileSchema,
-  /** Populated by `blueprint.card` (a separate feature). Null until then. */
+  /**
+   * The PRIMARY share asset (portrait), once a rasterizer has actually produced
+   * one. Null is the honest and common state: the vector card always renders,
+   * but turning it into a hosted PNG needs an external renderer, and this column
+   * holds a URL only when one really came back. See `cardRenderSchema`.
+   */
   cardAssetUrl: z.string().nullable(),
   visibility: visibilitySchema,
   createdAt: z.string().datetime({ offset: true }),
 });
 export type BlueprintRecord = z.infer<typeof blueprintSchema>;
+
+// ── The share card (§7.1 "the acquisition artifact", §7.2 exit criterion) ────
+
+/**
+ * The two share sizes §7.2 names, and the only two.
+ *
+ * They are an enum rather than free width/height because "renders pixel-perfect
+ * at share sizes (1080×1350, 1200×630)" is a claim about two specific canvases
+ * that were designed, not about arbitrary rectangles. An API that accepted
+ * `{ width, height }` would let a caller ask for 300×2000 and get something no
+ * one has ever looked at — and the exit criterion would silently become untrue.
+ */
+export const cardSizeSchema = z.enum(['portrait', 'landscape']);
+export type CardSize = z.infer<typeof cardSizeSchema>;
+
+/**
+ * Exact pixel dimensions. §7.2 names these numbers; this is where they live, so
+ * the composer, the tests and any future renderer read one source.
+ *
+ * `portrait` is 1080×1350 — the 4:5 feed/story canvas. `landscape` is 1200×630,
+ * the Open Graph card a link unfurls into.
+ */
+export const CARD_DIMENSIONS: Readonly<Record<CardSize, { readonly width: number; readonly height: number }>> = {
+  portrait: { width: 1080, height: 1350 },
+  landscape: { width: 1200, height: 630 },
+};
+
+/**
+ * Whether a raster of this card exists, and if not, why not — as DATA.
+ *
+ * A discriminated union rather than a thrown error, because "we have the vector
+ * card but no hosted PNG" is a normal, renderable state and not a request
+ * failure. A surface can show the card and a truthful note about the PNG; if
+ * this were a throw, the surface would have to catch an exception to display
+ * something it successfully received.
+ */
+export const cardRasterSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('rendered'),
+    url: z.string().url(),
+    contentType: z.literal('image/png'),
+    bytes: z.number().int().positive(),
+  }),
+  z.object({
+    status: z.literal('unavailable'),
+    /**
+     * Typed so a surface can distinguish "this deployment has no renderer" —
+     * permanent, nothing to retry — from "the renderer is down right now".
+     */
+    code: z.enum(['blueprint.card_renderer_unconfigured', 'blueprint.card_renderer_unreachable', 'blueprint.card_renderer_protocol']),
+    reason: z.string().min(1),
+  }),
+]);
+export type CardRaster = z.infer<typeof cardRasterSchema>;
+
+export const cardRenderSchema = z.object({
+  size: cardSizeSchema,
+  /** Echoed from CARD_DIMENSIONS so a consumer never has to look them up. */
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  /**
+   * The card itself, as SVG. This is a complete, shareable, printable artifact
+   * — not a preview of one. It is always present, because composing it needs
+   * nothing outside this service.
+   */
+  svg: z.string().min(1),
+  raster: cardRasterSchema,
+});
+export type CardRender = z.infer<typeof cardRenderSchema>;
+
+export const cardInput = z.object({
+  size: cardSizeSchema.default('portrait'),
+});
 
 // ── Crews (§7.1, §33) ────────────────────────────────────────────────────────
 
@@ -189,8 +267,24 @@ export type OnboardOutput = z.infer<typeof onboardOutput>;
  */
 export const blueprintExportSchema = z.object({
   exportedAt: z.string().datetime({ offset: true }),
-  schemaVersion: z.literal(1),
+  /**
+   * 2 — `card` was added. §7.2 promises "export (JSON + card)", and an export
+   * that omitted the card was JSON only. Bumped rather than added silently: the
+   * literal exists so a consumer reading an archive can tell which shape it is
+   * holding, and a new required field it cannot find is exactly the case it is
+   * there to make legible.
+   */
+  schemaVersion: z.literal(2),
   blueprint: blueprintSchema.nullable(),
+  /**
+   * The share card, composed at export time (§7.2 "export (JSON + card)").
+   *
+   * Portrait — the primary artifact. Null only when there is no Blueprint to
+   * draw. Derived on read rather than stored: it is a pure function of the
+   * profile, so persisting it would create a second copy of personal data that
+   * erasure would then have to chase.
+   */
+  card: cardRenderSchema.nullable(),
   crew: crewSchema.nullable(),
   membership: crewMemberSchema.nullable(),
   crewmates: z.array(z.object({ userId: z.string().uuid(), role: crewRoleSchema, joinedAt: z.string() })),
@@ -229,6 +323,7 @@ export type EraseReceipt = z.infer<typeof eraseReceiptSchema>;
 export interface BlueprintContract {
   onboard(input: OnboardInput): Promise<OnboardOutput>;
   get(input: { userId: string }): Promise<BlueprintRecord | null>;
+  card(input: { userId: string; size: CardSize }): Promise<CardRender>;
   export(input: { userId: string }): Promise<BlueprintExport>;
   erase(input: { userId: string }): Promise<EraseReceipt>;
 }

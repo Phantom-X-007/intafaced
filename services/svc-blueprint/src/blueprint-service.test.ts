@@ -5,10 +5,11 @@ import postgres from 'postgres';
 import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
-import type { BlueprintProfile, OnboardInput } from '@intafaced/contracts';
+import { CARD_DIMENSIONS, cardRenderSchema, type BlueprintProfile, type CardRaster, type OnboardInput } from '@intafaced/contracts';
 import { BlueprintService, BlueprintError } from './blueprint-service.js';
 import { MockNeuralEngine, deriveProfile, MOCK_ENGINE_VERSION } from './engine/mock-engine.js';
 import { EMPTY_CREW_SCORE, complementarity, newCrewId } from './matching/crew-matching.js';
+import { UnconfiguredCardRenderer, type CardRasterizeRequest, type CardRenderer } from './card/card-renderer.js';
 
 /**
  * svc-blueprint — onboarding, matching, ownership.
@@ -181,7 +182,7 @@ if (!available) {
     `;
     bus = new MemoryEventBus('svc-blueprint');
     engine = new MockNeuralEngine();
-    blueprint = new BlueprintService(sql, engine, bus, options);
+    blueprint = new BlueprintService(sql, engine, bus, new UnconfiguredCardRenderer(), options);
     identity = new IdentityProjection();
     await identity.attach(bus);
   });
@@ -443,7 +444,13 @@ if (!available) {
 
   describe('engine failure degrades cleanly', () => {
     it('writes nothing at all when the engine is unavailable', async () => {
-      const failing = new BlueprintService(sql, new MockNeuralEngine({ failWith: 'unavailable' }), bus, options);
+      const failing = new BlueprintService(
+        sql,
+        new MockNeuralEngine({ failWith: 'unavailable' }),
+        bus,
+        new UnconfiguredCardRenderer(),
+        options,
+      );
 
       await expect(failing.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'x' }]))).rejects.toMatchObject({
         code: 'blueprint.engine_unavailable',
@@ -458,7 +465,13 @@ if (!available) {
     });
 
     it('announces nothing, so no consumer learns of a Blueprint that does not exist', async () => {
-      const failing = new BlueprintService(sql, new MockNeuralEngine({ failWith: 'unavailable' }), bus, options);
+      const failing = new BlueprintService(
+        sql,
+        new MockNeuralEngine({ failWith: 'unavailable' }),
+        bus,
+        new UnconfiguredCardRenderer(),
+        options,
+      );
       await expect(failing.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'x' }]))).rejects.toThrow(BlueprintError);
 
       expect(bus.emitted('blueprintCreated')).toHaveLength(0);
@@ -467,7 +480,13 @@ if (!available) {
     });
 
     it('leaks nothing about the session in the error it raises', async () => {
-      const failing = new BlueprintService(sql, new MockNeuralEngine({ failWith: 'unavailable' }), bus, options);
+      const failing = new BlueprintService(
+        sql,
+        new MockNeuralEngine({ failWith: 'unavailable' }),
+        bus,
+        new UnconfiguredCardRenderer(),
+        options,
+      );
       const secret = 'a-very-identifying-answer';
 
       const error = await failing
@@ -479,7 +498,13 @@ if (!available) {
     });
 
     it('recovers on the next attempt once the engine is back', async () => {
-      const failing = new BlueprintService(sql, new MockNeuralEngine({ failWith: 'unavailable' }), bus, options);
+      const failing = new BlueprintService(
+        sql,
+        new MockNeuralEngine({ failWith: 'unavailable' }),
+        bus,
+        new UnconfiguredCardRenderer(),
+        options,
+      );
       await expect(failing.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'x' }]))).rejects.toThrow();
 
       const recovered = await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'x' }]));
@@ -500,7 +525,7 @@ if (!available) {
 
       const exported = await blueprint.export({ userId: USER_A });
 
-      expect(exported.schemaVersion).toBe(1);
+      expect(exported.schemaVersion).toBe(2);
       expect(exported.blueprint?.id).toBe(result.blueprint.id);
       expect(exported.blueprint?.profile).toEqual(result.blueprint.profile);
       expect(exported.crew?.id).toBe(result.placement.crewId);
@@ -508,6 +533,29 @@ if (!available) {
       expect(exported.matchRuns).toHaveLength(1);
       expect(exported.mentorMatches.map((m) => m.mentorId)).toContain(USER_B);
       expect(new Date(exported.exportedAt).toString()).not.toBe('Invalid Date');
+    });
+
+    it('includes the card — §7.2 promises "JSON + card", not JSON', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+
+      const exported = await blueprint.export({ userId: USER_A });
+
+      // The portrait, complete, in the export envelope. An export a user can
+      // take elsewhere should contain the artifact they actually share.
+      expect(exported.card?.size).toBe('portrait');
+      expect(exported.card?.width).toBe(CARD_DIMENSIONS.portrait.width);
+      expect(exported.card?.svg).toContain('<svg ');
+      expect(cardRenderSchema.safeParse(exported.card).success).toBe(true);
+    });
+
+    it('carries a null card for a user who has no Blueprint, rather than failing', async () => {
+      // Export must work for anyone. A user with nothing gets an envelope of
+      // nothings — not a 404, which would make "prove you hold nothing on me"
+      // impossible to answer.
+      const exported = await blueprint.export({ userId: USER_C });
+
+      expect(exported.blueprint).toBeNull();
+      expect(exported.card).toBeNull();
     });
 
     it('reaches every table that references the user', async () => {
@@ -817,7 +865,7 @@ if (!available) {
     });
 
     it('honours the shortlist size', async () => {
-      const small = new BlueprintService(sql, engine, bus, { ...options, mentorShortlistSize: 2 });
+      const small = new BlueprintService(sql, engine, bus, new UnconfiguredCardRenderer(), { ...options, mentorShortlistSize: 2 });
       for (const [index, mentorId] of [uuid(501), uuid(502), uuid(503), uuid(504)].entries()) {
         await small.onboard(onboardInput(mentorId, [{ key: 'q1', value: `mentor-${index}` }], { mentorAvailable: true }));
       }
@@ -838,8 +886,168 @@ if (!available) {
 
       expect(fetched?.id).toBe(created.blueprint.id);
       expect(fetched?.profile).toEqual(created.blueprint.profile);
-      // §7.1: the card is rendered by a separate feature and is null until then.
+      // Null because this suite runs with no rasterizer configured — the column
+      // holds a hosted PNG's URL and only ever a real one. The vector card is
+      // available regardless; see the card describe block below.
       expect(fetched?.cardAssetUrl).toBeNull();
+    });
+  });
+
+  // ── The share card (§7.1, §7.2) ───────────────────────────────────────────
+
+  describe('card', () => {
+    /** A renderer that really "renders" — the configured deployment. */
+    class StubRenderer implements CardRenderer {
+      readonly id = 'card-renderer-stub';
+      calls: CardRasterizeRequest[] = [];
+      constructor(private readonly result: CardRaster) {}
+      async rasterize(request: CardRasterizeRequest): Promise<CardRaster> {
+        this.calls.push(request);
+        return this.result;
+      }
+    }
+
+    const rendered: CardRaster = { status: 'rendered', url: 'https://cdn.example.com/card.png', contentType: 'image/png', bytes: 84_000 };
+
+    const withRenderer = (renderer: CardRenderer) => new BlueprintService(sql, engine, bus, renderer, options);
+
+    it('refuses when there is no Blueprint, rather than drawing an empty card', async () => {
+      // A card for a profile that does not exist would be a branded image
+      // asserting things about a person nobody has ever profiled.
+      await expect(blueprint.card({ userId: USER_A, size: 'portrait' })).rejects.toMatchObject({ code: 'blueprint.not_found' });
+    });
+
+    it('composes a card at both share sizes carrying the placed crew', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+
+      for (const size of ['portrait', 'landscape'] as const) {
+        const card = await blueprint.card({ userId: USER_A, size });
+        const { width, height } = CARD_DIMENSIONS[size];
+
+        expect(card).toMatchObject({ size, width, height });
+        expect(card.svg).toContain(`width="${width}"`);
+        expect(card.svg).toContain(`height="${height}"`);
+        // The user was placed on onboarding, so the card names their crew
+        // rather than claiming they are unplaced.
+        expect(card.svg).not.toContain('Unplaced');
+        expect(cardRenderSchema.safeParse(card).success).toBe(true);
+      }
+    });
+
+    it('renders in full with NO rasterizer, and says why there is no PNG', async () => {
+      // The property the whole adapter split exists for: the absence of an
+      // external rail degrades the PNG, never the card.
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      const card = await blueprint.card({ userId: USER_A, size: 'portrait' });
+
+      expect(card.svg.length).toBeGreaterThan(1_000);
+      expect(card.raster).toMatchObject({ status: 'unavailable', code: 'blueprint.card_renderer_unconfigured' });
+      expect(card.raster).not.toHaveProperty('url');
+    });
+
+    it('does NOT write card_asset_url when the raster is unavailable', async () => {
+      // The column must never hold a URL that does not resolve.
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      await blueprint.card({ userId: USER_A, size: 'portrait' });
+
+      expect((await blueprint.get({ userId: USER_A }))?.cardAssetUrl).toBeNull();
+    });
+
+    it('writes card_asset_url when a raster really came back', async () => {
+      const service = withRenderer(new StubRenderer(rendered));
+      await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+
+      const card = await service.card({ userId: USER_A, size: 'portrait' });
+
+      expect(card.raster).toEqual(rendered);
+      expect((await service.get({ userId: USER_A }))?.cardAssetUrl).toBe(rendered.url);
+    });
+
+    it('keys the asset on the blueprint id, never on the user id', async () => {
+      // The key becomes a public object path. An account identifier in it would
+      // make the asset URL a user-id oracle.
+      const renderer = new StubRenderer(rendered);
+      const service = withRenderer(renderer);
+      const created = await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+
+      await service.card({ userId: USER_A, size: 'portrait' });
+
+      expect(renderer.calls[0]?.blueprintId).toBe(created.blueprint.id);
+      expect(renderer.calls[0]?.blueprintId).not.toBe(USER_A);
+    });
+
+    it('does not persist a landscape url over the primary portrait asset', async () => {
+      // §7.1's schema has ONE card column. Letting the OG image overwrite it
+      // would make `card_asset_url` mean whichever size was requested last.
+      const service = withRenderer(new StubRenderer(rendered));
+      await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+
+      await service.card({ userId: USER_A, size: 'landscape' });
+      expect((await service.get({ userId: USER_A }))?.cardAssetUrl).toBeNull();
+
+      await service.card({ userId: USER_A, size: 'portrait' });
+      expect((await service.get({ userId: USER_A }))?.cardAssetUrl).toBe(rendered.url);
+    });
+
+    it('is stable: the same Blueprint yields a byte-identical card', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+
+      const first = await blueprint.card({ userId: USER_A, size: 'portrait' });
+      const second = await blueprint.card({ userId: USER_A, size: 'portrait' });
+
+      expect(second.svg).toBe(first.svg);
+    });
+
+    it('puts no profile content on the span, and no card in the event stream', async () => {
+      // §10. The card is derived data about a person; publishing it or tracing
+      // it would copy it outside the isolation the rest of this service keeps.
+      const service = withRenderer(new StubRenderer(rendered));
+      await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      const before = bus.published.length;
+
+      await service.card({ userId: USER_A, size: 'portrait' });
+
+      // Rendering a card is a read. It announces nothing.
+      expect(bus.published.length).toBe(before);
+    });
+
+    it('is not written by export — a read path must not persist on every read', async () => {
+      // `export` is a tRPC `.query()`: retried, prefetched and cached. It
+      // carries the card (§7.2 "JSON + card") but must not acquire `card()`'s
+      // side effect along with it, or every prefetch becomes a write.
+      const service = withRenderer(new StubRenderer(rendered));
+      await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+
+      const exported = await service.export({ userId: USER_A });
+
+      expect(exported.card?.raster).toEqual(rendered);
+      expect((await service.get({ userId: USER_A }))?.cardAssetUrl).toBeNull();
+    });
+
+    it('is not touched by the mentor shortlist, which reaches no rasterizer at all', async () => {
+      // `mentors` used to be `export().mentorMatches`. Once the card joined the
+      // export, that made a cheap list depend on an external renderer and its
+      // ten-second budget. It reads its own table now, and this is the
+      // assertion that keeps it there.
+      const renderer = new StubRenderer(rendered);
+      const service = withRenderer(renderer);
+      await service.onboard(onboardInput(USER_B, [{ key: 'q1', value: 'mentor' }], { mentorAvailable: true }));
+      await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'student' }]));
+
+      const shortlist = await service.mentors({ userId: USER_A });
+
+      expect(shortlist.length).toBeGreaterThan(0);
+      expect(shortlist.every((m) => m.studentId === USER_A)).toBe(true);
+      expect(renderer.calls).toHaveLength(0);
+    });
+
+    it('survives erasure of the user it belonged to', async () => {
+      // The card is derived on read, so erasure leaves nothing to chase — the
+      // next call simply has no Blueprint to draw.
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      await blueprint.erase({ userId: USER_A });
+
+      await expect(blueprint.card({ userId: USER_A, size: 'portrait' })).rejects.toMatchObject({ code: 'blueprint.not_found' });
     });
   });
 

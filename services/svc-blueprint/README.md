@@ -4,7 +4,9 @@
 
 Onboarding runs a guided session, the **Neural Engine** derives a profile from it, and this service persists that profile, places the user in a crew on complementary-profile heuristics, and shortlists mentors. It also owns the two promises §7.2 makes to the user: **export** and **hard delete**.
 
-**What this service is not:** it does not hold balances, it does not render the share card, and it does not contain the engine. The engine is an external deployment reached over an HTTP contract at `BLUEPRINT_ENGINE_URL`; what lives here is the `NeuralEngineClient` interface in front of it.
+It also **composes the share card** — the acquisition artifact of §7.1 — at the two share sizes §7.2 names.
+
+**What this service is not:** it does not hold balances, it does not contain the engine, and it does not rasterize. The engine is an external deployment reached over an HTTP contract at `BLUEPRINT_ENGINE_URL`; the card rasterizer is another, at `BLUEPRINT_CARD_RENDERER_URL`. What lives here are the `NeuralEngineClient` and `CardRenderer` interfaces in front of them.
 
 ---
 
@@ -30,11 +32,12 @@ tRPC (`src/router.ts`). Every procedure operates on `ctx.principal.userId` and n
 | `health`  | public            | Liveness                                                       |
 | `onboard` | `blueprint:write` | Session → engine → profile → crew placement → mentor shortlist |
 | `me`      | `blueprint:read`  | The caller's own Blueprint                                     |
-| `mentors` | `blueprint:read`  | The caller's mentor shortlist                                  |
+| `card`    | `blueprint:read`  | **§7.2 share card** — the caller's own, at either share size   |
+| `mentors` | `blueprint:read`  | The caller's mentor shortlist — its own query, not `export()`  |
 | `export`  | `blueprint:read`  | **§7.2 portable** — everything this service holds, as JSON     |
 | `erase`   | `blueprint:write` | **§7.2 deletable** — hard delete that cascades                 |
 
-HTTP: `GET /health`, `GET /ready`. Readiness reports the engine, because a Blueprint cannot be produced without it and reporting ready while it is down routes onboarding at a service that can only fail it.
+HTTP: `GET /health`, `GET /ready`. Readiness reports the engine, because a Blueprint cannot be produced without it and reporting ready while it is down routes onboarding at a service that can only fail it. It reports the card renderer too, but does **not** gate on it: a card can be produced without a rasterizer, and refusing traffic because the PNG rail is absent would take onboarding down over a share image.
 
 `blueprint` is non-custodial and `minTier: 'none'` in `JURISDICTION_MATRIX`, so the guard checks scope and region, not verification tier.
 
@@ -194,9 +197,66 @@ None of this is needed for correctness today, and none of it is speculative work
 
 ---
 
+## The share card — §7.1, §7.2
+
+§7.1 calls it "the acquisition artifact, treat it as a product". §7.2 makes it an exit criterion:
+
+> Card renders pixel-perfect at share sizes (1080×1350, 1200×630); no third-party system names anywhere in output (automated copy-scan test in CI)
+
+**Composition is ours; rasterization is a rail.** That split is Doctrine §0.4, and it is the whole design:
+
+| Half                               | Where                  | Needs              | Can it be absent?     |
+| ---------------------------------- | ---------------------- | ------------------ | --------------------- |
+| Compose the card (SVG)             | `card/compose.ts`      | nothing            | **No** — always works |
+| Rasterize + host it (PNG at a URL) | `CardRenderer` adapter | renderer + storage | **Yes** — and says so |
+
+`composeCard()` is a pure function: profile and crew in, SVG out. No clock, no randomness, no I/O. The SVG is **not a preview or a fallback** — it is a complete, resolution-independent card. What needs the rasterizer is a _hosted PNG at a URL_, because that is what a social platform fetches to unfurl a link.
+
+### The rule that matters most
+
+**No failure may produce a URL.** Every `HttpCardRenderer` failure path — timeout, transport error, non-2xx, non-JSON body, contract mismatch, zero bytes — returns `{ status: 'unavailable', code, reason }` and never a URL, and never throws. A fabricated asset URL is stored in `card_asset_url`, goes into an `og:image` tag, and is discovered when a share unfurls as a broken image on somebody else's timeline — precisely the moment this artifact exists to work.
+
+`card_asset_url` is written **only** on a real render, **only** for the portrait, and **only** by `card` — never by `export`. §7.1's schema has one card column and portrait is the primary artifact, so letting the OG image overwrite it would make the column mean "whichever size was asked for last". And `export` is a tRPC `.query()`: retried, prefetched and cached, so it carries the card (`renderCard`, no writes) without acquiring `card`'s side effect. For the same reason `mentors` reads `mentor_matches` directly instead of plucking a field off `export()` — otherwise a shortlist request would compose an SVG and wait on an external rasterizer.
+
+### It carries no personal data. None.
+
+No name, no handle, no avatar, no birth data, no user id, no timestamp. Everything drawn is either derived by the Neural Engine (the five axes) or a crew's derived name. Two consequences, and both are the reason:
+
+1. A card carrying nothing personal is **safe to make public by default** — and it is the one object here designed to leave the service.
+2. There is no caller-supplied text, so it cannot be turned into a public renderer of arbitrary strings in INTAFACED branding.
+
+**Open owner question:** whether a user may put their own display name on the card. It is the obvious product ask and it has a real abuse dimension, so it is not something this service decided on its own.
+
+### The brand is read, not restated
+
+Colours come from `@intafaced/ui/tokens` — the `/tokens` subpath carries no React. `packages/ui/src/tokens.ts` says "nothing hard-codes a hex outside this file", and a test fails on any hex in the card that is not a token. An acquisition artifact is the last place to invent a shade of orange.
+
+Fonts are the token stacks, and they end in `system-ui`. A rasterizer without the brand display face produces a legible card in a system font — not a failure, but not the designed artifact either. Font provisioning belongs to whatever implements `CardRenderer`; nothing on this side can detect it.
+
+### What is asserted
+
+- Both canvases as **literal numbers** — 1080×1350 and 1200×630 — as `width`/`height` attributes _and_ a matching `viewBox`. (Attributes without a viewBox scale the artwork; a viewBox without attributes lets the rasterizer choose the resolution, and §7.2's numbers would then depend on renderer defaults.) The literals are written out rather than read from `CARD_DIMENSIONS`, so the test disagrees with the code instead of agreeing with it by construction.
+- The §7.2 copy-scan runs on the **rendered output**, across every profile value the contract allows, with a negative control — a forbidden name could reach the card through an enum value without ever being typed in a file.
+- Determinism, in-canvas bounds, tag balance, XML escaping (including a `<script>` smuggled through a crew name), and no UUID or date anywhere in the output.
+
+### Configuration
+
+| Variable                             | Default | Meaning                                                               |
+| ------------------------------------ | ------- | --------------------------------------------------------------------- |
+| `BLUEPRINT_CARD_RENDERER_URL`        | _unset_ | No renderer. Vector card still renders; raster reports `unconfigured` |
+| `BLUEPRINT_CARD_RENDERER_TIMEOUT_MS` | 10000   | Shorter than the engine's 20s — nothing is waiting on the PNG         |
+| `BLUEPRINT_CARD_RENDERER_API_KEY`    | _unset_ | Bearer token. Never logged                                            |
+
+There is deliberately **no default URL**. One pointing at a host that does not exist would turn "this deployment has no renderer" — a permanent, honest state a surface can render immediately — into a timeout on every card request. Note that compose writes `${BLUEPRINT_CARD_RENDERER_URL:-}`, which sets the variable to the _empty string_ rather than leaving it absent; the schema normalises `''` to unset, and `env.test.ts` exists because without that the service crash-loops at boot over a rail it does not need.
+
+**This stack has no rasterizer and no object storage**, so `blueprint.card` here returns a full SVG and `blueprint.card_renderer_unconfigured`. That is the honest state, not an outage.
+
+---
+
 ## Not in this feature
 
-- **The share card** (`blueprint.card`) — 1080×1350 / 1200×630 server-side render via satori/resvg. Separate feature. `blueprints.card_asset_url` is the socket and is null until it lands.
+- **A hosted PNG.** See above — the adapter exists, the rail does not, and the service says so rather than pretending.
+- **Public card URLs.** `blueprint.card` is authenticated and self-only. Whose card may be seen is what `blueprints.visibility` decides, and that check is not built; a public endpoint shipped ahead of it would make every Blueprint's crew role enumerable by user id, including the `private` ones.
 - On-chain rank attestations (`blueprint.attestations`, §19).
 - Crew vaults (§33) — Phase 5P, and the money lives in the ledger when it arrives.
 
@@ -209,6 +269,8 @@ None of this is needed for correctness today, and none of it is speculative work
 - `packages/contracts/src/blueprint.ts` — **new.** The profile schema and the export/erase envelopes. §7.1 names three read-only downstream consumers of `blueprints.profile` (svc-trade, svc-academy, svc-agents); they read it through here and never import this service.
 - `packages/events/src/catalog.ts` — three events added. The bus validates against the catalog, so this is unavoidable rather than optional.
 - `packages/auth/src/scopes.ts` — `blueprint:read` / `blueprint:write`, plus the implication. `Scope` is a closed union; without these the router would have to authorise Blueprint access on an unrelated module's scope.
+- `packages/contracts/src/blueprint.ts` — the card contract: `CARD_DIMENSIONS`, `cardSizeSchema`, `cardRasterSchema` (the `rendered | unavailable` union), `cardRenderSchema`, and `card` on `BlueprintContract`. `blueprintExportSchema` goes to **schemaVersion 2**, adding `card` — §7.2 promises "export (JSON + card)", and an export without the card was JSON only. Bumped rather than added silently: the literal exists so a consumer reading an archive can tell which shape it holds.
+- `@intafaced/ui` is now a dependency of this service, for `@intafaced/ui/tokens` only. That subpath is plain data with no React import (`primitives.tsx` is a separate entry point and is never loaded here), and `packages/ui` is already in the Dockerfile manifest. The alternative — restating the brand hexes in this package — is the thing `tokens.ts` explicitly forbids.
 
 ---
 

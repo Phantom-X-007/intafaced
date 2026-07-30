@@ -24,7 +24,7 @@ import { trace, SpanStatusCode, type Span } from '@opentelemetry/api';
  */
 const tracer = trace.getTracer('svc-blueprint');
 
-export type OnboardingStage = 'session' | 'engine' | 'persist' | 'match' | 'mentors' | 'export' | 'erase';
+export type OnboardingStage = 'session' | 'engine' | 'persist' | 'match' | 'mentors' | 'card' | 'export' | 'erase';
 
 /**
  * The ONLY attributes this service puts on a span.
@@ -45,6 +45,30 @@ export interface BlueprintSpanAttributes {
   score?: number;
   candidateCount?: number;
   latencyMs?: number;
+  /**
+   * Whether the card rasterizer produced an asset. An operational fact about a
+   * rail — it says nothing about the person, only whether an external renderer
+   * answered.
+   */
+  cardRaster?: 'rendered' | 'unavailable';
+}
+
+/**
+ * Set one attribute from the closed set AFTER the span has started.
+ *
+ * Some facts are only known once the work is done, and the raster status is the
+ * first of them. This exists rather than a bare `span.setAttribute` because the
+ * closed type above is only a guarantee if there is no second way onto a span:
+ * a raw call takes any string, so it would put an attribute on the wire that
+ * never appears in `BlueprintSpanAttributes` and therefore never appears in the
+ * review this file describes.
+ */
+export function setBlueprintSpanAttribute<K extends keyof BlueprintSpanAttributes>(
+  span: Span,
+  key: K,
+  value: NonNullable<BlueprintSpanAttributes[K]>,
+): void {
+  span.setAttribute(`intafaced.${key}`, value as string | number);
 }
 
 export async function withBlueprintSpan<T>(name: string, attributes: BlueprintSpanAttributes, fn: (span: Span) => Promise<T>): Promise<T> {

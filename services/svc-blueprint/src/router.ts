@@ -3,6 +3,8 @@ import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/
 import {
   blueprintExportSchema,
   blueprintSchema,
+  cardInput,
+  cardRenderSchema,
   eraseReceiptSchema,
   mentorMatchSchema,
   onboardInput,
@@ -77,9 +79,43 @@ export function createBlueprintRouter(blueprint: BlueprintService) {
       .output(blueprintSchema.nullable())
       .query(({ ctx }) => blueprint.get({ userId: ctx.principal.userId })),
 
+    /**
+     * The share card (§7.1 "the acquisition artifact", §7.2 exit criterion).
+     *
+     * `blueprint:read`, and the caller's OWN card — the same rule as everything
+     * else on this router. It is tempting to make this public, since the card
+     * carries no personal data and exists to be shared: a public `card(userId)`
+     * would let a page render anyone's unfurl with no session at all.
+     *
+     * It is not public, because *whose* card may be seen is what
+     * `blueprints.visibility` decides, and that check does not exist yet. A
+     * public endpoint shipped ahead of it would make every Blueprint's crew role
+     * enumerable by user id — including the ones set to `private` — and walking
+     * that back later breaks URLs other people have already embedded.
+     * Authenticated and self-only is the reversible direction.
+     */
+    card: scopedProcedure('blueprint:read', { module: 'blueprint' })
+      .input(cardInput)
+      .output(cardRenderSchema)
+      .query(async ({ ctx, input }) => {
+        try {
+          return await blueprint.card({ userId: ctx.principal.userId, size: input.size });
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    /**
+     * The caller's mentor shortlist.
+     *
+     * Reads the shortlist directly. It used to pluck `mentorMatches` off
+     * `export()`, which was merely wasteful until the card joined the export —
+     * at which point a shortlist request would compose an SVG and call an
+     * external rasterizer, and could stall behind that renderer's timeout.
+     */
     mentors: scopedProcedure('blueprint:read', { module: 'blueprint' })
       .output(z.array(mentorMatchSchema))
-      .query(async ({ ctx }) => (await blueprint.export({ userId: ctx.principal.userId })).mentorMatches),
+      .query(({ ctx }) => blueprint.mentors({ userId: ctx.principal.userId })),
 
     /**
      * §7.2 ownership — portable. Everything this service holds about the

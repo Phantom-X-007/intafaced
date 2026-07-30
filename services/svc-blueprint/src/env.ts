@@ -1,6 +1,22 @@
 import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
+/**
+ * An optional URL where the EMPTY STRING means "not set".
+ *
+ * `loadEnv` hands `process.env` to zod untouched, and compose's usual way of
+ * declaring an optional knob — `FOO: ${FOO:-}` — sets the variable to `''`
+ * rather than leaving it absent. Against a plain `z.string().url().optional()`
+ * that is a validation failure, and because this schema is evaluated at import
+ * time the symptom is the whole service refusing to boot over a rail it does
+ * not even need.
+ *
+ * So `''` is normalised to `undefined` before validation. A non-empty value is
+ * still required to be a real URL: a typo'd host must fail loudly at startup,
+ * which is the case this must not swallow.
+ */
+export const optionalUrl = z.preprocess((value) => (value === '' ? undefined : value), z.string().url().optional());
+
 // This service self-mounts /trpc, so it must be able to authenticate the edge.
 // `export` and `erase` act on `ctx.principal.userId` and nothing else, which is
 // only a privacy guarantee if that userId cannot be asserted by the caller
@@ -46,6 +62,29 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
 
     /** Current crew season. Crews are formed and named within a season. */
     BLUEPRINT_SEASON: z.coerce.number().int().min(1).default(1),
+
+    /**
+     * The card rasterizer (§7.1 "rendered server-side … → PNG").
+     *
+     * **Optional, and unset means unset.** There is deliberately no default URL:
+     * one pointing at a host that does not exist would turn "this deployment has
+     * no renderer" — a permanent, honest state a surface can render immediately
+     * — into a timeout on every card request. When this is absent the service
+     * boots `UnconfiguredCardRenderer`, the vector card still renders in full,
+     * and the response carries a typed code saying why there is no PNG.
+     */
+    BLUEPRINT_CARD_RENDERER_URL: optionalUrl,
+
+    /**
+     * Shorter than the engine's 20s, on purpose. The engine call is the step a
+     * user sits through during onboarding; the card is composed instantly and
+     * only the hosted PNG is outstanding, so a slow renderer should give up
+     * quickly and report `unavailable` rather than hold a share sheet open.
+     */
+    BLUEPRINT_CARD_RENDERER_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(10_000),
+
+    /** Never logged. */
+    BLUEPRINT_CARD_RENDERER_API_KEY: z.string().optional(),
   }),
 );
 
