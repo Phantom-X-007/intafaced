@@ -19,19 +19,21 @@ WHAT THIS IS
 - Board: docs/TRACKER.md · README status band · `pnpm tracker ready`.
 - Plain map: docs/START-HERE.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Residual: docs/POST-MERGE-RESIDUAL-AFTER-86.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
 - Stream A claim (Nitro app surface): docs/NITRO-STREAM-A-CLAIM.md · issue #83. After Denon waves: docs/WAVE-AUDIT.md only.
+- Parallel with Denon (judgment columns, not just file territory): docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md · live agent claims: docs/LIVE-LANES.md.
 
 PARTNER
 - Denon (@Phantom-X-007) main builder. I am @ZenYoda3. Shared private GitHub.
 - Review is asymmetric: he merges his PRs on green CI + self-audit; he (or his agent) reviews mine. I do not Approve his code.
 - Never stomp origin/* in-flight branches. Check `gh pr list` + tracker before claiming.
-- Split board: Nitro = Stream A (vendor shell pages/components/images, App.vue, routes.js; branches feat/app-*). Denon = Stream B (services, packages, tooling, edge, proxy, main.js, compose). Never edit Stream B; open issue `[cross-stream] <file> — <what>`. Do not rebase/force-push his feat/multi-asset-* (money). Rebrand/#86 is already on main.
+- Split board (files): Nitro = Stream A (vendor shell pages/components/images, App.vue, routes.js; branches feat/app-*). Denon = Stream B (services, packages, tooling, edge, proxy, main.js, compose). Never edit Stream B; open issue `[cross-stream] <file> — <what>`. Do not rebase/force-push his feat/multi-asset-* (money). Rebrand/#86 is already on main.
+- Split board (judgment): give Denon licence/ops/rails/chain/multi-asset/architecture forks; keep Stream A polish, honesty UI, tracker truth, wave audits for Nitro+agents. Never invent his answers or mark human-only residual done. Classify before coding — unclear → list for Denon, do not guess.
 
 ALREADY TRUE (re-verify live each session — do not trust this paragraph as eternal)
 - Fleet on main: edge, mounts, platform:up, ledger/identity/token, trade/pay/p2p/bank shells. Do not rebuild services already on main.
 - Product UI = vendored exchange shell at http://localhost:8090 — not apps/web. Books = TypeScript ledger only. #86 shell rebrand is on main.
 - Stream A product work (browser look, prices/candles, DEX/CEX UI, order polish, account panes, mobile, empty states) is Nitro’s lane — see NITRO-STREAM-A-CLAIM.md.
-- Full product audit closed (#80/#81); #86 custody + shell; #96 vendor residual closed. Mega-wave after #86: docs/audit/2026-07-29-wave/ + PEACE-OF-MIND-AUDIT-CURRENT.md.
-- Residual: docs/POST-MERGE-RESIDUAL-AFTER-86.md. After big ship waves: docs/MEGA-AUDIT-PASTE-2026-07-29.md or WAVE-AUDIT.md. Strix PARKED — never without my explicit go + non-prod target.
+- Full product audit closed (#80/#81); #86 closed API-key escalate, wallet RPC open withdraw, trading backdoor. Residual: docs/POST-MERGE-RESIDUAL-AFTER-86.md.
+- After Denon waves: WAVE-AUDIT only. Strix PARKED — never run without my explicit go + non-prod target.
 - Not real customer money until rails/chain + perimeter + kill path + dual-book discipline. Multi-asset merge is Denon-only.
 
 MANDATORY WORKFLOW
@@ -48,10 +50,18 @@ RIGHT WAY (quality bar)
 - When ambiguous on money/custody/jurisdiction: stop and ask me (product) or cite doctrine.
 
 SESSION DEFAULT
-- Orient from START-HERE + tracker + open PRs (60s reality check), then execute the task I give.
-- If I only want status: plain map + next 2–3 moves + one recommended claim. No code.
+- Orient from START-HERE + parallel board + LIVE-LANES + tracker + open PRs (60s reality check), then execute the task I give.
+- If I only want status: plain map + Denon’s top items + my agent-safe top items + one recommended move. No code.
+- If Denon is working in parallel: protect his column; claim lanes; do not double-build spine product he should design.
 - Never install/run Strix or live exploit frameworks unless I explicitly say go and name a non-prod target.
 ```
+
+---
+
+## Enhanced parallel-mode block (optional add-on)
+
+When Nitro wants full parallel intent (Denon online), also paste the fenced “Enhanced director prompt” at the bottom of `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md`.
+
 
 ---
 
