@@ -25,7 +25,7 @@ import { LedgerService } from './service.js';
  * Requires Postgres. `docker compose up -d`. Skips cleanly when unreachable.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced';
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', 'drizzle');
 

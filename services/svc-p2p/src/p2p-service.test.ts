@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
@@ -23,7 +24,7 @@ import type { ReferencePriceSource } from './pricing.js';
  * does not close is a book where some of it went somewhere nobody asked for.
  */
 
-const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced';
+const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'), 'utf8');
 
@@ -58,6 +59,9 @@ if (!available) {
     connection: { search_path: 'p2p,public', application_name: 'svc-p2p-test' },
     onnotice: () => undefined,
   });
+
+  // Owns its database, or does not run. Must precede the first migration.
+  await assertTestDatabase(sql, 'svc-p2p');
 
   await sql.unsafe(migration);
 

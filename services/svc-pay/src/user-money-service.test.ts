@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import {
   MemoryLedger,
@@ -104,6 +105,10 @@ if (!available) {
     connection: { search_path: 'pay,public', application_name: 'svc-pay-user-money-test' },
     onnotice: () => undefined,
   });
+
+  // Owns its database, or does not run. This suite TRUNCATEs — pointed at the
+  // shared database that is destruction of live rows, which has happened here.
+  await assertTestDatabase(sql, 'svc-pay (user money)');
 
   /**
    * Applied under an advisory lock, because vitest runs test FILES in parallel

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import {
@@ -30,7 +31,7 @@ import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
  * a bug would hide.
  */
 
-const URL = process.env.TEST_DATABASE_URL_TOKEN ?? 'postgres://svc_token:svc_token@localhost:5433/intafaced';
+const URL = process.env.TEST_DATABASE_URL_TOKEN ?? 'postgres://svc_token:svc_token@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_token_init.sql'), 'utf8');
 const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_stake_pending.sql'), 'utf8');
@@ -63,6 +64,9 @@ if (!available) {
     connection: { search_path: 'token,public', application_name: 'svc-token-test' },
     onnotice: () => undefined,
   });
+
+  // Owns its database, or does not run. Must precede the first migration.
+  await assertTestDatabase(sql, 'svc-token');
 
   await sql.unsafe(migration);
   await sql.unsafe(migrationPending);

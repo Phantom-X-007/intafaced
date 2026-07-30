@@ -40,6 +40,10 @@ jobs:
         run: pnpm scan:custody
       - name: Vendor shell residue (mass-credit / CORS *)
         run: pnpm scan:vendor-shell
+      # Cheap, needs no database, and catches at review time the mistake that
+      # otherwise only shows up as someone else's `main` going red.
+      - name: Test DB isolation scan
+        run: pnpm scan:test-db
       - name: Workspace sync
         run: pnpm scan:workspace
       - name: Migration check (§14)
@@ -103,15 +107,22 @@ jobs:
       # Use 127.0.0.1 (not localhost) so Node does not try IPv6 ::1 before PG is up.
       CI: true
       REQUIRE_POSTGRES: '1'
-      TEST_DATABASE_URL: postgres://intafaced:intafaced@127.0.0.1:5432/intafaced
-      TEST_DATABASE_URL_PAY: postgres://svc_pay:svc_pay@127.0.0.1:5432/intafaced
-      TEST_DATABASE_URL_IDENTITY: postgres://svc_identity:svc_identity@127.0.0.1:5432/intafaced
-      TEST_DATABASE_URL_TOKEN: postgres://svc_token:svc_token@127.0.0.1:5432/intafaced
-      TEST_DATABASE_URL_TRADE: postgres://svc_trade:svc_trade@127.0.0.1:5432/intafaced
-      TEST_DATABASE_URL_P2P: postgres://svc_p2p:svc_p2p@127.0.0.1:5432/intafaced
-      TEST_DATABASE_URL_BANK: postgres://svc_bank:svc_bank@127.0.0.1:5432/intafaced
-      TEST_DATABASE_URL_BLUEPRINT: postgres://svc_blueprint:svc_blueprint@127.0.0.1:5432/intafaced
-      TEST_DATABASE_URL_AGENTS: postgres://svc_agents:svc_agents@127.0.0.1:5432/intafaced
+      # Target `intafaced_test`, not `intafaced`, even though CI's Postgres is a
+      # throwaway container where nothing could be harmed. Two reasons it still
+      # matters: `assertTestDatabase` refuses any database not ending in `_test`,
+      # so CI must satisfy the same rule it enforces on developers; and CI is the
+      # only place that proves the isolated database is actually bootstrappable.
+      # A green CI on the shared name would tell us nothing about the path every
+      # developer runs.
+      TEST_DATABASE_URL: postgres://intafaced:intafaced@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_PAY: postgres://svc_pay:svc_pay@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_IDENTITY: postgres://svc_identity:svc_identity@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_TOKEN: postgres://svc_token:svc_token@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_TRADE: postgres://svc_trade:svc_trade@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_P2P: postgres://svc_p2p:svc_p2p@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_BANK: postgres://svc_bank:svc_bank@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_BLUEPRINT: postgres://svc_blueprint:svc_blueprint@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_AGENTS: postgres://svc_agents:svc_agents@127.0.0.1:5432/intafaced_test
       REDIS_URL: redis://127.0.0.1:6379
       NATS_URL: nats://127.0.0.1:4222
 
@@ -131,6 +142,36 @@ jobs:
           # ops role used by some ledger/indexer suites for CREATE SCHEMA
           PGPASSWORD=intafaced psql -h localhost -U intafaced -d intafaced -c \
             "GRANT CREATE ON DATABASE intafaced TO intafaced_ops; ALTER ROLE intafaced_ops WITH CREATEDB;"
+
+      # Run the SAME init script the local docker fleet runs, rather than a CI
+      # transcription of it. That script shipped two silent bugs for a long time
+      # (an unquoted heredoc that let bash expand `DO $$` into the shell PID, and
+      # `CREATE ROLE IF NOT EXISTS`, which Postgres does not have). Both left
+      # `intafaced_test` created but EMPTY of service schemas — which is exactly
+      # what pushed suites back onto the shared database. CI never executed this
+      # file, so CI could not have caught either bug. Now it does.
+      - name: Create and bootstrap the isolated test database
+        env:
+          POSTGRES_USER: intafaced
+          POSTGRES_DB: intafaced
+          PGPASSWORD: intafaced
+          PGHOST: localhost
+        run: bash tooling/infra/postgres-init/02-intafaced-test-db.sh
+
+      - name: Prove the test database is actually populated
+        env:
+          PGPASSWORD: intafaced
+        run: |
+          # "Created but empty" was the real failure mode, and it is
+          # indistinguishable from success unless something asserts on contents.
+          expected=12
+          count=$(psql -h localhost -U intafaced -d intafaced_test -tAc \
+            "SELECT count(*) FROM pg_namespace WHERE nspname IN ('identity','ledger','token','matching','trade','pay','p2p','blueprint','bank','agents','indexer','protocol');")
+          echo "service schemas in intafaced_test: $count / $expected"
+          if [ "$count" -ne "$expected" ]; then
+            echo "::error::intafaced_test missing service schemas ($count/$expected) — 02-intafaced-test-db.sh did not do its job"
+            exit 1
+          fi
 
       - name: Prove money-test DB URLs resolve (residual #9)
         run: node tooling/ci/assert-test-db-env.mjs

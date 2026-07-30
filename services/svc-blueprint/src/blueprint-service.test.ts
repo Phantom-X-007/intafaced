@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import type { BlueprintProfile, OnboardInput } from '@intafaced/contracts';
@@ -24,7 +25,7 @@ import { EMPTY_CREW_SCORE, complementarity, newCrewId } from './matching/crew-ma
  * `NeuralEngineClient` interface.
  */
 
-const URL = process.env.TEST_DATABASE_URL_BLUEPRINT ?? 'postgres://svc_blueprint:svc_blueprint@localhost:5433/intafaced';
+const URL = process.env.TEST_DATABASE_URL_BLUEPRINT ?? 'postgres://svc_blueprint:svc_blueprint@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_blueprint_init.sql'), 'utf8');
 
@@ -58,6 +59,9 @@ if (!available) {
     connection: { search_path: 'blueprint,public', application_name: 'svc-blueprint-test' },
     onnotice: () => undefined,
   });
+
+  // Owns its database, or does not run. Must precede the first migration.
+  await assertTestDatabase(sql, 'svc-blueprint');
 
   await sql.unsafe(migration);
 

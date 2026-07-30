@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
+import { assertTestDatabase } from '@intafaced/db';
 import { verifyAccessToken, hasScope, SESSION_SCOPES } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type KeyObject } from 'node:crypto';
@@ -30,7 +31,16 @@ import {
  * Skips cleanly when Postgres is unreachable.
  */
 
-const URL = process.env.TEST_DATABASE_URL_IDENTITY ?? 'postgres://svc_identity:svc_identity@localhost:5433/intafaced';
+/**
+ * The fallback is `intafaced_test`, NOT the shared `intafaced`.
+ *
+ * This suite applies migrations and truncates tables, so it must own its
+ * database. While the default pointed at `intafaced`, an unset variable aimed a
+ * destructive suite at the database the local docker fleet and every other
+ * worktree share. `assertTestDatabase` below now refuses that outright,
+ * whatever URL it is handed.
+ */
+const URL = process.env.TEST_DATABASE_URL_IDENTITY ?? 'postgres://svc_identity:svc_identity@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 /** Every migration, in order. A suite that applies only 0000 tests a schema nobody deploys. */
 const migrations = ['0000_identity_init.sql', '0001_identity_kyc_review.sql', '0002_sub_accounts_revoke.sql'].map((f) =>
@@ -144,6 +154,9 @@ if (!available) {
     onnotice: () => undefined,
   });
 
+  // Owns its database, or does not run. Must precede the first migration.
+  await assertTestDatabase(sql, 'svc-identity');
+
   for (const migration of migrations) await sql.unsafe(migration);
 
   const bus = new MemoryEventBus('svc-identity');
@@ -161,6 +174,27 @@ if (!available) {
 
   beforeEach(async () => {
     bus.reset();
+    /**
+     * Reset the review queue, not just the bus.
+     *
+     * `kyc_records` is append-only in normal operation and nothing here ever
+     * removed rows, so the table grew without bound across runs — 307 pending
+     * rows on the shared database by the time this was tracked down. The queue
+     * is served oldest-first under a LIMIT, so once the backlog exceeded that
+     * limit a record created *now* could never appear in it, and the pending
+     * queue test failed with an assertion that looked exactly like a real
+     * regression. It passed on fresh Postgres, which is why CI stayed green.
+     *
+     * Truncating here rather than only scoping the assertion is deliberate:
+     * scoping would paper over the growth while leaving the table to grow
+     * forever, and the *next* limit-sensitive test would hit the same wall.
+     * The root cause is unbounded accumulation, so the fix removes it.
+     *
+     * This is a destructive statement, which is legitimate only because
+     * `assertTestDatabase` above has already proved we own this database.
+     * `kyc_records` is a leaf — nothing references it — so no CASCADE.
+     */
+    await sql`TRUNCATE identity.kyc_records`;
   });
 
   afterAll(async () => {
@@ -705,11 +739,21 @@ if (!available) {
       const first = await auth.submitKyc({ userId: a.userId, tier: 'basic', jurisdiction: 'DE' });
       const second = await auth.submitKyc({ userId: b.userId, tier: 'basic', jurisdiction: 'DE' });
 
+      /**
+       * Assert the ordering claim over *these two* records rather than over
+       * absolute positions in the queue. The claim under test is "the queue is
+       * FIFO", which is a statement about relative order; comparing raw indices
+       * additionally assumes nothing else is pending, which is an assumption
+       * about the fixture, not about the code. Belt and braces with the
+       * `beforeEach` truncate above — that removes the backlog, this makes the
+       * test state what it actually means.
+       */
       const queue = await auth.listPendingKyc(200);
       const ids = queue.map((r) => r.id);
       expect(ids).toContain(first.id);
       expect(ids).toContain(second.id);
-      expect(ids.indexOf(first.id)).toBeLessThan(ids.indexOf(second.id));
+      const mine = ids.filter((id) => id === first.id || id === second.id);
+      expect(mine).toEqual([first.id, second.id]);
 
       await auth.approveKycRecord({ recordId: first.id, reviewerId: operator.userId });
       expect((await auth.listPendingKyc(200)).map((r) => r.id)).not.toContain(first.id);

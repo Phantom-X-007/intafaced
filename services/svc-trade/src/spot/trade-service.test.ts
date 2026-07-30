@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { AuthError } from '@intafaced/auth';
@@ -99,6 +100,10 @@ if (!available) {
     connection: { search_path: 'trade,public', application_name: 'svc-trade-test' },
     onnotice: () => undefined,
   });
+
+  // Owns its database, or does not run. This suite TRUNCATEs — pointed at the
+  // shared database that is destruction of live rows, which has happened here.
+  await assertTestDatabase(sql, 'svc-trade');
 
   for (const migration of migrations) await sql.unsafe(migration);
 

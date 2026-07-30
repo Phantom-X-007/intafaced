@@ -41,6 +41,16 @@ export async function createTestDb(options: TestDbOptions): Promise<TestDb> {
 
   const admin = postgres(url, { max: 1, onnotice: () => undefined });
 
+  /**
+   * Guard before the first DDL. `createTestDb` gives each run its own *schema*,
+   * which isolates suites from each other — but it says nothing about which
+   * *database* those schemas are created and dropped in. Pointed at the shared
+   * `intafaced`, it happily creates and drops schemas inside the database the
+   * running fleet uses. Schema isolation and database isolation are different
+   * properties and only one of them was ever enforced here.
+   */
+  await assertTestDatabase(admin, `createTestDb(${options.service})`);
+
   await admin.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
   await admin.unsafe(`CREATE SCHEMA "${schema}"`);
 
@@ -108,6 +118,56 @@ export function resolveTestDatabaseUrl(serviceEnvKey: string | undefined, localD
   const shared = process.env.TEST_DATABASE_URL;
   if (shared && shared.trim() !== '') return shared;
   return localDefault;
+}
+
+/**
+ * THE GUARD. Refuse to run a destructive suite against a non-test database.
+ *
+ * Isolation that lives only in `.env` is aspirational: `.env` is gitignored, so
+ * every developer's copy drifts, and a variable that is merely *absent* falls
+ * back to whatever the code's default happens to be. That is not a hypothetical
+ * — it is how the shared `intafaced` database on :5433 accumulated 307 pending
+ * `identity.kyc_records`, how a branch's `loan_*` tables broke `main`'s custody
+ * doctrine test from a different checkout entirely, and how svc-pay came to
+ * `TRUNCATE pay.deposits` on a database with live rows in it.
+ *
+ * A test suite is allowed to be destructive — truncate, apply migrations, drop
+ * schemas — precisely and only because it owns its database. This function is
+ * what converts that sentence from a comment into an enforced precondition. It
+ * asks Postgres itself (`current_database()`), not the connection string, so a
+ * URL that lies, a `PGDATABASE` override, or a pooler that redirects elsewhere
+ * are all caught. Call it BEFORE the first destructive statement.
+ *
+ * The rule is a suffix, not a fixed name: any database ending in `_test` is
+ * fair game (`intafaced_test`, `intafaced_bank_loans_test`, a per-CI-job DB),
+ * and everything else — above all the shared `intafaced` — is refused. A suffix
+ * rule stays correct as services add dedicated databases; a hardcoded name
+ * would have to be edited every time and would silently rot.
+ *
+ * Failing loudly here is the entire point. The alternative is what we had: a
+ * green suite that quietly mutated the database the running fleet is using.
+ */
+export async function assertTestDatabase(sql: postgres.Sql, context: string): Promise<void> {
+  const rows = await sql<Array<{ db: string; usr: string }>>`
+    SELECT current_database() AS db, current_user AS usr
+  `;
+  const db = rows[0]?.db ?? '<unknown>';
+  const usr = rows[0]?.usr ?? '<unknown>';
+
+  if (db.endsWith('_test')) return;
+
+  throw new Error(
+    `REFUSING TO RUN ${context} against database "${db}" (as "${usr}").\n\n` +
+      `This suite applies migrations and/or truncates tables. It may only run\n` +
+      `against a dedicated test database — one whose name ends in "_test".\n` +
+      `"${db}" is not one, and on a developer machine it is almost certainly the\n` +
+      `SHARED database the local docker fleet and every other git worktree use.\n\n` +
+      `Fix: set the suite's TEST_DATABASE_URL_* variable to a *_test database.\n` +
+      `  cp .env.example .env   (it ships correct values for every service)\n` +
+      `Compose creates and bootstraps intafaced_test via\n` +
+      `tooling/infra/postgres-init/02-intafaced-test-db.sh — if it is missing,\n` +
+      `run: docker compose down -v && docker compose up -d`,
+  );
 }
 
 /**
