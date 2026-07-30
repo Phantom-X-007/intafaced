@@ -323,7 +323,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
-    note: 'Updated 2026-07-29: /trpc is mounted (createEdgeContext + fastifyTRPCPlugin, webhook raw-body parser encapsulated so it does not break tRPC). Edge already routes /api/pay → svc-pay. Merchant payment procedures are on the wire. Still not `done`: hosted checkout and payment links do not exist in the repo — the title is only partially delivered. Rails remain sandbox (MemoryChain + card-sandbox).',
+    note: 'Updated 2026-07-29: /trpc is mounted (createEdgeContext + fastifyTRPCPlugin, webhook raw-body parser encapsulated so it does not break tRPC). Edge already routes /api/pay → svc-pay. Merchant payment procedures are on the wire. Still not `done`: hosted checkout and payment links do not exist in the repo — the title is only partially delivered. Rails remain sandbox (MemoryChain + card-sandbox). Payment links: merchant.createLink + public resolveLink (token shown once). Hosted checkout UI still thin.',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', { module: 'pay', phase: '3', dependsOn: ['pay.psp'] }),

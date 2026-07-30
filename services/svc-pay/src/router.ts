@@ -124,6 +124,22 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
       .output(z.object({ ok: z.literal(true), service: z.string(), rails: z.array(z.string()) }))
       .query(() => ({ ok: true as const, service: 'svc-pay', rails: rails.ids() })),
 
+    /** Public payment-link resolve — checkout intent only, no merchant secrets. */
+    resolveLink: publicProcedure
+      .input(z.object({ token: z.string().min(8).max(200) }))
+      .output(
+        z.object({
+          id: z.string().uuid(),
+          merchantId: z.string().uuid(),
+          profileId: z.string().uuid().nullable(),
+          label: z.string(),
+          amount: amountSchema.nullable(),
+          currency: z.string().nullable(),
+          checkoutConfig: z.record(z.unknown()),
+        }),
+      )
+      .query(({ input }) => wrap(() => pay.resolvePaymentLink(input.token))),
+
     /** What an operator dashboard renders, and what routing will read (§6.1). */
     railHealth: scopedProcedure('pay:read', { module: 'pay' })
       .output(
@@ -187,6 +203,40 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           wrap(async () => {
             await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
             return pay.createProfile(input);
+          }),
+        ),
+
+      /** Hosted checkout pointer — token returned once. */
+      createLink: scopedProcedure('pay:write', { module: 'pay' })
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            label: z.string().min(1).max(120),
+            profileId: z.string().uuid().nullish(),
+            amount: amountSchema.optional(),
+            currency: assetIdSchema.optional(),
+            expiresAt: z.string().datetime({ offset: true }).optional(),
+          }),
+        )
+        .output(
+          z.object({
+            id: z.string().uuid(),
+            token: z.string(),
+            prefix: z.string(),
+            label: z.string(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            return pay.createPaymentLink({
+              merchantId: input.merchantId,
+              label: input.label,
+              profileId: input.profileId,
+              amount: input.amount === undefined ? undefined : parseAmount(input.amount),
+              currency: input.currency,
+              expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+            });
           }),
         ),
 
@@ -635,8 +685,11 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.merchant_not_found':
       case 'pay.payment_not_found':
       case 'pay.profile_not_found':
+      case 'pay.link_not_found':
       case 'pay.settlement_not_found':
         return 'NOT_FOUND' as const;
+      case 'pay.link_expired':
+        return 'BAD_REQUEST' as const;
       case 'pay.invalid_transition':
       case 'pay.capture_exceeds_authorized':
       case 'pay.refund_exceeds_captured':

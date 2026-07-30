@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import {
@@ -68,6 +69,8 @@ export type PayErrorCode =
   | 'pay.merchant_pricing_invalid'
   | 'pay.payment_not_found'
   | 'pay.profile_not_found'
+  | 'pay.link_not_found'
+  | 'pay.link_expired'
   | 'pay.invalid_amount'
   | 'pay.invalid_transition'
   | 'pay.capture_exceeds_authorized'
@@ -317,6 +320,99 @@ export class PayService {
       RETURNING id
     `;
     return { id: rows[0]!.id, merchantId: input.merchantId };
+  }
+
+  /**
+   * Create a shareable payment link. The raw token is returned once.
+   * Hosted checkout UI is still thin — this is the durable pointer + public resolve.
+   */
+  async createPaymentLink(input: {
+    merchantId: string;
+    label: string;
+    profileId?: string | null;
+    amount?: Amount;
+    currency?: string;
+    expiresAt?: Date | null;
+  }): Promise<{ id: string; token: string; prefix: string; label: string }> {
+    await this.getMerchant(input.merchantId);
+    if (input.profileId) {
+      const profiles = await this.sql<Array<{ id: string }>>`
+        SELECT id FROM pay.payment_profiles
+         WHERE id = ${input.profileId} AND merchant_id = ${input.merchantId}
+      `;
+      if (!profiles[0]) throw new PayError('payment profile not found for merchant', 'pay.profile_not_found');
+    }
+
+    const token = `pl_${randomBytes(24).toString('base64url')}`;
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const prefix = token.slice(0, 10);
+
+    const rows = await this.sql<Array<{ id: string }>>`
+      INSERT INTO pay.payment_links (
+        merchant_id, profile_id, token_hash, token_prefix, label, amount, currency, expires_at
+      ) VALUES (
+        ${input.merchantId},
+        ${input.profileId ?? null},
+        ${tokenHash},
+        ${prefix},
+        ${input.label},
+        ${input.amount === undefined ? null : formatAmount(input.amount)}::numeric,
+        ${input.currency ?? null},
+        ${input.expiresAt ?? null}
+      )
+      RETURNING id
+    `;
+
+    return { id: rows[0]!.id, token, prefix, label: input.label };
+  }
+
+  /**
+   * Public resolve. Returns checkout intent only — no merchant secrets.
+   */
+  async resolvePaymentLink(token: string): Promise<{
+    id: string;
+    merchantId: string;
+    profileId: string | null;
+    label: string;
+    amount: string | null;
+    currency: string | null;
+    checkoutConfig: Record<string, unknown>;
+  }> {
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        merchant_id: string;
+        profile_id: string | null;
+        label: string;
+        amount: string | null;
+        currency: string | null;
+        active: boolean;
+        expires_at: Date | null;
+        checkout_config: Record<string, unknown> | null;
+      }>
+    >`
+      SELECT l.id, l.merchant_id, l.profile_id, l.label, l.amount::text, l.currency,
+             l.active, l.expires_at, p.checkout_config
+        FROM pay.payment_links l
+        LEFT JOIN pay.payment_profiles p ON p.id = l.profile_id
+       WHERE l.token_hash = ${tokenHash}
+    `;
+    const row = rows[0];
+    if (!row || !row.active) throw new PayError('payment link not found', 'pay.link_not_found');
+    if (row.expires_at && row.expires_at.getTime() < Date.now()) {
+      throw new PayError('payment link expired', 'pay.link_expired');
+    }
+
+    return {
+      id: row.id,
+      merchantId: row.merchant_id,
+      profileId: row.profile_id,
+      label: row.label,
+      amount: row.amount,
+      currency: row.currency,
+      checkoutConfig: row.checkout_config ?? {},
+    };
   }
 
   // ── Payment lifecycle ──────────────────────────────────────────────────────
