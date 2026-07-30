@@ -7,10 +7,13 @@
     <!--<a href="/#/identbusiness">{{$t("otc.applymerchant")}}&gt;&gt;</a>-->
     <!-- </section> -->
     <section class="list-content">
-      <Tabs :value="tabPage" v-model="tabPage">
+      <!-- Stream A: failed ad API must not look like "no ads". -->
+      <p v-if="adsError" class="ix-empty ix-empty-error">{{ adsError }}</p>
+      <Tabs :value="tabPage" v-model="tabPage" v-if="!adsError">
         <TabPane :label="$t('otc.buyin')" name="buy">
           <div class="table-responsive list-table">
-            <Table :no-data-text="$t('common.nodata')" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader? 250: ''" :size="tableSize" :data="advertiment.ask.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
+            <p v-if="!loading && adsReachable && advertiment.ask.rows.length === 0" class="ix-empty">{{ $t('otc.adsEmpty') }}</p>
+            <Table :no-data-text="adsTableEmptyText" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader? 250: ''" :size="tableSize" :data="advertiment.ask.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
             <div class="page_change">
               <div style="float: right;">
                 <Page v-if="advertiment.ask.totalElement > 0" :pageSize="advertiment.ask.pageNumber" :total="advertiment.ask.totalElement" :current="advertiment.ask.currentPage" @on-change="changePage"></Page>
@@ -20,7 +23,8 @@
         </TabPane>
         <TabPane :label="$t('otc.sellout')" name="sell">
           <div class="table-responsive list-table">
-            <Table :no-data-text="$t('common.nodata')" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader? 250: ''" :size="tableSize" :data="advertiment.bid.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
+            <p v-if="!loading && adsReachable && advertiment.bid.rows.length === 0" class="ix-empty">{{ $t('otc.adsEmpty') }}</p>
+            <Table :no-data-text="adsTableEmptyText" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader? 250: ''" :size="tableSize" :data="advertiment.bid.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
             <div class="page_change">
               <div style="float: right;">
                 <Page v-if="advertiment.bid.totalElement > 0" :pageSize="advertiment.bid.pageNumber" :total="advertiment.bid.totalElement" :current="advertiment.bid.currentPage" @on-change="changePage"></Page>
@@ -749,6 +753,9 @@ export default {
       showCheckbox: false,
       fixedHeader: false,
       loading: true,
+      /* Stream A: empty ads ≠ failed ad API */
+      adsReachable: false,
+      adsError: "",
       dataCount: 10,
       tableSize: "large",
       tabPage: "buy",
@@ -1011,6 +1018,12 @@ export default {
     },
     lang: function() {
       return this.$store.state.lang;
+    },
+    adsTableEmptyText: function() {
+      if (this.adsError) {
+        return this.adsError;
+      }
+      return this.$t("common.nodata");
     }
   },
   watch: {
@@ -1031,7 +1044,7 @@ export default {
       this.advertiment.columns[2].title = this.$t("otc.operate");
     },
     loadAd(pageNo, advertiseType, table) {
-      //fetch ads
+      // fetch ads — fail must not look like "no ads"
       let params = {};
       table.rows = [];
       table.totalElement = 0;
@@ -1041,16 +1054,36 @@ export default {
       params["advertiseType"] = advertiseType;
       params["unit"] = this.coin;
       this.$http
-.post(this.host + this.api.otc.advertise, params)
-.then(response => {
+        .post(this.host + this.api.otc.advertise, params)
+        .then(response => {
           var resp = response.body;
-          if (resp.code == 0) {
-            if (resp.data.context) {
+          if (resp && resp.code == 0) {
+            if (resp.data && resp.data.context) {
               table.rows = resp.data.context;
-              table.totalElement = resp.data.totalElement;
+              table.totalElement = resp.data.totalElement || 0;
+            } else {
+              table.rows = [];
+              table.totalElement = 0;
             }
+            this.adsReachable = true;
+            this.adsError = "";
+            this.loading = false;
           } else {
-            this.$Message.error(resp.message);
+            /* Parallel buy/sell loads: only surface error if nothing succeeded. */
+            if (!this.adsReachable) {
+              this.adsError =
+                this.$t("otc.adsUnavailable") ||
+                "OTC ads did not answer — list is unknown, not empty.";
+            }
+            this.loading = false;
+            if (resp && resp.message) this.$Message.error(resp.message);
+          }
+        })
+        .catch(() => {
+          if (!this.adsReachable) {
+            this.adsError =
+              this.$t("otc.adsUnavailable") ||
+              "OTC ads service did not respond — list is unknown, not empty.";
           }
           this.loading = false;
         });
@@ -1063,7 +1096,9 @@ export default {
       }
     },
     reloadAd() {
-      // this.tabPage = "buy";
+      this.loading = true;
+      this.adsError = "";
+      this.adsReachable = false;
       this.loadAd(1, 0, this.advertiment.bid);
       this.loadAd(1, 1, this.advertiment.ask);
     },

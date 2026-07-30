@@ -10,7 +10,11 @@
         </div>
       </div>
       <div class="content">
-        <Menu ref="navMenu" mode="horizontal" width="auto" :active-name="activeMenuName" @on-select="menuSelected" class='tradelist'>
+        <!-- Stream A: empty coin list ≠ coin API down. -->
+        <p v-if="coinsError" class="ix-empty ix-empty-error">{{ coinsError }}</p>
+        <p v-else-if="coinsLoading" class="ix-empty ix-empty-loading">{{ $t('common.loading') }}</p>
+        <p v-else-if="coinsReachable && coins.length === 0" class="ix-empty">{{ $t('otc.coinsEmpty') }}</p>
+        <Menu v-if="!coinsError && coins.length > 0" ref="navMenu" mode="horizontal" width="auto" :active-name="activeMenuName" @on-select="menuSelected" class='tradelist'>
           <MenuGroup>
             <template v-for="(coin,index) in coins">
               <MenuItem :name="'coin-'+index"> {{coin.unit}}
@@ -18,7 +22,7 @@
             </template>
           </MenuGroup>
         </Menu>
-        <router-view></router-view>
+        <router-view v-if="!coinsError"></router-view>
       </div>
       <div class="advantage">
         <ul>
@@ -176,6 +180,9 @@ export default {
   data() {
     return {
       coins: [],
+      coinsLoading: true,
+      coinsReachable: false,
+      coinsError: "",
       activeMenuName: "coin-1"
     };
   },
@@ -192,15 +199,36 @@ export default {
   methods: {
     init() {
       this.$store.commit("navigate", "nav-otc");
-      this.$http.post(this.host + this.api.otc.coin).then(response => {
-        if (response.body.code == 0) {
-          this.coins = response.body.data;
-          this.activeMenu();
-          this.$nextTick(function() {
-            this.$refs.navMenu.updateActiveName();
-          });
-        }
-      });
+      this.coinsLoading = true;
+      this.coinsError = "";
+      this.coinsReachable = false;
+      this.$http
+        .post(this.host + this.api.otc.coin)
+        .then(response => {
+          var body = response.body;
+          if (body && body.code == 0) {
+            this.coins = body.data || [];
+            this.coinsReachable = true;
+            this.coinsLoading = false;
+            this.activeMenu();
+            this.$nextTick(function() {
+              if (this.$refs.navMenu) {
+                this.$refs.navMenu.updateActiveName();
+              }
+            });
+          } else {
+            this.coinsError =
+              this.$t("otc.coinsUnavailable") ||
+              "OTC markets did not answer — list is unknown, not empty.";
+            this.coinsLoading = false;
+          }
+        })
+        .catch(() => {
+          this.coinsError =
+            this.$t("otc.coinsUnavailable") ||
+            "OTC markets service did not respond — list is unknown, not empty.";
+          this.coinsLoading = false;
+        });
     },
     goBusiness() {
       if (this.isLogin) {
@@ -220,6 +248,9 @@ export default {
       }
     },
     activeMenu() {
+      if (!this.coins.length) {
+        return;
+      }
       let coin = this.$route.params[0] || "USDT";
       coin = coin.toUpperCase();
       let index=0;
@@ -230,7 +261,9 @@ export default {
       })
       this.activeMenuName = `coin-${index}`;
       this.$nextTick(function() {
-        this.$refs.navMenu.updateActiveName();
+        if (this.$refs.navMenu) {
+          this.$refs.navMenu.updateActiveName();
+        }
       });
     }
   },

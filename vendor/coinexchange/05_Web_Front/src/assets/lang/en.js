@@ -21,6 +21,7 @@ module.exports = {
         loading: "Loading...",
         // stream A — home board honesty when market thumb is down
         marketsUnavailable: "Market list unavailable — not empty"
+        // stream A — OTC/C2C empty≠error keys live under otc.* / ctc.* (append-only there)
     },
     header: {
         index: 'Home',
@@ -505,7 +506,12 @@ module.exports = {
         price: "Price(CNY)",
         status: "Status",
         operate: "Operate",
-        moredetail: "More details"
+        moredetail: "More details",
+        // stream A — C2C honesty: empty ≠ error; never invent quotes
+        priceUnavailable: "C2C price unavailable — not a fixed rate",
+        ordersUnavailable: "C2C orders unavailable — not empty",
+        ordersEmpty: "No C2C orders yet",
+        ordersSignIn: "Sign in to see your C2C orders"
     },
     otc: {
         ad: 'Advertising',
@@ -522,6 +528,12 @@ module.exports = {
         sell: 'sell',
         buy: 'buy',
         transaction: 'Trading transactions',
+        // stream A — OTC honesty: empty ads ≠ failed API
+        adsUnavailable: "OTC ads unavailable — not empty",
+        adsEmpty: "No ads for this market",
+        offerUnavailable: "Offer unavailable — details unknown, not blank",
+        coinsUnavailable: "OTC markets unavailable — not empty",
+        coinsEmpty: "No OTC markets configured",
         myad: {
             title: 'My Ad',
             post: 'Post An Ad',
