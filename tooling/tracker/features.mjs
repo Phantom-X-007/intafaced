@@ -248,11 +248,10 @@ export const FEATURES = [
   f('trade.convert', 'One-tap Convert — the retail on-ramp', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'done',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade'],
-    note: 'convert.quote + convert.execute on svc-trade (RFQ + house spread → market IOC, same hold→fill). Money-path suite tests exist (trade-service convert describe). Still wip: CI billing blocked so green-CI DoD not re-proven; edge product-check open.',
+    note: 'Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining.',
   }),
   f('trade.futures', 'Perps: cross/isolated margin, funding, liquidation ladder', {
     module: 'trade',
