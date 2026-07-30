@@ -70,10 +70,11 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true };
 });
 
-// Public CCXT-style REST (markets, orderbook, ticker, tickers, trades). No
-// auth — market data is public. Paths match packages/exchange-contract
+// Public CCXT-style REST (markets, orderbook, ticker, tickers, trades, ohlcv).
+// No auth — market data is public. Paths match packages/exchange-contract
 // REST_ROUTES; edge routes /api/v1 → here with path preserve and principal
 // exchange (private routes below verify the edge signature).
+// OHLCV returns [] until a candle aggregation job exists (no inventing candles).
 registerPublicRest(app, {
   markets: () => trade.markets(),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
@@ -115,7 +116,14 @@ app.log.info(
     port: env.HTTP_PORT,
     spotEnabled: env.TRADE_SPOT_ENABLED,
     trpc: true,
-    publicRest: ['/api/v1/markets', '/api/v1/orderbook/:symbol', '/api/v1/ticker/:symbol', '/api/v1/tickers', '/api/v1/trades/:symbol'],
+    publicRest: [
+      '/api/v1/markets',
+      '/api/v1/orderbook/:symbol',
+      '/api/v1/ticker/:symbol',
+      '/api/v1/tickers',
+      '/api/v1/trades/:symbol',
+      '/api/v1/ohlcv/:symbol',
+    ],
     privateRest: [
       'POST /api/v1/orders',
       'DELETE /api/v1/orders',

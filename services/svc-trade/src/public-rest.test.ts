@@ -354,4 +354,40 @@ describe('public REST routes', () => {
     expect(body['BTC/USDT']!.last).toBe('100.5');
     await app.close();
   });
+
+  // No candle aggregation store yet — honest empty until a candle job lands.
+  it('GET /api/v1/ohlcv/:symbol returns empty array with no auth', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /api/v1/ohlcv/:symbol accepts valid timeframe and still returns empty', async () => {
+    const app = await build();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1h&since=1700000000000&limit=100',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /api/v1/ohlcv/:symbol 404s for an unknown market', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/NOPE%2FUSDT' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe('MarketNotFound');
+    await app.close();
+  });
+
+  it('GET /api/v1/ohlcv/:symbol 400s for a bad timeframe', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=7m' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidTimeframe');
+    await app.close();
+  });
 });
