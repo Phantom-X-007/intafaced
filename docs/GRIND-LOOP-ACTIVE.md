@@ -2,7 +2,7 @@
 
 **Status:** DRAINED (agent queue) · Nitro AFK · 45m scheduler re-checks for open PRs / regressions / honest tracker lies only  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#160** on tip · product high water **#158** (subAccounts soft-revoke) · **#155–#157** (loop docs · notify OTEL · p2pTradeDisputed) · **#159** DRAINED loop · **#160** Wave E scan log
+**Last tip:** high water through **#163** on tip · product high water **#163** (CCXT `since` filters) + **#162** (terminal public trade tape) · shipped **after** first DRAINED claim (#159/#161) · queue re-checked still empty of micro product · **#161** drain honesty · **#160** Wave E · earlier product drain floor **#158**
 
 ---
 
@@ -59,7 +59,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#160** on main. Product high water **#158**; drain docs **#159–#160**.
+**#110–#163** on main. Product high water **#163**; first DRAINED claim was after **#158** product / **#159–#161** drain docs — then **#162–#163** product landed and queue was re-checked **still DRAINED**.
 
 | PR | What |
 | --- | --- |
@@ -79,6 +79,9 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 | **#158** | Identity **`subAccounts.revoke`** soft-disable (`revoked=true`) |
 | **#159** | Docs: loop **DRAINED** + sub-account tracker honesty |
 | **#160** | Docs(audit): Wave E doctrine scan log with real exit codes |
+| **#161** | Docs: **DRAINED (agent queue)** + p2pTradeDisputed tracker honesty |
+| **#162** | **Terminal public trade tape** — `LiveTradeTape` ← svc-ws `channel=trades` (no candles) |
+| **#163** | CCXT optional **`since` (ms)** on account/trades · closed orders · public trades |
 
 **Earlier in the same cook (do not redo):**
 
@@ -89,8 +92,9 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 - Pay: payment links create/list/deactivate + **hosted checkout HTML**
 - Notify: svc-notify inbox + i18n + edge + fans above (incl. disputed)
 - Protocol: factory honesty (still not chain-done)
-- **CCXT REST public:** markets, orderbook, ticker, tickers, trades (tape), ohlcv (empty)
-- **CCXT REST private:** open/create/cancel/get/closed, account/trades (+ symbol filter), cancel-all, fees, balance, positions empty
+- **CCXT REST public:** markets, orderbook, ticker, tickers, trades (tape + **since**), ohlcv (empty)
+- **CCXT REST private:** open/create/cancel/get/closed (+ **since**), account/trades (+ symbol + **since**), cancel-all, fees, balance, positions empty
+- **Terminal:** public depth live; **public trade tape live** (#162); charts still honest socket (no candle invent)
 - Docs: grind plan, loop files, wave A–E audits, scoreboards
 
 ---
@@ -107,13 +111,16 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 | 4 | pay.public-api thin slice | **SKIP** — public resolve via payment links / hosted checkout |
 | 5 | Private balance WS | **SKIP** — no safe ledger projection event path; do not invent poll from svc-ws |
 | 6 | identity subAccounts.revoke | **DONE** #158 · soft `revoked`; no hard delete |
-| 7 | Reassess DRAINED | **Met** — Status **DRAINED (agent queue)** |
+| 7 | Terminal public trade tape | **DONE** #162 · post-DRAINED product; charts still socket |
+| 8 | CCXT `since` filters | **DONE** #163 · post-DRAINED product; mytrades / closed / public tape |
+| 9 | Reassess DRAINED | **Met again** — Status **DRAINED (agent queue)** after re-check post-#162/#163 |
 
 **Not agent micro-queue (large phase / design — do not fake done):**
 
 - Futures · candle aggregation · real chain factory + RPC  
 - Push / email / SMS · `pay.public-api` design beyond links · venue.aggregation implementations  
 - `ops.admin` real wiring (not browser-local pretend kill-switches)  
+- Terminal charts / hotkeys / sub-accounts UI (tape is live; chart remains honest empty)
 
 **Drained-mode work only (each fire):**
 
@@ -121,6 +128,8 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 2. Local doctrine: brand / custody / vendor-shell / workspace / dod-gate / tracker:check  
 3. Honest tracker lies only if `--check` red or notes contradict main code  
 4. Do **not** invent product surface for futures, candles, chain factory, push/email/SMS, ops.admin  
+
+**NEXT QUEUE summary:** empty of micro product · only **scheduler babysit open PRs / human blockers**.
 
 ---
 
@@ -137,7 +146,9 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## Exit (DRAINED) — met
 
-Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · scoreboard Wave E updated · no open agent-owned product PRs rotting.
+Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · tip high water **#163** · product high water **#162–#163** after first drain claim · scoreboard updated · no open agent-owned product PRs rotting.
+
+**First DRAINED claim** was after **#158** product / **#159–#161** docs. **Terminal public trade tape (#162)** and **CCXT since filters (#163)** shipped afterward; queue was **re-checked** and remains empty of agent micro product (no un-drain).
 
 **45m scheduler still re-checks** for open PRs · regressions · new honest tracker lies. Does **not** invent product to un-drain.
 
@@ -150,4 +161,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.  
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED (agent queue) — do not re-ship #110–#160; only babysit / honest fixes.**
+**Next agent after compact: Status DRAINED (agent queue) — do not re-ship #110–#163; only babysit / honest fixes.**
