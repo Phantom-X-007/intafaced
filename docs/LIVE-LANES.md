@@ -7,8 +7,8 @@
 | Lane id | Owner session | Scope | Status | PR / proof | Do not touch |
 | --- | --- | --- | --- | --- | --- |
 | denon-nitro-board | 019fae69 | Parallel board (full backlog expand) | **live** | PR #170 | product features until claimed |
-| stream-a-uiproof | (open PR lane) | Stream A boot / uiproof | **PR open** | #169 | services/** |
-| grind-parallel-ops | 019fae3d | Multi-agent parallel + AFK grind | babysit / DRAINED micro-queue | tip ~#168 | inventing product when drained |
+| stream-a-uiproof | (open PR lane) | Stream A boot / uiproof | **PR open** | #169 (boot) · #172 (harness, stacks on boot) | services/** |
+| grind-parallel-ops | 019fae3d | Multi-agent parallel + AFK grind | babysit / DRAINED micro-queue | tip ~#168+ | inventing product when drained |
 | stream-a-ui | 019fb069 | Stream A shell product owner :8090 | live | issue #83 | services/** spine |
 | merge-ready | 019fae32 | Denon handover / merge (historical) | idle | #101 era | — |
 | mega-audit | 019fae30 | Denon ship audit (historical) | idle | #105 era | product features |
@@ -21,4 +21,4 @@
 
 ## Last board update
 
-- 2026-07-30 — expanded full Denon backlog; Nitro agents restricted to no-judgment work; PR #170 carries board.
+- 2026-07-30 — Stream A uiproof GO packet: PR-1 boot (#169) + PR-2 harness (#172); Denon↔Nitro board #170.

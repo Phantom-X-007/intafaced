@@ -2,7 +2,7 @@
   "name": "intafaced",
   "private": true,
   "version": "0.0.0",
-  "description": "INTAFACED Sovereign OS \u2014 monorepo root. Law: INTAFACED_DEFINITIVE_BUILD.md",
+  "description": "INTAFACED Sovereign OS — monorepo root. Law: INTAFACED_DEFINITIVE_BUILD.md",
   "packageManager": "pnpm@10.25.0",
   "engines": {
     "node": ">=20.0.0"
@@ -41,7 +41,8 @@
     "db:check": "node tooling/ci/migration-check.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json,yml,yaml}\"",
-    "scan:workspace": "node tooling/ci/workspace-sync.mjs"
+    "scan:workspace": "node tooling/ci/workspace-sync.mjs",
+    "ui:boot": "node tooling/uiproof/boot.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
