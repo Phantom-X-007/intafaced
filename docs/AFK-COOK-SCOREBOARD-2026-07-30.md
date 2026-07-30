@@ -62,3 +62,14 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | #123 | **orders.history** terminal orders |
 | #124 | Payment links **list + deactivate** |
 
+
+## Wave B (parallel agents + continuous audit)
+
+| PR | What |
+| --- | --- |
+| #126 | Grind plan + audit cadence |
+| #127 | **orders.cancelAll** |
+| #128 | **protocol factory honesty** (no fake addresses) |
+| #129 | **svc-notify** in-app inbox + 3 event fans |
+
+**Audit:** `docs/audit/WAVE-B-2026-07-30.md` — all local doctrine gates green.
