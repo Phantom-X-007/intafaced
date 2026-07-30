@@ -210,3 +210,42 @@ export async function deployAccountSuite(clients: DevChainClients, entryPoint: A
 export function accountFactoryAt(clients: DevChainClients, address: Address) {
   return getContract({ address, abi: loadArtifact('AccountFactory').abi, client: clients.publicClient });
 }
+
+/**
+ * Deploy the launch `TokenFactory` (§8.4).
+ *
+ * Takes no constructor arguments and links nothing: the factory embeds
+ * `SovereignToken`'s creation code via `type(T).creationCode`, so the template
+ * lives inside the factory's own bytecode and there is no implementation
+ * address to point at and get wrong.
+ *
+ * Worth stating because it inverts the risk in `deployAccountSuite`, where the
+ * implementation is a separate deployment that has to be checked against the
+ * factory. Here the equivalent failure is the standalone `SovereignToken.json`
+ * bytecode drifting from the copy embedded in the factory — which is exactly
+ * what `token-factory-onchain.test.ts` rules out by comparing our init code with
+ * the factory's own `initCode()`.
+ */
+export async function deployTokenFactory(clients: DevChainClients): Promise<{ factory: Address; tx: Hex }> {
+  const { publicClient, walletClient } = clients;
+  const account = walletClient.account;
+  if (!account) throw new Error('deployTokenFactory needs a wallet client with an account');
+
+  const artifact = loadArtifact('TokenFactory');
+  const tx = await walletClient.deployContract({
+    abi: artifact.abi,
+    bytecode: artifact.bytecode,
+    account,
+    chain: walletClient.chain,
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
+  if (receipt.status !== 'success' || !receipt.contractAddress) {
+    throw new Error(`TokenFactory deployment failed: ${tx}`);
+  }
+  return { factory: receipt.contractAddress, tx };
+}
+
+/** The deployed launch factory, ready to read. */
+export function tokenFactoryAt(clients: DevChainClients, address: Address) {
+  return getContract({ address, abi: loadArtifact('TokenFactory').abi, client: clients.publicClient });
+}

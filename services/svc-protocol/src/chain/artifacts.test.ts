@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AbiParameter } from 'viem';
 import { loadArtifact } from './artifacts.js';
-import { accountFactoryAbi, smartAccountAbi } from './abi.js';
+import { accountFactoryAbi, erc20ReadAbi, smartAccountAbi, tokenFactoryAbi } from './abi.js';
 // eslint-disable-next-line -- .mjs helper shared with scripts/compile-contracts.mjs; there is no .d.ts and none is wanted
 import { collectSources, computeSourceHash, SUITES, suiteSources } from '../../scripts/contract-sources.mjs';
 
@@ -75,15 +75,93 @@ describe('committed artefacts match the Solidity in this tree', () => {
   });
 });
 
+describe('committed launch artefacts match the Solidity in this tree', () => {
+  const launch = (SUITES as Suite[]).find((s) => s.name === 'launch');
+
+  it('has a compiled artefact for both launch contracts', () => {
+    for (const name of ['SovereignToken', 'TokenFactory'] as const) {
+      const artefact = loadArtifact(name);
+      expect(artefact.contractName).toBe(name);
+      expect(artefact.bytecode.length).toBeGreaterThan(2);
+      expect(artefact.deployedBytecode.length).toBeGreaterThan(2);
+      expect(artefact.bytecode).not.toContain('__$');
+      expect(artefact.suite).toBe('launch');
+    }
+  });
+
+  /**
+   * Staleness matters more here than anywhere else in this service.
+   *
+   * A token's CREATE2 init code IS `SovereignToken.json`'s bytecode
+   * (`launch/address.ts`), so an artefact that no longer corresponds to any
+   * source in the tree does not produce a build error — it produces confident,
+   * wrong addresses that a creator publishes.
+   */
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(launch, collectSources()));
+    for (const name of ['SovereignToken', 'TokenFactory'] as const) {
+      expect(loadArtifact(name).sourceHash, `${name}.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build`).toBe(
+        expected,
+      );
+    }
+  });
+
+  /**
+   * The launch suite has its OWN sourceHash, separate from the accounts suite.
+   * That is the point of compiling them apart: editing a token template must
+   * not mark every account artefact stale, and vice versa.
+   */
+  it('hashes the launch suite independently of the accounts suite', () => {
+    expect(loadArtifact('SovereignToken').sourceHash).not.toBe(loadArtifact('AccountFactory').sourceHash);
+  });
+
+  it('pins the same compiler and EVM version as the rest of the tree', () => {
+    const artefact = loadArtifact('SovereignToken');
+    expect(artefact.solcVersion).toBe('0.8.28');
+    expect(artefact.evmVersion).toBe('paris');
+    expect(artefact.optimizer).toEqual({ enabled: true, runs: 200 });
+  });
+
+  /**
+   * THE PRODUCT'S CENTRAL CLAIM, CHECKED AT THE ABI.
+   *
+   * `token-factory-onchain.test.ts` proves it against deployed bytecode, which
+   * is the stronger check and needs a chain. This one needs nothing and fails
+   * the build the moment somebody adds a mint function to the template — which
+   * is the edit most likely to be waved through, because it looks like a
+   * feature.
+   */
+  it('exposes no function that could inflate supply or confer control', () => {
+    const names = loadArtifact('SovereignToken')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+
+    for (const forbidden of ['mint', 'burn', 'owner', 'transferOwnership', 'renounceOwnership', 'pause', 'unpause', 'upgradeTo']) {
+      expect(names, `SovereignToken must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    // The control, so this cannot pass by reading an empty list.
+    expect(names).toContain('totalSupply');
+    expect(names).toContain('transfer');
+  });
+});
+
 describe('the hand-written ABI agrees with the compiled one', () => {
   const compiled = {
     AccountFactory: loadArtifact('AccountFactory').abi,
     SmartAccount: loadArtifact('SmartAccount').abi,
+    TokenFactory: loadArtifact('TokenFactory').abi,
+    SovereignToken: loadArtifact('SovereignToken').abi,
   } as const;
 
   const cases = [
     { contract: 'AccountFactory' as const, handWritten: accountFactoryAbi },
     { contract: 'SmartAccount' as const, handWritten: smartAccountAbi },
+    { contract: 'TokenFactory' as const, handWritten: tokenFactoryAbi },
+    // `erc20ReadAbi` is deliberately a SUBSET — reads only. This checks the
+    // entries it does declare, which is the whole job: a wrong output type here
+    // does not throw, it decodes the same bytes into a different value, and a
+    // creator is shown a supply that is not the supply.
+    { contract: 'SovereignToken' as const, handWritten: erc20ReadAbi },
   ];
 
   for (const { contract, handWritten } of cases) {

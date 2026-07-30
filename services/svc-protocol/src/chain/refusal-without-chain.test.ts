@@ -79,6 +79,18 @@ function routerFor(chain: ProtocolChain, factory: Address, implementation: Addre
   }).createCaller(anonymous());
 }
 
+/** A plausible deployed TokenFactory. Configured, and on a chain nobody can reach. */
+const TOKEN_FACTORY: Address = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0';
+
+/** Launch parameters that pass every policy check, so only the chain can refuse. */
+const VALID_TOKEN_PARAMS = {
+  name: 'Sovereign One',
+  symbol: 'SOV',
+  decimals: 18,
+  totalSupply: '1000000',
+  recipient: OWNER,
+};
+
 const deadChain = new ProtocolChain({
   chainId: DEV_CHAIN_ID,
   rpcUrl: DEAD_RPC,
@@ -87,6 +99,7 @@ const deadChain = new ProtocolChain({
   // CONFIGURED addresses buy nothing when nobody can reach the chain they are on.
   factory: FACTORY,
   implementation: IMPLEMENTATION,
+  tokenFactory: TOKEN_FACTORY,
 });
 
 describe('a real ProtocolChain pointed at a closed socket', () => {
@@ -169,6 +182,131 @@ describe('the router with no chain behind it — unchanged behaviour', () => {
     await expect(caller.buildDeployment({ owner: OWNER })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
     await expect(caller.chainStatus()).resolves.toMatchObject({ suiteConfigured: false, suiteDeployed: false, usable: false });
     await expect(caller.health()).resolves.toMatchObject({ ok: true, factoryConfigured: false });
+  });
+});
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * LAUNCH — a token address is the worst thing on this surface to fabricate
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * A smart-account address a user funds is bad. A token address is worse,
+ * because a creator BROADCASTS it — into an announcement, a chat, a listing.
+ * Everyone who acts on it sends funds to a contract that will never exist, and
+ * none of it is recoverable by anybody.
+ *
+ * The arithmetic cannot refuse on its own: `address.test.ts` pins that
+ * `computeTokenAddress` derives a perfectly well-formed address from a zero
+ * factory. So the refusal lives in the router, and it is checked here against a
+ * REAL `ProtocolChain` on a REAL closed socket rather than a stub that throws
+ * what a test author expected.
+ */
+describe('launch, with no chain behind it', () => {
+  const caller = () => routerFor(deadChain, FACTORY, IMPLEMENTATION);
+
+  it('refuses predictTokenAddress with 503 and the code intact, never an address', async () => {
+    await expect(caller().launch.predictTokenAddress({ creator: OWNER, params: VALID_TOKEN_PARAMS })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.stringContaining('protocol.chain_unreachable'),
+    });
+  });
+
+  it('refuses tokenInfo rather than answering with empty metadata', async () => {
+    await expect(caller().launch.tokenInfo({ token: TOKEN_FACTORY })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.stringContaining('protocol.chain_unreachable'),
+    });
+  });
+
+  it('reports launchUsable:false on chainStatus so a surface renders the outage', async () => {
+    await expect(caller().chainStatus()).resolves.toMatchObject({
+      reachable: false,
+      tokenFactoryConfigured: true,
+      // Configured is not deployed, and nobody looked.
+      tokenFactoryDeployed: false,
+      launchUsable: false,
+      refusalCode: 'protocol.chain_unreachable',
+    });
+  });
+
+  it('reports launch.status as unusable without throwing, and never claims an audit', async () => {
+    await expect(caller().launch.status()).resolves.toMatchObject({
+      configured: true,
+      deployed: false,
+      usable: false,
+      refusalCode: 'protocol.chain_unreachable',
+      mintAuthorityRetained: false,
+      template: { contractName: 'SovereignToken', audited: false },
+    });
+  });
+
+  /**
+   * Building reads nothing, so it still answers with the chain down — the same
+   * bargain `buildDeployment` makes. The calldata is valid whenever the factory
+   * address is, and a creator can hold it until a chain exists.
+   */
+  it('still builds launch calldata, because building reads nothing', async () => {
+    const call = await caller().launch.buildTokenDeployment({ creator: OWNER, params: VALID_TOKEN_PARAMS });
+    expect(call).toMatchObject({ to: TOKEN_FACTORY, value: '0' });
+    expect(call.predictedAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    // 1_000_000 at 18 decimals, as a string. Never a number, at any point.
+    expect(call.scaledTotalSupply).toBe((10n ** 24n).toString());
+    // The summary is the last place the irreversible part can be said.
+    expect(call.summary).toContain('no mint function');
+  });
+
+  /**
+   * Policy refusals need no chain and must not be masked by one being absent: a
+   * creator with a bad supply gets a 400 naming the reason, not a 503 that
+   * sends them looking at infrastructure.
+   */
+  it('refuses invalid parameters with 400 and a launch.* code, chain or no chain', async () => {
+    await expect(
+      caller().launch.buildTokenDeployment({ creator: OWNER, params: { ...VALID_TOKEN_PARAMS, decimals: 19 } }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('launch.invalid_decimals') });
+
+    await expect(
+      caller().launch.buildTokenDeployment({ creator: OWNER, params: { ...VALID_TOKEN_PARAMS, totalSupply: '1e21' } }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('launch.invalid_supply') });
+
+    await expect(
+      caller().launch.buildTokenDeployment({
+        creator: OWNER,
+        params: { ...VALID_TOKEN_PARAMS, totalSupply: '100000000000000000000' },
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('launch.supply_out_of_range') });
+  });
+
+  /**
+   * THE ONE THAT MATTERS MOST. With no factory configured, every launch path
+   * must refuse BEFORE the arithmetic runs — because the arithmetic succeeds
+   * and hands back a real-looking address for a token nothing will ever deploy.
+   */
+  it('refuses every launch path outright when no factory is configured', async () => {
+    const unconfigured = new ProtocolChain({
+      chainId: DEV_CHAIN_ID,
+      rpcUrl: DEAD_RPC,
+      entryPoint: ENTRYPOINT,
+      factory: FACTORY,
+      implementation: IMPLEMENTATION,
+      // `tokenFactory` omitted entirely — the other spelling of absence, which
+      // the client collapses to the zero address so only one is reachable here.
+    });
+    const caller = routerFor(unconfigured, FACTORY, IMPLEMENTATION);
+
+    for (const call of [
+      () => caller.launch.predictTokenAddress({ creator: OWNER, params: VALID_TOKEN_PARAMS }),
+      () => caller.launch.buildTokenDeployment({ creator: OWNER, params: VALID_TOKEN_PARAMS }),
+    ]) {
+      await expect(call()).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        message: expect.stringContaining('launch.factory_not_configured'),
+      });
+    }
+
+    // And it says so as data, rather than throwing, on the status surfaces.
+    await expect(caller.launch.status()).resolves.toMatchObject({ configured: false, deployed: false, usable: false });
+    await expect(caller.chainStatus()).resolves.toMatchObject({ tokenFactoryConfigured: false, launchUsable: false });
   });
 });
 
