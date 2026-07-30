@@ -17,7 +17,8 @@ import { subscribeNotificationEvents } from './events.js';
  * balance (Doctrine §0.6).
  *
  * Graph: mount tRPC with edge-signed principal; durable bus consumers for
- * fillSettled, p2pEscrowLocked, kycApproved.
+ * fillSettled, p2pEscrowLocked, p2pEscrowReleased, kycApproved, rankUpdated,
+ * stakeCreated.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -71,7 +72,14 @@ app.log.info(
   {
     port: env.HTTP_PORT,
     fanoutEnabled: env.NOTIFY_FANOUT_ENABLED,
-    consumers: ['notify-fill-settled', 'notify-p2p-escrow-locked', 'notify-kyc-approved'],
+    consumers: [
+      'notify-fill-settled',
+      'notify-p2p-escrow-locked',
+      'notify-p2p-escrow-released',
+      'notify-kyc-approved',
+      'notify-rank-updated',
+      'notify-stake-created',
+    ],
     trpc: true,
   },
   'svc-notify ready',
