@@ -324,7 +324,7 @@ export class PayService {
 
   /**
    * Create a shareable payment link. The raw token is returned once.
-   * Hosted checkout UI is still thin — this is the durable pointer + public resolve.
+   * Hosted page: GET /checkout?token= (see checkout-page.ts).
    */
   async createPaymentLink(input: {
     merchantId: string;

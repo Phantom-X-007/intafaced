@@ -9,6 +9,7 @@ import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { MemoryChain } from './rails/chain-port.js';
 import { RailRegistry } from './rails/registry.js';
 import { createPayRouter } from './router.js';
+import { registerCheckoutRoutes } from './checkout-page.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
 
@@ -97,6 +98,12 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, rails: rails.ids() }));
+
+/**
+ * Hosted payment-link checkout (HTML). Public — the token is the capability.
+ * Browser reaches it via edge `/api/pay/checkout?token=…` (prefix stripped).
+ */
+await registerCheckoutRoutes(app, pay);
 
 /**
  * THE WEBHOOK ENDPOINT.
