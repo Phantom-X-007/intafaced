@@ -32,12 +32,12 @@ next: O1 babysit · O2 stream-a / tracker honesty
 
 ## Modes (do not collapse)
 
-| Mode | When | Job |
-| --- | --- | --- |
-| **O1 BABYSIT** | Always (overnight default) | Open PRs → classify → gates → comment → merge **only if policy allows** |
-| **O2 STREAM-A / HYGIENE** | Parallel lanes claimed in `LIVE-LANES.md` | Shell polish N1–N8 · tracker honesty · WAVE-AUDIT · LIVE-LANES · brand reds |
-| **COOK (RUNNING)** | Only if Status set to RUNNING with a **named** NEXT QUEUE of Pool A items | Ship agent-safe product — **not** Denon mountains |
-| **MEGA / WAVE AUDIT** | Explicit audit fire | Batch tip audit — not a merge machine |
+| Mode                      | When                                                                      | Job                                                                         |
+| ------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **O1 BABYSIT**            | Always (overnight default)                                                | Open PRs → classify → gates → comment → merge **only if policy allows**     |
+| **O2 STREAM-A / HYGIENE** | Parallel lanes claimed in `LIVE-LANES.md`                                 | Shell polish N1–N8 · tracker honesty · WAVE-AUDIT · LIVE-LANES · brand reds |
+| **COOK (RUNNING)**        | Only if Status set to RUNNING with a **named** NEXT QUEUE of Pool A items | Ship agent-safe product — **not** Denon mountains                           |
+| **MEGA / WAVE AUDIT**     | Explicit audit fire                                                       | Batch tip audit — not a merge machine                                       |
 
 **Backend micro-queue remains DRAINED.** O2 does **not** un-drain Denon futures/rails/OTC/etc.
 
@@ -47,13 +47,13 @@ next: O1 babysit · O2 stream-a / tracker honesty
 
 Classify every open PR before merge:
 
-| Class | Meaning | Nitro merge? |
-| --- | --- | --- |
-| **M** | Money / custody / ledger / pay / bank / withdraw / settlement | **NO** unless Denon comments `merge when green` |
-| **H** | PR body says "not for a fast merge" / needs review / do not merge | **NO** — comment only |
-| **P** | Denon non-money spine | Prefer Denon self-merge; Nitro may merge only if CI+local green **and** no hold language |
-| **N** | Nitro / Stream A / docs / tracker honesty | Yes after **audit → fix → debug → prove** |
-| **X** | Human-only surface (billing, licences, multi-asset rails, kill drill, counsel) | Never treat as agent-done |
+| Class | Meaning                                                                        | Nitro merge?                                                                             |
+| ----- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **M** | Money / custody / ledger / pay / bank / withdraw / settlement                  | **NO** unless Denon comments `merge when green`                                          |
+| **H** | PR body says "not for a fast merge" / needs review / do not merge              | **NO** — comment only                                                                    |
+| **P** | Denon non-money spine                                                          | Prefer Denon self-merge; Nitro may merge only if CI+local green **and** no hold language |
+| **N** | Nitro / Stream A / docs / tracker honesty                                      | Yes after **audit → fix → debug → prove**                                                |
+| **X** | Human-only surface (billing, licences, multi-asset rails, kill drill, counsel) | Never treat as agent-done                                                                |
 
 **Babysit is not rubber-stamp.** Always post a PR comment: what you ran, what you verified, what you did **not** verify.
 
@@ -64,8 +64,8 @@ Classify every open PR before merge:
 ## O1 — Babysit fire (each 45m)
 
 1. `gh pr list --state open`
-2. For each PR: classify M/H/P/N/X → run CI check + local gates when mergeable  
-3. Money or hold language → **comment only**  
+2. For each PR: classify M/H/P/N/X → run CI check + local gates when mergeable
+3. Money or hold language → **comment only**
 4. Denon WIP radar (do not compete):
 
    ```bash
@@ -82,14 +82,14 @@ Classify every open PR before merge:
 
 **Allowed without Nitro product judgment:**
 
-| # | Work | Done when |
-| --- | --- | --- |
-| N1–N8 | Stream A shell (`feat/app-*` only) — empty/error states, order-entry polish, honest empty panes, mobile drawer | PR green + territory clean |
-| N10 | WAVE-AUDIT after Denon wave lands | `docs/WAVE-AUDIT.md` / residual honesty |
-| N11 | Tracker honesty — notes match main; **never** mark Denon residual done falsely | `pnpm tracker:check` green |
-| N12 | Brand / custody / workspace mechanical reds | Scans green |
-| N13 | Babysit open **Nitro** PRs | Merged or fixed |
-| N14 | LIVE-LANES + this file current | Board matches live |
+| #     | Work                                                                                                           | Done when                               |
+| ----- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| N1–N8 | Stream A shell (`feat/app-*` only) — empty/error states, order-entry polish, honest empty panes, mobile drawer | PR green + territory clean              |
+| N10   | WAVE-AUDIT after Denon wave lands                                                                              | `docs/WAVE-AUDIT.md` / residual honesty |
+| N11   | Tracker honesty — notes match main; **never** mark Denon residual done falsely                                 | `pnpm tracker:check` green              |
+| N12   | Brand / custody / workspace mechanical reds                                                                    | Scans green                             |
+| N13   | Babysit open **Nitro** PRs                                                                                     | Merged or fixed                         |
+| N14   | LIVE-LANES + this file current                                                                                 | Board matches live                      |
 
 **Forbidden overnight:**
 
@@ -151,23 +151,23 @@ If queue empty → set DRAINED / return to O1+O2. Do not invent.
 
 **#110–#221** on main. Agent micro high water **#162–#163**; Stream A **#169/#172/#182** floor; mega-audit **#176–#177**; Denon spine wave **#201–#218**.
 
-| PR | What |
-| --- | --- |
-| **#221** | fix(ci): DevVenue artefacts + invisible main reds |
-| **#218** | indexer read models against a real chain + harness watching the wire |
+| PR       | What                                                                  |
+| -------- | --------------------------------------------------------------------- |
+| **#221** | fix(ci): DevVenue artefacts + invisible main reds                     |
+| **#218** | indexer read models against a real chain + harness watching the wire  |
 | **#217** | token factory on dev chain; deployed bytecode ≠ artefact (immutables) |
-| **#216** | blueprint share card + false `done` corrected on ownership |
-| **#215** | docs high water through #213–#214 |
-| **#214** | pay hosted checkout + public sandbox refuse |
-| **#213** | docs: vendored exchange 0% used |
-| **#211** | test DB isolation |
-| **#210** | protocol local EVM + CREATE2 cross-check |
-| **#209** | venue §27 fabric |
-| **#208** | academy lobbies host-by-rank |
-| **#207** | notify multi-channel (honest refuse) |
-| **#206** | P0 trade rank-perks credentials |
-| **#202** | bank loans (collateral LTV liquidation) |
-| **#201** | CCXT answers honesty |
+| **#216** | blueprint share card + false `done` corrected on ownership            |
+| **#215** | docs high water through #213–#214                                     |
+| **#214** | pay hosted checkout + public sandbox refuse                           |
+| **#213** | docs: vendored exchange 0% used                                       |
+| **#211** | test DB isolation                                                     |
+| **#210** | protocol local EVM + CREATE2 cross-check                              |
+| **#209** | venue §27 fabric                                                      |
+| **#208** | academy lobbies host-by-rank                                          |
+| **#207** | notify multi-channel (honest refuse)                                  |
+| **#206** | P0 trade rank-perks credentials                                       |
+| **#202** | bank loans (collateral LTV liquidation)                               |
+| **#201** | CCXT answers honesty                                                  |
 
 Earlier cook product (#110–#163): CCXT REST slices, notify fans, trade tape, payment links, etc. — do not rebuild.
 
@@ -181,31 +181,31 @@ Empty of agent-invented product. Do **not** pad.
 
 ### O2 active queue (agent-safe)
 
-| # | Item | Disposition |
-| --- | --- | --- |
-| O2.1 | Tracker honesty — `bank.loans` was still 🟢 after #202 | **This PR** marks done + note |
-| O2.2 | Stream A empty/error states / order-entry polish | **Claim** `overnight-stream-a` lane |
-| O2.3 | LIVE-LANES + high water after each Denon tip move | Ongoing |
-| O2.4 | WAVE-AUDIT after next Denon wave | After open merges settle |
+| #    | Item                                                   | Disposition                         |
+| ---- | ------------------------------------------------------ | ----------------------------------- |
+| O2.1 | Tracker honesty — `bank.loans` was still 🟢 after #202 | **This PR** marks done + note       |
+| O2.2 | Stream A empty/error states / order-entry polish       | **Claim** `overnight-stream-a` lane |
+| O2.3 | LIVE-LANES + high water after each Denon tip move      | Ongoing                             |
+| O2.4 | WAVE-AUDIT after next Denon wave                       | After open merges settle            |
 
 ### Not agent micro / do not fake done
 
-- Futures · candle aggregation job  
-- Production chain / contract audit (dev chain #210/#217 ≠ go-live)  
-- Live pay rails · multi-asset merge · licences · kill drill · counsel  
-- `ops.admin` real kill-switches  
-- Crash-WIP `feat/spine-*` until Denon reclaims  
+- Futures · candle aggregation job
+- Production chain / contract audit (dev chain #210/#217 ≠ go-live)
+- Live pay rails · multi-asset merge · licences · kill drill · counsel
+- `ops.admin` real kill-switches
+- Crash-WIP `feat/spine-*` until Denon reclaims
 
 ---
 
 ## Human-only (never fake done)
 
-- GitHub Actions billing / minutes  
-- **Production** chain / RPC / audited factories (local anvil ≠ done for go-live)  
-- Licences, wallet secrets, counsel list, kill drill, multi-asset rails  
-- Push/email/SMS **provider credentials** (#207 adapters refuse until configured)  
-- Futures / positions product  
-- Candle aggregation  
+- GitHub Actions billing / minutes
+- **Production** chain / RPC / audited factories (local anvil ≠ done for go-live)
+- Licences, wallet secrets, counsel list, kill drill, multi-asset rails
+- Push/email/SMS **provider credentials** (#207 adapters refuse until configured)
+- Futures / positions product
+- Candle aggregation
 
 ---
 
@@ -213,9 +213,9 @@ Empty of agent-invented product. Do **not** pad.
 
 Only when:
 
-1. NEXT QUEUE lists **named Pool A** items (Stream A / hygiene / explicitly assigned), **or** Denon assigns a ticket  
-2. LIVE-LANES claims exist  
-3. Parallel ≤3 non-overlapping  
+1. NEXT QUEUE lists **named Pool A** items (Stream A / hygiene / explicitly assigned), **or** Denon assigns a ticket
+2. LIVE-LANES claims exist
+3. Parallel ≤3 non-overlapping
 
 Empty queue → stay O1+O2 / DRAINED micro. **Never invent product to un-drain.**
 
@@ -225,9 +225,9 @@ Empty queue → stay O1+O2 / DRAINED micro. **Never invent product to un-drain.*
 
 Every **45 minutes:** re-read this file on `origin/main`.
 
-- Run **O1 babysit**  
-- Continue **O2** claimed lanes only  
-- Update high water if tip moved (#218+)  
-- Do **not** open Denon mountains  
+- Run **O1 babysit**
+- Continue **O2** claimed lanes only
+- Update high water if tip moved (#218+)
+- Do **not** open Denon mountains
 
 **Next agent after compact:** O1+O2 · money = no Nitro merge · do not re-ship #110–#221 · Stream A / hygiene only for product volume.

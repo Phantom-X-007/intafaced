@@ -9,13 +9,13 @@ Related: `docs/GRIND-LOOP-WHAT-IT-DOES-AND-PROMPT-FIX-2026-07-30.md` · `docs/GR
 
 ## Verdict (read this first)
 
-| Question | Answer |
-| --- | --- |
-| Can we leave **the current loop as-is** overnight? | **Weak yes for babysit-only** if a session is still DRAINED — low activity, main green, no open PRs. **Not** a “go ham build everything” overnight. |
-| Did the cook already finish “everything planned”? | **No.** It finished the **agent micro-queue** and babysat Denon’s wave. **Most of the product mountain list is still open** and is **Denon’s design work**, not agent free-for-all. |
-| Is there new Denon work we hadn’t seen? | **Yes — active right now**, not only “planned in a doc.” Two hot branches + many older spine WIP branches. |
-| Should agents “go all out parallel autonomous” on tracker 🟢 ready? | **No — that would invent Denon product.** Tracker “ready” ≠ “Nitro agents may ship without judgment.” |
-| Best overnight posture | **Babysit + optional Stream A / hygiene wave** under **hard merge rules** (money / review-hold = no Nitro merge). Re-open product cook only after an explicit **un-drain** with a named NEXT QUEUE. |
+| Question                                                            | Answer                                                                                                                                                                                              |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Can we leave **the current loop as-is** overnight?                  | **Weak yes for babysit-only** if a session is still DRAINED — low activity, main green, no open PRs. **Not** a “go ham build everything” overnight.                                                 |
+| Did the cook already finish “everything planned”?                   | **No.** It finished the **agent micro-queue** and babysat Denon’s wave. **Most of the product mountain list is still open** and is **Denon’s design work**, not agent free-for-all.                 |
+| Is there new Denon work we hadn’t seen?                             | **Yes — active right now**, not only “planned in a doc.” Two hot branches + many older spine WIP branches.                                                                                          |
+| Should agents “go all out parallel autonomous” on tracker 🟢 ready? | **No — that would invent Denon product.** Tracker “ready” ≠ “Nitro agents may ship without judgment.”                                                                                               |
+| Best overnight posture                                              | **Babysit + optional Stream A / hygiene wave** under **hard merge rules** (money / review-hold = no Nitro merge). Re-open product cook only after an explicit **un-drain** with a named NEXT QUEUE. |
 
 ---
 
@@ -27,15 +27,15 @@ Related: `docs/GRIND-LOOP-WHAT-IT-DOES-AND-PROMPT-FIX-2026-07-30.md` · `docs/GR
 
 ### Live truth
 
-| Claim | Live |
-| --- | --- |
-| Agent product micro-queue empty | **Yes** — `GRIND-LOOP-ACTIVE.md` **Status: DRAINED** · NEXT QUEUE rows all DONE/SKIP |
-| Loop still *designed* to wake every 45m | **Yes** — babysit open PRs / honesty only; **must not invent product to un-drain** |
-| Loop still *actively* shipping under your name | **No right now** — last ZenYoda3 ship **#215** docs; no open PRs |
-| “Planning left a free buffet for agents” | **Partly wrong** — board has **Denon mountains** + **Nitro agent-safe** + **human-only**. Cook cleared the **micro** buffet, not Denon’s mountains. |
-| Tracker “32 ready to claim” means free autonomous ships | **Mostly false** — those IDs route to **Denon** (futures, OTC, copy, algo, MM, smart-accounts, bank.earn, …) or need product forks |
-| Mega-audit = product complete | **False** — verdict was **PASS-WITH-RESIDUALS**, not go-live, not product bug-free |
-| Parallel workflows “already going all out properly” | **Mixed** — cook used parallel waves earlier; **current DRAINED mode is serial babysit**, not multi-mountain fan-out |
+| Claim                                                   | Live                                                                                                                                                |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent product micro-queue empty                         | **Yes** — `GRIND-LOOP-ACTIVE.md` **Status: DRAINED** · NEXT QUEUE rows all DONE/SKIP                                                                |
+| Loop still _designed_ to wake every 45m                 | **Yes** — babysit open PRs / honesty only; **must not invent product to un-drain**                                                                  |
+| Loop still _actively_ shipping under your name          | **No right now** — last ZenYoda3 ship **#215** docs; no open PRs                                                                                    |
+| “Planning left a free buffet for agents”                | **Partly wrong** — board has **Denon mountains** + **Nitro agent-safe** + **human-only**. Cook cleared the **micro** buffet, not Denon’s mountains. |
+| Tracker “32 ready to claim” means free autonomous ships | **Mostly false** — those IDs route to **Denon** (futures, OTC, copy, algo, MM, smart-accounts, bank.earn, …) or need product forks                  |
+| Mega-audit = product complete                           | **False** — verdict was **PASS-WITH-RESIDUALS**, not go-live, not product bug-free                                                                  |
+| Parallel workflows “already going all out properly”     | **Mixed** — cook used parallel waves earlier; **current DRAINED mode is serial babysit**, not multi-mountain fan-out                                |
 
 ---
 
@@ -50,13 +50,13 @@ Related: `docs/GRIND-LOOP-WHAT-IT-DOES-AND-PROMPT-FIX-2026-07-30.md` · `docs/GR
 
 ### What the cook actually did (roles)
 
-| Role | What landed |
-| --- | --- |
-| **Nitro cook (product micro)** | Roughly **#110–#163** era agent ships (CCXT honesty slices, notify fans, tape, etc.) then declared DRAINED; occasional post-drain micro (#162/#163) then re-drain |
-| **Nitro cook (docs/ops)** | High-water PRs (#200, #204, #205, #212, #215…), tracker honesty, wave/mega audit archives |
-| **Nitro babysit** | Merged many **Denon-authored** PRs under ZenYoda3 after CI + checklist comment (#201–#214 chain) |
-| **Denon spine** | Loans #202, CCXT answers #201, pay checkout #214, venue fabric #209, academy lobbies #208, notify channels #207, local EVM #210, test isolation #211, blueprint card #216, etc. |
-| **Batch audit** | `docs/audit/2026-07-30-afk-cook-mega/` + `…-mega-r2/` |
+| Role                           | What landed                                                                                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Nitro cook (product micro)** | Roughly **#110–#163** era agent ships (CCXT honesty slices, notify fans, tape, etc.) then declared DRAINED; occasional post-drain micro (#162/#163) then re-drain               |
+| **Nitro cook (docs/ops)**      | High-water PRs (#200, #204, #205, #212, #215…), tracker honesty, wave/mega audit archives                                                                                       |
+| **Nitro babysit**              | Merged many **Denon-authored** PRs under ZenYoda3 after CI + checklist comment (#201–#214 chain)                                                                                |
+| **Denon spine**                | Loans #202, CCXT answers #201, pay checkout #214, venue fabric #209, academy lobbies #208, notify channels #207, local EVM #210, test isolation #211, blueprint card #216, etc. |
+| **Batch audit**                | `docs/audit/2026-07-30-afk-cook-mega/` + `…-mega-r2/`                                                                                                                           |
 
 ### What the cook did **not** do
 
@@ -69,24 +69,24 @@ Related: `docs/GRIND-LOOP-WHAT-IT-DOES-AND-PROMPT-FIX-2026-07-30.md` · `docs/GR
 
 **Hot (minutes ago — post-#216):**
 
-| Branch | Last signal | Meaning |
-| --- | --- | --- |
-| `feat/spine-token-factory` | ~13:47 UTC | Dev-chain deploy / launch / honest tracker — **in flight, not on main** |
-| `feat/spine-indexer-readmodels` | ~13:44 UTC | Indexer sockets / wiring docs + work — **in flight** |
+| Branch                          | Last signal | Meaning                                                                 |
+| ------------------------------- | ----------- | ----------------------------------------------------------------------- |
+| `feat/spine-token-factory`      | ~13:47 UTC  | Dev-chain deploy / launch / honest tracker — **in flight, not on main** |
+| `feat/spine-indexer-readmodels` | ~13:44 UTC  | Indexer sockets / wiring docs + work — **in flight**                    |
 
 **Standing / older WIP (not open PRs; may be crash-preserved):**
 
-| Branch | Note |
-| --- | --- |
-| `feat/multi-asset-instruments` | Money enum — **must not agent-merge** |
-| `feat/spine-otc-desk` | Crash WIP marker |
-| `feat/spine-derivatives` | Crash WIP marker |
-| `feat/spine-bank-card` | Crash WIP marker |
-| `feat/spine-agent-fleet` | Crash WIP marker |
-| `feat/spine-java-custody` / `java-rename` | Custody / rename hazard |
-| `feat/spine-market-seeder` | Seeding books (launch-critical class) |
-| `feat/spine-venue-fabric` | Overlaps #209 story — don’t rebuild blind |
-| others `feat/spine-*` | Orient before touching |
+| Branch                                    | Note                                      |
+| ----------------------------------------- | ----------------------------------------- |
+| `feat/multi-asset-instruments`            | Money enum — **must not agent-merge**     |
+| `feat/spine-otc-desk`                     | Crash WIP marker                          |
+| `feat/spine-derivatives`                  | Crash WIP marker                          |
+| `feat/spine-bank-card`                    | Crash WIP marker                          |
+| `feat/spine-agent-fleet`                  | Crash WIP marker                          |
+| `feat/spine-java-custody` / `java-rename` | Custody / rename hazard                   |
+| `feat/spine-market-seeder`                | Seeding books (launch-critical class)     |
+| `feat/spine-venue-fabric`                 | Overlaps #209 story — don’t rebuild blind |
+| others `feat/spine-*`                     | Orient before touching                    |
 
 **Open GitHub issues** still name large ops/product programs (ops.admin, compliance, mining, market.vendors, …) — backlog, not “done by cook.”
 
@@ -109,11 +109,11 @@ Generated tracker on tip still lists some surfaces as 🟢/🔨 while code is pa
 
 From parallel board Column B:
 
-| Band | Examples | Overnight fit |
-| --- | --- | --- |
-| Stream A shell | N1–N8: empty/error states, order-entry polish, honest empty panes, mobile drawer, i18n **in Stream A only** | **Good** if shell/dev env available |
-| Hygiene | N10–N14: WAVE-AUDIT after Denon merges, tracker honesty, brand/custody reds that are mechanical, LIVE-LANES refresh | **Good** · low risk |
-| Cross-stream | File issues only when blocked on services/edge | **Safe** |
+| Band           | Examples                                                                                                            | Overnight fit                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Stream A shell | N1–N8: empty/error states, order-entry polish, honest empty panes, mobile drawer, i18n **in Stream A only**         | **Good** if shell/dev env available |
+| Hygiene        | N10–N14: WAVE-AUDIT after Denon merges, tracker honesty, brand/custody reds that are mechanical, LIVE-LANES refresh | **Good** · low risk                 |
+| Cross-stream   | File issues only when blocked on services/edge                                                                      | **Safe**                            |
 
 **Forbidden even if “ready” in tracker:** inventing candles, balances, factory addresses, live rails, multi-asset merge, licence answers, money models.
 
@@ -135,24 +135,24 @@ Licences, multi-asset merge call, wallet secrets, kill-drill sign-off, go-live, 
 
 **Keep the loop running** in DRAINED mode with **enhanced merge law**:
 
-| Rule | |
-| --- | --- |
-| Money / custody / ledger / pay / bank / withdraw | **No Nitro merge** unless Denon comments “merge when green” |
-| PR says “not for fast merge” / needs review | **Hard stop** — comment only |
-| Non-money Denon PR, CI+local green, no hold language | Optional merge **or** leave for Denon (prefer leave if he is online) |
-| No open PRs | Doctrine/tracker honesty only · update high water · stop (no ceremony) |
-| Never invent product to un-drain | Hard |
+| Rule                                                 |                                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------- |
+| Money / custody / ledger / pay / bank / withdraw     | **No Nitro merge** unless Denon comments “merge when green”            |
+| PR says “not for fast merge” / needs review          | **Hard stop** — comment only                                           |
+| Non-money Denon PR, CI+local green, no hold language | Optional merge **or** leave for Denon (prefer leave if he is online)   |
+| No open PRs                                          | Doctrine/tracker honesty only · update high water · stop (no ceremony) |
+| Never invent product to un-drain                     | Hard                                                                   |
 
 **Overnight risk:** low.  
 **Overnight upside:** Denon PRs get gate-checked; high water stays honest if docs PR allowed.  
-**What will *not* happen:** mountain of new Nitro features.
+**What will _not_ happen:** mountain of new Nitro features.
 
 ### Option O2 — **Babysit + Stream A / hygiene fan-out (recommended if you want “agents working”)**
 
 Same merge law as O1, **plus** 2–3 parallel worktrees:
 
-1. Stream A honesty/polish (one PR per concern, `feat/app-*` only)  
-2. Tracker honesty vs main (fix false 🟢 for bank.loans etc. if still wrong)  
+1. Stream A honesty/polish (one PR per concern, `feat/app-*` only)
+2. Tracker honesty vs main (fix false 🟢 for bank.loans etc. if still wrong)
 3. LIVE-LANES + grind high water → **#216+** (docs only)
 
 **Overnight risk:** medium (UI churn, brand scan).  
@@ -183,12 +183,12 @@ Completeness = every enhancement named; detail compressed.
 
 ### E1 · Split law files (why: one prompt currently means three jobs)
 
-| Piece | Job |
-| --- | --- |
-| `GRIND-LOOP-ACTIVE.md` | Queue + high water + Status only |
-| Babysit policy block | Merge privileges (money = no) |
-| Cook prompt | Only when Status=RUNNING + non-empty NEXT QUEUE |
-| Un-drain protocol | Who may set RUNNING and what must be listed first |
+| Piece                  | Job                                               |
+| ---------------------- | ------------------------------------------------- |
+| `GRIND-LOOP-ACTIVE.md` | Queue + high water + Status only                  |
+| Babysit policy block   | Merge privileges (money = no)                     |
+| Cook prompt            | Only when Status=RUNNING + non-empty NEXT QUEUE   |
+| Un-drain protocol      | Who may set RUNNING and what must be listed first |
 
 **Why:** DRAINED + “GO NEXT QUEUE” + “babysit-merge Denon” in one paste caused rubber-stamp merges.
 
@@ -196,19 +196,19 @@ Completeness = every enhancement named; detail compressed.
 
 Ship into grind law (from prior prompt-fix doc):
 
-- CLASS M money → no Nitro auto-merge  
-- Review-hold language → no merge  
-- CLASS N Nitro PRs → full bar then merge  
-- Always: PR comment with what was verified / **not** verified  
+- CLASS M money → no Nitro auto-merge
+- Review-hold language → no merge
+- CLASS N Nitro PRs → full bar then merge
+- Always: PR comment with what was verified / **not** verified
 
 ### E3 · Un-drain is a deliberate act (why: empty queue ≠ “go invent”)
 
 To set Status **RUNNING** overnight/autonomy must:
 
-1. List **named** NEXT QUEUE items from Pool A only (or Denon-assigned tickets)  
-2. Claim lanes in `LIVE-LANES.md`  
-3. Cap parallel mountains (e.g. ≤3) with **non-overlapping paths**  
-4. Wave audit every 3–4 product ships  
+1. List **named** NEXT QUEUE items from Pool A only (or Denon-assigned tickets)
+2. Claim lanes in `LIVE-LANES.md`
+3. Cap parallel mountains (e.g. ≤3) with **non-overlapping paths**
+4. Wave audit every 3–4 product ships
 
 ### E4 · Tracker vs main reconciliation job (why: false 🟢 causes rebuilds)
 
@@ -249,40 +249,44 @@ next: babysit | stream-A PR | stopped
 
 ### E9 · Parallel workflow shape (when O2)
 
-| Lane | Owner | Branch prefix | Do not touch |
-| --- | --- | --- | --- |
-| babysit | grind session | (no product branch) | inventing features |
-| stream-a-1 | agent | `feat/app-*` | `services/**` |
-| stream-a-2 or hygiene | agent | `feat/app-*` or `docs/*` | money packages |
-| denon | Denon | `feat/spine-*` | Nitro force-push |
+| Lane                  | Owner         | Branch prefix            | Do not touch       |
+| --------------------- | ------------- | ------------------------ | ------------------ |
+| babysit               | grind session | (no product branch)      | inventing features |
+| stream-a-1            | agent         | `feat/app-*`             | `services/**`      |
+| stream-a-2 or hygiene | agent         | `feat/app-*` or `docs/*` | money packages     |
+| denon                 | Denon         | `feat/spine-*`           | Nitro force-push   |
 
 Use worktrees; update LIVE-LANES on claim/release.
 
 ### E10 · Fix known honesty bugs in law file (why: next compact lies)
 
-- High water **#214 → #216+**  
-- Human-only “chain factory **done**” vs “prod still human” contradiction  
-- LIVE-LANES stale #182 open / tip ~#169  
+- High water **#214 → #216+**
+- Human-only “chain factory **done**” vs “prod still human” contradiction
+- LIVE-LANES stale #182 open / tip ~#169
 
 ---
 
 ## 6. Execution plan if you say “enhance then overnight”
 
-**Phase 0 — 15 min (human decision)**  
-- Confirm O1 or O1+O2  
-- Confirm money **no Nitro merge**  
+**Phase 0 — 15 min (human decision)**
 
-**Phase 1 — Law PR (docs only, one PR)**  
-- Patch GRIND-LOOP-ACTIVE: Status, high water, merge matrix, STATUS block, un-drain rules  
-- Refresh LIVE-LANES  
-- Paste cook vs babysit prompts  
+- Confirm O1 or O1+O2
+- Confirm money **no Nitro merge**
 
-**Phase 2 — Start overnight session(s)**  
-- One babysit session with enhanced prompt  
-- If O2: 1–2 Stream A/hygiene sessions with lane claims  
+**Phase 1 — Law PR (docs only, one PR)**
 
-**Phase 3 — Morning check (you or agent, 5 min)**  
-- `gh pr list` · tip CI · STATUS block · any money holds left open for Denon  
+- Patch GRIND-LOOP-ACTIVE: Status, high water, merge matrix, STATUS block, un-drain rules
+- Refresh LIVE-LANES
+- Paste cook vs babysit prompts
+
+**Phase 2 — Start overnight session(s)**
+
+- One babysit session with enhanced prompt
+- If O2: 1–2 Stream A/hygiene sessions with lane claims
+
+**Phase 3 — Morning check (you or agent, 5 min)**
+
+- `gh pr list` · tip CI · STATUS block · any money holds left open for Denon
 
 **Not in overnight scope:** futures, live rails, multi-asset merge, resuming crash WIP spines, go-live.
 
@@ -290,18 +294,18 @@ Use worktrees; update LIVE-LANES on claim/release.
 
 ## 7. Completeness checklist (this plan’s named set)
 
-| # | Item | Covered |
-| --- | --- | --- |
-| 1 | What loop is doing now | Yes §1–2 |
-| 2 | What cook built vs left | Yes §2 |
-| 3 | Denon new work not on main | Yes §2 hot branches |
-| 4 | Tracker “ready” vs agent-safe | Yes §3 |
-| 5 | Overnight O1–O4 + pick | Yes §4 |
-| 6 | Enhancements E1–E10 | Yes §5 |
-| 7 | Execution phases | Yes §6 |
-| 8 | Myth of parallel go-ham | Yes §1, §4 O3 |
-| 9 | Merge bar vs your standard | Yes E2 + prior docs |
-| 10 | Human-only / no-fake list | Yes §3 Pool C |
+| #   | Item                          | Covered             |
+| --- | ----------------------------- | ------------------- |
+| 1   | What loop is doing now        | Yes §1–2            |
+| 2   | What cook built vs left       | Yes §2              |
+| 3   | Denon new work not on main    | Yes §2 hot branches |
+| 4   | Tracker “ready” vs agent-safe | Yes §3              |
+| 5   | Overnight O1–O4 + pick        | Yes §4              |
+| 6   | Enhancements E1–E10           | Yes §5              |
+| 7   | Execution phases              | Yes §6              |
+| 8   | Myth of parallel go-ham       | Yes §1, §4 O3       |
+| 9   | Merge bar vs your standard    | Yes E2 + prior docs |
+| 10  | Human-only / no-fake list     | Yes §3 Pool C       |
 
 ---
 
@@ -331,11 +335,11 @@ Not a single new master plan file — **live branch work**: token-factory + inde
 
 Reply with one:
 
-| Say | Meaning |
-| --- | --- |
-| **O1** | Babysit-only overnight + merge harden (recommended baseline) |
-| **O1+O2** | Same + Stream A/hygiene parallel |
-| **Law only** | Docs PR for enhancements; don’t start overnight yet |
-| **Stop** | Kill grind autonomy until morning |
+| Say          | Meaning                                                      |
+| ------------ | ------------------------------------------------------------ |
+| **O1**       | Babysit-only overnight + merge harden (recommended baseline) |
+| **O1+O2**    | Same + Stream A/hygiene parallel                             |
+| **Law only** | Docs PR for enhancements; don’t start overnight yet          |
+| **Stop**     | Kill grind autonomy until morning                            |
 
 Default if silent: treat **O1** as the safe assumption — do not un-drain product cook.

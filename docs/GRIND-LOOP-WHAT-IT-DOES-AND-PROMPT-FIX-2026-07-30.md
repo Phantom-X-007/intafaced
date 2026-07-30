@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-30 · **Mode:** explanation + prompt upgrade (no product code)  
 **Live high water at write:** main tip through **#216**; grind file still says #214  
-**Your standard (stated this chat):** merge only after **audit → fix → debug**.  
+**Your standard (stated this chat):** merge only after **audit → fix → debug**.
 
 If live git disagrees, live wins.
 
@@ -12,21 +12,21 @@ If live git disagrees, live wins.
 
 The loop is **not** “only auto-merge.” It has **two jobs**, and after the agent micro-queue emptied it mostly runs the second:
 
-1. **Cook** — invent/ship agent-owned product PRs (now **DRAINED** / empty).  
+1. **Cook** — invent/ship agent-owned product PRs (now **DRAINED** / empty).
 2. **Babysit** — find open PRs (usually **Denon’s**), run **gates + a short self-audit comment**, then **squash-merge under your GitHub name**.
 
 That babysit is **not** the full “audit / fix / debug / then merge” bar you just stated. It is closer to: **CI green + local package tests + doctrine greps + a PR comment**, then merge. It rarely opens a fix PR on Denon’s work; it **approves with a checklist**.
 
 ---
 
-## What the loop is doing *right now*
+## What the loop is doing _right now_
 
-| Mode | Status | What happens |
-| --- | --- | --- |
-| Agent product cook | **DRAINED** | Queue empty. Explicit: do **not** invent product. |
-| 45m re-check | **Designed** in the law file | Re-read `docs/GRIND-LOOP-ACTIVE.md`; if open PRs → babysit; if not → honesty/regression only. |
-| Your account on GitHub lately | **Idle since #215** | Docs high-water only. |
-| Who is still building | **Denon** | #216 merged by him; spine branches still cooking. |
+| Mode                          | Status                       | What happens                                                                                  |
+| ----------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------- |
+| Agent product cook            | **DRAINED**                  | Queue empty. Explicit: do **not** invent product.                                             |
+| 45m re-check                  | **Designed** in the law file | Re-read `docs/GRIND-LOOP-ACTIVE.md`; if open PRs → babysit; if not → honesty/regression only. |
+| Your account on GitHub lately | **Idle since #215**          | Docs high-water only.                                                                         |
+| Who is still building         | **Denon**                    | #216 merged by him; spine branches still cooking.                                             |
 
 So if nothing is open: the loop’s job is **almost nothing** — not “merge forever.”
 
@@ -34,11 +34,11 @@ So if nothing is open: the loop’s job is **almost nothing** — not “merge f
 
 ## Three things people confuse (keep them separate)
 
-| Layer | Who builds | Who “reviews” | Who merges (in practice today) |
-| --- | --- | --- | --- |
-| **A. Nitro agent product** | Your AFK cook (when RUNNING) | Same agent’s light gates + wave audits every few ships | Your account, after its own PR is green |
-| **B. Denon spine product** | Denon / his agents | **Denon self-audit in PR body** + **your babysit comment** (gates) | Often **your account** (“babysit-merge”) |
-| **C. Whole-repo peace audits** | Separate mega / wave audit runs | Archive under `docs/audit/…` | Not a merge machine — produces findings + occasional fix PRs |
+| Layer                          | Who builds                      | Who “reviews”                                                      | Who merges (in practice today)                               |
+| ------------------------------ | ------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
+| **A. Nitro agent product**     | Your AFK cook (when RUNNING)    | Same agent’s light gates + wave audits every few ships             | Your account, after its own PR is green                      |
+| **B. Denon spine product**     | Denon / his agents              | **Denon self-audit in PR body** + **your babysit comment** (gates) | Often **your account** (“babysit-merge”)                     |
+| **C. Whole-repo peace audits** | Separate mega / wave audit runs | Archive under `docs/audit/…`                                       | Not a merge machine — produces findings + occasional fix PRs |
 
 **Mega-audits happened** (`docs/audit/2026-07-30-afk-cook-mega/`, `…-mega-r2/`). Those are **batch tip audits**, not a per-PR deep design review of every Denon ship that later landed (#201–#216).
 
@@ -46,9 +46,9 @@ So if nothing is open: the loop’s job is **almost nothing** — not “merge f
 
 ## Is it “just merging unreviewed stuff?”
 
-**Short answer: it is merging after a *thin* review, not after *your* full bar.**
+**Short answer: it is merging after a _thin_ review, not after _your_ full bar.**
 
-### What babysit *does* do (evidence on real PRs)
+### What babysit _does_ do (evidence on real PRs)
 
 On money PRs (#202 loans, #214 pay) your agent posted a comment then merged within minutes. Typical content:
 
@@ -57,31 +57,31 @@ On money PRs (#202 loans, #214 pay) your agent posted a comment then merged with
 - Money bullets: ledger-client only, no money-as-number for amounts, named gates (e.g. public sandbox refuse)
 - Then: “Squash-merging under Denon green-CI + self-audit policy”
 
-Example smell on **#214**: Denon wrote *“Money path. Opened for review, not for a fast merge.”* Your agent treated that as “do a money checklist,” posted the checklist, and merged **~4 seconds later**. That is **gate review**, not **hold for human/partner design review**.
+Example smell on **#214**: Denon wrote _“Money path. Opened for review, not for a fast merge.”_ Your agent treated that as “do a money checklist,” posted the checklist, and merged **~4 seconds later**. That is **gate review**, not **hold for human/partner design review**.
 
-### What babysit usually does *not* do
+### What babysit usually does _not_ do
 
-- Deep adversarial redesign of Denon’s approach  
-- Open a **fix PR** before merge when something is “smelly but green”  
-- Long debug sessions on his branch unless CI/local is red  
-- Formal GitHub **Review** (Approve/Request changes) — almost always a **comment + merge**  
-- Wait for Denon if he asked for review time  
+- Deep adversarial redesign of Denon’s approach
+- Open a **fix PR** before merge when something is “smelly but green”
+- Long debug sessions on his branch unless CI/local is red
+- Formal GitHub **Review** (Approve/Request changes) — almost always a **comment + merge**
+- Wait for Denon if he asked for review time
 
-### When the loop *did* more than merge
+### When the loop _did_ more than merge
 
-- **Cook phase:** built product, ran light gates, wave audits A–E, mega-audit r1/r2, tracker honesty, scoreboard updates.  
+- **Cook phase:** built product, ran light gates, wave audits A–E, mega-audit r1/r2, tracker honesty, scoreboard updates.
 - **Sometimes** on babysit: rebase/conflict resolve, force-push, re-run CI (#209 comment trail). That is **make it mergeable**, not always **re-architect**.
 
 ---
 
-## Match against *your* standard
+## Match against _your_ standard
 
-| Your bar | Loop today |
-| --- | --- |
-| Audit | **Light:** CI + local gates + short doctrine/money comment. **Not** full design audit every PR. |
-| Fix | Only if red or babysit finds an obvious gate fail; not “I disagree with the design → fix first.” |
-| Debug | When tests/CI fail; not exploratory product debug of green PRs. |
-| Then merge | **Yes — merge is the default success path** for green Denon PRs under AFK babysit. |
+| Your bar   | Loop today                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------ |
+| Audit      | **Light:** CI + local gates + short doctrine/money comment. **Not** full design audit every PR.  |
+| Fix        | Only if red or babysit finds an obvious gate fail; not “I disagree with the design → fix first.” |
+| Debug      | When tests/CI fail; not exploratory product debug of green PRs.                                  |
+| Then merge | **Yes — merge is the default success path** for green Denon PRs under AFK babysit.               |
 
 So: **you are right to worry.** It is **not** “blind merge with zero checks.” It **is** “auto-merge with automated + checklist review,” which is **weaker** than audit→fix→debug→merge if “audit” means human-grade or full adversarial review.
 
@@ -110,12 +110,12 @@ Repo law (`AGENTS.md`) also says Denon may merge **his own** PRs on green CI + s
 
 You care about:
 
-1. **Sleep without panic** — volume while away, but no “fake money / fake done / fake CI.”  
-2. **Partner trust** — Denon shouldn’t feel you rubber-stamped his money PR against his “not for fast merge.”  
-3. **Meaning of merge** — green CI ≠ finished thinking; merge = “we’d defend this in court / go-live story.”  
-4. **Clear modes** — cook vs babysit vs audit are different jobs; one prompt must not collapse them into “merge stuff.”  
-5. **Compaction survival** — next chat must inherit **honest** high water + rules, not stale #214 / false chain-done.  
-6. **You never read code** — proof must be: PR link, CI color, one plain comment (“what was checked / what was *not*”).  
+1. **Sleep without panic** — volume while away, but no “fake money / fake done / fake CI.”
+2. **Partner trust** — Denon shouldn’t feel you rubber-stamped his money PR against his “not for fast merge.”
+3. **Meaning of merge** — green CI ≠ finished thinking; merge = “we’d defend this in court / go-live story.”
+4. **Clear modes** — cook vs babysit vs audit are different jobs; one prompt must not collapse them into “merge stuff.”
+5. **Compaction survival** — next chat must inherit **honest** high water + rules, not stale #214 / false chain-done.
+6. **You never read code** — proof must be: PR link, CI color, one plain comment (“what was checked / what was _not_”).
 7. **Stop conditions** — drained means **stop inventing**, not **stop thinking**; money/review-request means **stop merging**.
 
 ---
@@ -209,20 +209,20 @@ Babysit = verify + comment; merge is a separate privilege.
 
 ## What you should believe after reading this
 
-| Belief | True? |
-| --- | --- |
-| Loop only auto-merges, never audits | **False** — thin audits + past mega/wave audits exist |
-| Loop always full audit→fix→debug then merge | **False** — that is your *desired* bar, not babysit’s default |
-| Right now it is flood-merging unreviewed code | **False** — no open PRs; product queue drained; Denon self-merged #216 |
-| Your name on Denon merges means you deep-reviewed | **False** — usually gates + checklist comment |
-| Closing a chat guarantees the loop is dead | **Not guaranteed** — law still describes 45m re-check if a session runs |
+| Belief                                            | True?                                                                   |
+| ------------------------------------------------- | ----------------------------------------------------------------------- |
+| Loop only auto-merges, never audits               | **False** — thin audits + past mega/wave audits exist                   |
+| Loop always full audit→fix→debug then merge       | **False** — that is your _desired_ bar, not babysit’s default           |
+| Right now it is flood-merging unreviewed code     | **False** — no open PRs; product queue drained; Denon self-merged #216  |
+| Your name on Denon merges means you deep-reviewed | **False** — usually gates + checklist comment                           |
+| Closing a chat guarantees the loop is dead        | **Not guaranteed** — law still describes 45m re-check if a session runs |
 
 ---
 
 ## Suggested next moves (your call; nothing executed)
 
-1. **Adopt BABYSIT merge policy** (money / “not for fast merge” = no Nitro merge).  
-2. **Paste enhanced prompts** into `docs/GRIND-LOOP-ACTIVE.md` on a docs PR when you want the law file to match reality.  
-3. **Tell Denon in one line:** “AFK babysit was checklist+merge; from now money stays his merge.”  
+1. **Adopt BABYSIT merge policy** (money / “not for fast merge” = no Nitro merge).
+2. **Paste enhanced prompts** into `docs/GRIND-LOOP-ACTIVE.md` on a docs PR when you want the law file to match reality.
+3. **Tell Denon in one line:** “AFK babysit was checklist+merge; from now money stays his merge.”
 
 No product code was changed in this write.
