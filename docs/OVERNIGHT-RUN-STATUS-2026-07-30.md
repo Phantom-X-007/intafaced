@@ -1,3 +1,5 @@
+**Tip after overnight fire:** `d5ab759` (#223 merged).
+
 # Overnight run status — 2026-07-30 (compaction brace)
 
 **Read this first after compact / new chat.** Live git always wins if this disagrees.
