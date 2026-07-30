@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it, beforeEach, afterAll, beforeAll } from 'vitest';
 import { MemoryEventBus, MemorySeenStore } from '@intafaced/events';
 import { assertTestDatabase } from '@intafaced/db';
 import { applyBlueprintCreated, applyBlueprintDeleted, readBlueprintId } from './blueprint-profile.js';
@@ -25,17 +25,17 @@ const migrations = ['0000_identity_init.sql', '0001_identity_kyc_review.sql', '0
   readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
 );
 
-let sql: postgres.Sql;
+const sql = postgres(URL, {
+  max: 4,
+  onnotice: () => undefined,
+  connection: { search_path: 'identity,public', application_name: 'svc-identity-blueprint-test' },
+});
+
 let available = true;
 
 try {
-  assertTestDatabase(URL);
-  sql = postgres(URL, {
-    max: 4,
-    onnotice: () => undefined,
-    connection: { search_path: 'identity,public', application_name: 'svc-identity-blueprint-test' },
-  });
   await sql`SELECT 1`;
+  await assertTestDatabase(sql, 'svc-identity blueprint cascade');
   for (const m of migrations) await sql.unsafe(m);
 } catch {
   available = false;
@@ -58,12 +58,16 @@ async function seedUser(userId: string) {
 }
 
 describeDb('blueprint profile cascade (§7.2)', () => {
+  beforeAll(() => {
+    if (!available) return;
+  });
+
   beforeEach(async () => {
     await sql`TRUNCATE identity.profiles, identity.users CASCADE`;
   });
 
   afterAll(async () => {
-    if (available) await sql.end({ timeout: 5 });
+    await sql.end({ timeout: 5 });
   });
 
   it('sets blueprint_id on created', async () => {
@@ -146,7 +150,6 @@ describeDb('blueprint profile cascade (§7.2)', () => {
 
     expect(await readBlueprintId(sql, userId)).toBeNull();
 
-    // Replay delete — still null, not an error
     await bus.publish(
       'blueprintDeleted',
       {
