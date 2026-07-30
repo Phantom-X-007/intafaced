@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { TIMEFRAMES, timeframeSchema } from '@intafaced/exchange-contract';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
@@ -13,6 +14,7 @@ import type { Market, PublicTapePrint } from './spot/types.js';
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
  *   GET /api/v1/trades/:symbol?limit=
+ *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&limit=
  *
  * No auth — public market data. Amounts are decimal strings on the wire.
  * Private routes live in `private-rest.ts` (edge-signed principal).
@@ -22,6 +24,7 @@ const DEFAULT_DEPTH = 50;
 const MAX_DEPTH = 500;
 const DEFAULT_TRADES = 100;
 const MAX_TRADES = 500;
+const DEFAULT_OHLCV_TIMEFRAME = '1m';
 const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 
 export interface PublicRestDeps {
@@ -270,6 +273,45 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       return reply.code(200).send(tape.map((print) => presentPublicTrade(market.symbol, print)));
     },
   );
+
+  /**
+   * GET /api/v1/ohlcv/:symbol — REST_ROUTES.fetchOHLCV.
+   *
+   * No candle aggregation store exists anywhere in the monorepo yet. This route
+   * is wired so bots get a real path (not 404), validates params honestly, and
+   * always returns [] until a candle aggregation job lands. Do not invent
+   * OHLCV from fake data or incomplete tape bucketing here.
+   *
+   * Query: timeframe (optional, default 1m), since (ms, accepted for contract
+   * shape), limit (accepted for contract shape). Bad timeframe → 400.
+   */
+  app.get<{
+    Params: { symbol: string };
+    Querystring: { timeframe?: string; since?: string; limit?: string };
+  }>('/api/v1/ohlcv/:symbol', async (req, reply) => {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const market = await deps.marketBySymbol(symbol);
+    if (!market) {
+      return reply.code(404).send({ code: 'MarketNotFound', message: `market ${symbol} not found` });
+    }
+
+    const rawTf = req.query.timeframe ?? DEFAULT_OHLCV_TIMEFRAME;
+    const tf = timeframeSchema.safeParse(rawTf);
+    if (!tf.success) {
+      return reply.code(400).send({
+        code: 'InvalidTimeframe',
+        message: `timeframe must be one of: ${TIMEFRAMES.join(', ')}`,
+      });
+    }
+
+    // since / limit are accepted so clients matching the contract do not 400,
+    // but there is no candle source yet — empty until aggregation job.
+    void tf.data;
+    void req.query.since;
+    void req.query.limit;
+
+    return reply.code(200).send([]);
+  });
 }
 
 /** Test helper — build a minimal Market without a DB. */
