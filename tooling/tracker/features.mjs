@@ -511,7 +511,10 @@ export const FEATURES = [
   f('bank.loans', 'Collateralised loans, LTV, margin calls, liquidation', {
     module: 'bank',
     phase: '5',
+    status: 'done',
     dependsOn: ['bank.accounts', 'trade.spot'],
+    requires: ['services/svc-bank', 'packages/ledger-client/src/recipes/loans.ts'],
+    note: 'DONE on main #202 (2026-07-30). Collateral is purposed per loan (assertPurposedLocks covers collateral) so two loans in one asset cannot unsecure each other. Principal draws from loanReserve (module account, hard non-negative — underfunded reserve fails to lend rather than printing). No stored outstanding column — debt event-sourced. Liquidation ladder + accrual with per-(loan,day) idempotency. Value only via ledger-client recipes; amounts decimal strings / scaled bigint, never money-as-number for principal. Residual product: bank.earn / bank.cards / live go-live policy still separate.',
   }),
   f('bank.earn', 'Flexible + fixed yield pools', { module: 'bank', phase: '5', dependsOn: ['bank.accounts', 'token.staking'] }),
   f('bank.cards', 'CardIssuerAdapter + card-sim, <2s auth decision', { module: 'bank', phase: '5', dependsOn: ['bank.accounts'] }),

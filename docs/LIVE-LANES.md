@@ -2,25 +2,29 @@
 
 **Rule:** No code edits until your lane is on this board. First claimer wins.  
 **How to use:** `docs/NITRO-PARALLEL-OPS.md`.  
-**Full Denon ↔ Nitro backlog:** `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md`
+**Full Denon ↔ Nitro backlog:** `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md`  
+**Overnight posture:** O1+O2 — `docs/GRIND-LOOP-ACTIVE.md` + `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`
 
-| Lane id            | Owner session | Scope                                          | Status                        | PR / proof                  | Do not touch                   |
-| ------------------ | ------------- | ---------------------------------------------- | ----------------------------- | --------------------------- | ------------------------------ |
-| denon-nitro-board  | 019fae69      | Parallel board (full backlog expand)           | **live**                      | PR #170                     | product features until claimed |
-| stream-a-uiproof   | closed-floor  | Stream A proof floor (boot→B→Pass3→bar polish) | **floor done · #182 open**    | PR #182 · PROOF+Pass3 green | services/**                    |
-| grind-parallel-ops | 019fae3d      | Multi-agent parallel + AFK grind               | babysit / DRAINED micro-queue | tip ~#169+                  | inventing product when drained |
-| stream-a-ui        | 019fb069      | Stream A shell product owner :8090             | live                          | issue #83                   | services/** spine              |
-| merge-ready        | 019fae32      | Denon handover / merge (historical)            | idle                          | #101 era                    | —                              |
-| mega-audit         | 019fae30      | Denon ship audit (historical)                  | idle                          | #105 era                    | product features               |
+| Lane id            | Owner session | Scope                                       | Status           | PR / proof            | Do not touch                              |
+| ------------------ | ------------- | ------------------------------------------- | ---------------- | --------------------- | ----------------------------------------- |
+| grind-o1-babysit   | overnight-o1  | Open PRs · merge matrix · high water        | **live O1**      | tip ≥#218             | inventing Denon product; money auto-merge |
+| overnight-hygiene  | overnight-o2a | Tracker honesty · LIVE-LANES · grind STATUS | **live O2**      | this law PR           | services/** money                         |
+| overnight-stream-a | overnight-o2b | Stream A shell polish N1–N8 `feat/app-*`    | **claim next**   | —                     | services/** · packages money              |
+| stream-a-uiproof   | closed-floor  | Proof floor boot→B→Pass3                    | **floor done**   | #169 #172 #182 merged | rebuild harness                           |
+| stream-a-ui        | free / claim  | Shell product owner :8090                   | idle             | issue #83             | services/** spine                         |
+| denon-spine        | Phantom-X-007 | feat/spine-* mountains                      | **live (Denon)** | #217 #218 on main     | Nitro force-push / multi-asset            |
+| mega-audit         | idle          | Batch tip audit                             | idle             | #176–#177 era         | product features                          |
 
-## Free mountains
+## Free mountains (Nitro agents)
 
-**Nitro agents (no Nitro judgment):** Stream A polish N1–N8 · WAVE-AUDIT after Denon merges · tracker honesty · babysit open Nitro PRs.
+Stream A polish N1–N8 · WAVE-AUDIT after Denon merges · tracker honesty · babysit **Nitro** PRs · brand/custody mechanical reds.
 
-**Denon full backlog:** A1 decisions + A2 spine + A3 tracker mountains in parallel board — he takes these.
+## Denon only
+
+A1 decisions + A2/A3 spine mountains · `feat/multi-asset-instruments` · money PRs (he merges unless he says `merge when green`).
 
 ## Last board update
 
-- 2026-07-30 — Stream A **floor closed**: B1–B5 + Pass3 green; design-bar polish on #182. Research may stack leverage on top — do not rebuild harness.
-
-- 2026-07-30 — Stream A uiproof: PR-1 boot **#169 merged**; PR-2 harness **#172** open (PROOF.md needs non-sandboxed Chromium); Denon↔Nitro board #170.
+- **2026-07-30 evening — O1+O2 overnight armed:** babysit merge matrix hardened (money / review-hold = no Nitro merge); Stream A + hygiene lanes opened; high water through **#218/#217/#216**.
+- 2026-07-30 — Stream A floor closed: #169 #172 #182 merged (PROOF may still need non-sandboxed Chromium — honest residual).
+- 2026-07-30 — Denon tip: token factory #217 · indexer read models #218 · blueprint card #216 · pay checkout #214.

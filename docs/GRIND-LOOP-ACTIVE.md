@@ -1,169 +1,223 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** DRAINED (agent product micro-queue) · Denon spine wave **#201–#214** on main (babysit-merged) · **mega-audit 2026-07-30 ran** (`docs/audit/2026-07-30-afk-cook-mega/`) · **mega-r2 re-prove** (`docs/audit/2026-07-30-mega-r2/`) · 45m scheduler: open PRs / regressions only — product still DRAINED  
-**Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#214** (pay hosted checkout + public sandbox rail refuse) + **#213** (vendored exchange audit) · spine **#206–#211** · agent micro still DRAINED · do not re-ship **#110–#214** · CI live
+**Status:** **O1+O2 OVERNIGHT** · backend micro-queue still **DRAINED** (do not invent Denon product) · **O1 babysit** + **O2 Stream A / hygiene** only  
+**Operator decision:** 2026-07-30 Nitro chose **O1+O2** (see `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`)  
+**Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
+**Last tip:** high water through **#221** (CI fix for #217/#218 artefacts) + **#218** (indexer read models / real chain) + **#217** (token factory on dev chain) + **#216** blueprint card · do not re-ship **#110–#221** · CI live on tip
+
+```
+STATUS 2026-07-30T14:20Z
+tip: 2f6ab47 #221 (post #217/#218 CI fix)
+open PRs: (re-check live)
+merged this fire: law PR (this update) pending
+money holds: default NO Nitro merge on money paths
+next: O1 babysit · O2 stream-a / tracker honesty
+```
 
 ---
 
 ## How to survive compaction / new chat
 
-1. Read **this file** on `origin/main` first (`git show origin/main:docs/GRIND-LOOP-ACTIVE.md` or pull tip).
-2. Read `docs/GRIND-PLAN-2026-07-30.md` (audit cadence) and `docs/AFK-COOK-SCOREBOARD-2026-07-30.md` (peace-of-mind map).
+1. Read **this file** on `origin/main` first.
+2. Read `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md` + `docs/GRIND-LOOP-WHAT-IT-DOES-AND-PROMPT-FIX-2026-07-30.md`.
 3. `git fetch origin main && git log --oneline origin/main -25`
 4. `gh pr list --state open` and `gh pr list --state merged --limit 20`
-5. Continue **NEXT QUEUE** from #1 — **never re-ship MERGED**.
-6. **Worktree only** (`pnpm wt <branch>` / worktree create). Never edit the main checkout.
-7. Light gates every product PR; full wave audit every 3–4 product PRs (brand / custody / vendor-shell / workspace / tracker).
-8. **Update this file** after each batch (or before you stop) so the next compact session inherits truth.
-9. If GitHub Actions never starts: **billing-blocked** (human) — prove local green + admin-merge when allowed; do **not** claim CI green.
+5. **Never re-ship MERGED** (#110–#221 high water).
+6. **Worktree only.** Never edit the main checkout. Never push main.
+7. Light gates every product PR; wave audit every 3–4 product ships.
+8. **Update this file** before you stop (queue + high water + STATUS block).
+9. Never invent green CI. Never mark human-only done. Never invent candles / balances / factory addresses.
 
 ---
 
-## Enhanced AFK prompt (paste)
+## Modes (do not collapse)
+
+| Mode                      | When                                                                      | Job                                                                         |
+| ------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **O1 BABYSIT**            | Always (overnight default)                                                | Open PRs → classify → gates → comment → merge **only if policy allows**     |
+| **O2 STREAM-A / HYGIENE** | Parallel lanes claimed in `LIVE-LANES.md`                                 | Shell polish N1–N8 · tracker honesty · WAVE-AUDIT · LIVE-LANES · brand reds |
+| **COOK (RUNNING)**        | Only if Status set to RUNNING with a **named** NEXT QUEUE of Pool A items | Ship agent-safe product — **not** Denon mountains                           |
+| **MEGA / WAVE AUDIT**     | Explicit audit fire                                                       | Batch tip audit — not a merge machine                                       |
+
+**Backend micro-queue remains DRAINED.** O2 does **not** un-drain Denon futures/rails/OTC/etc.
+
+---
+
+## Merge privilege matrix (hard — Nitro agents)
+
+Classify every open PR before merge:
+
+| Class | Meaning                                                                        | Nitro merge?                                                                             |
+| ----- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **M** | Money / custody / ledger / pay / bank / withdraw / settlement                  | **NO** unless Denon comments `merge when green`                                          |
+| **H** | PR body says "not for a fast merge" / needs review / do not merge              | **NO** — comment only                                                                    |
+| **P** | Denon non-money spine                                                          | Prefer Denon self-merge; Nitro may merge only if CI+local green **and** no hold language |
+| **N** | Nitro / Stream A / docs / tracker honesty                                      | Yes after **audit → fix → debug → prove**                                                |
+| **X** | Human-only surface (billing, licences, multi-asset rails, kill drill, counsel) | Never treat as agent-done                                                                |
+
+**Babysit is not rubber-stamp.** Always post a PR comment: what you ran, what you verified, what you did **not** verify.
+
+**Your bar for Nitro-owned PRs:** audit → fix → debug → then merge. Green CI alone is not enough if a known fail case is unfixed.
+
+---
+
+## O1 — Babysit fire (each 45m)
+
+1. `gh pr list --state open`
+2. For each PR: classify M/H/P/N/X → run CI check + local gates when mergeable
+3. Money or hold language → **comment only**
+4. Denon WIP radar (do not compete):
+
+   ```bash
+   git ls-remote origin 'refs/heads/feat/spine*' | head
+   # never force-push Denon branches; never touch feat/multi-asset-instruments
+   ```
+
+5. If no open PRs: optional brand/custody/vendor-shell/tracker:check; update high water if tip moved; **stop** (no ceremony)
+6. Update STATUS block at top of this file
+
+---
+
+## O2 — Stream A / hygiene (parallel — claim LIVE-LANES first)
+
+**Allowed without Nitro product judgment:**
+
+| #     | Work                                                                                                           | Done when                               |
+| ----- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| N1–N8 | Stream A shell (`feat/app-*` only) — empty/error states, order-entry polish, honest empty panes, mobile drawer | PR green + territory clean              |
+| N10   | WAVE-AUDIT after Denon wave lands                                                                              | `docs/WAVE-AUDIT.md` / residual honesty |
+| N11   | Tracker honesty — notes match main; **never** mark Denon residual done falsely                                 | `pnpm tracker:check` green              |
+| N12   | Brand / custody / workspace mechanical reds                                                                    | Scans green                             |
+| N13   | Babysit open **Nitro** PRs                                                                                     | Merged or fixed                         |
+| N14   | LIVE-LANES + this file current                                                                                 | Board matches live                      |
+
+**Forbidden overnight:**
+
+- Tracker 🟢 rows that are **Denon mountains** (futures, OTC, copy, algo, MM-bot, live rails, multi-asset merge, …)
+- `services/**` / packages money / edge / compose / Java as Stream A
+- Resuming crash-WIP `feat/spine-*` without Denon reclaim
+- Inventing candles, balances, factory addresses, CI green
+
+**Parallel cap:** ≤3 active Nitro lanes; non-overlapping paths; worktrees only.
+
+---
+
+## Enhanced prompts (paste)
+
+### O1 BABYSIT
 
 ```
-AFK GRIND LOOP — full autonomous cook (Nitro away). COMPACTION SURVIVAL first.
+AFK O1 BABYSIT ONLY (Nitro away). Default is NOT auto-merge.
 
-READ (in order, on tip):
-  1) docs/GRIND-LOOP-ACTIVE.md   ← queue + MERGED high water + human-only
-  2) docs/GRIND-PLAN-2026-07-30.md
-  3) docs/AFK-COOK-SCOREBOARD-2026-07-30.md
-  4) live: git fetch origin main · git log origin/main -25 · gh pr list open/merged
+LAW: docs/GRIND-LOOP-ACTIVE.md on origin/main (merge matrix is hard).
+LIVE: gh pr list --state open · git log origin/main -10
 
-RULES (hard):
-  - Worktree only from origin/main — never main checkout; never push main.
-  - One service (or one docs concern) per PR; parallel independent mountains OK.
-  - Light gates every PR; wave audit every 3–4 product ships.
-  - CI may be billing-blocked → local green + admin merge when policy allows; never fake CI green.
-  - Brand clean: no model-vendor names in brand-scanned docs (say agent / session model / operator).
-  - Doctrine: no balances outside ledger-client; no money as number; cross-service only via contracts/events.
-  - Update docs/GRIND-LOOP-ACTIVE.md BEFORE you stop (queue + high water + honest status).
-  - Front-run Denon product holes without fake "done" on human blockers.
-  - After compact / new chat: this file is law — re-read tip, never re-do MERGED.
+For each open PR → class M/H/P/N/X per this file.
+- M or H: NO merge. Comment gates only. Wait for Denon "merge when green" on money.
+- P: merge only if CI+local green and no hold language; prefer Denon self-merge.
+- N: audit→fix→debug→prove→merge.
+- X: never mark done.
 
-UNSPOKEN NEEDS (deduce and ship toward these — Nitro is not present to restate them):
-  - Volume + quality without Nitro: keep shipping real product surface, not ceremony.
-  - Bots can trade: CCXT public + private REST (and private WS where safe) must stay coherent and grow.
-  - In-app notifications: fan safe bus events into svc-notify inbox; skip events without userIds.
-  - Continuous light gates + periodic wave audits — peace of mind without reading code.
-  - Scoreboard stays current so a human can scan "are we good?" in seconds.
-  - Compaction survival: every stop updates this loop file so the next session continues cold.
-  - NEVER invent green CI, NEVER mark human-only items done, NEVER invent candle data / balances / factory addresses.
-  - NEVER fake human-only work as agent-done (billing, chain props, licences, counsel, kill drill, multi-asset rails).
+If no open PRs: honesty scans optional; update high water; stop.
+Never invent product. Never re-ship #110–#221.
+Update STATUS block before stop.
+```
 
-GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest tracker lies / brand-scan red only; do not pad ceremony.
+### O2 STREAM-A / HYGIENE
+
+```
+AFK O2 — Stream A / hygiene only (Nitro away).
+
+LAW: GRIND-LOOP-ACTIVE.md · DENON-NITRO-PARALLEL-BOARD Column B · LIVE-LANES.md
+Claim a free lane on LIVE-LANES before edits. Worktree from origin/main. feat/app-* or docs/tracker only.
+
+Ship one of: empty/error states, order-entry polish, honest empty panes, tracker honesty, WAVE-AUDIT, LIVE-LANES refresh.
+Never services/**. Never Denon mountains. Never fake numbers/candles.
+One concern per PR. Light gates. Update LIVE-LANES + grind STATUS when done.
+```
+
+### COOK (only if Status becomes RUNNING)
+
+```
+AFK COOK — only if GRIND-LOOP Status is RUNNING and NEXT QUEUE is non-empty named Pool A items.
+Do not babysit-merge Denon money. Worktree. One service/docs concern per PR.
+Audit→fix→debug→prove→merge for YOUR PRs. Update this file before stop.
+If queue empty → set DRAINED / return to O1+O2. Do not invent.
 ```
 
 ---
 
 ## MERGED (do not redo) — high water
 
-**#110–#214** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
+**#110–#221** on main. Agent micro high water **#162–#163**; Stream A **#169/#172/#182** floor; mega-audit **#176–#177**; Denon spine wave **#201–#218**.
 
-| PR       | What                                                                                    |
-| -------- | --------------------------------------------------------------------------------------- |
-| **#214** | pay hosted checkout + `assertRailMayAcceptPublicPayment` (sandbox never public)         |
-| **#213** | docs(audit): vendored exchange 0% used — decision not taken                             |
-| **#211** | fix(test): isolate every suite from the live database                                   |
-| **#210** | protocol local dev chain + CREATE2 on-chain cross-check                                 |
-| **#209** | venue §27 fabric — sequenced books, gap withholds                                       |
-| **#208** | academy lobbies — host rights by rank                                                   |
-| **#207** | notify multi-channel fan-out (honest refuse)                                            |
-| **#206** | P0 trade rank-perks service credentials                                                 |
-| **#145** | Private REST **account/balance** (ledger projection, self-only)                         |
-| **#146** | Public **OHLCV** route — honest empty until candle aggregation                          |
-| **#147** | **GET /positions** — honest `[]` until `trade.futures`                                  |
-| **#148** | Notify fans: `rankUpdated`, `stakeCreated`, `p2pEscrowReleased`                         |
-| **#149** | Tracker: **trade.convert** marked done (mounted + money-path tests)                     |
-| **#150** | Notify fan: `p2pEscrowRefunded`                                                         |
-| **#151** | Docs: Wave D grind loop high-water + compaction survival                                |
-| **#152** | Tracker honesty wave D — notes match main code                                          |
-| **#153** | Docs(audit): Wave D doctrine scan log with real exit codes                              |
-| **#154** | SQL **symbol filter** on `account/trades` + positions health log                        |
-| **#155** | Docs: grind loop high water past #154 + AFK scoreboard                                  |
-| **#156** | **svc-notify OpenTelemetry** + `tracker:check` green                                    |
-| **#157** | Notify fan: **`p2pTradeDisputed`** (openedBy only)                                      |
-| **#158** | Identity **`subAccounts.revoke`** soft-disable (`revoked=true`)                         |
-| **#159** | Docs: loop **DRAINED** + sub-account tracker honesty                                    |
-| **#160** | Docs(audit): Wave E doctrine scan log with real exit codes                              |
-| **#161** | Docs: **DRAINED (agent queue)** + p2pTradeDisputed tracker honesty                      |
-| **#162** | **Terminal public trade tape** — `LiveTradeTape` ← svc-ws `channel=trades` (no candles) |
-| **#163** | CCXT optional **`since` (ms)** on account/trades · closed orders · public trades        |
+| PR       | What                                                                  |
+| -------- | --------------------------------------------------------------------- |
+| **#221** | fix(ci): DevVenue artefacts + invisible main reds                     |
+| **#218** | indexer read models against a real chain + harness watching the wire  |
+| **#217** | token factory on dev chain; deployed bytecode ≠ artefact (immutables) |
+| **#216** | blueprint share card + false `done` corrected on ownership            |
+| **#215** | docs high water through #213–#214                                     |
+| **#214** | pay hosted checkout + public sandbox refuse                           |
+| **#213** | docs: vendored exchange 0% used                                       |
+| **#211** | test DB isolation                                                     |
+| **#210** | protocol local EVM + CREATE2 cross-check                              |
+| **#209** | venue §27 fabric                                                      |
+| **#208** | academy lobbies host-by-rank                                          |
+| **#207** | notify multi-channel (honest refuse)                                  |
+| **#206** | P0 trade rank-perks credentials                                       |
+| **#202** | bank loans (collateral LTV liquidation)                               |
+| **#201** | CCXT answers honesty                                                  |
 
-**Earlier in the same cook (do not redo):**
-
-- Money: yield/buyback, convert (code + tracker), stake/gov earlier
-- Auth: webauthn, apikeys exchange, edge `ifc_` bearer
-- Trade WS: private orders + fills streams
-- Trade: history, cancelAll, fills.forOrder
-- Pay: payment links create/list/deactivate + **hosted checkout HTML**
-- Notify: svc-notify inbox + i18n + edge + fans above (incl. disputed)
-- Protocol: factory honesty (still not chain-done)
-- **CCXT REST public:** markets, orderbook, ticker, tickers, trades (tape + **since**), ohlcv (empty)
-- **CCXT REST private:** open/create/cancel/get/closed (+ **since**), account/trades (+ symbol + **since**), cancel-all, fees, balance, positions empty
-- **Terminal:** public depth live; **public trade tape live** (#162); charts still honest socket (no candle invent)
-- Docs: grind plan, loop files, wave A–E audits, scoreboards
+Earlier cook product (#110–#163): CCXT REST slices, notify fans, trade tape, payment links, etc. — do not rebuild.
 
 ---
 
-## NEXT QUEUE (agent-cookable — honest)
+## NEXT QUEUE
 
-**Empty of product ships.** Remaining items are human-only, safety-skipped, or large phase features.
+### Backend micro (still DRAINED)
 
-| #   | Item                        | Disposition                                                                            |
-| --- | --------------------------- | -------------------------------------------------------------------------------------- |
-| 1   | svc-notify OTEL / DoD       | **DONE** #156 · local `dod-gate` green including svc-notify                            |
-| 2   | tracker:check               | **DONE** #156 · green on tip (sub-account note honesty may land with drain docs)       |
-| 3   | p2pTradeDisputed fan        | **DONE** #157 · openedBy only; still **skip** p2pDisputeResolved (no buyer/seller ids) |
-| 4   | pay.public-api thin slice   | **SKIP** — public resolve via payment links / hosted checkout                          |
-| 5   | Private balance WS          | **SKIP** — no safe ledger projection event path; do not invent poll from svc-ws        |
-| 6   | identity subAccounts.revoke | **DONE** #158 · soft `revoked`; no hard delete                                         |
-| 7   | Terminal public trade tape  | **DONE** #162 · post-DRAINED product; charts still socket                              |
-| 8   | CCXT `since` filters        | **DONE** #163 · post-DRAINED product; mytrades / closed / public tape                  |
-| 9   | Reassess DRAINED            | **Met again** — Status **DRAINED (agent queue)** after re-check post-#162/#163         |
+Empty of agent-invented product. Do **not** pad.
 
-**Not agent micro-queue (large phase / design — do not fake done):**
+### O2 active queue (agent-safe)
 
-- Futures · candle aggregation
-- ~~real chain factory + RPC (local dev)~~ → **local EVM + CREATE2 #210** (prod chain still human)
-- ~~Push / email / SMS channel fan-out~~ → **DONE #207** (refuses when unconfigured)
-- ~~pay hosted checkout / public gate~~ → **DONE #214** (sandbox refuse on public path; live rails only under live-only)
-- ~~venue.aggregation fabric~~ → **DONE #209** (sequenced/gap-withhold; CONNECT)
-- `ops.admin` real wiring (not browser-local pretend kill-switches)
-- Terminal charts / hotkeys / sub-accounts UI (tape is live; chart remains honest empty)
-- ~~Bank loans product~~ → **DONE #202** (Denon spine; not agent micro)
-- ~~CCXT contract/answers honesty~~ → **DONE #201** (Denon spine; OHLCV from fills, not invented candles)
+| #    | Item                                                   | Disposition                         |
+| ---- | ------------------------------------------------------ | ----------------------------------- |
+| O2.1 | Tracker honesty — `bank.loans` was still 🟢 after #202 | **This PR** marks done + note       |
+| O2.2 | Stream A empty/error states / order-entry polish       | **Claim** `overnight-stream-a` lane |
+| O2.3 | LIVE-LANES + high water after each Denon tip move      | Ongoing                             |
+| O2.4 | WAVE-AUDIT after next Denon wave                       | After open merges settle            |
 
-**Drained-mode work only (each fire):**
+### Not agent micro / do not fake done
 
-1. `gh pr list --state open` — babysit; local verify + admin-merge if CI billing-stuck
-2. Local doctrine: brand / custody / vendor-shell / workspace / dod-gate / tracker:check
-3. Honest tracker lies only if `--check` red or notes contradict main code
-4. Do **not** invent product surface for futures, candles, chain factory, push/email/SMS, ops.admin
-
-**NEXT QUEUE summary:** empty of micro product · only **scheduler babysit open PRs / human blockers**.
+- Futures · candle aggregation job
+- Production chain / contract audit (dev chain #210/#217 ≠ go-live)
+- Live pay rails · multi-asset merge · licences · kill drill · counsel
+- `ops.admin` real kill-switches
+- Crash-WIP `feat/spine-*` until Denon reclaims
 
 ---
 
 ## Human-only (never fake done)
 
-- GitHub Actions **billing / spending limit** (was silent; **jobs now start** after budget set — still watch minutes; path filters #198 cut docs-only burn)
-- Real chain factory + RPC for smart-accounts **done**
+- GitHub Actions billing / minutes
+- **Production** chain / RPC / audited factories (local anvil ≠ done for go-live)
 - Licences, wallet secrets, counsel list, kill drill, multi-asset rails
-- Push / email / SMS **production credentials / provider accounts** (channel fan-out **#207** ships adapters that refuse when unconfigured — not fake delivered)
-- Futures / positions product (honest empty is the agent floor)
-- Candle aggregation job (OHLCV stays `[]` until real source)
+- Push/email/SMS **provider credentials** (#207 adapters refuse until configured)
+- Futures / positions product
+- Candle aggregation
 
 ---
 
-## Exit (DRAINED) — met
+## Un-drain protocol (who may set RUNNING)
 
-Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · tip high water **#175/#177** · mega-audit archive on main · Stream A packages doc **#175** · open agent product PRs: none.
+Only when:
 
-**First DRAINED claim** was after **#158** product / **#159–#161** docs. **Terminal public trade tape (#162)** and **CCXT since filters (#163)** shipped afterward; queue was **re-checked** and remains empty of agent micro product (no un-drain).
+1. NEXT QUEUE lists **named Pool A** items (Stream A / hygiene / explicitly assigned), **or** Denon assigns a ticket
+2. LIVE-LANES claims exist
+3. Parallel ≤3 non-overlapping
 
-**45m scheduler still re-checks** for open PRs · regressions · new honest tracker lies. Does **not** invent product to un-drain.
+Empty queue → stay O1+O2 / DRAINED micro. **Never invent product to un-drain.**
 
 ---
 
@@ -171,7 +225,9 @@ Agent queue empty · remaining items human-blocked / safety-skipped / large phas
 
 Every **45 minutes:** re-read this file on `origin/main`.
 
-- If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.
-- If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
+- Run **O1 babysit**
+- Continue **O2** claimed lanes only
+- Update high water if tip moved (#218+)
+- Do **not** open Denon mountains
 
-**Next agent after compact: Status DRAINED (agent product micro-queue) — do not re-ship #110–#214; babysit open PRs; #214 pay public sandbox gate on main.**
+**Next agent after compact:** O1+O2 · money = no Nitro merge · do not re-ship #110–#221 · Stream A / hygiene only for product volume.
