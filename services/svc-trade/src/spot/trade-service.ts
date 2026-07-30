@@ -554,6 +554,20 @@ export class TradeService {
     });
   }
 
+  /**
+   * Cancel every open/pending order for the principal (optional market filter).
+   * Sequential on purpose: each cancel is its own hold-release money path.
+   */
+  async cancelAllOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]> {
+    requireScope(principal, 'trade:write');
+    const open = await this.openOrders(principal, marketId);
+    const out: OrderRecord[] = [];
+    for (const order of open) {
+      out.push(await this.cancelOrder(principal, order.id));
+    }
+    return out;
+  }
+
   // ── Applying what the engine said ─────────────────────────────────────────
 
   private async applySubmitResult(market: Market, orderId: string, result: EngineSubmitResult): Promise<void> {

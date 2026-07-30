@@ -271,6 +271,13 @@ export function createTradeRouter(trade: TradeService) {
         .output(orderOutput)
         .mutation(({ ctx, input }) => guard(async () => presentOrder(await trade.cancelOrder(ctx.principal, input.orderId)))),
 
+      cancelAll: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ marketId: z.string().uuid().optional() }).optional())
+        .output(z.array(orderOutput))
+        .mutation(({ ctx, input }) =>
+          guard(async () => (await trade.cancelAllOrders(ctx.principal, input?.marketId)).map(presentOrder)),
+        ),
+
       get: scopedProcedure('trade:read')
         .input(z.object({ orderId: z.string().uuid() }))
         .output(orderOutput)
