@@ -6,6 +6,7 @@ import {
   p2pEscrowLocked,
   p2pEscrowRefunded,
   p2pEscrowReleased,
+  p2pTradeDisputed,
   rankUpdated,
   stakeCreated,
 } from '@intafaced/events';
@@ -209,9 +210,7 @@ describe('event fan-out', () => {
     });
     expect(await notify.unreadCount(USER)).toBe(1);
     expect(rankUpdated.subject).toContain('identity');
-    const rank = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find(
-      (n) => n.kind === 'identity.rank.updated',
-    );
+    const rank = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find((n) => n.kind === 'identity.rank.updated');
     expect(rank?.sourceSubject).toBe(rankUpdated.subject);
     expect(rank?.sourceIdempotencyKey).toBe(`${USER}:1:2`);
     expect(rank?.titleKey).toBe('notify.identity.rank.updated.title');
@@ -235,9 +234,7 @@ describe('event fan-out', () => {
     });
     expect(await notify.unreadCount(USER)).toBe(2);
     expect(stakeCreated.subject).toContain('token');
-    const stake = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find(
-      (n) => n.kind === 'token.stake.created',
-    );
+    const stake = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find((n) => n.kind === 'token.stake.created');
     expect(stake?.sourceSubject).toBe(stakeCreated.subject);
     expect(stake?.sourceIdempotencyKey).toBe(stakeId);
     expect(stake?.titleKey).toBe('notify.token.stake.created.title');
@@ -319,6 +316,43 @@ describe('event fan-out', () => {
     expect(buyerRow?.sourceIdempotencyKey).toBe(`${tradeId}:buyer`);
   });
 
+  it('writes inbox row from p2pTradeDisputed for openedBy only and dedupes redelivery', async () => {
+    const store = new MemoryNotifyStore();
+    const notify = new NotifyService(store, { fanoutEnabled: true });
+    const bus = new MemoryEventBus('test-producer');
+    await subscribeNotificationEvents(bus, notify);
+
+    const tradeId = '34343434-3434-4343-8343-343434343434';
+    const disputeId = '45454545-4545-4545-8545-454545454545';
+    const payload = {
+      tradeId,
+      disputeId,
+      openedBy: USER,
+      reason: 'payment_not_received',
+      moderatorDeadline: '2026-08-01T12:00:00.000Z',
+    };
+    await bus.publish('p2pTradeDisputed', payload);
+    await bus.publish('p2pTradeDisputed', payload);
+
+    expect(await notify.unreadCount(USER)).toBe(1);
+    expect(await notify.unreadCount(BUYER)).toBe(0);
+    expect(await notify.unreadCount(OTHER)).toBe(0);
+    expect(p2pTradeDisputed.subject).toContain('p2p');
+
+    const row = (await notify.list({ userId: USER, limit: 10, unreadOnly: false })).items.find((n) => n.kind === 'p2p.trade.disputed');
+    expect(row?.sourceSubject).toBe(p2pTradeDisputed.subject);
+    expect(row?.sourceIdempotencyKey).toBe(disputeId);
+    expect(row?.titleKey).toBe('notify.p2p.trade.disputed.title');
+    expect(row?.bodyKey).toBe('notify.p2p.trade.disputed.body');
+    expect(row?.severity).toBe('action');
+    expect(row?.params).toMatchObject({
+      tradeId,
+      disputeId,
+      reason: 'payment_not_received',
+      moderatorDeadline: '2026-08-01T12:00:00.000Z',
+    });
+  });
+
   it('acks bus events without writing when fan-out is off', async () => {
     const store = new MemoryNotifyStore();
     const notify = new NotifyService(store, { fanoutEnabled: false });
@@ -351,6 +385,13 @@ describe('event fan-out', () => {
       amount: '1',
       resolvedBy: 'buyer',
       reason: 'cancelled',
+    });
+    await bus.publish('p2pTradeDisputed', {
+      tradeId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      disputeId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      openedBy: USER,
+      reason: 'no_release',
+      moderatorDeadline: '2026-08-02T00:00:00.000Z',
     });
     expect(await notify.unreadCount(USER)).toBe(0);
   });

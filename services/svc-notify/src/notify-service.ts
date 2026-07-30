@@ -11,8 +11,8 @@ import { withNotifySpan } from './tracing.js';
  * svc-notify — in-app inbox (ops.notifications).
  *
  * Holds no balances. Inserts are driven by the bus (fillSettled, p2p escrow
- * lifecycle, kycApproved, rankUpdated, stakeCreated). Push / email / SMS are
- * §13 sockets — this service never opens those channels.
+ * lifecycle, p2pTradeDisputed, kycApproved, rankUpdated, stakeCreated). Push /
+ * email / SMS are §13 sockets — this service never opens those channels.
  */
 
 export class NotifyService {
