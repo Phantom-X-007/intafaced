@@ -206,3 +206,13 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 
 **Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · tip **#167** · Status **DRAINED (agent queue)**
 
+## 45m re-check (post-#169 / #172)
+
+| Event | Result |
+| --- | --- |
+| #169 | Admin-merged after main conflict resolve — Stream A `ui:boot` |
+| #172 | Admin-merged after conflict resolve — Playwright harness + design bar |
+| PROOF.md | **Honest unverified** in agent sandbox (Chromium SEGV) — needs desktop Terminal run |
+| Backend micro-queue | still **DRAINED** |
+
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · tip **#172** · Status **DRAINED (backend micro-queue)**
