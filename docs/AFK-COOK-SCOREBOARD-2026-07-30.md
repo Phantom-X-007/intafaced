@@ -185,4 +185,13 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 | ops.admin real wiring | Browser-local only — large phase |
 | Real rails / kill drill / licences / counsel | Denon + counsel |
 
-**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED (agent queue)** · product high water **#162–#163** · tip through **#163** · scheduler 45m re-check only
+## 45m re-check (post-#165 / #138)
+
+| Event | Result |
+| --- | --- |
+| Local doctrine gates | brand/custody/vendor-shell/workspace/dod-gate/tracker:check **green** after brand scrub of #138 docs |
+| Open PRs babysit | **#138** admin-merged (was only open product-adjacent docs PR) |
+| Brand regression | #138 landed with model-provider + upstream-shell path names → **scrubbed same fire** (planner/executor · `vendor/*/`) |
+| Agent product queue | still **empty** — DRAINED |
+
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED (agent queue)** · product high water **#162–#163** · tip through **#165 + #138** · scheduler 45m re-check only
