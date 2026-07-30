@@ -81,7 +81,7 @@ Orca is **running** on this machine. Two different modes (do not mix them up):
 
 | Mode | When | What happens |
 | --- | --- | --- |
-| **Full handoff** | “Give this to another agent / worktree and stop babysitting” | `orca worktree create --agent grok --prompt "…" --no-parent` (or codex/claude). Original chat **stops monitoring**. |
+| **Full handoff** | “Give this to another agent / worktree and stop babysitting” | `orca worktree create --agent grok --prompt "…" --no-parent` (or other installed agent ids). Original chat **stops monitoring**. |
 | **Supervised orchestration** | “Coordinate a DAG, wait for workers, decision gates” | `orca orchestration task-create` + `dispatch --inject` + `check --wait`. **Only** when you explicitly want supervision. |
 
 **Do not** start with full Orca orchestration for every day. That is the pro path for *supervised multi-worker runs*, not for open “what can we do?” directing.
