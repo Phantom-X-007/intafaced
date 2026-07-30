@@ -59,6 +59,7 @@ const SERVICES = [
   ['svc-protocol', 'protocol'],
   ['svc-indexer', 'indexer'],
   ['svc-notify', 'notify'],
+  ['svc-academy', 'academy'],
 ];
 
 const host = process.env.POSTGRES_HOST ?? 'postgres';

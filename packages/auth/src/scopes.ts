@@ -203,6 +203,18 @@ const SESSION_SCOPE_LIST = [
   'token:read',
   'token:stake',
   'academy:read',
+  // Non-custodial, `minTier: 'none'`, and now backed by a service that mounts a
+  // router. `academy:write` is what TAKES A SEAT in a lobby, and a lobby nobody
+  // may sit in is not a lobby — withholding it would ship svc-academy
+  // unreachable, which is the outage-with-a-comment this table exists to stop.
+  //
+  // What it deliberately does NOT decide is who may HOST. That is §4.1's
+  // `rank_thresholds.perks.lobbyHostRights`, read from svc-identity at
+  // `createRoom` (services/svc-academy/src/host-rights.ts). Had hosting ridden
+  // on this scope, issuing it here would have handed room creation to every
+  // account on the platform in the same commit — and §XIII's model is
+  // ambassadors and operators running rooms, not anyone with a login.
+  'academy:write',
   'agents:read',
   // Non-custodial, `minTier: 'none'`. §22 makes this the easy case: the
   // platform never holds a Blueprint, so there is nothing to verify anyone
@@ -274,7 +286,6 @@ export const WITHHELD_FROM_SESSION: Readonly<Record<Exclude<Scope, SessionScope>
   'launch:write': 'svc-launch not built',
   'market:read': 'svc-market not built',
   'market:write': 'svc-market not built',
-  'academy:write': 'svc-academy not built — academy:read is already issued',
 
   // Operator scopes. Never on a user session, whatever the account.
   // `admin:compliance` is the sharp one: it approves KYC records, so a session
