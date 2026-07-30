@@ -2,7 +2,7 @@
 
 **Status:** DRAINED (agent product queue) · **mega-audit 2026-07-30 ran** (archive `docs/audit/2026-07-30-afk-cook-mega/`) · 45m scheduler: open PRs / regressions only — **pause product grind during audit; product still DRAINED**  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#174** mega-audit plan V2 + overlay · **#172/#169** Stream A uiproof · **#167** fleet-down · backend micro-queue **DRAINED** · do not re-ship **#110–#174** · audit agent fixes land as chore/fix PR(s) after #174
+**Last tip:** high water through **#175** (Nitro agent packages for Stream A) · **#176–#177** mega-audit P0/P1 archive + PEACE tip · **#169/#172** uiproof · **#167** fleet-down · backend micro-queue **DRAINED** · do not re-ship **#110–#177**
 
 ---
 
@@ -59,7 +59,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#172** on main. Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
+**#110–#177** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
 
 | PR       | What                                                                                    |
 | -------- | --------------------------------------------------------------------------------------- |
@@ -146,7 +146,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## Exit (DRAINED) — met
 
-Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · tip high water **#172** · backend product **#162–#163** · Stream A uiproof **#169/#172** on main · open agent product PRs: none.
+Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED (agent queue) · tip high water **#175/#177** · mega-audit archive on main · Stream A packages doc **#175** · open agent product PRs: none.
 
 **First DRAINED claim** was after **#158** product / **#159–#161** docs. **Terminal public trade tape (#162)** and **CCXT since filters (#163)** shipped afterward; queue was **re-checked** and remains empty of agent micro product (no un-drain).
 
@@ -161,4 +161,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED (backend micro-queue) — do not re-ship #110–#172; babysit open PRs; PROOF.md needs human/desktop Chromium not agent invent.**
+**Next agent after compact: Status DRAINED (agent product queue) — do not re-ship #110–#177; babysit open PRs; Stream A packages in docs/NITRO-AGENT-PACKAGES-2026-07-30.md; PROOF.md desktop Chromium only.**
