@@ -1,6 +1,8 @@
 import { createPublicClient, defineChain, http } from 'viem';
 import type { Address, Hex, PublicClient } from 'viem';
 import { accountFactoryAbi, smartAccountAbi } from './abi.js';
+import { poolAbi } from '../amm/abi.js';
+import { ChainUnavailableError, classifyChainError, isZeroAddress } from './availability.js';
 import { withSpan } from '../tracing.js';
 
 /**
@@ -39,6 +41,26 @@ export interface OnChainSession {
 
 const NO_SESSION_HASH = `0x${'00'.repeat(32)}` as Hex;
 
+/** Reserves as the pool itself reports them. `blockTimestampLast` is the pool's own clock. */
+export interface PoolReserves {
+  readonly reserve0: bigint;
+  readonly reserve1: bigint;
+  readonly blockTimestampLast: number;
+}
+
+/** What `chainStatus` reports. Never throws — being down is an answer, not a fault. */
+export interface ChainStatus {
+  readonly reachable: boolean;
+  /** The chain id we derive addresses for. */
+  readonly configuredChainId: number;
+  /** What the RPC says it is. Null when it did not answer. */
+  readonly observedChainId: number | null;
+  readonly blockNumber: string | null;
+  readonly suiteDeployed: boolean;
+  readonly refusalCode: string | null;
+  readonly reason: string | null;
+}
+
 export class ProtocolChain {
   readonly client: PublicClient;
 
@@ -52,9 +74,24 @@ export class ProtocolChain {
     this.client = createPublicClient({ chain, transport: http(config.rpcUrl) }) as PublicClient;
   }
 
+  /**
+   * Every read goes through here.
+   *
+   * A chain read has exactly two honest outcomes: an answer, or a typed refusal
+   * naming why there was none. `classifyChainError` is what keeps the second
+   * from degrading into an opaque 500 — or, worse, into a default value.
+   */
+  async #read<T>(what: string, span: string, fn: () => Promise<T>): Promise<T> {
+    try {
+      return await withSpan(span, fn);
+    } catch (err) {
+      throw classifyChainError(err, what, this.config.rpcUrl);
+    }
+  }
+
   /** Whether an account address has code yet. A predicted address has none. */
   async isDeployed(address: Address): Promise<boolean> {
-    return withSpan('chain.isDeployed', async () => {
+    return this.#read('isDeployed', 'chain.isDeployed', async () => {
       const code = await this.client.getCode({ address });
       return code !== undefined && code !== '0x';
     });
@@ -62,7 +99,7 @@ export class ProtocolChain {
 
   /** The factory's own answer, so a derivation bug in this repo cannot go unnoticed. */
   async predictAddressOnChain(owner: Address, userSalt: Hex): Promise<Address> {
-    return withSpan('chain.getAddress', async () =>
+    return this.#read('predictAddressOnChain', 'chain.getAddress', async () =>
       this.client.readContract({
         address: this.config.factory,
         abi: accountFactoryAbi,
@@ -73,18 +110,27 @@ export class ProtocolChain {
   }
 
   async ownerOf(account: Address): Promise<Address> {
-    return withSpan('chain.owner', async () => this.client.readContract({ address: account, abi: smartAccountAbi, functionName: 'owner' }));
+    return this.#read('ownerOf', 'chain.owner', async () =>
+      this.client.readContract({ address: account, abi: smartAccountAbi, functionName: 'owner' }),
+    );
   }
 
   async sessionEpoch(account: Address): Promise<bigint> {
-    return withSpan('chain.sessionEpoch', async () =>
+    return this.#read('sessionEpoch', 'chain.sessionEpoch', async () =>
       this.client.readContract({ address: account, abi: smartAccountAbi, functionName: 'sessionEpoch' }),
     );
   }
 
-  /** Null when the key was never granted — not an error, just absence. */
+  /**
+   * Null when the key was never granted — not an error, just absence.
+   *
+   * The distinction only holds because `#read` converts a call against an
+   * address with no code into `protocol.contract_not_deployed` instead of
+   * letting it surface as a decode failure. Null here means the account exists
+   * and the owner granted this key nothing. It never means "we could not ask".
+   */
   async sessionOf(account: Address, sessionKey: Address): Promise<OnChainSession | null> {
-    return withSpan('chain.getSession', async () => {
+    return this.#read('sessionOf', 'chain.getSession', async () => {
       const record = await this.client.readContract({
         address: account,
         abi: smartAccountAbi,
@@ -104,7 +150,7 @@ export class ProtocolChain {
   }
 
   async isSessionLive(account: Address, sessionKey: Address): Promise<boolean> {
-    return withSpan('chain.isSessionLive', async () =>
+    return this.#read('isSessionLive', 'chain.isSessionLive', async () =>
       this.client.readContract({
         address: account,
         abi: smartAccountAbi,
@@ -112,5 +158,107 @@ export class ProtocolChain {
         args: [sessionKey],
       }),
     );
+  }
+
+  /**
+   * Live reserves for a constant-product pool.
+   *
+   * `amm.quoteExactIn` took reserves as an input and nothing in the repo ever
+   * supplied them, which made a correct AMM implementation into a calculator
+   * with no inputs — `getReserves` was in the ABI and called from nowhere. This
+   * is the read that closes that loop. Today it refuses, because there is no
+   * chain; it refuses with `protocol.contract_not_deployed` or
+   * `protocol.chain_unreachable`, and never with a zero reserve.
+   *
+   * A zero reserve would be the worst possible answer: `getAmountOut` treats
+   * empty reserves as `amm.no_liquidity`, so fabricated zeros would surface to a
+   * user as the confident claim "this pool has no liquidity" about a pool nobody
+   * has looked at.
+   */
+  async poolReserves(pool: Address): Promise<PoolReserves> {
+    return this.#read('poolReserves', 'chain.getReserves', async () => {
+      const [reserve0, reserve1, blockTimestampLast] = await this.client.readContract({
+        address: pool,
+        abi: poolAbi,
+        functionName: 'getReserves',
+      });
+      return { reserve0, reserve1, blockTimestampLast: Number(blockTimestampLast) };
+    });
+  }
+
+  /** Which token is `reserve0`. Needed to orient a quote; a pool sorts its pair. */
+  async poolToken0(pool: Address): Promise<Address> {
+    return this.#read('poolToken0', 'chain.token0', async () =>
+      this.client.readContract({ address: pool, abi: poolAbi, functionName: 'token0' }),
+    );
+  }
+
+  async poolToken1(pool: Address): Promise<Address> {
+    return this.#read('poolToken1', 'chain.token1', async () =>
+      this.client.readContract({ address: pool, abi: poolAbi, functionName: 'token1' }),
+    );
+  }
+
+  async poolFeeBps(pool: Address): Promise<number> {
+    return this.#read('poolFeeBps', 'chain.feeBps', async () =>
+      this.client.readContract({ address: pool, abi: poolAbi, functionName: 'feeBps' }).then(Number),
+    );
+  }
+
+  /**
+   * Assert the RPC is the chain we derive addresses for.
+   *
+   * A CREATE2 address is only meaningful on the chain its factory is deployed
+   * to. If `PROTOCOL_CHAIN_ID` says 31337 while the RPC is answering for
+   * mainnet, every address this service predicts is wrong in a way no amount of
+   * correct arithmetic can catch — so it is checked against the endpoint rather
+   * than trusted from config.
+   */
+  async assertChainId(): Promise<number> {
+    const observed = await this.#read('assertChainId', 'chain.chainId', async () => this.client.getChainId());
+    if (observed !== this.config.chainId) {
+      throw new ChainUnavailableError(
+        'protocol.chain_id_mismatch',
+        `The RPC at ${this.config.rpcUrl} is chain ${observed}, but this service derives addresses for chain ` +
+          `${this.config.chainId}. Refusing: an address predicted for the wrong chain is an address a user could fund and never reach.`,
+      );
+    }
+    return observed;
+  }
+
+  /**
+   * The honest self-report. Answers "is any of this real yet?" without throwing,
+   * because a product surface needs to render the refusal, not catch it.
+   */
+  async status(): Promise<ChainStatus> {
+    const suiteDeployed = !isZeroAddress(this.config.factory) && !isZeroAddress(this.config.implementation);
+
+    try {
+      const observedChainId = await this.assertChainId();
+      const blockNumber = await this.#read('blockNumber', 'chain.blockNumber', async () => this.client.getBlockNumber());
+      return {
+        reachable: true,
+        configuredChainId: this.config.chainId,
+        observedChainId,
+        blockNumber: blockNumber.toString(),
+        suiteDeployed,
+        refusalCode: null,
+        reason: null,
+      };
+    } catch (err) {
+      const refusal = err instanceof ChainUnavailableError ? err : classifyChainError(err, 'status', this.config.rpcUrl);
+      return {
+        reachable: false,
+        configuredChainId: this.config.chainId,
+        // Null even on a chain-id mismatch: the endpoint answered, but not for a
+        // chain this service can serve, so there is no id here worth reporting
+        // as ours. The observed id is named in `reason`.
+        observedChainId: null,
+        blockNumber: null,
+        suiteDeployed,
+        refusalCode: refusal.code,
+        reason: refusal.message,
+      };
+    }
   }
 }

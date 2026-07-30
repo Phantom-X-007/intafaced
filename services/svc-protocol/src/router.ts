@@ -5,6 +5,7 @@ import { publicJurisdictionProcedure, publicProcedure, router, scopedProcedure, 
 import { computeAccountAddress, DEFAULT_USER_SALT, AddressDerivationError } from './accounts/address.js';
 import { AccountRegistry, bindingMessage, ClaimRefusedError } from './accounts/registry.js';
 import type { ProtocolChain } from './chain/client.js';
+import { ChainUnavailableError, isZeroAddress } from './chain/availability.js';
 import { RelayRefusedError, SessionRelay } from './session/relay.js';
 import { createSessionSpec, evaluateSessionCall, hashSessionSpec, sessionSpecInputSchema, SessionScopeError } from './session/spec.js';
 import type { UserOperation } from './chain/userop.js';
@@ -83,12 +84,6 @@ const unsignedCallOutput = z.object({
   summary: z.string(),
 });
 
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-
-function isZeroAddress(addr: string): boolean {
-  return addr.toLowerCase() === ZERO_ADDRESS;
-}
-
 /** Refuse create2 arithmetic against an unconfigured factory/impl (defaults are 0x0). */
 function requireAccountFactoryConfigured(factory: string, implementation: string): void {
   if (isZeroAddress(factory) || isZeroAddress(implementation)) {
@@ -101,6 +96,28 @@ function requireAccountFactoryConfigured(factory: string, implementation: string
 
 /** Every domain error becomes a client error with its own code intact. */
 function toTrpcError(err: unknown): TRPCError {
+  /**
+   * A refusal that was already shaped stays shaped.
+   *
+   * Without this, any `TRPCError` thrown inside a procedure's own `try` block
+   * falls all the way through to the `INTERNAL_SERVER_ERROR` at the bottom, and
+   * a deliberate 400 arrives at the caller as "Protocol request failed" with its
+   * message discarded.
+   */
+  if (err instanceof TRPCError) return err;
+  /**
+   * The chain being absent is not this service failing.
+   *
+   * 503 with the refusal code in the message, so a caller can tell "there is no
+   * chain here" from "svc-protocol is broken". A 500 would invite a retry that
+   * can never succeed, and — the reason this branch is first — anything falling
+   * through to the bottom of this function becomes
+   * `INTERNAL_SERVER_ERROR: 'Protocol request failed'`, which is precisely the
+   * opaque answer a user cannot act on.
+   */
+  if (err instanceof ChainUnavailableError) {
+    return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: `${err.code}: ${err.message}`, cause: err });
+  }
   if (err instanceof SessionScopeError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
@@ -169,6 +186,42 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         relayEnabled: deps.relayEnabled(),
         factoryConfigured: !isZeroAddress(chain.config.factory) && !isZeroAddress(chain.config.implementation),
       })),
+
+    /**
+     * IS ANY OF THIS REAL YET? — the question `health` cannot answer.
+     *
+     * `health` is deliberately synchronous: it reports config, touches no
+     * network, and answers `ok: true` whenever the process is up. That is
+     * correct for a liveness probe and misleading as a statement about the
+     * chain, because `ok: true, chainId: 31337` reads as "there is a chain" when
+     * `PROTOCOL_RPC_URL` defaults to a localhost port with nothing behind it.
+     *
+     * This procedure probes and reports what it found. It is the one place in
+     * this router that returns a refusal as *data* rather than throwing it: a
+     * product surface has to render "no chain configured" as a state, and a
+     * status endpoint that 503s cannot be distinguished from one that is down.
+     * Every other path here throws, because every other path would otherwise
+     * have to invent a value.
+     */
+    chainStatus: publicJurisdictionProcedure('protocol', 'protocol')
+      .output(
+        z.object({
+          reachable: z.boolean(),
+          configuredChainId: z.number(),
+          observedChainId: z.number().nullable(),
+          blockNumber: z.string().nullable(),
+          /** Factory AND implementation are both non-zero. */
+          suiteDeployed: z.boolean(),
+          refusalCode: z.string().nullable(),
+          reason: z.string().nullable(),
+          /** True only when a real chain answered AND the suite is deployed on it. */
+          usable: z.boolean(),
+        }),
+      )
+      .query(async () => {
+        const status = await chain.status();
+        return { ...status, usable: status.reachable && status.suiteDeployed };
+      }),
 
     /**
      * The address a key will own, before anything is deployed. Permissionless:
@@ -275,7 +328,26 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         return { to: call.to, data: call.data, value: call.value.toString(), summary: call.summary };
       }),
 
-    /** On-chain session state. The chain answers; we only relay the question. */
+    /**
+     * On-chain session state. The chain answers; we only relay the question.
+     *
+     * ── Why this reads the account's code first ──────────────────────────────
+     *
+     * `exists: false` is a claim about what the owner granted. It must only ever
+     * be returned when a deployed account was actually asked and answered "no
+     * session for that key". Two other situations produce the same *shape* and
+     * mean something completely different:
+     *
+     *   · the account is not deployed — nobody has granted anything because
+     *     there is nothing to grant on
+     *   · the chain is unreachable — nobody looked
+     *
+     * Both of those now refuse. Reporting either as `exists: false, live: false`
+     * would tell a user their agent's permissions are absent when the truth is
+     * unknown, and a user who believes that will not go looking for the session
+     * that is in fact live. `isDeployed` costs one `eth_getCode` and is what
+     * makes the negative answer trustworthy.
+     */
     sessionStatus: publicJurisdictionProcedure('protocol', 'protocol')
       .input(z.object({ account: addressSchema, sessionKey: addressSchema }))
       .output(
@@ -291,27 +363,41 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         }),
       )
       .query(async ({ input }) => {
-        const record = await chain.sessionOf(input.account as Address, input.sessionKey as Address);
-        if (!record) {
+        try {
+          const account = input.account as Address;
+
+          if (!(await chain.isDeployed(account))) {
+            throw new ChainUnavailableError(
+              'protocol.contract_not_deployed',
+              `${account} holds no contract code on chain ${chain.config.chainId}, so it has granted no sessions ` +
+                `and cannot be asked about one. This is not the same as having no session.`,
+            );
+          }
+
+          const record = await chain.sessionOf(account, input.sessionKey as Address);
+          if (!record) {
+            return {
+              exists: false,
+              live: false,
+              specHash: null,
+              validAfter: null,
+              validUntil: null,
+              spentWei: null,
+              revoked: null,
+            };
+          }
           return {
-            exists: false,
-            live: false,
-            specHash: null,
-            validAfter: null,
-            validUntil: null,
-            spentWei: null,
-            revoked: null,
+            exists: true,
+            live: await chain.isSessionLive(account, input.sessionKey as Address),
+            specHash: record.specHash,
+            validAfter: record.validAfter,
+            validUntil: record.validUntil,
+            spentWei: record.spentWei.toString(),
+            revoked: record.revoked,
           };
+        } catch (err) {
+          throw toTrpcError(err);
         }
-        return {
-          exists: true,
-          live: await chain.isSessionLive(input.account as Address, input.sessionKey as Address),
-          specHash: record.specHash,
-          validAfter: record.validAfter,
-          validUntil: record.validUntil,
-          spentWei: record.spentWei.toString(),
-          revoked: record.revoked,
-        };
       }),
 
     /**
@@ -438,6 +524,22 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
      * holds LP keys and never posts to the ledger here.
      */
     amm: router({
+      /**
+       * PURE MATH OVER RESERVES THE CALLER SUPPLIES. Not a market quote.
+       *
+       * Read the input list: `reserveIn` and `reserveOut` are parameters. This
+       * procedure does not know which pool they came from, whether such a pool
+       * exists, or how old they are. It is `getAmountOut` behind a network hop —
+       * useful for a client that already holds a reserve snapshot and wants the
+       * exact figure the contract would compute, and useless as a price.
+       *
+       * `quoteFromPool` is the one that sources its own reserves from the chain,
+       * and it is what a product surface must call. This one is kept because a
+       * caller that has reserves from elsewhere should not have to re-implement
+       * the rounding — the whole point of mirroring
+       * `ConstantProductPool._getAmountOut` is that there is exactly one
+       * implementation of it.
+       */
       quoteExactIn: publicJurisdictionProcedure('protocol', 'protocol')
         .input(
           z.object({
@@ -447,7 +549,14 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
             feeBps: z.number().int().min(0).max(1000).default(30),
           }),
         )
-        .output(z.object({ amountOut: z.string(), priceImpactBps: z.number().int() }))
+        .output(
+          z.object({
+            amountOut: z.string(),
+            priceImpactBps: z.number().int(),
+            /** Always false here. The caller supplied the reserves; no chain was read. */
+            reservesFromChain: z.literal(false),
+          }),
+        )
         .query(({ input }) => {
           try {
             const q = quoteExactIn({
@@ -456,7 +565,133 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
               reserveOut: BigInt(input.reserveOut),
               feeBps: input.feeBps,
             });
-            return { amountOut: q.amountOut.toString(), priceImpactBps: q.priceImpactBps };
+            return { amountOut: q.amountOut.toString(), priceImpactBps: q.priceImpactBps, reservesFromChain: false as const };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /** Live reserves, oriented by the pool's own `token0`. Refuses if it cannot read them. */
+      poolReserves: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(z.object({ pool: addressSchema }))
+        .output(
+          z.object({
+            pool: z.string(),
+            token0: z.string(),
+            reserve0: z.string(),
+            reserve1: z.string(),
+            feeBps: z.number().int(),
+            blockTimestampLast: z.number().int(),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            const pool = input.pool as Address;
+            const [reserves, token0, feeBps] = await Promise.all([
+              chain.poolReserves(pool),
+              chain.poolToken0(pool),
+              chain.poolFeeBps(pool),
+            ]);
+            return {
+              pool,
+              token0,
+              reserve0: reserves.reserve0.toString(),
+              reserve1: reserves.reserve1.toString(),
+              feeBps,
+              blockTimestampLast: reserves.blockTimestampLast,
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * THE REAL QUOTE — reserves read from the pool, not accepted from the caller.
+       *
+       * This is the procedure that makes the AMM math reachable. It reads
+       * `getReserves`, `token0` and `feeBps` from the pool, orients the reserves
+       * against `tokenIn`, and applies the same `getAmountOut` the contract will.
+       * Nothing is defaulted: if the chain cannot be read the call refuses with
+       * `protocol.chain_unreachable`, and if the address holds no code it refuses
+       * with `protocol.contract_not_deployed`.
+       *
+       * It refuses in this environment, every time, because there is no chain
+       * (SOCKET §13 `socket.evm-rpc`). That is the honest state of
+       * `protocol.amm` and it is why the tracker keeps it blocked.
+       *
+       * Two limits worth stating rather than discovering:
+       *   · `blockTimestampLast` is the pool's own last-touch time, NOT the head
+       *     block's. It cannot bound how stale this quote is. Measuring that
+       *     needs the head block timestamp, which is a second read.
+       *   · the three reads are concurrent but not atomic. `token0` and `feeBps`
+       *     are immutable so they cannot skew; reserves are a single call, so a
+       *     quote is consistent with one observation even though it is not
+       *     pinned to a block. Pinning needs an explicit `blockNumber` argument.
+       */
+      quoteFromPool: publicJurisdictionProcedure('protocol', 'protocol')
+        .input(
+          z.object({
+            pool: addressSchema,
+            tokenIn: addressSchema,
+            amountIn: z.string().regex(/^\d+$/),
+          }),
+        )
+        .output(
+          z.object({
+            amountOut: z.string(),
+            priceImpactBps: z.number().int(),
+            reserveIn: z.string(),
+            reserveOut: z.string(),
+            feeBps: z.number().int(),
+            /** Always true here — that is the difference from `quoteExactIn`. */
+            reservesFromChain: z.literal(true),
+            blockTimestampLast: z.number().int(),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            const pool = input.pool as Address;
+            const [reserves, token0, token1, feeBps] = await Promise.all([
+              chain.poolReserves(pool),
+              chain.poolToken0(pool),
+              chain.poolToken1(pool),
+              chain.poolFeeBps(pool),
+            ]);
+
+            /**
+             * `token1` is read purely to make this check possible.
+             *
+             * Deciding orientation with a single `tokenIn === token0` test would
+             * treat every unrecognised token as token1 and return a confident
+             * quote for a pair the pool does not trade. That is a fabricated
+             * price — the exact failure mode this whole surface refuses — so the
+             * mismatch is named instead of defaulted.
+             */
+            const tokenIn = toChecksum(input.tokenIn);
+            const inIsToken0 = tokenIn === toChecksum(token0);
+            const inIsToken1 = tokenIn === toChecksum(token1);
+            if (!inIsToken0 && !inIsToken1) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message:
+                  `amm.token_not_in_pool: ${tokenIn} is not traded by pool ${pool}, which holds ` +
+                  `${toChecksum(token0)} and ${toChecksum(token1)}. Refusing rather than quoting the wrong side.`,
+              });
+            }
+
+            const reserveIn = inIsToken0 ? reserves.reserve0 : reserves.reserve1;
+            const reserveOut = inIsToken0 ? reserves.reserve1 : reserves.reserve0;
+
+            const q = quoteExactIn({ amountIn: BigInt(input.amountIn), reserveIn, reserveOut, feeBps });
+            return {
+              amountOut: q.amountOut.toString(),
+              priceImpactBps: q.priceImpactBps,
+              reserveIn: reserveIn.toString(),
+              reserveOut: reserveOut.toString(),
+              feeBps,
+              reservesFromChain: true as const,
+              blockTimestampLast: reserves.blockTimestampLast,
+            };
           } catch (err) {
             throw toTrpcError(err);
           }
@@ -473,7 +708,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         .output(unsignedCallOutput)
         .query(({ input }) => {
           const factory = deps.ammFactoryAddress();
-          if (factory === '0x0000000000000000000000000000000000000000') {
+          if (isZeroAddress(factory)) {
             throw new TRPCError({
               code: 'PRECONDITION_FAILED',
               message: 'AMM factory is not configured (PROTOCOL_AMM_FACTORY_ADDRESS). Contracts are in-repo under contracts/amm/.',

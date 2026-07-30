@@ -400,7 +400,7 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['identity.accounts'],
     requires: ['services/svc-protocol'],
-    note: 'Core + contracts on main; /trpc mounted; edge /api/protocol + web health/predictAddress product path. Factory/impl default 0x0 and PROTOCOL_RPC_URL is outside compose (no chain in stack). predict/buildDeployment refuse zero factory/impl. NOT done until factory+impl non-zero, RPC answers, and product path proves real chain config. Sockets: socket.evm-rpc, socket.contract-toolchain, socket.p256-verifier.',
+    note: 'Core + contracts on main; /trpc mounted; edge /api/protocol + web health/predictAddress product path. Factory/impl default 0x0 and PROTOCOL_RPC_URL is outside compose (no chain in stack). predict/buildDeployment refuse zero factory/impl. 2026-07-30 honesty pass: every chain-dependent path refuses with a typed code instead of an opaque 500. chain/availability.ts separates transport failure (protocol.chain_unreachable) from an absent contract (protocol.contract_not_deployed) and a wrong-chain RPC (protocol.chain_id_mismatch); router maps them to 503 with the code intact. sessionStatus had no try/catch and could answer exists:false — indistinguishable from "the owner granted nothing" — when nothing had been read; it now proves code at the address first. New chainStatus returns reachable/observedChainId/usable as DATA so a surface renders the outage instead of catching a throw. NOT done until factory+impl non-zero, RPC answers, and product path proves real chain config. Sockets: socket.evm-rpc, socket.contract-toolchain, socket.p256-verifier.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
     module: 'protocol',
@@ -410,7 +410,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['protocol.smart-accounts'],
     requires: ['services/svc-protocol/contracts/amm', 'services/svc-protocol/src/amm'],
-    note: 'WIP 2026-07-29: ConstantProductPool + PoolFactory Solidity, pure quote math + unsigned calldata builders on svc-protocol (amm.quoteExactIn / buildCreatePool / buildSwapExactIn / buildMintLiquidity). Not done until factory is deployed on a real chain (PROTOCOL_AMM_FACTORY_ADDRESS non-zero) and forge/runtime contract tests run — Foundry still §13 socket.contract-toolchain.',
+    note: 'WIP 2026-07-29: ConstantProductPool + PoolFactory Solidity, pure quote math + unsigned calldata builders on svc-protocol (amm.quoteExactIn / buildCreatePool / buildSwapExactIn / buildMintLiquidity). 2026-07-30: quoteExactIn took reserves as an INPUT and nothing in the repo supplied them — getReserves was in the ABI and called from nowhere, so a correct AMM was a calculator with no inputs. Added chain reads (poolReserves/poolToken0/poolToken1/poolFeeBps) and amm.quoteFromPool, which sources its own reserves, orients them by token0, and refuses a tokenIn the pool does not trade (amm.token_not_in_pool) rather than assuming token1. Both quotes now carry reservesFromChain so a caller can tell a real quote from arithmetic. quoteFromPool refuses in this environment every time — there is no chain. Not done until factory is deployed on a real chain (PROTOCOL_AMM_FACTORY_ADDRESS non-zero) and forge/runtime contract tests run — Foundry still §13 socket.contract-toolchain.',
   }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', {
     module: 'protocol',
