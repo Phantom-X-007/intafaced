@@ -272,7 +272,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot'],
-    note: 'partial — public REST: markets, orderbook, ticker, tickers, trades (tape), ohlcv (route exists, always [] until candle aggregation job — no inventing candles); private REST (edge-signed principal, fail-closed): GET orders/open|closed, GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance. Still open: positions/leverage, WS private.',
+    note: 'partial — public REST: markets, orderbook, ticker, tickers, trades (tape), ohlcv (route exists, always [] until candle aggregation job — no inventing candles); private REST (edge-signed principal, fail-closed): GET orders/open|closed, GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance (ledger projection, self-only), GET positions (returns [] until trade.futures; setLeverage/setMarginMode not mounted). Still open: leverage/margin when futures exists, WS private.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', { module: 'trade', phase: '2', dependsOn: ['trade.spot'] }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {

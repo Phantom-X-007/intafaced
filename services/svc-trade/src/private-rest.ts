@@ -29,6 +29,7 @@ import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderS
  *   GET    /api/v1/account/trades  scope: trade:read
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
+ *   GET    /api/v1/positions       scope: trade:read  (honest [] until trade.futures)
  *
  * Auth is the mount boundary: edge terminates the bearer (JWT or API key) and
  * forwards a signed principal on every `/api/*` hop. This service never parses
@@ -529,6 +530,31 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       requireScope(principal, 'trade:read');
       const rows = await deps.userBalances(principal.userId);
       return reply.code(200).send(presentCcxtBalances(rows));
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
+   * Derivatives positions — REST_ROUTES.fetchPositions.
+   *
+   * Spot-only honesty: trade.futures is not built, so there are no positions.
+   * Edge-signed principal + trade:read required (same fail-closed gate as open
+   * orders). Always 200 + []. Optional ?symbol= is accepted and ignored so
+   * CCXT clients that pass a filter still get a valid empty list, not 404.
+   * Does NOT invent leverage/margin state (setLeverage/setMarginMode not mounted).
+   */
+  app.get<{ Querystring: { symbol?: string } }>('/api/v1/positions', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      requireScope(principal, 'trade:read');
+      // symbol query intentionally unused — no position store to filter.
+      void req.query.symbol;
+      return reply.code(200).send([]);
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
