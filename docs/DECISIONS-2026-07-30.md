@@ -133,10 +133,38 @@ process rule after the fact would create risk rather than remove it.
 - Close `feat/multi-asset-instruments` and `feat/spine-trading-hours` as
   superseded — keeping stale duplicates of merged work invites someone
   re-merging them.
-- **One thing did NOT land with it and is a real gap:** `assertMarketOpen` /
-  trading-hours enforcement on the order-create path. The instrument model knows
-  each market's schedule; nothing checks it. **A weekend EUR/USD order is
-  accepted today.** That is now a spine work item, not a merge decision.
+### Correction — trading-hours enforcement DID land
+
+An earlier version of this section claimed `assertMarketOpen` was missing and
+that "a weekend EUR/USD order is accepted today". **That was wrong.** It landed
+in **#102 `feat(trade): refuse orders into a closed venue`** (`5110166`), roughly
+two hours before this document was first written, and #102 squashed *both* halves
+— the instrument model and the enforcement — into one commit, which is why the
+schedule columns being present did not imply the check was absent.
+
+Verified on `main`, not inferred: `services/svc-trade/src/spot/trade-service.ts`
+calls `assertMarketOpen` at **line 387**; `holdFor` is not reached until **line
+430**. So the refusal happens before any hold, which is the property that
+matters — a closed venue cannot fill, and funding an order into one locks the
+balance behind a book nobody is matching.
+
+I claimed a live money bug that did not exist. Caught by an agent that checked
+the running code instead of taking the brief at face value. The lesson is the one
+this repo keeps relearning: **schema present ≠ enforcement present, and neither
+can be inferred from the other — read the call site.**
+
+**What was genuinely missing was the coverage, not the code**, and that is now on
+`feat/spine-venue-hours`:
+- the unknown-schedule fail-safe existed but had **zero tests** — removing the
+  guard broke nothing, while `rows.ts` casts the schedule straight out of the
+  Postgres enum with no runtime parse, so a migration adding an enum value
+  without a matching schedule entry puts an unknown key on the order path
+- **`cme-globex` had no coverage at all** — commodities close *daily*, so the
+  60-minute settlement break was an hour-wide hole every weekday, not just at
+  weekends
+- "refused before any hold" was asserted only by a comment; it is now an
+  end-to-end test proving the balance stays spendable and nothing reaches the
+  engine
 
 ---
 
