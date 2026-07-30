@@ -447,6 +447,9 @@ module.exports = {
         },
         realtime: 'realtime',
         kline: "KLine",
+        // stream A — depth honesty (empty ≠ feed down)
+        depthWaiting: "Waiting for depth feed…",
+        depthEmptyBook: "No bids or asks on this book right now",
         depth: "Depth",
         publishstate0: "It is about to begin. Please wait....",
         publishstate1: "It is about to end. Please wait...",
