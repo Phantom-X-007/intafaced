@@ -1068,11 +1068,25 @@ export class TradeService {
     return rows.map(toOrder);
   }
 
-  async myFills(principal: Principal, limit = 100): Promise<FillRecord[]> {
+  /**
+   * User fills, newest first. Optional `marketId` pushes the symbol filter into
+   * SQL (`fills.market_id`) so a per-market limit is honest — not a post-filter
+   * of a user-wide page that can under-fill the limit.
+   */
+  async myFills(principal: Principal, limit = 100, marketId?: string): Promise<FillRecord[]> {
     requireScope(principal, 'trade:read');
-    const rows = await this.sql<FillRow[]>`
-      SELECT * FROM trade.fills WHERE user_id = ${principal.userId} ORDER BY ts DESC LIMIT ${Math.min(limit, 500)}
-    `;
+    const capped = Math.min(Math.max(limit, 1), 500);
+    const rows = marketId
+      ? await this.sql<FillRow[]>`
+          SELECT * FROM trade.fills
+           WHERE user_id = ${principal.userId} AND market_id = ${marketId}
+           ORDER BY ts DESC LIMIT ${capped}
+        `
+      : await this.sql<FillRow[]>`
+          SELECT * FROM trade.fills
+           WHERE user_id = ${principal.userId}
+           ORDER BY ts DESC LIMIT ${capped}
+        `;
     return rows.map(toFill);
   }
 
