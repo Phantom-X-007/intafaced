@@ -25,7 +25,7 @@ DECLARE
     -- Phase 4 · BLUEPRINT
     'blueprint',
     -- Phase 5 · SURFACES
-    'bank', 'launch', 'academy', 'market', 'mining_pool', 'agents', 'core_ops',
+    'bank', 'launch', 'academy', 'market', 'mining_pool', 'agents', 'core_ops', 'notify',
     -- Protocol Plane (v1.1 §17.5) — svc-dex absorbed into svc-protocol
     'chain', 'indexer', 'bridge', 'protocol'
   ];

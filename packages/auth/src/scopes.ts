@@ -60,6 +60,11 @@ export const SCOPES = [
   'agents:read',
   'agents:execute',
 
+  // Notify — in-app inbox only. `:write` is mark-read / mark-all-read on the
+  // caller's own rows; there is no path that targets another user.
+  'notify:read',
+  'notify:write',
+
   // Protocol plane (read-only by definition: keys are the user's, not ours)
   'protocol:read',
 
@@ -100,6 +105,7 @@ const IMPLIED: Partial<Record<Scope, readonly Scope[]>> = {
   'market:write': ['market:read'],
   'academy:write': ['academy:read'],
   'agents:execute': ['agents:read'],
+  'notify:write': ['notify:read'],
 };
 
 /** Expand a scope list to everything it actually grants. */
@@ -212,6 +218,9 @@ const SESSION_SCOPE_LIST = [
   // `bank:card` is deliberately NOT here — see below.
   'bank:read',
   'bank:write',
+  // Non-custodial in-app inbox. Self-only mark-read; minTier none.
+  'notify:read',
+  'notify:write',
   // Read-only by construction, on a plane that has no write scope to hold:
   // svc-protocol's own suite asserts `SCOPES` contains no `protocol:write`.
   // Non-custodial and `minTier: 'none'`, so §22 says permissionless — and a

@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**36 of 107 shipped (34%)** · 3 in progress · 30 ready to claim · 38 blocked · 15 deliberate §13 sockets
+**36 of 107 shipped (34%)** · 3 in progress · 30 ready to claim · 38 blocked · 18 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -54,7 +54,7 @@ pnpm wt feat/<the-thing>
 | Screening queues, geo-block, VPN/Tor detection | `core-ops` | 5 | `ops.compliance` |
 | Warehouse — read replica + cube layer | `core-ops` | 5 | `ops.analytics` |
 | apps/admin — listings, fee params, treasury, kill-switches | `core-ops` | 5 | `ops.admin` |
-| Event-driven fan-out: in-app, push, email, SMS | `core-ops` | 5 | `ops.notifications` |
+| Event-driven fan-out: in-app, push, email, SMS | `notify` | 5 | `ops.notifications` |
 
 ## Highest leverage
 
@@ -69,7 +69,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | **6** | Live lobbies, LiveKit SFU, capacity tiers | 🟢 ready | `academy.lobbies` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **4** | ERC-20 deploy from audited templates | ⛔ blocked | `launch.token-factory` |
-| **2** | Chain → Postgres read models | ⛔ blocked | `indexer.readmodels` |
+| **3** | Event-driven fan-out: in-app, push, email, SMS | 🟢 ready | `ops.notifications` |
 
 ## 🔨 In progress
 
@@ -233,7 +233,10 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Screening queues, geo-block, VPN/Tor detection | F |  | `ops.compliance` |
 | 🟢 | Warehouse — read replica + cube layer | F |  | `ops.analytics` |
 | 🟢 | apps/admin — listings, fee params, treasury, kill-switches <br/>_Downgraded 2026-07-28: apps/admin has ZERO test files and makes no network call of any kind. Every kill-switch, freeze and reconcile is React `useState` in the browser — flipping one changes a local boolean and nothing else. An operator console that appears to halt the ledger and does not is worse than no console._ | F |  | `ops.admin` |
-| 🟢 | Event-driven fan-out: in-app, push, email, SMS | F |  | `ops.notifications` |
+| 🟢 | Event-driven fan-out: in-app, push, email, SMS <br/>_In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers for fillSettled, p2pEscrowLocked, kycApproved; ON CONFLICT dedupe). Push / email / SMS remain §13 sockets — no channel senders in this service._ | F |  | `ops.notifications` |
+| 🔌 | Push notification channel (device tokens + provider) <br/>_§13 — interface is the in-app inbox row; push delivery not in v1._ | F |  | `socket.notify-push` |
+| 🔌 | Email notification channel <br/>_§13 — outbound mail rail not wired._ | F |  | `socket.notify-email` |
+| 🔌 | SMS notification channel <br/>_§13 — outbound SMS rail not wired._ | F |  | `socket.notify-sms` |
 | 🔌 | Rust port of svc-matching | F |  | `socket.rust-matching` |
 | 🔌 | Live card issuer rail | F |  | `socket.live-issuer` |
 | 🔌 | PayPal / Stripe / live acquiring rails | F |  | `socket.psp-partners` |

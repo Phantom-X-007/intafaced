@@ -130,6 +130,9 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   def('market.listings', 'market', null, 'Vendor marketplace open for listings and purchases'),
   def('market.vendorApplications', 'market', null, 'Accepting new vendor applications'),
   def('indexer.ingest', 'indexer', null, 'Chain → Postgres read-model ingestion'),
+  // In-app fan-out kill-switch. OFF = consumers ack without writing inbox rows.
+  // Push / email / SMS are §13 sockets and are not gated by this flag.
+  def('notify.fanout', 'notify', 'III', 'In-app notification fan-out from bus events'),
 ];
 
 export const FLAG_KEYS = FLAG_REGISTRY.map((f) => f.key);

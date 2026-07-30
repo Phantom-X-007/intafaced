@@ -602,7 +602,35 @@ export const FEATURES = [
     requires: ['apps/admin'],
     note: 'Downgraded 2026-07-28: apps/admin has ZERO test files and makes no network call of any kind. Every kill-switch, freeze and reconcile is React `useState` in the browser — flipping one changes a local boolean and nothing else. An operator console that appears to halt the ledger and does not is worse than no console.',
   }),
-  f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', { module: 'core-ops', phase: '5', dependsOn: ['infra.events'] }),
+  f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', {
+    module: 'notify',
+    phase: '5',
+    status: 'ready',
+    dependsOn: ['infra.events'],
+    requires: ['services/svc-notify'],
+    note: 'In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers for fillSettled, p2pEscrowLocked, kycApproved; ON CONFLICT dedupe). Push / email / SMS remain §13 sockets — no channel senders in this service.',
+  }),
+  f('socket.notify-push', 'Push notification channel (device tokens + provider)', {
+    module: 'notify',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['ops.notifications'],
+    note: '§13 — interface is the in-app inbox row; push delivery not in v1.',
+  }),
+  f('socket.notify-email', 'Email notification channel', {
+    module: 'notify',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['ops.notifications'],
+    note: '§13 — outbound mail rail not wired.',
+  }),
+  f('socket.notify-sms', 'SMS notification channel', {
+    module: 'notify',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['ops.notifications'],
+    note: '§13 — outbound SMS rail not wired.',
+  }),
 
   // ── PHASE 5P · PROTOCOL P2–P3 ────────────────────────────────────────────
   f('chain.rust-core', 'Rust CLOB execution engine', {
