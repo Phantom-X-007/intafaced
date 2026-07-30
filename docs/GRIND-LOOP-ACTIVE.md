@@ -1,8 +1,8 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** RUNNING · Nitro AFK · agents + 45m scheduler own the loop  
-**Scheduler:** every **45 minutes** re-read **this file** on `origin/main` and ship **NEXT QUEUE**  
-**Last tip:** re-check `git rev-parse origin/main` (high water through **#154** — balance · OHLCV · positions · notify fans · convert done · grind loop · tracker honesty · wave D scans · mytrades symbol filter)
+**Status:** DRAINED · Nitro AFK · 45m scheduler re-checks for regressions / open PRs only  
+**Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work  
+**Last tip:** high water through **#158** (identity subAccounts soft-revoke). Prior: **#155–#157** (loop docs · notify OTEL + tracker green · p2pTradeDisputed fan)
 
 ---
 
@@ -52,14 +52,14 @@ UNSPOKEN NEEDS (deduce and ship toward these — Nitro is not present to restate
   - NEVER invent green CI, NEVER mark human-only items done, NEVER invent candle data / balances / factory addresses.
   - NEVER fake human-only work as agent-done (billing, chain props, licences, counsel, kill drill, multi-asset rails).
 
-GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED, update scoreboard, stop product ships.
+GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest tracker lies / brand-scan red only; do not pad ceremony.
 ```
 
 ---
 
 ## MERGED (do not redo) — high water
 
-**#110–#154** on main, including latest wave:
+**#110–#158** on main. Latest agent-cookable wave:
 
 | PR | What |
 | --- | --- |
@@ -73,6 +73,10 @@ GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED,
 | **#152** | Tracker honesty wave D — notes match main code |
 | **#153** | Docs(audit): Wave D doctrine scan log with real exit codes |
 | **#154** | SQL **symbol filter** on `account/trades` + positions health log |
+| **#155** | Docs: grind loop high water past #154 + AFK scoreboard |
+| **#156** | **svc-notify OpenTelemetry** + `tracker:check` green |
+| **#157** | Notify fan: **`p2pTradeDisputed`** (openedBy only) |
+| **#158** | Identity **`subAccounts.revoke`** soft-disable (`revoked=true`) |
 
 **Earlier in the same cook (do not redo):**
 
@@ -91,13 +95,24 @@ GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED,
 
 ## NEXT QUEUE (agent-cookable — honest)
 
-1. **Fix DoD gate `svc-notify` OTEL** — if still open (`node tooling/ci/dod-gate.mjs` red: no OpenTelemetry instrumentation §14). Ship minimal instrumentation matching other services; do not invent SLO panels.
-2. **Fix `tracker:check` if `TRACKER.md` still stale** — run `pnpm tracker` / regenerate and commit only if `--check` is red. No status lies.
-3. **`p2pTradeDisputed` notify fan (openedBy only)** — if not shipped: event has `openedBy` userId; fan that principal only. **Still skip** `p2pDisputeResolved` (no buyer/seller userIds) and events with no principal ids.
-4. **`pay.public-api` thin slice — SKIP (proven not worth it)** — public resolve already exists via payment links / hosted checkout. Do not invent webhooks/sandbox.
-5. **Private balance WS** — only if a safe ledger projection event path exists for self-only stream; **prefer skip** (do not invent balance events or poll ledger from svc-ws).
-6. **Identity `subAccounts.revoke`** — if still missing and cheap (create/list exist; no revoke). Soft-delete or status flag only if schema supports it cleanly; else skip with note.
-7. **Reassess DRAINED** — when only human blockers + large phase features remain (futures, candle job, chain factory, push/email/SMS), flip Status to **DRAINED** and update the scoreboard. Do not pad the queue with ceremony.
+**Empty of product ships.** Remaining items are human-only, safety-skipped, or large phase features.
+
+| # | Item | Disposition |
+| --- | --- | --- |
+| 1 | svc-notify OTEL / DoD | **DONE** #156 · local `dod-gate` green including svc-notify |
+| 2 | tracker:check | **DONE** #156 · green on tip (sub-account note honesty may land with drain docs) |
+| 3 | p2pTradeDisputed fan | **DONE** #157 · openedBy only; still **skip** p2pDisputeResolved (no buyer/seller ids) |
+| 4 | pay.public-api thin slice | **SKIP** — public resolve via payment links / hosted checkout |
+| 5 | Private balance WS | **SKIP** — no safe ledger projection event path; do not invent poll from svc-ws |
+| 6 | identity subAccounts.revoke | **DONE** #158 · soft `revoked`; no hard delete |
+| 7 | Reassess DRAINED | **THIS FILE** — Status **DRAINED** |
+
+**Drained-mode work only (each fire):**
+
+1. `gh pr list --state open` — babysit; local verify + admin-merge if CI billing-stuck  
+2. Local doctrine: brand / custody / vendor-shell / workspace / dod-gate / tracker:check  
+3. Honest tracker lies only if `--check` red or notes contradict main code  
+4. Do **not** invent product surface for futures, candles, chain factory, push/email/SMS  
 
 ---
 
@@ -112,14 +127,17 @@ GO: NEXT QUEUE #1. If queue empty of agent-cookable work → set Status DRAINED,
 
 ---
 
-## Exit (DRAINED)
+## Exit (DRAINED) — met
 
-Agent queue empty **or** each remaining item is human-blocked / safety-skipped / large phase feature · local doctrine scans green · **Status:** DRAINED on this file · scoreboard Wave row updated · no open agent-owned product PRs rotting.
+Agent queue empty · remaining items human-blocked / safety-skipped / large phase · local doctrine scans green (brand/custody/vendor-shell/workspace/dod-gate/tracker:check) · **Status:** DRAINED · scoreboard Wave row updated · no open agent-owned product PRs (only long-lived docs PR if any).
 
 ---
 
 ## Scheduler
 
-Every **45 minutes:** re-read this file on `origin/main` → ship NEXT QUEUE #1 (or next free mountain) → update this file before stop.
+Every **45 minutes:** re-read this file on `origin/main`.
 
-**Next agent after compact: NEXT QUEUE #1 (`svc-notify` OTEL / DoD gate if still red; else #2 tracker:check).**
+- If **DRAINED:** babysit open PRs + scan for real regressions only; update high water if something merged.  
+- If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
+
+**Next agent after compact: Status DRAINED — do not re-ship #110–#158; only babysit / honest fixes.**
