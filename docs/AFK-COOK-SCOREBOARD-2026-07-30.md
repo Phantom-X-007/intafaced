@@ -83,3 +83,7 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | #127–#129 | cancelAll · protocol honesty · svc-notify |
 
 **Audit policy in force:** light gates every PR; wave audit every 3–4 ships (`docs/GRIND-PLAN-2026-07-30.md`).
+
+## Compaction survival
+
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) — paste prompt + queue. Next chat continues without Nitro.
