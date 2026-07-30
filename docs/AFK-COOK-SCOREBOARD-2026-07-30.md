@@ -256,3 +256,16 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 | #202 | Bank loans (purposed collateral, LTV ladder, loanReserve) | CI all green · local bank 58 + ledger 99 · DoD gate |
 
 **Agent product micro-queue:** still empty. **Do not re-ship #110–#202.**
+
+## Spine landings #206–#211 (2026-07-30 AFK babysit)
+
+| PR   | What                                | Proof                            |
+| ---- | ----------------------------------- | -------------------------------- |
+| #206 | P0 trade rank-perks S2S credentials | CI all green                     |
+| #207 | notify multi-channel honest refuse  | local notify 45 pass             |
+| #208 | academy lobbies rank host rights    | local academy 50 pass            |
+| #209 | venue §27 sequenced/gap fabric      | local adapter 137 + contracts 29 |
+| #210 | protocol local EVM + CREATE2        | local protocol 196 pass          |
+| #211 | test DB isolation                   | CI all green                     |
+
+**Agent product micro-queue:** still empty. **Do not re-ship #110–#211.**

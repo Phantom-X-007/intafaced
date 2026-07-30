@@ -1,8 +1,8 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** DRAINED (agent product micro-queue) · Denon spine **#201–#202** merged this fire · **mega-audit 2026-07-30 ran** (`docs/audit/2026-07-30-afk-cook-mega/`) · **mega-r2 re-prove** (`docs/audit/2026-07-30-mega-r2/`) · 45m scheduler: open PRs / regressions only — product still DRAINED  
+**Status:** DRAINED (agent product micro-queue) · Denon spine wave **#201–#211** on main (babysit-merged) · **mega-audit 2026-07-30 ran** (`docs/audit/2026-07-30-afk-cook-mega/`) · **mega-r2 re-prove** (`docs/audit/2026-07-30-mega-r2/`) · 45m scheduler: open PRs / regressions only — product still DRAINED  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main` — product queue empty of agent-cookable work; do not pad ceremony  
-**Last tip:** high water through **#203** (verify includes format:check + .mjs) · **#201–#202** Denon spine CCXT+loans · **#198–#200** CI · agent micro still DRAINED · do not re-ship **#110–#203**
+**Last tip:** high water through **#211** (test DB isolation) + **#209** (venue §27 fabric) · spine **#206–#210** (rank-perks P0, notify channels, academy lobbies, local EVM CREATE2) · agent micro still DRAINED · do not re-ship **#110–#211** · CI live
 
 ---
 
@@ -59,10 +59,16 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 ## MERGED (do not redo) — high water
 
-**#110–#203** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
+**#110–#211** on main (#175 agent packages · #176–#177 mega-audit). Backend/CCXT product high water **#162–#163**; ops **#167** display_name backfill; Stream A **#169** `ui:boot` + **#172** Playwright harness/design bar (PROOF.md still needs non-sandboxed Chromium — honest unverified). Docs **#168–#171**. Backend micro-queue remains **DRAINED**; Stream A tooling is not a backend un-drain.
 
 | PR       | What                                                                                    |
 | -------- | --------------------------------------------------------------------------------------- |
+| **#211** | fix(test): isolate every suite from the live database                                   |
+| **#210** | protocol local dev chain + CREATE2 on-chain cross-check                                 |
+| **#209** | venue §27 fabric — sequenced books, gap withholds                                       |
+| **#208** | academy lobbies — host rights by rank                                                   |
+| **#207** | notify multi-channel fan-out (honest refuse)                                            |
+| **#206** | P0 trade rank-perks service credentials                                                 |
 | **#145** | Private REST **account/balance** (ledger projection, self-only)                         |
 | **#146** | Public **OHLCV** route — honest empty until candle aggregation                          |
 | **#147** | **GET /positions** — honest `[]` until `trade.futures`                                  |
@@ -117,8 +123,11 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 
 **Not agent micro-queue (large phase / design — do not fake done):**
 
-- Futures · candle aggregation · real chain factory + RPC
-- Push / email / SMS · `pay.public-api` design beyond links · venue.aggregation implementations
+- Futures · candle aggregation
+- ~~real chain factory + RPC (local dev)~~ → **local EVM + CREATE2 #210** (prod chain still human)
+- ~~Push / email / SMS channel fan-out~~ → **DONE #207** (refuses when unconfigured)
+- `pay.public-api` design beyond links
+- ~~venue.aggregation fabric~~ → **DONE #209** (sequenced/gap-withhold; CONNECT)
 - `ops.admin` real wiring (not browser-local pretend kill-switches)
 - Terminal charts / hotkeys / sub-accounts UI (tape is live; chart remains honest empty)
 - ~~Bank loans product~~ → **DONE #202** (Denon spine; not agent micro)
@@ -140,7 +149,7 @@ GO: NEXT QUEUE #1. If Status is DRAINED → babysit open PRs / scan for honest t
 - GitHub Actions **billing / spending limit** (was silent; **jobs now start** after budget set — still watch minutes; path filters #198 cut docs-only burn)
 - Real chain factory + RPC for smart-accounts **done**
 - Licences, wallet secrets, counsel list, kill drill, multi-asset rails
-- Push / email / SMS notification channels (§13 sockets)
+- Push / email / SMS **production credentials / provider accounts** (channel fan-out **#207** ships adapters that refuse when unconfigured — not fake delivered)
 - Futures / positions product (honest empty is the agent floor)
 - Candle aggregation job (OHLCV stays `[]` until real source)
 
@@ -163,4 +172,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - If **DRAINED (agent queue):** babysit open PRs + scan for real regressions / honesty only; update high water if something merged.
 - If a human or Denon re-opens agent-cookable work: set Status **RUNNING**, put items in NEXT QUEUE, ship.
 
-**Next agent after compact: Status DRAINED (agent product micro-queue) — do not re-ship #110–#203; babysit open PRs; spine #201–#203 on main.**
+**Next agent after compact: Status DRAINED (agent product micro-queue) — do not re-ship #110–#211; babysit open PRs; spine #206–#211 on main.**
