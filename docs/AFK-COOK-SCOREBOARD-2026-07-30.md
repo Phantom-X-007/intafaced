@@ -73,3 +73,13 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | #129 | **svc-notify** in-app inbox + 3 event fans |
 
 **Audit:** `docs/audit/WAVE-B-2026-07-30.md` — all local doctrine gates green.
+
+## Wave C (parallel)
+
+| PR | What |
+| --- | --- |
+| #130 | Wave B audit gates green |
+| #131 | **Public REST** `/api/v1/markets` + orderbook (ccxt-api partial) |
+| #127–#129 | cancelAll · protocol honesty · svc-notify |
+
+**Audit policy in force:** light gates every PR; wave audit every 3–4 ships (`docs/GRIND-PLAN-2026-07-30.md`).
