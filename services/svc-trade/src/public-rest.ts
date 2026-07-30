@@ -13,7 +13,7 @@ import type { Market, PublicTapePrint } from './spot/types.js';
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
- *   GET /api/v1/trades/:symbol?limit=
+ *   GET /api/v1/trades/:symbol?limit=&since=
  *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&limit=
  *
  * No auth — public market data. Amounts are decimal strings on the wire.
@@ -34,8 +34,9 @@ export interface PublicRestDeps {
   /**
    * Recent public prints for a market (no user/order ids). Empty when nothing
    * has traded — callers return honest 200 + [].
+   * Optional sinceMs (unix ms) filters fills.ts >= since in SQL.
    */
-  publicTape(marketId: string, limit: number): Promise<PublicTapePrint[]>;
+  publicTape(marketId: string, limit: number, sinceMs?: number): Promise<PublicTapePrint[]>;
   /** Injectable clock for tests. */
   now?: () => number;
 }
@@ -178,6 +179,19 @@ function parseLimit(raw: unknown, fallback: number, max: number): number {
 }
 
 /**
+ * Optional CCXT `since` (unix ms). Absent/empty → no filter.
+ * NaN or negative → invalid (caller returns 400). Zero is valid (epoch).
+ */
+export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, sinceMs: undefined };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    return { ok: false, message: 'since must be a non-negative unix timestamp in milliseconds' };
+  }
+  return { ok: true, sinceMs: Math.floor(n) };
+}
+
+/**
  * Register the public REST routes on a Fastify instance.
  * Mount alongside `/trpc` — no auth middleware.
  */
@@ -259,7 +273,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     return reply.code(200).send(out);
   });
 
-  app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>(
+  app.get<{ Params: { symbol: string }; Querystring: { limit?: string; since?: string } }>(
     '/api/v1/trades/:symbol',
     async (req, reply) => {
       const symbol = decodeURIComponent(req.params.symbol);
@@ -269,7 +283,12 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       }
 
       const limit = parseLimit(req.query.limit, DEFAULT_TRADES, MAX_TRADES);
-      const tape = await deps.publicTape(market.id, limit);
+      const sinceParsed = parseSince(req.query.since);
+      if (!sinceParsed.ok) {
+        return reply.code(400).send({ code: 'InvalidSince', message: sinceParsed.message });
+      }
+      // since → SQL on fills.ts (timestamptz) via publicTape.sinceMs.
+      const tape = await deps.publicTape(market.id, limit, sinceParsed.sinceMs);
       return reply.code(200).send(tape.map((print) => presentPublicTrade(market.symbol, print)));
     },
   );
