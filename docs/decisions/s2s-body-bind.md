@@ -13,11 +13,11 @@ body**. Within the 300-second skew window a captured signature was replayable ag
 
 That is not abstract. The S2S surfaces include the ones that move value:
 
-| Surface | Reached how | What a replay buys |
-| --- | --- | --- |
-| `svc-ledger` `/trpc/post` | `registerS2sHttp`, plain JSON | `ledger.post()` directly — any transaction, any amount |
-| `svc-matching` `POST /markets/:id/orders` | `verifyServiceHeaders` guard | an order the ledger never held funds for |
-| `svc-matching` `DELETE …/orders/:orderId` | same | cancel any resting order, releasing that user's hold |
+| Surface                                   | Reached how                   | What a replay buys                                     |
+| ----------------------------------------- | ----------------------------- | ------------------------------------------------------ |
+| `svc-ledger` `/trpc/post`                 | `registerS2sHttp`, plain JSON | `ledger.post()` directly — any transaction, any amount |
+| `svc-matching` `POST /markets/:id/orders` | `verifyServiceHeaders` guard  | an order the ledger never held funds for               |
+| `svc-matching` `DELETE …/orders/:orderId` | same                          | cancel any resting order, releasing that user's hold   |
 
 The original header comment was candid about the deferral and its reason — Fastify has
 parsed and discarded the raw bytes by the time a handler or tRPC context runs. That
@@ -27,12 +27,12 @@ deferral was reasonable. It was also a replayable money instruction.
 
 Two schemes, and exactly two.
 
-| | v1 (legacy) | v2 |
-| --- | --- | --- |
-| preimage | `${service}\n${timestamp}` | `intafaced-s2s-v2\n` + length-prefixed `(service, ts, sha256(body))` |
-| headers | 3 | 4 — adds `x-intafaced-service-body` |
-| body integrity | **none** | yes |
-| replay window | 300s | 300s (unchanged) |
+|                | v1 (legacy)                | v2                                                                   |
+| -------------- | -------------------------- | -------------------------------------------------------------------- |
+| preimage       | `${service}\n${timestamp}` | `intafaced-s2s-v2\n` + length-prefixed `(service, ts, sha256(body))` |
+| headers        | 3                          | 4 — adds `x-intafaced-service-body`                                  |
+| body integrity | **none**                   | yes                                                                  |
+| replay window  | 300s                       | 300s (unchanged)                                                     |
 
 **The digest header's presence is the version marker.** No fourth "version" header
 exists; one whose only content restates another header's presence is a thing to keep
@@ -86,11 +86,11 @@ Fastify 5.10.0, probed directly before any of this was written:
 
 That last asymmetry is why retention is modelled as three states, not two:
 
-| state | meaning | under `require` |
-| --- | --- | --- |
-| `{ retained: true, bytes: <n> }` | the request carried a body | verify the digest |
-| `{ retained: true, bytes: <0> }` | no body, **and we know that** | verify against the empty digest |
-| `{ retained: false }` | nobody kept the bytes | **fail closed** — `body-unavailable` |
+| state                            | meaning                       | under `require`                      |
+| -------------------------------- | ----------------------------- | ------------------------------------ |
+| `{ retained: true, bytes: <n> }` | the request carried a body    | verify the digest                    |
+| `{ retained: true, bytes: <0> }` | no body, **and we know that** | verify against the empty digest      |
+| `{ retained: false }`            | nobody kept the bytes         | **fail closed** — `body-unavailable` |
 
 Collapsing the last two into `Buffer \| undefined` would let a service that forgot to
 install retention accept every body while believing it had verified them.
@@ -110,7 +110,7 @@ Two properties make that true:
 1. **The default is `accept-both`.** A verifier running the new code accepts a v1
    caller running the old code. Nothing 401s at any point during the rollout.
 2. **A v2 caller is safe to deploy before its verifier.** `accept-both` is also the
-   default on the *old* code path in the sense that matters: an old verifier ignores
+   default on the _old_ code path in the sense that matters: an old verifier ignores
    the unknown `x-intafaced-service-body` header entirely and validates the v1
    preimage — but a v2 caller signs the **v2** preimage, which an old verifier would
    reject.
@@ -168,12 +168,12 @@ Flip per service. `svc-ledger` and `svc-matching` are independent.
 This PR upgrades the three ledger-clients in Stream B's territory. **Three callers are
 owned by other agents and are still v1:**
 
-| Caller | File | Calls |
-| --- | --- | --- |
-| `svc-trade` | `services/svc-trade/src/ledger-client.ts` | svc-ledger |
-| `svc-trade` | `services/svc-trade/src/spot/matching-client.ts` | **svc-matching** |
-| `svc-pay` | `services/svc-pay/src/ledger-client.ts` | svc-ledger |
-| `svc-bank` | `services/svc-bank/src/ledger-client.ts` (two clients) | svc-ledger |
+| Caller      | File                                                   | Calls            |
+| ----------- | ------------------------------------------------------ | ---------------- |
+| `svc-trade` | `services/svc-trade/src/ledger-client.ts`              | svc-ledger       |
+| `svc-trade` | `services/svc-trade/src/spot/matching-client.ts`       | **svc-matching** |
+| `svc-pay`   | `services/svc-pay/src/ledger-client.ts`                | svc-ledger       |
+| `svc-bank`  | `services/svc-bank/src/ledger-client.ts` (two clients) | svc-ledger       |
 
 Upgraded here: `svc-agents`, `svc-p2p`, `svc-token`.
 
@@ -193,7 +193,7 @@ upgraded** — it is the only caller. Same for `svc-ledger` and the three above.
 
 A verifier in `accept-both` still accepts v1, so a captured **v1** call remains replayable
 against any body for 300 seconds — exactly the hole L2-6 names. Domain separation means an
-attacker cannot *downgrade* a captured v2 call by stripping the digest header (tested),
+attacker cannot _downgrade_ a captured v2 call by stripping the digest header (tested),
 but that does not help a caller that never sent one.
 
 **The security property exists only under `require`.** Until every caller is v2 and both
@@ -210,7 +210,7 @@ the rest. That is a real improvement and it is not the fix. The fix is the flip.
   different blast radius. Bundling it here would mean doing both badly. **Own PR.**
 - **Binding the method and path.** Body binding stops "any body"; it stops "any procedure"
   only narrowly, since two procedures can accept structurally similar bodies. (The
-  route-crossing tests here pass because the *bodies* differ, not because the path is
+  route-crossing tests here pass because the _bodies_ differ, not because the path is
   bound.) Binding the request target is the completion and is cheap in code — but it
   breaks the fleet the first time anything between two services rewrites a path, so it
   needs a survey of the proxy and mount topology first. The length-prefixed framing exists

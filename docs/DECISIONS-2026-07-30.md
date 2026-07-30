@@ -40,11 +40,11 @@ your GitHub token, which is a change to your account and not mine to make:
 
 Three products get conflated under "TradingView charts":
 
-| product | licence | what it is |
-| --- | --- | --- |
-| **Lightweight Charts** | Apache-2.0, open source | rendering only — candles, crosshair, scales |
+| product                                      | licence                                                               | what it is                                                              |
+| -------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Lightweight Charts**                       | Apache-2.0, open source                                               | rendering only — candles, crosshair, scales                             |
 | **Advanced Charts** (was "Charting Library") | free of charge, **not** open source; you apply and are granted access | drawing tools, indicator library, saved layouts — what Hyperliquid uses |
-| **Trading Platform** | same gating | Advanced Charts plus order-entry integration |
+| **Trading Platform**                         | same gating                                                           | Advanced Charts plus order-entry integration                            |
 
 **What actually went wrong was never cost.** The vendored copy was **Advanced
 Charts v1.11 (2017) with no licence, NOTICE, EULA or copyright anywhere across
@@ -60,6 +60,7 @@ lightweight-charts vendored as a standalone bundle — no npm dependency, no CDN
 time scale. **Zero indicators, zero drawing tools.** That is not a pro terminal.
 
 **Decision:**
+
 1. **Apply to TradingView for Advanced Charts** — free, days not minutes, so it
    is the long-lead item and starting it costs nothing. **Owner action.**
 2. **Ship lightweight-charts as the default** until a grant is on file.
@@ -111,14 +112,14 @@ counsel-confirmed, it is a cheap question to ask.
 The board reserves this as "Denon-only money-enum merge". **It has already
 landed** — both halves. Verified against the running database, not the diff:
 
-| evidence | state |
-| --- | --- |
-| `services/svc-trade/drizzle/0001_multi_asset_instruments.sql` | on `main` |
-| `trade.markets.asset_class` distinct values | `crypto`, `commodity`, `forex` |
-| `services/svc-ledger/drizzle/0003_commodity_asset_kind.sql` | on `main` |
-| `ledger.asset_kind` enum | `crypto`, `fiat`, `native`, **`commodity`** |
-| `ledger.assets` by kind | crypto 4, fiat 7, native 1, **commodity 5** |
-| `/api/v1/markets` through the edge | returns `AUD/USD` in CCXT shape |
+| evidence                                                      | state                                       |
+| ------------------------------------------------------------- | ------------------------------------------- |
+| `services/svc-trade/drizzle/0001_multi_asset_instruments.sql` | on `main`                                   |
+| `trade.markets.asset_class` distinct values                   | `crypto`, `commodity`, `forex`              |
+| `services/svc-ledger/drizzle/0003_commodity_asset_kind.sql`   | on `main`                                   |
+| `ledger.asset_kind` enum                                      | `crypto`, `fiat`, `native`, **`commodity`** |
+| `ledger.assets` by kind                                       | crypto 4, fiat 7, native 1, **commodity 5** |
+| `/api/v1/markets` through the edge                            | returns `AUD/USD` in CCXT shape             |
 
 **So the money-enum call reserved for the owner was taken by whoever merged it.**
 I am flagging that rather than quietly accepting it, because the rule existed for
@@ -130,15 +131,17 @@ is live with real rows. Reverting a live, tested schema change to satisfy a
 process rule after the fact would create risk rather than remove it.
 
 **Actions:**
+
 - Close `feat/multi-asset-instruments` and `feat/spine-trading-hours` as
   superseded — keeping stale duplicates of merged work invites someone
   re-merging them.
+
 ### Correction — trading-hours enforcement DID land
 
 An earlier version of this section claimed `assertMarketOpen` was missing and
 that "a weekend EUR/USD order is accepted today". **That was wrong.** It landed
 in **#102 `feat(trade): refuse orders into a closed venue`** (`5110166`), roughly
-two hours before this document was first written, and #102 squashed *both* halves
+two hours before this document was first written, and #102 squashed _both_ halves
 — the instrument model and the enforcement — into one commit, which is why the
 schedule columns being present did not imply the check was absent.
 
@@ -155,11 +158,12 @@ can be inferred from the other — read the call site.**
 
 **What was genuinely missing was the coverage, not the code**, and that is now on
 `feat/spine-venue-hours`:
+
 - the unknown-schedule fail-safe existed but had **zero tests** — removing the
   guard broke nothing, while `rows.ts` casts the schedule straight out of the
   Postgres enum with no runtime parse, so a migration adding an enum value
   without a matching schedule entry puts an unknown key on the order path
-- **`cme-globex` had no coverage at all** — commodities close *daily*, so the
+- **`cme-globex` had no coverage at all** — commodities close _daily_, so the
   60-minute settlement break was an hour-wide hole every weekday, not just at
   weekends
 - "refused before any hold" was asserted only by a comment; it is now an

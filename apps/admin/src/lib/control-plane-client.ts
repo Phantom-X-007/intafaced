@@ -198,7 +198,8 @@ export async function readFreeze(): Promise<FreezeResult> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const body = (await res.json().catch(() => ({}))) as Partial<FreezeState> & { error?: string; message?: string };
-    if (!res.ok) return { ok: false, status: res.status, state: null, detail: body.error ?? body.message ?? `svc-edge answered ${res.status}` };
+    if (!res.ok)
+      return { ok: false, status: res.status, state: null, detail: body.error ?? body.message ?? `svc-edge answered ${res.status}` };
 
     return {
       ok: true,
@@ -233,7 +234,8 @@ export async function setFreeze(frozen: boolean, reason?: string): Promise<Freez
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const body = (await res.json().catch(() => ({}))) as Partial<FreezeState> & { error?: string; message?: string };
-    if (!res.ok) return { ok: false, status: res.status, state: null, detail: body.error ?? body.message ?? `svc-edge answered ${res.status}` };
+    if (!res.ok)
+      return { ok: false, status: res.status, state: null, detail: body.error ?? body.message ?? `svc-edge answered ${res.status}` };
 
     return {
       ok: true,

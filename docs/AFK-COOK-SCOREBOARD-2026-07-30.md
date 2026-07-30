@@ -237,13 +237,13 @@ First DRAINED claim was after product **#158** / drain docs **#159–#161**. The
 
 ## 45m re-check (spine P0 babysit #182–#186)
 
-| PR | Result |
-| --- | --- |
+| PR   | Result                                                                     |
+| ---- | -------------------------------------------------------------------------- |
 | #185 | Merged — empty order book → empty depth, not 502 (7 matching-client tests) |
-| #183 | Merged P0 — sandbox rails refused in enforced envs (163 rail tests) |
-| #184 | Merged — S2S body-bind (47 contracts + 17 ledger s2s tests) |
-| #186 | Merged P0 — kill-switches reachable (51 edge tests) |
-| #182 | Merged — uiproof B1–B5 + Pass3; brand-scrubbed docs |
-| Open | none |
+| #183 | Merged P0 — sandbox rails refused in enforced envs (163 rail tests)        |
+| #184 | Merged — S2S body-bind (47 contracts + 17 ledger s2s tests)                |
+| #186 | Merged P0 — kill-switches reachable (51 edge tests)                        |
+| #182 | Merged — uiproof B1–B5 + Pass3; brand-scrubbed docs                        |
+| Open | none                                                                       |
 
 **Loop:** tip **#186** · Status **DRAINED (agent product queue)** · human: CI billing still

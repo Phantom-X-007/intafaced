@@ -211,9 +211,9 @@ describe('service credentials — canonical framing', () => {
     expect(v1).not.toBe(v2);
 
     // A v1 signature presented as if it were v2 is refused...
-    expect(
-      verifyServiceCall('svc-trade', String(ts), v1, SECRET, { bodyDigest: digest, rawBody: bytes(BODY) }).rejected,
-    ).toBe('bad-signature');
+    expect(verifyServiceCall('svc-trade', String(ts), v1, SECRET, { bodyDigest: digest, rawBody: bytes(BODY) }).rejected).toBe(
+      'bad-signature',
+    );
 
     // ...and a v2 signature presented with the digest header stripped is too.
     expect(verifyServiceCall('svc-trade', String(ts), v2, SECRET, {}).rejected).toBe('bad-signature');

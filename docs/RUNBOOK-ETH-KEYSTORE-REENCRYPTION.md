@@ -18,15 +18,15 @@
 **In the deployment on this machine there are no ETH keystores to migrate.** Checked, not
 assumed:
 
-| Check | Result |
-| --- | --- |
-| `docker ps` — any `01_wallet_rpc` service running | **none.** No `service-rpc-eth`, `-eusdt`, `-btc`, or any sibling |
-| `/data/eth/data/keystore` inside each running container | does not exist |
-| `find … -name '*.jar' -path '*target*'` under `01_wallet_rpc` | no build output — the tree has never been compiled here |
-| `01_wallet_rpc/pom.xml` `<modules>` | lists `xrp`; **`vendor/coinexchange/01_wallet_rpc/xrp` is not tracked in git** — the reactor cannot resolve it |
-| the wallet address book in MongoDB | `coinex-mongo` **is** running, and `listDatabases` returns `admin`, `bitrade`, `config`, `local`. **There is no `wallet` database** — so no `ETH_address_book`, no `EUSDT_address_book`; not empty collections, no database at all |
+| Check                                                         | Result                                                                                                                                                                                                                             |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker ps` — any `01_wallet_rpc` service running             | **none.** No `service-rpc-eth`, `-eusdt`, `-btc`, or any sibling                                                                                                                                                                   |
+| `/data/eth/data/keystore` inside each running container       | does not exist                                                                                                                                                                                                                     |
+| `find … -name '*.jar' -path '*target*'` under `01_wallet_rpc` | no build output — the tree has never been compiled here                                                                                                                                                                            |
+| `01_wallet_rpc/pom.xml` `<modules>`                           | lists `xrp`; **`vendor/coinexchange/01_wallet_rpc/xrp` is not tracked in git** — the reactor cannot resolve it                                                                                                                     |
+| the wallet address book in MongoDB                            | `coinex-mongo` **is** running, and `listDatabases` returns `admin`, `bitrade`, `config`, `local`. **There is no `wallet` database** — so no `ETH_address_book`, no `EUSDT_address_book`; not empty collections, no database at all |
 
-So on this host the migration is a **pre-flight**, not a rescue: set the password *before*
+So on this host the migration is a **pre-flight**, not a rescue: set the password _before_
 the first `GET /rpc/address/{account}` ever runs and there is nothing to re-encrypt, because
 every keystore will be born with the right password.
 
@@ -44,11 +44,11 @@ Confirm which case you are in **before** doing anything else — §1 is that con
 
 Before `#86`, three things were true in `vendor/coinexchange/01_wallet_rpc`:
 
-| Path | Before `#86` | Now on `main` |
-| --- | --- | --- |
-| `eth/…/WalletController.getNewAddress` | `@RequestParam(required = false, defaultValue = "") String password` — the encryption password came from the **HTTP query string, defaulting to the empty string** | parameter removed; `createNewWallet(account)` only |
-| `eth-support/…/EthService.createNewWallet` | encrypted with the caller's `password` | encrypts with `coin.getKeystorePassword()`, and refuses if blank |
-| `eth-support/…/EthService.transferFromWallet` / `.transferToken` | unlocked deposit keystores with the **literal `""`** | unlock with `requireKeystorePassword()` |
+| Path                                                             | Before `#86`                                                                                                                                                       | Now on `main`                                                    |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `eth/…/WalletController.getNewAddress`                           | `@RequestParam(required = false, defaultValue = "") String password` — the encryption password came from the **HTTP query string, defaulting to the empty string** | parameter removed; `createNewWallet(account)` only               |
+| `eth-support/…/EthService.createNewWallet`                       | encrypted with the caller's `password`                                                                                                                             | encrypts with `coin.getKeystorePassword()`, and refuses if blank |
+| `eth-support/…/EthService.transferFromWallet` / `.transferToken` | unlocked deposit keystores with the **literal `""`**                                                                                                               | unlock with `requireKeystorePassword()`                          |
 
 The sweep path hard-coded `""`. That is the load-bearing fact: whatever a caller could have
 passed, the only deposit keystores this system could ever sweep are the ones encrypted with
@@ -95,7 +95,7 @@ uses `ETH_address_book` and both `erc-token` and `erc-eusdt` use `EUSDT_address_
 
 `walletFile` is the join key. **Every step below keeps the filename unchanged**, so this
 collection is never written to. That is deliberate: a migration that has to update a
-database *and* rewrite files has two failure modes that can disagree with each other.
+database _and_ rewrite files has two failure modes that can disagree with each other.
 
 ---
 
@@ -253,8 +253,8 @@ docker run --rm -v "$KS:/ks:ro" -v "$PWD:/work" -w /work maven:3-jdk-8 \
   > classify-before.tsv
 ```
 
-*(Resolve the web3j version from `01_wallet_rpc/pom.xml` rather than trusting `3.6.0` here —
-if the version differs, use the one the build resolves.)*
+_(Resolve the web3j version from `01_wallet_rpc/pom.xml` rather than trusting `3.6.0` here —
+if the version differs, use the one the build resolves.)_
 
 **Verifiable — three assertions, all of which must hold:**
 
@@ -266,7 +266,7 @@ if the version differs, use the one the build resolves.)*
 
 **If `old_fail > 0`:** stop. A mixed population means some files were created with a
 caller-supplied password through the old query parameter. Those passwords are **not
-recoverable** and those keys can only be dealt with by sweeping (§4, option B) *if* the
+recoverable** and those keys can only be dealt with by sweeping (§4, option B) _if_ the
 password can be found, or reported as unrecoverable if it cannot. Do not continue a
 whole-directory re-encryption over a mixed set — you will produce a directory that no single
 password opens, which is worse than what you started with.
@@ -277,18 +277,18 @@ password opens, which is worse than what you started with.
 
 ## 4 · Choose: re-encrypt in place, or sweep out
 
-| | **A · Re-encrypt (recommended)** | **B · Sweep out** |
-| --- | --- | --- |
-| What it does | decrypt with `""`, re-encrypt with the new password, same address | send each balance to the hot wallet, abandon the deposit address |
-| On-chain | nothing | one transaction per address |
-| Cost | none | gas per address, plus ERC-20 gas funding for token addresses that hold no ETH |
-| Reversible | **yes** — restore §2's snapshot | **no.** A transaction cannot be recalled |
-| Deposit addresses users already hold | keep working | **stop being swept.** Money sent to them afterwards is stranded until someone notices |
-| Failure mode | a file fails to re-encrypt; retry it | a transaction is mined and the address is now unmonitored |
+|                                      | **A · Re-encrypt (recommended)**                                  | **B · Sweep out**                                                                     |
+| ------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| What it does                         | decrypt with `""`, re-encrypt with the new password, same address | send each balance to the hot wallet, abandon the deposit address                      |
+| On-chain                             | nothing                                                           | one transaction per address                                                           |
+| Cost                                 | none                                                              | gas per address, plus ERC-20 gas funding for token addresses that hold no ETH         |
+| Reversible                           | **yes** — restore §2's snapshot                                   | **no.** A transaction cannot be recalled                                              |
+| Deposit addresses users already hold | keep working                                                      | **stop being swept.** Money sent to them afterwards is stranded until someone notices |
+| Failure mode                         | a file fails to re-encrypt; retry it                              | a transaction is mined and the address is now unmonitored                             |
 
 **Recommendation: A.** B is the right answer only for addresses whose password is genuinely
 unrecoverable, because it is the only option that does not need the password to be
-known — and even then it needs *the private key*, which needs the password. B is therefore
+known — and even then it needs _the private key_, which needs the password. B is therefore
 mostly theatre for the empty-password case: if you can sweep it, you can re-encrypt it, and
 re-encryption is free and reversible.
 
@@ -349,7 +349,7 @@ Supply the new password through a file or stdin, never as an argv string — arg
 `ps` and lands in shell history.
 
 **Verifiable, per file:** the address is unchanged and the KDF is full scrypt, both asserted
-*before* the swap. Any failure throws with the original still in place.
+_before_ the swap. Any failure throws with the original still in place.
 
 **Verifiable, per directory** — re-run §3's classifier twice:
 
@@ -441,7 +441,7 @@ java … Classify "$KS" ""         | grep -c OLD_OK    # must be 0
 ```
 
 **Step 5 is the one that matters.** Steps 1–4 prove the new files are fine; only a real
-sweep of a *migrated* keystore proves the migration worked. Do it on a testnet first.
+sweep of a _migrated_ keystore proves the migration worked. Do it on a testnet first.
 
 **Done means:**
 
