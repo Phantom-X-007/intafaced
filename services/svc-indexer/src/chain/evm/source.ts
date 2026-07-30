@@ -312,7 +312,15 @@ export class EvmChainSource implements ChainSource {
     const base = { kind: 'evm' as const, rpcUrl: this.rpcUrl, venue: this.venue };
     try {
       const observedChainId = await this.assertChainId();
-      const chainHeight = await this.#read('blockNumber', 'indexer.chain.blockNumber', async () => this.client.getBlockNumber());
+      // `cacheTime: 0` is load-bearing. viem memoises `eth_blockNumber` for
+      // `client.cacheTime` (which defaults to the polling interval), and a cached
+      // tip here would make `behindBy` report zero on a projection that is
+      // genuinely behind — a staleness marker that lies about staleness is worse
+      // than not having one. Caught by `source.live.test.ts`, which mines a block
+      // and asserts the number moves.
+      const chainHeight = await this.#read('blockNumber', 'indexer.chain.blockNumber', async () =>
+        this.client.getBlockNumber({ cacheTime: 0 }),
+      );
       return {
         ...base,
         reachable: true,

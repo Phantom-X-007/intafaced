@@ -65,6 +65,20 @@ export function devRpcUrl(): string {
   return process.env.INDEXER_RPC_URL || process.env.PROTOCOL_RPC_URL || 'http://127.0.0.1:8545';
 }
 
+/**
+ * The SECOND dev chain — the `evm-reorg` service, port 8546.
+ *
+ * A suite that reorgs must not share a node with suites that assume it does not.
+ * `evm_revert` rewinds the whole node, so running the reorg suite against 8545
+ * would rewind svc-protocol's deployed factory out from under its own live tests
+ * — and `pnpm verify` runs package tasks in parallel, so "they will not overlap"
+ * is not available as an assumption. See the `evm-reorg` block in
+ * docker-compose.yml for the full argument.
+ */
+export function reorgRpcUrl(): string {
+  return process.env.INDEXER_REORG_RPC_URL || 'http://127.0.0.1:8546';
+}
+
 /** True when a JSON-RPC endpoint answers at all. Never throws. */
 export async function devChainReachable(rpcUrl = devRpcUrl()): Promise<boolean> {
   try {
