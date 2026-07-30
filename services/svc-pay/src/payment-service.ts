@@ -220,6 +220,22 @@ export interface PayServiceOptions {
   readonly valueMovement?: ValueMovementPolicy;
 
   /**
+   * The same decision for the PUBLIC hosted checkout, and it is a SEPARATE knob
+   * for one reason: `PAY_ALLOW_SANDBOX_RAILS` must not relax it.
+   *
+   * That override means "no user of this deployment is being told anything true
+   * about their money" — a statement an operator can make about a pilot, a demo
+   * or a load test, because everyone it covers is inside the exercise. A hosted
+   * checkout is reachable by STRANGERS who followed a link and agreed to
+   * nothing, and their consent is not the operator's to give.
+   *
+   * `assertRailPosture` computes it from the environment alone
+   * (`RailPosture.publicCheckoutPolicy`). Defaults to `valueMovement` so a
+   * caller that does not care cannot end up more permissive than the payout gate.
+   */
+  readonly publicCheckoutMovement?: ValueMovementPolicy;
+
+  /**
    * Which rails may serve the PUBLIC hosted checkout, in preference order, and
    * the payment method each one represents.
    *
@@ -370,6 +386,7 @@ export const DEFAULT_CHECKOUT_RAILS: readonly CheckoutRail[] = [{ railId: 'crypt
 export class PayService {
   private readonly defaultFeeBps: number | undefined;
   private readonly valueMovement: ValueMovementPolicy;
+  private readonly publicCheckoutMovement: ValueMovementPolicy;
   private readonly checkoutRails: readonly CheckoutRail[];
   private readonly checkoutSessionTtlSeconds: number;
   private readonly linkDefaultTtlDays: number;
@@ -385,6 +402,7 @@ export class PayService {
   ) {
     this.defaultFeeBps = options.defaultFeeBps;
     this.valueMovement = options.valueMovement ?? 'allow-sandbox';
+    this.publicCheckoutMovement = options.publicCheckoutMovement ?? this.valueMovement;
     this.checkoutRails = options.checkoutRails ?? DEFAULT_CHECKOUT_RAILS;
     this.checkoutSessionTtlSeconds = options.checkoutSessionTtlSeconds ?? 900;
     this.linkDefaultTtlDays = options.linkDefaultTtlDays ?? 30;
@@ -778,7 +796,9 @@ export class PayService {
     const adapter = selectPublicCheckoutRail(
       this.rails,
       this.checkoutRails.map((r) => r.railId),
-      this.valueMovement,
+      // NOT `valueMovement`. The public surface follows the environment, and
+      // `PAY_ALLOW_SANDBOX_RAILS` does not relax it — see the option's comment.
+      this.publicCheckoutMovement,
       this.now(),
     );
     const method = this.checkoutRails.find((r) => r.railId === adapter.id)!.method;

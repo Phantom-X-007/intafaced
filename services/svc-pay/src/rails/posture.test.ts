@@ -347,6 +347,41 @@ describe('the public checkout gate', () => {
   });
 });
 
+describe('PAY_ALLOW_SANDBOX_RAILS does not reach the public checkout', () => {
+  /**
+   * The override's documented meaning is "no USER OF THIS DEPLOYMENT is being
+   * told anything true about their money" — a statement an operator can make
+   * about a pilot, a demo or a load test, because everyone it covers is inside
+   * the exercise.
+   *
+   * A hosted checkout is reachable by STRANGERS who followed a link and agreed
+   * to nothing. Their consent is not an operator's to give with an environment
+   * variable, so the public path follows the ENVIRONMENT and not the flag.
+   */
+  it.each(RAIL_POSTURE_ENFORCED_ENVS)('keeps APP_ENV=%s public-live-only even with the override set', (appEnv) => {
+    const posture = assertRailPosture(new RailRegistry([cardSandbox()]), {
+      APP_ENV: appEnv,
+      PAY_ALLOW_SANDBOX_RAILS: 'true',
+    });
+
+    // The override did what it says for payouts: the process booted, and a
+    // sandbox may move value.
+    expect(posture.sandboxOverride).toBe(true);
+    expect(posture.policy).toBe('allow-sandbox');
+
+    // And it did NOT reach the public surface.
+    expect(posture.publicCheckoutPolicy).toBe('live-only');
+    expect(() => assertRailMayAcceptPublicPayment(cardSandbox(), posture.publicCheckoutPolicy)).toThrow(PublicCheckoutUnavailable);
+  });
+
+  it('leaves dev and test alone, where the sandbox IS the fixture', () => {
+    for (const appEnv of ['dev', 'test']) {
+      const posture = assertRailPosture(new RailRegistry([cardSandbox()]), { APP_ENV: appEnv });
+      expect(posture.publicCheckoutPolicy).toBe('allow-sandbox');
+    }
+  });
+});
+
 describe('selectPublicCheckoutRail', () => {
   it('walks the configured preference list, not the registry', () => {
     const live = liveRail();

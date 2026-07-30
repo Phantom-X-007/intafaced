@@ -54,6 +54,25 @@ export interface RailPosture {
   readonly policy: ValueMovementPolicy;
   /** True when an operator deliberately overrode the refusal. */
   readonly sandboxOverride: boolean;
+
+  /**
+   * The policy for the PUBLIC HOSTED CHECKOUT — and the one thing
+   * `PAY_ALLOW_SANDBOX_RAILS` does NOT relax.
+   *
+   * That override exists so an operator can run a pilot, a demo or a load test
+   * in a production-like environment, and its documented meaning is: no USER OF
+   * THIS DEPLOYMENT is being told anything true about their money. Everyone it
+   * covers is inside the exercise — an operator, a tester, an investor being
+   * shown a screen.
+   *
+   * A HOSTED CHECKOUT IS REACHABLE BY STRANGERS. The payer is not in the pilot;
+   * they followed a link, they are not logged in, and they have not agreed to
+   * anything. "Nobody here is being told the truth" cannot be consented to on
+   * their behalf by an environment variable — so the public path follows the
+   * ENVIRONMENT, not the override, and in `staging`/`prod` it is `live-only`
+   * whatever the flag says.
+   */
+  readonly publicCheckoutPolicy: ValueMovementPolicy;
 }
 
 export interface RailPostureStatus {
@@ -153,6 +172,10 @@ export function assertRailPosture(rails: RailRegistry, env: Record<string, strin
     // The runtime policy follows the boot decision so the two cannot disagree.
     policy: enforced && !sandboxOverride ? 'live-only' : 'allow-sandbox',
     sandboxOverride: enforced && sandboxOverride,
+    // NOT `&& !sandboxOverride`. See the field's own comment: the override is a
+    // statement an operator can make about the people inside their own
+    // deployment, and a hosted checkout is reachable by people who are not.
+    publicCheckoutPolicy: enforced ? 'live-only' : 'allow-sandbox',
   };
 }
 

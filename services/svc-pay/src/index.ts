@@ -104,6 +104,10 @@ for (const { railId } of env.PAY_CHECKOUT_RAILS) {
 const pay = new PayService(sql, ledger, rails, {
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
   valueMovement: railPosture.policy,
+  // NOT `railPosture.policy`. `PAY_ALLOW_SANDBOX_RAILS` relaxes the payout gate
+  // for a pilot or a demo — a statement about people inside this deployment. A
+  // hosted checkout is reachable by strangers, so it follows the environment.
+  publicCheckoutMovement: railPosture.publicCheckoutPolicy,
   checkoutRails: env.PAY_CHECKOUT_RAILS,
   checkoutSessionTtlSeconds: env.PAY_CHECKOUT_SESSION_TTL_SECONDS,
   linkDefaultTtlDays: env.PAY_LINK_DEFAULT_TTL_DAYS,
@@ -167,7 +171,9 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 function publicCheckoutStatus(): { rails: string[]; acceptable: boolean; reason?: string } {
   const configured = env.PAY_CHECKOUT_RAILS.map((r) => r.railId);
   try {
-    const adapter = selectPublicCheckoutRail(rails, configured, railPosture.policy);
+    // The SAME policy the request path uses, or `/ready` would report a
+    // checkout as working that every payer is being refused from.
+    const adapter = selectPublicCheckoutRail(rails, configured, railPosture.publicCheckoutPolicy);
     return { rails: configured, acceptable: true, reason: `would open on ${adapter.id}` };
   } catch (err) {
     return { rails: configured, acceptable: false, reason: err instanceof Error ? err.message : String(err) };
