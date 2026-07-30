@@ -33,9 +33,11 @@ import {
 const URL = process.env.TEST_DATABASE_URL_IDENTITY ?? 'postgres://svc_identity:svc_identity@localhost:5433/intafaced';
 const here = dirname(fileURLToPath(import.meta.url));
 /** Every migration, in order. A suite that applies only 0000 tests a schema nobody deploys. */
-const migrations = ['0000_identity_init.sql', '0001_identity_kyc_review.sql'].map((f) =>
-  readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
-);
+const migrations = [
+  '0000_identity_init.sql',
+  '0001_identity_kyc_review.sql',
+  '0002_sub_accounts_revoke.sql',
+].map((f) => readFileSync(join(here, '..', 'drizzle', f), 'utf8'));
 
 const tokenConfig = {
   secret: 'an-identity-test-signing-secret-long-enough',
@@ -493,6 +495,48 @@ if (!available) {
       const { id } = await auth.createApiKey({ userId: owner.userId, name: 'mine', scopes: ['trade:read'], grantorScopes: SESSION_SCOPES });
 
       expect(await auth.revokeApiKey(attacker.userId, id)).toBe(false);
+    });
+  });
+
+  describe('sub-accounts', () => {
+    it('creates and lists only the parent’s books', async () => {
+      const owner = await register();
+      const other = await register();
+      const { id } = await auth.createSubAccount(owner.userId, 'bot-a', 'mm');
+      await auth.createSubAccount(other.userId, 'not-yours');
+
+      const mine = await auth.listSubAccounts(owner.userId);
+      expect(mine).toHaveLength(1);
+      expect(mine[0]).toMatchObject({ id, label: 'bot-a', purpose: 'mm', revoked: false });
+      expect(await auth.listSubAccounts(other.userId)).toHaveLength(1);
+    });
+
+    it('soft-revokes without deleting the row (ledger owner id must survive)', async () => {
+      const session = await register();
+      const { id } = await auth.createSubAccount(session.userId, 'retire-me');
+
+      expect(await auth.revokeSubAccount(session.userId, id)).toBe(true);
+      expect(await auth.revokeSubAccount(session.userId, id)).toBe(false);
+
+      const listed = await auth.listSubAccounts(session.userId);
+      expect(listed).toHaveLength(1);
+      expect(listed[0]).toMatchObject({ id, revoked: true });
+
+      const rows = await sql<Array<{ id: string; revoked: boolean }>>`
+        SELECT id, revoked FROM identity.sub_accounts WHERE id = ${id}
+      `;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.revoked).toBe(true);
+    });
+
+    it('will not let one user revoke another user’s sub-account', async () => {
+      const owner = await register();
+      const attacker = await register();
+      const { id } = await auth.createSubAccount(owner.userId, 'mine');
+
+      expect(await auth.revokeSubAccount(attacker.userId, id)).toBe(false);
+      const still = await auth.listSubAccounts(owner.userId);
+      expect(still[0]).toMatchObject({ id, revoked: false });
     });
   });
 

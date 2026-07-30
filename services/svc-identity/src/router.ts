@@ -610,6 +610,7 @@ export function createIdentityRouter(
               id: z.string().uuid(),
               label: z.string(),
               purpose: z.string().nullable(),
+              revoked: z.boolean(),
               createdAt: z.string(),
             }),
           ),
@@ -620,9 +621,21 @@ export function createIdentityRouter(
             id: r.id,
             label: r.label,
             purpose: r.purpose,
+            revoked: r.revoked,
             createdAt: r.createdAt.toISOString(),
           }));
         }),
+
+      /**
+       * Soft-disable. Self-only via principal.userId → parent_user_id.
+       * No ledger posts — balances under this id are untouched.
+       */
+      revoke: scopedProcedure('identity:write')
+        .input(z.object({ subAccountId: z.string().uuid() }))
+        .output(z.object({ revoked: z.boolean() }))
+        .mutation(async ({ ctx, input }) => ({
+          revoked: await auth.revokeSubAccount(ctx.principal.userId, input.subAccountId),
+        })),
     }),
   });
 }

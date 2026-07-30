@@ -30,7 +30,7 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `rank.awardXp`                                | service                   | Modules award XP here, never by writing `rank_state`        |
 | `apiKeys.exchange`                            | public                    | Long-lived key → short-lived access JWT (edge-usable)       |
 | `apiKeys.create` / `list` / `revoke`          | `identity:write` / `read` | Key returned once, never retrievable                        |
-| `subAccounts.create`                          | `identity:write`          | Ledger-visible; real separate balances                      |
+| `subAccounts.create` / `list` / `revoke`      | `identity:write` / `read` | Ledger-visible; soft-disable only (no balance sweep)        |
 
 HTTP: `GET /health` · `GET /ready` (reports whether argon2id is active).
 
@@ -82,7 +82,7 @@ A live session plus a fresh TOTP code buys an access token that is weaker than a
 
 **This service holds no balances and posts no ledger transactions.**
 
-It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ one. The only connection to money is that `sub_accounts.id` is what the ledger's `subaccount` owner type keys on.
+It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ one. The only connection to money is that `sub_accounts.id` is what the ledger's `subaccount` owner type keys on. `subAccounts.revoke` soft-disables only — it never posts a ledger transaction and never sweeps balances (same rule as bank space archive).
 
 ---
 

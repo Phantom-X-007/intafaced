@@ -944,9 +944,13 @@ export class AuthService {
     return rows[0]!;
   }
 
-  async listSubAccounts(userId: string): Promise<Array<{ id: string; label: string; purpose: string | null; createdAt: Date }>> {
-    const rows = await this.sql<Array<{ id: string; label: string; purpose: string | null; created_at: Date }>>`
-      SELECT id, label, purpose, created_at FROM identity.sub_accounts
+  async listSubAccounts(
+    userId: string,
+  ): Promise<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; createdAt: Date }>> {
+    const rows = await this.sql<
+      Array<{ id: string; label: string; purpose: string | null; revoked: boolean; created_at: Date }>
+    >`
+      SELECT id, label, purpose, revoked, created_at FROM identity.sub_accounts
        WHERE parent_user_id = ${userId}
        ORDER BY created_at DESC
     `;
@@ -954,8 +958,32 @@ export class AuthService {
       id: r.id,
       label: r.label,
       purpose: r.purpose,
+      revoked: r.revoked,
       createdAt: r.created_at,
     }));
+  }
+
+  /**
+   * Soft-disable a sub-account the caller owns.
+   *
+   * Self-only: the UPDATE is gated on `parent_user_id = userId`, so a foreign
+   * principal cannot retire another user's book (same shape as revokeApiKey).
+   *
+   * Does not move ledger balances. Identity holds no balances and posts no
+   * ledger transactions — the row is a label the ledger keys on. Sweeping on
+   * revoke would make a catalogue change move money (bank.spaces.archive rule).
+   * Hard DELETE is refused by design: owner_type=subaccount accounts and any
+   * trade.orders.sub_account_id still name this id.
+   */
+  async revokeSubAccount(userId: string, subAccountId: string): Promise<boolean> {
+    const result = await this.sql`
+      UPDATE identity.sub_accounts
+         SET revoked = true
+       WHERE id = ${subAccountId}
+         AND parent_user_id = ${userId}
+         AND revoked = false
+    `;
+    return result.count > 0;
   }
 
   /**

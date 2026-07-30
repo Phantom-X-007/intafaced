@@ -200,6 +200,10 @@ export const apiKeys = identity.table(
  *
  * Ledger-visible: the ledger's `subaccount` owner type keys on this id, so a
  * sub-account has genuinely separate balances rather than a UI filter.
+ *
+ * Soft-disable via `revoked` only — never hard-delete. Destroying the row
+ * would orphan ledger accounts keyed on this id. Revoke does not move value
+ * (identity holds no balances; see bank.spaces.archive for the same rule).
  */
 export const subAccounts = identity.table(
   'sub_accounts',
@@ -210,9 +214,13 @@ export const subAccounts = identity.table(
       .references(() => users.id, { onDelete: 'cascade' }),
     label: text('label').notNull(),
     purpose: text('purpose'),
+    revoked: boolean('revoked').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [index('sub_accounts_parent_idx').on(t.parentUserId)],
+  (t) => [
+    index('sub_accounts_parent_idx').on(t.parentUserId),
+    index('sub_accounts_parent_revoked_idx').on(t.parentUserId, t.revoked),
+  ],
 );
 
 export const schema = { users, profiles, kycRecords, rankState, xpEvents, rankThresholds, sessions, apiKeys, subAccounts };
