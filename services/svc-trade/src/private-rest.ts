@@ -3,7 +3,16 @@ import { AuthError, requireScope, type Principal } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext, type Context, type EdgeRequest } from '@intafaced/contracts';
 import { createOrderRequestSchema, type CreateOrderRequest } from '@intafaced/exchange-contract';
-import { formatAmount, mul, parseAmount, InsufficientFundsError, LedgerError, MoneyError } from '@intafaced/ledger-client';
+import {
+  formatAmount,
+  mul,
+  parseAmount,
+  InsufficientFundsError,
+  LedgerError,
+  MoneyError,
+  type AccountKind,
+  type Balance,
+} from '@intafaced/ledger-client';
 import type { PlaceOrderInput } from './spot/trade-service.js';
 import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus } from './spot/types.js';
 
@@ -19,6 +28,7 @@ import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderS
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
  *   GET    /api/v1/account/trades  scope: trade:read
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
+ *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *
  * Auth is the mount boundary: edge terminates the bearer (JWT or API key) and
  * forwards a signed principal on every `/api/*` hop. This service never parses
@@ -26,7 +36,8 @@ import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderS
  * exactly like the tRPC mount. A self-asserted principal header is anonymous.
  *
  * Money path: create/cancel/cancelAll call TradeService only — no second hold
- * path, no balances outside the ledger.
+ * path, no balances outside the ledger. Balance is a read of ledger.balances
+ * for principal.userId only (Doctrine §0.6 projection, not a second store).
  */
 
 const DEFAULT_HISTORY = 100;
@@ -59,6 +70,65 @@ export interface PrivateRestDeps {
    * `GET /account/fees`. Empty list → honest `{}` on the wire.
    */
   markets(): Promise<Market[]>;
+  /**
+   * Ledger balances for one user. Route MUST pass only `principal.userId` —
+   * never a client-supplied ownerId. S2S ledger client has no per-user gate;
+   * self-only is enforced here at the edge of this surface.
+   */
+  userBalances(userId: string): Promise<readonly Balance[]>;
+}
+
+/** Kinds that count as locked / not free under exchange-contract free/used/total. */
+const USED_KINDS: ReadonlySet<AccountKind> = new Set(['hold', 'escrow', 'stake', 'collateral']);
+
+/**
+ * Project ledger Balance[] into CCXT `balancesSchema`:
+ *   free  → `available`
+ *   used  → hold + escrow + stake + collateral (all purposes summed per asset)
+ *   total → free + used
+ *
+ * Empty ledger rows → honest empty `balances: {}`. No fabricated zero assets.
+ * Unknown future kinds are ignored rather than guessed into free/used.
+ */
+export function presentCcxtBalances(
+  rows: readonly Balance[],
+  now: Date = new Date(),
+): {
+  timestamp: number;
+  datetime: string;
+  balances: Record<string, { free: string; used: string; total: string }>;
+} {
+  const freeBy = new Map<string, bigint>();
+  const usedBy = new Map<string, bigint>();
+
+  for (const row of rows) {
+    const asset = row.account.assetId;
+    const kind = row.account.kind;
+    if (kind === 'available') {
+      freeBy.set(asset, (freeBy.get(asset) ?? 0n) + row.amount);
+    } else if (USED_KINDS.has(kind)) {
+      usedBy.set(asset, (usedBy.get(asset) ?? 0n) + row.amount);
+    }
+  }
+
+  const assets = [...new Set([...freeBy.keys(), ...usedBy.keys()])].sort();
+  const balances: Record<string, { free: string; used: string; total: string }> = {};
+  for (const asset of assets) {
+    const free = freeBy.get(asset) ?? 0n;
+    const used = usedBy.get(asset) ?? 0n;
+    balances[asset] = {
+      free: formatAmount(free),
+      used: formatAmount(used),
+      total: formatAmount(free + used),
+    };
+  }
+
+  const timestamp = now.getTime();
+  return {
+    timestamp,
+    datetime: now.toISOString(),
+    balances,
+  };
 }
 
 /** Map internal order status → CCXT `orderSchema.status`. */
@@ -436,6 +506,29 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       requireScope(principal, 'trade:read');
       const listed = await deps.markets();
       return reply.code(200).send(presentTradingFees(listed));
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
+   * Ledger projection for the authenticated user only.
+   *
+   * Owner is always `principal.userId` from the edge-signed principal — never a
+   * query or body field. That is the same self-only rule as openOrders/myFills;
+   * the S2S ledger client will answer for any ownerId, so the gate lives here.
+   * Read-only: no recipe, no post, no second balance store (Doctrine §0.6).
+   */
+  app.get('/api/v1/account/balance', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      requireScope(principal, 'trade:read');
+      const rows = await deps.userBalances(principal.userId);
+      return reply.code(200).send(presentCcxtBalances(rows));
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;

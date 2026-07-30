@@ -83,6 +83,7 @@ registerPublicRest(app, {
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
 // Create/cancel/cancelAll are the money path: TradeService only (no second hold).
+// Balance is a self-only ledger projection (principal.userId → ledger.balances).
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
@@ -96,6 +97,8 @@ registerPrivateRest(app, {
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   marketById: (marketId) => trade.marketById(marketId),
   markets: () => trade.markets(),
+  // Self-only: route always passes principal.userId — never client ownerId.
+  userBalances: (userId) => ledger.balances('user', userId),
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -122,6 +125,7 @@ app.log.info(
       'GET /api/v1/orders/closed',
       'GET /api/v1/account/trades',
       'GET /api/v1/account/fees',
+      'GET /api/v1/account/balance',
     ],
   },
   'svc-trade ready',

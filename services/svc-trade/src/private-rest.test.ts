@@ -3,12 +3,13 @@ import Fastify from 'fastify';
 import type { Principal } from '@intafaced/auth';
 import { AuthError } from '@intafaced/auth';
 import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { orderSchema, tradeSchema, tradingFeeSchema } from '@intafaced/exchange-contract';
-import { parseAmount } from '@intafaced/ledger-client';
+import { balancesSchema, orderSchema, tradeSchema, tradingFeeSchema } from '@intafaced/exchange-contract';
+import { parseAmount, type Balance } from '@intafaced/ledger-client';
 import {
   fakeFill,
   fakeOrder,
   mapCreateOrderBody,
+  presentCcxtBalances,
   presentCcxtMyTrade,
   presentCcxtOrder,
   presentCcxtTradingFee,
@@ -118,6 +119,62 @@ describe('toCcxtOrderStatus / presentCcxtOrder / presentCcxtMyTrade / fees', () 
     expect(Object.keys(fees)).toEqual(['ETH/USDT']);
     expect(tradingFeeSchema.safeParse(fees['ETH/USDT']).success).toBe(true);
   });
+
+  it('presentCcxtBalances maps available→free and hold/escrow/stake/collateral→used', () => {
+    const now = new Date('2023-11-14T22:13:20.000Z');
+    const rows: Balance[] = [
+      {
+        account: { ownerType: 'user', ownerId: USER, assetId: 'USDT', kind: 'available' },
+        accountId: 'a1',
+        amount: parseAmount('1000'),
+      },
+      {
+        account: { ownerType: 'user', ownerId: USER, assetId: 'USDT', kind: 'hold', purpose: 'order:o1' },
+        accountId: 'a2',
+        amount: parseAmount('100'),
+      },
+      {
+        account: { ownerType: 'user', ownerId: USER, assetId: 'USDT', kind: 'hold', purpose: 'order:o2' },
+        accountId: 'a3',
+        amount: parseAmount('150'),
+      },
+      {
+        account: { ownerType: 'user', ownerId: USER, assetId: 'IFC', kind: 'stake', purpose: 'token:stake:s1' },
+        accountId: 'a4',
+        amount: parseAmount('4000'),
+      },
+      {
+        account: { ownerType: 'user', ownerId: USER, assetId: 'BTC', kind: 'escrow', purpose: 'trade:t1' },
+        accountId: 'a5',
+        amount: parseAmount('0.5'),
+      },
+      {
+        account: { ownerType: 'user', ownerId: USER, assetId: 'ETH', kind: 'collateral' },
+        accountId: 'a6',
+        amount: parseAmount('2'),
+      },
+    ];
+    const wire = presentCcxtBalances(rows, now);
+    expect(balancesSchema.safeParse(wire).success).toBe(true);
+    expect(wire.timestamp).toBe(now.getTime());
+    expect(wire.datetime).toBe(now.toISOString());
+    expect(wire.balances.USDT).toEqual({ free: '1000', used: '250', total: '1250' });
+    expect(wire.balances.IFC).toEqual({ free: '0', used: '4000', total: '4000' });
+    expect(wire.balances.BTC).toEqual({ free: '0', used: '0.5', total: '0.5' });
+    expect(wire.balances.ETH).toEqual({ free: '0', used: '2', total: '2' });
+    // Decimal strings only — never JS numbers on the wire.
+    for (const entry of Object.values(wire.balances)) {
+      expect(typeof entry.free).toBe('string');
+      expect(typeof entry.used).toBe('string');
+      expect(typeof entry.total).toBe('string');
+    }
+  });
+
+  it('presentCcxtBalances returns honest empty balances for no ledger rows', () => {
+    const wire = presentCcxtBalances([], new Date('2023-11-14T22:13:20.000Z'));
+    expect(balancesSchema.safeParse(wire).success).toBe(true);
+    expect(wire.balances).toEqual({});
+  });
 });
 
 describe('mapCreateOrderBody', () => {
@@ -204,6 +261,7 @@ describe('private REST — mount boundary + order write path', () => {
       marketBySymbol: async (symbol) => (symbol === 'BTC/USDT' ? market : null),
       marketById: async (id) => (id === market.id ? market : null),
       markets: async () => [market],
+      userBalances: async () => [],
       ...overrides,
     };
   }
@@ -784,6 +842,100 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  // ── GET /account/balance ──────────────────────────────────────────────────
+
+  it('GET /account/balance: forged → 401; never reads ledger', async () => {
+    let read = false;
+    const app = await build(
+      deps({
+        userBalances: async () => {
+          read = true;
+          return [];
+        },
+      }),
+    );
+    const forged = encodePrincipal(principal({ scopes: ['trade:read'] }));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/balance',
+      headers: { 'x-intafaced-principal': forged, 'x-intafaced-region': 'DE' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(read).toBe(false);
+    await app.close();
+  });
+
+  it('GET /account/balance: scope miss → 403; never reads ledger', async () => {
+    let read = false;
+    const app = await build(
+      deps({
+        userBalances: async () => {
+          read = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/balance',
+      headers: signedHeaders(principal({ scopes: [] })),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('scope.denied');
+    expect(read).toBe(false);
+    await app.close();
+  });
+
+  it('GET /account/balance: signed → self-only userId and balancesSchema wire', async () => {
+    let seenUserId: string | undefined;
+    const rows: Balance[] = [
+      {
+        account: { ownerType: 'user', ownerId: USER, assetId: 'USDT', kind: 'available' },
+        accountId: 'a1',
+        amount: parseAmount('1000'),
+      },
+      {
+        account: { ownerType: 'user', ownerId: USER, assetId: 'USDT', kind: 'hold', purpose: 'order:o1' },
+        accountId: 'a2',
+        amount: parseAmount('250'),
+      },
+    ];
+    const app = await build(
+      deps({
+        userBalances: async (userId) => {
+          seenUserId = userId;
+          return rows;
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/balance',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenUserId).toBe(USER);
+    const body = res.json() as ReturnType<typeof presentCcxtBalances>;
+    expect(balancesSchema.safeParse(body).success).toBe(true);
+    expect(body.balances.USDT).toEqual({ free: '1000', used: '250', total: '1250' });
+    expect(typeof body.balances.USDT!.free).toBe('string');
+    await app.close();
+  });
+
+  it('GET /account/balance: empty wallet → honest empty balances object', async () => {
+    const app = await build(deps({ userBalances: async () => [] }));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/balance',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { balances: Record<string, unknown> };
+    expect(balancesSchema.safeParse(body).success).toBe(true);
+    expect(body.balances).toEqual({});
     await app.close();
   });
 });

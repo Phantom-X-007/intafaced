@@ -2,7 +2,7 @@
 
 **Status:** RUNNING · Nitro AFK · agents + 45m scheduler own the loop  
 **Scheduler:** every 45 minutes re-reads this file and ships NEXT QUEUE  
-**Last tip:** re-check `git rev-parse origin/main` (was past #143 fills.forOrder)
+**Last tip:** re-check `git rev-parse origin/main` (past account/balance REST)
 
 ---
 
@@ -40,18 +40,17 @@ GO from NEXT QUEUE #1.
 - Pay: payment links + list/deactivate + **hosted checkout HTML**
 - Notify: svc-notify inbox + i18n + edge
 - Protocol: factory honesty (still not done)
-- **CCXT REST:** public markets/orderbook/ticker/trades/tickers; private open/create/cancel/get/closed/trades/cancel-all/fees
+- **CCXT REST:** public markets/orderbook/ticker/trades/tickers; private open/create/cancel/get/closed/trades/cancel-all/fees/**balance**
 - Docs: grind plan, loop, wave audits
 
 ---
 
 ## NEXT QUEUE (agent)
 
-1. **account/balance REST** — only if ledger read is already safe via trade/edge pattern; else skip with note
-2. **OHLCV public REST** — only if candle source exists; else document socket
-3. **trade.convert** tracker honesty (tests exist; CI billing blocks green-CI claim)
-4. **positions** — futures only; spot = N/A note on tracker
-5. Reassess **DRAINED** when only human blockers remain
+1. **OHLCV public REST** — only if candle source exists; else document socket
+2. **trade.convert** tracker honesty (tests exist; CI billing blocks green-CI claim)
+3. **positions** — futures only; spot = N/A note on tracker
+4. Reassess **DRAINED** when only human blockers remain
 
 ## Human-only
 
@@ -65,4 +64,4 @@ GO from NEXT QUEUE #1.
 
 Agent queue empty or each item human-blocked · doctrine green · Status line DRAINED · scoreboard updated.
 
-**Next agent after compact: NEXT QUEUE #1.**
+**Next agent after compact: NEXT QUEUE #1 (OHLCV).**
