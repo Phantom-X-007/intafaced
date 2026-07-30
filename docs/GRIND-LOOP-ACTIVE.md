@@ -52,29 +52,25 @@ GO. Enhance the queue if live main changed. Ship.
 
 ## MERGED this cook (do not redo)
 
-#110–#134 region includes (among others):
-- Token yield/buyback · apikeys exchange · edge ifc_ · subaccounts list
-- Private orders + fills WS · order history · cancelAll
-- Payment links create/resolve/list/deactivate
-- svc-notify inbox + i18n · protocol factory honesty
-- CCXT public REST: markets, orderbook, ticker, trades
-- Grind plan · wave audits · scoreboards
-
----
+#110–#136 region includes (among others):
+- Token yield/buyback · apikeys · edge ifc_ · subaccounts
+- Private orders/fills WS · order history · cancelAll
+- Payment links full CRUD soft-deactivate
+- svc-notify · i18n · protocol factory honesty
+- CCXT public: markets, orderbook, ticker, trades, **tickers**
+- CCXT private: **orders/open**
+- Grind plan · wave audits · **GRIND-LOOP-ACTIVE**
 
 ## NEXT QUEUE (ordered)
 
 ### Ready to cook (agent)
 
-1. **trade.ccxt-api private REST** — `GET /api/v1/orders/open` + `GET /api/v1/tickers` if not already merged after #133
-2. **trade.ccxt-api** — createOrder/cancelOrder REST mapping to existing tRPC money paths (careful mount + principal)
-3. **Public REST tickers list** if not shipped
-4. **fills.forOrder** query if missing
-5. **ops.notifications** — mark-read polish / edge product path smoke if gaps remain
-6. **pay.gateway** hosted checkout **minimal HTML** page resolving link token (UI thin is still a hole)
-7. **infra.i18n** — first real consumer outside package (one surface) OR honest keep ready
-8. **trade.convert** — edge product path check + tracker flip only if DoD met
-9. **ws** private positions — only if futures positions exist; else leave socket note
+1. **trade.ccxt-api private REST** — createOrder + cancelOrder + fetchOrder/closed/myTrades (principal + money path careful)
+2. **pay hosted checkout** — minimal HTML resolve of payment link token (no fake rails)
+3. **fills.forOrder** tRPC if still missing
+4. **trade.convert** edge product path check; flip tracker only if honest
+5. **public OHLCV** REST if matching has candles; else socket note
+6. Wave audit after this batch
 
 ### Human-only (never fake-ship)
 
@@ -107,4 +103,4 @@ All of:
 
 ## Last agent note
 
-Session will compact. **Next agent: start at NEXT QUEUE #1.** In-flight: REST tickers+private open orders agent may still be running — check `gh pr list` before duplicating.
+Session compacting. **Next agent: start at NEXT QUEUE #1 (REST private create/cancel).** #136 tickers+orders/open already merged.
