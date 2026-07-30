@@ -8,6 +8,7 @@ import { useEdge, usePlane } from '@/lib/providers';
 import { useService } from '@/lib/use-service';
 import { Blotter } from './blotter';
 import { LiveOrderBook } from './live-book';
+import { LiveTradeTape } from './live-tape';
 import { OrderTicket } from './order-ticket';
 import { CustodyBanner, PlaneSwitch } from './plane-switch';
 import { ProtocolPlanePanels } from './protocol-plane';
@@ -32,16 +33,19 @@ import styles from './terminal.module.css';
  *   · Protocol Plane status and smart-account derivation (`protocol.health`,
  *     `protocol.predictAddress`)
  *
- *   · the order book — snapshot + sequenced deltas from svc-ws
+ * Live, from svc-ws (second public origin — edge cannot carry a socket):
+ *   · the order book — snapshot + sequenced deltas (`channel` default / depth)
+ *   · the public trade tape — `TradePrint` frames on `channel=trades`
  *
  * Sockets, each with the reason on screen:
- *   · the chart — no candle or trade-tape source exists anywhere yet
+ *   · the chart — public tape is live above; candles still have no store
+ *     (CCXT OHLCV is always empty until a candle aggregation job exists)
  *   · account equity — svc-ledger is deliberately absent from the edge route
  *     table, and no other service exposes a balance read
  *   · everything on the Protocol Plane that needs a chain
  *
- * The count is deliberate. Six real panels and three honest holes is a truthful
- * terminal; nine panels of plausible numbers is a demo that gets somebody hurt.
+ * The count is deliberate. Real panels and honest holes is a truthful
+ * terminal; panels of plausible numbers is a demo that gets somebody hurt.
  */
 
 const copy = {
@@ -50,8 +54,8 @@ const copy = {
   noMarkets: 'svc-trade has no listed markets',
   chartTitle: 'Chart',
   chartReason:
-    'No candle or trade-tape source exists. svc-trade publishes markets, orders and fills, and nothing that carries a price series; svc-ws streams depth and only depth — the `trades.<market>` stream §5.3 names is not built, and neither is a candle store.',
-  chartBlocked: 'ws.gateway (trades) · trade.candles',
+    'No candle store exists. The public trade tape is live in the panel above (svc-ws channel=trades); building OHLC candles from those prints is a separate job, and the CCXT OHLCV route correctly returns [] until that job runs — this panel will not invent candles from an empty series.',
+  chartBlocked: 'trade.candles · candle aggregation job',
   equityTitle: 'Account equity',
   equityReason:
     'Balances live in svc-ledger, which svc-edge deliberately does not route — `ledger.post` moves value on a module’s own authority, so no browser token carries a ledger scope. A balance read for users has to be a procedure on a mounted service, and there is not one.',
@@ -94,6 +98,7 @@ export function Terminal() {
           </div>
 
           <div className={styles.chartColumn}>
+            <LiveTradeTape marketId={selected?.id ?? null} />
             <SocketPanel title={copy.chartTitle} reason={copy.chartReason} blockedBy={copy.chartBlocked} />
             <Blotter markets={markets} />
           </div>
