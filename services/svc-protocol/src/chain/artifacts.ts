@@ -48,8 +48,18 @@ export interface ContractArtifact {
   readonly abi: Abi;
   /** Creation code, ready for a deployment transaction. */
   readonly bytecode: Hex;
-  /** Runtime code, i.e. what `eth_getCode` returns once deployed. */
+  /**
+   * Runtime code as the COMPILER produced it.
+   *
+   * Not, in general, what `eth_getCode` returns — see `immutableReferences`.
+   * Use `deployedCodeMatches()` rather than comparing this directly.
+   */
   readonly deployedBytecode: Hex;
+  /**
+   * Where the constructor writes `immutable` values into the runtime, keyed by
+   * AST id. Byte offsets into `deployedBytecode`.
+   */
+  readonly immutableReferences?: Readonly<Record<string, ReadonlyArray<{ start: number; length: number }>>>;
 }
 
 export class MissingArtifactError extends Error {
@@ -70,4 +80,57 @@ export function loadArtifact(name: ArtifactName): ContractArtifact {
   } catch (err) {
     throw new MissingArtifactError(name, err);
   }
+}
+
+/**
+ * IS THE CODE AT THIS ADDRESS THIS ARTEFACT? — the check that is wrong if you
+ * write the obvious version.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * `runtime === artifact.deployedBytecode` IS FALSE FOR A CORRECT DEPLOYMENT
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Solidity `immutable` variables are not storage. The compiler emits ZERO
+ * placeholders for them inside the runtime code and the constructor splices the
+ * real values in, so the bytes on chain genuinely differ from the compiler's
+ * `deployedBytecode` — by exactly the immutables and nothing else.
+ *
+ * `SovereignToken` has three (`decimals`, `totalSupply`, `initialHolder`), so a
+ * byte-equality check rejects every legitimately launched token. This was
+ * written the obvious way first and caught by deploying one and looking at the
+ * diff: `12` where the artefact had `00` was `decimals = 18`.
+ *
+ * The failure mode of getting this wrong is not a broken feature, it is a
+ * DISHONEST one — a "verified against the audited template" badge that is
+ * permanently false would train everyone to ignore it, which is worse than not
+ * having it.
+ *
+ * So the immutable ranges are masked on BOTH sides and everything else must
+ * match byte for byte. What that still catches is the whole point: a factory
+ * that deploys a different token, a template swapped after the fact, a proxy
+ * where a real contract should be.
+ */
+export function deployedCodeMatches(artifact: ContractArtifact, runtime: string | null | undefined): boolean {
+  if (!runtime || runtime === '0x') return false;
+
+  const expected = artifact.deployedBytecode.slice(2).toLowerCase();
+  const actual = runtime.slice(2).toLowerCase();
+  // Length is compared before masking. An immutable never changes the size of
+  // the runtime, so a different length is a different contract, full stop.
+  if (expected.length !== actual.length) return false;
+
+  const expectedBytes = Buffer.from(expected, 'hex');
+  const actualBytes = Buffer.from(actual, 'hex');
+
+  for (const ranges of Object.values(artifact.immutableReferences ?? {})) {
+    for (const { start, length } of ranges) {
+      // Zero both sides over the range rather than skipping it, so the
+      // comparison stays a single buffer equality and cannot drift out of sync
+      // with the offsets.
+      expectedBytes.fill(0, start, start + length);
+      actualBytes.fill(0, start, start + length);
+    }
+  }
+
+  return expectedBytes.equals(actualBytes);
 }

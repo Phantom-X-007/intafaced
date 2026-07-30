@@ -1,4 +1,4 @@
-import { parseUnits } from 'viem';
+import { isAddress, parseUnits, getAddress as toChecksum } from 'viem';
 import type { Address } from 'viem';
 
 /**
@@ -204,7 +204,28 @@ export function parseTokenParams(input: TokenParamsInput): TokenParams {
     );
   }
 
-  if (/^0x0{40}$/i.test(input.recipient)) {
+  /**
+   * Validated and NORMALISED to its checksummed form, here, once.
+   *
+   * The normalisation is not cosmetic. `computeTokenAddress` checksums the
+   * recipient before hashing it into the init code, while the calldata builder
+   * encodes whatever string it was handed — so without this, derivation and
+   * calldata are two different spellings of one address travelling separately.
+   * They agree today because ABI encoding is case-insensitive, and that is
+   * exactly the kind of agreement that stops being true quietly.
+   *
+   * `isAddress(..., { strict: false })` accepts a mixed-case address whose
+   * checksum is wrong, and `toChecksum` then repairs it. That is deliberate:
+   * refusing a valid 20-byte address over its capitalisation would reject a
+   * correct launch, while the checksum's actual job — catching a typo — is not
+   * something this layer can do better than the wallet that will sign.
+   */
+  if (!isAddress(input.recipient, { strict: false })) {
+    throw new TokenParamsError('launch.invalid_recipient', `recipient is not a 20-byte EVM address: ${input.recipient}`);
+  }
+  const recipient = toChecksum(input.recipient);
+
+  if (/^0x0{40}$/i.test(recipient)) {
     throw new TokenParamsError(
       'launch.invalid_recipient',
       `recipient is the zero address. The entire supply is minted to it at construction, so this would burn the whole ` +
@@ -212,5 +233,5 @@ export function parseTokenParams(input: TokenParamsInput): TokenParams {
     );
   }
 
-  return { name, symbol, decimals: input.decimals, totalSupply: scaled, recipient: input.recipient };
+  return { name, symbol, decimals: input.decimals, totalSupply: scaled, recipient };
 }

@@ -30,7 +30,30 @@ export const EXPECTED_SOLC = '0.8.28';
 export const SETTINGS = {
   optimizer: { enabled: true, runs: 200 },
   evmVersion: 'paris',
-  outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object', 'evm.deployedBytecode.object'] } },
+  outputSelection: {
+    '*': {
+      '*': [
+        'abi',
+        'evm.bytecode.object',
+        'evm.deployedBytecode.object',
+        /**
+         * Where the constructor splices `immutable` values into the runtime.
+         *
+         * Requested because without it, comparing a deployed contract against
+         * `deployedBytecode` is WRONG and looks right. `SovereignToken` has
+         * three immutables (`decimals`, `totalSupply`, `initialHolder`); the
+         * compiler emits zero placeholders for them and the constructor writes
+         * the real values in, so a byte-identical check fails for every
+         * correctly deployed token. Found by deploying one and looking.
+         *
+         * Note this is NOT part of `computeSourceHash` — outputSelection asks
+         * for more output, it does not change the bytecode — so widening it
+         * leaves every committed `sourceHash` valid.
+         */
+        'evm.deployedBytecode.immutableReferences',
+      ],
+    },
+  },
 };
 
 export function sha256(value) {

@@ -6,6 +6,7 @@ import { computeAccountAddress, DEFAULT_USER_SALT, AddressDerivationError } from
 import { AccountRegistry, bindingMessage, ClaimRefusedError } from './accounts/registry.js';
 import type { ProtocolChain } from './chain/client.js';
 import { ChainUnavailableError, isZeroAddress } from './chain/availability.js';
+import { deployedCodeMatches } from './chain/artifacts.js';
 import { RelayRefusedError, SessionRelay } from './session/relay.js';
 import { createSessionSpec, evaluateSessionCall, hashSessionSpec, sessionSpecInputSchema, SessionScopeError } from './session/spec.js';
 import { SignatureEnvelopeError, type UserOperation } from './chain/userop.js';
@@ -1080,12 +1081,18 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
             creator: z.string().nullable(),
             fromThisFactory: z.boolean(),
             /**
-             * The deployed runtime is byte-identical to the compiled template.
+             * The deployed runtime IS the compiled template, once the
+             * constructor-written `immutable` values are masked out.
              *
-             * Read, not assumed. `fromThisFactory` says our factory recorded the
-             * creator; this says the code at the address is actually the
+             * Read, not assumed. `fromThisFactory` says our factory recorded
+             * the creator; this says the code at the address really is the
              * template — the check that catches a factory whose recorded
              * provenance no longer matches what it deploys.
+             *
+             * The masking is not a loosening. See `deployedCodeMatches`: a
+             * byte-identical comparison is FALSE for every correct deployment,
+             * because `decimals`, `totalSupply` and `initialHolder` are spliced
+             * into the runtime at construction.
              */
             matchesTemplate: z.boolean(),
           }),
@@ -1110,7 +1117,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
             // answer is "unknown", which is exactly what `null` says — the
             // metadata above is still real and still worth returning.
             const creator = isZeroAddress(chain.tokenFactory) ? null : await chain.tokenCreator(token);
-            const runtime = (await chain.runtimeCode(token)) ?? '0x';
+            const runtime = await chain.runtimeCode(token);
 
             return {
               token,
@@ -1121,7 +1128,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
               initialHolder: metadata.initialHolder,
               creator,
               fromThisFactory: creator !== null,
-              matchesTemplate: runtime.toLowerCase() === templateArtifact().deployedBytecode.toLowerCase(),
+              matchesTemplate: deployedCodeMatches(templateArtifact(), runtime),
             };
           } catch (err) {
             throw toTrpcError(err);

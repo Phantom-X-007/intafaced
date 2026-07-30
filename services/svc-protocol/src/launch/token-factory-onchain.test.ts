@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { decodeEventLog, keccak256, toHex, type Address, type Hex } from 'viem';
 import { computeTokenAddress, DEFAULT_TOKEN_SALT, templateArtifact, tokenInitCode } from './address.js';
 import { parseTokenParams, type TokenParams } from './params.js';
-import { loadArtifact } from '../chain/artifacts.js';
+import { deployedCodeMatches, loadArtifact } from '../chain/artifacts.js';
 // .ts helper under scripts/, deliberately outside the service build — it is the
 // only file in this repository holding a private key, and it is a public one.
 import {
@@ -213,7 +213,7 @@ describe.skipIf(!reachable)('the predicted address is where the token actually l
       symbol: 'LAND',
       decimals: 18,
       totalSupply: '1000000',
-      recipient: '0x00000000000000000000000000000000000000A1',
+      recipient: '0x00000000000000000000000000000000000000a1',
     });
     const userSalt = keccak256(toHex('landing-check'));
     const predicted = computeTokenAddress({ factory, creator, userSalt, params });
@@ -231,16 +231,46 @@ describe.skipIf(!reachable)('the predicted address is where the token actually l
     /**
      * THE SECOND HALF OF THE PROMISE. Landing at the right address says nothing
      * about what is at it — the arithmetic would agree just as happily if the
-     * factory embedded a different token. This compares the runtime byte for
-     * byte against what the compiler produced, so "the audited template" is a
-     * claim about the deployed code and not about our intentions.
+     * factory embedded a different token. This compares the runtime against
+     * what the compiler produced, so "the template" is a claim about the
+     * deployed code and not about our intentions.
      */
-    expect(after!.toLowerCase()).toBe(templateArtifact().deployedBytecode.toLowerCase());
+    expect(deployedCodeMatches(templateArtifact(), after)).toBe(true);
+
+    /**
+     * And the thing that makes the check above non-trivial, pinned so nobody
+     * "simplifies" it back to byte-equality.
+     *
+     * The runtime is NOT byte-identical to `deployedBytecode`, and a correct
+     * deployment never will be: `decimals`, `totalSupply` and `initialHolder`
+     * are `immutable`, so the compiler leaves zero placeholders and the
+     * constructor splices the real values in. Writing the obvious comparison
+     * first is how this was found — `12` on chain where the artefact had `00`
+     * was `decimals = 18`.
+     */
+    expect(after!.toLowerCase()).not.toBe(templateArtifact().deployedBytecode.toLowerCase());
+    expect(Object.keys(templateArtifact().immutableReferences ?? {}).length, 'the template lost its immutables').toBe(3);
+  }, 60_000);
+
+  /**
+   * The masking must not turn the check into a rubber stamp.
+   *
+   * `deployedCodeMatches` zeroes three 32-byte windows. If that were ever
+   * widened — or if the comparison silently became "same length" — a completely
+   * different contract would pass. The factory's own runtime is a real,
+   * unrelated, deployed contract, so it is the honest negative control.
+   */
+  it('does not match a different contract deployed on the same chain', async () => {
+    const factoryRuntime = await clients.publicClient.getCode({ address: factory });
+    expect(factoryRuntime).toBeDefined();
+    expect(deployedCodeMatches(templateArtifact(), factoryRuntime)).toBe(false);
+    expect(deployedCodeMatches(templateArtifact(), '0x')).toBe(false);
+    expect(deployedCodeMatches(templateArtifact(), null)).toBe(false);
   }, 60_000);
 
   it('mints the entire supply to the recipient, and nothing to the creator', async () => {
     const creator = clients.deployer;
-    const recipient: Address = '0x00000000000000000000000000000000000000B2';
+    const recipient: Address = '0x00000000000000000000000000000000000000b2';
     const params = parseTokenParams({
       name: 'Supply Check',
       symbol: 'SUP',
@@ -382,7 +412,7 @@ describe.skipIf(!reachable)('the predicted address is where the token actually l
       symbol: 'EVT',
       decimals: 9,
       totalSupply: '42',
-      recipient: '0x00000000000000000000000000000000000000C3',
+      recipient: '0x00000000000000000000000000000000000000c3',
     });
     const userSalt = keccak256(toHex('event-check'));
     const token = computeTokenAddress({ factory, creator: clients.deployer, userSalt, params });
