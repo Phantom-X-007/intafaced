@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@intafaced/auth": "workspace:*",
+    "@intafaced/svc-protocol": "workspace:*",
     "@types/node": "^22.10.2",
     "rimraf": "^6.0.1",
     "solc": "0.8.28",

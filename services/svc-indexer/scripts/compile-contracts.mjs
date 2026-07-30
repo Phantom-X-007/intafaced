@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * Compile this service's dev fixtures.
+ * Compile this service's dev fixture.
+ *
+ * The compiler, its version pin and its settings are svc-protocol's — see the
+ * header of `contract-sources.mjs` for why they are imported rather than copied.
+ * This script owns only the loop: which directory, which suite, where artefacts
+ * land.
  *
  * The only Solidity svc-indexer owns is `contracts/dev/DevVenue.sol`, and it is
  * a log emitter for tests — read its header before assuming otherwise. The
@@ -14,10 +19,22 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { collectSources, computeSourceHash, EXPECTED_SOLC, OUT_DIR, SETTINGS, SUITES, suiteSources } from './contract-sources.mjs';
+import {
+  assertSolcPinAgrees,
+  collectSources,
+  computeSourceHash,
+  CONTRACTS_DIR,
+  EXPECTED_SOLC,
+  OUT_DIR,
+  SETTINGS,
+  SUITES,
+  suiteSources,
+} from './contract-sources.mjs';
 
 const require = createRequire(import.meta.url);
 const solc = require('solc');
+
+assertSolcPinAgrees();
 
 const actualVersion = solc.version();
 if (!actualVersion.startsWith(EXPECTED_SOLC)) {
@@ -25,7 +42,7 @@ if (!actualVersion.startsWith(EXPECTED_SOLC)) {
   process.exit(1);
 }
 
-const all = collectSources();
+const all = collectSources(CONTRACTS_DIR);
 let failed = false;
 let written = 0;
 
