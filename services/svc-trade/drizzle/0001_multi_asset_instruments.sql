@@ -95,6 +95,18 @@ ALTER TABLE "trade"."markets" DROP CONSTRAINT IF EXISTS "markets_planes_valid_ck
 ALTER TABLE "trade"."markets" ADD CONSTRAINT "markets_planes_valid_ck"
   CHECK (array_length("planes", 1) >= 1 AND "planes" <@ ARRAY['fiat', 'protocol']::text[]);
 
+-- BACKFILL BEFORE CONSTRAINING. The column above lands with DEFAULT '', so
+-- every row that already existed holds '' — and the CHECK below rejects it.
+-- On an empty database there are no such rows and this migration passed; against
+-- a database with real markets in it, it failed on the first row and took the
+-- whole fleet down with it, because everything with a schema waits on
+-- `migrate` completing successfully.
+--
+-- The symbol is the right fallback: it is what `listMarket` uses when no
+-- display name is given, so this makes existing rows consistent with new ones
+-- rather than inventing a label.
+UPDATE "trade"."markets" SET "display_name" = "symbol" WHERE length("display_name") = 0;
+
 ALTER TABLE "trade"."markets" DROP CONSTRAINT IF EXISTS "markets_display_name_present_ck";
 ALTER TABLE "trade"."markets" ADD CONSTRAINT "markets_display_name_present_ck"
   CHECK (length("display_name") > 0);
