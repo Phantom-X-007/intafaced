@@ -28,21 +28,24 @@
 5. **Market sell CCXT cost** residual
 6. **Stream A PROOF** unverified
 7. **Terminal equity panel** still unwired (API honest; UI later)
-8. Open docs PR **#175** (leave)
+8. ~~Open docs PR #175~~ — merged mid-run as docs
 
 ## PR links
 
-Filled in PEACE TIP block and operator chat after merge.
+https://github.com/Phantom-X-007/intafaced/pull/179 (merged squash)
 
 ## Residual list (every item that still needs human or later agent)
 
 - Human: Actions billing; Postgres/Docker if money e2e wanted; licences; wallet secrets; counsel list; kill drill
 - Denon: chain/factory product; dual-book discipline habit
-- Agent later: market sell cost; sub-account ownership S2S; wire terminal equity UI; #175 docs leave
+- Agent later: market sell cost; sub-account ownership S2S; wire terminal equity UI
 - Product: candles, futures positions, real rails
 
 ## POST-MERGE TIP
 
 ```
-(pre-fill at merge time)
+PRE-AUDIT: 6dd3defec668e2dfc07042d39c0e8eab9672e248
+MID-RUN:   36874756c9caec86d46109ce62cdfdae5482f750
+POST-FIX / FINAL origin/main: 508ac95257d256907d9e0c403f09588ce5109bec
+PR: https://github.com/Phantom-X-007/intafaced/pull/179
 ```
