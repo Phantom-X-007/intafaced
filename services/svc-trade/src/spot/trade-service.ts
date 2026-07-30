@@ -1030,6 +1030,29 @@ export class TradeService {
     return rows.map(toOrder);
   }
 
+  /** Terminal orders for the principal (filled / cancelled / rejected / expired). */
+  async orderHistory(principal: Principal, input: { marketId?: string; limit?: number } = {}): Promise<OrderRecord[]> {
+    requireScope(principal, 'trade:read');
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
+    const rows = input.marketId
+      ? await this.sql<OrderRow[]>`
+          SELECT * FROM trade.orders
+           WHERE user_id = ${principal.userId}
+             AND market_id = ${input.marketId}
+             AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `
+      : await this.sql<OrderRow[]>`
+          SELECT * FROM trade.orders
+           WHERE user_id = ${principal.userId}
+             AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `;
+    return rows.map(toOrder);
+  }
+
   async myFills(principal: Principal, limit = 100): Promise<FillRecord[]> {
     requireScope(principal, 'trade:read');
     const rows = await this.sql<FillRow[]>`

@@ -280,6 +280,20 @@ export function createTradeRouter(trade: TradeService) {
         .input(z.object({ marketId: z.string().uuid().optional() }).optional())
         .output(z.array(orderOutput))
         .query(({ ctx, input }) => guard(async () => (await trade.openOrders(ctx.principal, input?.marketId)).map(presentOrder))),
+
+      history: scopedProcedure('trade:read')
+        .input(
+          z
+            .object({
+              marketId: z.string().uuid().optional(),
+              limit: z.number().int().min(1).max(500).optional(),
+            })
+            .optional(),
+        )
+        .output(z.array(orderOutput))
+        .query(({ ctx, input }) =>
+          guard(async () => (await trade.orderHistory(ctx.principal, { marketId: input?.marketId, limit: input?.limit })).map(presentOrder)),
+        ),
     }),
 
     fills: router({
