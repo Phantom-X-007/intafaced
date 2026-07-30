@@ -129,17 +129,31 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | #158 | Identity **subAccounts.revoke** soft-disable |
 | #159 | Loop + scoreboard **DRAINED**; sub-account tracker honesty |
 | #160 | Docs(audit): Wave E doctrine scan log with real exit codes |
-| (later) | Tracker honesty: ops.notifications lists **p2pTradeDisputed**; Status **DRAINED (agent queue)** |
+| #161 | Tracker honesty: ops.notifications lists **p2pTradeDisputed**; Status **DRAINED (agent queue)** |
+| #162 | **Terminal public trade tape** — `LiveTradeTape` ← svc-ws `channel=trades` (decimal-string prints; charts still honest socket) |
+| #163 | CCXT optional **`since` (ms)** on account/trades · closed orders · public trades |
 
-### Unspoken needs (post-#158 / tip ≥ #160)
+### Post-DRAINED product (queue re-checked)
+
+First DRAINED claim was after product **#158** / drain docs **#159–#161**. Then:
+
+| PR | What |
+| --- | --- |
+| #162 | **web.terminal** public trade tape wired (tracker note already honest on tip) |
+| #163 | Bot history paging: `since` filters on private + public trade REST |
+
+**Reassess:** still **DRAINED (agent queue)** — no further agent micro product; next fire = babysit open PRs / human blockers only.
+
+### Unspoken needs (post-#163 / tip ≥ #163)
 
 | Need | Status |
 | --- | --- |
-| Volume + quality without Nitro | Product queue emptied through #158; no padding ceremony |
-| Bots can trade (CCXT public+private) | Balance · positions empty · OHLCV empty · mytrades `?symbol=` · write path on main |
+| Volume + quality without Nitro | Product through **#163** after drain re-check; no padding ceremony |
+| Bots can trade (CCXT public+private) | Balance · positions empty · OHLCV empty · mytrades `?symbol=` + **`since`** · closed **`since`** · public tape **`since`** · write path on main |
+| Terminal surface | Depth live · **public trade tape live (#162)** · charts still honest empty (no candle invent) |
 | In-app notifications | Fans include rank/stake/p2p lock/release/refund + **dispute opened** (openedBy) |
 | Continuous light gates + wave audits | Local green at drain: brand/custody/vendor-shell/workspace/dod-gate/tracker:check |
-| Peace-of-mind scoreboard | This file + GRIND-LOOP-ACTIVE product high water **#158** · tip **#160** · **Status DRAINED (agent queue)** |
+| Peace-of-mind scoreboard | This file + GRIND-LOOP-ACTIVE product high water **#162–#163** · tip **#163** · **Status DRAINED (agent queue)** |
 | Compaction survival | Loop file still law for every 45m fire |
 | Never fake human blockers | CI billing · chain factory · futures · candles · push/email/SMS still human/later |
 
@@ -148,12 +162,14 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | Item | Result |
 | --- | --- |
 | svc-notify OTEL | **DONE** #156 |
-| tracker:check | **DONE** #156 (+ sub-account note #159; p2pTradeDisputed consumer note this PR) |
+| tracker:check | **DONE** #156 (+ sub-account note #159; p2pTradeDisputed consumer note #161) |
 | p2pTradeDisputed fan | **DONE** #157 |
 | pay.public-api | **SKIP** |
 | Private balance WS | **SKIP** |
 | subAccounts.revoke | **DONE** #158 |
-| Reassess DRAINED | **Met** — **DRAINED (agent queue)** |
+| Terminal public trade tape | **DONE** #162 (post-DRAINED) |
+| CCXT `since` filters | **DONE** #163 (post-DRAINED) |
+| Reassess DRAINED | **Met again** — **DRAINED (agent queue)** after #162/#163 re-check |
 
 ### Still open (honest — not agent product)
 
@@ -162,10 +178,11 @@ Full: `docs/audit/AFK-WAVE-2026-07-30.md`
 | GitHub CI green | Org billing / spending limit — **human** |
 | Futures / real positions | Honest `[]` only |
 | Candle aggregation / OHLCV data | Honest empty until real job |
+| Terminal charts / hotkeys / sub-accounts | Tape live; chart socket remains honest |
 | protocol.smart-accounts chain | Factory honesty only — not propped |
 | Push / email / SMS | §13 sockets |
 | venue.aggregation implementations | Large phase |
 | ops.admin real wiring | Browser-local only — large phase |
 | Real rails / kill drill / licences / counsel | Denon + counsel |
 
-**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED (agent queue)** · product high water **#158** · tip through **#160** · scheduler 45m re-check only
+**Loop file:** [`GRIND-LOOP-ACTIVE.md`](GRIND-LOOP-ACTIVE.md) · **Status: DRAINED (agent queue)** · product high water **#162–#163** · tip through **#163** · scheduler 45m re-check only
