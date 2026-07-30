@@ -1078,6 +1078,9 @@ importers:
       postgres:
         specifier: ^3.4.5
         version: 3.4.9
+      viem:
+        specifier: ^2.55.8
+        version: 2.55.8(typescript@5.9.3)(zod@3.25.76)
       zod:
         specifier: ^3.24.1
         version: 3.25.76

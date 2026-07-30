@@ -1,0 +1,380 @@
+import {
+  createPublicClient,
+  createWalletClient,
+  defineChain,
+  encodeFunctionData,
+  getAddress,
+  http,
+  isAddress,
+  keccak256,
+  toBytes,
+  type Address,
+  type Hex,
+  type PublicClient,
+  type WalletClient,
+} from 'viem';
+import { mnemonicToAccount, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
+import type { Amount } from '@intafaced/ledger-client';
+import type { BroadcastStore } from './broadcast-store.js';
+import { ERC20_TRANSFER_TOPIC, fromChainUnits, requireAsset, toChainUnits, type EvmAsset } from './evm-assets.js';
+import type { ChainSendRequest, ConfirmedTransfer, CryptoChainPort } from './chain-port.js';
+
+/**
+ * LIVE EVM implementation of `CryptoChainPort`.
+ *
+ * This is what turns `crypto-native` from a sandbox into a rail that can move
+ * value. `posture` is `'live'` — a returned txHash is look-up-able on the node
+ * this port is pointed at. Pointing it at anvil makes the rail live against a
+ * local chain; pointing it at a public RPC makes it live against that chain.
+ * The code does not invent a production network decision; the operator does, by
+ * supplying `PAY_CRYPTO_RPC_URL` + `PAY_CRYPTO_CHAIN_ID`.
+ *
+ * Acceptance addresses are HD-derived from `PAY_CRYPTO_DEPOSIT_MNEMONIC` at
+ * account index `n` (viem `addressIndex`) where `n` is a stable function of
+ * (paymentId, assetId). The same payment always gets the same address; two
+ * payments that collide on index walk forward until a free slot is found.
+ *
+ * Outbound sends go through a hot wallet (`PAY_CRYPTO_HOT_WALLET_KEY`) and the
+ * `BroadcastStore`, so a retried business key never broadcasts twice.
+ */
+
+const ERC20_TRANSFER_ABI = [
+  {
+    type: 'function',
+    name: 'transfer',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+export interface EvmLiveChainOptions {
+  readonly rpcUrl: string;
+  readonly chainId: number;
+  readonly chainName?: string;
+  /** BIP-39 mnemonic that derives per-payment acceptance addresses. */
+  readonly depositMnemonic: string;
+  /** Hex private key (0x…) for outbound payouts/refunds. */
+  readonly hotWalletKey: Hex;
+  readonly assets: ReadonlyMap<string, EvmAsset>;
+  readonly broadcasts: BroadcastStore;
+  /** How deep a transfer must be before we report it as finalized. Default 6. */
+  readonly minConfirmations?: number;
+  readonly requestTimeoutMs?: number;
+}
+
+export interface FinalizedInbound {
+  readonly address: string;
+  readonly transfer: ConfirmedTransfer;
+}
+
+interface AddressBookEntry {
+  readonly paymentId: string;
+  readonly assetId: string;
+  readonly address: Address;
+  readonly index: number;
+}
+
+interface ObservedInbound extends ConfirmedTransfer {
+  readonly blockNumber: bigint;
+}
+
+export class EvmLiveChain implements CryptoChainPort {
+  readonly posture = 'live' as const;
+  readonly description: string;
+
+  private readonly public: PublicClient;
+  private readonly wallet: WalletClient;
+  private readonly hotAccount: PrivateKeyAccount;
+  private readonly depositMnemonic: string;
+  private readonly assets: ReadonlyMap<string, EvmAsset>;
+  private readonly broadcasts: BroadcastStore;
+  private readonly minConfirmations: number;
+
+  private readonly byPayment = new Map<string, AddressBookEntry>();
+  private readonly byAddress = new Map<string, AddressBookEntry>();
+  private readonly observed = new Map<string, ObservedInbound>();
+  private readonly finalizedEmitted = new Set<string>();
+
+  private scanCursor = 0n;
+  private tip = 0n;
+  private started = false;
+
+  constructor(private readonly options: EvmLiveChainOptions) {
+    const chain = defineChain({
+      id: options.chainId,
+      name: options.chainName ?? `pay-evm-${options.chainId}`,
+      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+      rpcUrls: { default: { http: [options.rpcUrl] } },
+    });
+
+    const transport = http(options.rpcUrl, { timeout: options.requestTimeoutMs ?? 15_000 });
+    this.public = createPublicClient({ chain, transport });
+    this.hotAccount = privateKeyToAccount(options.hotWalletKey);
+    this.wallet = createWalletClient({ account: this.hotAccount, chain, transport });
+
+    // Validate mnemonic early — a typo here must fail boot, not the first payment.
+    mnemonicToAccount(options.depositMnemonic);
+    this.depositMnemonic = options.depositMnemonic;
+
+    this.assets = options.assets;
+    this.broadcasts = options.broadcasts;
+    this.minConfirmations = options.minConfirmations ?? 6;
+    this.description =
+      `live EVM chain id=${options.chainId} rpc=${redactRpc(options.rpcUrl)} ` +
+      `hot=${this.hotAccount.address} assets=[${[...this.assets.keys()].join(',')}]`;
+  }
+
+  hotWalletAddress(): Address {
+    return this.hotAccount.address;
+  }
+
+  async acceptanceAddress(paymentId: string, assetId: string): Promise<string> {
+    requireAsset(this.assets, assetId);
+    const key = bookKey(paymentId, assetId);
+    const existing = this.byPayment.get(key);
+    if (existing) return existing.address;
+
+    let index = stableIndex(paymentId, assetId);
+    for (let guard = 0; guard < 1_000; guard++, index = (index + 1) >>> 0) {
+      const address = deriveDepositAddress(this.depositMnemonic, index);
+      const taken = this.byAddress.get(address.toLowerCase());
+      if (taken && (taken.paymentId !== paymentId || taken.assetId !== assetId)) continue;
+
+      const entry: AddressBookEntry = { paymentId, assetId, address, index };
+      this.byPayment.set(key, entry);
+      this.byAddress.set(address.toLowerCase(), entry);
+      return address;
+    }
+    throw new Error('Could not allocate a unique acceptance address — address book exhausted');
+  }
+
+  async inboundTransfer(address: string): Promise<ConfirmedTransfer | null> {
+    if (!isAddress(address)) return null;
+    await this.refresh();
+    const observed = this.observed.get(getAddress(address).toLowerCase());
+    if (!observed) return null;
+    const { blockNumber: _b, ...transfer } = observed;
+    return transfer;
+  }
+
+  async send(request: ChainSendRequest): Promise<{ txHash: string }> {
+    const prior = await this.broadcasts.get(request.idempotencyKey);
+    if (prior) return { txHash: prior };
+
+    if (!isAddress(request.to)) {
+      throw new Error(`Outbound destination is not an address: ${request.to}`);
+    }
+    const asset = requireAsset(this.assets, request.assetId);
+    const units = toChainUnits(request.amount, asset.decimals);
+    if (units <= 0n) throw new Error('Outbound amount must be positive');
+
+    let hash: Hex;
+    if (asset.kind === 'native') {
+      hash = await this.wallet.sendTransaction({
+        account: this.hotAccount,
+        to: getAddress(request.to),
+        value: units,
+        chain: this.wallet.chain,
+      });
+    } else {
+      hash = await this.wallet.sendTransaction({
+        account: this.hotAccount,
+        to: asset.address,
+        data: encodeFunctionData({
+          abi: ERC20_TRANSFER_ABI,
+          functionName: 'transfer',
+          args: [getAddress(request.to), units],
+        }),
+        chain: this.wallet.chain,
+      });
+    }
+
+    await this.public.waitForTransactionReceipt({ hash });
+    const stored = await this.broadcasts.put(request.idempotencyKey, hash);
+    return { txHash: stored };
+  }
+
+  /**
+   * Advance the tip and index new inbound transfers to watched addresses.
+   *
+   * Safe to call from `inboundTransfer` and from the watcher loop.
+   */
+  async refresh(): Promise<void> {
+    this.tip = await this.public.getBlockNumber();
+    if (!this.started) {
+      const lookback = 2_000n;
+      this.scanCursor = this.tip > lookback ? this.tip - lookback : 0n;
+      this.started = true;
+    }
+
+    const watched = [...this.byAddress.keys()];
+    if (watched.length === 0) {
+      this.scanCursor = this.tip + 1n;
+      this.recomputeConfirmations();
+      return;
+    }
+
+    const watchedSet = new Set(watched);
+    while (this.scanCursor <= this.tip) {
+      const block = await this.public.getBlock({ blockNumber: this.scanCursor, includeTransactions: true });
+      for (const tx of block.transactions) {
+        if (typeof tx === 'string') continue;
+        if (!tx.to) continue;
+        const to = tx.to.toLowerCase();
+        if (!watchedSet.has(to)) continue;
+        const entry = this.byAddress.get(to);
+        if (!entry) continue;
+        const asset = this.assets.get(entry.assetId);
+        if (!asset || asset.kind !== 'native') continue;
+        if (tx.value === 0n) continue;
+
+        this.record({
+          address: getAddress(tx.to),
+          txHash: tx.hash,
+          from: tx.from,
+          assetId: entry.assetId,
+          amount: fromChainUnits(tx.value, asset.decimals),
+          blockNumber: block.number,
+        });
+      }
+      this.scanCursor += 1n;
+    }
+
+    await this.scanErc20(watchedSet);
+    this.recomputeConfirmations();
+  }
+
+  /**
+   * Transfers that have reached `minConfirmations` since the last drain.
+   * The watcher turns each into a signed webhook exactly once.
+   */
+  drainFinalized(): FinalizedInbound[] {
+    const out: FinalizedInbound[] = [];
+    for (const [address, observed] of this.observed) {
+      if (observed.confirmations < this.minConfirmations) continue;
+      if (this.finalizedEmitted.has(address)) continue;
+      this.finalizedEmitted.add(address);
+      const { blockNumber: _b, ...transfer } = observed;
+      out.push({ address: getAddress(address), transfer });
+    }
+    return out;
+  }
+
+  /** Test helper — force the scan cursor (e.g. after anvil restart). */
+  resetScan(fromBlock = 0n): void {
+    this.scanCursor = fromBlock;
+    this.started = true;
+    this.observed.clear();
+    this.finalizedEmitted.clear();
+  }
+
+  private record(input: { address: Address; txHash: Hex; from: Address; assetId: string; amount: Amount; blockNumber: bigint }): void {
+    const key = input.address.toLowerCase();
+    const confirmations = Number(this.tip - input.blockNumber + 1n);
+    const next: ObservedInbound = {
+      txHash: input.txHash,
+      from: getAddress(input.from),
+      assetId: input.assetId,
+      amount: input.amount,
+      confirmations: confirmations < 0 ? 0 : confirmations,
+      blockNumber: input.blockNumber,
+    };
+    const prev = this.observed.get(key);
+    if (prev && prev.txHash !== next.txHash) return;
+    this.observed.set(key, next);
+  }
+
+  private async scanErc20(watchedSet: Set<string>): Promise<void> {
+    const erc20 = [...this.assets.values()].filter((a): a is Extract<EvmAsset, { kind: 'erc20' }> => a.kind === 'erc20');
+    if (erc20.length === 0) return;
+
+    const window = BigInt(Math.max(this.minConfirmations * 4, 64));
+    const fromBlock = this.tip > window ? this.tip - window : 0n;
+
+    for (const asset of erc20) {
+      const logs = await this.public.getLogs({
+        address: asset.address,
+        fromBlock,
+        toBlock: this.tip,
+        events: [
+          {
+            type: 'event',
+            name: 'Transfer',
+            inputs: [
+              { name: 'from', type: 'address', indexed: true },
+              { name: 'to', type: 'address', indexed: true },
+              { name: 'value', type: 'uint256', indexed: false },
+            ],
+          },
+        ],
+      });
+
+      for (const log of logs) {
+        const toTopic = log.topics[2];
+        const fromTopic = log.topics[1];
+        if (!toTopic || !fromTopic || !log.transactionHash) continue;
+        if (log.topics[0]?.toLowerCase() !== ERC20_TRANSFER_TOPIC.toLowerCase()) continue;
+
+        const to = getAddress(`0x${toTopic.slice(26)}`);
+        if (!watchedSet.has(to.toLowerCase())) continue;
+        const entry = this.byAddress.get(to.toLowerCase());
+        if (!entry || entry.assetId !== asset.assetId) continue;
+
+        const from = getAddress(`0x${fromTopic.slice(26)}`);
+        const value = log.data && log.data !== '0x' ? BigInt(log.data) : 0n;
+        if (value <= 0n) continue;
+
+        this.record({
+          address: to,
+          txHash: log.transactionHash,
+          from,
+          assetId: asset.assetId,
+          amount: fromChainUnits(value, asset.decimals),
+          blockNumber: log.blockNumber ?? 0n,
+        });
+      }
+    }
+  }
+
+  private recomputeConfirmations(): void {
+    for (const [key, observed] of this.observed) {
+      const confirmations = Number(this.tip - observed.blockNumber + 1n);
+      this.observed.set(key, {
+        ...observed,
+        confirmations: confirmations < 0 ? 0 : confirmations,
+      });
+    }
+  }
+}
+
+function bookKey(paymentId: string, assetId: string): string {
+  return `${paymentId}\0${assetId}`;
+}
+
+function stableIndex(paymentId: string, assetId: string): number {
+  const digest = keccak256(toBytes(`${paymentId}:${assetId}`));
+  return Number(BigInt(digest) & 0x7fff_ffffn);
+}
+
+function deriveDepositAddress(mnemonic: string, index: number): Address {
+  return mnemonicToAccount(mnemonic, { addressIndex: index }).address;
+}
+
+function redactRpc(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.password) u.password = '***';
+    if (u.username) u.username = '***';
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length > 1) {
+      u.pathname = `/***/${parts[parts.length - 1]}`;
+    }
+    return u.toString();
+  } catch {
+    return '(rpc)';
+  }
+}

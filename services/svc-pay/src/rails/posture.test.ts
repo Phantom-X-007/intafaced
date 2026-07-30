@@ -16,7 +16,10 @@ import {
   defaultChainFor,
   railPostureStatus,
   selectPublicCheckoutRail,
+  shouldRegisterCardSandbox,
+  tryLiveChainFromEnv,
 } from './posture.js';
+import { EvmLiveChain } from './evm-chain.js';
 
 /**
  * RAILS THAT ARE HONEST ABOUT NOT BEING REAL.
@@ -295,6 +298,62 @@ describe('defaultChainFor — what index.ts actually gets', () => {
   it('describes itself in one line an operator can read on /ready', () => {
     expect(defaultChainFor({ APP_ENV: 'prod' }).description).toMatch(/NO CHAIN CONFIGURED/);
     expect(defaultChainFor({ APP_ENV: 'dev' }).description).toMatch(/no transaction reaches any chain/);
+  });
+
+  it('builds a LIVE EvmLiveChain when the full crypto config is present — even in prod', () => {
+    const env = {
+      APP_ENV: 'prod',
+      PAY_CRYPTO_RPC_URL: 'http://127.0.0.1:8545',
+      PAY_CRYPTO_CHAIN_ID: '31337',
+      PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
+      PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      PAY_CRYPTO_ASSETS: 'ETH:native',
+    };
+    const chain = defaultChainFor(env);
+    expect(chain).toBeInstanceOf(EvmLiveChain);
+    expect(chain.posture).toBe('live');
+    expect(new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1 }).mode).toBe('live');
+  });
+
+  it('REFUSES a partial live config rather than quietly falling back to MemoryChain', () => {
+    expect(() =>
+      tryLiveChainFromEnv({
+        PAY_CRYPTO_RPC_URL: 'http://127.0.0.1:8545',
+        // deliberately omit keys
+      }),
+    ).toThrow(/incomplete/i);
+  });
+});
+
+describe('shouldRegisterCardSandbox', () => {
+  it('defaults on in dev/test and off in staging/prod', () => {
+    expect(shouldRegisterCardSandbox({ APP_ENV: 'dev' })).toBe(true);
+    expect(shouldRegisterCardSandbox({ APP_ENV: 'test' })).toBe(true);
+    expect(shouldRegisterCardSandbox({ APP_ENV: 'staging' })).toBe(false);
+    expect(shouldRegisterCardSandbox({ APP_ENV: 'prod' })).toBe(false);
+  });
+
+  it('honours an explicit override', () => {
+    expect(shouldRegisterCardSandbox({ APP_ENV: 'prod', PAY_REGISTER_CARD_SANDBOX: 'true' })).toBe(true);
+    expect(shouldRegisterCardSandbox({ APP_ENV: 'dev', PAY_REGISTER_CARD_SANDBOX: 'false' })).toBe(false);
+  });
+
+  it('lets a prod deployment with ONLY a live crypto rail pass the boot posture gate', () => {
+    const env = {
+      APP_ENV: 'prod',
+      PAY_CRYPTO_RPC_URL: 'http://127.0.0.1:8545',
+      PAY_CRYPTO_CHAIN_ID: '31337',
+      PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
+      PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      PAY_CRYPTO_ASSETS: 'ETH:native',
+    };
+    const chain = defaultChainFor(env);
+    const rails = new RailRegistry([new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1 })]);
+    expect(rails.list()[0]!.mode).toBe('live');
+    expect(() => assertRailPosture(rails, { APP_ENV: 'prod' })).not.toThrow();
+    const status = railPostureStatus(rails, 'live-only');
+    expect(status.live).toEqual(['crypto-native']);
+    expect(status.sandbox).toEqual([]);
   });
 });
 
