@@ -165,7 +165,31 @@ if (compose !== null) {
     if (!index?.includes('register(fastifyTRPCPlugin')) continue;
     if (svc === 'svc-edge') continue;
 
-    const envVar = /envVar: '(\w+)'/.exec(new RegExp(`\\{[^}]*${svc.replace('svc-', '')}[^}]*\\}`, 'i').exec(routes)?.[0] ?? '')?.[1];
+    /**
+     * Read the ROUTE ENTRIES, not the first brace pair that mentions the name.
+     *
+     * This previously ran `new RegExp('\\{[^}]*<name>[^}]*\\}')` across the whole
+     * file and took the first hit. That matches ANY brace pair — including the
+     * `Upstream` interface and the comments inside it. As soon as a comment near
+     * the top mentioned `trade` (#186 added one explaining the new `module`
+     * field), the check matched that block, found no `envVar`, and reported
+     * "svc-trade mounts a tRPC router but has no entry in UPSTREAMS" — while the
+     * entry sat plainly at line 62 and the edge answered 200 for it.
+     *
+     * It went red on `main` for everyone, on prose. A gate that fails on a
+     * comment is worse than no gate, because it teaches people to ignore it —
+     * and the next failure it reports will be a real one.
+     *
+     * So: consider only brace pairs that ASSIGN `envVar` a string literal —
+     * `envVar: '…'`. Note the quote is load-bearing. My first attempt matched
+     * `envVar:` alone, which still selected the `Upstream` interface, because
+     * the interface *declares* `readonly envVar: string`. A value has quotes; a
+     * type does not. That distinction is the whole check.
+     */
+    const entries = routes.match(/\{[^{}]*envVar: '[^{}]*\}/g) ?? [];
+    const needle = svc.replace('svc-', '').toLowerCase();
+    const entry = entries.find((e) => e.toLowerCase().includes(needle));
+    const envVar = /envVar: '(\w+)'/.exec(entry ?? '')?.[1];
 
     if (!envVar) {
       failures.push({
