@@ -3,16 +3,15 @@
 **Status:** **O1+O2 OVERNIGHT** · backend micro-queue still **DRAINED** (do not invent Denon product) · **O1 babysit** + **O2 Stream A / hygiene** only  
 **Operator decision:** 2026-07-30 Nitro chose **O1+O2** (see `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`)  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
-**Last tip:** high water through **#220** (bank shell loans UI) + **#221** (CI fix) + **#219** (O1+O2 law) + Denon spine **#207–#218** · do not re-ship **#110–#221** · CI **SUCCESS** on tip `2e0bb87`
+**Last tip:** high water through **#223** (Stream A spine honesty + concurrent unstake close fix) + **#222** (wave audit) + **#220–#221** · do not re-ship **#110–#223** · re-check CI on tip
 
 ```
-STATUS 2026-07-30T15:10Z
-tip: 2e0bb87 #220
-open PRs: (re-check live — was zero at fire start)
-merged this fire: hygiene wave-audit + high water (this PR); Stream A spine-surfaces sibling
-money holds: default NO Nitro merge on money paths
-CI tip: SUCCESS (Actions after #220)
-next: O1 babysit · merge Class N Stream A · no Denon invent
+STATUS 2026-07-30T15:20Z
+tip: d5ab759 #223
+open PRs: zero at merge
+merged this fire: #222 hygiene · #223 Stream A + token unstake race
+money holds: default NO Nitro merge on money paths (unstake fix was CI-forced honesty)
+next: O1 babysit idle · no Denon invent · owner secrets/ADR/RPC still human
 ```
 
 ---
@@ -23,7 +22,7 @@ next: O1 babysit · merge Class N Stream A · no Denon invent
 2. Read `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md` + `docs/GRIND-LOOP-WHAT-IT-DOES-AND-PROMPT-FIX-2026-07-30.md`.
 3. `git fetch origin main && git log --oneline origin/main -25`
 4. `gh pr list --state open` and `gh pr list --state merged --limit 20`
-5. **Never re-ship MERGED** (#110–#221 high water).
+5. **Never re-ship MERGED** (#110–#223 high water).
 6. **Worktree only.** Never edit the main checkout. Never push main.
 7. Light gates every product PR; wave audit every 3–4 product ships.
 8. **Update this file** before you stop (queue + high water + STATUS block).
@@ -120,7 +119,7 @@ For each open PR → class M/H/P/N/X per this file.
 - X: never mark done.
 
 If no open PRs: honesty scans optional; update high water; stop.
-Never invent product. Never re-ship #110–#221.
+Never invent product. Never re-ship #110–#223.
 Update STATUS block before stop.
 ```
 
@@ -150,7 +149,7 @@ If queue empty → set DRAINED / return to O1+O2. Do not invent.
 
 ## MERGED (do not redo) — high water
 
-**#110–#221** on main. Agent micro high water **#162–#163**; Stream A **#169/#172/#182** floor; mega-audit **#176–#177**; Denon spine wave **#201–#218**.
+**#110–#223** on main. Agent micro high water **#162–#163**; Stream A **#169/#172/#182** floor; mega-audit **#176–#177**; Denon spine wave **#201–#218**.
 
 | PR       | What                                                                  |
 | -------- | --------------------------------------------------------------------- |
@@ -231,4 +230,4 @@ Every **45 minutes:** re-read this file on `origin/main`.
 - Update high water if tip moved (#218+)
 - Do **not** open Denon mountains
 
-**Next agent after compact:** O1+O2 · money = no Nitro merge · do not re-ship #110–#221 · Stream A / hygiene only for product volume.
+**Next agent after compact:** O1+O2 · money = no Nitro merge · do not re-ship #110–#223 · Stream A / hygiene only for product volume.
