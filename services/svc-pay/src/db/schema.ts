@@ -377,16 +377,98 @@ export const paymentLinks = pay.table(
     amount: amount('amount'),
     currency: text('currency'),
     active: boolean('active').notNull().default(true),
+    /**
+     * NULL means unbounded, and that is a decision rather than an omission.
+     *
+     * A use is consumed by a COMPLETED payment, and a completed payment against
+     * a merchant's own link is revenue, not abuse. What actually makes a
+     * capability URL dangerous is living forever — which is why `expires_at` is
+     * defaulted and capped by the service while this stays opt-in: a merchant
+     * sets it to 1 for an invoice that must only ever be paid once.
+     */
+    maxUses: integer('max_uses'),
+    /**
+     * Completed payments against this link.
+     *
+     * Advisory under concurrency, on purpose. It is checked at session open,
+     * where nothing has moved yet; it is NEVER allowed to refuse the booking of
+     * money that has already arrived, which is the same rule that stops a
+     * deposit being refused at the boundary.
+     */
+    uses: integer('uses').notNull().default(0),
     expiresAt: tstz('expires_at'),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('payment_links_token_hash_idx').on(t.tokenHash), index('payment_links_merchant_idx').on(t.merchantId)],
 );
 
+/**
+ * `open` — a payer is mid-checkout. `completed` — the payment behind it was
+ * captured. `expired` — the browser handoff lapsed. `cancelled` — abandoned.
+ */
+export const checkoutSessionStatusEnum = pay.enum('checkout_session_status', ['open', 'completed', 'expired', 'cancelled']);
+
+/**
+ * A HOSTED CHECKOUT SESSION — one anonymous payer, one attempt, one frozen
+ * amount.
+ *
+ * This is the public surface that takes money from somebody who is not logged
+ * in, so every column here exists to take a decision away from the browser:
+ *
+ *   · `amount` / `currency` are frozen at open and never re-read from a request
+ *     afterwards. That is what makes client-side amount tampering impossible
+ *     rather than merely discouraged.
+ *   · `rail_adapter` is chosen SERVER-SIDE from configuration. A hosted checkout
+ *     that lets its caller name a rail is the route straight back to the P0 that
+ *     `rails/posture.ts` closed; the payer names a method at most.
+ *   · `token_hash`, never a token, and its own token rather than the link's — a
+ *     link is a many-payer capability and a session is one payer's.
+ *
+ * A SESSION EXPIRING DOES NOT EXPIRE THE PAYMENT. The session is a browser
+ * handoff measured in minutes; the payment is a claim on money and does not
+ * expire at all. A payer who sends funds ten minutes after their tab timed out
+ * has still sent them to an acceptance address derived from the payment id, and
+ * the rail's webhook still matches that payment by `rail_ref` and still books
+ * it. Expiring both together is what would strand them.
+ */
+export const checkoutSessions = pay.table(
+  'checkout_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    linkId: uuid('link_id')
+      .notNull()
+      .references(() => paymentLinks.id),
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    /** The payment this session opened. Written in the same transaction as the session. */
+    paymentId: uuid('payment_id').references(() => payments.id),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: text('token_prefix').notNull(),
+    amount: amount('amount').notNull(),
+    currency: text('currency').notNull(),
+    railAdapter: text('rail_adapter').notNull(),
+    /** What this one payer needs in order to pay — an acceptance address, and what to send. */
+    instruction: jsonb('instruction').notNull().default({}),
+    status: checkoutSessionStatusEnum('status').notNull().default('open'),
+    expiresAt: tstz('expires_at').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('checkout_sessions_token_hash_idx').on(t.tokenHash),
+    /** One session per payment: two browsers must never be told they own the same money. */
+    uniqueIndex('checkout_sessions_payment_idx').on(t.paymentId),
+    index('checkout_sessions_link_status_idx').on(t.linkId, t.status),
+    index('checkout_sessions_expiry_idx').on(t.status, t.expiresAt),
+  ],
+);
+
 export const schema = {
   merchants,
   paymentProfiles,
   paymentLinks,
+  checkoutSessions,
   payments,
   paymentEvents,
   settlements,

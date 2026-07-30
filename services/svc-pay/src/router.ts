@@ -4,7 +4,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { PayError, type PayService } from './payment-service.js';
 import type { UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import type { RailRegistry } from './rails/registry.js';
-import { SandboxRailRefusal } from './rails/posture.js';
+import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.js';
 
 /**
  * svc-pay's internal tRPC surface (§2 — cross-service calls go through
@@ -52,6 +52,25 @@ const settlementView = z.object({
   payoutMethod: z.string().nullable(),
   payoutRef: z.string().nullable(),
   status: z.enum(['pending', 'posted', 'paid_out', 'failed']),
+});
+
+/**
+ * A checkout session on the wire.
+ *
+ * NOTHING HERE IDENTIFIES ANYTHING BUT THIS SESSION. No merchantId, no linkId,
+ * no paymentId, no railAdapter — the caller is anonymous, so the response
+ * carries what one payer needs in order to pay and nothing they could use to
+ * enumerate a merchant or correlate two links.
+ */
+const checkoutSessionView = z.object({
+  id: z.string().uuid(),
+  status: z.enum(['open', 'completed', 'expired', 'cancelled']),
+  label: z.string(),
+  amount: amountSchema,
+  currency: assetIdSchema,
+  method: z.string(),
+  expiresAt: z.string().datetime({ offset: true }),
+  instruction: z.object({ reference: z.string(), amount: amountSchema, currency: assetIdSchema }).nullable(),
 });
 
 const depositView = z.object({
@@ -136,10 +155,68 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           label: z.string(),
           amount: amountSchema.nullable(),
           currency: z.string().nullable(),
+          expiresAt: z.string().nullable(),
+          remainingUses: z.number().int().nullable(),
           checkoutConfig: z.record(z.unknown()),
         }),
       )
       .query(({ input }) => wrap(() => pay.resolvePaymentLink(input.token))),
+
+    /**
+     * HOSTED CHECKOUT — the public, unauthenticated payment path (§6.1).
+     *
+     * `publicProcedure`, deliberately and unavoidably: it takes money from
+     * somebody who is not logged in, which is what a hosted checkout IS. What
+     * makes that safe is not a scope, because there is no principal to hang one
+     * on. It is the four properties the service enforces:
+     *
+     *   · THE AMOUNT IS NOT THE CALLER'S. On a fixed-amount link the input
+     *     `amount` is ignored outright — not compared, not validated against the
+     *     link, ignored — and the session freezes the link's number.
+     *   · THERE IS NO RAIL INPUT, AND THERE WILL NOT BE ONE. The rail is chosen
+     *     server-side from `PAY_CHECKOUT_RAILS`. A hosted checkout that can name
+     *     a rail is the route back to the sandbox-withdrawal P0.
+     *   · A SANDBOX RAIL IS REFUSED on the public surface under `live-only`,
+     *     even though sandbox `authorize`/`capture` are allowed on the merchant
+     *     integration path. See `assertRailMayAcceptPublicPayment`.
+     *   · THE SESSION IS NOT A PAYMENT AUTHORITY. Nothing here can mark anything
+     *     paid; only a verified rail webhook can.
+     */
+    checkout: router({
+      open: publicProcedure
+        .input(
+          z.object({
+            token: z.string().min(8).max(200),
+            /** Honoured only on a link that fixes no amount. Otherwise ignored. */
+            amount: amountSchema.optional(),
+            /** Honoured only on a link that fixes no currency. Otherwise ignored. */
+            assetId: assetIdSchema.optional(),
+          }),
+        )
+        .output(z.object({ sessionToken: z.string(), session: checkoutSessionView }))
+        .mutation(({ input }) =>
+          wrap(async () => {
+            const { sessionToken, session } = await pay.openCheckoutSession({
+              linkToken: input.token,
+              amount: input.amount === undefined ? undefined : parseAmount(input.amount),
+              assetId: input.assetId,
+            });
+            return { sessionToken, session };
+          }),
+        ),
+
+      /**
+       * Poll a session by its OWN token.
+       *
+       * A separate token from the link's, because a link is a many-payer
+       * capability and a session is one payer's: addressing sessions by the link
+       * token would let anybody holding the URL read a stranger's checkout.
+       */
+      status: publicProcedure
+        .input(z.object({ sessionToken: z.string().min(8).max(200) }))
+        .output(checkoutSessionView)
+        .query(({ input }) => wrap(() => pay.getCheckoutSession(input.sessionToken))),
+    }),
 
     /**
      * What an operator dashboard renders, and what routing will read (§6.1).
@@ -225,7 +302,10 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             profileId: z.string().uuid().nullish(),
             amount: amountSchema.optional(),
             currency: assetIdSchema.optional(),
+            /** Omit for the service default. A link with no expiry cannot be created. */
             expiresAt: z.string().datetime({ offset: true }).optional(),
+            /** Completed payments this link may take. Omit for unbounded. */
+            maxUses: z.number().int().min(1).max(1_000_000).optional(),
           }),
         )
         .output(
@@ -234,19 +314,29 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             token: z.string(),
             prefix: z.string(),
             label: z.string(),
+            /** Always a date. The service defaults and caps it; it is never null. */
+            expiresAt: z.string().datetime({ offset: true }),
+            maxUses: z.number().int().nullable(),
           }),
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
-            return pay.createPaymentLink({
+            const link = await pay.createPaymentLink({
               merchantId: input.merchantId,
               label: input.label,
               profileId: input.profileId,
               amount: input.amount === undefined ? undefined : parseAmount(input.amount),
               currency: input.currency,
-              expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+              // `undefined`, NOT `null`. This line used to pass `null` when the
+              // caller omitted an expiry, which the service reads as "never
+              // expires" and now refuses outright — a payment link is a
+              // capability URL, and an omitted expiry has to mean the default
+              // rather than forever.
+              expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+              maxUses: input.maxUses,
             });
+            return { ...link, expiresAt: link.expiresAt.toISOString() };
           }),
         ),
 
@@ -262,6 +352,8 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
               currency: z.string().nullable(),
               active: z.boolean(),
               expiresAt: z.string().nullable(),
+              maxUses: z.number().int().nullable(),
+              uses: z.number().int(),
               createdAt: z.string(),
             }),
           ),
@@ -734,6 +826,18 @@ function toTrpcError(err: unknown): unknown {
   if (err instanceof SandboxRailRefusal) {
     return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: `${err.code}: ${err.message}`, cause: err });
   }
+  /**
+   * SERVICE_UNAVAILABLE, for exactly the reason above. A hosted checkout that
+   * cannot reach a real rail is not a bad request and not a server fault: the
+   * request was well-formed and the platform cannot serve it, because it has no
+   * rail that would actually take the payer's money. BAD_REQUEST would send a
+   * merchant's engineer looking for a mistake in their integration that is not
+   * there, and INTERNAL_SERVER_ERROR reads as "retry", which is the one thing
+   * that can never fix this.
+   */
+  if (err instanceof PublicCheckoutUnavailable) {
+    return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: `${err.code}: ${err.message}`, cause: err });
+  }
   if (!(err instanceof PayError)) return err;
 
   const code = (() => {
@@ -743,9 +847,24 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.profile_not_found':
       case 'pay.link_not_found':
       case 'pay.settlement_not_found':
+      case 'pay.checkout_session_not_found':
         return 'NOT_FOUND' as const;
       case 'pay.link_expired':
+      case 'pay.checkout_session_expired':
         return 'BAD_REQUEST' as const;
+      /**
+       * CONFLICT, not NOT_FOUND. The link is real and the URL is correct — it
+       * has simply been paid as many times as the merchant allowed, and a
+       * session that is already closed is not a missing one. A 404 sends the
+       * caller looking for a typo that is not there; a conflict says the state
+       * is wrong, which is the only thing that is actually true.
+       */
+      case 'pay.link_exhausted':
+      case 'pay.checkout_session_closed':
+        return 'CONFLICT' as const;
+      /** The caller is anonymous and opening rows in our database. */
+      case 'pay.checkout_busy':
+        return 'TOO_MANY_REQUESTS' as const;
       case 'pay.invalid_transition':
       case 'pay.capture_exceeds_authorized':
       case 'pay.refund_exceeds_captured':

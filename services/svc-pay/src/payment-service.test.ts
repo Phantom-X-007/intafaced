@@ -51,7 +51,22 @@ import { signPayload } from './rails/webhook-signature.js';
  */
 const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', 'drizzle', '0000_pay_init.sql'), 'utf8');
+
+/**
+ * 0000, 0002 and 0003 — every migration touching the MERCHANT-money tables,
+ * applied together and truncated together in `beforeEach`.
+ *
+ * The hosted-checkout tests live in this file rather than in one of their own
+ * for exactly that reason. `merchants`, `payment_links`, `checkout_sessions`,
+ * `payments` and `payment_events` are one connected set that this suite already
+ * TRUNCATEs between tests — and vitest runs test FILES in parallel, so a second
+ * file exercising the same tables would have its rows deleted out from under it
+ * mid-assertion. 0001's tables (`deposits`, `withdrawals`) are disjoint, which
+ * is precisely why `user-money-service.test.ts` legitimately gets its own file.
+ */
+const migrations = ['0000_pay_init.sql', '0002_pay_payment_links.sql', '0003_pay_checkout_sessions.sql'].map((f) =>
+  readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
+);
 
 /** Shared by every svc-pay suite that brings the schema up. Any constant, as long as it is the same one. */
 const PAY_MIGRATION_LOCK = 8_140_701;
@@ -96,7 +111,7 @@ if (!available) {
   // Postgres kills one of them with a deadlock. Same constant, both files.
   await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(${PAY_MIGRATION_LOCK})`;
-    await tx.unsafe(migration);
+    for (const migration of migrations) await tx.unsafe(migration);
   });
 
   let ledger: MemoryLedger;
@@ -107,7 +122,16 @@ if (!available) {
   let pay: PayService;
 
   beforeEach(async () => {
-    await sql`TRUNCATE pay.settlements, pay.payment_events, pay.payments, pay.payment_profiles, pay.merchants RESTART IDENTITY CASCADE`;
+    // A BARE TRUNCATE, deliberately not wrapped in the migration advisory lock.
+    //
+    // Taking that lock here looks like insurance and is the opposite: if the
+    // other svc-pay suite holds it while applying its migration, this hook
+    // blocks, vitest times the hook out, and the abandoned transaction then
+    // commits its TRUNCATE somewhere in the middle of the NEXT test — which
+    // surfaces as "merchant not found after insert" and foreign-key violations
+    // in tests that have nothing to do with any of this. A blocking cleanup is
+    // worse than a racing one.
+    await sql`TRUNCATE pay.checkout_sessions, pay.payment_links, pay.settlements, pay.payment_events, pay.payments, pay.payment_profiles, pay.merchants RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     chain = new MemoryChain();
     card = new CardSandboxAdapter({ secret: SECRET });
@@ -1077,6 +1101,353 @@ if (!available) {
 
     it('reports an unknown payment rather than returning an empty one', async () => {
       await expect(pay.getPayment('44444444-4444-4444-8444-444444444444')).rejects.toBeInstanceOf(PayError);
+    });
+  });
+
+  // ── PAYMENT LINKS AS CAPABILITY URLS ──────────────────────────────────────
+  //
+  // A payment link is a bearer credential that anyone holding can pay against,
+  // and it survives in email threads, screenshots and browser history. Every
+  // test here fails if one becomes issuable without an end.
+
+  describe('payment links', () => {
+    it('always has an expiry, even when the merchant does not ask for one', async () => {
+      const m = await merchant();
+      const link = await pay.createPaymentLink({ merchantId: m.id, label: 'Invoice 1', amount: amt('10'), currency: 'USDT' });
+
+      expect(link.expiresAt).toBeInstanceOf(Date);
+      expect(link.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+      const rows = await sql<Array<{ expires_at: Date | null }>>`SELECT expires_at FROM pay.payment_links WHERE id = ${link.id}`;
+      expect(rows[0]!.expires_at).not.toBeNull();
+    });
+
+    it('REFUSES a link that never expires', async () => {
+      const m = await merchant();
+      await expect(
+        pay.createPaymentLink({ merchantId: m.id, label: 'Forever', amount: amt('10'), currency: 'USDT', expiresAt: null }),
+      ).rejects.toMatchObject({ code: 'pay.link_expiry_invalid' });
+
+      // And nothing was written. A refusal that leaves a row behind is not one.
+      const rows = await sql`SELECT id FROM pay.payment_links WHERE merchant_id = ${m.id}`;
+      expect(rows).toHaveLength(0);
+    });
+
+    it('caps a lifetime the merchant asked to be longer than the ceiling', async () => {
+      const m = await merchant();
+      const capped = new PayService(sql, ledger, rails, { linkMaxTtlDays: 7 });
+      const tenYears = new Date(Date.now() + 3650 * 24 * 3600_000);
+      const link = await capped.createPaymentLink({
+        merchantId: m.id,
+        label: 'Long',
+        amount: amt('1'),
+        currency: 'USDT',
+        expiresAt: tenYears,
+      });
+
+      expect(link.expiresAt.getTime()).toBeLessThan(Date.now() + 8 * 24 * 3600_000);
+    });
+
+    it('refuses to resolve an expired link', async () => {
+      const m = await merchant();
+      const link = await pay.createPaymentLink({ merchantId: m.id, label: 'Old', amount: amt('5'), currency: 'USDT' });
+      await sql`UPDATE pay.payment_links SET expires_at = now() - interval '1 day' WHERE id = ${link.id}`;
+
+      await expect(pay.resolvePaymentLink(link.token)).rejects.toMatchObject({ code: 'pay.link_expired' });
+    });
+
+    it('reports a REVOKED link as not found, never as revoked', async () => {
+      const m = await merchant();
+      const link = await pay.createPaymentLink({ merchantId: m.id, label: 'Gone', amount: amt('5'), currency: 'USDT' });
+      expect(await pay.deactivatePaymentLink(m.id, link.id)).toEqual({ deactivated: true });
+
+      // Whoever holds this URL is anonymous. Confirming the token was once real
+      // tells them the merchant exists and that the link was worth something.
+      await expect(pay.resolvePaymentLink(link.token)).rejects.toMatchObject({ code: 'pay.link_not_found' });
+    });
+
+    it('counts down a bounded link and then refuses it', async () => {
+      const m = await merchant();
+      const link = await pay.createPaymentLink({
+        merchantId: m.id,
+        label: 'One-shot invoice',
+        amount: amt('5'),
+        currency: 'USDT',
+        maxUses: 1,
+      });
+
+      expect((await pay.resolvePaymentLink(link.token)).remainingUses).toBe(1);
+
+      await sql`UPDATE pay.payment_links SET uses = 1 WHERE id = ${link.id}`;
+      await expect(pay.resolvePaymentLink(link.token)).rejects.toMatchObject({ code: 'pay.link_exhausted' });
+    });
+  });
+
+  // ── HOSTED CHECKOUT ───────────────────────────────────────────────────────
+  //
+  // THE PUBLIC, UNAUTHENTICATED, VALUE-BEARING SURFACE. Every test in here is
+  // about somebody who is not logged in and may be hostile.
+
+  describe('hosted checkout', () => {
+    /** A link and a service configured for the public checkout path. */
+    async function linked(options: { amount?: string; currency?: string; maxUses?: number } = {}) {
+      const m = await merchant();
+      const link = await pay.createPaymentLink({
+        merchantId: m.id,
+        label: 'Order 1001',
+        amount: options.amount === undefined ? undefined : amt(options.amount),
+        currency: options.currency,
+        maxUses: options.maxUses,
+      });
+      return { merchant: m, link };
+    }
+
+    const paymentIdFor = async (reference: string) => {
+      const rows = await sql<Array<{ id: string }>>`SELECT id FROM pay.payments WHERE rail_ref = ${reference}`;
+      return rows[0]!.id;
+    };
+
+    it('opens a session, freezes the amount, and hands the payer a rail reference', async () => {
+      const { link } = await linked({ amount: '25.5', currency: 'USDT' });
+
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+
+      expect(session.status).toBe('open');
+      expect(session.amount).toBe('25.5');
+      expect(session.currency).toBe('USDT');
+      expect(session.instruction?.reference).toBeTruthy();
+      expect(sessionToken.startsWith('cs_')).toBe(true);
+
+      // NOTHING IN THE PAYER'S VIEW IDENTIFIES ANYTHING BUT THIS SESSION.
+      const keys = Object.keys(session);
+      expect(keys).not.toContain('merchantId');
+      expect(keys).not.toContain('paymentId');
+      expect(keys).not.toContain('railAdapter');
+      expect(keys).not.toContain('linkId');
+    });
+
+    /**
+     * THE FRAUD TEST. A payer who edits the form cannot lower what they owe.
+     *
+     * The supplied amount is not merged, not compared, not validated against the
+     * link — it is IGNORED. Comparing would mean there exists a request in which
+     * the client's number is read, and the property this surface needs is that
+     * there is not.
+     */
+    it('IGNORES a payer-supplied amount on a fixed-amount link', async () => {
+      const { link } = await linked({ amount: '100', currency: 'USDT' });
+
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token, amount: amt('0.01'), assetId: 'BTC' });
+
+      expect(session.amount).toBe('100');
+      expect(session.currency).toBe('USDT');
+
+      // And the PAYMENT — the row the ledger will eventually be posted from —
+      // carries the merchant's number, not the payer's.
+      const payment = await pay.getPayment(await paymentIdFor(session.instruction!.reference));
+      expect(formatAmount(payment.amount)).toBe('100');
+      expect(payment.assetId).toBe('USDT');
+    });
+
+    it('needs the payer to state an amount on a variable-amount link, and freezes what they said', async () => {
+      const { link } = await linked({ currency: 'USDT' });
+
+      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({
+        code: 'pay.checkout_amount_required',
+      });
+
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, amount: amt('7.25') });
+      expect(session.amount).toBe('7.25');
+
+      // Frozen: a later read renders the session's number, never a new one.
+      expect((await pay.getCheckoutSession(sessionToken)).amount).toBe('7.25');
+    });
+
+    /**
+     * THE RAIL IS NOT THE CALLER'S TO CHOOSE.
+     *
+     * `card-sandbox` is registered, healthy, and supports the whole inbound
+     * lifecycle — and it is not what a public checkout lands on, because it is
+     * not in `checkoutRails`. There is no input on `openCheckoutSession` that
+     * could make it one.
+     */
+    it('chooses the rail server-side; the payer cannot name one', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const payment = await pay.getPayment(await paymentIdFor(session.instruction!.reference));
+
+      expect(payment.railAdapter).toBe('crypto-native');
+      expect(rails.has('card-sandbox')).toBe(true);
+    });
+
+    /**
+     * THE P0 GATE, ON THE PUBLIC SURFACE.
+     *
+     * `authorize` and `capture` are deliberately NOT in
+     * `VALUE_LEAVING_CAPABILITIES`, because a sandbox capture on a merchant's
+     * own integration leaves the platform short and reconciliation catches it.
+     * That reasoning does not survive contact with an anonymous payer who is
+     * shown "paid" and a merchant who is credited clearing they can withdraw —
+     * so `live-only` refuses the public path outright.
+     */
+    it('REFUSES to open a checkout on a sandbox rail under live-only, and writes nothing', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      const strict = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
+
+      await expect(strict.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({
+        code: 'pay.checkout_rail_not_live',
+      });
+
+      // NOTHING WAS CREATED. No session for a payer to poll, no payment row for
+      // a settlement sweep to find, and nothing to reconcile.
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+    });
+
+    it('refuses when the link is exhausted, expired or revoked — before any row exists', async () => {
+      const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT', maxUses: 1 });
+      await sql`UPDATE pay.payment_links SET uses = 1 WHERE id = ${link.id}`;
+      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.link_exhausted' });
+
+      const second = await pay.createPaymentLink({ merchantId: m.id, label: 'Old', amount: amt('1'), currency: 'USDT' });
+      await sql`UPDATE pay.payment_links SET expires_at = now() - interval '1 hour' WHERE id = ${second.id}`;
+      await expect(pay.openCheckoutSession({ linkToken: second.token })).rejects.toMatchObject({ code: 'pay.link_expired' });
+
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+    });
+
+    it('gives every payer their own session token and their own payment', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+
+      const first = await pay.openCheckoutSession({ linkToken: link.token });
+      const second = await pay.openCheckoutSession({ linkToken: link.token });
+
+      expect(first.sessionToken).not.toBe(second.sessionToken);
+      expect(first.session.id).not.toBe(second.session.id);
+      // Two payers, two acceptance references. One shared reference would merge
+      // two people's money into one payment.
+      expect(first.session.instruction!.reference).not.toBe(second.session.instruction!.reference);
+    });
+
+    it('puts a floor under an anonymous caller opening sessions off one URL', async () => {
+      const { link } = await linked({ amount: '1', currency: 'USDT' });
+      const bounded = new PayService(sql, ledger, rails, { maxOpenSessionsPerLink: 2 });
+
+      await bounded.openCheckoutSession({ linkToken: link.token });
+      await bounded.openCheckoutSession({ linkToken: link.token });
+
+      await expect(bounded.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.checkout_busy' });
+    });
+
+    /**
+     * THE §5 QUESTION FOR THIS FEATURE: if the browser gives up, whose money is
+     * stranded?
+     *
+     * NOBODY'S — and this test is the proof. The session expires; the PAYMENT
+     * does not. Funds sent to the acceptance address after the tab timed out are
+     * still matched to the payment by the rail's own webhook, still booked, and
+     * still credited to the merchant. Expiring the payment alongside the session
+     * is the change that WOULD strand a late payer, and this test is what stops
+     * somebody making it.
+     */
+    it('expires the SESSION without expiring the PAYMENT — a late payer is still paid in', async () => {
+      const { merchant: m, link } = await linked({ amount: '40', currency: 'USDT' });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const address = session.instruction!.reference;
+
+      // The payer wanders off. The handoff window closes.
+      await sql`UPDATE pay.checkout_sessions SET expires_at = now() - interval '1 minute' WHERE id = ${session.id}`;
+      expect((await pay.getCheckoutSession(sessionToken)).status).toBe('expired');
+      expect(await pay.clearingBalance(m.id, 'USDT')).toBe(0n);
+
+      // And then they pay anyway. The chain does not know about our tab.
+      chain.credit({ address, assetId: 'USDT', amount: amt('40'), from: '0xlatepayer', confirmations: 12 });
+      const outcome = await pay.handleWebhook(
+        'crypto-native',
+        signed('crypto-native', { id: 'evt-late-1', type: 'captured', ref: address, occurredAt: new Date().toISOString() }),
+      );
+
+      expect(outcome.applied).toBe(true);
+      // The merchant has the money. That is the whole assertion.
+      expect(await clearingOf(m.id)).toBe('40');
+      // And the payer's record of their own attempt says paid, rather than
+      // sitting `expired` next to a captured payment.
+      expect((await pay.getCheckoutSession(sessionToken)).status).toBe('completed');
+    });
+
+    it('counts a completed payment against the link exactly once, however many times the webhook is delivered', async () => {
+      const { link } = await linked({ amount: '15', currency: 'USDT', maxUses: 2 });
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const address = session.instruction!.reference;
+
+      chain.credit({ address, assetId: 'USDT', amount: amt('15'), from: '0xbuyer', confirmations: 12 });
+      const delivery = signed('crypto-native', {
+        id: 'evt-dup-1',
+        type: 'captured',
+        ref: address,
+        occurredAt: new Date().toISOString(),
+      });
+
+      await pay.handleWebhook('crypto-native', delivery);
+      const second = await pay.handleWebhook('crypto-native', delivery);
+      expect(second.duplicate).toBe(true);
+
+      const rows = await sql<Array<{ uses: number }>>`SELECT uses FROM pay.payment_links WHERE id = ${link.id}`;
+      expect(Number(rows[0]!.uses)).toBe(1);
+      expect((await pay.resolvePaymentLink(link.token)).remainingUses).toBe(1);
+    });
+
+    /**
+     * THE OTHER CRASH POINT: the process dies after the session and payment are
+     * committed and before the rail was ever asked.
+     *
+     * Whose money is stranded? Nobody's — no payer has been handed anywhere to
+     * send funds yet. The session sits `open` with no instruction, and the next
+     * read completes it, because `authorize` is idempotent on the payment id and
+     * the acceptance address is derived from it.
+     */
+    it('resumes a session that was committed before the rail was asked', async () => {
+      const { link } = await linked({ amount: '12', currency: 'USDT' });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const address = session.instruction!.reference;
+
+      // Simulate the crash: the row as it was between the two phases.
+      await sql`UPDATE pay.checkout_sessions SET instruction = '{}'::jsonb WHERE id = ${session.id}`;
+
+      const resumed = await pay.getCheckoutSession(sessionToken);
+      expect(resumed.status).toBe('open');
+      // The SAME address. A second one would split one payer across two
+      // payments and strand whichever they did not use.
+      expect(resumed.instruction!.reference).toBe(address);
+    });
+
+    it('refuses a public checkout for a suspended merchant, exactly as the integration path does', async () => {
+      const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+
+      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+    });
+
+    it('reports an unknown session token as not found rather than an empty session', async () => {
+      await expect(pay.getCheckoutSession('cs_nothing_here_at_all')).rejects.toMatchObject({
+        code: 'pay.checkout_session_not_found',
+      });
+    });
+
+    it('sweeps lapsed sessions without touching a payment or a balance', async () => {
+      const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const paymentId = await paymentIdFor(session.instruction!.reference);
+
+      await sql`UPDATE pay.checkout_sessions SET expires_at = now() - interval '1 second' WHERE id = ${session.id}`;
+      expect(await pay.expireCheckoutSessions()).toEqual({ expired: 1 });
+
+      // The payment is untouched. Sweeping a browser handoff is not an opinion
+      // about anybody's money.
+      expect((await pay.getPayment(paymentId)).status).toBe('created');
+      expect(await pay.clearingBalance(m.id, 'USDT')).toBe(0n);
     });
   });
 }

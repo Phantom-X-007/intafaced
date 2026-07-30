@@ -13,7 +13,7 @@ import {
 } from '@intafaced/ledger-client';
 import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequest } from './rails/rail-adapter.js';
 import type { RailRegistry } from './rails/registry.js';
-import { assertRailMayMoveValue, type ValueMovementPolicy } from './rails/posture.js';
+import { assertRailMayMoveValue, selectPublicCheckoutRail, type ValueMovementPolicy } from './rails/posture.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
 
 /**
@@ -72,6 +72,19 @@ export type PayErrorCode =
   | 'pay.profile_not_found'
   | 'pay.link_not_found'
   | 'pay.link_expired'
+  /** The link's `maxUses` has been reached. Never resolved by retrying. */
+  | 'pay.link_exhausted'
+  /** A merchant asked for a link that never expires, or one past the lifetime cap. */
+  | 'pay.link_expiry_invalid'
+  // ── Hosted checkout (public, unauthenticated — `openCheckoutSession`) ──
+  | 'pay.checkout_session_not_found'
+  | 'pay.checkout_session_expired'
+  /** The session is completed or cancelled — anything but open. */
+  | 'pay.checkout_session_closed'
+  /** A variable-amount link needs the payer to say how much. */
+  | 'pay.checkout_amount_required'
+  /** Too many sessions open on one link. The cheap floor under an anonymous caller. */
+  | 'pay.checkout_busy'
   | 'pay.invalid_amount'
   | 'pay.invalid_transition'
   | 'pay.capture_exceeds_authorized'
@@ -205,6 +218,101 @@ export interface PayServiceOptions {
    * so the boot refusal and the runtime check cannot disagree.
    */
   readonly valueMovement?: ValueMovementPolicy;
+
+  /**
+   * Which rails may serve the PUBLIC hosted checkout, in preference order, and
+   * the payment method each one represents.
+   *
+   * CONFIGURATION, NEVER A REQUEST FIELD. A hosted checkout that lets its caller
+   * name a rail — or a payment link that resolves to one — is exactly where the
+   * sandbox-withdrawal P0 comes back, so the payer never names one and this list
+   * is the only thing that decides.
+   *
+   * Default is `crypto-native` alone. It is the only v1 rail that could ever be
+   * live (§13: "crypto-native is real from day one"), and `card-sandbox` must
+   * never take money from an anonymous third party even in dev — a sandbox
+   * capture on the public surface credits a merchant nobody paid.
+   */
+  readonly checkoutRails?: readonly CheckoutRail[];
+
+  /** How long a browser handoff stays open. Minutes. Never applied to the payment. */
+  readonly checkoutSessionTtlSeconds?: number;
+
+  /** Applied when a merchant creates a link without naming an expiry. */
+  readonly linkDefaultTtlDays?: number;
+
+  /** The hard ceiling on a link's lifetime. A capability URL does not live forever. */
+  readonly linkMaxTtlDays?: number;
+
+  /** Open sessions allowed against one link at once. An anti-abuse floor, not a rate limiter. */
+  readonly maxOpenSessionsPerLink?: number;
+
+  /** Injectable clock. Expiry is half of this feature, so it has to be drivable. */
+  readonly now?: () => Date;
+}
+
+/** One entry in `checkoutRails`: which adapter, and what `payments.method` it writes. */
+export interface CheckoutRail {
+  readonly railId: string;
+  /** 'crypto' | 'card' | 'bank_transfer' — what the payer is actually doing. */
+  readonly method: string;
+}
+
+export type CheckoutSessionStatus = 'open' | 'completed' | 'expired' | 'cancelled';
+
+/**
+ * What a public checkout session looks like to the payer's browser.
+ *
+ * NOTE WHAT IS ABSENT: no merchant id, no link id, no rail adapter id, no
+ * payment id, no profile configuration. A public surface returns what this one
+ * payer needs in order to pay, and nothing that would let them enumerate
+ * anything or correlate two merchants.
+ */
+export interface CheckoutSessionView {
+  readonly id: string;
+  readonly status: CheckoutSessionStatus;
+  readonly label: string;
+  /** Decimal string. Frozen at open; never re-read from a request afterwards. */
+  readonly amount: string;
+  readonly currency: string;
+  readonly method: string;
+  readonly expiresAt: string;
+  /**
+   * How the payer actually pays: a rail reference, and what to send to it.
+   *
+   * Null while the rail has not answered yet. On `crypto-native` the rail
+   * reference IS the acceptance address, derived from the payment id — which is
+   * why this is generic rather than an `{ address }` the core would have had to
+   * learn a rail's shape to produce.
+   */
+  readonly instruction: { readonly reference: string; readonly amount: string; readonly currency: string } | null;
+}
+
+interface LinkRow {
+  id: string;
+  merchant_id: string;
+  profile_id: string | null;
+  label: string;
+  amount: string | null;
+  currency: string | null;
+  active: boolean;
+  expires_at: Date | null;
+  max_uses: number | null;
+  uses: number;
+  checkout_config: Record<string, unknown> | null;
+}
+
+interface CheckoutSessionRow {
+  id: string;
+  link_id: string;
+  merchant_id: string;
+  payment_id: string | null;
+  amount: string;
+  currency: string;
+  rail_adapter: string;
+  instruction: Record<string, unknown>;
+  status: CheckoutSessionStatus;
+  expires_at: Date;
 }
 
 interface PaymentRow {
@@ -256,9 +364,18 @@ const TRANSITIONS: Readonly<Record<PaymentStatus, readonly PaymentStatus[]>> = {
   failed: [],
 };
 
+/** The v1 public checkout estate: one rail, and the only one that can ever be live. */
+export const DEFAULT_CHECKOUT_RAILS: readonly CheckoutRail[] = [{ railId: 'crypto-native', method: 'crypto' }];
+
 export class PayService {
   private readonly defaultFeeBps: number | undefined;
   private readonly valueMovement: ValueMovementPolicy;
+  private readonly checkoutRails: readonly CheckoutRail[];
+  private readonly checkoutSessionTtlSeconds: number;
+  private readonly linkDefaultTtlDays: number;
+  private readonly linkMaxTtlDays: number;
+  private readonly maxOpenSessionsPerLink: number;
+  private readonly now: () => Date;
 
   constructor(
     private readonly sql: Sql,
@@ -268,6 +385,12 @@ export class PayService {
   ) {
     this.defaultFeeBps = options.defaultFeeBps;
     this.valueMovement = options.valueMovement ?? 'allow-sandbox';
+    this.checkoutRails = options.checkoutRails ?? DEFAULT_CHECKOUT_RAILS;
+    this.checkoutSessionTtlSeconds = options.checkoutSessionTtlSeconds ?? 900;
+    this.linkDefaultTtlDays = options.linkDefaultTtlDays ?? 30;
+    this.linkMaxTtlDays = options.linkMaxTtlDays ?? 365;
+    this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
+    this.now = options.now ?? (() => new Date());
   }
 
   // ── Merchants ──────────────────────────────────────────────────────────────
@@ -338,6 +461,26 @@ export class PayService {
   /**
    * Create a shareable payment link. The raw token is returned once.
    * Hosted page: GET /checkout?token= (see checkout-page.ts).
+   *
+   * A PAYMENT LINK IS A CAPABILITY URL. Whoever holds one can pay against it,
+   * and nobody has to log in to do so, so three properties are not optional:
+   *
+   *   EXPIRY is mandatory in effect, even though the parameter is not. A link
+   *   with no expiry is a bearer credential with no end, sitting in an email
+   *   thread, a screenshot, a Slack channel and a browser history forever. So an
+   *   omitted `expiresAt` gets `linkDefaultTtlDays`, an explicit one is capped at
+   *   `linkMaxTtlDays`, and an explicit `null` — "never expires" — is REFUSED.
+   *
+   *   BOUNDED USE is opt-in, via `maxUses`, and the default of unbounded is a
+   *   decision rather than an oversight. A use is consumed by a completed
+   *   payment; a completed payment against a merchant's own link is revenue. The
+   *   merchant who is issuing an invoice sets `maxUses: 1` and gets single-use
+   *   semantics; the merchant running a tip jar does not, and should not have to.
+   *   The bound is checked at session open, where nothing has moved.
+   *
+   *   REVOCATION is `deactivatePaymentLink`, and it is one-way. There is no
+   *   reactivate: a link a merchant has revoked was revoked for a reason, and
+   *   the honest way to undo it is to issue a new token.
    */
   async createPaymentLink(input: {
     merchantId: string;
@@ -345,8 +488,11 @@ export class PayService {
     profileId?: string | null;
     amount?: Amount;
     currency?: string;
+    /** Omit for the default lifetime. `null` — "never expires" — is refused. */
     expiresAt?: Date | null;
-  }): Promise<{ id: string; token: string; prefix: string; label: string }> {
+    /** Completed payments this link may take. Omit for unbounded. */
+    maxUses?: number;
+  }): Promise<{ id: string; token: string; prefix: string; label: string; expiresAt: Date; maxUses: number | null }> {
     await this.getMerchant(input.merchantId);
     if (input.profileId) {
       const profiles = await this.sql<Array<{ id: string }>>`
@@ -356,13 +502,22 @@ export class PayService {
       if (!profiles[0]) throw new PayError('payment profile not found for merchant', 'pay.profile_not_found');
     }
 
+    if (input.maxUses !== undefined && (!Number.isInteger(input.maxUses) || input.maxUses < 1)) {
+      throw new PayError(`maxUses must be a positive integer, got ${input.maxUses}`, 'pay.invalid_amount');
+    }
+
+    const expiresAt = this.linkExpiryFor(input.expiresAt);
+
+    // 24 random bytes. Enumeration is not a threat model here, it is arithmetic
+    // — but the token is still only ever STORED as a hash, because a leaked
+    // database backup of payment links would otherwise be a wallet.
     const token = `pl_${randomBytes(24).toString('base64url')}`;
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const prefix = token.slice(0, 10);
 
     const rows = await this.sql<Array<{ id: string }>>`
       INSERT INTO pay.payment_links (
-        merchant_id, profile_id, token_hash, token_prefix, label, amount, currency, expires_at
+        merchant_id, profile_id, token_hash, token_prefix, label, amount, currency, expires_at, max_uses
       ) VALUES (
         ${input.merchantId},
         ${input.profileId ?? null},
@@ -371,16 +526,54 @@ export class PayService {
         ${input.label},
         ${input.amount === undefined ? null : formatAmount(input.amount)}::numeric,
         ${input.currency ?? null},
-        ${input.expiresAt ?? null}
+        ${expiresAt},
+        ${input.maxUses ?? null}
       )
       RETURNING id
     `;
 
-    return { id: rows[0]!.id, token, prefix, label: input.label };
+    return { id: rows[0]!.id, token, prefix, label: input.label, expiresAt, maxUses: input.maxUses ?? null };
+  }
+
+  /**
+   * The lifetime a link actually gets.
+   *
+   * `undefined` → the default. A date → capped. `null` → refused, and refusing
+   * is the point: "never expires" is the only value a caller can pass that
+   * makes the link strictly more dangerous than any other, so it is the one
+   * value that has to be argued for rather than typed.
+   */
+  private linkExpiryFor(requested: Date | null | undefined): Date {
+    const now = this.now().getTime();
+    const cap = new Date(now + this.linkMaxTtlDays * 24 * 60 * 60 * 1000);
+
+    if (requested === null) {
+      throw new PayError(
+        `A payment link cannot be created without an expiry — it is a capability URL, and whoever holds it can pay ` +
+          `against it. Omit expiresAt for the ${this.linkDefaultTtlDays}-day default, or name a date at most ` +
+          `${this.linkMaxTtlDays} days out.`,
+        'pay.link_expiry_invalid',
+      );
+    }
+    if (requested === undefined) return new Date(now + this.linkDefaultTtlDays * 24 * 60 * 60 * 1000);
+    if (Number.isNaN(requested.getTime())) throw new PayError('expiresAt is not a date', 'pay.link_expiry_invalid');
+    if (requested.getTime() <= now) {
+      throw new PayError('A payment link cannot be created already expired', 'pay.link_expiry_invalid');
+    }
+    // Capped rather than refused: a merchant asking for two years wants a
+    // long-lived link, and silently shortening it to the cap is what every
+    // other bounded-lifetime credential in this codebase does.
+    return requested.getTime() > cap.getTime() ? cap : requested;
   }
 
   /**
    * Public resolve. Returns checkout intent only — no merchant secrets.
+   *
+   * PUBLIC AND UNAUTHENTICATED, so what it does NOT say matters as much as what
+   * it does. There is no rail id in this response and there never will be: the
+   * rail is chosen server-side at session open (see `openCheckoutSession`), and
+   * a resolve that named one would be the first half of a payment link that
+   * resolves to a rail.
    */
   async resolvePaymentLink(token: string): Promise<{
     id: string;
@@ -389,32 +582,63 @@ export class PayService {
     label: string;
     amount: string | null;
     currency: string | null;
+    expiresAt: string | null;
+    /** Null when the link is unbounded. Counts down as payments complete. */
+    remainingUses: number | null;
+    checkoutConfig: Record<string, unknown>;
+  }> {
+    return this.readLink(this.sql, token);
+  }
+
+  private async readLink(
+    sql: Sql,
+    token: string,
+    options: { forUpdate?: boolean } = {},
+  ): Promise<{
+    id: string;
+    merchantId: string;
+    profileId: string | null;
+    label: string;
+    amount: string | null;
+    currency: string | null;
+    expiresAt: string | null;
+    remainingUses: number | null;
     checkoutConfig: Record<string, unknown>;
   }> {
     const tokenHash = createHash('sha256').update(token).digest('hex');
-    const rows = await this.sql<
-      Array<{
-        id: string;
-        merchant_id: string;
-        profile_id: string | null;
-        label: string;
-        amount: string | null;
-        currency: string | null;
-        active: boolean;
-        expires_at: Date | null;
-        checkout_config: Record<string, unknown> | null;
-      }>
-    >`
-      SELECT l.id, l.merchant_id, l.profile_id, l.label, l.amount::text, l.currency,
-             l.active, l.expires_at, p.checkout_config
-        FROM pay.payment_links l
-        LEFT JOIN pay.payment_profiles p ON p.id = l.profile_id
-       WHERE l.token_hash = ${tokenHash}
-    `;
+    // The lock is on the LINK, taken before any session row is counted or
+    // written. Two payers opening a checkout on the same link at the same
+    // instant must queue here, or both would see the same open-session count
+    // and the same remaining uses.
+    const rows = options.forUpdate
+      ? await sql<LinkRow[]>`
+          SELECT l.id, l.merchant_id, l.profile_id, l.label, l.amount::text, l.currency,
+                 l.active, l.expires_at, l.max_uses, l.uses, NULL::jsonb AS checkout_config
+            FROM pay.payment_links l
+           WHERE l.token_hash = ${tokenHash}
+           FOR UPDATE
+        `
+      : await sql<LinkRow[]>`
+          SELECT l.id, l.merchant_id, l.profile_id, l.label, l.amount::text, l.currency,
+                 l.active, l.expires_at, l.max_uses, l.uses, p.checkout_config
+            FROM pay.payment_links l
+            LEFT JOIN pay.payment_profiles p ON p.id = l.profile_id
+           WHERE l.token_hash = ${tokenHash}
+        `;
+
     const row = rows[0];
+    // A deactivated link is reported as NOT FOUND, not as revoked. Whoever holds
+    // this URL is anonymous, and confirming that a token was once real tells
+    // them the merchant exists and that the link was worth something.
     if (!row || !row.active) throw new PayError('payment link not found', 'pay.link_not_found');
-    if (row.expires_at && row.expires_at.getTime() < Date.now()) {
+    if (row.expires_at && row.expires_at.getTime() < this.now().getTime()) {
       throw new PayError('payment link expired', 'pay.link_expired');
+    }
+
+    const maxUses = row.max_uses === null ? null : Number(row.max_uses);
+    const remainingUses = maxUses === null ? null : Math.max(0, maxUses - Number(row.uses));
+    if (remainingUses !== null && remainingUses <= 0) {
+      throw new PayError('payment link has been used the maximum number of times', 'pay.link_exhausted');
     }
 
     return {
@@ -424,6 +648,8 @@ export class PayService {
       label: row.label,
       amount: row.amount,
       currency: row.currency,
+      expiresAt: row.expires_at?.toISOString() ?? null,
+      remainingUses,
       checkoutConfig: row.checkout_config ?? {},
     };
   }
@@ -437,6 +663,8 @@ export class PayService {
       currency: string | null;
       active: boolean;
       expiresAt: string | null;
+      maxUses: number | null;
+      uses: number;
       createdAt: string;
     }>
   > {
@@ -450,10 +678,12 @@ export class PayService {
         currency: string | null;
         active: boolean;
         expires_at: Date | null;
+        max_uses: number | null;
+        uses: number;
         created_at: Date;
       }>
     >`
-      SELECT id, token_prefix, label, amount::text, currency, active, expires_at, created_at
+      SELECT id, token_prefix, label, amount::text, currency, active, expires_at, max_uses, uses, created_at
         FROM pay.payment_links
        WHERE merchant_id = ${merchantId}
        ORDER BY created_at DESC
@@ -466,11 +696,24 @@ export class PayService {
       currency: r.currency,
       active: r.active,
       expiresAt: r.expires_at?.toISOString() ?? null,
+      maxUses: r.max_uses === null ? null : Number(r.max_uses),
+      uses: Number(r.uses),
       createdAt: r.created_at.toISOString(),
     }));
   }
 
-  /** Soft-disable a link so public resolve fails. Token never re-issued. */
+  /**
+   * REVOCATION. Soft-disable a link so public resolve fails, and so no further
+   * session can be opened against it. The token is never re-issued and there is
+   * no reactivate — a link a merchant revoked was revoked for a reason.
+   *
+   * IT DOES NOT CANCEL SESSIONS ALREADY OPEN, and it must not. A payer who is
+   * mid-checkout has been handed an acceptance address derived from their
+   * payment id; killing the payment out from under them while their funds are in
+   * flight is exactly how a payer's money ends up somewhere nothing points at.
+   * Revocation stops NEW payers; the ones already committed are still owed a
+   * working payment.
+   */
   async deactivatePaymentLink(merchantId: string, linkId: string): Promise<{ deactivated: boolean }> {
     await this.getMerchant(merchantId);
     const result = await this.sql`
@@ -479,6 +722,257 @@ export class PayService {
        WHERE id = ${linkId} AND merchant_id = ${merchantId} AND active = true
     `;
     return { deactivated: result.count > 0 };
+  }
+
+  // ── Hosted checkout (§6.1) ─────────────────────────────────────────────────
+  //
+  // THIS IS THE ONLY PUBLIC, UNAUTHENTICATED, VALUE-BEARING SURFACE IN THE
+  // SERVICE. Everything below assumes the caller is hostile until proven
+  // otherwise, and the design rules that follow from that are:
+  //
+  //   1. THE BROWSER DECIDES NOTHING THAT COSTS MONEY. The amount is frozen on
+  //      the server at open and never re-read from a request. The rail is chosen
+  //      from configuration and is never named by the caller — a hosted checkout
+  //      that can name a rail is the route straight back to the P0 that
+  //      `rails/posture.ts` closed.
+  //   2. THE RAIL SAYS WHEN IT IS PAID, NOT THE PAGE. A session completes only
+  //      when the payment behind it reaches `captured`, which happens on a
+  //      verified webhook or an operator-driven capture. There is no
+  //      "confirm payment" the payer can call.
+  //   3. NOTHING IS FABRICATED. If no rail can honestly accept a public payment
+  //      on this deployment, opening the session is REFUSED before any row is
+  //      written and the payer is never shown a checkout that cannot complete.
+  //   4. THE SESSION EXPIRES; THE PAYMENT DOES NOT. See `getCheckoutSession`.
+
+  /**
+   * Open a checkout session against a payment link. PUBLIC — the link token is
+   * the capability, exactly as it is for `resolvePaymentLink`.
+   *
+   * ORDER OF OPERATIONS, AND WHY:
+   *
+   *   0. Choose a rail and check the posture. FIRST, before a row exists,
+   *      because a refusal here must cost nothing and leave nothing behind.
+   *   1. Lock the link, validate it, count open sessions, freeze the amount,
+   *      write the payment and the session — one transaction, no external calls.
+   *   2. Ask the rail how this payer pays. OUTSIDE the transaction, because it
+   *      is a network call and because a crash here is resumable: the session is
+   *      committed with no instruction, and the next read fills it in.
+   *
+   * IF THE PROCESS DIES AFTER (1) AND BEFORE (2), whose money is stranded?
+   * Nobody's. No payer has been handed anywhere to send funds yet, and no value
+   * has moved on any rail. The session sits `open` with a null instruction and
+   * the first `getCheckoutSession` completes it, because `authorize` is
+   * idempotent on the payment id and the acceptance address is derived from it.
+   */
+  async openCheckoutSession(input: {
+    linkToken: string;
+    /** Honoured ONLY when the link fixes no amount. Otherwise the link wins. */
+    amount?: Amount;
+    /** Honoured ONLY when the link fixes no currency. Otherwise the link wins. */
+    assetId?: string;
+  }): Promise<{ sessionToken: string; session: CheckoutSessionView }> {
+    // Step 0. Before anything exists. A deployment with no rail that can
+    // honestly take a public payment refuses here, and the payer sees "this
+    // merchant cannot take payment right now" rather than a form that leads
+    // nowhere or, far worse, a fabricated receipt.
+    const adapter = selectPublicCheckoutRail(
+      this.rails,
+      this.checkoutRails.map((r) => r.railId),
+      this.valueMovement,
+      this.now(),
+    );
+    const method = this.checkoutRails.find((r) => r.railId === adapter.id)!.method;
+
+    const opened = await transaction(
+      this.sql,
+      async (tx) => {
+        const link = await this.readLink(tx, input.linkToken, { forUpdate: true });
+
+        const merchant = await this.getMerchant(link.merchantId);
+        if (merchant.status !== 'active') {
+          // Same code the merchant integration path uses, and deliberately the
+          // same refusal: a suspended merchant does not take money from the
+          // public either.
+          throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
+        }
+
+        // The floor under an anonymous caller opening rows off one URL forever.
+        // Not a rate limiter — a rate limiter belongs at the edge, and this is
+        // the bound that survives the edge being bypassed.
+        const open = await tx<Array<{ n: string }>>`
+          SELECT COUNT(*)::text AS n FROM pay.checkout_sessions
+           WHERE link_id = ${link.id} AND status = 'open' AND expires_at > ${this.now()}
+        `;
+        if (Number.parseInt(open[0]?.n ?? '0', 10) >= this.maxOpenSessionsPerLink) {
+          throw new PayError(`Too many checkout sessions are already open on this payment link`, 'pay.checkout_busy', {
+            limit: this.maxOpenSessionsPerLink,
+          });
+        }
+
+        // ── THE AMOUNT. The link always wins. ──
+        //
+        // A supplied amount is not merged, not compared, not validated against
+        // the link's — it is IGNORED whenever the link states one. Comparing
+        // would mean there is a request in which the client's number is read,
+        // and the whole property this surface needs is that there is not.
+        const linkAmount = link.amount === null ? undefined : parseAmount(link.amount);
+        const amount = linkAmount ?? input.amount;
+        if (amount === undefined) {
+          throw new PayError('This payment link needs the payer to state an amount', 'pay.checkout_amount_required');
+        }
+        if (amount <= 0n) throw new PayError('Payment amount must be positive', 'pay.invalid_amount');
+
+        const currency = link.currency ?? input.assetId;
+        if (!currency) {
+          throw new PayError('This payment link needs the payer to state a currency', 'pay.checkout_amount_required');
+        }
+
+        const payment = await insertPayment(tx, {
+          merchantId: link.merchantId,
+          profileId: link.profileId,
+          amount,
+          assetId: currency,
+          method,
+          railAdapter: adapter.id,
+          metadata: { source: 'checkout', linkId: link.id },
+        });
+
+        // Its own token, not the link's. A link is a MANY-payer capability and a
+        // session is ONE payer's: addressing sessions by the link token would
+        // let anybody holding the URL read a stranger's checkout.
+        const sessionToken = `cs_${randomBytes(24).toString('base64url')}`;
+        const rows = await tx<CheckoutSessionRow[]>`
+          INSERT INTO pay.checkout_sessions (
+            link_id, merchant_id, payment_id, token_hash, token_prefix,
+            amount, currency, rail_adapter, expires_at
+          ) VALUES (
+            ${link.id}, ${link.merchantId}, ${payment.id},
+            ${createHash('sha256').update(sessionToken).digest('hex')},
+            ${sessionToken.slice(0, 10)},
+            ${formatAmount(amount)}::numeric, ${currency}, ${adapter.id},
+            ${new Date(this.now().getTime() + this.checkoutSessionTtlSeconds * 1000)}
+          )
+          RETURNING id, link_id, merchant_id, payment_id, amount, currency, rail_adapter, instruction, status, expires_at
+        `;
+
+        return { sessionToken, row: rows[0]!, label: link.label, method };
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+
+    // Step 2, outside the transaction. Network call to the rail.
+    const withInstruction = await this.ensureInstruction(opened.row);
+
+    return {
+      sessionToken: opened.sessionToken,
+      session: toCheckoutSessionView(withInstruction, opened.label, opened.method),
+    };
+  }
+
+  /**
+   * Read a session by its own token. PUBLIC — this is what the hosted page polls.
+   *
+   * A SESSION EXPIRING DOES NOT EXPIRE THE PAYMENT, and this method is where
+   * that distinction is enforced. The session is a browser handoff measured in
+   * minutes: past its expiry it is reported `expired` and no new instruction is
+   * issued. The PAYMENT behind it is untouched — still `created`, still carrying
+   * the acceptance address derived from its own id, still matched by
+   * `payments (rail_adapter, rail_ref)` when the rail's webhook arrives.
+   *
+   * IF A PAYER SENDS FUNDS TEN MINUTES AFTER THEIR TAB TIMED OUT, whose money is
+   * stranded? Nobody's. The transfer lands at an address we control, the watcher
+   * delivers a verified event, `applyWebhook` matches the payment by rail
+   * reference and books it, and the merchant is credited. What the payer loses
+   * is a page that said "paid" — not their money. Expiring the payment along
+   * with the session is the change that WOULD strand them, and it is why these
+   * are two lifetimes on two tables rather than one.
+   */
+  async getCheckoutSession(sessionToken: string): Promise<CheckoutSessionView> {
+    const tokenHash = createHash('sha256').update(sessionToken).digest('hex');
+    const rows = await this.sql<Array<CheckoutSessionRow & { label: string }>>`
+      SELECT s.id, s.link_id, s.merchant_id, s.payment_id, s.amount::text, s.currency,
+             s.rail_adapter, s.instruction, s.status, s.expires_at, l.label
+        FROM pay.checkout_sessions s
+        JOIN pay.payment_links l ON l.id = s.link_id
+       WHERE s.token_hash = ${tokenHash}
+    `;
+    const row = rows[0];
+    if (!row) throw new PayError('checkout session not found', 'pay.checkout_session_not_found');
+
+    const method = this.checkoutRails.find((r) => r.railId === row.rail_adapter)?.method ?? 'crypto';
+
+    if (row.status !== 'open') return toCheckoutSessionView(row, row.label, method);
+
+    if (row.expires_at.getTime() <= this.now().getTime()) {
+      // Lazily projected, and also swept by `expireCheckoutSessions`. Both, so
+      // that a deployment with no sweeper still tells the payer the truth.
+      await this.sql`
+        UPDATE pay.checkout_sessions SET status = 'expired', updated_at = now()
+         WHERE id = ${row.id} AND status = 'open'
+      `;
+      return toCheckoutSessionView({ ...row, status: 'expired' }, row.label, method);
+    }
+
+    // The resume: a session committed before the rail was asked. Idempotent on
+    // the payment id, so re-running is free and produces the same address.
+    return toCheckoutSessionView(await this.ensureInstruction(row), row.label, method);
+  }
+
+  /**
+   * Ask the rail how this payer pays, and remember the answer.
+   *
+   * `authorize` is the right call and not a special checkout-only path: on
+   * `crypto-native` a fresh payment has nothing at its acceptance address yet, so
+   * the rail answers `pending` and returns the ADDRESS as the rail reference —
+   * which is precisely the instruction the payer needs. The core learns nothing
+   * about chains to do this; it reads the reference the adapter already stores.
+   *
+   * A RAIL REFUSAL IS NOT TURNED INTO A PLAUSIBLE PAGE. `authorize` marks the
+   * payment failed and throws; this cancels the session and rethrows, so the
+   * payer is told the checkout could not be opened rather than being shown an
+   * address nothing is watching.
+   */
+  private async ensureInstruction(row: CheckoutSessionRow): Promise<CheckoutSessionRow> {
+    if (!row.payment_id) return row;
+    if (typeof row.instruction?.reference === 'string' && row.instruction.reference) return row;
+
+    let railRef: string | null;
+    try {
+      railRef = (await this.authorize(row.payment_id)).railRef;
+    } catch (err) {
+      await this.sql`
+        UPDATE pay.checkout_sessions SET status = 'cancelled', updated_at = now()
+         WHERE id = ${row.id} AND status = 'open'
+      `;
+      throw err;
+    }
+
+    // No reference yet is not an error and not an instruction either — the rail
+    // took the request and has not answered. The session stays open with a null
+    // instruction and the next poll asks again.
+    if (!railRef) return row;
+
+    const instruction = { reference: railRef, amount: row.amount, currency: row.currency };
+    await this.sql`
+      UPDATE pay.checkout_sessions
+         SET instruction = ${this.sql.json(instruction as never)}, updated_at = now()
+       WHERE id = ${row.id} AND status = 'open'
+    `;
+    return { ...row, instruction };
+  }
+
+  /**
+   * Close out sessions whose handoff window has passed. Idempotent; safe to run
+   * on a timer, and it touches NO payment and NO ledger account — expiring a
+   * browser handoff is not an opinion about anybody's money.
+   */
+  async expireCheckoutSessions(): Promise<{ expired: number }> {
+    const result = await this.sql`
+      UPDATE pay.checkout_sessions
+         SET status = 'expired', updated_at = now()
+       WHERE status = 'open' AND expires_at <= ${this.now()}
+    `;
+    return { expired: result.count };
   }
 
   // ── Payment lifecycle ──────────────────────────────────────────────────────
@@ -516,30 +1010,7 @@ export class PayService {
     return transaction(
       this.sql,
       async (tx) => {
-        const rows = await tx<PaymentRow[]>`
-          INSERT INTO pay.payments (merchant_id, profile_id, amount, currency, method, rail_adapter, status)
-          VALUES (
-            ${input.merchantId}, ${input.profileId ?? null}, ${formatAmount(input.amount)}::numeric,
-            ${input.assetId}, ${input.method}, ${input.railAdapter}, 'created'
-          )
-          RETURNING id, merchant_id, profile_id, amount, currency, method, rail_adapter, rail_ref, status, created_at
-        `;
-        const row = rows[0]!;
-
-        await appendEvent(tx, row.id, 'created', {
-          amount: formatAmount(input.amount),
-          assetId: input.assetId,
-          method: input.method,
-          railAdapter: input.railAdapter,
-          customerRef: input.customerRef ?? null,
-          // The instrument lives on the `created` event rather than in a column
-          // because it is a rail's business, not ours, and because a tokenised
-          // instrument is the sort of thing that must never end up in a WHERE
-          // clause by accident.
-          instrument: input.instrument ?? null,
-          metadata: input.metadata ?? {},
-        });
-
+        const row = await insertPayment(tx, input);
         return { ...toPayment(row), capturedAmount: 0n, refundedAmount: 0n };
       },
       { isolation: 'read committed', maxAttempts: 5 },
@@ -735,6 +1206,11 @@ export class PayService {
             ledgerTxId: posted.id,
           });
           await tx`UPDATE pay.payments SET status = 'captured', updated_at = now() WHERE id = ${row.id}`;
+
+          // In the SAME transaction as the capture, because a hosted checkout
+          // that says "paid" out of step with the book is the whole failure mode
+          // this feature has to avoid in both directions.
+          await completeCheckoutSession(tx, row.id);
 
           span.setAttribute('intafaced.amount', formatAmount(result.amount));
           return this.view(tx, { ...row, status: 'captured' });
@@ -1427,6 +1903,116 @@ export class PayService {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Write a payment row and its `created` event.
+ *
+ * Extracted so `createPayment` (a merchant integration naming its own rail) and
+ * `openCheckoutSession` (an anonymous payer on a rail the server chose) produce
+ * BYTE-IDENTICAL rows and event payloads. Two code paths writing a payments row
+ * two slightly different ways is how one of them ends up missing a field the
+ * settlement sweep or a dispute later depends on.
+ */
+async function insertPayment(
+  tx: Sql,
+  input: {
+    merchantId: string;
+    profileId?: string | null;
+    amount: Amount;
+    assetId: string;
+    method: string;
+    railAdapter: string;
+    instrument?: PaymentIntent['instrument'];
+    customerRef?: string;
+    metadata?: Record<string, string>;
+  },
+): Promise<PaymentRow> {
+  const rows = await tx<PaymentRow[]>`
+    INSERT INTO pay.payments (merchant_id, profile_id, amount, currency, method, rail_adapter, status)
+    VALUES (
+      ${input.merchantId}, ${input.profileId ?? null}, ${formatAmount(input.amount)}::numeric,
+      ${input.assetId}, ${input.method}, ${input.railAdapter}, 'created'
+    )
+    RETURNING id, merchant_id, profile_id, amount, currency, method, rail_adapter, rail_ref, status, created_at
+  `;
+  const row = rows[0]!;
+
+  await appendEvent(tx, row.id, 'created', {
+    amount: formatAmount(input.amount),
+    assetId: input.assetId,
+    method: input.method,
+    railAdapter: input.railAdapter,
+    customerRef: input.customerRef ?? null,
+    // The instrument lives on the `created` event rather than in a column
+    // because it is a rail's business, not ours, and because a tokenised
+    // instrument is the sort of thing that must never end up in a WHERE clause
+    // by accident.
+    instrument: input.instrument ?? null,
+    metadata: input.metadata ?? {},
+  });
+
+  return row;
+}
+
+/**
+ * Mark a hosted-checkout session paid, and count the use against its link.
+ *
+ * Runs inside the capture transaction. Two properties are load-bearing:
+ *
+ *   IT IS IDEMPOTENT — the UPDATE only matches a session that is not already
+ *   `completed` — so a redelivered webhook that re-runs capture does not count a
+ *   second use against the link.
+ *
+ *   IT PROMOTES AN `expired` SESSION TO `completed`. A payer whose tab timed out
+ *   and who then sent the funds anyway HAS PAID, and the session is the record of
+ *   that payer's attempt. Leaving it `expired` next to a captured payment would
+ *   be the books and the checkout disagreeing about the same money.
+ *
+ *   IT NEVER REFUSES. The link's `uses` is incremented UNCONDITIONALLY, even
+ *   past `max_uses`. That is not sloppiness about the bound, it is the same rule
+ *   that governs a deposit: money that has ALREADY ARRIVED must always be
+ *   bookable. The bound is a gate on opening a checkout, where nothing has
+ *   moved; enforcing it here would mean refusing to record value sitting at an
+ *   address we control, and stranding it is a far worse outcome than a merchant
+ *   taking one payment past their own ceiling.
+ *
+ * Which makes the bound honestly ADVISORY under concurrency: two payers who
+ * open sessions at the same instant on a `maxUses: 1` link can both pay, and
+ * both are booked. `payment_links.uses` then reads 2 and the next open is
+ * refused. The service says so rather than implying a hard cap it cannot keep.
+ */
+async function completeCheckoutSession(tx: Sql, paymentId: string): Promise<void> {
+  const closed = await tx<Array<{ link_id: string }>>`
+    UPDATE pay.checkout_sessions
+       SET status = 'completed', updated_at = now()
+     WHERE payment_id = ${paymentId} AND status IN ('open', 'expired')
+     RETURNING link_id
+  `;
+  for (const { link_id } of closed) {
+    await tx`UPDATE pay.payment_links SET uses = uses + 1 WHERE id = ${link_id}`;
+  }
+}
+
+/**
+ * A session as the payer's browser sees it.
+ *
+ * The instruction is rebuilt from the row's own frozen amount and currency
+ * rather than passed through from anywhere, so a page can never render a number
+ * that differs from the one the payment was created for.
+ */
+function toCheckoutSessionView(row: CheckoutSessionRow, label: string, method: string): CheckoutSessionView {
+  const reference = typeof row.instruction?.reference === 'string' ? row.instruction.reference : null;
+  return {
+    id: row.id,
+    status: row.status,
+    label,
+    amount: formatAmount(parseAmount(row.amount)),
+    currency: row.currency,
+    method,
+    expiresAt: row.expires_at.toISOString(),
+    instruction: reference ? { reference, amount: formatAmount(parseAmount(row.amount)), currency: row.currency } : null,
+  };
+}
 
 async function lockPayment(tx: Sql, paymentId: string): Promise<PaymentRow> {
   const rows = await tx<PaymentRow[]>`

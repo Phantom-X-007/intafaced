@@ -1,5 +1,5 @@
 import { MemoryChain, UnconfiguredChain, type CryptoChainPort } from './chain-port.js';
-import { VALUE_LEAVING_CAPABILITIES, type RailAdapter, type RailCapability } from './rail-adapter.js';
+import { VALUE_LEAVING_CAPABILITIES, isUsable, type RailAdapter, type RailCapability } from './rail-adapter.js';
 import type { RailRegistry } from './registry.js';
 
 /**
@@ -190,6 +190,117 @@ export function assertRailMayMoveValue(adapter: RailAdapter, capability: RailCap
   if (!VALUE_LEAVING_CAPABILITIES.includes(capability)) return;
   if (adapter.mode === 'live') return;
   throw new SandboxRailRefusal(adapter.id, capability);
+}
+
+// ── THE PUBLIC INBOUND GATE ──────────────────────────────────────────────────
+
+export class PublicCheckoutUnavailable extends Error {
+  readonly code = 'pay.checkout_rail_not_live';
+
+  constructor(
+    readonly railId: string | null,
+    readonly reason: 'sandbox' | 'none-configured' | 'unhealthy',
+  ) {
+    super(
+      (railId === null
+        ? `No rail can accept a public hosted-checkout payment on this deployment (${reason}). `
+        : `Rail "${railId}" cannot accept a public hosted-checkout payment on this deployment (${reason}). `) +
+        `No session was opened, no payment row exists, and no payer has been shown a checkout that ` +
+        `could not complete.`,
+    );
+    this.name = 'PublicCheckoutUnavailable';
+  }
+}
+
+/**
+ * STRICTER THAN `assertRailMayMoveValue`, and it has to be.
+ *
+ * `VALUE_LEAVING_CAPABILITIES` deliberately excludes `authorize` and `capture`,
+ * and the reasoning in `rail-adapter.ts` is sound as far as it goes: a sandbox
+ * capture leaves the PLATFORM short, reconciliation against the rail boundary is
+ * exactly the figure that catches it, and nobody has been told their own money
+ * left.
+ *
+ * THAT REASONING ASSUMES THE PAYER IS THE MERCHANT'S OWN INTEGRATION — a
+ * merchant server calling `payment.create` with a rail id it chose, on a
+ * deployment whose posture it knows. Every part of that assumption fails on a
+ * hosted checkout:
+ *
+ *   · The payer is an anonymous third party who agreed to nothing and is shown
+ *     "paid" by a page carrying our name.
+ *   · The merchant is credited clearing they can settle and then withdraw, so a
+ *     fabricated inbound becomes a real outbound one hop later.
+ *   · Nobody in the loop can see which rail was used, or what mode it was in.
+ *
+ * So on the public surface a sandbox rail is refused under the same `live-only`
+ * policy that refuses a sandbox payout. One boot decision, two call sites, and
+ * no second route around the P0.
+ *
+ * CALLED BEFORE THE SESSION ROW EXISTS, never after — a payer must not be shown
+ * a checkout that cannot possibly complete, and refusing before anything is
+ * written leaves nothing to reconcile.
+ */
+export function assertRailMayAcceptPublicPayment(adapter: RailAdapter, policy: ValueMovementPolicy): void {
+  if (policy !== 'live-only') return;
+  if (adapter.mode === 'live') return;
+  throw new PublicCheckoutUnavailable(adapter.id, 'sandbox');
+}
+
+/**
+ * What a rail must be able to do before a public checkout may point at it.
+ *
+ * `webhook` is the load-bearing entry. A hosted checkout completes when the
+ * RAIL says the money arrived, never when the browser says so — a rail that
+ * cannot deliver a verified webhook has no way to tell us anything true, and a
+ * session on it could only ever be completed by trusting the payer's own page.
+ */
+export const PUBLIC_CHECKOUT_CAPABILITIES: readonly RailCapability[] = ['authorize', 'capture', 'webhook'];
+
+/**
+ * Which registered rail serves a public checkout, in configured order.
+ *
+ * NOT ROUTING. Smart routing — geo, method, amount band, risk score, live
+ * approval rates — is its own tracker feature (`pay.routing`), and when it lands
+ * it replaces this function and nothing else. What this does is far dumber and
+ * deliberately so: walk an operator-configured preference list and take the
+ * first entry that is registered, can run the whole inbound lifecycle, is
+ * answering, and passes the gate above.
+ *
+ * THE PREFERENCE LIST IS CONFIGURATION, NEVER A REQUEST FIELD. That is the whole
+ * reason this function exists rather than a `railAdapter` input: a hosted
+ * checkout that can name a rail, or a payment link that resolves to one, is
+ * exactly where the sandbox-withdrawal P0 would come back.
+ */
+export function selectPublicCheckoutRail(
+  rails: RailRegistry,
+  preference: readonly string[],
+  policy: ValueMovementPolicy,
+  now: Date = new Date(),
+): RailAdapter {
+  let sawSandbox = false;
+  let sawUnhealthy = false;
+
+  for (const railId of preference) {
+    if (!rails.has(railId)) continue;
+    const adapter = rails.get(railId);
+    if (!PUBLIC_CHECKOUT_CAPABILITIES.every((c) => adapter.capabilities.includes(c))) continue;
+
+    if (!isUsable(adapter, now)) {
+      sawUnhealthy = true;
+      continue;
+    }
+    try {
+      assertRailMayAcceptPublicPayment(adapter, policy);
+    } catch {
+      sawSandbox = true;
+      continue;
+    }
+    return adapter;
+  }
+
+  // The reason is for operators. The payer's page says "this merchant cannot
+  // take payment right now" and nothing whatsoever about our rail estate.
+  throw new PublicCheckoutUnavailable(null, sawSandbox ? 'sandbox' : sawUnhealthy ? 'unhealthy' : 'none-configured');
 }
 
 /**

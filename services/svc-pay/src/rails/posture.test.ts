@@ -6,13 +6,16 @@ import { ChainNotConfiguredError, MemoryChain, UnconfiguredChain } from './chain
 import { RailRegistry } from './registry.js';
 import { isUsable } from './rail-adapter.js';
 import {
+  PublicCheckoutUnavailable,
   RAIL_POSTURE_ENFORCED_ENVS,
   SandboxRailError,
   SandboxRailRefusal,
+  assertRailMayAcceptPublicPayment,
   assertRailMayMoveValue,
   assertRailPosture,
   defaultChainFor,
   railPostureStatus,
+  selectPublicCheckoutRail,
 } from './posture.js';
 
 /**
@@ -292,5 +295,115 @@ describe('defaultChainFor — what index.ts actually gets', () => {
   it('describes itself in one line an operator can read on /ready', () => {
     expect(defaultChainFor({ APP_ENV: 'prod' }).description).toMatch(/NO CHAIN CONFIGURED/);
     expect(defaultChainFor({ APP_ENV: 'dev' }).description).toMatch(/no transaction reaches any chain/);
+  });
+});
+
+// ══ THE PUBLIC INBOUND GATE ═════════════════════════════════════════════════
+//
+// `assertRailMayMoveValue` deliberately lets a SANDBOX authorize and capture
+// through, and `rail-adapter.ts` argues for that: a sandbox capture leaves the
+// PLATFORM short, reconciliation against the rail boundary is the figure that
+// exists to catch it, and nobody has been told their own money left.
+//
+// THAT ARGUMENT ASSUMES THE PAYER IS THE MERCHANT'S OWN INTEGRATION. On a hosted
+// checkout the payer is an anonymous third party shown "paid" by a page carrying
+// our name, and the merchant is credited clearing they can settle and then
+// withdraw — so a fabricated inbound becomes a real outbound one hop later.
+// Every test below fails if the public surface loses the stricter gate.
+
+describe('the public checkout gate', () => {
+  it('lets a sandbox rail take a public payment in dev, where the sandbox IS the fixture', () => {
+    expect(() => assertRailMayAcceptPublicPayment(cardSandbox(), 'allow-sandbox')).not.toThrow();
+  });
+
+  it('REFUSES a sandbox rail on the public surface under live-only', () => {
+    expect(() => assertRailMayAcceptPublicPayment(cardSandbox(), 'live-only')).toThrow(PublicCheckoutUnavailable);
+    expect(() => assertRailMayAcceptPublicPayment(cryptoOn(new MemoryChain()), 'live-only')).toThrow(PublicCheckoutUnavailable);
+  });
+
+  it('is STRICTER than the value-leaving gate, which is the entire point', () => {
+    const sandbox = cardSandbox();
+    // The merchant integration path: a sandbox authorize/capture is allowed,
+    // because a sandbox capture only ever leaves the platform short.
+    expect(() => assertRailMayMoveValue(sandbox, 'capture', 'live-only')).not.toThrow();
+    expect(() => assertRailMayMoveValue(sandbox, 'authorize', 'live-only')).not.toThrow();
+    // The same rail, the same policy, an anonymous payer: refused.
+    expect(() => assertRailMayAcceptPublicPayment(sandbox, 'live-only')).toThrow(PublicCheckoutUnavailable);
+  });
+
+  it('lets a live rail through', () => {
+    expect(() => assertRailMayAcceptPublicPayment(liveRail(), 'live-only')).not.toThrow();
+  });
+
+  it('carries a code a caller can branch on, and says nothing was created', () => {
+    try {
+      assertRailMayAcceptPublicPayment(cardSandbox(), 'live-only');
+      throw new Error('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PublicCheckoutUnavailable);
+      expect((err as PublicCheckoutUnavailable).code).toBe('pay.checkout_rail_not_live');
+      expect((err as Error).message).toMatch(/no payment row exists/i);
+    }
+  });
+});
+
+describe('selectPublicCheckoutRail', () => {
+  it('walks the configured preference list, not the registry', () => {
+    const live = liveRail();
+    const rails = new RailRegistry([cryptoOn(new MemoryChain()), live]);
+    // crypto-native is registered FIRST and is perfectly healthy. It is not
+    // chosen, because the operator did not put it in the list — which is the
+    // whole property that stops a caller ever selecting a rail.
+    expect(selectPublicCheckoutRail(rails, [live.id], 'allow-sandbox').id).toBe(live.id);
+  });
+
+  it('skips a rail that cannot run the whole inbound lifecycle', () => {
+    // `webhook` is the load-bearing capability: a rail that cannot deliver a
+    // verified event has no way to tell us anything true, so a session on it
+    // could only ever be completed by trusting the payer's own browser.
+    const noWebhook = new Proxy(cardSandbox(), {
+      get(target, prop, receiver) {
+        if (prop === 'capabilities') return ['authorize', 'capture'];
+        if (prop === 'id') return 'no-webhook-rail';
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as CardSandboxAdapter;
+
+    expect(() => selectPublicCheckoutRail(new RailRegistry([noWebhook]), ['no-webhook-rail'], 'allow-sandbox')).toThrow(
+      PublicCheckoutUnavailable,
+    );
+  });
+
+  it('skips a rail that is not answering rather than sending a payer to it', () => {
+    const down = cardSandbox();
+    down.setHealthy(false);
+    try {
+      selectPublicCheckoutRail(new RailRegistry([down]), ['card-sandbox'], 'allow-sandbox');
+      throw new Error('should have refused');
+    } catch (err) {
+      expect((err as PublicCheckoutUnavailable).reason).toBe('unhealthy');
+    }
+  });
+
+  it('refuses rather than falling back to a sandbox when live-only and only sandboxes exist', () => {
+    const rails = new RailRegistry([cardSandbox(), cryptoOn(new MemoryChain())]);
+    try {
+      selectPublicCheckoutRail(rails, ['crypto-native', 'card-sandbox'], 'live-only');
+      throw new Error('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PublicCheckoutUnavailable);
+      expect((err as PublicCheckoutUnavailable).reason).toBe('sandbox');
+      // No rail is named in the refusal that reaches a payer.
+      expect((err as PublicCheckoutUnavailable).railId).toBeNull();
+    }
+  });
+
+  it('refuses when the preference list names nothing that is registered', () => {
+    try {
+      selectPublicCheckoutRail(new RailRegistry([cardSandbox()]), ['some-future-acquirer'], 'allow-sandbox');
+      throw new Error('should have refused');
+    } catch (err) {
+      expect((err as PublicCheckoutUnavailable).reason).toBe('none-configured');
+    }
   });
 });
