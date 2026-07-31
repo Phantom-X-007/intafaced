@@ -906,7 +906,7 @@ export default {
       }
       return rows;
     },
-    /* B6 — favourites for the pinned watchlist rail (capped for density). */
+    /* B6 — favourites for the pinned watchlist rail (density-capped). */
     watchlistMarkets() {
       const key = this.searchKey.trim().toUpperCase();
       let rows = this.markets.filter(r => r.isFavor);

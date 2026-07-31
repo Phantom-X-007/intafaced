@@ -16,25 +16,25 @@
 
 ## Done already (tip main)
 
-| Item | PR |
-| --- | --- |
-| Wave A honesty + locks + grouping | #261 #262 #267 |
-| P21 modular teal | #267 |
-| B5 prefs · B7 keyboard · B8 impact | #267 |
-| B9 partial fill · copy id · CSV | #295 |
+| Item                               | PR             |
+| ---------------------------------- | -------------- |
+| Wave A honesty + locks + grouping  | #261 #262 #267 |
+| P21 modular teal                   | #267           |
+| B5 prefs · B7 keyboard · B8 impact | #267           |
+| B9 partial fill · copy id · CSV    | #295           |
 
 ## Next craft order (this program)
 
-| ID | Work | Notes |
-| --- | --- | --- |
-| B2 | Density hierarchy | CSS + structure on desk only |
-| B6 | Watchlist rail | Promote favourites without new backend |
-| B10 | a11y floor | Live region + focus validation error |
-| B3 | uc craft = desk | Shared honesty + token use on money screens |
-| B9′ | Fee schedule surface | Page-data fee honesty on ticket (residual of B9) |
-| B14 | content-visibility blotter | Measure-first spike if cheap |
-| B12 | CMS/OTC last | Only after desk+money |
-| Wave C | LWC panes etc. | After B DoD / written plan A6 |
+| ID     | Work                       | Notes                                            |
+| ------ | -------------------------- | ------------------------------------------------ |
+| B2     | Density hierarchy          | CSS + structure on desk only                     |
+| B6     | Watchlist rail             | Promote favourites without new backend           |
+| B10    | a11y floor                 | Live region + focus validation error             |
+| B3     | uc craft = desk            | Shared honesty + token use on money screens      |
+| B9′    | Fee schedule surface       | Page-data fee honesty on ticket (residual of B9) |
+| B14    | content-visibility blotter | Measure-first spike if cheap                     |
+| B12    | CMS/OTC last               | Only after desk+money                            |
+| Wave C | LWC panes etc.             | After B DoD / written plan A6                    |
 
 ## Hard bans
 
