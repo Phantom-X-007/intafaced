@@ -73,21 +73,21 @@
 </template>
 <style scoped lang="scss">
 .login_form {
-  background: #0e0e0e url(../../assets/images/login_bg.png) no-repeat center center;
+  background: var(--ix-bg, #0a0c10) url(../../assets/images/login_bg.png) no-repeat center center;
   height: 760px;
   position: relative;
   overflow: hidden;
 .login_right {
     padding: 20px 30px;
     position: absolute;
-    background: #171717;
+    background: var(--ix-surface, #12151c);
     width: 350px;
     height: 485px;
     left: 50%;
     top: 50%;
     margin-left: -175px;
     margin-top: -205px;
-    border-top: 4px solid #1ad4bc;
+    border-top: 4px solid var(--ix-orange, #00c2a8);
     border-radius: 5px;
 .tel-title{
       color: #fff;
@@ -97,9 +97,9 @@
 .ivu-form-item-content {
 .register_btn.ivu-btn {
             width: 100%;
-            background-color: #1ad4bc;
+            background-color: var(--ix-orange, #00c2a8);
             outline: none;
-            border-color: #1ad4bc;
+            border-color: var(--ix-orange, #00c2a8);
             color: #fff;
             border-radius: 5px;
             font-size: 18px;
@@ -117,13 +117,13 @@
           }
           #sendCode {
             position: absolute;
-            border: 1px solid #1ad4bc;
+            border: 1px solid var(--ix-orange, #00c2a8);
             background: transparent;
             top: -10px;
             outline: none;
             right: 0;
             width: 30%;
-            color: #1ad4bc;
+            color: var(--ix-orange, #00c2a8);
             cursor: pointer;
           }
         }
@@ -135,14 +135,14 @@
         font-size: 12px;
         cursor: default;
         a {
-          color: #1ad4bc;
+          color: var(--ix-orange, #00c2a8);
           margin-left: -10px;
         }
 .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
 .ivu-checkbox.ivu-checkbox-checked {
 .ivu-checkbox-inner {
-              border: 1px solid #1ad4bc;
-              background-color: #1ad4bc;
+              border: 1px solid var(--ix-orange, #00c2a8);
+              background-color: var(--ix-orange, #00c2a8);
             }
           }
         }
@@ -533,8 +533,8 @@ export default {
 .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
 .ivu-checkbox.ivu-checkbox-checked {
 .ivu-checkbox-inner {
-              border: 1px solid #1ad4bc;
-              background-color: #1ad4bc;
+              border: 1px solid var(--ix-orange, #00c2a8);
+              background-color: var(--ix-orange, #00c2a8);
             }
           }
 
@@ -559,7 +559,7 @@ export default {
     right: 4px;
   }
 .ivu-form-item-error.ivu-input-group-append,.ivu-form-item-error.ivu-input-group-prepend,.ivu-input-group-append,.ivu-input-group-prepend{
-    background-color: #171717;
+    background-color: var(--ix-surface, #12151c);
     border-bottom: 1px solid #141414;
     border-top:none;
     border-left: none;

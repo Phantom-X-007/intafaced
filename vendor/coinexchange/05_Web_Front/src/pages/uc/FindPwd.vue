@@ -47,14 +47,14 @@
 </template>
 <style scoped lang="scss">
 .login_form {
-  background: #0e0e0e url(../../assets/images/login_bg.png) no-repeat center center;
+  background: var(--ix-bg, #0a0c10) url(../../assets/images/login_bg.png) no-repeat center center;
   height: 760px;
   position: relative;
   overflow: hidden;
 .login_right {
     padding: 20px 30px;
     position: absolute;
-    background: #171717;
+    background: var(--ix-surface, #12151c);
     width: 350px;
     height: auto;
     left: 50%;
@@ -62,7 +62,7 @@
     margin-left: -175px;
     margin-top: -205px;
     border-radius: 5px;
-    border-top: 4px solid #1ad4bc;
+    border-top: 4px solid var(--ix-orange, #00c2a8);
 .tel-title{
       font-size:25px;
       color: #fff;
@@ -83,7 +83,7 @@
           }
           #sendCode {
             position: absolute;
-            border: 1px solid #1ad4bc;
+            border: 1px solid var(--ix-orange, #00c2a8);
             background: transparent;
             top: -10px;
             outline: none;
