@@ -7,7 +7,11 @@
     </div>
     <div class="container">
       <h1>{{cateTitle}}</h1>
-      <div class="list">
+      <!-- Stream A: failed page-query must not look like an empty category. -->
+      <p v-if="loadError" class="ix-empty ix-empty-error">{{ loadError }}</p>
+      <p v-else-if="!loaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
+      <p v-else-if="list.length === 0" class="ix-empty">{{ $t("cms.helpEmpty") }}</p>
+      <div class="list" v-else>
         <router-link class="item" v-for="(item,index) in list" :key="index" :to="{path:'helpdetail',query:{cate:cate,id:item.id,cateTitle:cateTitle}}">
           <span class="text" >{{item.title}}</span>
           <span class="time">
@@ -15,7 +19,7 @@
           </span>
         </router-link>
       </div>
-      <div class="page">
+      <div class="page" v-if="loaded && !loadError && total > 0">
         <Page :total="total" :pageSize="pageSize" :current="pageNo" @on-change="pageChange"></Page>
       </div>
     </div>
@@ -95,7 +99,9 @@ export default {
       pageNo: 1,
       pageSize: 10,
       total: 0,
-      list: []
+      list: [],
+      loaded: false,
+      loadError: ""
     };
   },
   created() {
@@ -119,6 +125,7 @@ export default {
       const { cate, cateTitle } = to.query;
       this.cate = cate;
       this.cateTitle = cateTitle;
+      this.pageNo = 1;
       this.getData();
     }
   },
@@ -134,15 +141,31 @@ export default {
         cate: this.cate,
         lang: this.langPram
       };
+      this.loaded = false;
+      this.loadError = "";
       this.$http
-.post(this.host + "/uc/ancillary/more/help/page", params)
-.then(res => {
-          if (res.status == 200 && res.body.code == 0) {
-            this.list = res.body.data.content;
-            this.total = res.body.data.totalElements;
+        .post(this.host + "/uc/ancillary/more/help/page", params)
+        .then(res => {
+          if (res.status == 200 && res.body && res.body.code == 0 && res.body.data) {
+            this.list = res.body.data.content || [];
+            this.total = res.body.data.totalElements || 0;
+            this.loaded = true;
+            this.loadError = "";
           } else {
-            this.$Message.error(res.body.message);
+            this.list = [];
+            this.total = 0;
+            this.loaded = true;
+            this.loadError =
+              (res.body && res.body.message) ||
+              this.$t("cms.helpUnavailable");
+            if (res.body && res.body.message) this.$Message.error(res.body.message);
           }
+        })
+        .catch(() => {
+          this.list = [];
+          this.total = 0;
+          this.loaded = true;
+          this.loadError = this.$t("cms.helpUnavailable");
         });
     }
   }

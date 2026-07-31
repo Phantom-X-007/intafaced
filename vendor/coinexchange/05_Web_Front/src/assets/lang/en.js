@@ -1570,7 +1570,15 @@ module.exports = {
         otherhelp: "Other In This Category",
         scanforshare: "Scan for share",
         download: "Download",
-        downloadslogan: "INTAFACED APP - Trade everywhere."
+        downloadslogan: "INTAFACED APP - Trade everywhere.",
+        // stream A — CMS/envelope honesty: empty ≠ error; never invent content
+        helpUnavailable: "Help did not load — list is unknown, not empty.",
+        helpEmpty: "No help articles yet.",
+        noticeUnavailable: "Announcements unavailable — not empty.",
+        noticeEmpty: "No announcements yet.",
+        articleUnavailable: "Article unavailable — content unknown, not blank.",
+        envelopeUnavailable: "Gift unavailable — details unknown, not blank.",
+        envelopeDetailUnavailable: "Claim history unavailable — not empty."
     },
     description: {
         title1: 'Security',

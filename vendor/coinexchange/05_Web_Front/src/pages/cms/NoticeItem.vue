@@ -4,19 +4,24 @@
       <Col :xs="24" :sm="24" :md="5" :lg="5" class="notice-list">
         <div class="main">
           <h2>{{$t("cms.noticecenter")}}</h2>
-          <div class="list">
-            <div :class="item.id==queryId?'active': 'item1'" v-for="item in FAQList" @click="noticedeail(item.id)">
+          <!-- Stream A: list failure ≠ empty list. -->
+          <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+          <p v-else-if="!listLoaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
+          <p v-else-if="FAQList.length === 0" class="ix-empty">{{ $t("cms.noticeEmpty") }}</p>
+          <div class="list" v-else>
+            <div :class="item.id==queryId?'active': 'item1'" v-for="item in FAQList" :key="item.id" @click="noticedeail(item.id)">
               <span class="text">{{item.title}}</span>
             </div>
           </div>
-          <div class="page">
+          <div class="page" v-if="listLoaded && !listError && totalNum > 0">
             <Page :total="totalNum" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage" size="small"></Page>
           </div>
         </div>
       </Col>
       <Col :xs="24" :sm="24" :md="5" :lg="19">
         <div class="content-wrap">
-            <div v-show="hasContent">
+            <p v-if="detailError" class="ix-empty ix-empty-error" style="margin-top:15%;">{{ detailError }}</p>
+            <div v-else-if="hasContent">
               <div class="header">
                 <h2>{{data.info.title}}</h2>
                 <span>{{data.info.createTime}}</span>
@@ -41,7 +46,7 @@
                 </div>
               </div>
             </div>
-            <div v-show="!hasContent">
+            <div v-else-if="!spinShow && listLoaded">
                 <p style="font-size: 30px;text-align:center;margin-top: 15%;"><Icon type="ios-cafe" /></p>
                 <p style="text-align:center;font-size: 12px;margin-top: 10px;color: #8a8a8a;">{{$t("cms.notexist")}}</p>
             </div>
@@ -51,7 +56,9 @@
     </Row>
     <div class="bottom-list">
       <p style="font-size: 18px;margin: 15px 0;">Latest announcements</p>
-      <div class="notice-item" v-for="item in FAQList" @click="noticedeail(item.id)">
+      <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+      <p v-else-if="listLoaded && FAQList.length === 0" class="ix-empty">{{ $t("cms.noticeEmpty") }}</p>
+      <div class="notice-item" v-for="item in FAQList" :key="'m-'+item.id" @click="noticedeail(item.id)">
         <span class="text">[{{item.createTime | subTime}}] {{item.title}}</span>
       </div>
     </div>
@@ -86,12 +93,15 @@ export default {
       time: "",
       content: "",
       initLang: this.$store.state.lang,
-      hasContent: true,
+      hasContent: false,
       pageNo: 1,
       pageSize: 10,
       totalNum: 0,
       FAQList: [],
-      spinShow: false
+      spinShow: false,
+      listLoaded: false,
+      listError: "",
+      detailError: ""
     };
   },
   created: function() {
@@ -103,6 +113,7 @@ export default {
   },
   filters: {
     subTime: function(str) {
+      if (!str) return "";
       return str.substr(5,5);
     }
   },
@@ -135,26 +146,41 @@ export default {
       this.qrcode.value = this.rootHost + "/announcement/" + id;
       this.queryId = id;
 
+      if (id == 0) {
+        this.hasContent = false;
+        this.detailError = "";
+        this.spinShow = false;
+        return;
+      }
+
       this.spinShow = true;
+      this.detailError = "";
       var param = {
         id: id,
         lang: this.langPram
       };
       this.$http
-.post(this.host + "/uc/announcement/more", param)
-.then(response => {
+        .post(this.host + "/uc/announcement/more", param)
+        .then(response => {
           var result = response.body;
-          if (result.code == 0) {
+          if (result && result.code == 0 && result.data && result.data.info) {
             const data = result.data;
             this.data = data;
             this.hasContent = true;
+            this.detailError = "";
             this.spinShow = false;
 
             window.document.title = "Announcement - " + this.data.info.title + " - INTAFACED | Sovereign Exchange";
-          }else{
+          } else {
             this.hasContent = false;
+            this.detailError = "";
             this.spinShow = false;
           }
+        })
+        .catch(() => {
+          this.hasContent = false;
+          this.detailError = this.$t("cms.articleUnavailable");
+          this.spinShow = false;
         });
     },
     fetchData() {
@@ -170,26 +196,42 @@ export default {
     },
     loadDataPage(pageIndex) {
       var param = {};
-      (param["pageNo"] = pageIndex),
-        (param["pageSize"] = this.pageSize),
-        (param["lang"] = this.langPram),
-        this.$http
-.post(this.host + this.api.uc.announcement, param)
-.then(response => {
-            // console.log(response);
-            var resp = response.body;
-            if (resp.code == 0) {
-              if (resp.data.content.length == 0) return;
-              this.FAQList = resp.data.content;
-              this.totalNum = resp.data.totalElements;
-              this.loadNoticeInfo();
-            } else {
-              this.$Notice.error({
-                title: this.$t("common.tip"),
-                desc: resp.message
-              });
-            }
-          });
+      param["pageNo"] = pageIndex;
+      param["pageSize"] = this.pageSize;
+      param["lang"] = this.langPram;
+      this.pageNo = pageIndex;
+      this.listLoaded = false;
+      this.listError = "";
+      this.$http
+        .post(this.host + this.api.uc.announcement, param)
+        .then(response => {
+          var resp = response.body;
+          if (resp && resp.code == 0 && resp.data) {
+            this.FAQList = resp.data.content || [];
+            this.totalNum = resp.data.totalElements || 0;
+            this.listLoaded = true;
+            this.listError = "";
+            this.loadNoticeInfo();
+          } else {
+            this.FAQList = [];
+            this.totalNum = 0;
+            this.listLoaded = true;
+            this.listError =
+              (resp && resp.message) || this.$t("cms.noticeUnavailable");
+            this.$Notice.error({
+              title: this.$t("common.tip"),
+              desc: this.listError
+            });
+            this.loadNoticeInfo();
+          }
+        })
+        .catch(() => {
+          this.FAQList = [];
+          this.totalNum = 0;
+          this.listLoaded = true;
+          this.listError = this.$t("cms.noticeUnavailable");
+          this.loadNoticeInfo();
+        });
     }
   },
   watch: {

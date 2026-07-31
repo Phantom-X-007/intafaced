@@ -3,8 +3,12 @@
     <img class="bannerimg" src="../../assets/images/help_banner.jpg">
     <div class="help_container">
       <h1>{{$t("header.helpcenter")}}</h1>
-      <div class="main">
-        <div class="section" v-for="section in helpData">
+      <!-- Stream A: failed help API must not look like an empty catalog. -->
+      <p v-if="loadError" class="ix-empty ix-empty-error" style="margin-top:80px;">{{ loadError }}</p>
+      <p v-else-if="!loaded" class="ix-empty ix-empty-loading" style="margin-top:80px;">{{ $t("common.loading") }}</p>
+      <p v-else-if="helpData.length === 0" class="ix-empty" style="margin-top:80px;">{{ $t("cms.helpEmpty") }}</p>
+      <div class="main" v-else>
+        <div class="section" v-for="section in helpData" :key="section.cate">
           <h3 v-if="langPram == 'CN'">{{section.titleCN}}</h3>
           <h3 v-if="langPram == 'EN'">{{section.titleEN}}</h3>
           <div class="list-wrap">
@@ -109,7 +113,9 @@
 export default {
   data() {
     return {
-      helpData: []
+      helpData: [],
+      loaded: false,
+      loadError: ""
     };
   },
   created: function() {
@@ -132,13 +138,29 @@ export default {
     getData() {
       let param = {};
       param["lang"] = this.langPram;
-      this.$http.post(this.host + "/uc/ancillary/more/help", param).then(res => {
-        if (res.status == 200 && res.body.code == 0) {
-          this.helpData = res.body.data;
-        } else {
-          this.$Message.error(res.body.message);
-        }
-      });
+      this.loaded = false;
+      this.loadError = "";
+      this.$http
+        .post(this.host + "/uc/ancillary/more/help", param)
+        .then(res => {
+          if (res.status == 200 && res.body && res.body.code == 0) {
+            this.helpData = res.body.data || [];
+            this.loaded = true;
+            this.loadError = "";
+          } else {
+            this.helpData = [];
+            this.loaded = true;
+            this.loadError =
+              (res.body && res.body.message) ||
+              this.$t("cms.helpUnavailable");
+            if (res.body && res.body.message) this.$Message.error(res.body.message);
+          }
+        })
+        .catch(() => {
+          this.helpData = [];
+          this.loaded = true;
+          this.loadError = this.$t("cms.helpUnavailable");
+        });
     }
   }
 };

@@ -5,11 +5,14 @@
       <span>></span>
       <router-link :to="{path:'helplist',query:{cate:cate,cateTitle:cateTitle}}">{{cateTitle}}</router-link>
     </div>
-    <div class="main">
+    <!-- Stream A: failed detail must not paint a blank article as if it loaded. -->
+    <p v-if="loadError" class="ix-empty ix-empty-error" style="margin-top:40px;">{{ loadError }}</p>
+    <p v-else-if="!loaded" class="ix-empty ix-empty-loading" style="margin-top:40px;">{{ $t("common.loading") }}</p>
+    <div class="main" v-else-if="articleReady">
       <div class="menu">
         <p style="color: #74777a;">{{$t("cms.otherhelp")}}</p>
         <div class="titles">
-          <div class="route" v-for="item in topList" @click="clickTitle(item.id)" :class="{active:item.id==article.id}">
+          <div class="route" v-for="item in topList" :key="item.id" @click="clickTitle(item.id)" :class="{active:item.id==article.id}">
             <span>{{item.title}}</span>
           </div>
         </div>
@@ -49,6 +52,9 @@ export default {
     return {
       topList: [], //pinned articles
       article: {}, //article detail
+      loaded: false,
+      loadError: "",
+      articleReady: false,
       qrcode: {
         value: "",
         size: 150
@@ -89,56 +95,91 @@ export default {
         id: this.id
       });
     },
+    markLoadError(message) {
+      this.topList = [];
+      this.article = {};
+      this.articleReady = false;
+      this.loaded = true;
+      this.loadError = message || this.$t("cms.articleUnavailable");
+    },
     init() {
-      Promise.all([this.getTop(), this.getArticle()]).then(arr => {
-        if (
-          arr[0].status == 200 &&
-          arr[0].body.code == 0 &&
-          arr[1].status == 200 &&
-          arr[1].body.code == 0
-) {
-          let returnTop = arr[0].body.data,
-            returnArticle = arr[1].body.data,
-            hsaInTop = false;
-          returnTop.forEach(v => {
-            if (v.id == returnArticle.id) {
-              hsaInTop = true;
-            }
-          });
-          hsaInTop? "": returnTop.unshift(returnArticle);
-          this.topList = returnTop;
-          this.article = returnArticle;
-          window.document.title = "Help - " + this.article.title + " - INTAFACED | Sovereign Exchange";
-        } else {
-          this.$message.error("Network error");
-        }
-      });
+      this.loaded = false;
+      this.loadError = "";
+      this.articleReady = false;
+      Promise.all([this.getTop(), this.getArticle()])
+        .then(arr => {
+          if (
+            arr[0].status == 200 &&
+            arr[0].body &&
+            arr[0].body.code == 0 &&
+            arr[1].status == 200 &&
+            arr[1].body &&
+            arr[1].body.code == 0 &&
+            arr[1].body.data
+          ) {
+            let returnTop = arr[0].body.data || [],
+              returnArticle = arr[1].body.data,
+              hsaInTop = false;
+            returnTop.forEach(v => {
+              if (v.id == returnArticle.id) {
+                hsaInTop = true;
+              }
+            });
+            hsaInTop ? "" : returnTop.unshift(returnArticle);
+            this.topList = returnTop;
+            this.article = returnArticle;
+            this.articleReady = true;
+            this.loaded = true;
+            this.loadError = "";
+            window.document.title =
+              "Help - " + this.article.title + " - INTAFACED | Sovereign Exchange";
+          } else {
+            this.markLoadError(this.$t("cms.articleUnavailable"));
+            this.$Message.error(this.$t("cms.articleUnavailable"));
+          }
+        })
+        .catch(() => {
+          this.markLoadError(this.$t("cms.articleUnavailable"));
+        });
     },
     getTopList() {
       this.$http
-.post(this.host + "/uc/ancillary/more/help/page/top", {
+        .post(this.host + "/uc/ancillary/more/help/page/top", {
           cate: this.cate,
           lang: this.langPram
         })
-.then(res => {
-          if (res.status == 200 && res.body.code == 0) {
-            this.topList = res.body.data;
+        .then(res => {
+          if (res.status == 200 && res.body && res.body.code == 0) {
+            this.topList = res.body.data || [];
           } else {
-            this.$Message.error(res.body.message);
+            if (res.body && res.body.message) this.$Message.error(res.body.message);
           }
+        })
+        .catch(() => {
+          /* sidebar optional; main article state already honest */
         });
     },
     getData(id) {
       this.$http
-.post(this.host + "/uc/ancillary/more/help/detail", {
+        .post(this.host + "/uc/ancillary/more/help/detail", {
           id
         })
-.then(res => {
-          if (res.status == 200 && res.body.code == 0) {
+        .then(res => {
+          if (res.status == 200 && res.body && res.body.code == 0 && res.body.data) {
             this.article = res.body.data;
+            this.articleReady = true;
+            this.loadError = "";
           } else {
-            this.$Message.error(res.body.message);
+            this.articleReady = false;
+            this.loadError =
+              (res.body && res.body.message) ||
+              this.$t("cms.articleUnavailable");
+            if (res.body && res.body.message) this.$Message.error(res.body.message);
           }
+        })
+        .catch(() => {
+          this.articleReady = false;
+          this.loadError = this.$t("cms.articleUnavailable");
         });
     }
   }
