@@ -334,7 +334,7 @@ describe('private REST — mount boundary + order write path', () => {
       openPosition: async () => {
         throw new Error('openPosition not stubbed');
       },
-      closePosition: async () => {
+      closePosition: async (_p, _id, _exit) => {
         throw new Error('closePosition not stubbed');
       },
       ...overrides,

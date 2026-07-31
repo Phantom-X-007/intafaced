@@ -259,7 +259,7 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual: F1–F5 + planners/ticks + mark/rate ports + futuresRealizeProfit + close planner (external exit; never invent). Still missing: wire PositionService.close to planner, live oracles, cron, matching. Not done.',
+    note: 'Updated 2026-07-31 residual: F1–F5 + planners/ticks + mark/rate ports + realizeProfit + close planner wired to PositionService.close(exitPrice) (required external mark; never invent). Still missing: live oracles, wall-clock cron, matching. Not done.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
