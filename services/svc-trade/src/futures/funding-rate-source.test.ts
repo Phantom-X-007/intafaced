@@ -1,0 +1,170 @@
+import { describe, expect, it } from 'vitest';
+import { fixedFundingRateSource, isRateFresh, memoryFundingRateBook, periodIdFor } from './funding-rate-source.js';
+import { memoryFundingPeriodStore, runFundingTick } from './funding-tick.js';
+import { parseAmount as amt, type PostRequest } from '@intafaced/ledger-client';
+import type { FundingOpenPosition } from './funding-settlement.js';
+
+const A = '11111111-1111-4111-8111-111111111111';
+const B = '22222222-2222-4222-8222-222222222222';
+
+function longShort(): FundingOpenPosition[] {
+  return [
+    {
+      positionId: 'plong',
+      userId: A,
+      side: 'long',
+      size: amt('1'),
+      entryPrice: amt('50000'),
+      marginAsset: 'USDT',
+    },
+    {
+      positionId: 'pshort',
+      userId: B,
+      side: 'short',
+      size: amt('1'),
+      entryPrice: amt('50000'),
+      marginAsset: 'USDT',
+    },
+  ];
+}
+
+describe('periodIdFor', () => {
+  it('names period without inventing rate', () => {
+    expect(periodIdFor('m1', '2026-07-31T00:00:00.000Z')).toBe('m1:2026-07-31T00:00:00.000Z');
+  });
+});
+
+describe('memoryFundingRateBook', () => {
+  it('empty book → null (never invents)', async () => {
+    const book = memoryFundingRateBook({ now: () => 1_000_000 });
+    expect(await book.source().quote({ marketId: 'm1', at: new Date(1_000_000) })).toBeNull();
+  });
+
+  it('returns published rate when fresh', async () => {
+    const book = memoryFundingRateBook({ now: () => 1_000_000 });
+    book.set({
+      marketId: 'm1',
+      rate: '0.0001',
+      periodId: periodIdFor('m1', '2026-07-31T00:00:00.000Z'),
+      asOfMs: 1_000_000,
+    });
+    const q = await book.source().quote({ marketId: 'm1', at: new Date(1_000_000) });
+    expect(q).toEqual({
+      marketId: 'm1',
+      rate: '0.0001',
+      periodId: 'm1:2026-07-31T00:00:00.000Z',
+    });
+  });
+
+  it('stale rate → null', async () => {
+    const book = memoryFundingRateBook();
+    book.set({
+      marketId: 'm1',
+      rate: '0.0001',
+      periodId: 'm1:t0',
+      asOfMs: 0,
+    });
+    const src = book.source({ maxAgeMs: 1_000 });
+    expect(await src.quote({ marketId: 'm1', at: new Date(10_000) })).toBeNull();
+  });
+
+  it('rejects empty periodId and bad rate strings', async () => {
+    const book = memoryFundingRateBook({ now: () => 5_000 });
+    book.set({ marketId: 'm1', rate: 'not-a-number', periodId: 'p', asOfMs: 5_000 });
+    expect(await book.source().quote({ marketId: 'm1', at: new Date(5_000) })).toBeNull();
+    book.set({ marketId: 'm1', rate: '0.01', periodId: '  ', asOfMs: 5_000 });
+    expect(await book.source().quote({ marketId: 'm1', at: new Date(5_000) })).toBeNull();
+  });
+
+  it('allows negative rates (shorts pay)', async () => {
+    const book = memoryFundingRateBook({ now: () => 5_000 });
+    book.set({
+      marketId: 'm1',
+      rate: '-0.0001',
+      periodId: 'm1:neg',
+      asOfMs: 5_000,
+    });
+    const q = await book.source().quote({ marketId: 'm1', at: new Date(5_000) });
+    expect(q?.rate).toBe('-0.0001');
+  });
+});
+
+describe('fixedFundingRateSource', () => {
+  it('null quote stays null', async () => {
+    expect(await fixedFundingRateSource(null).quote({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('refuses market mismatch', async () => {
+    const src = fixedFundingRateSource({ marketId: 'm1', rate: '0.01', periodId: 'p' });
+    expect(await src.quote({ marketId: 'm2', at: new Date() })).toBeNull();
+  });
+});
+
+describe('isRateFresh', () => {
+  it('respects maxAgeMs', () => {
+    const e = { marketId: 'm', rate: '0', periodId: 'p', asOfMs: 1000 };
+    expect(isRateFresh(e, 1500, 1000)).toBe(true);
+    expect(isRateFresh(e, 2500, 1000)).toBe(false);
+    expect(isRateFresh(e, 99999, 0)).toBe(true);
+  });
+});
+
+describe('integration: rate book → funding tick', () => {
+  it('skips settle when rate book empty', async () => {
+    const book = memoryFundingRateBook({ now: () => 1_000_000 });
+    const posts: PostRequest[] = [];
+    const result = await runFundingTick(
+      {
+        rates: book.source(),
+        positions: {
+          async listOpenForMarket() {
+            return longShort();
+          },
+        },
+        periods: memoryFundingPeriodStore(),
+        ledger: {
+          async post(req) {
+            posts.push(req);
+            return { id: 'x', idempotencyKey: req.idempotencyKey } as never;
+          },
+        },
+        now: () => new Date(1_000_000),
+      },
+      'm1',
+    );
+    expect(result).toEqual({ status: 'skipped', reason: 'no_rate' });
+    expect(posts).toHaveLength(0);
+  });
+
+  it('settles when external rate published', async () => {
+    const book = memoryFundingRateBook({ now: () => 1_000_000 });
+    book.set({
+      marketId: 'm1',
+      rate: '0.0001',
+      periodId: periodIdFor('m1', '2026-07-31T00:00:00.000Z'),
+      asOfMs: 1_000_000,
+    });
+    const posts: PostRequest[] = [];
+    const result = await runFundingTick(
+      {
+        rates: book.source(),
+        positions: {
+          async listOpenForMarket() {
+            return longShort();
+          },
+        },
+        periods: memoryFundingPeriodStore(),
+        ledger: {
+          async post(req) {
+            posts.push(req);
+            return { id: 'x', idempotencyKey: req.idempotencyKey } as never;
+          },
+        },
+        now: () => new Date(1_000_000),
+      },
+      'm1',
+    );
+    expect(result.status).toBe('settled');
+    expect(posts.length).toBeGreaterThan(0);
+  });
+});
