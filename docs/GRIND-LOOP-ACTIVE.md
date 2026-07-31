@@ -2,6 +2,7 @@
 
 **Status:** **COOK RUNNING** · residual campaign armed · O1 babysit always on  
 **Operator decision:** 2026-07-31 Nitro claimed full residual board (third-dev screenshot program) — see `docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`  
+**Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` — Denon = direction; Nitro agents execute **and merge** under Class matrix (this file must not re-block Class M after gates).  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
 **Last tip:** re-check · high water through **#258** · do not re-ship **#110–#258** without regression
 
@@ -33,14 +34,14 @@ do not: collide stream-a-ui; invent futures positions; fake done
 
 ## Modes (do not collapse)
 
-| Mode                      | When                                                                      | Job                                                                         |
-| ------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **O1 BABYSIT**            | Always (overnight default)                                                | Open PRs → classify → gates → comment → merge **only if policy allows**     |
-| **O2 STREAM-A / HYGIENE** | Parallel lanes claimed in `LIVE-LANES.md`                                 | Shell polish N1–N8 · tracker honesty · WAVE-AUDIT · LIVE-LANES · brand reds |
-| **COOK (RUNNING)**        | Only if Status set to RUNNING with a **named** NEXT QUEUE of Pool A items | Ship agent-safe product — **not** Denon mountains                           |
-| **MEGA / WAVE AUDIT**     | Explicit audit fire                                                       | Batch tip audit — not a merge machine                                       |
+| Mode                      | When                                       | Job                                                                                                       |
+| ------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| **O1 BABYSIT**            | Always (overnight default)                 | Open PRs → classify → gates → comment → merge **only if policy allows**                                   |
+| **O2 STREAM-A / HYGIENE** | Parallel lanes claimed in `LIVE-LANES.md`  | Shell polish N1–N8 · tracker honesty · WAVE-AUDIT · LIVE-LANES · brand reds                               |
+| **COOK (RUNNING)**        | Status RUNNING with a **named** NEXT QUEUE | Ship residual campaign + Stream A under ownership law + LIVE-LANES — **do not invent** engine product law |
+| **MEGA / WAVE AUDIT**     | Explicit audit fire                        | Batch tip audit — not a merge machine                                                                     |
 
-**Backend micro-queue remains DRAINED.** O2 does **not** un-drain Denon futures/rails/OTC/etc.
+**Futures/OTC/copy/algo product law** still waits on Denon direction (or explicit research-only stub). Implementation residual work is Nitro-owned.
 
 ---
 
@@ -48,13 +49,15 @@ do not: collide stream-a-ui; invent futures positions; fake done
 
 Classify every open PR before merge:
 
-| Class | Meaning                                                                        | Nitro merge?                                                                             |
-| ----- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| **M** | Money / custody / ledger / pay / bank / withdraw / settlement                  | **NO** unless Denon comments `merge when green`                                          |
-| **H** | PR body says "not for a fast merge" / needs review / do not merge              | **NO** — comment only                                                                    |
-| **P** | Denon non-money spine                                                          | Prefer Denon self-merge; Nitro may merge only if CI+local green **and** no hold language |
-| **N** | Nitro / Stream A / docs / tracker honesty                                      | Yes after **audit → fix → debug → prove**                                                |
-| **X** | Human-only surface (billing, licences, multi-asset rails, kill drill, counsel) | Never treat as agent-done                                                                |
+| Class | Meaning                                                           | Nitro merge?                                                                                         |
+| ----- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **M** | Money / custody / ledger / pay / bank / withdraw / settlement     | **Yes** after money self-audit + second-pass adversarial + green CI; **no** if Denon/author **hold** |
+| **H** | PR body says "not for a fast merge" / needs review / do not merge | **NO** — comment only                                                                                |
+| **P** | Spine non-money                                                   | Yes if CI+local green + self-audit + no hold language                                                |
+| **N** | Nitro / Stream A / docs / tracker honesty                         | Yes after **audit → fix → debug → prove**                                                            |
+| **X** | Human-only surface (billing, licences, go-live, counsel content)  | Never treat as agent-done                                                                            |
+
+Canonical matrix also in `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` + residual campaign §5.3 — if conflict, ownership law wins.
 
 **Babysit is not rubber-stamp.** Always post a PR comment: what you ran, what you verified, what you did **not** verify.
 
@@ -66,7 +69,7 @@ Classify every open PR before merge:
 
 1. `gh pr list --state open`
 2. For each PR: classify M/H/P/N/X → run CI check + local gates when mergeable
-3. Money or hold language → **comment only**
+3. Hold language → **comment only**. Class M → merge only if self-audit + adversarial + green (ownership law); else comment blockers.
 4. Denon WIP radar (do not compete):
 
    ```bash

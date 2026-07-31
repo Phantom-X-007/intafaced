@@ -47,11 +47,12 @@ Pros do **not** rely on “chat A reads chat B’s brain.” They share **three 
 
 **Cross-memory hierarchy (strict order):**
 
-1. **Live claim board file** (who is doing what) — write every claim/release
-2. **Product truth docs** (`START-HERE`, PEACE-OF-MIND, residual, law)
-3. **GitHub** (`gh pr list`, branches, CI)
-4. **Grok session files** — only if board is missing/stale
-5. **Grok experimental memory** — preferences/decisions, **never** lane ownership
+1. **GitHub + git tip** (`gh pr list`, branches, CI) — live high water
+2. **Live claim board** (`docs/LIVE-LANES.md`) — who is coding what _now_
+3. **Ownership law** (`docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`) — who directs vs executes/merges
+4. **Product / campaign docs** (residual campaign, START-HERE, PEACE-OF-MIND, frontend SoT)
+5. **Grok session files** — only if board is missing/stale
+6. **Grok experimental memory** — soft prefs only, **never** lanes / tip / merge rights
 
 Memory (`GROK_MEMORY=1` / `[memory] enabled`) is useful for “Nitro hates code dumps.” It is **not** a substitute for a claim board.
 
@@ -281,8 +282,10 @@ You’re doing it “pro” when:
 
 ## Related
 
-- `docs/NITRO-SESSION-PROMPT.md` — base identity/law prompt (still paste every coding chat)
-- `docs/SPLIT-BOARD.md` — Nitro vs Denon territory
+- `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` — durable direction vs execution/merge law
+- `docs/NITRO-SESSION-PROMPT.md` — paste every coding chat
+- `docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` — residual program
 - `docs/START-HERE.md` — product map
-- Grok: `/dashboard` · optional `[memory] enabled = true` for soft prefs only
+- `docs/SPLIT-BOARD.md` / `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md` — history only; do not block residual execution
+- Grok: optional memory for soft prefs only — never lanes/high water
 - Orca: `orca skills get orca-cli` · `orca skills get orchestration` (agents run these)

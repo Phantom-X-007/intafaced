@@ -9,10 +9,23 @@ You are working in the INTAFACED monorepo. Read this before your first edit.
 | **Nitro** (`@ZenYoda3`)      | Non-technical operator. Directs work; does not run git/PR by hand. | write  |
 | **Denon** (`@Phantom-X-007`) | Experienced builder. Owns technical quality of what he ships.      | admin  |
 
+### Operating split (durable decision — 2026-07-31)
+
+| Layer                                                                                   | Owner                                                 |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **Direction** — high-altitude plan + product/money/spine **law** for greenfield engines | **Denon** (specs/ADRs/issues; free hands)             |
+| **Execution + merge** — residual board, Stream A, honesty, audits, research packs, PRs  | **Nitro agents** (merge when Class matrix gates pass) |
+| **Class X** — secrets, prod go-live, licence purchase, sanctions **content**            | **Nitro human** (+ counsel)                           |
+
+- Denon is **not** the default residual ship machine; he **sets direction** so agents can go hard in parallel.
+- Agents ship implementation under doctrine + Class matrix — they do **not** invent futures/OTC/multi-asset product law or force-push his `feat/spine-*`.
+- Full law + memory architecture + merge matrix: [`docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md). Campaign: `docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`. Lanes: `docs/LIVE-LANES.md`.
+- **Live tip / open PRs are never “in AGENTS.md”** — re-derive: `git fetch && git log -1 --oneline origin/main` · `gh pr list --state open`.
+
 **Review is asymmetric — on purpose (not slower theater):**
 
 - **Denon’s PRs:** he may merge when **CI is green**. He does **not** wait for Nitro to click Approve. His **agent must self-audit** (doctrine + money paths + `pnpm verify`) before he merges.
-- **Nitro’s PRs:** the agent opens the PR; **Denon (or his agent) reviews before merge**. Nitro is not expected to Approve Denon’s code.
+- **Nitro’s PRs:** agents open PRs and **merge when Class N/P/M gates pass** (see ownership law). Denon may still review; Nitro is not blocked waiting for Approve on agent-gated work. Class **M** requires money self-audit + second-pass adversarial + green CI (and no hold). Class **X** never agent-done.
 
 Do not invent a mutual-approval gate. That slows two people who already know who can read what.
 
@@ -36,9 +49,11 @@ export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
 
 1. [`INTAFACED_DEFINITIVE_BUILD.md`](INTAFACED_DEFINITIVE_BUILD.md) — the law.
 2. [`tooling/agent-protocol/AGENT_PROTOCOL.md`](tooling/agent-protocol/AGENT_PROTOCOL.md) — hard prohibitions.
-3. The target service's `README.md`.
-4. [`CONTRIBUTING.md`](CONTRIBUTING.md) — branch, PR, worktree workflow.
-5. If orienting Nitro (status / plan / “where are we”): [`docs/START-HERE.md`](docs/START-HERE.md).
+3. [`docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md) — who directs vs executes vs merges (durable).
+4. The target service's `README.md`.
+5. [`CONTRIBUTING.md`](CONTRIBUTING.md) — branch, PR, worktree workflow.
+6. If orienting Nitro (status / plan / “where are we”): [`docs/START-HERE.md`](docs/START-HERE.md).
+7. Before multi-agent code: [`docs/LIVE-LANES.md`](docs/LIVE-LANES.md) + residual campaign on tip.
 
 ---
 
@@ -64,9 +79,10 @@ Nitro does not know GitHub workflow. **You run the whole loop.** Do not hand him
 2. **Worktree** — ensure work is on `feat/|fix/|chore/|docs/…`, never on `main` checkout.
 3. **Implement** — surgical; match repo style; no drive-by refactors.
 4. **`pnpm verify`** — run it; paste real output. Not “should pass.”
-5. **Commit** only if he asked to commit, or he explicitly asked you to ship / open a PR (shipping implies commit).
+5. **Commit** if he asked to ship / open a PR, residual campaign / “go all out” is active, or he already authorized autonomous ship for this program (shipping implies commit).
 6. **Push + open PR** with the template filled (what / why / how you know). Title: `type(scope): …`
-7. **Reply to him in plain language only:** what changed, PR link, CI green/red, anything **he** must decide. No raw git lesson unless he asks “why.”
+7. **Merge when Class matrix gates pass** (ownership law) — do not wait for Denon Approve on Class N/P/M-gated work. Post self-audit on money. Never merge Class X as agent-done.
+8. **Reply to him in plain language only:** what changed, PR link, CI green/red / merged, anything **he** must decide (Class X only). No raw git lesson unless he asks “why.”
 
 ### Never put on Nitro
 

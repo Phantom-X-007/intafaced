@@ -2,9 +2,11 @@
 
 **Rule:** No code edits until your lane is on this board. First claimer wins.  
 **How to use:** `docs/NITRO-PARALLEL-OPS.md`.  
+**Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` (Denon directs · Nitro executes/merges).  
 **Residual campaign law:** `docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`  
-**Full Denon ↔ Nitro backlog (history):** `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md`  
-**Overnight posture (legacy O1+O2):** `docs/GRIND-LOOP-ACTIVE.md`
+**Full Denon ↔ Nitro backlog (history only):** `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md` — do not use to block residual execution.  
+**Overnight posture:** `docs/GRIND-LOOP-ACTIVE.md`  
+**PR numbers / session names in the table lag** — re-derive with `gh pr list` before acting.
 
 | Lane id                       | Owner session                   | Scope                                                         | Status                               | PR / proof                | Do not touch                                |
 | ----------------------------- | ------------------------------- | ------------------------------------------------------------- | ------------------------------------ | ------------------------- | ------------------------------------------- |

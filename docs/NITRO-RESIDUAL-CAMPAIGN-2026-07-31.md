@@ -1,9 +1,9 @@
 # Nitro residual campaign — all-out, right way (2026-07-31)
 
 **Status:** ARMED · Nitro claims the residual board · this session = coordinator  
-**Tip at write:** `c40fd59` (#258) · always re-check `git fetch && git log origin/main -1`  
-**Open PR at write:** **#259** `test(identity): fix freeze-refresh assertion after revoke` (Class N — babysit to green)  
-**Third builder:** stood down by Nitro message (program ownership)  
+**Ownership law (who directs vs executes/merges):** [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md) — Denon = direction; Nitro agents = execution + merge under §5.3 gates.  
+**Tip / open PRs at write:** historical snapshot only — always re-check `git fetch && git log origin/main -1` · `gh pr list --state open`  
+**Third builder:** stood down by Nitro message (program ownership) unless re-assigned  
 **If live git disagrees with this file: live wins — fix this file same turn.**
 
 ---

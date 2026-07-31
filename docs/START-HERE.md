@@ -60,9 +60,11 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Next product gates:** dual-book discipline + real rails/chain → not another full audit
 - **Denon handover (2026-07-29):** [`HANDOVER-NITRO-BRANCHES.md`](HANDOVER-NITRO-BRANCHES.md) · owner decisions closed: [`OWNER-DECISIONS-OPEN.md`](OWNER-DECISIONS-OPEN.md)
 - - **Denon return board (2026-07-29):** [`DENON-RETURN-GITHUB-STATE-2026-07-29.md`](DENON-RETURN-GITHUB-STATE-2026-07-29.md) — what Nitro agents landed; do not rebuild
-- **Nitro’s product lane (Stream A):** app surface only — claim + ordered checklist in [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md) · GitHub issue **#83** · Phase 1 execution plan [`STREAM-A-PHASE1-PLAN.md`](STREAM-A-PHASE1-PLAN.md). Denon owns spine (services, edge, proxy, compose). Do not edit Stream B files; open `[cross-stream]` issues instead.
+- **Nitro’s product lane (Stream A):** trader shell — claim + checklist in [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md) · issue **#83**. Frontend lock: [`FRONTEND-STATE-OF-TRUTH-2026-07-31.md`](FRONTEND-STATE-OF-TRUTH-2026-07-31.md) when present on tip.
+- **Residual campaign (Nitro executes + merges):** [`NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`](NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md) · lanes [`LIVE-LANES.md`](LIVE-LANES.md).
+- **Who owns what (durable — not a status board):** [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md) · also in [`AGENTS.md`](../AGENTS.md) · paste [`NITRO-SESSION-PROMPT.md`](NITRO-SESSION-PROMPT.md). **Denon = direction; Nitro agents = ship + merge when gates pass.** Live tip/PRs: re-derive with git/`gh`, never from memory.
 - **GitHub CI money (Actions thrift — active law):** [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md) · also in `AGENTS.md`. Parallel/autonomous shipping stays; cut waste + cheaper runners. Not a Denon review gate.
-- **#86 landed on main** (shell rebrand + custody locks). Multi-asset remains Denon-only money. Re-check with `gh pr list`.
+- **#86 landed on main** (shell rebrand + custody locks). Multi-asset **product law** still needs Denon direction; agents may execute after he specs. Re-check with `gh pr list`.
 
 History only (may lag): [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md)
 

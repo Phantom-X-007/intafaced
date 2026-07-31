@@ -4,6 +4,7 @@ Read [`AGENTS.md`](AGENTS.md) first — it is the canonical brief for every AI a
 
 Plain-language map for Nitro: [`docs/START-HERE.md`](docs/START-HERE.md).  
 Paste prompt for new sessions: [`docs/NITRO-SESSION-PROMPT.md`](docs/NITRO-SESSION-PROMPT.md).
+Ownership law (Nitro executes + merges · Denon directs): [`docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md).
 
 The four non-negotiables, repeated here because they are the ones that cost real money or real time:
 
