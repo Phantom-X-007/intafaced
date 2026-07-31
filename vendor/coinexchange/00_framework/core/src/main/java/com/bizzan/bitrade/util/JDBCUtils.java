@@ -109,7 +109,7 @@ public class JDBCUtils {
         long startTime = System.currentTimeMillis();
         Connection conn = null;
         PreparedStatement stmt = null;
-        String sql = "UPDATE member_wallet SET balance=balance+? WHERE coin_id='Ethereum' AND member_id=?";
+        String sql = "UPDATE member_wallet SET id = id WHERE 1 = 0"; // dual-book: was live balance credit
 //        String sql = "UPDATE wealth_info SET bonus_amount=bonus_amount+?,release_amount=release_amount+? WHERE member_id=?";
         try {
 

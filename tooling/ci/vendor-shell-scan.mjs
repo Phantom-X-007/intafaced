@@ -87,6 +87,17 @@ const FORBIDDEN = [
     re: /SET\s+balance\s*=\s*balance\s*\+\s*:balance\s+WHERE\s+coin_id\s*=\s*'BHB'/i,
     reason: 'DAO increaseBalanceForBHB live mint SQL (must stay no-op)',
   },
+  // ── Dual-book four mutators (Plan P2-2 · Spec DB-3) — live JPQL only ────
+  {
+    id: 'jpql-wallet-balance-plus',
+    re: /wallet\.balance\s*=\s*wallet\.balance\s*\+\s*:amount/i,
+    reason: 'live increaseBalance/thaw JPQL — dual-book (must be no-op WHERE 1=0)',
+  },
+  {
+    id: 'jpql-wallet-frozen-plus',
+    re: /wallet\.frozenBalance\s*=\s*wallet\.frozenBalance\s*\+\s*:amount/i,
+    reason: 'live freezeBalance JPQL — dual-book (must be no-op WHERE 1=0)',
+  },
 ];
 
 function walk(dir, out = []) {

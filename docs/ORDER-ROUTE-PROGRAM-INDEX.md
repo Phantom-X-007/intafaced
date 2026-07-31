@@ -1,6 +1,6 @@
 # Order-route program — Nitro index + cold-agent handoff
 
-**Status:** LAW PACK ON BRANCH · Build next  
+**Status:** AGENT FINISH GATE · BUILD LIVE · spines F1–F7 + fast-check + door-kill wired · seed/F8 residual  
 **One screen for Nitro.** Full paste for new Build chats is at the bottom.
 
 | #   | Doc                                                                              | Role                                                |
@@ -19,18 +19,27 @@
 
 ## Phase now (re-derive tip before acting)
 
-| Phase                                          | Status                       |
-| ---------------------------------------------- | ---------------------------- |
-| Frame · Spec · Landscape v2 · Architect · Plan | **Done** (this pack)         |
-| P0-1 Denon DIRECTION #272                      | **Done on main**             |
-| P0-2 LIVE-LANES claim                          | Do first in Build            |
-| P0-3 residual seed-first pointer               | Do early in Build            |
-| **P1-0 → P1-1 chaos F1–F4**                    | **First code spine**         |
-| Dual-book P2 · seed P4 · …                     | After chaos spine (≤3 lanes) |
+| Phase                                          | Status                                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Frame · Spec · Landscape v2 · Architect · Plan | **Done** (this pack)                                                                         |
+| P0-1 Denon DIRECTION #272                      | **Done on main**                                                                             |
+| P0-2 LIVE-LANES claim                          | **LIVE** this ship                                                                           |
+| P0-3 residual seed-first pointer               | **Done** this ship                                                                           |
+| P1-1 chaos F1–F4                               | **Green on CI** (#289 Tests)                                                                 |
+| P1-2 fast-check                                | **Landed** (`order-route-properties.test.ts`)                                                |
+| P1-3 assemble smoke                            | **Landed** (`pnpm order-path-smoke` honest skip)                                             |
+| P1-4 F5–F7                                     | **Landed** · F8 waits seed (P4)                                                              |
+| Dual-book P2-1…P2-4                            | **Inventory + mutator no-op + scans + Spring door interceptor** · entity setBalance residual |
+| P1-5 reconcile CX-9                            | **Landed** (`reconcileOrder`)                                                                |
+| Next                                           | P3 DEX residual · P4 seed honesty (unlocks F8) · non-HTTP dual-book residual · P2-5 ADR      |
 
 **Engine order (Denon law):** seed/mm → multi-asset → futures. Futures recipes/REST on tip ≠ “futures first” for this program.
 
 ---
+
+## Finish gate
+
+See [`ORDER-ROUTE-PROGRAM-FINISH-2026-07-31.md`](ORDER-ROUTE-PROGRAM-FINISH-2026-07-31.md).
 
 ## Paste into every new Build chat (verbatim)
 
@@ -83,7 +92,8 @@ When done with a slice: PR link + scoreboard row + real verify output. Phase onl
 
 ## Changelog
 
-| When       | What                                                  |
-| ---------- | ----------------------------------------------------- |
-| 2026-07-31 | Initial index + paste                                 |
-| 2026-07-31 | Handoff hardened for new Build chat · compaction-safe |
+| When       | What                                                        |
+| ---------- | ----------------------------------------------------------- |
+| 2026-07-31 | Initial index + paste                                       |
+| 2026-07-31 | Handoff hardened for new Build chat · compaction-safe       |
+| 2026-07-31 | Build ship: P0 claim · chaos F1–F4 · dual-book mutator scan |

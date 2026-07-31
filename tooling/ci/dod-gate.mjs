@@ -201,6 +201,8 @@ for (const script of [
   'brand-scan.mjs',
   'custody-scan.mjs',
   'vendor-shell-scan.mjs',
+  'vendor-java-money-scan.mjs',
+  'dual-book-door-scan.mjs',
   'secret-scan.mjs',
   'migration-check.mjs',
   'killswitch-reachability.mjs',

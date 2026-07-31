@@ -134,8 +134,9 @@ public class MemberApplicationService extends BaseService {
         member.setApplicationTime(new Date());
         memberDao.save(member);
         application.setAuditStatus(AUDIT_SUCCESS);//审核成功
-        // 审核通过给奖励
-        if(needRealName==1){
+        // Dual-book: promotion/realname wallet mints disabled (INTAFACED).
+        // KYC status updates above remain; balance credits must go through ledger.
+        if (false && needRealName==1){
             if(member.getInviterId() != null) {
                 Member member1 = memberDao.findOne(member.getInviterId());
                 promotion(member1, member);
@@ -143,7 +144,7 @@ public class MemberApplicationService extends BaseService {
         }
         // 实名奖励
         // 被邀请者本身的奖励
-        RewardPromotionSetting rewardPromotionSetting = rewardPromotionSettingService.findByType(PromotionRewardType.REGISTER);
+        RewardPromotionSetting rewardPromotionSetting = null; // dual-book disable mint
         if (rewardPromotionSetting != null) {
         	BigDecimal amount1 = JSONObject.parseObject(rewardPromotionSetting.getInfo()).getBigDecimal("one");
 			MemberWallet memberWallet = memberWalletService.findByCoinAndMember(rewardPromotionSetting.getCoin(), member);

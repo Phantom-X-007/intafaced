@@ -47,26 +47,21 @@ public class LegalWalletWithdrawService extends TopBaseService<LegalWalletWithdr
     //提现
     @Transactional(rollbackFor = Exception.class)
     public void withdraw(MemberWallet wallet, LegalWalletWithdraw legalWalletWithdraw) {
-        wallet.setBalance(BigDecimalUtils.sub(wallet.getBalance(), legalWalletWithdraw.getAmount()));
-        wallet.setFrozenBalance(BigDecimalUtils.add(wallet.getFrozenBalance(), legalWalletWithdraw.getAmount()));
-        legalWalletWithdrawDao.save(legalWalletWithdraw);
+        throw new IllegalStateException(
+                "legal wallet withdraw is disabled: Java shell must not freeze balances (INTAFACED dual-book)");
     }
 
     //提现不通过
     @Transactional(rollbackFor = Exception.class)
     public void noPass(MemberWallet wallet, LegalWalletWithdraw withdraw) {
-        wallet.setFrozenBalance(BigDecimalUtils.sub(wallet.getFrozenBalance(), withdraw.getAmount()));//冻结金额减少
-        wallet.setBalance(BigDecimalUtils.add(wallet.getBalance(), withdraw.getAmount()));//本金增加
-        withdraw.setStatus(WithdrawStatus.FAIL);//标记失败
-        withdraw.setDealTime(new Date());//处理时间
+        throw new IllegalStateException(
+                "legal wallet withdraw noPass is disabled: Java shell must not thaw balances (INTAFACED dual-book)");
     }
 
     //打款
     @Transactional(rollbackFor = Exception.class)
     public void remit(String paymentInstrument, LegalWalletWithdraw withdraw, MemberWallet wallet) {
-        withdraw.setPaymentInstrument(paymentInstrument);//支付凭证
-        withdraw.setStatus(WithdrawStatus.SUCCESS);//标记成功
-        withdraw.setRemitTime(new Date());//打款时间
-        wallet.setFrozenBalance(BigDecimalUtils.sub(wallet.getFrozenBalance(), withdraw.getAmount()));//钱包冻结金额减少
+        throw new IllegalStateException(
+                "legal wallet remit is disabled: Java shell must not debit frozen balances (INTAFACED dual-book)");
     }
 }

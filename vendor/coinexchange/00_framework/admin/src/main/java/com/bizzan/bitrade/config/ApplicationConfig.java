@@ -13,6 +13,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
 
 import com.bizzan.bitrade.ext.OrdinalToEnumConverterFactory;
+import com.bizzan.bitrade.interceptor.DualBookMoneyDoorInterceptor;
 import com.bizzan.bitrade.interceptor.LogInterceptor;
 import com.bizzan.bitrade.interceptor.OutExcelInterceptor;
 import com.bizzan.bitrade.interceptor.SessionInterceptor;
@@ -57,6 +58,8 @@ public class ApplicationConfig extends WebMvcConfigurerAdapter {
     }
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // Dual-book Option B: refuse Java money mutator HTTP paths before session/auth.
+        registry.addInterceptor(new DualBookMoneyDoorInterceptor()).addPathPatterns("/**");
         registry.addInterceptor(new SessionInterceptor()).addPathPatterns("/**")
                 .excludePathPatterns("/code/sms-provider/**","/captcha","/system/employee/sign/in",
                         "/system/employee/check","/system/employee/logout");

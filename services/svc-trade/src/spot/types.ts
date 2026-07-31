@@ -22,6 +22,27 @@ export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'PO';
 export type OrderStatus = 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected' | 'expired';
 export type Liquidity = 'maker' | 'taker';
 
+/**
+ * CX-9 reconcile diagnoses (Spec · Plan P1-5).
+ *
+ * Operator / recovery method — not a silent cancel-all of healthy opens.
+ */
+export type ReconcileCase =
+  'orphan_pending' | 'open_hold_no_engine' | 'open_hold_engine_cleared' | 'open_engine_no_hold' | 'terminal' | 'not_found';
+
+export type ReconcileAction = 'deleted' | 'released' | 'fail_closed' | 'none';
+
+export interface ReconcileResult {
+  readonly orderId: string;
+  readonly case: ReconcileCase;
+  readonly action: ReconcileAction;
+  /** Decimal string of ledger hold for this order before action. */
+  readonly holdBefore: string;
+  /** Whether the engine reported the order live at cancel probe (null if not probed). */
+  readonly engineLive: boolean | null;
+  readonly detail: string;
+}
+
 export interface Market {
   readonly id: string;
   readonly symbol: string;
@@ -67,6 +88,8 @@ export interface OrderRecord {
   readonly feeDiscountBps: number;
   readonly protectionPrice: Amount | null;
   readonly engineSequence: number | null;
+  /** Seed/mm liquidity order (SD-2). Public volume excludes these (SD-3). */
+  readonly seeded: boolean;
   readonly rejectCode: string | null;
   readonly createdAt: Date;
 }
@@ -148,6 +171,8 @@ export type TradeErrorCode =
   | 'trade.below_min_notional'
   | 'trade.no_reference_price'
   | 'trade.spot_disabled'
+  | 'trade.seed_disabled'
+  | 'trade.seed_must_make'
   | 'trade.order_not_found'
   | 'trade.order_not_open'
   | 'trade.not_owner'

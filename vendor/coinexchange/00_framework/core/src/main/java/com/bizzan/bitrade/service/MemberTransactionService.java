@@ -179,37 +179,8 @@ public class MemberTransactionService extends BaseService {
 
     @Transactional
     public void matchWallet(Long uid,String symbol,BigDecimal amount){
-        List<MemberTransaction> transactions = findMatchTransaction(uid,symbol);
-        BigDecimal deltaAmount = BigDecimal.ZERO;
-        MemberWallet gccWallet = walletService.findByCoinUnitAndMemberId("GCC",uid);
-        MemberWallet gcxWallet = walletService.findByCoinUnitAndMemberId("GCX",uid);
-
-        for(MemberTransaction transaction:transactions){
-            if(amount.compareTo(deltaAmount) > 0) {
-                BigDecimal  amt = amount.subtract(deltaAmount).compareTo(transaction.getAmount()) > 0 ? transaction.getAmount() : amount.subtract(deltaAmount);
-                deltaAmount = deltaAmount.add(amt);
-                transaction.setFlag(1);
-            }
-            else {
-                break;
-            }
-        }
-
-        gccWallet.setBalance(gccWallet.getBalance().subtract(deltaAmount));
-        gcxWallet.setBalance(gcxWallet.getBalance().add(deltaAmount));
-
-        MemberTransaction transaction = new MemberTransaction();
-        transaction.setAmount(deltaAmount);
-        transaction.setSymbol(gcxWallet.getCoin().getUnit());
-        transaction.setAddress(gcxWallet.getAddress());
-        transaction.setMemberId(gcxWallet.getMemberId());
-        transaction.setType(TransactionType.MATCH);
-        transaction.setFee(BigDecimal.ZERO);
-        //保存配对记录
-        save(transaction);
-        if(gccWallet.getBalance().compareTo(BigDecimal.ZERO) < 0){
-            gccWallet.setBalance(BigDecimal.ZERO);
-        }
+        throw new IllegalStateException(
+                "matchWallet is disabled: Java shell must not mutate balances (INTAFACED dual-book)");
     }
 
     public boolean isOverMatchLimit(String day,double limit) throws Exception {
