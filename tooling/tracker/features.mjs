@@ -259,7 +259,7 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual: full futures residual stack + startFuturesJobs wired (default OFF; TRADE_FUTURES_JOBS_ENABLED + explicit market ids). Still missing: live multi-venue index oracle, matching seed, ops enable. Not done.',
+    note: 'Updated 2026-07-31 residual: full stack + jobs wire (OFF) + public funding-rate for futures only when rate published (never invent 0). Still missing: live multi-venue index, matching seed, ops enable. Not done.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
