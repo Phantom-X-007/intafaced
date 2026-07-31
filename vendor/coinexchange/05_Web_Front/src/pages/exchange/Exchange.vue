@@ -590,12 +590,12 @@
 
           <dl class="ix-meta">
             <div>
-              <dt>Available</dt>
+              <dt>Available <em class="ix-dim">(venue wallet)</em></dt>
               <dd v-if="!isLogin || walletReachable">
                 {{ fmt(availableBalance, side === 'BUY' ? baseCoinScale : coinScale) }}
                 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }}</em>
               </dd>
-              <dd v-else class="ix-dim">— <em>unknown</em></dd>
+              <dd v-else class="ix-dim">— <em>unknown · not ledger</em></dd>
             </div>
             <div v-if="orderType === 'LIMIT_PRICE'">
               <dt>Order value</dt>
@@ -925,9 +925,9 @@ export default {
     },
     feeLabel() {
       if (!this.feeKnown) {
-        return '—';
+        return 'unknown (market did not provide fee)';
       }
-      return (this.num(this.symbolFee) * 100).toFixed(2) + '%';
+      return (this.num(this.symbolFee) * 100).toFixed(2) + '% · market schedule';
     },
     tradesEmptyLabel() {
       if (!this.tradesReachable && !this.feedLive) {

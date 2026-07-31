@@ -197,6 +197,7 @@ export default {
   },
   data() {
     return {
+      irreversibleSubmitting: false,
       watching: false,
       stompClient: null,
       reserveTime: "60",
@@ -331,19 +332,26 @@ export default {
       }
     },
     ok1() {
+      if (this.irreversibleSubmitting) return;
+      this.irreversibleSubmitting = true;
       this.$http
-.post(this.host + "/otc/order/pay", {
+        .post(this.host + "/otc/order/pay", {
           orderSn: this.$route.query.tradeId
         })
-.then(response => {
+        .then(response => {
+          this.irreversibleSubmitting = false;
           var resp = response.body;
-          if (resp.code == 0) {
+          if (resp && resp.code == 0) {
             this.$Message.success(resp.message);
             this.sendOrderStatusNotice(1);
             this.getDetail();
           } else {
-            this.$Message.error(resp.message);
+            this.$Message.error((resp && resp.message) || "Pay mark failed");
           }
+        })
+        .catch(() => {
+          this.irreversibleSubmitting = false;
+          this.$Message.error("Venue did not respond — payment not marked.");
         });
     },
     ok2() {
@@ -357,42 +365,54 @@ export default {
       }, 10000);
     },
     ok3() {
+      if (this.irreversibleSubmitting) return;
+      this.irreversibleSubmitting = true;
       this.$http
-.post(this.host + "/otc/order/cancel", {
+        .post(this.host + "/otc/order/cancel", {
           orderSn: this.$route.query.tradeId
         })
-.then(response => {
+        .then(response => {
+          this.irreversibleSubmitting = false;
           var resp = response.body;
-          if (resp.code == 0) {
+          if (resp && resp.code == 0) {
             this.$Message.success(resp.message);
             this.sendOrderStatusNotice(3);
             this.getDetail();
           } else {
-            this.$Message.error(resp.message);
+            this.$Message.error((resp && resp.message) || "Cancel failed");
           }
+        })
+        .catch(() => {
+          this.irreversibleSubmitting = false;
+          this.$Message.error("Venue did not respond — order not cancelled.");
         });
     },
     ok4() {
-      if (1 == 1) {
-        var params = {};
-        params["orderSn"] = this.$route.query.tradeId;
-        params["remark"] = this.formItem.remark;
-
-        this.$http
-.post(this.host + "/otc/order/appeal", params)
-.then(response => {
-            var resp = response.body;
-            if (resp.code == 0) {
-              this.$Message.success(resp.message);
-              this.sendOrderStatusNotice(4);
-              this.getDetail();
-            } else {
-              this.$Message.error(resp.message);
-            }
-          });
-      }
+      if (this.irreversibleSubmitting) return;
+      var params = {};
+      params["orderSn"] = this.$route.query.tradeId;
+      params["remark"] = this.formItem.remark;
+      this.irreversibleSubmitting = true;
+      this.$http
+        .post(this.host + "/otc/order/appeal", params)
+        .then(response => {
+          this.irreversibleSubmitting = false;
+          var resp = response.body;
+          if (resp && resp.code == 0) {
+            this.$Message.success(resp.message);
+            this.sendOrderStatusNotice(4);
+            this.getDetail();
+          } else {
+            this.$Message.error((resp && resp.message) || "Appeal failed");
+          }
+        })
+        .catch(() => {
+          this.irreversibleSubmitting = false;
+          this.$Message.error("Venue did not respond — appeal not filed.");
+        });
     },
     ok5() {
+      if (this.irreversibleSubmitting) return;
       var params = {};
       params["orderSn"] = this.$route.query.tradeId;
       params["jyPassword"] = this.fundpwd;
@@ -400,17 +420,23 @@ export default {
         this.$Message.error(this.$t("otc.chat.msg7tip"));
         return;
       }
+      this.irreversibleSubmitting = true;
       this.$http
-.post(this.host + "/otc/order/release", params)
-.then(response => {
+        .post(this.host + "/otc/order/release", params)
+        .then(response => {
+          this.irreversibleSubmitting = false;
           var resp = response.body;
-          if (resp.code == 0) {
+          if (resp && resp.code == 0) {
             this.$Message.success(resp.message);
             this.sendOrderStatusNotice(5);
             this.getDetail();
           } else {
-            this.$Message.error(resp.message);
+            this.$Message.error((resp && resp.message) || "Release failed");
           }
+        })
+        .catch(() => {
+          this.irreversibleSubmitting = false;
+          this.$Message.error("Venue did not respond — coins not released.");
         });
     },
     getDetail() {
