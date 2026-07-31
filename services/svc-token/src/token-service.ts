@@ -39,6 +39,7 @@ export class TokenError extends Error {
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
       | 'token.params_missing'
+      | 'token.params_invalid'
       | 'token.proposal_not_found'
       | 'token.proposal_not_open'
       | 'token.proposal_window'
@@ -98,8 +99,16 @@ export interface ProposalDetail extends ProposalRecord {
 
 export interface TokenServiceOptions {
   assetId?: string;
-  emission: EmissionParams;
-  buyback: BuybackParams;
+  /**
+   * Test override. Production loads emission from `token_params` (T-02).
+   * When `loadParamsFromDb` is false, this is required.
+   */
+  emission?: EmissionParams;
+  /**
+   * Test override. Production loads buyback from `token_params` (T-02).
+   * When `loadParamsFromDb` is false, this is required.
+   */
+  buyback?: BuybackParams;
   /**
    * How long a loaded fee-discount schedule stays good, in ms (default 60s).
    *
@@ -109,6 +118,11 @@ export interface TokenServiceOptions {
    * governance already operates on. 0 disables the cache, which is what the tests use.
    */
   feeScheduleTtlMs?: number;
+  /**
+   * Production default true: buyback + emission params come from `token_params`.
+   * Tests set false and inject `emission` / `buyback` so pure service tests need no DB row.
+   */
+  loadParamsFromDb?: boolean;
 }
 
 export interface StakeRecord {
@@ -125,7 +139,10 @@ export interface StakeRecord {
 export class TokenService {
   private readonly assetId: string;
   private readonly feeScheduleTtlMs: number;
+  private readonly loadParamsFromDb: boolean;
   private feeScheduleCache: { schedule: FeeDiscountSchedule; loadedAt: number } | null = null;
+  private buybackParamsCache: { params: BuybackParams; loadedAt: number } | null = null;
+  private emissionParamsCache: { params: EmissionParams; loadedAt: number } | null = null;
 
   constructor(
     private readonly sql: Sql,
@@ -135,6 +152,12 @@ export class TokenService {
   ) {
     this.assetId = options.assetId ?? 'IFC';
     this.feeScheduleTtlMs = options.feeScheduleTtlMs ?? 60_000;
+    this.loadParamsFromDb = options.loadParamsFromDb !== false;
+    if (!this.loadParamsFromDb) {
+      if (!options.emission || !options.buyback) {
+        throw new Error('TokenService test mode requires emission and buyback overrides when loadParamsFromDb is false');
+      }
+    }
   }
 
   // ── Staking (§4.3) ─────────────────────────────────────────────────────────
@@ -511,6 +534,66 @@ export class TokenService {
     return schedule;
   }
 
+  /**
+   * Buyback split params from `token_params` (T-02). Defaults in source are seed only.
+   */
+  async buybackParams(now: number = Date.now()): Promise<BuybackParams> {
+    if (!this.loadParamsFromDb) return this.options.buyback!;
+    const cached = this.buybackParamsCache;
+    if (cached && this.feeScheduleTtlMs > 0 && now - cached.loadedAt < this.feeScheduleTtlMs) return cached.params;
+
+    const rows = await this.sql<Array<{ buyback_bps: string; burn_split_bps: string }>>`
+      SELECT buyback_bps::text, burn_split_bps::text FROM token.token_params WHERE id = true
+    `;
+    if (rows.length === 0) throw new TokenError('token_params singleton row is missing — run migrations', 'token.params_missing');
+    const params: BuybackParams = {
+      buybackBps: Number(rows[0]!.buyback_bps),
+      burnSplitBps: Number(rows[0]!.burn_split_bps),
+    };
+    if (!Number.isInteger(params.buybackBps) || params.buybackBps < 0 || params.buybackBps > 10_000) {
+      throw new TokenError(`token_params.buyback_bps out of range: ${params.buybackBps}`, 'token.params_invalid');
+    }
+    if (!Number.isInteger(params.burnSplitBps) || params.burnSplitBps < 0 || params.burnSplitBps > 10_000) {
+      throw new TokenError(`token_params.burn_split_bps out of range: ${params.burnSplitBps}`, 'token.params_invalid');
+    }
+    this.buybackParamsCache = { params, loadedAt: now };
+    return params;
+  }
+
+  /**
+   * Emission curve from `token_params` (T-02). Code defaults are not live authority.
+   */
+  async emissionParams(now: number = Date.now()): Promise<EmissionParams> {
+    if (!this.loadParamsFromDb) return this.options.emission!;
+    const cached = this.emissionParamsCache;
+    if (cached && this.feeScheduleTtlMs > 0 && now - cached.loadedAt < this.feeScheduleTtlMs) return cached.params;
+
+    const rows = await this.sql<Array<{ total_supply: string; halving_interval: number; emission_curve: unknown }>>`
+      SELECT total_supply::text, halving_interval, emission_curve FROM token.token_params WHERE id = true
+    `;
+    if (rows.length === 0) throw new TokenError('token_params singleton row is missing — run migrations', 'token.params_missing');
+    const row = rows[0]!;
+    const curve = row.emission_curve;
+    if (curve === null || typeof curve !== 'object' || Array.isArray(curve)) {
+      throw new TokenError('token_params.emission_curve is missing or not an object', 'token.params_invalid');
+    }
+    const curveObj = curve as Record<string, unknown>;
+    const initialRaw = curveObj.initialEpochReward;
+    if (typeof initialRaw !== 'string' && typeof initialRaw !== 'number') {
+      throw new TokenError('token_params.emission_curve.initialEpochReward is required', 'token.params_invalid');
+    }
+    const params: EmissionParams = {
+      initialEpochReward: parseAmount(String(initialRaw)),
+      halvingIntervalEpochs: Number(row.halving_interval),
+      maxSupply: parseAmount(row.total_supply),
+    };
+    if (!Number.isInteger(params.halvingIntervalEpochs) || params.halvingIntervalEpochs < 1) {
+      throw new TokenError(`token_params.halving_interval invalid: ${params.halvingIntervalEpochs}`, 'token.params_invalid');
+    }
+    this.emissionParamsCache = { params, loadedAt: now };
+    return params;
+  }
+
   async accessOf(userId: string) {
     const [staked, schedule] = await Promise.all([this.stakeOf(userId), this.feeDiscountSchedule()]);
     return { staked, tier: accessTierFor(staked), feeDiscountBps: feeDiscountBps(staked, schedule) };
@@ -637,6 +720,11 @@ export class TokenService {
   /**
    * Record and settle a buyback run.
    *
+   * T-01 residual (explicit): this is **operator burn-from-rewards**, not a structural
+   * market-buy of revenue. `tokensBought` is trusted input; `toRewards` is not a second
+   * ledger credit — funds must already sit in the rewards engine. Full §4.3 flywheel
+   * (auto market-buy + budget from `buybackBudget`) is a product socket, not this path.
+   *
    * `tokensBought` is supplied by the caller because pricing and execution are
    * svc-trade's job, not this service's — svc-token never decides a price.
    * Until the internal book exists (Phase 2) an operator supplies the executed
@@ -652,7 +740,8 @@ export class TokenService {
     revenueTotal: Record<string, string>;
     tokensBought: Amount;
   }): Promise<{ runId: string; burned: Amount; toRewards: Amount }> {
-    const { toBurn, toRewards } = splitBuyback(input.tokensBought, this.options.buyback);
+    const buyback = await this.buybackParams();
+    const { toBurn, toRewards } = splitBuyback(input.tokensBought, buyback);
 
     // toBurn + toRewards === tokensBought exactly (splitBuyback derives one side
     // by subtraction). The burn is the only leg that needs a ledger movement —
@@ -731,7 +820,14 @@ export class TokenService {
     return this.mintEpoch(epoch, destination);
   }
 
-  private async mintEpochInner(epoch: number, destination: ReturnType<typeof rewardsEngine>): Promise<{ epoch: number; minted: Amount }> {
+  private async mintEpochInner(
+    epoch: number,
+    destination: ReturnType<typeof rewardsEngine>,
+  ): Promise<{
+    epoch: number;
+    minted: Amount;
+  }> {
+    const emission = await this.emissionParams();
     return transaction(
       this.sql,
       async (tx) => {
@@ -740,13 +836,13 @@ export class TokenService {
         `;
         if (rows[0]?.closed) throw new TokenError(`Epoch ${epoch} is already closed`, 'token.epoch_closed');
 
-        const reward = epochReward(epoch, this.options.emission);
+        const reward = epochReward(epoch, emission);
         if (reward <= 0n) throw new TokenError('Emission schedule is exhausted', 'token.supply_exhausted');
 
         // Guard the cap independently of the curve: a mis-tuned parameter must
         // not be able to mint past max supply.
-        const cumulative = cumulativeEmission(epoch, this.options.emission);
-        if (cumulative > this.options.emission.maxSupply) {
+        const cumulative = cumulativeEmission(epoch, emission);
+        if (cumulative > emission.maxSupply) {
           throw new TokenError('Emission would exceed max supply', 'token.supply_exhausted');
         }
 

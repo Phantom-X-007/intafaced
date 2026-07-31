@@ -75,7 +75,13 @@ if (!available) {
   let bus: MemoryEventBus;
   let token: TokenService;
 
-  const options = { assetId: 'IFC', emission: DEFAULT_EMISSION_PARAMS, buyback: DEFAULT_BUYBACK_PARAMS };
+  const options = {
+    assetId: 'IFC',
+    emission: DEFAULT_EMISSION_PARAMS,
+    buyback: DEFAULT_BUYBACK_PARAMS,
+    loadParamsFromDb: false,
+    feeScheduleTtlMs: 0,
+  };
 
   /** Put real IFC in a user's available balance so a stake has something behind it. */
   async function fund(userId: string, amount: string) {

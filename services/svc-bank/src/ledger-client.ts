@@ -8,7 +8,7 @@ import {
   type PostRequest,
   rehydrateLedgerHttpError,
 } from '@intafaced/ledger-client';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import type { HistoryRange, LedgerEntryRecord, LedgerHistory } from './analytics/ledger-history.js';
 
 /**
@@ -24,17 +24,13 @@ import type { HistoryRange, LedgerEntryRecord, LedgerHistory } from './analytics
  */
 export function createLedgerClient(baseUrl: string, internalSecret: string): LedgerClient {
   /**
-   * Service credentials, per call (§2).
+   * Service credentials, per call (§2) — body-bound (T-04 / L2-6).
    *
-   * svc-ledger's `post` is a `serviceProcedure` now, so this client must prove
-   * which service it is. It previously sent `content-type` and nothing else —
-   * there was no credential to check even before `post` began checking.
-   *
-   * Signed per request rather than once at construction, because the signature
-   * covers a timestamp: a captured header stops working after the skew window
-   * instead of being a permanent bearer token.
+   * svc-ledger's `post` is a `serviceProcedure`. Signing identity + timestamp
+   * alone left a captured signature replayable against ANY body for ~300s.
+   * Body bind matches svc-token and closes that hole on earn/loan money posts.
    */
-  const authHeaders = () => serviceAuthHeaders('svc-bank', internalSecret);
+  const authHeaders = (payload: string) => serviceAuthHeadersForBody('svc-bank', internalSecret, payload);
 
   const url = baseUrl.replace(/\/$/, '');
 
@@ -117,7 +113,7 @@ export function createLedgerHistory(baseUrl: string, internalSecret: string): Le
   // Reads are service-to-service too. `/trpc/history` is not a `serviceProcedure`
   // yet — it does not exist yet — but a read client that cannot identify itself
   // would need changing again the moment it becomes one.
-  const authHeaders = () => serviceAuthHeaders('svc-bank', internalSecret);
+  const authHeaders = (payload: string) => serviceAuthHeadersForBody('svc-bank', internalSecret, payload);
 
   return {
     async entriesFor(account: AccountRef, range: HistoryRange): Promise<LedgerEntryRecord[]> {
@@ -137,11 +133,13 @@ export function createLedgerHistory(baseUrl: string, internalSecret: string): Le
   };
 }
 
-async function call<T>(base: string, path: string, body: unknown, auth: () => Record<string, string>): Promise<T> {
+async function call<T>(base: string, path: string, body: unknown, auth: (payload: string) => Record<string, string>): Promise<T> {
+  // Serialise once so the signature covers the exact bytes on the wire.
+  const payload = JSON.stringify(body);
   const response = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...auth() },
-    body: JSON.stringify(body),
+    headers: { 'content-type': 'application/json', ...auth(payload) },
+    body: payload,
   });
 
   if (!response.ok) {
