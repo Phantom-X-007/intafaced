@@ -1,5 +1,8 @@
 <template>
   <div class="envelope">
+    <!-- Stream A: never paint invented gift name/amount while loading or on failure. -->
+    <p v-if="loadError" class="ix-empty ix-empty-error" style="padding-top:120px;text-align:center;">{{ loadError }}</p>
+    <template v-else-if="envelopeReady">
     <div v-if="hasInviteUser" style="width:80%;height: 35px;padding: 5px 0 5px 0px;border-radius: 35px;background-color:rgb(157, 0, 0);margin-left:10%;text-align:center;display: flex;flex-direction:row;justify-content:center;margin-bottom:10px;">
       <img style="width: 25px; height: 25px;margin-right: 10px;border-radius: 25px;" :src="inviteUserAvatar"></img>
       <div style="height: 30px;line-height:30px;color: #EEE;">{{inviteUserId}} has sent you a gift!</div>
@@ -36,7 +39,7 @@
 
     <div class="envelope-result" v-if="hasReceived && envelopeInfo.state == 0">
       <p style="font-size:14px;text-align:center;color: #999;margin-top: 5px;">Congratulations!</p>
-      <p style="text-align:center;font-size: 30px;color: rgb(251, 39, 42);font-weight:bold;margin: 10px 0;">{{receiveAmount}} BTC</p>
+      <p style="text-align:center;font-size: 30px;color: rgb(251, 39, 42);font-weight:bold;margin: 10px 0;">{{receiveAmount}} {{envelopeInfo.unit}}</p>
       <Button v-if="envelopeInfo.invite == 1" class="register_btn" @click="inviteMore()">Invite friends for more claims</Button>
       <p v-if="envelopeInfo.invite ==1" style="font-size:14px;text-align:center;color: #999;margin-top:15px;">Each friend you invite adds one claim</p>
       <p style="text-align:center;">
@@ -54,12 +57,15 @@
       <div class="title">Claim history</div>
 
       <div class="content">
-        <p v-if="envelopeDetailList.length == 0" style="color: #999;margin: 20px 0;">No claims yet</p>
-        <div class="item clearfix" v-for="item in envelopeDetailList">
+        <p v-if="detailError" class="ix-empty ix-empty-error">{{ detailError }}</p>
+        <p v-else-if="!detailLoaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
+        <p v-else-if="envelopeDetailList.length == 0" class="ix-empty" style="margin: 20px 0;">No claims yet</p>
+        <div class="item clearfix" v-for="(item, idx) in envelopeDetailList" :key="idx">
           <div class="phone">{{item.userIdentify}}</div><div class="amount">{{item.amount}} {{envelopeInfo.unit}}</div>
         </div>
       </div>
     </div>
+    </template>
     <p style="text-align:center;margin-top: 25px;margin-bottom: 20px;">
     <router-link style="font-size:14px;text-align:center;color: #EEE;margin-top:15px;text-decoration:underline;" to="/app">© INTAFACED.COM | Download the app</router-link>
     </p>
@@ -79,24 +85,29 @@ export default {
       country: "",
       sendcodeValue: this.$t("uc.regist.sendcode"),
       codedisabled: false,
-      receiveAmount: "0.00",
+      receiveAmount: "",
       promotionCode: "",
       hasInviteUser: false,
-      inviteUserId: "***********",
+      inviteUserId: "",
       inviteUserAvatar: "/static/defaultavatar.png",
+      /* Never invent gift name/amount/counts before query answers. */
+      loadError: "",
+      envelopeReady: false,
+      detailLoaded: false,
+      detailError: "",
       envelopeInfo: {
         id: 0,
-        name: "**********",
-        totalAmount: "0.00",
+        name: "",
+        totalAmount: "",
         unit: "",
-        receiveCount: 0,
-        count: 0,
+        receiveCount: "",
+        count: "",
         invite: 0,
         type: 0,
         logo: "/static/applogo.svg",
         bgImage: "/static/redenvelope.png",
-        state: 0,
-        detail: "A small stake in a large future"
+        state: -1,
+        detail: ""
       },
       formInline: {
         verifyCode: "",
@@ -161,6 +172,8 @@ export default {
           resp.code == 0 && this.$Message.success(resp.message);
           resp.code == 0 && this.settime();
           resp.code!= 0 && this.$Message.error(resp.message);
+        }).catch(() => {
+          this.$Message.error(this.$t("cms.envelopeUnavailable"));
         });
       }
     },
@@ -186,14 +199,16 @@ export default {
       }
 
       this.$http.post(this.host + "/uc/redenvelope/receive", this.formInline).then(res => {
-        if (res.status == 200 && res.body.code == 0) {
+        if (res.status == 200 && res.body && res.body.code == 0 && res.body.data) {
           this.promotionCode = res.body.data.promotionCode;
           this.receiveAmount = res.body.data.amount;
           this.hasReceived = true;
           this.getEnvelopeDetailList();
         } else {
-            this.$Message.error(res.body.message);
+            this.$Message.error((res.body && res.body.message) || this.$t("cms.envelopeUnavailable"));
         }
+      }).catch(() => {
+        this.$Message.error(this.$t("cms.envelopeUnavailable"));
       });
     },
     inviteMore(){
@@ -217,9 +232,11 @@ export default {
         param["code"] = this.formInline.promotionCode;
 
         this.spinShow = true;
+        this.loadError = "";
+        this.envelopeReady = false;
         this.$http.post(this.host + "/uc/redenvelope/query", param).then(res => {
           this.spinShow = false;
-          if (res.status == 200 && res.body.code == 0) {
+          if (res.status == 200 && res.body && res.body.code == 0 && res.body.data) {
             this.envelopeInfo.id = res.body.data.id;
             this.envelopeInfo.name = res.body.data.name;
             this.envelopeInfo.totalAmount = res.body.data.totalAmount;
@@ -245,21 +262,44 @@ export default {
               this.envelopeInfo.bgImage = res.body.data.bgImage;
             }
 
+            this.envelopeReady = true;
+            this.loadError = "";
             window.document.title = "[" + this.envelopeInfo.totalAmount + " " + this.envelopeInfo.unit + "]" + this.envelopeInfo.name + " — INTAFACED(INTAFACED.COM)Exchange"
             this.getEnvelopeDetailList();
           } else {
-              this.$Message.error(res.body.message);
+              this.envelopeReady = false;
+              this.loadError =
+                (res.body && res.body.message) ||
+                this.$t("cms.envelopeUnavailable");
+              if (res.body && res.body.message) this.$Message.error(res.body.message);
           }
+        }).catch(() => {
+          this.spinShow = false;
+          this.envelopeReady = false;
+          this.loadError = this.$t("cms.envelopeUnavailable");
         });
     },
     getEnvelopeDetailList(){
       this.queryDetail.envelopeId = this.envelopeInfo.id;
+      this.detailLoaded = false;
+      this.detailError = "";
       this.$http.post(this.host + "/uc/redenvelope/query-detail", this.queryDetail).then(res => {
-        if (res.status == 200 && res.body.code == 0) {
-          this.envelopeDetailList = res.body.data.content;
+        if (res.status == 200 && res.body && res.body.code == 0 && res.body.data) {
+          this.envelopeDetailList = res.body.data.content || [];
+          this.detailLoaded = true;
+          this.detailError = "";
         } else {
-            this.$Message.error(res.body.message);
+            this.envelopeDetailList = [];
+            this.detailLoaded = true;
+            this.detailError =
+              (res.body && res.body.message) ||
+              this.$t("cms.envelopeDetailUnavailable");
+            if (res.body && res.body.message) this.$Message.error(res.body.message);
         }
+      }).catch(() => {
+        this.envelopeDetailList = [];
+        this.detailLoaded = true;
+        this.detailError = this.$t("cms.envelopeDetailUnavailable");
       });
     }
   }

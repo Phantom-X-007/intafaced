@@ -5,8 +5,12 @@
       <span>{{$t("header.service")}}</span>
     </div>
     <div class="main">
-      <div class="list">
-        <div class="item" v-for="item in FAQList" @click="noticedeail(item.id)">
+      <!-- Stream A: failed announcement list must not look like empty success. -->
+      <p v-if="loadError" class="ix-empty ix-empty-error">{{ loadError }}</p>
+      <p v-else-if="!loaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
+      <p v-else-if="FAQList.length === 0" class="ix-empty">{{ $t("cms.noticeEmpty") }}</p>
+      <div class="list" v-else>
+        <div class="item" v-for="item in FAQList" :key="item.id" @click="noticedeail(item.id)">
         <img v-show="item.isTop==0" class="iconimg" src="../../assets/images/icon-top.png" alt="">
           <span class="text">{{item.title}}</span>
 
@@ -15,7 +19,7 @@
           </span>
         </div>
       </div>
-      <div class="page">
+      <div class="page" v-if="loaded && !loadError && totalNum > 0">
         <Page :total="totalNum" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
       </div>
     </div>
@@ -103,7 +107,9 @@ export default {
       pageNo: 1,
       pageSize: 10,
       totalNum: 0,
-      FAQList: []
+      FAQList: [],
+      loaded: false,
+      loadError: ""
     };
   },
   created: function() {
@@ -126,25 +132,40 @@ export default {
     },
     loadDataPage(pageIndex) {
       var param = {};
-      (param["pageNo"] = pageIndex),
-        (param["pageSize"] = this.pageSize),
-        (param["lang"] = this.langPram),
-        this.$http
-.post(this.host + this.api.uc.announcement, param)
-.then(response => {
-            // console.log(response);
-            var resp = response.body;
-            if (resp.code == 0) {
-              if (resp.data.content.length == 0) return;
-              this.FAQList = resp.data.content;
-              this.totalNum = resp.data.totalElements;
-            } else {
-              this.$Notice.error({
-                title: this.$t("common.tip"),
-                desc: resp.message
-              });
-            }
-          });
+      param["pageNo"] = pageIndex;
+      param["pageSize"] = this.pageSize;
+      param["lang"] = this.langPram;
+      this.pageNo = pageIndex;
+      this.loaded = false;
+      this.loadError = "";
+      this.$http
+        .post(this.host + this.api.uc.announcement, param)
+        .then(response => {
+          var resp = response.body;
+          if (resp && resp.code == 0 && resp.data) {
+            // empty content is success empty — not failure, not silent no-op
+            this.FAQList = resp.data.content || [];
+            this.totalNum = resp.data.totalElements || 0;
+            this.loaded = true;
+            this.loadError = "";
+          } else {
+            this.FAQList = [];
+            this.totalNum = 0;
+            this.loaded = true;
+            this.loadError =
+              (resp && resp.message) || this.$t("cms.noticeUnavailable");
+            this.$Notice.error({
+              title: this.$t("common.tip"),
+              desc: this.loadError
+            });
+          }
+        })
+        .catch(() => {
+          this.FAQList = [];
+          this.totalNum = 0;
+          this.loaded = true;
+          this.loadError = this.$t("cms.noticeUnavailable");
+        });
     },
     noticedeail(id) {
       var path = { path: "/notice/index", query: { id: id } };
