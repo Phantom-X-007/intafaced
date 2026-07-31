@@ -30,8 +30,7 @@ const devChainMod = await (async () => {
 })();
 
 const chainUp = devChainMod ? await devChainMod.devChainReachable() : false;
-const describeOnChain =
-  !devChainMod || (!chainUp && !devChainMod.devChainRequired()) ? describe.skip : describe;
+const describeOnChain = !devChainMod || (!chainUp && !devChainMod.devChainRequired()) ? describe.skip : describe;
 
 describeOnChain('PoolFactory onchain (protocol.amm)', () => {
   if (!devChainMod) return;

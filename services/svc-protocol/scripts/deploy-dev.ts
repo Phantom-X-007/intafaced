@@ -285,11 +285,8 @@ const onFactory = (await publicClient.readContract({
   args: [TOKEN_A, TOKEN_B, FEE_BPS],
 })) as Address;
 const poolCode = await publicClient.getCode({ address: predictedPool });
-const poolOk =
-  predictedPool.toLowerCase() === onFactory.toLowerCase() && !!poolCode && poolCode !== '0x';
-console.log(
-  `\nAMM createPool cross-check: ${poolOk ? 'OK' : 'FAIL'} predicted ${predictedPool} getPool ${onFactory}`,
-);
+const poolOk = predictedPool.toLowerCase() === onFactory.toLowerCase() && !!poolCode && poolCode !== '0x';
+console.log(`\nAMM createPool cross-check: ${poolOk ? 'OK' : 'FAIL'} predicted ${predictedPool} getPool ${onFactory}`);
 if (!poolOk) {
   console.error('Pool address predict/create disagree or no code at pool — stop. Do not wire AMM factory.');
   process.exit(1);
