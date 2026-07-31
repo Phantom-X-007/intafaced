@@ -9,6 +9,7 @@ import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { RailRegistry } from './rails/registry.js';
 import { CryptoChainWatcher } from './rails/chain-watcher.js';
 import { EvmLiveChain } from './rails/evm-chain.js';
+import { PostgresBroadcastStore } from './rails/broadcast-store.js';
 import {
   assertRailPosture,
   defaultChainFor,
@@ -59,7 +60,13 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
  * not also register the sandbox acquirer, or boot fails unless the operator
  * deliberately sets `PAY_ALLOW_SANDBOX_RAILS=true`.
  */
-const chain = defaultChainFor(process.env);
+/**
+ * Live crypto outbound broadcasts journal in Postgres so multi-replica fleets
+ * share claim→put (MemoryBroadcastStore alone is single-process residual).
+ * Unconfigured/Memory chain paths ignore the store.
+ */
+const broadcasts = new PostgresBroadcastStore(sql);
+const chain = defaultChainFor(process.env, broadcasts);
 
 const cryptoRail = new CryptoNativeAdapter({
   chain,
