@@ -755,8 +755,10 @@ export class TradeService {
       const makerFeeAsset = takerBuys ? market.quoteAsset : market.baseAsset;
       const takerFeeAsset = takerBuys ? market.baseAsset : market.quoteAsset;
       // fills.order_id FK → trade.orders. Seed path never wrote a row; insert a
-      // bookkeeping stub (hold money already on MM ledger pots, not this row).
+      // bookkeeping stub. Hold value lives on MM ledger pots; row hold_amount
+      // is the fill notional (orders_hold_positive_ck) for this match only.
       const makerHoldAsset = takerBuys ? market.baseAsset : market.quoteAsset;
+      const makerHoldAmount = takerBuys ? qty : quoteAmount;
       await this.sql`
         INSERT INTO trade.orders (
           id, user_id, market_id, side, type, price, qty, status, tif,
@@ -764,7 +766,7 @@ export class TradeService {
         ) VALUES (
           ${fill.makerOrderId}, ${HOUSE_MM_USER_UUID}, ${market.id}, ${makerSide}, ${'limit'},
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${'open'}, ${'PO'},
-          ${makerHoldAsset}, ${'0'}::numeric, ${0}
+          ${makerHoldAsset}, ${formatAmount(makerHoldAmount)}::numeric, ${0}
         )
         ON CONFLICT (id) DO NOTHING
       `;
