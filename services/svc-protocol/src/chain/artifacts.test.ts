@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AbiParameter } from 'viem';
 import { loadArtifact } from './artifacts.js';
 import { accountFactoryAbi, erc20ReadAbi, smartAccountAbi, tokenFactoryAbi } from './abi.js';
+import { factoryAbi, poolAbi } from '../amm/abi.js';
 // eslint-disable-next-line -- .mjs helper shared with scripts/compile-contracts.mjs; there is no .d.ts and none is wanted
 import { collectSources, computeSourceHash, SUITES, suiteSources } from '../../scripts/contract-sources.mjs';
 
@@ -193,20 +194,47 @@ describe('the hand-written ABI agrees with the compiled one', () => {
   }
 });
 
-describe('the AMM contracts are pinned as not compiling', () => {
-  /**
-   * `protocol.amm` is blocked, and now for a reason anyone can reproduce in one
-   * command rather than a reason recorded in a tracker note.
-   * `ConstantProductPool.swapExactIn` calls `swap`, which is `external`, which
-   * Solidity does not permit — so the pool has never produced bytecode.
-   *
-   * If this expectation ever becomes wrong, the pinning in
-   * `scripts/contract-sources.mjs` is what has to change, deliberately.
-   */
-  it('writes no artefact for ConstantProductPool', () => {
-    const amm = (SUITES as Array<Suite & { expectedError?: string }>).find((s) => s.name === 'amm');
-    expect(amm?.expect).toBe('fails');
-    expect(amm?.expectedError).toBe('Undeclared identifier');
-    expect(() => loadArtifact('ConstantProductPool' as never)).toThrowError(/No compiled artefact/);
+describe('committed AMM artefacts match the Solidity in this tree', () => {
+  const amm = (SUITES as Suite[]).find((s) => s.name === 'amm');
+
+  it('compiles ConstantProductPool + PoolFactory (no longer pinned broken)', () => {
+    expect(amm?.expect).toBe('compiles');
+    for (const name of ['ConstantProductPool', 'PoolFactory'] as const) {
+      const artefact = loadArtifact(name);
+      expect(artefact.contractName).toBe(name);
+      expect(artefact.suite).toBe('amm');
+      expect(artefact.bytecode.length).toBeGreaterThan(2);
+      expect(artefact.bytecode).not.toContain('__$');
+    }
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(amm, collectSources()));
+    for (const name of ['ConstantProductPool', 'PoolFactory'] as const) {
+      expect(loadArtifact(name).sourceHash, `${name}.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build`).toBe(
+        expected,
+      );
+    }
+  });
+
+  it('hand-written pool/factory ABI entries match the compiled contracts', () => {
+    const compiledPool = loadArtifact('ConstantProductPool').abi;
+    const compiledFactory = loadArtifact('PoolFactory').abi;
+    for (const entry of poolAbi) {
+      const actual = compiledPool.find((item) => item.type === entry.type && 'name' in item && item.name === entry.name);
+      expect(actual, `ConstantProductPool.${entry.name} missing`).toBeDefined();
+      if (!actual || !('inputs' in actual) || !('outputs' in actual)) throw new Error('unreachable');
+      expect(signature(actual.inputs)).toBe(signature(entry.inputs as readonly AbiParameter[]));
+      expect(signature(actual.outputs)).toBe(signature(entry.outputs as readonly AbiParameter[]));
+      expect(actual.stateMutability).toBe(entry.stateMutability);
+    }
+    for (const entry of factoryAbi) {
+      const actual = compiledFactory.find((item) => item.type === entry.type && 'name' in item && item.name === entry.name);
+      expect(actual, `PoolFactory.${entry.name} missing`).toBeDefined();
+      if (!actual || !('inputs' in actual) || !('outputs' in actual)) throw new Error('unreachable');
+      expect(signature(actual.inputs)).toBe(signature(entry.inputs as readonly AbiParameter[]));
+      expect(signature(actual.outputs)).toBe(signature(entry.outputs as readonly AbiParameter[]));
+      expect(actual.stateMutability).toBe(entry.stateMutability);
+    }
   });
 });

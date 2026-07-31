@@ -130,9 +130,39 @@ contract ConstantProductPool {
 
     /**
      * Swap exact input for output. `amountOut` is the minimum the caller accepts.
-     * Tokens must already be transferred in (or use swapExact with pull).
+     * Tokens must already be transferred in (or use swapExactIn with pull).
+     *
+     * External ABI stays `swap(...)` for calldata builders. The shared body is
+     * `_swap` so `swapExactIn` can call it without changing visibility of the
+     * external entrypoint (Solidity forbids calling an `external` function
+     * from inside the same contract).
      */
     function swap(uint256 amount0Out, uint256 amount1Out, address to) external {
+        _swap(amount0Out, amount1Out, to);
+    }
+
+    /** Pull-and-swap convenience for a single exact-in hop. */
+    function swapExactIn(address tokenIn, uint256 amountIn, uint256 minAmountOut, address to)
+        external
+        returns (uint256 amountOut)
+    {
+        if (amountIn == 0) revert InsufficientInput();
+        (uint112 r0, uint112 r1,) = getReserves();
+        bool zeroIn = tokenIn == token0;
+        if (!zeroIn && tokenIn != token1) revert InvalidTokens();
+
+        _pull(tokenIn, msg.sender, amountIn);
+        amountOut = _getAmountOut(amountIn, zeroIn ? r0 : r1, zeroIn ? r1 : r0);
+        if (amountOut < minAmountOut) revert InsufficientOutput();
+
+        if (zeroIn) {
+            _swap(0, amountOut, to);
+        } else {
+            _swap(amountOut, 0, to);
+        }
+    }
+
+    function _swap(uint256 amount0Out, uint256 amount1Out, address to) private {
         if (amount0Out == 0 && amount1Out == 0) revert InsufficientOutput();
         if (amount0Out > 0 && amount1Out > 0) revert InsufficientOutput();
         (uint112 r0, uint112 r1,) = getReserves();
@@ -157,27 +187,6 @@ contract ConstantProductPool {
 
         _update(balance0, balance1);
         emit Swap(msg.sender, amount0In, amount1In, amount0Out, amount1Out, to);
-    }
-
-    /** Pull-and-swap convenience for a single exact-in hop. */
-    function swapExactIn(address tokenIn, uint256 amountIn, uint256 minAmountOut, address to)
-        external
-        returns (uint256 amountOut)
-    {
-        if (amountIn == 0) revert InsufficientInput();
-        (uint112 r0, uint112 r1,) = getReserves();
-        bool zeroIn = tokenIn == token0;
-        if (!zeroIn && tokenIn != token1) revert InvalidTokens();
-
-        _pull(tokenIn, msg.sender, amountIn);
-        amountOut = _getAmountOut(amountIn, zeroIn ? r0 : r1, zeroIn ? r1 : r0);
-        if (amountOut < minAmountOut) revert InsufficientOutput();
-
-        if (zeroIn) {
-            swap(0, amountOut, to);
-        } else {
-            swap(amountOut, 0, to);
-        }
     }
 
     function getAmountOut(uint256 amountIn, address tokenIn) external view returns (uint256) {

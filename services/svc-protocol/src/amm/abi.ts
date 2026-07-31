@@ -2,6 +2,17 @@
 export const poolAbi = [
   {
     type: 'function',
+    name: 'swap',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'amount0Out', type: 'uint256' },
+      { name: 'amount1Out', type: 'uint256' },
+      { name: 'to', type: 'address' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'swapExactIn',
     stateMutability: 'nonpayable',
     inputs: [

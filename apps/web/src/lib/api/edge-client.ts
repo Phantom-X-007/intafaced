@@ -121,6 +121,12 @@ export interface EdgeClient {
   readonly baseUrl: string;
   query<T>(service: ServiceId, path: string, schema: z.ZodType<T>, input?: unknown): Promise<Result<T>>;
   mutate<T>(service: ServiceId, path: string, schema: z.ZodType<T>, input?: unknown): Promise<Result<T>>;
+  /**
+   * Absolute REST path on the edge (e.g. `/api/v1/ohlcv/BTC%2FUSDT`).
+   * Uses the same bearer token source as tRPC. Public routes omit Authorization
+   * when no token is set.
+   */
+  restGet<T>(path: string, schema: z.ZodType<T>, opts?: { readonly auth?: boolean; readonly service?: ServiceId }): Promise<Result<T>>;
   /** `GET {base}/ready` — the edge's own route table. Not a tRPC call. */
   ready(): Promise<Result<readonly string[]>>;
 }
@@ -185,6 +191,36 @@ export function createEdgeClient(options: EdgeClientOptions = {}): EdgeClient {
     baseUrl,
     query: (service, path, schema, input) => run('query', service, path, schema, input),
     mutate: (service, path, schema, input) => run('mutation', service, path, schema, input),
+
+    async restGet(path, schema, opts = {}) {
+      const service = opts.service ?? 'trade';
+      const wantAuth = opts.auth !== false;
+      const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+      try {
+        const bearer = wantAuth ? token() : null;
+        const res = await fetchImpl(url, {
+          headers: {
+            Accept: 'application/json',
+            ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+          },
+        });
+        if (!res.ok) {
+          const reason: FailureReason =
+            res.status === 401 ? 'unauthenticated' : res.status === 403 ? 'forbidden' : res.status === 404 ? 'not-found' : 'server-error';
+          return failure(service, path, reason, `HTTP ${res.status}`);
+        }
+        const body: unknown = await res.json();
+        const parsed = schema.safeParse(body);
+        if (!parsed.success) {
+          const first = parsed.error.issues[0];
+          const where = first ? `${first.path.join('.') || '<root>'}: ${first.message}` : 'shape mismatch';
+          return failure(service, path, 'invalid-response', where);
+        }
+        return ok(parsed.data);
+      } catch (err) {
+        return failure(service, path, 'unreachable', err instanceof Error ? err.message : 'rest unreachable');
+      }
+    },
 
     async ready() {
       try {

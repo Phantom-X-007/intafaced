@@ -478,6 +478,46 @@
   gap: var(--if-space-4);
 }
 
+/* ── Chart ────────────────────────────────────────────────────────────────── */
+
+.chartSvg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+}
+
+.chartWick {
+  stroke: var(--if-text-secondary);
+  stroke-width: 1;
+}
+
+.chartBodyUp {
+  fill: var(--if-long);
+}
+
+.chartBodyDown {
+  fill: var(--if-short);
+}
+
+.chartMeta {
+  margin: var(--if-space-2) 0 0;
+  color: var(--if-text-secondary);
+  font-size: var(--if-text-sm);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── Reflow ───────────────────────────────────────────────────────────────── */
 
 @media (max-width: 1400px) {
