@@ -6,8 +6,10 @@
           <Tabs value="name1" @on-click="showItem">
             <TabPane :label="$t('uc.otcorder.unpaid')" name="name1">
               <div class="order-table">
-                <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page">
+                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
+                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
                     <Page v-if="totalPage > 0" :total="totalNum" :current="currentPage" show-total @on-change="changePage" :page-size="pageSize"></Page>
                   </div>
@@ -16,8 +18,10 @@
             </TabPane>
             <TabPane :label="$t('uc.otcorder.paided')" name="name2">
               <div class="order-table">
-                <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page">
+                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
+                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
                     <Page v-if="totalPage > 0" :total="totalNum" :current="currentPage" show-total @on-change="changePage" :page-size="pageSize"></Page>
                   </div>
@@ -26,8 +30,10 @@
             </TabPane>
             <TabPane :label="$t('uc.otcorder.finished')" name="name3">
               <div class="order-table">
-                <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page">
+                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
+                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
                     <Page v-if="totalPage > 0" :total="totalNum" :current="currentPage" show-total @on-change="changePage" :page-size="pageSize"></Page>
                   </div>
@@ -36,18 +42,22 @@
             </TabPane>
             <TabPane :label="$t('uc.otcorder.canceled')" name="name0">
               <div class="order-table">
-                <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page">
+                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
+                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
-                    <Page v-if="totalPage > 0" :total="totalNum" :pageSize="pageSize" show-total:current="currentPage" @on-change="changePage"></Page>
+                    <Page v-if="totalPage > 0" :total="totalNum" :pageSize="pageSize" show-total :current="currentPage" @on-change="changePage"></Page>
                   </div>
                 </div>
               </div>
             </TabPane>
             <TabPane :label="$t('uc.otcorder.appealing')" name="name4">
               <div class="order-table">
-                <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page">
+                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
+                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
                     <Page v-if="totalPage > 0" :total="totalNum" :current="currentPage" show-total @on-change="changePage" :page-size="pageSize"></Page>
                   </div>
@@ -72,6 +82,8 @@ export default {
       whichItem: 1,
       tableOrder: [],
       loading: true,
+      listReachable: false,
+      listError: "",
       totalPage: 0,
       pageSize: 10,
       totalNum: 0,
@@ -95,50 +107,79 @@ export default {
         this.getOrder(4, pageNo);
       }
     },
+    applyOrderPayload(resp) {
+      if (resp && resp.code == 0 && resp.data) {
+        this.tableOrder = resp.data.content || [];
+        this.totalPage = resp.data.totalPages || 0;
+        this.totalNum = resp.data.totalElements || 0;
+        this.listReachable = true;
+        this.listError = "";
+        this.loading = false;
+        return true;
+      }
+      this.tableOrder = [];
+      this.listReachable = false;
+      this.listError =
+        "OTC orders did not answer — list is unknown, not empty.";
+      this.loading = false;
+      return false;
+    },
     getOrder(status, pageNo) {
       this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       this.tableOrder = [];
       let params = {};
       params["status"] = status;
       params["pageNo"] = pageNo;
       params["pageSize"] = this.pageSize;
       this.currentPage = pageNo + 1;
-      this.$http.post(this.host + "/otc/order/self", params).then(response => {
-        var resp = response.body;
-        if (resp.code == 0 && resp.data.content) {
-          this.tableOrder = resp.data.content;
-          this.totalPage = resp.data.totalPages;
-          this.totalNum = resp.data.totalElements;
-        } else {
-          // this.$Message.error(resp.message);
-          // this.$Message.error(this.$t('common.logintip'));
-          this.$Message.error(this.loginmsg);
-        }
-        this.loading = false;
-      });
+      this.$http
+        .post(this.host + "/otc/order/self", params)
+        .then(response => {
+          var resp = response.body;
+          if (!this.applyOrderPayload(resp)) {
+            if (resp && resp.message) this.$Message.error(resp.message);
+            else this.$Message.error(this.loginmsg);
+          }
+        })
+        .catch(() => {
+          this.tableOrder = [];
+          this.listReachable = false;
+          this.listError =
+            "OTC order service did not respond — list is unknown, not empty.";
+          this.loading = false;
+        });
     },
     init() {},
     handleSearch() {
+      this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       this.tableOrder = [];
       let params = {};
       params["status"] = this.whichItem;
       params["pageNo"] = 0;
       params["pageSize"] = this.pageSize;
-      if (this.ordKeyword!= "") {
+      if (this.ordKeyword != "") {
         params["orderSn"] = this.ordKeyword;
       }
       this.currentPage = 1;
-      this.$http.post(this.host + "/otc/order/self", params).then(response => {
-        var resp = response.body;
-        if (resp.code == 0 && resp.data.content) {
-          this.tableOrder = resp.data.content;
-          this.totalPage = resp.data.totalPages;
-          this.totalNum = resp.data.totalElements;
-        } else {
-          this.$Message.error(resp.message);
-        }
-        this.loading = false;
-      });
+      this.$http
+        .post(this.host + "/otc/order/self", params)
+        .then(response => {
+          var resp = response.body;
+          if (!this.applyOrderPayload(resp)) {
+            if (resp && resp.message) this.$Message.error(resp.message);
+          }
+        })
+        .catch(() => {
+          this.tableOrder = [];
+          this.listReachable = false;
+          this.listError =
+            "OTC order service did not respond — list is unknown, not empty.";
+          this.loading = false;
+        });
     },
     showItem(name) {
       if (name == "name1") {
