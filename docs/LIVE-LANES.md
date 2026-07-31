@@ -36,6 +36,10 @@ Per `NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` §7 NEXT QUEUE — claim one lane, r
 
 ## Last board update
 
+- **2026-07-31 continuous implement:** Wave A continue branch `feat/app-wave-a-continue` — remaining zero-coverage uc + cancel lock + TradingView attribution.
+
+
+
 - **2026-07-31 residual campaign ARMED:** Nitro owns residual board program. Tip `c40fd59` (#258). Open **#259**. Frontend Wave A SoT locked separately — coordinate before shell file claims. Third builder stood down.
 
 - **2026-07-31 audit-fire-mega:** claimed residual-ws (tracker honesty only). Tip re-check. Open frontend #261 left alone. Do not collide stream-a-ui.

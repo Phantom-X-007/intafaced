@@ -158,6 +158,11 @@
             <p class="ix-empty ix-empty-abs" v-else-if="mainTab === 'chart' && !feedLive">
               No market feed — chart has no live history to show
             </p>
+            <p class="ix-chart-attr" v-show="mainTab === 'chart'" role="contentinfo">
+              Charting by
+              <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a>
+              Lightweight Charts (Apache-2.0)
+            </p>
 
             <div class="ix-depth-host" v-show="mainTab === 'depth'">
               <DepthGraph ref="depthGraph" />
@@ -333,7 +338,7 @@
                   <td class="ix-num">{{ fmt(row.tradedAmount, coinScale) }}</td>
                   <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
                   <td class="ix-num">
-                    <button type="button" class="ix-cancel" @click="cancelOrder(row)">Cancel</button>
+                    <button type="button" class="ix-cancel" :disabled="!!cancellingId" @click="cancelOrder(row)">{{ cancellingId === row.orderId ? 'Cancelling…' : 'Cancel' }}</button>
                   </td>
                 </tr>
               </tbody>
@@ -759,6 +764,7 @@ export default {
 
       trend: 0,
       submitting: false,
+      cancellingId: null,
       /** Inline field validation message; empty when fields look usable. */
       orderValidationError: ''
     };
@@ -1692,11 +1698,15 @@ export default {
     },
 
     cancelOrder(order) {
+      if (this.cancellingId) return;
       this.$Modal.confirm({
         title: 'Cancel order',
         content: 'Cancel this order?',
         onOk: () => {
-          this.request(this.api.exchange.orderCancel + '/' + order.orderId).then(body => {
+          if (this.cancellingId) return;
+          this.cancellingId = order.orderId;
+          return this.request(this.api.exchange.orderCancel + '/' + order.orderId).then(body => {
+            this.cancellingId = null;
             if (body && body.code == 0) {
               this.$Notice.success({ title: 'Order cancelled', desc: order.symbol });
               this.loadAccount();
@@ -1706,6 +1716,12 @@ export default {
                 desc: (body && body.message) || 'The exchange did not respond.'
               });
             }
+          }).catch(() => {
+            this.cancellingId = null;
+            this.$Notice.error({
+              title: 'Cancel failed',
+              desc: 'The exchange did not respond — order not cancelled.'
+            });
           });
         }
       });
@@ -2266,6 +2282,19 @@ $radius-sm: var(--ix-radius-sm, 8px);
 
 /* The widget writes an iframe in here. With `fullscreen` off and `autosize`
    on it inherits 100% of this box, which is why the box must be definite. */
+
+.ix-chart-attr {
+  margin: 0;
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  opacity: 0.55;
+  text-align: right;
+}
+.ix-chart-attr a {
+  color: inherit;
+  text-decoration: underline;
+}
 .ix-kline,
 .ix-depth-host {
   position: absolute;

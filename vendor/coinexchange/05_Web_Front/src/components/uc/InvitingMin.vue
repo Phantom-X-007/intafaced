@@ -4,8 +4,12 @@
             <div class="bill_box rightarea padding-right-clear record">
                 <div class="col-xs-12 rightarea-con">
                     <div class="trade_accumulative">
-                        <div class="trade_accumulative_return">{{$t('uc.finance.inviting.accumulative_return')}}&nbsp;&nbsp;{{accumulative_return}}</div>
-                        <div class="trade_accumulat_return">{{$t('uc.finance.inviting.accumulat_return')}}&nbsp;&nbsp;{{accumulat_return}}</div>
+                        <div class="trade_accumulative_return" v-if="loading">{{$t('uc.finance.inviting.accumulative_return')}}&nbsp;&nbsp;<span class="ix-empty-loading">Loading…</span></div>
+                        <div class="trade_accumulative_return" v-else-if="listError">{{$t('uc.finance.inviting.accumulative_return')}}&nbsp;&nbsp;<span class="ix-dim">— unknown</span></div>
+                        <div class="trade_accumulative_return" v-else-if="listReachable">{{$t('uc.finance.inviting.accumulative_return')}}&nbsp;&nbsp;{{accumulative_return}}</div>
+                        <div class="trade_accumulative_return" v-else>{{$t('uc.finance.inviting.accumulative_return')}}&nbsp;&nbsp;<span class="ix-dim">—</span></div>
+                        <div class="trade_accumulat_return" v-if="listReachable">{{$t('uc.finance.inviting.accumulat_return')}}&nbsp;&nbsp;{{accumulat_return}}</div>
+                        <div class="trade_accumulat_return" v-else-if="listError">{{$t('uc.finance.inviting.accumulat_return')}}&nbsp;&nbsp;<span class="ix-dim">— unknown</span></div>
                     </div>
                     <div class="form-group">
                         <span>
@@ -27,7 +31,9 @@
                         <span style="color: #eb6f6c">{{$t('uc.finance.inviting.start_end')}}: </span>&nbsp;&nbsp;<span>{{$t('uc.finance.inviting.chargetime')}}</span>
                     </div>
                     <div class="order-table">
-                        <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord"></Table>
+                        <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                        <p v-else-if="!loading && listReachable && tableRecord.length === 0" class="ix-empty">No inviting records yet</p>
+                        <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :loading="loading"></Table>
                         <div style="margin: 10px;overflow: hidden" >
                             <div style="float: right;">
                                 <Page :total="total" :pageSize="pageSize" show-total:current="page+1" @on-change="changePage" id="record_pages"></Page>
@@ -108,13 +114,16 @@
                         }
                     },
                 ],
-                accumulative_return:'1000',
-                accumulat_return:'1000',
+                accumulative_return: null,
+                accumulat_return: null,
                 pageSize:10,
                 value:'',
                 page:0,
                 total:0,
                 tableRecord: [],
+                loading: true,
+                listReachable: false,
+                listError: "",
             }
         },
         created:function(){
@@ -138,16 +147,31 @@
                     startTime,
                     endTime
                 };
+                this.loading = true;
+                this.listReachable = false;
+                this.listError = "";
                 this.$http.post(this.host+url,params).then(res=>{
-                    if(res.body.code == 0){
+                    if(res.body && res.body.code == 0 && res.body.data){
                         let data = res.body.data;
                         this.accumulative_return = data.backAmount;
                         this.accumulat_return = data.preAmount;
-                        this.total = data.exchangeOrders.totalElements;
-                        this.tableRecord = data.exchangeOrders.content;
+                        this.total = (data.exchangeOrders && data.exchangeOrders.totalElements) || 0;
+                        this.tableRecord = (data.exchangeOrders && data.exchangeOrders.content) || [];
+                        this.listReachable = true;
                     }else{
-                        this.$Message.error(res.body.message);
+                        this.tableRecord = [];
+                        this.accumulative_return = null;
+                        this.accumulat_return = null;
+                        this.listError = "Inviting records did not answer — totals are unknown, not zero.";
+                        if (res.body && res.body.message) this.$Message.error(res.body.message);
                     }
+                    this.loading = false;
+                }).catch(() => {
+                    this.tableRecord = [];
+                    this.accumulative_return = null;
+                    this.accumulat_return = null;
+                    this.listError = "Inviting service did not respond — totals are unknown, not zero.";
+                    this.loading = false;
                 });
             },
             dateform(time){
@@ -198,14 +222,24 @@
                     params = {startTime,endTime,memberId,page,limit,inviterState};
                 this.startTime = startTime;
                 this.endTime = endTime;
+                this.loading = true;
+                this.listError = "";
                 this.$http.post(this.host + url, params).then(res => {
-                    if(res.body.code == 0){
+                    if(res.body && res.body.code == 0 && res.body.data){
                         let data = res.body.data;
-                        this.total = data.exchangeOrders.totalElements;
-                        this.tableRecord = data.exchangeOrders.content;
+                        this.total = (data.exchangeOrders && data.exchangeOrders.totalElements) || 0;
+                        this.tableRecord = (data.exchangeOrders && data.exchangeOrders.content) || [];
+                        this.listReachable = true;
                     }else{
-                        this.$Message.error(res.body.message);
+                        this.tableRecord = [];
+                        this.listError = "Inviting records did not answer — list is unknown, not empty.";
+                        if (res.body && res.body.message) this.$Message.error(res.body.message);
                     }
+                    this.loading = false;
+                }).catch(() => {
+                    this.tableRecord = [];
+                    this.listError = "Inviting service did not respond — list is unknown, not empty.";
+                    this.loading = false;
                 });
                
             },

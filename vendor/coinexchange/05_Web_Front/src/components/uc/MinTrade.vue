@@ -29,7 +29,9 @@
                         <span style="color: #eb6f6c">{{$t('uc.finance.trade.start_end')}}: </span>&nbsp;&nbsp;<span>{{$t('uc.finance.trade.chargetime')}}</span>
                     </div> -->
                     <div class="order-table">
-                        <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :loading="loading"></Table>
+                        <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                        <p v-else-if="!loading && listReachable && tableRecord.length === 0" class="ix-empty">No trade-mining records yet</p>
+                        <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :loading="loading"></Table>
                         <div style="margin: 10px;overflow: hidden">
                             <div style="float: right;">
                                 <Page :total="total" :page-size="pageSize" show-total:current="page" @on-change="changePage" id="record_pages"></Page>
@@ -51,6 +53,8 @@ export default {
     var that = this;
     return {
       loading: false,
+      listReachable: false,
+      listError: "",
       startTime: "",
       endTime: "",
       ordKeyword: "",
@@ -280,19 +284,31 @@ export default {
         endTime
       };
       this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       this.$http.post(this.host + url, params).then(res => {
-        if (res.body.code == 0) {
+        if (res.body && res.body.code == 0 && res.body.data) {
           let data = res.body.data;
           this.accumulative_return = data.backAmount;
           this.accumulat_return = data.preAmount;
-          if (data.data) {
+          if (data.data && data.data.hits) {
             let truedata = data.data.hits;
-            this.total = truedata.total;
-            this.tableRecord = truedata.hits;
+            this.total = truedata.total || 0;
+            this.tableRecord = truedata.hits || [];
+          } else {
+            this.tableRecord = [];
+            this.total = 0;
           }
+          this.listReachable = true;
         } else {
-          this.$Message.error(res.body.message);
+          this.tableRecord = [];
+          this.listError = "Trade mining did not answer — list is unknown, not empty.";
+          if (res.body && res.body.message) this.$Message.error(res.body.message);
         }
+        this.loading = false;
+      }).catch(() => {
+        this.tableRecord = [];
+        this.listError = "Trade mining service did not respond — list is unknown, not empty.";
         this.loading = false;
       });
     },

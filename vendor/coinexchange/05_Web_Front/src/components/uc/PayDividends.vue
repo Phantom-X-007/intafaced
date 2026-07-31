@@ -4,7 +4,10 @@
             <div class="bill_box rightarea padding-right-clear record">
                 <div class="col-xs-12 rightarea-con">
                     <div class="trade_accumulative">
-                        <div class="trade_accumulative_return">{{$t('uc.finance.paydividende.money_holding')}}&nbsp;&nbsp;{{new Number(accumulative_return).toFixed(8)}}</div>
+                        <div class="trade_accumulative_return" v-if="loading">{{$t('uc.finance.paydividende.money_holding')}}&nbsp;&nbsp;<span class="ix-empty-loading">Loading…</span></div>
+                        <div class="trade_accumulative_return" v-else-if="listError">{{$t('uc.finance.paydividende.money_holding')}}&nbsp;&nbsp;<span class="ix-dim">— unknown</span></div>
+                        <div class="trade_accumulative_return" v-else-if="listReachable">{{$t('uc.finance.paydividende.money_holding')}}&nbsp;&nbsp;{{new Number(accumulative_return).toFixed(8)}}</div>
+                        <div class="trade_accumulative_return" v-else>{{$t('uc.finance.paydividende.money_holding')}}&nbsp;&nbsp;<span class="ix-dim">—</span></div>
                         <!-- <div class="trade_accumulat_return">{{$t('uc.finance.paydividende.money_hold')}}&nbsp;&nbsp;{{accumulat_return}}</div> -->
                     </div>
                     <!-- search date (hidden)-->
@@ -32,7 +35,9 @@
                         <span>{{$t('uc.finance.paydividende.datehodld')}}</span>
                     </div>
                     <div class="order-table">
-                        <Table :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :loading="loading"></Table>
+                        <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                        <p v-else-if="!loading && listReachable && (!tableRecord || tableRecord.length === 0)" class="ix-empty">No dividend records yet</p>
+                        <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :loading="loading"></Table>
                         <div style="margin: 10px;overflow: hidden">
                             <div style="float: right;">
                                 <Page :total="total" :page-size="pageSize" show-total:current="page+1" @on-change="changePage" id="record_pages"></Page>
@@ -142,7 +147,9 @@ export default {
       page: 0,
       total: 0,
       tableRecord: [],
-      loading: false
+      loading: false,
+      listReachable: false,
+      listError: ""
     };
   },
   created: function() {
@@ -160,23 +167,33 @@ export default {
     },
     getTableData(pageNo = 1, pageSize = 10) {
       this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       this.$http
-.post(this.host + this.api.uc.paydividends, {
+        .post(this.host + this.api.uc.paydividends, {
           memberId: this.memberId,
           pageNo,
           pageSize
         })
-.then(res => {
+        .then(res => {
           this.loading = false;
           let resp = res.body;
-          if (resp.code == 0) {
-            let data = (this.data = resp.data);
+          if (resp && resp.code == 0) {
+            let data = (this.data = resp.data) || {};
             this.accumulative_return = data.amount || 0;
-            this.total = parseInt(resp.totalElement);
-            this.tableRecord = data.bonus;
+            this.total = parseInt(resp.totalElement || 0, 10) || 0;
+            this.tableRecord = data.bonus || [];
+            this.listReachable = true;
           } else {
-            this.$Message.error(resp.message);
+            this.tableRecord = [];
+            this.listError = "Dividend records did not answer — totals are unknown, not zero.";
+            if (resp && resp.message) this.$Message.error(resp.message);
           }
+        })
+        .catch(() => {
+          this.loading = false;
+          this.tableRecord = [];
+          this.listError = "Dividend service did not respond — totals are unknown, not zero.";
         });
     },
     changePage(pageindex) {
