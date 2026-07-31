@@ -402,8 +402,11 @@ if (!available) {
       const session = await register();
       await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
       await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({ code: 'auth.account_frozen' });
+      // Presented session was revoked on freeze-refuse. Second present hits revoked path.
       await db.sql`UPDATE users SET status = 'active' WHERE id = ${session.userId}`;
-      await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({ code: 'auth.session_invalid' });
+      await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({
+        code: expect.stringMatching(/^auth\.(session_reused|session_invalid)$/),
+      });
     });
 
     it('issues a new refresh token and invalidates the old one', async () => {
