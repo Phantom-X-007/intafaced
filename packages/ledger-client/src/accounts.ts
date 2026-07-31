@@ -100,6 +100,16 @@ export function loanCollateralAccount(userId: string, assetId: string, loanId: s
 }
 
 /**
+ * Margin collateral securing ONE futures position (§5.2 / trade.futures).
+ *
+ * Purpose key is `position:<id>` — never share a pot across positions, or a
+ * release on A quietly unsecures B (same failure mode as multi-loan collateral).
+ */
+export function positionCollateralAccount(userId: string, assetId: string, positionId: string): AccountRef {
+  return userCollateral(userId, assetId, `position:${positionId}`);
+}
+
+/**
  * THE LENDING RESERVE (§8.1) — the pot loan principal is drawn FROM.
  *
  * The same discipline as `earnPoolReserve`, for the same reason: a loan must
