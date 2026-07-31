@@ -1431,16 +1431,21 @@ export class LoanService {
     const badDebt = parseAmount(row.bad_debt);
     const outstandingPrincipal = drawn - repaid - recovered - badDebt;
 
-    // funded = what the reserve holds now + what is out on loan. Bad debt was made
-    // good by the insurance fund, so it is already inside the reserve balance.
-    const funded = reserve.amount + outstandingPrincipal;
+    // funded / drift honesty (B-02):
+    // `funded` is currently defined as reserve + outstanding principal — a
+    // tautology, not an independent sum of `loan.reserve.funded` journal rows.
+    // True drift needs ledger journal aggregation (or a bank funding table).
+    // Until that exists, report drift 0 and do not claim independent reconcile.
+    const outstandingClamped = outstandingPrincipal < 0n ? 0n : outstandingPrincipal;
+    const funded = reserve.amount + outstandingClamped;
+    const drift = 0n;
 
     return {
       reserveBalance: reserve.amount,
-      outstandingPrincipal: outstandingPrincipal < 0n ? 0n : outstandingPrincipal,
+      outstandingPrincipal: outstandingClamped,
       badDebt,
       funded,
-      drift: 0n,
+      drift,
     };
   }
 
