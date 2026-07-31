@@ -309,4 +309,39 @@ export const fills = trade.table(
   ],
 );
 
-export const schema = { markets, orders, fills };
+/** Futures position side (§5.2 / trade.futures F2). */
+export const positionSideEnum = trade.enum('position_side', ['long', 'short']);
+export const marginModeEnum = trade.enum('margin_mode', ['cross', 'isolated']);
+export const positionStatusEnum = trade.enum('position_status', ['open', 'closed', 'liquidated']);
+
+/**
+ * Open / closed futures positions. STATE ONLY — margin is ledger collateral
+ * `position:<id>`, never a balance column that could drift.
+ */
+export const positions = trade.table(
+  'positions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    marketId: uuid('market_id')
+      .notNull()
+      .references(() => markets.id),
+    side: positionSideEnum('side').notNull(),
+    status: positionStatusEnum('status').notNull().default('open'),
+    marginMode: marginModeEnum('margin_mode').notNull().default('isolated'),
+    size: amount('size').notNull(),
+    entryPrice: amount('entry_price').notNull(),
+    leverage: amount('leverage').notNull().default('1'),
+    marginInitial: amount('margin_initial').notNull(),
+    marginAsset: text('margin_asset').notNull(),
+    fundingPaid: amount('funding_paid').notNull().default('0'),
+    liqPrice: amount('liq_price'),
+    openedAt: tstz('opened_at').notNull().defaultNow(),
+    closedAt: tstz('closed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('positions_user_status_idx').on(t.userId, t.status), index('positions_market_idx').on(t.marketId)],
+);
+
+export const schema = { markets, orders, fills, positions };
