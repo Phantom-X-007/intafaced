@@ -4,7 +4,7 @@ import type postgres from 'postgres';
  * svc-identity's half of the blueprint cascade (§7.2).
  *
  * svc-blueprint owns Blueprint rows and publishes `blueprintCreated` /
- * `blueprintDeleted`. It must never write `identity.profiles` (§2). We set and
+ * `blueprintDeleted`. It must never write `profiles` (§2). We set and
  * clear `profiles.blueprint_id` here so export/erase truly cascades.
  *
  * Pure SQL helpers — the bus wiring lives in `events.ts` so tests can drive
@@ -16,7 +16,7 @@ export type Sql = postgres.Sql;
 /** Link the caller's profile to a newly created Blueprint. */
 export async function applyBlueprintCreated(sql: Sql, input: { userId: string; blueprintId: string }): Promise<{ updated: boolean }> {
   const rows = await sql`
-    UPDATE identity.profiles
+    UPDATE profiles
        SET blueprint_id = ${input.blueprintId}
      WHERE user_id = ${input.userId}
  RETURNING user_id
@@ -33,7 +33,7 @@ export async function applyBlueprintCreated(sql: Sql, input: { userId: string; b
  */
 export async function applyBlueprintDeleted(sql: Sql, input: { userId: string; blueprintId: string }): Promise<{ cleared: boolean }> {
   const rows = await sql`
-    UPDATE identity.profiles
+    UPDATE profiles
        SET blueprint_id = NULL
      WHERE user_id = ${input.userId}
        AND blueprint_id = ${input.blueprintId}
@@ -44,7 +44,7 @@ export async function applyBlueprintDeleted(sql: Sql, input: { userId: string; b
 
 export async function readBlueprintId(sql: Sql, userId: string): Promise<string | null> {
   const rows = await sql<Array<{ blueprint_id: string | null }>>`
-    SELECT blueprint_id FROM identity.profiles WHERE user_id = ${userId}
+    SELECT blueprint_id FROM profiles WHERE user_id = ${userId}
   `;
   return rows[0]?.blueprint_id ?? null;
 }

@@ -30,6 +30,11 @@ import type { RankService } from '../rank/rank-service.js';
  *
  * Sovereignty means owning this. No third-party auth dependency, which also
  * means no third party to blame — every decision here is ours to get right.
+ *
+ * Schema: SQL is search_path-relative (not hard-coded `identity.*`). Production
+ * connects with `search_path = identity,public` (see `src/index.ts`). Tests use
+ * `createTestDb`, which allocates a unique schema per suite so parallel
+ * worktrees cannot TRUNCATE each other into a poisoned KYC queue.
  */
 
 export class AuthError extends Error {
@@ -167,7 +172,7 @@ export class AuthService {
 
     const userId = await transaction(this.sql, async (tx) => {
       const clash = await tx<Array<{ handle: string; email: string }>>`
-        SELECT handle, email FROM identity.users WHERE handle = ${input.handle} OR email = ${input.email}
+        SELECT handle, email FROM users WHERE handle = ${input.handle} OR email = ${input.email}
       `;
       for (const row of clash) {
         if (row.handle.toLowerCase() === input.handle.toLowerCase()) {
@@ -177,17 +182,17 @@ export class AuthService {
       }
 
       const inserted = await tx<Array<{ id: string }>>`
-        INSERT INTO identity.users (handle, email, password_hash)
+        INSERT INTO users (handle, email, password_hash)
         VALUES (${input.handle}, ${input.email}, ${passwordHash})
         RETURNING id
       `;
       const id = inserted[0]!.id;
 
       await tx`
-        INSERT INTO identity.profiles (user_id, display_name, region)
+        INSERT INTO profiles (user_id, display_name, region)
         VALUES (${id}, ${input.handle}, ${input.region ?? null})
       `;
-      await tx`INSERT INTO identity.rank_state (user_id) VALUES (${id})`;
+      await tx`INSERT INTO rank_state (user_id) VALUES (${id})`;
 
       return id;
     });
@@ -213,7 +218,7 @@ export class AuthService {
 
   async login(input: { identifier: string; password: string; totpCode?: string; device?: string; ip?: string }): Promise<SessionTokens> {
     const rows = await this.sql<Array<{ id: string; password_hash: string; status: string; totp_secret: string | null }>>`
-      SELECT id, password_hash, status, totp_secret FROM identity.users
+      SELECT id, password_hash, status, totp_secret FROM users
        WHERE handle = ${input.identifier} OR email = ${input.identifier}
     `;
     const user = rows[0];
@@ -238,7 +243,7 @@ export class AuthService {
     // nobody has to reset a password to benefit from the stronger algorithm.
     if (await needsRehash(user.password_hash)) {
       const upgraded = await hashPassword(input.password);
-      await this.sql`UPDATE identity.users SET password_hash = ${upgraded}, updated_at = now() WHERE id = ${user.id}`;
+      await this.sql`UPDATE users SET password_hash = ${upgraded}, updated_at = now() WHERE id = ${user.id}`;
     }
 
     return this.issueSession(user.id, { device: input.device, ip: input.ip, mfa });
@@ -254,7 +259,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + this.tokens.refreshTtlSeconds * 1000);
 
     const inserted = await this.sql<Array<{ id: string }>>`
-      INSERT INTO identity.sessions (user_id, refresh_hash, device, ip, mfa, expires_at)
+      INSERT INTO sessions (user_id, refresh_hash, device, ip, mfa, expires_at)
       VALUES (${userId}, ${hashToken(refreshToken)}, ${options.device ?? null}, ${options.ip ?? null}, ${options.mfa}, ${expiresAt})
       RETURNING id
     `;
@@ -287,7 +292,7 @@ export class AuthService {
 
     const result = await transaction<RefreshOutcome>(this.sql, async (tx) => {
       const rows = await tx<Array<{ id: string; user_id: string; revoked: boolean; mfa: boolean; expires_at: Date }>>`
-        SELECT id, user_id, revoked, mfa, expires_at FROM identity.sessions WHERE refresh_hash = ${hash} FOR UPDATE
+        SELECT id, user_id, revoked, mfa, expires_at FROM sessions WHERE refresh_hash = ${hash} FOR UPDATE
       `;
       const session = rows[0];
       if (!session) throw new AuthError('Session not found', 'auth.session_invalid');
@@ -300,16 +305,16 @@ export class AuthService {
       if (session.revoked) return { kind: 'reuse', userId: session.user_id, sessionId: session.id };
 
       if (session.expires_at.getTime() < Date.now()) {
-        await tx`UPDATE identity.sessions SET revoked = true WHERE id = ${session.id}`;
+        await tx`UPDATE sessions SET revoked = true WHERE id = ${session.id}`;
         return { kind: 'expired' };
       }
 
-      await tx`UPDATE identity.sessions SET revoked = true, last_used_at = now() WHERE id = ${session.id}`;
+      await tx`UPDATE sessions SET revoked = true, last_used_at = now() WHERE id = ${session.id}`;
 
       const nextToken = generateToken(48);
       const expiresAt = new Date(Date.now() + this.tokens.refreshTtlSeconds * 1000);
       const nextSession = await tx<Array<{ id: string }>>`
-        INSERT INTO identity.sessions (user_id, refresh_hash, device, ip, mfa, expires_at)
+        INSERT INTO sessions (user_id, refresh_hash, device, ip, mfa, expires_at)
         VALUES (
           ${session.user_id}, ${hashToken(nextToken)}, ${options.device ?? null},
           ${options.ip ?? null}, ${session.mfa}, ${expiresAt}
@@ -342,11 +347,11 @@ export class AuthService {
       // Losing every session is the correct outcome: two parties hold a token
       // that only one should, and we cannot tell which one is the owner.
       await this.sql`
-        UPDATE identity.sessions
+        UPDATE sessions
            SET revoked = true, reuse_detected_at = now()
          WHERE user_id = ${result.userId} AND revoked = false
       `;
-      await this.sql`UPDATE identity.sessions SET reuse_detected_at = now() WHERE id = ${result.sessionId}`;
+      await this.sql`UPDATE sessions SET reuse_detected_at = now() WHERE id = ${result.sessionId}`;
       throw new AuthError('Refresh token reuse detected — all sessions revoked', 'auth.session_reused');
     }
 
@@ -356,11 +361,11 @@ export class AuthService {
   }
 
   async logout(refreshToken: string): Promise<void> {
-    await this.sql`UPDATE identity.sessions SET revoked = true WHERE refresh_hash = ${hashToken(refreshToken)}`;
+    await this.sql`UPDATE sessions SET revoked = true WHERE refresh_hash = ${hashToken(refreshToken)}`;
   }
 
   async logoutAll(userId: string): Promise<number> {
-    const result = await this.sql`UPDATE identity.sessions SET revoked = true WHERE user_id = ${userId} AND revoked = false`;
+    const result = await this.sql`UPDATE sessions SET revoked = true WHERE user_id = ${userId} AND revoked = false`;
     return result.count;
   }
 
@@ -368,7 +373,7 @@ export class AuthService {
 
   async startTotpEnrolment(userId: string): Promise<{ secret: string; uri: string; recoveryCodes: string[] }> {
     const rows = await this.sql<Array<{ email: string; totp_secret: string | null }>>`
-      SELECT email, totp_secret FROM identity.users WHERE id = ${userId}
+      SELECT email, totp_secret FROM users WHERE id = ${userId}
     `;
     const user = rows[0];
     if (!user) throw new AuthError('User not found', 'auth.not_found');
@@ -387,7 +392,7 @@ export class AuthService {
     if (!verifyTotp(secret, code)) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
 
     await this.sql`
-      UPDATE identity.users SET totp_secret = ${secret}, totp_enrolled_at = now(), updated_at = now()
+      UPDATE users SET totp_secret = ${secret}, totp_enrolled_at = now(), updated_at = now()
        WHERE id = ${userId} AND totp_secret IS NULL
     `;
 
@@ -411,7 +416,7 @@ export class AuthService {
    */
   async startWebauthnRegistration(userId: string): Promise<RegistrationOptionsJSON> {
     const rows = await this.sql<Array<{ email: string; handle: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
-      SELECT email, handle, webauthn_creds FROM identity.users WHERE id = ${userId}
+      SELECT email, handle, webauthn_creds FROM users WHERE id = ${userId}
     `;
     const user = rows[0];
     if (!user) throw new AuthError('User not found', 'auth.not_found');
@@ -429,7 +434,7 @@ export class AuthService {
    */
   async confirmWebauthnRegistration(userId: string, response: RegistrationResponseJSON): Promise<{ credentialId: string }> {
     const rows = await this.sql<Array<{ webauthn_creds: StoredWebAuthnCredential[] }>>`
-      SELECT webauthn_creds FROM identity.users WHERE id = ${userId}
+      SELECT webauthn_creds FROM users WHERE id = ${userId}
     `;
     const user = rows[0];
     if (!user) throw new AuthError('User not found', 'auth.not_found');
@@ -456,7 +461,7 @@ export class AuthService {
 
     const next = [...existing, stored];
     await this.sql`
-      UPDATE identity.users
+      UPDATE users
          SET webauthn_creds = ${this.sql.json(next as never)}, updated_at = now()
        WHERE id = ${userId}
     `;
@@ -484,7 +489,7 @@ export class AuthService {
    */
   async startWebauthnAuthentication(identifier: string): Promise<AuthenticationOptionsJSON> {
     const rows = await this.sql<Array<{ id: string; status: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
-      SELECT id, status, webauthn_creds FROM identity.users
+      SELECT id, status, webauthn_creds FROM users
        WHERE handle = ${identifier} OR email = ${identifier}
     `;
     const user = rows[0];
@@ -510,7 +515,7 @@ export class AuthService {
     options: { device?: string; ip?: string } = {},
   ): Promise<SessionTokens> {
     const rows = await this.sql<Array<{ id: string; status: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
-      SELECT id, status, webauthn_creds FROM identity.users
+      SELECT id, status, webauthn_creds FROM users
        WHERE handle = ${identifier} OR email = ${identifier}
     `;
     const user = rows[0];
@@ -545,7 +550,7 @@ export class AuthService {
 
     const next = creds.map((c) => (c.credentialId === credential.credentialId ? { ...c, counter: newCounter } : c));
     await this.sql`
-      UPDATE identity.users
+      UPDATE users
          SET webauthn_creds = ${this.sql.json(next as never)}, updated_at = now()
        WHERE id = ${user.id}
     `;
@@ -555,7 +560,7 @@ export class AuthService {
 
   async listWebauthnCredentials(userId: string): Promise<Array<{ credentialId: string; createdAt: string; transports?: string[] }>> {
     const rows = await this.sql<Array<{ webauthn_creds: StoredWebAuthnCredential[] }>>`
-      SELECT webauthn_creds FROM identity.users WHERE id = ${userId}
+      SELECT webauthn_creds FROM users WHERE id = ${userId}
     `;
     if (!rows[0]) throw new AuthError('User not found', 'auth.not_found');
     return asCredentialList(rows[0].webauthn_creds).map((c) => ({
@@ -594,7 +599,7 @@ export class AuthService {
 
     const { key, hash, prefix } = generateApiKey();
     const rows = await this.sql<Array<{ id: string }>>`
-      INSERT INTO identity.api_keys (user_id, name, key_hash, key_prefix, scopes, domain_whitelist, expires_at)
+      INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes, domain_whitelist, expires_at)
       VALUES (
         ${input.userId}, ${input.name}, ${hash}, ${prefix},
         ${input.scopes}, ${input.domainWhitelist ?? []}, ${input.expiresAt ?? null}
@@ -608,14 +613,14 @@ export class AuthService {
 
   async verifyApiKey(key: string): Promise<{ userId: string; scopes: string[]; keyId: string } | null> {
     const rows = await this.sql<Array<{ id: string; user_id: string; scopes: string[]; expires_at: Date | null }>>`
-      SELECT id, user_id, scopes, expires_at FROM identity.api_keys
+      SELECT id, user_id, scopes, expires_at FROM api_keys
        WHERE key_hash = ${hashToken(key)} AND revoked = false
     `;
     const row = rows[0];
     if (!row) return null;
     if (row.expires_at && row.expires_at.getTime() < Date.now()) return null;
 
-    await this.sql`UPDATE identity.api_keys SET last_used_at = now() WHERE id = ${row.id}`;
+    await this.sql`UPDATE api_keys SET last_used_at = now() WHERE id = ${row.id}`;
     return { userId: row.user_id, scopes: row.scopes, keyId: row.id };
   }
 
@@ -645,7 +650,7 @@ export class AuthService {
     if (!verified) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
 
     const users = await this.sql<Array<{ status: string }>>`
-      SELECT status FROM identity.users WHERE id = ${verified.userId}
+      SELECT status FROM users WHERE id = ${verified.userId}
     `;
     const user = users[0];
     if (!user) throw new AuthError('Account not found', 'auth.not_found');
@@ -677,14 +682,14 @@ export class AuthService {
 
   async revokeApiKey(userId: string, keyId: string): Promise<boolean> {
     const result = await this.sql`
-      UPDATE identity.api_keys SET revoked = true WHERE id = ${keyId} AND user_id = ${userId} AND revoked = false
+      UPDATE api_keys SET revoked = true WHERE id = ${keyId} AND user_id = ${userId} AND revoked = false
     `;
     return result.count > 0;
   }
 
   async listApiKeys(userId: string) {
     return this.sql<Array<{ id: string; name: string; key_prefix: string; scopes: string[]; last_used_at: Date | null; revoked: boolean }>>`
-      SELECT id, name, key_prefix, scopes, last_used_at, revoked FROM identity.api_keys
+      SELECT id, name, key_prefix, scopes, last_used_at, revoked FROM api_keys
        WHERE user_id = ${userId} ORDER BY created_at DESC
     `;
   }
@@ -694,7 +699,7 @@ export class AuthService {
   /** Highest approved, unexpired tier. Anything else is `none`. */
   async kycTier(userId: string, sql: Sql = this.sql): Promise<'none' | 'basic' | 'full' | 'institutional'> {
     const rows = await sql<Array<{ tier: 'basic' | 'full' | 'institutional' }>>`
-      SELECT tier FROM identity.kyc_records
+      SELECT tier FROM kyc_records
        WHERE user_id = ${userId} AND status = 'approved' AND (expires_at IS NULL OR expires_at > now())
     `;
     const order = { basic: 1, full: 2, institutional: 3 } as const;
@@ -720,14 +725,14 @@ export class AuthService {
    */
   async submitKyc(input: { userId: string; tier: SubmittableKycTier; jurisdiction: string; providerRef?: string }): Promise<KycRecordView> {
     return transaction(this.sql, async (tx) => {
-      const users = await tx<Array<{ id: string }>>`SELECT id FROM identity.users WHERE id = ${input.userId} FOR UPDATE`;
+      const users = await tx<Array<{ id: string }>>`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
       if (!users[0]) throw new AuthError('User not found', 'auth.not_found');
 
       // An approved, unexpired record at this tier or higher already answers the
       // request. Re-submitting must not reset anyone to `pending` — that would
       // let a user drop their own tier and, worse, make it look reviewable again.
       const existing = await tx<KycRow[]>`
-        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records
+        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records
          WHERE user_id = ${input.userId}
            AND (
              (status = 'approved' AND (expires_at IS NULL OR expires_at > now()))
@@ -743,7 +748,7 @@ export class AuthService {
       if (pending) return toKycRecord(pending);
 
       const inserted = await tx<KycRow[]>`
-        INSERT INTO identity.kyc_records (user_id, tier, jurisdiction, provider_ref, status)
+        INSERT INTO kyc_records (user_id, tier, jurisdiction, provider_ref, status)
         VALUES (${input.userId}, ${input.tier}, ${input.jurisdiction}, ${input.providerRef ?? null}, 'pending')
         RETURNING id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at
       `;
@@ -754,7 +759,7 @@ export class AuthService {
   /** Every record for one user, newest first. What `kyc.status` renders. */
   async listKycRecords(userId: string): Promise<KycRecordView[]> {
     const rows = await this.sql<KycRow[]>`
-      SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records
+      SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records
        WHERE user_id = ${userId} ORDER BY created_at DESC
     `;
     return rows.map(toKycRecord);
@@ -764,7 +769,7 @@ export class AuthService {
   async listPendingKyc(limit = 50): Promise<KycRecordView[]> {
     const rows = await this.sql<KycRow[]>`
       SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at
-        FROM identity.kyc_records
+        FROM kyc_records
        WHERE status = 'pending' ORDER BY created_at ASC LIMIT ${limit}
     `;
     return rows.map(toKycRecord);
@@ -772,7 +777,7 @@ export class AuthService {
 
   async getKycRecord(recordId: string): Promise<KycRecordView | null> {
     const rows = await this.sql<KycRow[]>`
-      SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records WHERE id = ${recordId}
+      SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE id = ${recordId}
     `;
     return rows[0] ? toKycRecord(rows[0]) : null;
   }
@@ -791,7 +796,7 @@ export class AuthService {
   async approveKycRecord(input: { recordId: string; reviewerId: string; expiresAt?: Date | null }): Promise<KycRecordView> {
     const outcome = await transaction(this.sql, async (tx) => {
       const rows = await tx<KycRow[]>`
-        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records WHERE id = ${input.recordId} FOR UPDATE
+        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE id = ${input.recordId} FOR UPDATE
       `;
       const row = rows[0];
       if (!row) throw new AuthError('KYC record not found', 'auth.not_found');
@@ -801,7 +806,7 @@ export class AuthService {
       }
 
       const updated = await tx<KycRow[]>`
-        UPDATE identity.kyc_records
+        UPDATE kyc_records
            SET status = 'approved', reviewed_at = now(), reviewed_by = ${input.reviewerId},
                expires_at = ${input.expiresAt ?? null}
          WHERE id = ${row.id}
@@ -823,7 +828,7 @@ export class AuthService {
   async rejectKycRecord(input: { recordId: string; reviewerId: string }): Promise<KycRecordView> {
     return transaction(this.sql, async (tx) => {
       const rows = await tx<KycRow[]>`
-        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM identity.kyc_records WHERE id = ${input.recordId} FOR UPDATE
+        SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE id = ${input.recordId} FOR UPDATE
       `;
       const row = rows[0];
       if (!row) throw new AuthError('KYC record not found', 'auth.not_found');
@@ -833,7 +838,7 @@ export class AuthService {
       }
 
       const updated = await tx<KycRow[]>`
-        UPDATE identity.kyc_records
+        UPDATE kyc_records
            SET status = 'rejected', reviewed_at = now(), reviewed_by = ${input.reviewerId}
          WHERE id = ${row.id}
         RETURNING id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at
@@ -852,7 +857,7 @@ export class AuthService {
    */
   async approveKyc(input: { userId: string; tier: SubmittableKycTier; jurisdiction: string; providerRef?: string }): Promise<void> {
     await this.sql`
-      INSERT INTO identity.kyc_records (user_id, tier, jurisdiction, provider_ref, status, reviewed_at)
+      INSERT INTO kyc_records (user_id, tier, jurisdiction, provider_ref, status, reviewed_at)
       VALUES (${input.userId}, ${input.tier}, ${input.jurisdiction}, ${input.providerRef ?? null}, 'approved', now())
     `;
 
@@ -899,7 +904,7 @@ export class AuthService {
     scopes: Scope[];
   }> {
     const users = await this.sql<Array<{ totp_secret: string | null; status: string }>>`
-      SELECT totp_secret, status FROM identity.users WHERE id = ${input.userId}
+      SELECT totp_secret, status FROM users WHERE id = ${input.userId}
     `;
     const user = users[0];
     if (!user) throw new AuthError('User not found', 'auth.not_found');
@@ -917,7 +922,7 @@ export class AuthService {
     // The session must still be live. Elevating off a revoked session would let
     // a logout be undone by whoever still holds the old access token.
     const sessions = await this.sql<Array<{ id: string }>>`
-      SELECT id FROM identity.sessions
+      SELECT id FROM sessions
        WHERE id = ${input.sessionId} AND user_id = ${input.userId} AND revoked = false AND expires_at > now()
     `;
     if (!sessions[0]) throw new AuthError('Session is no longer valid', 'auth.session_invalid');
@@ -937,7 +942,7 @@ export class AuthService {
 
   async createSubAccount(userId: string, label: string, purpose?: string): Promise<{ id: string }> {
     const rows = await this.sql<Array<{ id: string }>>`
-      INSERT INTO identity.sub_accounts (parent_user_id, label, purpose)
+      INSERT INTO sub_accounts (parent_user_id, label, purpose)
       VALUES (${userId}, ${label}, ${purpose ?? null})
       RETURNING id
     `;
@@ -948,7 +953,7 @@ export class AuthService {
     userId: string,
   ): Promise<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; createdAt: Date }>> {
     const rows = await this.sql<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; created_at: Date }>>`
-      SELECT id, label, purpose, revoked, created_at FROM identity.sub_accounts
+      SELECT id, label, purpose, revoked, created_at FROM sub_accounts
        WHERE parent_user_id = ${userId}
        ORDER BY created_at DESC
     `;
@@ -975,7 +980,7 @@ export class AuthService {
    */
   async revokeSubAccount(userId: string, subAccountId: string): Promise<boolean> {
     const result = await this.sql`
-      UPDATE identity.sub_accounts
+      UPDATE sub_accounts
          SET revoked = true
        WHERE id = ${subAccountId}
          AND parent_user_id = ${userId}
@@ -994,7 +999,7 @@ export class AuthService {
   async getSubAccountOwnership(subAccountId: string): Promise<{ id: string; parentUserId: string; revoked: boolean } | null> {
     const rows = await this.sql<Array<{ id: string; parent_user_id: string; revoked: boolean }>>`
       SELECT id, parent_user_id, revoked
-        FROM identity.sub_accounts
+        FROM sub_accounts
        WHERE id = ${subAccountId}
        LIMIT 1
     `;
