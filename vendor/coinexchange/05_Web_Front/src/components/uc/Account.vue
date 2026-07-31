@@ -8,8 +8,8 @@
                     <span class="tips-g">{{$t('uc.account.pagetip')}}</span>
                 </section>
                 <section class="accountContent">
-                    <p v-if="profileLoading" class="ix-empty-loading" role="status">Loading payment methods…</p>
-                    <p v-else-if="profileError" class="ix-empty ix-empty-error" role="alert">{{ profileError }}</p>
+                    <IxHonestState v-if="profileLoading" kind="loading" message="Loading payment methods…" />
+                    <IxHonestState v-else-if="profileError" kind="error" :message="profileError" />
                     <p v-else-if="profileReachable" class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
                       OTC payment methods on this account — unknown is not “unbound.”
                     </p>
@@ -178,8 +178,11 @@
 </template>
 <script>
 
+import IxHonestState from './IxHonestState.vue';
+
 export default {
     components: {
+      IxHonestState
     },
     data() {
         const validatePass = (rule, value, callback) => {
@@ -647,7 +650,7 @@ export default {
 .account-box.account-in.account-item.account-item-in.btn {
     padding: 8px 10px;
     cursor: pointer;
-    color: #ff6b00;
+    color: #00c2a8;
 }
 
 .tips-g {
@@ -694,7 +697,7 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #ff6b00;
+    color: #00c2a8;
     transition: all.2s ease-in-out;
     cursor: pointer;
 }
@@ -707,7 +710,7 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #ff6b00;
+    color: #00c2a8;
     transition: all.2s ease-in-out;
     cursor: pointer;
 }
@@ -779,7 +782,7 @@ p.describe {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #ff6b00;
+    background: #00c2a8;
 }
 
 .bill_box {
@@ -942,7 +945,7 @@ p.describe {
 }
 
 .order_box.active {
-    border-bottom: 2px solid #ff6b00;
+    border-bottom: 2px solid #00c2a8;
 }
 
 .order_box.search {
@@ -955,8 +958,8 @@ p.describe {
     /* border: #cccccc solid 1px; */
 }
 .ivu-btn-primary{
-    background-color: #ff6b00;
-    border-color: #ff6b00;
+    background-color: #00c2a8;
+    border-color: #00c2a8;
 }
 
 @media screen and (max-width:768px){

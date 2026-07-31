@@ -3,8 +3,7 @@
       <div class="nav-right padding-right-clear">
         <div class="padding-right-clear padding-left-clear rightarea user account-box">
             <div class="rightarea-con">
-                <p v-if="profileLoading" class="ix-empty-loading" role="status" style="padding: 12px 20px;">Loading security settings…</p>
-                <p v-else-if="profileError" class="ix-empty ix-empty-error" role="alert" style="padding: 12px 20px;">{{ profileError }}</p>
+                <div style="padding: 12px 20px;"><IxHonestState v-if="profileLoading" kind="loading" message="Loading security settings…" /><IxHonestState v-else-if="profileError" kind="error" :message="profileError" /></div>
                 <div class="user-top-icon" v-if="profileReachable">
                     <div class="user-icons">
                         <div class="user-face user-avatar-public">
@@ -31,7 +30,7 @@
                         <!-- 1 -->
                         <div class="account-item" style="display:none">
                             <div class="account-item-in">
-                                <Icon type="person" style="font-size: 18px;color: #ff6b00;"></Icon>
+                                <Icon type="person" style="font-size: 18px;color: #00c2a8;"></Icon>
                                 <span class="card-number">{{$t('uc.safe.nickname')}}</span>
                                 <p class="bankInfo" style="color: #fff;">
                                     //
@@ -42,10 +41,10 @@
                         <!-- 6 -->
                         <div class="account-item">
                             <div class="account-item-in">
-                                <Icon type="md-card" size="18" color="#ff6b00"/>
+                                <Icon type="md-card" size="18" color="#00c2a8"/>
                                 <span class="card-number">{{$t('uc.safe.verified')}}</span>
                                 <p v-if="user.realVerified==1" class="bankInfo" style="color: #fff;font-size: 13px;">{{user.realName}}</p>
-                                <p v-else-if="user.realVerified==0&&user.realAuditing==0&&user.realNameRejectReason!=null" class="bankInfo" style="color: #ff6b00;font-size: 13px;">
+                                <p v-else-if="user.realVerified==0&&user.realAuditing==0&&user.realNameRejectReason!=null" class="bankInfo" style="color: #00c2a8;font-size: 13px;">
                                     Rejected{{user.realNameRejectReason?": "+user.realNameRejectReason:""}}, Please try again. 
                                 </p>
                                 <p v-else class="bankInfo" style="color: #8a8a8a;font-size: 13px;">
@@ -116,7 +115,7 @@
                         <!-- 2 -->
                         <div class="account-item" style="display: none;">
                             <div class="account-item-in">
-                                <Icon type="ios-mail" size="20" color="#ff6b00;"/>
+                                <Icon type="ios-mail" size="20" color="#00c2a8;"/>
                                 <span class="card-number">{{$t('uc.safe.email')}}</span>
                                 <p v-if="user.emailVerified==1" class="bankInfo" style="color: grey;font-size: 13px;">
                                     {{user.email}}
@@ -162,7 +161,7 @@
                         <!-- 3 -->
                         <div class="account-item">
                             <div class="account-item-in">
-                                <Icon type="ios-call" color="#ff6b00" size="20"/>
+                                <Icon type="ios-call" color="#00c2a8" size="20"/>
                                 <span class="card-number">{{$t('uc.safe.phone')}}</span>
                                 <p v-if="user.phoneVerified==1" class="bankInfo" style="color: #fff;font-size: 13px;">
                                     {{user.mobilePhone}}
@@ -208,7 +207,7 @@
                         <!-- 4 -->
                         <div class="account-item">
                             <div class="account-item-in">
-                                <Icon type="ios-lock" size="20"color="#ff6b00;"></Icon>
+                                <Icon type="ios-lock" size="20"color="#00c2a8;"></Icon>
                                 <span class="card-number">{{$t('uc.safe.loginpwd')}}</span>
                                 <p class="bankInfo" style="color: #8a8a8a;font-size: 13px;">
                                     {{$t('uc.safe.logintip')}}
@@ -256,7 +255,7 @@
                         <!-- 5 -->
                         <div class="account-item">
                             <div class="account-item-in">
-                              <Icon type="logo-bitcoin" size="20" color="#ff6b00" />
+                              <Icon type="logo-bitcoin" size="20" color="#00c2a8" />
                                 <span class="card-number">{{$t('uc.safe.fundpwd')}}</span>
                                 <p class="bankInfo" style="color: #8a8a8a;font-size: 13px;">
                                     {{$t('uc.safe.fundtip')}}
@@ -312,7 +311,7 @@
                                         <!--</Input>-->
                                         <!--</FormItem>-->
                                         <p style="text-align:right;">
-                                            <a @click="handleReset('formValidate8');fGetBackFundpwd=!fGetBackFundpwd" style="color:#ff8534;">Forgot password?</a>
+                                            <a @click="handleReset('formValidate8');fGetBackFundpwd=!fGetBackFundpwd" style="color:#1ad4bc;">Forgot password?</a>
                                         </p>
                                         <!-- Button -->
                                         <FormItem>
@@ -362,6 +361,8 @@
     </div>
 </template>
 <script>
+import IxHonestState from './IxHonestState.vue';
+
 export default {
   components: {},
   data() {
@@ -1067,7 +1068,7 @@ button.ivu-btn.ivu-btn-primary{
 .uploadimgtip {
   position: relative;
   top: -20px;
-  color: #ff6b00;
+  color: #00c2a8;
 }
 .account-box.account-in.account-item.account-detail {
   padding: 30px 0;
@@ -1367,7 +1368,7 @@ button.ivu-btn.ivu-btn-primary{
   height: 45px;
   width: 45px;
   border-radius: 50%;
-  background-color: #ff6b00;
+  background-color: #00c2a8;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1463,7 +1464,7 @@ button.ivu-btn.ivu-btn-primary{
 }
 
 .user-avatar-public >.user-avatar-in {
-  background: #ff6b00;
+  background: #00c2a8;
   border-radius: 50%;
   height: 42px;
   width: 42px;
@@ -1478,21 +1479,21 @@ button.ivu-btn.ivu-btn-primary{
 }
 /* router-link-exact-active router-link-active */
 .account-item-in i {
-  color: #ff6b00!important;
+  color: #00c2a8!important;
 }
 .btn {
-  color: #ff6b00;
+  color: #00c2a8;
 }
 .ivu-btn-primary {
-  background-color: #ff6b00;
-  border-color: #ff6b00;
+  background-color: #00c2a8;
+  border-color: #00c2a8;
 }
 </style>
 <style lang="scss">
 li.ivu-upload-list-file.ivu-upload-list-file-finish {
   &:hover {
     span {
-      color: #ff6b00;
+      color: #00c2a8;
     }
   }
 }

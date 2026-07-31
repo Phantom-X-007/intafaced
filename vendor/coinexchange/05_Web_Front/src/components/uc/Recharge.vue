@@ -42,7 +42,7 @@
                 <p v-if="accountType!= 0" style="margin-top: 10px;font-size:12px;color:#8a8a8a;">Memo: <span style="font-size: 20px;color: #F90;font-weight:bold;">{{memoCode}}</span></p>
                 <p v-if="accountType!= 0" style="margin-top: 10px;font-size:12px;color:#8a8a8a;">
                   {{$t('uc.finance.recharge.memotips')}}
-                  <a style="color: #ff6b00;" v-clipboard:copy="memoCode" v-clipboard:success="onCopy" v-clipboard:error="onError" href="javascript:;" id="copyBtn" class="link-copy">{{$t('uc.finance.recharge.copy')}} Memo</a>
+                  <a style="color: #00c2a8;" v-clipboard:copy="memoCode" v-clipboard:success="onCopy" v-clipboard:error="onError" href="javascript:;" id="copyBtn" class="link-copy">{{$t('uc.finance.recharge.copy')}} Memo</a>
                 </p>
               </div>
             </div>
@@ -56,8 +56,8 @@
               <div class="action-body">
                 <p class="acb-p1">{{$t('uc.finance.recharge.record')}}</p>
                 <div class="order-table">
-                  <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
-                  <p v-else-if="!loading && listReachable && tableRecharge.length === 0" class="ix-empty">No deposits yet</p>
+                  <IxHonestState v-if="listError" kind="error" :message="listError" />
+                  <IxHonestState v-else-if="!loading && listReachable && tableRecharge.length === 0" kind="empty" message="No deposits yet" />
                   <Table v-if="!listError" :columns="tableColumnsRecharge" :data="tableRecharge" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
                   <div style="margin: 10px;overflow: hidden" v-if="!listError">
                     <div style="float: right;">
@@ -384,7 +384,7 @@ export default {
 .action-box.title a.link-copy {
   font-size: 14px;
   margin-left: 20px;
-  color: #ff6b00;
+  color: #00c2a8;
 }
 
 .hb-night a {
@@ -398,7 +398,7 @@ export default {
   margin-left: 20px;
   font-size: 14px;
   position: relative;
-  color: #ff6b00;
+  color: #00c2a8;
 }
 
 .hb-night a {
@@ -453,7 +453,7 @@ p.describe {
   width: 4px;
   height: 22px;
   margin-right: 10px;
-  background: #ff6b00;
+  background: #00c2a8;
 }
 
 .bill_box {

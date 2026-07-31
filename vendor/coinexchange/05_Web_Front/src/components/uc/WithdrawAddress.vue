@@ -28,13 +28,15 @@
               </div>
             </div>
             <div class="btnbox">
-              <Button id="addrSubmit" @click='addAddr' size="large" style="width:86px;color:#fff;background:#ff6b00;border:1px solid #ff6b00;">{{$t('uc.finance.withdraw.add')}}</Button>
+              <Button id="addrSubmit" @click='addAddr' size="large" style="width:86px;color:#fff;background:#00c2a8;border:1px solid #00c2a8;">{{$t('uc.finance.withdraw.add')}}</Button>
             </div>
             <div class="action-content">
               <div class="action-body">
                 <p class="acb-p1 describe">{{$t('uc.finance.withdraw.addresslist')}}</p>
                 <div class="order-table">
-                  <Table :columns="tableColumnsRecharge" :data="dataRecharge" :disabled-hover="true"></Table>
+                  <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+                  <p v-else-if="!loading && listReachable && dataRecharge.length === 0" class="ix-empty">No withdraw addresses yet</p>
+                  <Table v-if="!listError" :columns="tableColumnsRecharge" :data="dataRecharge" :loading="loading" :disabled-hover="true"></Table>
                   <div style="margin: 10px;overflow: hidden">
                     <div style="float: right;">
                       <Page :total="dataCount" :current="1" @on-change="changePage" :loading="loading" class="recharge_btn"></Page>
@@ -50,7 +52,7 @@
     <!-- model -->
     <Modal v-model="modal2" width="360">
       <p slot="header" style="color:#f60;text-align:center">
-        <Icon type="ios-mail" size="20" color="#ff6b00;" />
+        <Icon type="ios-mail" size="20" color="#00c2a8;" />
         <span>{{$t('uc.finance.withdraw.safevalidate')}}</span>
       </p>
       <div style="text-align:center">
@@ -91,7 +93,7 @@
         </Form>
       </div>
       <div slot="footer">
-        <Button type="primary" size="large" long @click="handleSubmit('formValidateAddr')">{{$t('uc.finance.withdraw.save')}}</Button>
+        <Button type="primary" size="large" long :loading="submitting" :disabled="submitting" @click="handleSubmit('formValidateAddr')">{{ submitting ? 'Saving…' : $t('uc.finance.withdraw.save') }}</Button>
       </div>
     </Modal>
   </div>
@@ -107,6 +109,9 @@ export default {
       disbtn: false,
       dataCount: 10,
       loading: true,
+      listReachable: false,
+      listError: "",
+      submitting: false,
       //else
       sendMsgDisabled1: false,
       sendMsgDisabled2: false,
@@ -252,19 +257,32 @@ export default {
         });
     },
     getList(pageNo, pageSize) {
+      this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       let params = {};
       params["pageNo"] = pageNo;
       params["pageSize"] = pageSize;
       this.$http
-.post(this.host + "/uc/withdraw/address/page", params)
-.then(response => {
+        .post(this.host + "/uc/withdraw/address/page", params)
+        .then(response => {
           var resp = response.body;
-          if (resp.code == 0 && resp.data.content) {
-            this.dataRecharge = resp.data.content;
-            this.dataCount = resp.data.totalElement;
+          if (resp && resp.code == 0 && resp.data) {
+            this.dataRecharge = resp.data.content || [];
+            this.dataCount = resp.data.totalElement || resp.data.totalElements || 0;
+            this.listReachable = true;
           } else {
-            this.$Message.error(resp.message);
+            this.dataRecharge = [];
+            this.listError =
+              "Address list did not answer — list is unknown, not empty.";
+            if (resp && resp.message) this.$Message.error(resp.message);
           }
+          this.loading = false;
+        })
+        .catch(() => {
+          this.dataRecharge = [];
+          this.listError =
+            "Address service did not respond — list is unknown, not empty.";
           this.loading = false;
         });
     },
@@ -356,19 +374,25 @@ export default {
         title: title,
         content: content,
         onOk: () => {
+          if (this.submitting) return;
+          this.submitting = true;
           let params = {};
           params["id"] = id;
           this.$http
-.post(this.host + "/uc/withdraw/address/delete", params)
-.then(response => {
+            .post(this.host + "/uc/withdraw/address/delete", params)
+            .then(response => {
+              this.submitting = false;
               var resp = response.body;
-              if (resp.code == 0) {
+              if (resp && resp.code == 0) {
                 this.$Message.success(resp.message);
                 this.refresh();
               } else {
-                this.$Message.error(resp.message);
+                this.$Message.error((resp && resp.message) || "Delete failed");
               }
-              this.loading = false;
+            })
+            .catch(() => {
+              this.submitting = false;
+              this.$Message.error("Venue did not respond — address not deleted.");
             });
         },
         onCancel: () => {}
@@ -384,6 +408,7 @@ export default {
       });
     },
     submit(name) {
+      if (this.submitting) return;
       let param = {};
       param["address"] = this.withdrawAddr;
       param["unit"] = this.coinType;
@@ -396,18 +421,24 @@ export default {
       }
       param["remark"] = this.remark;
 
+      this.submitting = true;
       this.$http
-.post(this.host + "/uc/withdraw/address/add", param)
-.then(response => {
+        .post(this.host + "/uc/withdraw/address/add", param)
+        .then(response => {
+          this.submitting = false;
           var resp = response.body;
-          if (resp.code == 0) {
+          if (resp && resp.code == 0) {
             this.$Message.success(this.$t("uc.finance.withdraw.savemsg2"));
             this.formValidateAddr.vailCode2 = "";
             this.refresh();
             this.modal2 = false;
           } else {
-            this.$Message.error(resp.message);
+            this.$Message.error((resp && resp.message) || "Save failed");
           }
+        })
+        .catch(() => {
+          this.submitting = false;
+          this.$Message.error("Venue did not respond — address not saved.");
         });
     }
   },

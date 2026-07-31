@@ -4,8 +4,10 @@
       <div class="bill_box rightarea padding-right-clear">
         <div class="shaow">
           <div class="money_table">
-            <Table :columns="tableColumns" :data="orderList" :loading="loading" :disabled-hover="true"></Table>
-            <div class="page">
+            <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+            <p v-else-if="!loading && listReachable && orderList.length === 0" class="ix-empty">No innovation orders yet</p>
+            <Table v-if="!listError" :columns="tableColumns" :data="orderList" :loading="loading" :disabled-hover="true"></Table>
+            <div class="page" v-if="!listError">
               <Page :total="total" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
             </div>
           </div>
@@ -23,22 +25,35 @@ export default {
       total: 0,
       pageSize: 10,
       loading: true,
+      listReachable: false,
+      listError: "",
       pageNo: 1,
       orderList: []
     };
   },
   methods: {
     getMyOrderList() {
+      this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       let params = {};
       params.pageNo = this.pageNo;
       params.pageSize = this.pageSize;
       this.$http.post(this.host + this.api.uc.myInnovationOrderList, params).then(response => {
         var resp = response.body;
-        if (resp.code == 0) {
-          this.orderList = resp.data.content;
+        if (resp && resp.code == 0 && resp.data) {
+          this.orderList = resp.data.content || [];
+          this.total = resp.data.totalElements || this.total;
+          this.listReachable = true;
         } else {
+          this.orderList = [];
+          this.listError = "Innovation orders did not answer — list is unknown, not empty.";
           this.$Message.error(this.loginmsg);
         }
+        this.loading = false;
+      }).catch(() => {
+        this.orderList = [];
+        this.listError = "Innovation service did not respond — list is unknown, not empty.";
         this.loading = false;
       });
     },
@@ -202,9 +217,9 @@ export default {
                 }
               }
 .ivu-btn.ivu-btn-info {
-                border: 1px solid #ff8534;
+                border: 1px solid #1ad4bc;
                 span {
-                  color: #ff8534;
+                  color: #1ad4bc;
                 }
               }
 .ivu-btn.ivu-btn-error {
@@ -254,10 +269,10 @@ export default {
 }
 
 .header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #ff8534;color: #ff8534;
+  float:right;padding: 5px 15px;border: 1px solid #1ad4bc;color: #1ad4bc;
   margin-left: 20px;
   &:hover{
-    background: #ff8534;
+    background: #1ad4bc;
     color: #000;
     cursor: pointer;
   }

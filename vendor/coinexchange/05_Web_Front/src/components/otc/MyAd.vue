@@ -273,10 +273,10 @@ export default {
 .add_ad {
       margin-bottom: 20px;
 .ivu-btn {
-        background: #ff6b00;
+        background: #00c2a8;
         color: #fff;
         &:hover {
-          border-color: #ff6b00;
+          border-color: #00c2a8;
         }
       }
     }
@@ -318,10 +318,10 @@ export default {
               }
             }
             button.ivu-btn.ivu-btn-primary {
-              border:1px solid #ff8534;
+              border:1px solid #1ad4bc;
               background-color: transparent;
               span {
-                color: #ff8534;
+                color: #1ad4bc;
               }
             }
             button.ivu-btn.ivu-btn-error {

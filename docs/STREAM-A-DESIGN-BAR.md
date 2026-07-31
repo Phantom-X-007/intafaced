@@ -5,7 +5,7 @@
 **Companions:** `FRONTEND-OPERATING-PLAN-2026-07-30.md`, `FRONTEND-OPERATING-PLAN-GROK-AUDIT-2026-07-30.md`, `RUNNING-STREAM-A.md`.
 
 > World-class here means **trust, density, calm, plane unity** — not a new component library.  
-> **One kit: iView 3. One brand: #86 black/orange. Upgrade via tokens + patterns.**
+> **One kit: iView 3. Colors modular via CSS tokens.** Provisional lock: **P21** deep neutral + teal (`docs/COLOR-LOCK-P21-PROVISIONAL-2026-07-31.md`). Orange is not sacred.
 
 Agents score polish PRs against this checklist. A PR that fails the bar is not “done,” even if `ui:proof` is green.
 
@@ -41,15 +41,15 @@ Agents score polish PRs against this checklist. A PR that fails the bar is not �
 
 ## 2 · Token layer (append-only; no new npm kit)
 
-Implement as CSS variables (Stream A sheet or an append-only region in the existing brand CSS). Map to **#86** black/orange already shipped.
+Implement as CSS variables in `intafaced.css` `:root` (the modular swap point). Current values = **P21** (provisional); change the block to retheme.
 
-| Token group | Minimum set                                                                                    |
-| ----------- | ---------------------------------------------------------------------------------------------- |
-| **Color**   | `--bg`, `--panel`, `--border`, `--text`, `--text-muted`, `--up`, `--down`, `--accent` (orange) |
-| **Space**   | 4 / 8 / 12 / 16 / 24                                                                           |
-| **Type**    | 11 / 12 / 13 / 14 / 16; **tabular nums** for prices and sizes                                  |
-| **Control** | order-form control height; radius small/medium                                                 |
-| **Z**       | drawer / modal / toast scale                                                                   |
+| Token group | Minimum set                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| **Color**   | `--bg`, `--panel`, `--border`, `--text`, `--text-muted`, `--up`, `--down`, `--accent` (P21 teal now) |
+| **Space**   | 4 / 8 / 12 / 16 / 24                                                                                 |
+| **Type**    | 11 / 12 / 13 / 14 / 16; **tabular nums** for prices and sizes                                        |
+| **Control** | order-form control height; radius small/medium                                                       |
+| **Z**       | drawer / modal / toast scale                                                                         |
 
 **How agents restyle:** iView via variables + local SCSS overrides — never fork the kit.
 

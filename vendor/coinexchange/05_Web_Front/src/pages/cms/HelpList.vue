@@ -76,17 +76,17 @@
       font-size: 14px;
     }
     &:hover{
-      color: #ff6b00;
+      color: #00c2a8;
     }
   }
 }
 .route-wrap {
   font-size: 14px;
   a {
-    color: #ff8534;
+    color: #1ad4bc;
   }
   span {
-    color: #ff8534;
+    color: #1ad4bc;
   }
 }
 

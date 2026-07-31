@@ -342,6 +342,11 @@ export default {
     },
     ok() {
       if (this.submitting) return;
+      if (!this.$store.getters.isLogin) {
+        this.$Message.error("Session ended — sign in again. Withdrawal was not submitted.");
+        this.modal = false;
+        return;
+      }
       if (this.formInline.code == "") {
         this.modal = true;
         this.$Message.error("Enter the SMS code");
@@ -742,7 +747,7 @@ export default {
   }
   .ix-receipt-net {
     font-weight: 600;
-    color: #ff6b00;
+    color: #00c2a8;
   }
   .ix-receipt-addr {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -771,7 +776,7 @@ export default {
   outline: none;
   right: 0;
   width: 30%;
-  color: #ff8534;
+  color: #1ad4bc;
   cursor: pointer;
   height: 20px;
   line-height: 20px;
@@ -794,15 +799,15 @@ export default {
         margin-right: 0;
         a {
           display: inline-block;
-          color: #ff6b00;
+          color: #00c2a8;
           width: 160px;
           height: 40px;
-          border: 1px solid #ff6b00;
+          border: 1px solid #00c2a8;
           line-height: 40px;
           text-align: center;
           float: right;
           &:hover{
-            background: #ff6b00;
+            background: #00c2a8;
             color: #000;
           }
         }
@@ -1060,7 +1065,7 @@ table.table.table-inner.action-box {
 }
 
 .order_box.active {
-  border-bottom: 2px solid #ff6b00;
+  border-bottom: 2px solid #00c2a8;
 }
 
 .order_box.search {
@@ -1074,8 +1079,8 @@ table.table.table-inner.action-box {
 }
 
 .ivu-btn-primary {
-  background-color: #ff6b00;
-  border-color: #ff6b00;
+  background-color: #00c2a8;
+  border-color: #00c2a8;
 }
 #pages {
   margin: 10px;
@@ -1119,7 +1124,7 @@ table.table.table-inner.action-box {
           thead.ivu-table-cell {
 .ivu-poptip.ivu-poptip-rel.ivu-table-filter {
               i.ivu-icon.ivu-icon-funnel.on {
-                color: #ff8534;
+                color: #1ad4bc;
               }
             }
           }

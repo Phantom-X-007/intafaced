@@ -213,8 +213,8 @@ export default {
 .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
 .ivu-checkbox.ivu-checkbox-checked {
 .ivu-checkbox-inner {
-              border: 1px solid #ff8534;
-              background-color: #ff8534;
+              border: 1px solid #1ad4bc;
+              background-color: #1ad4bc;
             }
           }
 

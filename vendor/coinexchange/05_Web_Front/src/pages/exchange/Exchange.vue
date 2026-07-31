@@ -1,5 +1,6 @@
 <template>
-  <div class="ix-terminal">
+  <div class="ix-terminal" @keydown="onDeskKeydown">
+    <!-- Wave B7: / market search · Esc clear/blur · Enter in ticket submits · B/S side -->
     <!-- ══ pair header ══════════════════════════════════════════════════ -->
     <header class="ix-head">
       <div class="ix-head-pair">
@@ -67,18 +68,22 @@
       <aside class="ix-panel ix-markets">
         <div class="ix-markets-search">
           <input
+            ref="marketSearch"
             type="text"
             v-model="searchKey"
-            placeholder="Search market"
+            placeholder="Search market  ·  /"
             spellcheck="false"
+            aria-label="Search market"
+            autocomplete="off"
           />
         </div>
-        <nav class="ix-tabs ix-tabs-sm">
+        <nav class="ix-tabs ix-tabs-sm" aria-label="Market list filter">
           <button
             type="button"
             v-if="isLogin"
             :class="{ 'is-active': baseFilter === 'favor' }"
             @click="baseFilter = 'favor'"
+            title="Watchlist (favourites)"
           >★</button>
           <button
             type="button"
@@ -157,6 +162,11 @@
             </p>
             <p class="ix-empty ix-empty-abs" v-else-if="mainTab === 'chart' && !feedLive">
               No market feed — chart has no live history to show
+            </p>
+            <p class="ix-chart-attr" v-show="mainTab === 'chart'" role="contentinfo">
+              Charting by
+              <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a>
+              Lightweight Charts (Apache-2.0)
             </p>
 
             <div class="ix-depth-host" v-show="mainTab === 'depth'">
@@ -274,7 +284,7 @@
                 <thead>
                   <tr>
                     <th>Asset</th>
-                    <th class="ix-num">Available</th>
+                    <th class="ix-num">Available (venue)</th>
                     <th class="ix-num">Value</th>
                     <th></th>
                   </tr>
@@ -333,7 +343,7 @@
                   <td class="ix-num">{{ fmt(row.tradedAmount, coinScale) }}</td>
                   <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
                   <td class="ix-num">
-                    <button type="button" class="ix-cancel" @click="cancelOrder(row)">Cancel</button>
+                    <button type="button" class="ix-cancel" :disabled="!!cancellingId" @click="cancelOrder(row)">{{ cancellingId === row.orderId ? 'Cancelling…' : 'Cancel' }}</button>
                   </td>
                 </tr>
               </tbody>
@@ -432,6 +442,14 @@
               :title="m.label"
               @click="bookMode = m.id"
             ><i></i><i></i></button>
+            <select
+              class="ix-book-group"
+              v-model.number="bookGroup"
+              title="Price grouping"
+              aria-label="Order book price grouping"
+            >
+              <option v-for="g in bookGroups" :key="g" :value="g">{{ g === 1 ? '1 tick' : '×' + g }}</option>
+            </select>
           </div>
         </nav>
 
@@ -534,6 +552,7 @@
             <label>Price</label>
             <div class="ix-input" :class="{ 'is-disabled': orderType === 'MARKET_PRICE' }">
               <input
+                ref="ticketPrice"
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
@@ -541,6 +560,7 @@
                 :placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : '0.00'"
                 v-model="form.price"
                 @input="onPriceInput"
+                @keydown.enter.prevent="submitOrder"
               />
               <span class="ix-unit">{{ currentCoin.base }}</span>
             </div>
@@ -550,12 +570,14 @@
             <label>{{ amountLabel }}</label>
             <div class="ix-input">
               <input
+                ref="ticketAmount"
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
                 placeholder="0.00"
                 v-model="form.amount"
                 @input="onAmountInput"
+                @keydown.enter.prevent="submitOrder"
               />
               <span class="ix-unit">{{ amountUnit }}</span>
             </div>
@@ -585,12 +607,12 @@
 
           <dl class="ix-meta">
             <div>
-              <dt>Available</dt>
+              <dt>Available <em class="ix-dim">(venue wallet)</em></dt>
               <dd v-if="!isLogin || walletReachable">
                 {{ fmt(availableBalance, side === 'BUY' ? baseCoinScale : coinScale) }}
                 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }}</em>
               </dd>
-              <dd v-else class="ix-dim">— <em>unknown</em></dd>
+              <dd v-else class="ix-dim">— <em>unknown · not ledger</em></dd>
             </div>
             <div v-if="orderType === 'LIMIT_PRICE'">
               <dt>Order value</dt>
@@ -599,6 +621,10 @@
             <div>
               <dt>Fee (est.)</dt>
               <dd>{{ feeLabel }}</dd>
+            </div>
+            <div v-if="orderType === 'MARKET_PRICE' && marketImpactLabel">
+              <dt>Book impact <em class="ix-dim">(est.)</em></dt>
+              <dd>{{ marketImpactLabel }}</dd>
             </div>
           </dl>
 
@@ -611,6 +637,9 @@
           >
             {{ submitting ? 'Placing…' : submitLabel }}
           </button>
+          <p class="ix-order-note ix-dim ix-kbd-hint" title="Keyboard floor">
+            <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>Enter</kbd> submit · <kbd>B</kbd>/<kbd>S</kbd> side
+          </p>
 
           <p class="ix-order-note ix-order-error" v-if="orderValidationError">{{ orderValidationError }}</p>
           <p class="ix-order-note" v-if="!isLogin">
@@ -720,6 +749,8 @@ export default {
         { id: 'bids', label: 'Bids only' },
         { id: 'asks', label: 'Asks only' }
       ],
+      bookGroup: 1,
+      bookGroups: [1, 10, 50, 100],
       accountTab: 'balances',
 
       interval: '60',
@@ -759,6 +790,7 @@ export default {
 
       trend: 0,
       submitting: false,
+      cancellingId: null,
       /** Inline field validation message; empty when fields look usable. */
       orderValidationError: ''
     };
@@ -787,13 +819,13 @@ export default {
     /* Asks are held best-last so the rail can render them top-down away from
        the spread, the way every book on the market reads. */
     asks() {
-      return this.plate.asks.slice(-BOOK_DEPTH);
+      return this.groupPlate(this.plate.asks, 'ask').slice(-BOOK_DEPTH);
     },
     asksAscending() {
-      return this.plate.asks.slice().reverse();
+      return this.groupPlate(this.plate.asks, 'ask').slice().reverse();
     },
     bids() {
-      return this.plate.bids.slice(0, BOOK_DEPTH);
+      return this.groupPlate(this.plate.bids, 'bid').slice(0, BOOK_DEPTH);
     },
     spread() {
       const bestAsk = this.plate.asks.length ? this.num(this.plate.asks[this.plate.asks.length - 1].price) : 0;
@@ -887,6 +919,54 @@ export default {
       }
       return this.num(this.form.price) * this.num(this.form.amount);
     },
+    /**
+     * Wave B8 — rough walk of top-of-book for market size already on the page.
+     * Estimate only; never invents fill when book is empty / unreachable.
+     */
+    marketImpactLabel() {
+      if (this.orderType !== 'MARKET_PRICE') return '';
+      if (!this.bookReachable) return 'book unknown';
+      const size = this.num(this.form.amount);
+      if (size <= 0) return '';
+      const levels =
+        this.side === 'BUY'
+          ? this.groupPlate(this.plate.asks, 'ask').slice().reverse()
+          : this.groupPlate(this.plate.bids, 'bid').slice();
+      if (!levels.length) return 'no depth';
+      let remain = size;
+      let cost = 0;
+      let filled = 0;
+      const mid = this.lastPrice;
+      for (let i = 0; i < levels.length && remain > 0; i++) {
+        const px = this.num(levels[i].price);
+        const qty = this.num(levels[i].amount);
+        if (px <= 0 || qty <= 0) continue;
+        if (this.quoteSized) {
+          /* Market buy amount is quote currency — spend remain quote. */
+          const takeQuote = Math.min(remain, px * qty);
+          const takeBase = takeQuote / px;
+          cost += takeQuote;
+          filled += takeBase;
+          remain -= takeQuote;
+        } else {
+          const take = Math.min(remain, qty);
+          cost += take * px;
+          filled += take;
+          remain -= take;
+        }
+      }
+      if (filled <= 0) return 'no depth';
+      const avg = cost / filled;
+      const slip =
+        mid > 0 ? ((this.side === 'BUY' ? avg - mid : mid - avg) / mid) * 100 : null;
+      const avgTxt = this.fmt(avg, this.baseCoinScale);
+      if (remain > 1e-12) {
+        return slip == null
+          ? `avg ${avgTxt} · partial book`
+          : `avg ${avgTxt} · ~${slip.toFixed(2)}% · partial`;
+      }
+      return slip == null ? `avg ${avgTxt}` : `avg ${avgTxt} · ~${slip.toFixed(2)}%`;
+    },
     canSize() {
       return this.isLogin && this.availableBalance > 0 &&
         (this.orderType === 'MARKET_PRICE' || this.num(this.form.price) > 0);
@@ -919,9 +999,9 @@ export default {
     },
     feeLabel() {
       if (!this.feeKnown) {
-        return '—';
+        return 'unknown (market did not provide fee)';
       }
-      return (this.num(this.symbolFee) * 100).toFixed(2) + '%';
+      return (this.num(this.symbolFee) * 100).toFixed(2) + '% · market schedule';
     },
     tradesEmptyLabel() {
       if (!this.tradesReachable && !this.feedLive) {
@@ -957,6 +1037,25 @@ export default {
         this.trend = next > this.lastTick ? 1 : -1;
       }
       this.lastTick = next;
+    },
+    /* Wave B5 — cheap desk memory (local only; never money). */
+    bookMode() {
+      this.saveDeskPrefs();
+    },
+    bookGroup() {
+      this.saveDeskPrefs();
+    },
+    interval() {
+      this.saveDeskPrefs();
+    },
+    mainTab() {
+      this.saveDeskPrefs();
+    },
+    railTab() {
+      this.saveDeskPrefs();
+    },
+    baseFilter() {
+      this.saveDeskPrefs();
     }
   },
 
@@ -972,15 +1071,80 @@ export default {
     this.depthPending = false;
     this.lastTick = 0;
 
+    this.loadDeskPrefs();
     this.init();
+    /* B7 — capture when focus is not in a field (document-level). */
+    this._onDeskKeyWindow = e => this.onDeskKeydown(e, true);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', this._onDeskKeyWindow, true);
+    }
   },
 
   beforeDestroy() {
+    if (typeof window !== 'undefined' && this._onDeskKeyWindow) {
+      window.removeEventListener('keydown', this._onDeskKeyWindow, true);
+    }
     this.teardown();
   },
 
   methods: {
     /* ── plumbing ──────────────────────────────────────────────────────── */
+
+    /**
+     * Wave B7 keyboard floor (desk only — no new backend).
+     * @param {KeyboardEvent} e
+     * @param {boolean} fromWindow capture-phase for global / and Esc
+     */
+    onDeskKeydown(e, fromWindow) {
+      if (!e || e.defaultPrevented) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target;
+      const tag = (t && t.tagName) || '';
+      const typing =
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        (t && t.isContentEditable);
+
+      if (e.key === 'Escape') {
+        if (this.searchKey) {
+          this.searchKey = '';
+          e.preventDefault();
+        }
+        if (typing && t && typeof t.blur === 'function') {
+          t.blur();
+          e.preventDefault();
+        }
+        return;
+      }
+
+      /* / focuses market search when not already typing in a field. */
+      if (!typing && e.key === '/') {
+        e.preventDefault();
+        const el = this.$refs.marketSearch;
+        if (el && typeof el.focus === 'function') {
+          el.focus();
+          if (typeof el.select === 'function') el.select();
+        }
+        return;
+      }
+
+      /* B / S flip ticket side when not typing. */
+      if (!typing && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        this.setSide('BUY');
+        return;
+      }
+      if (!typing && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        this.setSide('SELL');
+        return;
+      }
+
+      /* Enter on ticket inputs is handled by @keydown.enter on the fields.
+         Avoid double-fire from window capture. */
+      if (fromWindow) return;
+    },
 
     /* Never rejects. A dead backend produces null, and every caller treats
        null as "leave the current state alone". */
@@ -989,6 +1153,59 @@ export default {
         response => (response && response.body) || null,
         () => null
       );
+    },
+
+    /* Wave B5 — persist non-money desk chrome (pair lives in the URL). Local-only. */
+    deskPrefsKey() {
+      return 'ix.desk.prefs.v1';
+    },
+    loadDeskPrefs() {
+      try {
+        const raw = window.localStorage.getItem(this.deskPrefsKey());
+        if (!raw) return;
+        const p = JSON.parse(raw);
+        if (!p || typeof p !== 'object') return;
+        const modes = { all: 1, bids: 1, asks: 1 };
+        if (modes[p.bookMode]) this.bookMode = p.bookMode;
+        if ([1, 10, 50, 100].indexOf(Number(p.bookGroup)) >= 0) {
+          this.bookGroup = Number(p.bookGroup);
+        }
+        const ivals = this.intervals.map(i => i.value);
+        if (ivals.indexOf(p.interval) >= 0) this.interval = p.interval;
+        const mains = { chart: 1, depth: 1, book: 1, trades: 1 };
+        if (mains[p.mainTab]) this.mainTab = p.mainTab;
+        const rails = { book: 1, trades: 1 };
+        if (rails[p.railTab]) this.railTab = p.railTab;
+        if (typeof p.baseFilter === 'string' && p.baseFilter) {
+          this.baseFilter = p.baseFilter;
+        }
+        if (typeof p.pair === 'string' && /^[a-z0-9]+_[a-z0-9]+$/i.test(p.pair)) {
+          this.defaultPair = p.pair.toLowerCase();
+        }
+      } catch (e) {
+        /* private mode / bad JSON — leave defaults */
+      }
+    },
+    saveDeskPrefs() {
+      try {
+        const pair =
+          (this.$route && this.$route.params && this.$route.params.pair) ||
+          this.defaultPair;
+        window.localStorage.setItem(
+          this.deskPrefsKey(),
+          JSON.stringify({
+            pair: String(pair || this.defaultPair).toLowerCase(),
+            bookMode: this.bookMode,
+            bookGroup: this.bookGroup,
+            interval: this.interval,
+            mainTab: this.mainTab,
+            railTab: this.railTab,
+            baseFilter: this.baseFilter
+          })
+        );
+      } catch (e) {
+        /* ignore quota / private mode */
+      }
     },
 
     init() {
@@ -1009,7 +1226,12 @@ export default {
         base,
         symbol: coin + '/' + base
       });
-      this.baseFilter = base;
+      /* Keep a remembered market-list filter when it is "favor"; otherwise
+         follow the pair's quote so the list matches the desk. */
+      if (this.baseFilter !== 'favor') {
+        this.baseFilter = base;
+      }
+      this.saveDeskPrefs();
       this.trend = 0;
       this.lastTick = 0;
       this.chartFailed = false;
@@ -1513,6 +1735,33 @@ export default {
       this.$router.push({ name: 'ExchangePair', params: { pair: row.href } });
     },
 
+    /**
+     * Display grouping only. N=1 is raw book. Higher N folds by N×10^(-scale).
+     */
+    groupPlate(rows, side) {
+      var list = rows || [];
+      var g = Number(this.bookGroup) || 1;
+      if (g <= 1 || list.length === 0) return list;
+      var scale = this.baseCoinScale || 2;
+      var step = g * Math.pow(10, -scale);
+      if (!(step > 0)) return list;
+      var map = {};
+      var order = [];
+      for (var i = 0; i < list.length; i++) {
+        var row = list[i];
+        var px = this.num(row.price);
+        if (!isFinite(px)) continue;
+        var bucket = side === 'bid' ? Math.floor(px / step) * step : Math.ceil(px / step) * step;
+        var key = bucket.toFixed(Math.min(scale + 4, 12));
+        if (!map[key]) {
+          map[key] = { price: key, amount: 0, totalAmount: 0 };
+          order.push(key);
+        }
+        map[key].amount += this.num(row.amount) || 0;
+        map[key].totalAmount += this.num(row.totalAmount != null ? row.totalAmount : row.amount) || 0;
+      }
+      return order.map(function (k) { return map[k]; });
+    },
     useBookPrice(row) {
       const price = this.num(row.price);
       if (price <= 0) {
@@ -1666,6 +1915,9 @@ export default {
     },
 
     placeOrder(amount, price) {
+      if (!this.isLogin) {
+        return this.warn('Session ended — sign in again. No order was placed.');
+      }
       this.submitting = true;
       return this.request(this.api.exchange.orderAdd, {
         symbol: this.currentCoin.symbol,
@@ -1686,17 +1938,26 @@ export default {
           this.accountTab = 'open';
           this.loadAccount();
         } else {
-          this.$Notice.error({ title: 'Order rejected', desc: body.message || 'Unknown error' });
+          // auth-ish failures: do not claim placed
+          var msg = body.message || 'Unknown error';
+          if (body.code == 4000 || /login|session|auth|token/i.test(String(msg))) {
+            msg = 'Session invalid — sign in again. Order was not placed. (' + msg + ')';
+          }
+          this.$Notice.error({ title: 'Order rejected', desc: msg });
         }
       });
     },
 
     cancelOrder(order) {
+      if (this.cancellingId) return;
       this.$Modal.confirm({
         title: 'Cancel order',
         content: 'Cancel this order?',
         onOk: () => {
-          this.request(this.api.exchange.orderCancel + '/' + order.orderId).then(body => {
+          if (this.cancellingId) return;
+          this.cancellingId = order.orderId;
+          return this.request(this.api.exchange.orderCancel + '/' + order.orderId).then(body => {
+            this.cancellingId = null;
             if (body && body.code == 0) {
               this.$Notice.success({ title: 'Order cancelled', desc: order.symbol });
               this.loadAccount();
@@ -1706,6 +1967,12 @@ export default {
                 desc: (body && body.message) || 'The exchange did not respond.'
               });
             }
+          }).catch(() => {
+            this.cancellingId = null;
+            this.$Notice.error({
+              title: 'Cancel failed',
+              desc: 'The exchange did not respond — order not cancelled.'
+            });
           });
         }
       });
@@ -1864,7 +2131,7 @@ export default {
 <style scoped lang="scss">
 /* Palette comes from assets/css/intafaced.css. Fallbacks keep the terminal
    readable if this page is ever rendered before that sheet loads. */
-$orange: var(--ix-orange, #ff6b00);
+$orange: var(--ix-orange, #00c2a8);
 $up: var(--ix-up, #00b275);
 $down: var(--ix-down, #ff4a68);
 $text: var(--ix-text, #f2f2f2);
@@ -2109,7 +2376,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
     border-radius: $radius-sm;
     &.is-active {
       color: $orange;
-      background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+      background: var(--ix-orange-soft, rgba(0, 194, 168, 0.12));
       &::after {
         display: none;
       }
@@ -2154,7 +2421,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
   }
   &.is-current {
     border-left-color: $orange;
-    background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+    background: var(--ix-orange-soft, rgba(0, 194, 168, 0.12));
     color: $text;
   }
 }
@@ -2216,15 +2483,15 @@ $radius-sm: var(--ix-radius-sm, 8px);
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 107, 0, 0.35);
+  border: 1px solid rgba(0, 194, 168, 0.35);
   border-radius: 6px;
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(0, 194, 168, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #ff6b00;
+  color: #00c2a8;
   font-weight: 600;
 }
 .ix-empty-error {
@@ -2266,6 +2533,19 @@ $radius-sm: var(--ix-radius-sm, 8px);
 
 /* The widget writes an iframe in here. With `fullscreen` off and `autosize`
    on it inherits 100% of this box, which is why the box must be definite. */
+
+.ix-chart-attr {
+  margin: 0;
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  opacity: 0.55;
+  text-align: right;
+}
+.ix-chart-attr a {
+  color: inherit;
+  text-decoration: underline;
+}
 .ix-kline,
 .ix-depth-host {
   position: absolute;
@@ -2389,6 +2669,16 @@ $radius-sm: var(--ix-radius-sm, 8px);
   color: $faint;
 }
 
+.ix-book-group {
+  margin-left: 6px;
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 1px 4px;
+  max-width: 64px;
+}
 .ix-book-modes {
   margin-left: auto;
   display: flex;
@@ -2623,7 +2913,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
       border-radius: 999px;
       background: $orange;
       border: 2px solid #000;
-      box-shadow: 0 0 0 1px var(--ix-orange-glow, rgba(255, 107, 0, 0.28));
+      box-shadow: 0 0 0 1px var(--ix-orange-glow, rgba(0, 194, 168, 0.28));
       cursor: pointer;
     }
     &::-moz-range-thumb {
@@ -2656,7 +2946,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
       color: $orange;
     }
     &.is-active {
-      background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+      background: var(--ix-orange-soft, rgba(0, 194, 168, 0.12));
       border-color: $orange;
       color: $orange;
     }
@@ -2811,6 +3101,23 @@ $radius-sm: var(--ix-radius-sm, 8px);
   height: 100% !important;
   border: 0;
   background: var(--ix-bg, #000000);
+}
+
+.ix-kbd-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0.72;
+}
+.ix-kbd-hint kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--ix-hairline, #242a34);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--ix-text-dim, #8a909c);
+  background: var(--ix-surface-raised, #161a22);
 }
 </style>
 

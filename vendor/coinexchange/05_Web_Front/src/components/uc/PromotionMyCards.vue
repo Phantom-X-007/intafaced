@@ -7,7 +7,9 @@
             <div style="width: 100%;height: 50px;">
               <div class="header-btn" @click="exchangeCard">{{$t('uc.promotion.exchangewithcode')}}</div>
             </div>
-            <Table :columns="tableColumnsCard" :data="tableCardList" :loading="loading" :disabled-hover="true"></Table>
+            <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+            <p v-else-if="!loading && listReachable && tableCardList.length === 0" class="ix-empty">No promotion cards yet</p>
+            <Table v-if="!listError" :columns="tableColumnsCard" :data="tableCardList" :loading="loading" :disabled-hover="true"></Table>
           </div>
         </div>
       </div>
@@ -49,6 +51,8 @@ export default {
     return {
       loginmsg: this.$t("common.logintip"),
       loading: true,
+      listReachable: false,
+      listError: "",
       tableCardList: [],
       showModal: false,
       cardNo: "",
@@ -61,13 +65,23 @@ export default {
   },
   methods: {
     getMyCardList() {
+      this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       this.$http.post(this.host + this.api.uc.mycardlist).then(response => {
         var resp = response.body;
-        if (resp.code == 0) {
-          this.tableCardList = resp.data;
+        if (resp && resp.code == 0) {
+          this.tableCardList = resp.data || [];
+          this.listReachable = true;
         } else {
+          this.tableCardList = [];
+          this.listError = "Promotion cards did not answer — list is unknown, not empty.";
           this.$Message.error(this.loginmsg);
         }
+        this.loading = false;
+      }).catch(() => {
+        this.tableCardList = [];
+        this.listError = "Promotion service did not respond — list is unknown, not empty.";
         this.loading = false;
       });
     },
@@ -120,17 +134,21 @@ export default {
       this.modal_loading = true;
       this.$http.post(this.host + this.api.uc.exchangecard, param).then(response => {
         var resp = response.body;
-        if (resp.code == 0) {
+        if (resp && resp.code == 0) {
           this.showModal = false;
           this.$Notice.success({
               title: this.$t("uc.promotion.exchangesuccess"),
               desc:resp.message,
               duration: 30
             });
+          this.getMyCardList();
         } else {
-          this.$Message.error(resp.message);
+          this.$Message.error((resp && resp.message) || "Exchange failed");
         }
         this.modal_loading = false;
+      }).catch(() => {
+        this.modal_loading = false;
+        this.$Message.error("Venue did not respond — card not exchanged.");
       });
     }
   },
@@ -295,9 +313,9 @@ export default {
                 }
               }
 .ivu-btn.ivu-btn-info {
-                border: 1px solid #ff8534;
+                border: 1px solid #1ad4bc;
                 span {
-                  color: #ff8534;
+                  color: #1ad4bc;
                 }
               }
 .ivu-btn.ivu-btn-error {
@@ -347,10 +365,10 @@ export default {
 }
 
 .header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #ff8534;color: #ff8534;
+  float:right;padding: 5px 15px;border: 1px solid #1ad4bc;color: #1ad4bc;
   margin-left: 20px;
   &:hover{
-    background: #ff8534;
+    background: #1ad4bc;
     color: #000;
     cursor: pointer;
   }

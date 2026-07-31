@@ -8,11 +8,13 @@
         </section>
         <div class="shaow">
           <div class="money_table mining-list">
-            <Row>
-                <Col span="24" v-if="miningList.length == 0" style="text-align:center;margin-top: 30px;">
+            <p v-if="loading" class="ix-empty-loading" role="status">Loading mining positions…</p>
+            <p v-else-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
+            <Row v-else>
+                <Col span="24" v-if="listReachable && miningList.length == 0" style="text-align:center;margin-top: 30px;">
                   {{$t('uc.mining.empty')}}
                 </Col>
-                <Col :xs="24" :sm="24" :md="8" :lg="8" v-for="item in miningList">
+                <Col :xs="24" :sm="24" :md="8" :lg="8" v-for="item in miningList" :key="item.id || item.title">
                   <Card style="width:100%;position:relative;">
                     <div style="width: 100%;min-height: 58px;">
                       <div style="float:left;"><img style="width:50px;height:50px;border-radius:50px;" :src="item.image"></div>
@@ -87,22 +89,34 @@ export default {
       total: 0,
       pageSize: 10,
       loading: true,
+      listReachable: false,
+      listError: "",
       pageNo: 1,
       miningList: []
     };
   },
   methods: {
     getMyMiningList() {
+      this.loading = true;
+      this.listReachable = false;
+      this.listError = "";
       let params = {};
       params.pageNo = this.pageNo;
       params.pageSize = this.pageSize;
       this.$http.post(this.host + this.api.uc.myInnovationMinings, params).then(response => {
         var resp = response.body;
-        if (resp.code == 0) {
-          this.miningList = resp.data.content;
+        if (resp && resp.code == 0 && resp.data) {
+          this.miningList = resp.data.content || [];
+          this.listReachable = true;
         } else {
+          this.miningList = [];
+          this.listError = "Mining positions did not answer — list is unknown, not empty.";
           this.$Message.error(this.loginmsg);
         }
+        this.loading = false;
+      }).catch(() => {
+        this.miningList = [];
+        this.listError = "Mining service did not respond — list is unknown, not empty.";
         this.loading = false;
       });
     },
@@ -269,9 +283,9 @@ export default {
                 }
               }
 .ivu-btn.ivu-btn-info {
-                border: 1px solid #ff8534;
+                border: 1px solid #1ad4bc;
                 span {
-                  color: #ff8534;
+                  color: #1ad4bc;
                 }
               }
 .ivu-btn.ivu-btn-error {
@@ -322,10 +336,10 @@ export default {
 }
 
 .header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #ff8534;color: #ff8534;
+  float:right;padding: 5px 15px;border: 1px solid #1ad4bc;color: #1ad4bc;
   margin-left: 20px;
   &:hover{
-    background: #ff8534;
+    background: #1ad4bc;
     color: #000;
     cursor: pointer;
   }
@@ -396,7 +410,7 @@ export default {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #ff6b00;
+    background: #00c2a8;
 }
 
 .bill_box {

@@ -417,9 +417,9 @@ export default {
                 }
               }
               p.ivu-btn.ivu-btn-info {
-                border: 1px solid #ff8534;
+                border: 1px solid #1ad4bc;
                 span {
-                  color: #ff8534;
+                  color: #1ad4bc;
                 }
               }
               p.ivu-btn.ivu-btn-error {

@@ -33,7 +33,7 @@
   text-align: center;
 }
 .table.ivu-table-cell-expand {
-  color: #ff6b00;
+  color: #00c2a8;
 }
 </style>
 
@@ -86,6 +86,7 @@ export default {
     return {
       loading: true,
       ordersReachable: false,
+      cancellingId: null,
       ordersError: "",
       pageSize: 10,
       pageNo: 1,
@@ -225,7 +226,7 @@ export default {
                   size: "small"
                 },
                 style: {
-                  border: "1px solid #ff8534",
+                  border: "1px solid #1ad4bc",
                   color: "#f1ac19",
                   "line-height": "1.2",
                   "border-radius": "10px"
@@ -341,21 +342,32 @@ export default {
       }).catch(() => {});
     },
     cancel(orderId) {
+      if (this.cancellingId) return;
       this.$Modal.confirm({
         content: this.$t("exchange.undotip"),
         onOk: () => {
+          if (this.cancellingId) return;
+          this.cancellingId = orderId;
           this.$http
-.post(this.host + this.api.exchange.orderCancel + "/" + orderId, {})
-.then(response => {
+            .post(this.host + this.api.exchange.orderCancel + "/" + orderId, {})
+            .then(response => {
+              this.cancellingId = null;
               var resp = response.body;
-              if (resp.code == 0) {
+              if (resp && resp.code == 0) {
                 this.getHistoryOrder();
               } else {
                 this.$Notice.error({
                   title: this.$t("exchange.tip"),
-                  desc: resp.message
+                  desc: (resp && resp.message) || "Cancel failed"
                 });
               }
+            })
+            .catch(() => {
+              this.cancellingId = null;
+              this.$Notice.error({
+                title: this.$t("exchange.tip"),
+                desc: "Venue did not respond — order not cancelled."
+              });
             });
         }
       });

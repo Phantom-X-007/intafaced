@@ -11,35 +11,39 @@
    selector rather than reaching for !important, except on the handful of
    properties the vendor itself set inline.
 
-   Palette is declared once here as custom properties. The literal hex values
-   still present throughout the templates were remapped by retheme.mjs to the
-   same values, so the two agree.
+   Palette is declared once here as custom properties (modular swap point).
+   Historical template hex was remapped by retheme.mjs; brand accent hex is
+   kept in sync with these tokens when the lock changes (see COLOR-LOCK doc).
+
+   LOCK: P21 Deep neutral · teal — provisional 2026-07-31 (easy to change).
    ========================================================================== */
 
 :root {
-  /* ── brand ─────────────────────────────────────────────────────────────── */
-  --ix-orange: #ff6b00;
-  --ix-orange-light: #ff8534;
-  --ix-orange-dark: #cc5500;
-  --ix-orange-soft: rgba(255, 107, 0, 0.12);
-  --ix-orange-glow: rgba(255, 107, 0, 0.28);
+  /* ── brand accent (token names keep --ix-orange* for call-site stability;
+       values are P21 teal; rename later if desired) ─────────────────────── */
+  --ix-orange: #00c2a8;
+  --ix-orange-light: #1ad4bc;
+  --ix-orange-dark: #009e89;
+  --ix-orange-soft: rgba(0, 194, 168, 0.12);
+  --ix-orange-glow: rgba(0, 194, 168, 0.28);
+  --ix-on-accent: #041210;
 
-  /* ── surfaces: black, lifted by translucency rather than by lighter greys ─ */
-  --ix-bg: #000000;
-  --ix-surface: rgba(255, 255, 255, 0.045);
-  --ix-surface-raised: rgba(255, 255, 255, 0.07);
-  --ix-surface-solid: #0d0d0d;
-  --ix-hairline: rgba(255, 255, 255, 0.09);
-  --ix-hairline-strong: rgba(255, 255, 255, 0.16);
+  /* ── surfaces: P21 deep neutral (not pure #000; solid panel lift) ──────── */
+  --ix-bg: #0a0c10;
+  --ix-surface: #12151c;
+  --ix-surface-raised: #161a22;
+  --ix-surface-solid: #12151c;
+  --ix-hairline: #242a34;
+  --ix-hairline-strong: #323a48;
 
   /* ── type ──────────────────────────────────────────────────────────────── */
-  --ix-text: #f2f2f2;
-  --ix-text-dim: #9a9a9a;
-  --ix-text-faint: #6b6b6b;
+  --ix-text: #e8ebf0;
+  --ix-text-dim: #8a909c;
+  --ix-text-faint: #6b7280;
 
-  /* ── market direction — never rebranded, a trader reads these as meaning ─ */
-  --ix-up: #00b275;
-  --ix-down: #ff4a68;
+  /* ── market direction — trader meaning, not brand ──────────────────────── */
+  --ix-up: #0ecb81;
+  --ix-down: #f6465d;
 
   /* ── geometry ──────────────────────────────────────────────────────────── */
   --ix-radius-sm: 8px;
@@ -51,8 +55,7 @@
   --ix-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
   --ix-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
 
-  /* ── STREAM-A-DESIGN-BAR.md §2 aliases (map to #86 tokens above) ──────────
-     New polish uses short names; existing --ix-* stay the source of truth. */
+  /* ── STREAM-A-DESIGN-BAR.md §2 aliases — short names for new polish ────── */
   --bg: var(--ix-bg);
   --panel: var(--ix-surface);
   --panel-raised: var(--ix-surface-raised);
@@ -62,6 +65,7 @@
   --up: var(--ix-up);
   --down: var(--ix-down);
   --accent: var(--ix-orange);
+  --on-accent: var(--ix-on-accent);
 
   /* space: 4 / 8 / 12 / 16 / 24 */
   --space-1: 4px;
@@ -92,9 +96,7 @@
 }
 
 /* ── base ──────────────────────────────────────────────────────────────────
-   A single fixed radial wash behind everything. Glass needs something to
-   refract; over flat #000 a blurred panel is indistinguishable from a solid
-   one, and the whole effect collapses. */
+   Soft teal wash on P21 deep base — restrained, not casino glow. */
 html,
 body {
   background: var(--ix-bg);
@@ -110,9 +112,9 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(1100px 700px at 12% -10%, rgba(255, 107, 0, 0.16), transparent 60%),
-    radial-gradient(900px 600px at 100% 0%, rgba(255, 107, 0, 0.08), transparent 55%),
-    radial-gradient(800px 800px at 50% 120%, rgba(255, 133, 52, 0.06), transparent 60%);
+    radial-gradient(1100px 700px at 12% -10%, rgba(0, 194, 168, 0.1), transparent 60%),
+    radial-gradient(900px 600px at 100% 0%, rgba(0, 194, 168, 0.05), transparent 55%),
+    radial-gradient(800px 800px at 50% 120%, rgba(26, 212, 188, 0.04), transparent 60%);
 }
 
 #app {
@@ -122,7 +124,7 @@ body::before {
 
 ::selection {
   background: var(--ix-orange);
-  color: #000;
+  color: var(--ix-on-accent);
 }
 
 /* ── scrollbars ────────────────────────────────────────────────────────────
@@ -173,11 +175,11 @@ body::before {
 .ivu-dropdown-menu,
 .ivu-tooltip-inner,
 .ivu-poptip-inner {
-  background: rgba(14, 14, 14, 0.86) !important;
+  background: var(--ix-surface-raised) !important;
 }
 
 .ivu-modal-content {
-  background: rgba(12, 12, 12, 0.82) !important;
+  background: var(--ix-surface-solid) !important;
   box-shadow: var(--ix-shadow-lg);
 }
 .ivu-modal-header,
@@ -257,33 +259,32 @@ img.avatar,
   transform: translateY(0);
 }
 
-/* Primary is the brand. The glow is what makes it read as the one action on
-   the page rather than a flat orange rectangle. */
+/* Primary is the brand accent. Glow marks the one action on the page. */
 .ivu-btn-primary,
 .ivu-btn-warning {
   background: linear-gradient(180deg, var(--ix-orange-light), var(--ix-orange)) !important;
   border-color: transparent !important;
-  color: #0a0a0a !important;
+  color: var(--ix-on-accent) !important;
   box-shadow: 0 6px 20px var(--ix-orange-glow);
 }
 .ivu-btn-primary:hover,
 .ivu-btn-warning:hover {
-  background: linear-gradient(180deg, #ff9448, var(--ix-orange-light)) !important;
+  background: linear-gradient(180deg, #33dcc8, var(--ix-orange-light)) !important;
   box-shadow: 0 10px 28px var(--ix-orange-glow);
-  color: #0a0a0a !important;
+  color: var(--ix-on-accent) !important;
 }
 
 .ivu-btn-success {
-  background: linear-gradient(180deg, #14c98a, var(--ix-up)) !important;
+  background: linear-gradient(180deg, #1ad492, var(--ix-up)) !important;
   border-color: transparent !important;
   color: #04170f !important;
-  box-shadow: 0 6px 20px rgba(0, 178, 117, 0.28);
+  box-shadow: 0 6px 20px rgba(14, 203, 129, 0.28);
 }
 .ivu-btn-error {
   background: linear-gradient(180deg, #ff6b83, var(--ix-down)) !important;
   border-color: transparent !important;
   color: #1a0409 !important;
-  box-shadow: 0 6px 20px rgba(255, 74, 104, 0.28);
+  box-shadow: 0 6px 20px rgba(246, 70, 93, 0.28);
 }
 
 .ivu-btn-text {
@@ -582,7 +583,7 @@ textarea::placeholder {
 }
 .ivu-alert-warning {
   background: var(--ix-orange-soft) !important;
-  border-color: rgba(255, 107, 0, 0.3) !important;
+  border-color: rgba(0, 194, 168, 0.3) !important;
 }
 
 /* ============================================================================
@@ -815,7 +816,7 @@ a:hover {
 .ix-pill-partial {
   background: var(--ix-orange-soft);
   color: var(--ix-orange);
-  border-color: rgba(255, 107, 0, 0.32);
+  border-color: rgba(0, 194, 168, 0.32);
 }
 .ix-pill-absent {
   background: rgba(255, 255, 255, 0.05);
@@ -902,7 +903,7 @@ a:hover {
 }
 .ix-tag-on {
   background: var(--ix-orange-soft);
-  border-color: rgba(255, 107, 0, 0.3);
+  border-color: rgba(0, 194, 168, 0.3);
   color: var(--ix-orange);
 }
 

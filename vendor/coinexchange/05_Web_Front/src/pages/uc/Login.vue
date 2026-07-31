@@ -62,7 +62,7 @@
     top: 50%;
     margin-left: -175px;
     margin-top: -165px;
-    border-top: 4px solid #ff8534;
+    border-top: 4px solid #1ad4bc;
     border-radius: 5px;
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
 .login_title{
@@ -73,9 +73,9 @@
 .ivu-form-item-content {
 .login_btn.ivu-btn {
             width: 100%;
-            background-color: #ff8534;
+            background-color: #1ad4bc;
             outline: none;
-            border-color: #ff8534;
+            border-color: #1ad4bc;
             color: #fff;
             font-size: 18px;
             border-radius: 5px;
@@ -97,7 +97,7 @@
     }
     a {
       float: right;
-      color: #ff8534;
+      color: #1ad4bc;
     }
   }
 }

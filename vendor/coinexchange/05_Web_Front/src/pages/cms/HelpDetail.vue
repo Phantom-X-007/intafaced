@@ -241,7 +241,7 @@ export default {
     }
     > a {
       padding: 10px;
-      color: #ff8534;
+      color: #1ad4bc;
     }
 .route {
       display: flex;
@@ -261,7 +261,7 @@ export default {
         color: #8a8a8a;
       }
       &.active {
-        background-color: #ff8534;
+        background-color: #1ad4bc;
         color: #fff;
         > span{
           color: #fff;
@@ -301,10 +301,10 @@ export default {
 
 .route-wrap {
   font-size: 14px;
-  color: #ff8534;
+  color: #1ad4bc;
   margin-bottom: 40px;
   a {
-    color: #ff8534;
+    color: #1ad4bc;
   }
 }
 </style>

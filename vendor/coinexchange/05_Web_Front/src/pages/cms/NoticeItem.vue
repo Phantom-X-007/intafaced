@@ -36,12 +36,12 @@
               <div class="nav-bottom">
                 <div class="left" v-if="data.back">
                   <router-link class="link" :to="'../announcement/'+data.back.id">
-                    < {{$t("cms.prevnotice")}} <p style="color:#ff6b00;">{{data.back.title}}</p>
+                    < {{$t("cms.prevnotice")}} <p style="color:#00c2a8;">{{data.back.title}}</p>
                   </router-link>
                 </div>
                 <div class="right" v-if="data.next">
                   <router-link class="link" :to="'../announcement/'+data.next.id">{{$t("cms.nextnotice")}} >
-                    <p style="color:#ff6b00;">{{data.next.title}}</p>
+                    <p style="color:#00c2a8;">{{data.next.title}}</p>
                   </router-link>
                 </div>
               </div>
@@ -262,7 +262,7 @@ export default {
 .bottom-list.notice-item span{
   display: block;
   margin: 10px 0;
-  color: #ff6b00;
+  color: #00c2a8;
   font-size: 14px;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -379,12 +379,12 @@ export default {
         color: rgba(130,142,161,1);
         &:hover{
           cursor: pointer;
-          color: #ff6b00;
+          color: #00c2a8;
         }
       }
 .active{
         background: #FFF;
-        color: #ff6b00;
+        color: #00c2a8;
         width: 100%;
         text-align:left;
         padding: 15px 15px;
@@ -427,7 +427,7 @@ export default {
     padding-bottom: 110px;
 .link {
       font-size: 14px;
-      color: #ff6b00;
+      color: #00c2a8;
     }
 .header {
       margin-bottom: 40px;
