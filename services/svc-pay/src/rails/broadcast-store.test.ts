@@ -44,4 +44,24 @@ describe('MemoryBroadcastStore — Class M claim/put ordering', () => {
     await store.claim('k');
     await expect(store.put('k', BROADCAST_PENDING)).rejects.toThrow(/pending sentinel/);
   });
+
+  it('after put, a new claimer is done with the same hash (retry-safe same process)', async () => {
+    const store = new MemoryBroadcastStore();
+    const first = await store.claim('refund:p1:1');
+    expect(first.kind).toBe('mine');
+    await store.put('refund:p1:1', '0xhash1');
+    const second = await store.claim('refund:p1:1');
+    expect(second).toEqual({ kind: 'done', txHash: '0xhash1' });
+  });
+
+  it('reset clears journal — documents single-process crash residual (M226-01)', async () => {
+    const store = new MemoryBroadcastStore();
+    await store.claim('payout:w2:1');
+    await store.put('payout:w2:1', '0xsent');
+    store.reset();
+    // After process death equivalent, same business key is claimable again —
+    // multi-replica / crash residual: a second broadcast can mine.
+    const again = await store.claim('payout:w2:1');
+    expect(again.kind).toBe('mine');
+  });
 });

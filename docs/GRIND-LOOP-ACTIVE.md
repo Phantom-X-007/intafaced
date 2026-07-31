@@ -6,13 +6,12 @@
 **Last tip:** money-class mega audited tip `#250` · do not re-ship **#110–#250** without regression
 
 ```
-STATUS 2026-07-31T02:35Z
-tip: re-check origin/main after money-class PR merge
+STATUS 2026-07-31T02:45Z
+tip: re-check origin/main after denon-wave-deep PR
 open PRs: re-check gh
-money-class mega: PASS-WITH-RESIDUALS · archive docs/audit/2026-07-31-money-class-mega/
-  #246/#227/#228/#244 PASS · #226 PASS-WITH-RESIDUALS (MemoryBroadcastStore P0 multi-replica hold)
-next: O1 babysit · no invent durable journal without Denon · Stream A browser proof · dual-book ADR human
-do not re-audit money-class closed surfaces without tip move
+money-class mega: closed #251 · denon-wave deep: bank B-01 + pay M226-03 fixed; #201-#218 judged
+backend only — frontend/Stream A is OTHER CHAT (do not touch)
+next: O1 babysit · B-02 bank reconcile residual · no invent BroadcastStore · no frontend
 ```
 
 ---

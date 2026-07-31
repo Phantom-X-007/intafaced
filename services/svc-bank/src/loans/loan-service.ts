@@ -362,8 +362,17 @@ export class LoanService {
           FROM bank.loan_repayments WHERE loan_id = ${loanId} AND status = 'settled'
       ),
       seized AS (
+        -- Shortfall only reduces outstanding after insurance actually posted
+        -- (bad_debt_ledger_tx_id set). Counting shortfall on settle-alone left
+        -- a hole where loanLiquidate succeeded, loanBadDebt failed, and the next
+        -- sweep saw debt.total = 0 and cleared the loan without charging insurance (B-01).
         SELECT COALESCE(SUM(principal_repaid), 0) AS p, COALESCE(SUM(interest_repaid), 0) AS i,
-               COALESCE(SUM(shortfall), 0) AS s
+               COALESCE(SUM(
+                 CASE
+                   WHEN shortfall > 0 AND bad_debt_ledger_tx_id IS NOT NULL THEN shortfall
+                   ELSE 0
+                 END
+               ), 0) AS s
           FROM bank.loan_liquidations WHERE loan_id = ${loanId} AND status = 'settled'
       )
       SELECT
@@ -818,7 +827,15 @@ export class LoanService {
     if (loan.status === 'repaid' || loan.status === 'liquidated')
       throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
     if (loan.status === 'pending') throw new BankError(`Loan ${loan.id} has no drawn principal to repay`, 'bank.loan_not_drawable');
+    if (loan.status === 'liquidating')
+      throw new BankError(`Loan ${loan.id} is mid-liquidation — wait for insurance cover / sweep before repay`, 'bank.loan_liquidating');
     if (input.amount <= 0n) throw new BankError('A repayment must be positive', 'bank.below_minimum');
+
+    // Open shortfall rows mean insurance (or a re-drive) still owns the residual debt.
+    // Allowing repay here dual-covers the hole with the borrower (critic B-01 residual).
+    if (await this.hasOpenShortfall(loan.id)) {
+      throw new BankError(`Loan ${loan.id} has uncovered liquidation shortfall — insurance re-drive required`, 'bank.loan_liquidating');
+    }
 
     const debt = await this.outstanding(loan.id);
     if (debt.total <= 0n) {
@@ -1017,12 +1034,31 @@ export class LoanService {
     const collateralMark = marks.get(loan.collateralAssetId)!;
     const debtMark = marks.get(loan.debtAssetId)!;
 
+    // Re-drive insurance posts that failed after a settled liquidate (B-01).
+    await this.coverOpenShortfalls(loan);
+
     const debt = await this.outstanding(loan.id);
     const collateral = await this.collateralOf(loan);
 
     if (debt.total <= 0n) {
-      // Repaid or fully recovered while the sweep was running. Not a risk event.
-      await this.sql`UPDATE bank.loans SET margin_called_at = NULL, updated_at = now() WHERE id = ${loan.id}`;
+      // Fully recovered — including after coverOpenShortfalls stamped insurance.
+      // If any liquidate row settled, close as liquidated (not stuck `liquidating`).
+      const liq = await this.sql<Array<{ n: string }>>`
+        SELECT COUNT(*)::text AS n FROM bank.loan_liquidations
+         WHERE loan_id = ${loan.id} AND status = 'settled'
+      `;
+      if (Number(liq[0]?.n ?? 0) > 0) {
+        const held = await this.collateralOf(loan);
+        if (held > 0n) await this.releaseCollateral(loan, held);
+        await this.sql`
+          UPDATE bank.loans
+             SET status = 'liquidated', closed_at = COALESCE(closed_at, ${now}),
+                 margin_called_at = NULL, updated_at = now()
+           WHERE id = ${loan.id}
+        `;
+      } else {
+        await this.sql`UPDATE bank.loans SET margin_called_at = NULL, updated_at = now() WHERE id = ${loan.id}`;
+      }
       await this.clearMarginCalls(loan.id, now);
       return 'cleared';
     }
@@ -1258,29 +1294,10 @@ export class LoanService {
     });
 
     // ── The shortfall, named ────────────────────────────────────────────────
+    // Posted after liquidate; outstanding() only counts shortfall once
+    // bad_debt_ledger_tx_id is set so a failed insurance post cannot zero the debt.
     if (split.shortfall > 0n) {
-      try {
-        const posted = await this.ledger.post(
-          recipes.loanBadDebt({ loanId: loan.id, debtAssetId: loan.debtAssetId, shortfall: split.shortfall }),
-        );
-        await this.sql`
-          UPDATE bank.loan_liquidations SET bad_debt_ledger_tx_id = ${posted.id}
-           WHERE loan_id = ${loan.id} AND tranche = ${tranche}
-        `;
-      } catch (err) {
-        if (isInsufficientFunds(err)) {
-          // The insurance fund cannot cover it. The reserve is genuinely short by
-          // this much and the platform needs to know NOW, from a code that means
-          // exactly that — not from a reserve balance that is quietly lower than
-          // the sum of its fundings.
-          throw new BankError(
-            `Loan ${loan.id} left ${formatAmount(split.shortfall)} ${loan.debtAssetId} of bad debt and the ` +
-              `insurance fund cannot cover it — the lending reserve is short by that amount`,
-            'bank.bad_debt_uncovered',
-          );
-        }
-        throw err;
-      }
+      await this.coverShortfallTranche(loan, tranche, split.shortfall);
     }
 
     const remaining = await this.outstanding(loan.id);
@@ -1302,6 +1319,56 @@ export class LoanService {
       // `liquidating`, so the next sweep re-reads the grace clock and the ladder
       // does not run away on one mark.
       await this.sql`UPDATE bank.loans SET status = 'margin_call', updated_at = now() WHERE id = ${loan.id}`;
+    }
+  }
+
+  /**
+   * Post insurance cover for one liquidation tranche's shortfall.
+   * Idempotent via ledger key bank.loan.baddebt:${loanId} (one close per loan today).
+   */
+  private async coverShortfallTranche(loan: LoanRecord, tranche: number, shortfall: Amount): Promise<void> {
+    try {
+      const posted = await this.ledger.post(recipes.loanBadDebt({ loanId: loan.id, debtAssetId: loan.debtAssetId, shortfall }));
+      await this.sql`
+        UPDATE bank.loan_liquidations SET bad_debt_ledger_tx_id = ${posted.id}
+         WHERE loan_id = ${loan.id} AND tranche = ${tranche}
+      `;
+    } catch (err) {
+      if (isInsufficientFunds(err)) {
+        throw new BankError(
+          `Loan ${loan.id} left ${formatAmount(shortfall)} ${loan.debtAssetId} of bad debt and the ` +
+            `insurance fund cannot cover it — the lending reserve is short by that amount`,
+          'bank.bad_debt_uncovered',
+        );
+      }
+      throw err;
+    }
+  }
+
+  private async hasOpenShortfall(loanId: string): Promise<boolean> {
+    const rows = await this.sql<Array<{ n: string }>>`
+      SELECT COUNT(*)::text AS n FROM bank.loan_liquidations
+       WHERE loan_id = ${loanId}
+         AND status = 'settled'
+         AND shortfall > 0
+         AND bad_debt_ledger_tx_id IS NULL
+    `;
+    return Number(rows[0]?.n ?? 0) > 0;
+  }
+
+  /** Retry any settled liquidations whose shortfall never made it onto the insurance fund (B-01). */
+  private async coverOpenShortfalls(loan: LoanRecord): Promise<void> {
+    const rows = await this.sql<Array<{ tranche: number; shortfall: string }>>`
+      SELECT tranche, shortfall::text AS shortfall
+        FROM bank.loan_liquidations
+       WHERE loan_id = ${loan.id}
+         AND status = 'settled'
+         AND shortfall > 0
+         AND bad_debt_ledger_tx_id IS NULL
+       ORDER BY tranche ASC
+    `;
+    for (const row of rows) {
+      await this.coverShortfallTranche(loan, Number(row.tranche), parseAmount(row.shortfall));
     }
   }
 
@@ -1352,7 +1419,8 @@ export class LoanService {
         COALESCE((SELECT SUM(q.principal_repaid) FROM bank.loan_liquidations q
                    JOIN open_loans l ON l.id = q.loan_id WHERE q.status = 'settled'), 0) AS recovered,
         COALESCE((SELECT SUM(q.shortfall) FROM bank.loan_liquidations q
-                   JOIN open_loans l ON l.id = q.loan_id WHERE q.status = 'settled'), 0) AS bad_debt,
+                   JOIN open_loans l ON l.id = q.loan_id
+                  WHERE q.status = 'settled' AND q.bad_debt_ledger_tx_id IS NOT NULL), 0) AS bad_debt,
         COALESCE((SELECT SUM(l.principal) FROM open_loans l), 0) AS outstanding_principal
     `;
 
