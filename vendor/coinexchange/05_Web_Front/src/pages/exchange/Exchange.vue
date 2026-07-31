@@ -1,5 +1,6 @@
 <template>
-  <div class="ix-terminal">
+  <div class="ix-terminal" @keydown="onDeskKeydown">
+    <!-- Wave B7: / market search · Esc clear/blur · Enter in ticket submits · B/S side -->
     <!-- ══ pair header ══════════════════════════════════════════════════ -->
     <header class="ix-head">
       <div class="ix-head-pair">
@@ -67,18 +68,22 @@
       <aside class="ix-panel ix-markets">
         <div class="ix-markets-search">
           <input
+            ref="marketSearch"
             type="text"
             v-model="searchKey"
-            placeholder="Search market"
+            placeholder="Search market  ·  /"
             spellcheck="false"
+            aria-label="Search market"
+            autocomplete="off"
           />
         </div>
-        <nav class="ix-tabs ix-tabs-sm">
+        <nav class="ix-tabs ix-tabs-sm" aria-label="Market list filter">
           <button
             type="button"
             v-if="isLogin"
             :class="{ 'is-active': baseFilter === 'favor' }"
             @click="baseFilter = 'favor'"
+            title="Watchlist (favourites)"
           >★</button>
           <button
             type="button"
@@ -547,6 +552,7 @@
             <label>Price</label>
             <div class="ix-input" :class="{ 'is-disabled': orderType === 'MARKET_PRICE' }">
               <input
+                ref="ticketPrice"
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
@@ -554,6 +560,7 @@
                 :placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : '0.00'"
                 v-model="form.price"
                 @input="onPriceInput"
+                @keydown.enter.prevent="submitOrder"
               />
               <span class="ix-unit">{{ currentCoin.base }}</span>
             </div>
@@ -563,12 +570,14 @@
             <label>{{ amountLabel }}</label>
             <div class="ix-input">
               <input
+                ref="ticketAmount"
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
                 placeholder="0.00"
                 v-model="form.amount"
                 @input="onAmountInput"
+                @keydown.enter.prevent="submitOrder"
               />
               <span class="ix-unit">{{ amountUnit }}</span>
             </div>
@@ -613,6 +622,10 @@
               <dt>Fee (est.)</dt>
               <dd>{{ feeLabel }}</dd>
             </div>
+            <div v-if="orderType === 'MARKET_PRICE' && marketImpactLabel">
+              <dt>Book impact <em class="ix-dim">(est.)</em></dt>
+              <dd>{{ marketImpactLabel }}</dd>
+            </div>
           </dl>
 
           <button
@@ -624,6 +637,9 @@
           >
             {{ submitting ? 'Placing…' : submitLabel }}
           </button>
+          <p class="ix-order-note ix-dim ix-kbd-hint" title="Keyboard floor">
+            <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>Enter</kbd> submit · <kbd>B</kbd>/<kbd>S</kbd> side
+          </p>
 
           <p class="ix-order-note ix-order-error" v-if="orderValidationError">{{ orderValidationError }}</p>
           <p class="ix-order-note" v-if="!isLogin">
@@ -903,6 +919,54 @@ export default {
       }
       return this.num(this.form.price) * this.num(this.form.amount);
     },
+    /**
+     * Wave B8 — rough walk of top-of-book for market size already on the page.
+     * Estimate only; never invents fill when book is empty / unreachable.
+     */
+    marketImpactLabel() {
+      if (this.orderType !== 'MARKET_PRICE') return '';
+      if (!this.bookReachable) return 'book unknown';
+      const size = this.num(this.form.amount);
+      if (size <= 0) return '';
+      const levels =
+        this.side === 'BUY'
+          ? this.groupPlate(this.plate.asks, 'ask').slice().reverse()
+          : this.groupPlate(this.plate.bids, 'bid').slice();
+      if (!levels.length) return 'no depth';
+      let remain = size;
+      let cost = 0;
+      let filled = 0;
+      const mid = this.lastPrice;
+      for (let i = 0; i < levels.length && remain > 0; i++) {
+        const px = this.num(levels[i].price);
+        const qty = this.num(levels[i].amount);
+        if (px <= 0 || qty <= 0) continue;
+        if (this.quoteSized) {
+          /* Market buy amount is quote currency — spend remain quote. */
+          const takeQuote = Math.min(remain, px * qty);
+          const takeBase = takeQuote / px;
+          cost += takeQuote;
+          filled += takeBase;
+          remain -= takeQuote;
+        } else {
+          const take = Math.min(remain, qty);
+          cost += take * px;
+          filled += take;
+          remain -= take;
+        }
+      }
+      if (filled <= 0) return 'no depth';
+      const avg = cost / filled;
+      const slip =
+        mid > 0 ? ((this.side === 'BUY' ? avg - mid : mid - avg) / mid) * 100 : null;
+      const avgTxt = this.fmt(avg, this.baseCoinScale);
+      if (remain > 1e-12) {
+        return slip == null
+          ? `avg ${avgTxt} · partial book`
+          : `avg ${avgTxt} · ~${slip.toFixed(2)}% · partial`;
+      }
+      return slip == null ? `avg ${avgTxt}` : `avg ${avgTxt} · ~${slip.toFixed(2)}%`;
+    },
     canSize() {
       return this.isLogin && this.availableBalance > 0 &&
         (this.orderType === 'MARKET_PRICE' || this.num(this.form.price) > 0);
@@ -1009,14 +1073,78 @@ export default {
 
     this.loadDeskPrefs();
     this.init();
+    /* B7 — capture when focus is not in a field (document-level). */
+    this._onDeskKeyWindow = e => this.onDeskKeydown(e, true);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', this._onDeskKeyWindow, true);
+    }
   },
 
   beforeDestroy() {
+    if (typeof window !== 'undefined' && this._onDeskKeyWindow) {
+      window.removeEventListener('keydown', this._onDeskKeyWindow, true);
+    }
     this.teardown();
   },
 
   methods: {
     /* ── plumbing ──────────────────────────────────────────────────────── */
+
+    /**
+     * Wave B7 keyboard floor (desk only — no new backend).
+     * @param {KeyboardEvent} e
+     * @param {boolean} fromWindow capture-phase for global / and Esc
+     */
+    onDeskKeydown(e, fromWindow) {
+      if (!e || e.defaultPrevented) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target;
+      const tag = (t && t.tagName) || '';
+      const typing =
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        (t && t.isContentEditable);
+
+      if (e.key === 'Escape') {
+        if (this.searchKey) {
+          this.searchKey = '';
+          e.preventDefault();
+        }
+        if (typing && t && typeof t.blur === 'function') {
+          t.blur();
+          e.preventDefault();
+        }
+        return;
+      }
+
+      /* / focuses market search when not already typing in a field. */
+      if (!typing && e.key === '/') {
+        e.preventDefault();
+        const el = this.$refs.marketSearch;
+        if (el && typeof el.focus === 'function') {
+          el.focus();
+          if (typeof el.select === 'function') el.select();
+        }
+        return;
+      }
+
+      /* B / S flip ticket side when not typing. */
+      if (!typing && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        this.setSide('BUY');
+        return;
+      }
+      if (!typing && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        this.setSide('SELL');
+        return;
+      }
+
+      /* Enter on ticket inputs is handled by @keydown.enter on the fields.
+         Avoid double-fire from window capture. */
+      if (fromWindow) return;
+    },
 
     /* Never rejects. A dead backend produces null, and every caller treats
        null as "leave the current state alone". */
@@ -2973,6 +3101,23 @@ $radius-sm: var(--ix-radius-sm, 8px);
   height: 100% !important;
   border: 0;
   background: var(--ix-bg, #000000);
+}
+
+.ix-kbd-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0.72;
+}
+.ix-kbd-hint kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--ix-hairline, #242a34);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--ix-text-dim, #8a909c);
+  background: var(--ix-surface-raised, #161a22);
 }
 </style>
 

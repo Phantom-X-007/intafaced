@@ -31,3 +31,15 @@
 3. Brand-scan fix after rebase docs
 4. CI green · Wave B craft next
 5. #261/#262 already merged — do not re-ship
+
+## Wave B progress (same PR stack)
+
+| ID                  | Status                                 |
+| ------------------- | -------------------------------------- |
+| B1 P21 tokens       | Done provisional                       |
+| B5 desk prefs       | Done                                   |
+| B6 watchlist filter | Favourites tab labeled; no new rail    |
+| B7 keyboard floor   | Done (`/` Esc Enter B/S)               |
+| B8 book impact est  | Done market ticket estimate from plate |
+
+**Collision:** order-route docs not owned here — restored to main for #289.
