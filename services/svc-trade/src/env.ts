@@ -76,6 +76,36 @@ const schema = serviceEnvSchema
        * Empty (default) = funding jobs not scheduled — never invent market list.
        */
       TRADE_FUTURES_FUNDING_MARKET_IDS: z.string().default(''),
+
+      /**
+       * Market-maker seed job (trade.mm-bot residual).
+       * Default OFF — ops must enable + fund pot + set markets + mids.
+       * Never invents mid or market list.
+       */
+      TRADE_MM_SEED_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /** Seed scan interval when enabled. Default 60s. */
+      TRADE_MM_SEED_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(60_000),
+
+      /**
+       * Explicit seed targets: `marketId:base:quote,...`
+       * Empty (default) = job not scheduled even when enabled.
+       */
+      TRADE_MM_SEED_MARKETS: z.string().default(''),
+
+      /**
+       * External mids for seed: `marketId:mid,...`
+       * Missing mid for a market → skip that market (never invent).
+       */
+      TRADE_MM_SEED_MIDS: z.string().default(''),
+
+      TRADE_MM_SEED_HALF_SPREAD_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
+      TRADE_MM_SEED_STEP_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
+      TRADE_MM_SEED_LEVELS: z.coerce.number().int().min(1).max(50).default(3),
+      TRADE_MM_SEED_QTY: z.string().default('1'),
     }),
   );
 

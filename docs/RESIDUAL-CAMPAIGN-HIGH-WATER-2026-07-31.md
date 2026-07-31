@@ -33,13 +33,16 @@ TRADE_FUTURES_JOBS_ENABLED=true
 TRADE_FUTURES_FUNDING_MARKET_IDS=<uuid,...>
 # POST /internal/futures/funding-rate (S2S) to publish rates
 # Seed mid must be external — planSeedQuotes / seedMarket refuse null mid
-# Fund pot first: marketMakerSeedFund; then seedMarket(...) — no auto job yet
+# Fund pot first: marketMakerSeedFund
+# TRADE_MM_SEED_ENABLED=true
+# TRADE_MM_SEED_MARKETS=marketId:BASE:QUOTE,...
+# TRADE_MM_SEED_MIDS=marketId:mid,...   # external only; missing mid → skip
 ```
 
 ## NEXT QUEUE
 
-1. Wire seedMarket into ops job host (default OFF) + explicit market list
-2. House tradeFill path when MM seed orders fill
+1. House tradeFill path when MM seed orders fill
+2. Live mid oracle (replace env mids)
 3. Live index / multi-venue mark oracle
 4. Candle aggregation job (OHLCV still empty-honest)
 5. Pay card commercial socket (X) · human go-live secrets (X)
