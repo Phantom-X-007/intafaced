@@ -482,6 +482,27 @@ describe('recipes — the money paths', () => {
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
+  it('futures funding: payer collateral → payee available (F5 recipe)', async () => {
+    await fund(USER_A, 'USDT', '1000');
+    await fund(USER_B, 'USDT', '1000');
+    await ledger.post(recipes.futuresMarginLock({ positionId: 'pos-long', userId: USER_A, assetId: 'USDT', amount: amt('500') }));
+    await ledger.post(recipes.futuresMarginLock({ positionId: 'pos-short', userId: USER_B, assetId: 'USDT', amount: amt('500') }));
+    await ledger.post(
+      recipes.futuresFundingPay({
+        fundingId: 'mkt1:2026-07-31T00:00:00Z:pos-long',
+        payerUserId: USER_A,
+        payerPositionId: 'pos-long',
+        payeeUserId: USER_B,
+        payeePositionId: 'pos-short',
+        assetId: 'USDT',
+        amount: amt('10'),
+      }),
+    );
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(USER_A, 'USDT', 'pos-long'))).amount)).toBe('490');
+    expect(await balanceOf(USER_B, 'USDT')).toBe('510'); // 500 free + 10 funding
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
   it('trade fill: six entries, fees to house, books closed', async () => {
     await fund(USER_A, 'USDT', '1000'); // taker, buying
     await fund(USER_B, 'BTC', '2'); // maker, selling
