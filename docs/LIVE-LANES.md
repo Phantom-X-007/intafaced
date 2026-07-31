@@ -17,7 +17,8 @@
 | residual-amm                  | free / claim                    | R5 protocol.amm deploy + mint/swap proof                      | blocked until R4 first cut preferred | —                         | audit theater                                |
 | residual-pay                  | free / claim                    | R3 pay.gateway Class M residuals                              | free after research pack             | —                         | go-live without X                            |
 | residual-terminal             | free / claim                    | R1 hotkeys/sub-accounts                                       | **check frontend first**             | —                         | same files as stream-a-ui                    |
-| residual-trade-futures        | free / claim                    | R6 futures research→MVP                                       | free after research pack             | —                         | mark done without recipes                    |
+| residual-trade-futures        | free / claim                    | R6 futures — **after seed/mm per Denon DIRECTION**            | free after research pack             | —                         | mark done without recipes; not first mountain |
+| **order-route-harden**        | **Build chat (claim on start)** | Denon order-route/DEX–CEX harden · Plan P0–P8                 | **ARMED · claim before code**        | `ORDER-ROUTE-PROGRAM-INDEX.md` | invent go-live; futures-first; skip chaos spine |
 | stream-a-ui / frontend-wave-a | **sibling frontend SoT**        | Trader shell Wave A honesty/craft                             | **assume active until proven idle**  | FRONTEND-STATE-OF-TRUTH   | residual-terminal collision                  |
 | denon-spine                   | Phantom-X-007                   | feat/spine-*                                                  | hold crash WIP                       | —                         | Nitro force-push / multi-asset               |
 | third-builder                 | shehzad002                      | stood down on residual board                                  | **idle**                             | #226–#228 on main         | re-claim residual rows without Nitro assign  |
@@ -42,3 +43,5 @@ Per `NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` §7 NEXT QUEUE — claim one lane, r
 - **2026-07-31 mega-finish:** branch `audit/finish-mega-2026-07-31` — recovery codes + residual packs + finish definition. Leave #266 pay journal and #267 frontend to their owners.
 
 - **2026-07-31 residual-pay-m226-close:** claimed **residual-pay** — M226-01 re-verify + M226-02 refundId. No frontend #267. No futures #278.
+
+- **2026-07-31 order-route-harden ARMED:** Full program pack in `docs/ORDER-ROUTE-PROGRAM-INDEX.md` (Spec/Plan/Architect/landscape v2). Build chat claims this lane before P1 code. Denon seed-first · dual-book · chaos spine. Do not double-build with residual-trade-futures invent.
