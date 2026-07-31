@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>INTAFACED · Styleboard N1–N4 · pick one</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      background: #111;
+      color: #eee;
+      line-height: 1.45;
+    }
+    header {
+      padding: 28px 24px 12px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header h1 { margin: 0 0 8px; font-size: 22px; font-weight: 650; }
+    header p { margin: 0 0 6px; color: #aaa; font-size: 14px; max-width: 62ch; }
+    .rec {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border: 1px solid #3a3a3a;
+      border-radius: 10px;
+      background: #1a1a1a;
+      max-width: 70ch;
+      font-size: 14px;
+    }
+    .rec strong { color: #fff; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 28px;
+      padding: 16px 24px 48px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    @media (min-width: 960px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    article {
+      border-radius: 14px;
+      border: 1px solid #333;
+      overflow: hidden;
+      background: #0a0a0a;
+    }
+    article.rec-card { border-color: #6a8; box-shadow: 0 0 0 1px rgba(100,180,120,0.35); }
+    .meta { padding: 14px 16px 10px; border-bottom: 1px solid #2a2a2a; }
+    .meta .id { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #888; }
+    .meta h2 { margin: 4px 0 6px; font-size: 18px; }
+    .meta .feel { margin: 0; font-size: 13px; color: #bbb; }
+    .badge {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #243;
+      color: #9d8;
+    }
+    /* Mini desk mock */
+    .desk {
+      height: 280px;
+      display: grid;
+      grid-template-columns: 1fr 140px 160px;
+      grid-template-rows: 36px 1fr;
+      gap: 1px;
+      padding: 8px;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+    .desk > div { border-radius: 4px; overflow: hidden; }
+    .head { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 10px; }
+    .head .logo { font-weight: 700; letter-spacing: 0.04em; }
+    .head .pill { padding: 2px 8px; border-radius: 999px; opacity: 0.9; }
+    .chart { position: relative; padding: 8px; }
+    .chart .line {
+      position: absolute; left: 12px; right: 12px; top: 40%;
+      height: 2px; border-radius: 2px; opacity: 0.85;
+    }
+    .chart .line2 {
+      position: absolute; left: 12px; right: 40%; top: 55%;
+      height: 2px; border-radius: 2px; opacity: 0.45;
+    }
+    .chart .lbl { opacity: 0.55; }
+    .book { padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+    .book .row { display: flex; justify-content: space-between; }
+    .ticket { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .ticket .btn {
+      margin-top: auto;
+      text-align: center;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 11px;
+    }
+    .ticket .fld {
+      height: 22px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      opacity: 0.85;
+    }
+    .swatches { display: flex; gap: 6px; padding: 10px 16px 14px; flex-wrap: wrap; }
+    .sw { width: 28px; height: 28px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); }
+    footer {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px 40px;
+      font-size: 13px;
+      color: #999;
+    }
+    footer code { color: #ccc; }
+
+    /* N1 Instrument */
+    .n1 .desk { background: #0a0c10; color: #e8eaed; }
+    .n1 .head { background: #12151c; border: 1px solid #1e2430; }
+    .n1 .head .pill { background: #1a2230; color: #8ab4ff; }
+    .n1 .chart { background: #0e1218; border: 1px solid #1e2430; }
+    .n1 .chart .line { background: #8ab4ff; }
+    .n1 .chart .line2 { background: #4a6; }
+    .n1 .book { background: #12151c; border: 1px solid #1e2430; }
+    .n1 .up { color: #3d9a6a; }
+    .n1 .dn { color: #c45; }
+    .n1 .ticket { background: #12151c; border: 1px solid #1e2430; }
+    .n1 .ticket .fld { background: #0a0c10; border: 1px solid #2a3344; }
+    .n1 .ticket .btn { background: #8ab4ff; color: #0a0c10; }
+
+    /* N2 Signal */
+    .n2 .desk { background: #0b0f14; color: #eef1f4; }
+    .n2 .head { background: #101820; border: 1px solid #1c2833; }
+    .n2 .head .pill { background: #2a2010; color: #f0a020; }
+    .n2 .chart { background: #0d1218; border: 1px solid #1c2833; }
+    .n2 .chart .line { background: #f0a020; }
+    .n2 .chart .line2 { background: #2a8; }
+    .n2 .book { background: #101820; border: 1px solid #1c2833; }
+    .n2 .up { color: #00b275; }
+    .n2 .dn { color: #ff4a68; }
+    .n2 .ticket { background: #101820; border: 1px solid #1c2833; }
+    .n2 .ticket .fld { background: #0b0f14; border: 1px solid #2a3848; }
+    .n2 .ticket .btn { background: #f0a020; color: #0b0f14; }
+
+    /* N3 Ledger dual-tone */
+    .n3 .desk {
+      background: linear-gradient(90deg, #0e1116 55%, #f4f1ea 55%);
+      color: #e8e8e8;
+    }
+    .n3 .head {
+      background: #0e1116;
+      border: 1px solid #2a2e36;
+      color: #e8e8e8;
+    }
+    .n3 .head .pill { background: #1a3a3a; color: #7ec8c0; }
+    .n3 .chart { background: #12161c; border: 1px solid #2a2e36; color: #ddd; }
+    .n3 .chart .line { background: #7ec8c0; }
+    .n3 .chart .line2 { background: #c4a574; }
+    .n3 .book { background: #12161c; border: 1px solid #2a2e36; }
+    .n3 .up { color: #3d9a6a; }
+    .n3 .dn { color: #c45; }
+    .n3 .ticket {
+      background: #f4f1ea;
+      border: 1px solid #d9d2c5;
+      color: #1a1a1a;
+    }
+    .n3 .ticket .fld { background: #fff; border: 1px solid #d0c8ba; color: #1a1a1a; }
+    .n3 .ticket .btn { background: #1a1a1a; color: #f4f1ea; }
+    .n3 .ticket .muted { color: #666; }
+
+    /* N4 Terminal Zero */
+    .n4 .desk { background: #000; color: #c8c8c8; }
+    .n4 .head { background: #000; border: 1px solid #222; }
+    .n4 .head .pill { background: #111; color: #c8c8c8; border: 1px solid #333; }
+    .n4 .chart { background: #000; border: 1px solid #222; }
+    .n4 .chart .line { background: #c8c8c8; }
+    .n4 .chart .line2 { background: #666; }
+    .n4 .book { background: #000; border: 1px solid #222; }
+    .n4 .up { color: #8c8; }
+    .n4 .dn { color: #c88; }
+    .n4 .ticket { background: #000; border: 1px solid #222; }
+    .n4 .ticket .fld { background: #0a0a0a; border: 1px solid #333; }
+    .n4 .ticket .btn { background: #c8c8c8; color: #000; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Styleboard — pick one look for the product</h1>
+    <p>This is the only decision you need right now. After you pick, agents retheme the real trading shell (desk + money screens) to match — without changing honesty rules or inventing numbers.</p>
+    <p>Score each: <strong>trust</strong> · <strong>cool</strong> · <strong>would use daily</strong>. Graft allowed (e.g. “N3 base + N2 density”).</p>
+    <div class="rec">
+      <strong>Recommendation: N3 Ledger</strong> (default in the locked plan as your K3).
+      Why: INTAFACED is literally two books / two planes — this look makes that visible every day, not just in labels.
+      Strong runner-up: <strong>N2 Signal</strong> if you want a pure dense trader desk and less dual-tone drama.
+      Avoid as sole pick unless you want extreme: N4 (cold, hard for daily non-desk money screens). N1 is fine if you want “cool lab” over “desk you live in.”
+    </div>
+  </header>
+
+  <div class="grid">
+    <article class="n1" id="n1">
+      <div class="meta">
+        <div class="id">N1 · Instrument</div>
+        <h2>Precision lab</h2>
+        <p class="feel">Cool metal, thin rules, steel accent. Market green/red only — accent never means PnL.</p>
+      </div>
+      <div class="desk">
+        <div class="head">
+          <span class="logo">INTAFACED</span>
+          <span class="pill">CEX · custodial</span>
+          <span style="margin-left:auto;opacity:.6">BTC/USDT · Live</span>
+        </div>
+        <div class="chart">
+          <div class="lbl">Chart</div>
+          <div class="line"></div>
+          <div class="line2"></div>
+        </div>
+        <div class="book">
+          <div class="row dn"><span>97,420</span><span>0.42</span></div>
+          <div class="row dn"><span>97,410</span><span>1.10</span></div>
+          <div class="row" style="opacity:.5"><span>spread</span><span>10</span></div>
+          <div class="row up"><span>97,400</span><span>0.88</span></div>
+          <div class="row up"><span>97,390</span><span>2.01</span></div>
+        </div>
+        <div class="ticket">
+          <div>Buy · Limit</div>
+          <div class="fld">Price</div>
+          <div class="fld">Amount</div>
+          <div class="btn">Buy BTC</div>
+        </div>
+      </div>
+      <div class="swatches">
+        <div class="sw" style="background:#0a0c10" title="bg"></div>
+        <div class="sw" style="background:#12151c" title="panel"></div>
+        <div class="sw" style="background:#8ab4ff" title="accent"></div>
+        <div class="sw" style="background:#e8eaed" title="text"></div>
+        <div class="sw" style="background:#3d9a6a" title="up"></div>
+        <div class="sw" style="background:#c45" title="down"></div>
+      </div>
+    </article>
+
+    <article class="n2" id="n2">
+      <div class="meta">
+        <div class="id">N2 · Signal</div>
+        <h2>Pro signal desk</h2>
+        <p class="feel">Dense, high contrast, amber signal accent. Confidence without casino neon.</p>
+      </div>
+      <div class="desk">
+        <div class="head">
+          <span class="logo">INTAFACED</span>
+          <span class="pill">CEX · custodial</span>
+          <span style="margin-left:auto;opacity:.6">BTC/USDT · Live</span>
+        </div>
+        <div class="chart">
+          <div class="lbl">Chart</div>
+          <div class="line"></div>
+          <div class="line2"></div>
+        </div>
+        <div class="book">
+          <div class="row dn"><span>97,420</span><span>0.42</span></div>
+          <div class="row dn"><span>97,410</span><span>1.10</span></div>
+          <div class="row" style="opacity:.5"><span>spread</span><span>10</span></div>
+          <div class="row up"><span>97,400</span><span>0.88</span></div>
+          <div class="row up"><span>97,390</span><span>2.01</span></div>
+        </div>
+        <div class="ticket">
+          <div>Buy · Limit</div>
+          <div class="fld">Price</div>
+          <div class="fld">Amount</div>
+          <div class="btn">Buy BTC</div>
+        </div>
+      </div>
+      <div class="swatches">
+        <div class="sw" style="background:#0b0f14" title="bg"></div>
+        <div class="sw" style="background:#101820" title="panel"></div>
+        <div class="sw" style="background:#f0a020" title="accent"></div>
+        <div class="sw" style="background:#eef1f4" title="text"></div>
+        <div class="sw" style="background:#00b275" title="up"></div>
+        <div class="sw" style="background:#ff4a68" title="down"></div>
+      </div>
+    </article>
+
+    <article class="n3 rec-card" id="n3">
+      <div class="meta">
+        <div class="id">N3 · Ledger (recommended)</div>
+        <h2>Dual-tone books</h2>
+        <p class="feel">Dark desk for trading; warm light panel for money / fiat calm. Two books always feel different.</p>
+        <span class="badge">Recommended · your K3 default in the locked plan</span>
+      </div>
+      <div class="desk">
+        <div class="head">
+          <span class="logo">INTAFACED</span>
+          <span class="pill">CEX · custodial</span>
+          <span style="margin-left:auto;opacity:.6">BTC/USDT · Live</span>
+        </div>
+        <div class="chart">
+          <div class="lbl">Chart · venue book</div>
+          <div class="line"></div>
+          <div class="line2"></div>
+        </div>
+        <div class="book">
+          <div class="row dn"><span>97,420</span><span>0.42</span></div>
+          <div class="row dn"><span>97,410</span><span>1.10</span></div>
+          <div class="row" style="opacity:.5"><span>spread</span><span>10</span></div>
+          <div class="row up"><span>97,400</span><span>0.88</span></div>
+          <div class="row up"><span>97,390</span><span>2.01</span></div>
+        </div>
+        <div class="ticket">
+          <div>Buy · Limit</div>
+          <div class="fld">Price</div>
+          <div class="fld">Amount</div>
+          <div class="muted" style="font-size:9px">Money panels use warm ledger tone</div>
+          <div class="btn">Buy BTC</div>
+        </div>
+      </div>
+      <div class="swatches">
+        <div class="sw" style="background:#0e1116" title="dark book"></div>
+        <div class="sw" style="background:#f4f1ea" title="light book"></div>
+        <div class="sw" style="background:#1a1a1a" title="ink accent"></div>
+        <div class="sw" style="background:#7ec8c0" title="protocol teal"></div>
+        <div class="sw" style="background:#3d9a6a" title="up"></div>
+        <div class="sw" style="background:#c45" title="down"></div>
+      </div>
+    </article>
+
+    <article class="n4" id="n4">
+      <div class="meta">
+        <div class="id">N4 · Terminal Zero</div>
+        <h2>Pure terminal</h2>
+        <p class="feel">Almost monochrome, max density, 1px borders, zero chrome. Polar extreme.</p>
+      </div>
+      <div class="desk">
+        <div class="head">
+          <span class="logo">INTAFACED</span>
+          <span class="pill">CEX</span>
+          <span style="margin-left:auto;opacity:.6">BTC/USDT</span>
+        </div>
+        <div class="chart">
+          <div class="lbl">Chart</div>
+          <div class="line"></div>
+          <div class="line2"></div>
+        </div>
+        <div class="book">
+          <div class="row dn"><span>97,420</span><span>0.42</span></div>
+          <div class="row dn"><span>97,410</span><span>1.10</span></div>
+          <div class="row" style="opacity:.5"><span>spread</span><span>10</span></div>
+          <div class="row up"><span>97,400</span><span>0.88</span></div>
+          <div class="row up"><span>97,390</span><span>2.01</span></div>
+        </div>
+        <div class="ticket">
+          <div>Buy · Limit</div>
+          <div class="fld">Price</div>
+          <div class="fld">Amount</div>
+          <div class="btn">Buy BTC</div>
+        </div>
+      </div>
+      <div class="swatches">
+        <div class="sw" style="background:#000" title="bg"></div>
+        <div class="sw" style="background:#111" title="panel"></div>
+        <div class="sw" style="background:#c8c8c8" title="fg"></div>
+        <div class="sw" style="background:#8c8" title="up"></div>
+        <div class="sw" style="background:#c88" title="down"></div>
+      </div>
+    </article>
+  </div>
+
+  <footer>
+    <p><strong>How to pick:</strong> reply in chat with one of: <code>N1</code> · <code>N2</code> · <code>N3</code> · <code>N4</code> · or a graft like <code>N3 + N2 density</code>.</p>
+    <p>File on disk: <code>docs/styleboard/OPEN-ME.html</code> (this page). Open in any browser — double-click the file or drag into Chrome/Safari.</p>
+    <p>After pick: agents apply tokens to the real shell (Wave B) without touching honesty rules.</p>
+  </footer>
+</body>
+</html>
