@@ -12,7 +12,7 @@
             <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
               Deposit addresses are for this venue’s exchange wallet — not the platform ledger books.
             </p>
-            <p v-if="walletError" class="ix-empty ix-empty-error">{{ walletError }}</p>
+            <p v-if="walletError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ walletError }}</p>
             <p v-else-if="walletLoading" class="ix-empty ix-empty-loading">Loading wallet…</p>
             <div class="action-inner" v-if="!walletError">
               <div class="inner-left">
