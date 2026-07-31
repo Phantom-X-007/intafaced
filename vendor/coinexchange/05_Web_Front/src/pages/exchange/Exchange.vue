@@ -437,6 +437,14 @@
               :title="m.label"
               @click="bookMode = m.id"
             ><i></i><i></i></button>
+            <select
+              class="ix-book-group"
+              v-model.number="bookGroup"
+              title="Price grouping"
+              aria-label="Order book price grouping"
+            >
+              <option v-for="g in bookGroups" :key="g" :value="g">{{ g === 1 ? '1 tick' : '×' + g }}</option>
+            </select>
           </div>
         </nav>
 
@@ -725,6 +733,8 @@ export default {
         { id: 'bids', label: 'Bids only' },
         { id: 'asks', label: 'Asks only' }
       ],
+      bookGroup: 1,
+      bookGroups: [1, 10, 50, 100],
       accountTab: 'balances',
 
       interval: '60',
@@ -793,13 +803,13 @@ export default {
     /* Asks are held best-last so the rail can render them top-down away from
        the spread, the way every book on the market reads. */
     asks() {
-      return this.plate.asks.slice(-BOOK_DEPTH);
+      return this.groupPlate(this.plate.asks, 'ask').slice(-BOOK_DEPTH);
     },
     asksAscending() {
-      return this.plate.asks.slice().reverse();
+      return this.groupPlate(this.plate.asks, 'ask').slice().reverse();
     },
     bids() {
-      return this.plate.bids.slice(0, BOOK_DEPTH);
+      return this.groupPlate(this.plate.bids, 'bid').slice(0, BOOK_DEPTH);
     },
     spread() {
       const bestAsk = this.plate.asks.length ? this.num(this.plate.asks[this.plate.asks.length - 1].price) : 0;
@@ -2418,6 +2428,16 @@ $radius-sm: var(--ix-radius-sm, 8px);
   color: $faint;
 }
 
+.ix-book-group {
+  margin-left: 6px;
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 1px 4px;
+  max-width: 64px;
+}
 .ix-book-modes {
   margin-left: auto;
   display: flex;
