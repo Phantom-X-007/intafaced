@@ -999,7 +999,7 @@ export class AuthService {
   async getSubAccountOwnership(subAccountId: string): Promise<{ id: string; parentUserId: string; revoked: boolean } | null> {
     const rows = await this.sql<Array<{ id: string; parent_user_id: string; revoked: boolean }>>`
       SELECT id, parent_user_id, revoked
-        FROM identity.sub_accounts
+        FROM sub_accounts
        WHERE id = ${subAccountId}
        LIMIT 1
     `;
