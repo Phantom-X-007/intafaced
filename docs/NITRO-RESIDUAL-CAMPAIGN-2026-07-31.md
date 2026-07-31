@@ -349,3 +349,5 @@ DONE FOR A FIRE
 5. Keep NEXT QUEUE non-empty after every merge.
 
 **Nitro does nothing technical** unless Class X appears (prod RPC, secrets, go-live, licence).
+
+**High water (compaction):** [RESIDUAL-CAMPAIGN-HIGH-WATER-2026-07-31.md](RESIDUAL-CAMPAIGN-HIGH-WATER-2026-07-31.md)
