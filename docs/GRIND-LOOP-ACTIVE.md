@@ -6,13 +6,13 @@
 **Last tip:** re-check · high water through **#258** · do not re-ship **#110–#258** without regression
 
 ```
-STATUS 2026-07-31T residual-campaign
-tip: re-check origin/main (expect ≥ c40fd59 #258)
-open PRs: #259 identity freeze-refresh test — babysit Class N
-campaign: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md
-LIVE-LANES: residual-coord LIVE; ≤3 code lanes; frontend Wave A = sibling
-next: Wave 0 (merge plan PR + #259) → Wave 1 R4 smart-accounts + R2 ws honesty + tracker
-do not: fake done; collide stream-a-ui; force-push Denon spine; skip Class M adversarial
+STATUS 2026-07-31T04:00Z
+tip: re-check origin/main
+open PRs: #261 frontend withdraw honesty — LEAVE (sibling Wave A)
+campaign: NITRO-RESIDUAL-CAMPAIGN · LIVE-LANES residual-ws claimed by audit-fire-mega
+backend high water: #251–#259 · residual-ws tracker honesty shipping
+next: merge residual-ws · then residual-smart-accounts research OR ID-P1-1 · NO vendor/**
+do not: collide stream-a-ui; invent futures positions; fake done
 ```
 
 ---
