@@ -3,15 +3,15 @@
 **Status:** **O1+O2 OVERNIGHT** · backend micro-queue still **DRAINED** (do not invent Denon product) · **O1 babysit** + **O2 Stream A / hygiene** only  
 **Operator decision:** 2026-07-30 Nitro chose **O1+O2** (see `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`)  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
-**Last tip:** high water through **#246/#244/#243/#242/#240/#227** residual fire 1-5 · #245 identity createTestDb in flight · do not re-ship **#110-#246**
+**Last tip:** peace shell close through **#228** + residual fire · PEACE re-derived · do not re-ship **#110–#249/#228**
 
 ```
-STATUS 2026-07-31T01:45Z
-tip: re-check origin/main (post #227 ws positions + residual eng)
-open PRs: #226 Class M (rebased, no Nitro merge) · #228 mixed AMM (rebased, prefer Denon) · #245 identity test isolation (CI)
-merged this fire: #240 hub/DEX · #241 wave-audit · #242 tracker · #243 CMS · #244 CCXT cost · #246 sub-account gate · #227 positions · format #247/#248
-money holds: #226
-next: merge #245 when green · author/Denon #226/#228 · no invent
+STATUS 2026-07-31T02:00Z
+tip: re-check origin/main (post #228 AMM/equity)
+open PRs: re-check gh (expect empty or babysit only)
+merged overnight parallel: #226 money · #227 ws · #228 AMM/equity · residual fire #240–#249
+peace shell: scoreboard closed agent residuals (#244/#246/#228 equity wire); Stream A PROOF still unverified; dual-book ADR still human
+next: O1 babysit idle · Stream A browser proof when :8090 · no Denon invent
 ```
 
 ---

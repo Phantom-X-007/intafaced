@@ -1,12 +1,12 @@
 wtmp begins Thu Oct 16 18:50:05 WITA 2025# Peace of mind — current floor (Nitro)
 
-**Date:** 2026-07-30  
+**Date:** 2026-07-31 (peace shell close re-derive)  
 **Main tip (literal SHA this audit closed against after fix PR merges — refresh on next fetch):** see bottom **TIP block**  
 **Pre-fix tip this r2 run:** `6dd3def…` (#177) · mid-run tip became `36874756c9caec86d46109ce62cdfdae5482f750` (#175+#178 docs) before merge  
 **Cook SINCE baseline:** `8a8c19bc626e6dada49a33be1f88d17873f42502` (#107)  
 **Prior mega archive:** [`audit/2026-07-30-afk-cook-mega/`](audit/2026-07-30-afk-cook-mega/) (#176)  
 **This re-prove archive:** [`audit/2026-07-30-mega-r2/`](audit/2026-07-30-mega-r2/)  
-**Claim tags:** `[VERIFIED 2026-07-30]` mega-audit r2 (local gates + code-path L3; **not** Actions green; **not** money e2e without Postgres)
+**Claim tags:** `[VERIFIED 2026-07-31]` peace shell close re-derive after residual fire + #226–#228; L0 local green; **not go-live**
 
 **Stream A:** [NITRO-STREAM-A-CLAIM.md](NITRO-STREAM-A-CLAIM.md) · uiproof PROOF **UNVERIFIED** this tip
 
@@ -22,20 +22,20 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 ## Scoreboard
 
-| System                   | Risk now                                        | Status                                  |
-| ------------------------ | ----------------------------------------------- | --------------------------------------- |
-| Ledger                   | Low if perimeter holds                          | OK to build · PG suites skipped locally |
-| Identity                 | ifc_ exchange + soft revoke on tip              | OK                                      |
-| Pay                      | Links + checkout honest; rails sandbox residual | OK to build · residual                  |
-| Token / bank earn        | Yield/buyback gated; bank PG skip               | OK · residual                           |
-| P2P                      | Prior fixes; PG suite skip                      | OK · residual                           |
-| Edge                     | ifc_ + region HMAC; preservePath                | OK for dev                              |
-| Trade                    | Private REST + convert; R5/R6 holds             | OK · sell-cost residual                 |
-| Protocol / DEX / indexer | Mounted shells; chain propped                   | Not product-complete                    |
-| Deploy                   | Fleet + notify + WS JWT                         | Usable with care                        |
-| **Vendor (shell)**       | **UI OK; high if used as books**                | **UI shell · quarantined as ledger**    |
-| Terminal                 | Equity socket honest about unwired balance REST | OK honesty                              |
-| CI doctrine              | Brand/custody/migrate local green               | OK local · **Actions not green**        |
+| System                   | Risk now                                         | Status                                  |
+| ------------------------ | ------------------------------------------------ | --------------------------------------- |
+| Ledger                   | Low if perimeter holds                           | OK to build · PG suites skipped locally |
+| Identity                 | ifc_ exchange + soft revoke on tip               | OK                                      |
+| Pay                      | Links + checkout; live EVM rail on main (#226)   | OK to build · live rail residual ops    |
+| Token / bank earn        | Yield/buyback gated; bank PG skip                | OK · residual                           |
+| P2P                      | Prior fixes; PG suite skip                       | OK · residual                           |
+| Edge                     | ifc_ + region HMAC; preservePath                 | OK for dev                              |
+| Trade                    | Private REST + convert; R5/R6 holds              | OK · market-sell cost honest (#244)     |
+| Protocol / DEX / indexer | Mounted shells; chain propped                    | Not product-complete                    |
+| Deploy                   | Fleet + notify + WS JWT                          | Usable with care                        |
+| **Vendor (shell)**       | **UI OK; high if used as books**                 | **UI shell · quarantined as ledger**    |
+| Terminal                 | apps/web equity wired to /account/balance (#228) | OK honesty · dual-book labeled          |
+| CI doctrine              | Brand/custody/migrate local green                | OK local · **Actions not green**        |
 
 ---
 
@@ -61,19 +61,20 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 ## Still open (honest residuals)
 
-| Item                                                  | Verdict                                                                                                                        | Who                           |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
-| GitHub Actions zero-step failures (billing)           | **CANNOT VERIFY green** — e.g. run 30518974758                                                                                 | **Human**                     |
-| Money e2e / PG suites local                           | **SKIPPED** — no Docker/Postgres                                                                                               | Human install or CI when paid |
-| OHLCV / positions                                     | **HOLDS** honest empty                                                                                                         | Product (candles / futures)   |
-| Factory / chain                                       | **HOLDS** honesty; not deployed                                                                                                | **Denon**                     |
-| Pay rails sandbox                                     | residual double-submit until real rails                                                                                        | Money agent when rails real   |
-| Market sell CCXT `cost` still `"0"` without fill load | residual after R6                                                                                                              | Agent later                   |
-| Sub-account ownership S2S                             | **CLOSED** — identity `/internal/sub-accounts/:id` + trade placeOrder gate (owned + not revoked; fail-closed on identity down) | shipped this wave             |
-| Stream A PROOF / Chromium                             | **UNVERIFIED**                                                                                                                 | Nitro desktop                 |
-| Terminal equity **UI wire** (API exists)              | honesty OK; live panel still product                                                                                           | Stream A / web later          |
-| Licences · wallet secrets · counsel list · kill drill | human/ops/law                                                                                                                  | Denon + you                   |
-| Dual-book policy discipline                           | habit                                                                                                                          | All                           |
+| Item                                                  | Verdict                                                                                                  | Who                           |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| GitHub Actions zero-step failures (billing)           | **CANNOT VERIFY green** — e.g. run 30518974758                                                           | **Human**                     |
+| Money e2e / PG suites local                           | **SKIPPED** — no Docker/Postgres                                                                         | Human install or CI when paid |
+| OHLCV / positions                                     | **HOLDS** honest empty                                                                                   | Product (candles / futures)   |
+| Factory / chain                                       | **HOLDS** honesty; not deployed                                                                          | **Denon**                     |
+| Pay rails sandbox                                     | residual double-submit until real rails                                                                  | Money agent when rails real   |
+| Market sell CCXT `cost` honest null without fills     | **CLOSED** #244 — unfilled `"0"`; filled-unknown `null`                                                  | done                          |
+| Sub-account ownership S2S                             | **CLOSED** #246 — identity S2S + trade placeOrder gate (fail-closed)                                     | done                          |
+| Live EVM crypto rail (`pay.rails`)                    | **ON MAIN** #226 — Class M landed; ops still own keys/RPC/go-live                                        | Denon ops / owner             |
+| Stream A PROOF / Chromium                             | **UNVERIFIED** this tip — shell honesty shipped; browser proof pack still missing                        | Nitro desktop                 |
+| Terminal equity **UI wire**                           | **CLOSED** #228 apps/web `AccountEquity` → `/api/v1/account/balance` (ledger projection; dual-book note) | done                          |
+| Licences · wallet secrets · counsel list · kill drill | human/ops/law                                                                                            | Denon + you                   |
+| Dual-book policy discipline                           | habit                                                                                                    | All                           |
 
 ---
 
@@ -106,14 +107,14 @@ Archive proof: `docs/audit/2026-07-30-mega-r2/01-L0.md` through `06-VERDICT.md`.
 ## Residual wave audit (delta only — 2026-07-31)
 
 **Method:** [`WAVE-AUDIT.md`](WAVE-AUDIT.md) · archive [`audit/2026-07-31-residual-wave/`](audit/2026-07-31-residual-wave/)  
-**Verdict:** **PASS-WITH-RESIDUALS** (not go-live; does not rewrite scoreboard above)
+**Verdict:** **PASS-WITH-RESIDUALS** (not go-live; does not rewrite scoreboard above as go-live)
 
 ```
-WAVE TIP (post #239):      cd277dcc3fc2f71d3694b2eccc12b20d0fdb3f00
-SINCE (#224 high water):   f42d41cc2f5440109bba5abe8e536c34bb6da179
-PRODUCT THROUGH:           #238 Activity honesty
-OPEN CLASS M:              #226 live EVM rail — Denon; no Nitro merge
-DUAL-BOOK ADR / SECRETS:   still human/owner
+PEACE SHELL CLOSE TIP:     be6ac800aa544411117175fd66f0ea56f607d5c8
+PRODUCT THROUGH:           #249 residual fire · #226 live rail · #227 positions · #228 AMM+equity · #244 cost · #246 sub-account · Stream A honesty wave
+SHELL DUAL-BOOK:           UI labels on exchange + UC money panes + apps/web equity note — ADR policy still human
+STREAM A PROOF:            still UNVERIFIED (Chromium/desktop)
+SECRETS / GO-LIVE / ADR:   still human/owner
 ```
 
-L0 at wave tip: brand/custody/vendor-shell/tracker **PASS**. Full PEACE floor above still authority for go/no-go language.
+L0 at this tip: brand/custody/vendor-shell/tracker re-run **PASS** (peace-shell-close session). Full floor above still **not go-live**.
