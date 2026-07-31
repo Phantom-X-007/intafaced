@@ -8,8 +8,8 @@
                     <span class="tips-g">{{$t('uc.account.pagetip')}}</span>
                 </section>
                 <section class="accountContent">
-                    <p v-if="profileLoading" class="ix-empty-loading" role="status">Loading payment methods…</p>
-                    <p v-else-if="profileError" class="ix-empty ix-empty-error" role="alert">{{ profileError }}</p>
+                    <IxHonestState v-if="profileLoading" kind="loading" message="Loading payment methods…" />
+                    <IxHonestState v-else-if="profileError" kind="error" :message="profileError" />
                     <p v-else-if="profileReachable" class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
                       OTC payment methods on this account — unknown is not “unbound.”
                     </p>
@@ -178,8 +178,11 @@
 </template>
 <script>
 
+import IxHonestState from './IxHonestState.vue';
+
 export default {
     components: {
+      IxHonestState
     },
     data() {
         const validatePass = (rule, value, callback) => {

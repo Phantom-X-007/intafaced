@@ -56,8 +56,8 @@
               <div class="action-body">
                 <p class="acb-p1">{{$t('uc.finance.recharge.record')}}</p>
                 <div class="order-table">
-                  <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
-                  <p v-else-if="!loading && listReachable && tableRecharge.length === 0" class="ix-empty">No deposits yet</p>
+                  <IxHonestState v-if="listError" kind="error" :message="listError" />
+                  <IxHonestState v-else-if="!loading && listReachable && tableRecharge.length === 0" kind="empty" message="No deposits yet" />
                   <Table v-if="!listError" :columns="tableColumnsRecharge" :data="tableRecharge" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
                   <div style="margin: 10px;overflow: hidden" v-if="!listError">
                     <div style="float: right;">
