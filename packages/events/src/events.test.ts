@@ -119,6 +119,37 @@ describe('event catalog', () => {
     });
     expect(payload.amount).toBe('1234.123456789012345678');
   });
+
+  it('accepts a futures positionUpdated with decimal-string money fields', () => {
+    const payload = validatePayload('positionUpdated', {
+      positionId: crypto.randomUUID(),
+      userId: crypto.randomUUID(),
+      marketId: 'btc-usdt-perp',
+      symbol: 'BTC/USDT:USDT',
+      status: 'open',
+      side: 'long',
+      contracts: '1.250000000000000000',
+      entryPrice: '64000.5',
+      markPrice: '64110',
+      notional: '80137.5',
+      leverage: '5',
+      collateral: '16027.5',
+      unrealizedPnl: '137.5',
+      realizedPnl: '0',
+      liquidationPrice: '52000',
+      marginMode: 'cross',
+      fundingPaid: '-0.004000000000000000',
+      ts: new Date().toISOString(),
+    });
+    expect(EVENT_CATALOG.positionUpdated.subject).toBe('intafaced.trade.position.updated');
+    expect(payload.contracts).toBe('1.250000000000000000');
+    expect(() =>
+      validatePayload('positionUpdated', {
+        ...payload,
+        contracts: 1.25,
+      }),
+    ).toThrow(EventValidationError);
+  });
 });
 
 describe('bus', () => {

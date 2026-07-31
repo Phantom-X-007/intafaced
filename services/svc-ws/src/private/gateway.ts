@@ -6,13 +6,15 @@ import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.j
 import type { PrivateOrderHub } from './hub.js';
 
 /**
- * Authenticated private order stream.
+ * Authenticated private stream (orders, fills, positions).
  *
  * Separate path from the public `/stream` so the public port never grows a
  * credential. Token is `?access_token=` on the upgrade URL (browsers cannot
  * set Authorization on WebSocket upgrades reliably).
  *
  * When `tokens` is null the private path is disabled (403 on upgrade).
+ * Positions updates only arrive when `trade.futures` publishes `positionUpdated`;
+ * the channel still announces ready so clients do not invent a second socket.
  */
 
 export const PRIVATE_STREAM_PATH = '/private/stream';
@@ -129,6 +131,8 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
 
           try {
             ws.send(JSON.stringify({ channel: 'orders', type: 'ready', userId }));
+            ws.send(JSON.stringify({ channel: 'fills', type: 'ready', userId }));
+            ws.send(JSON.stringify({ channel: 'positions', type: 'ready', userId }));
           } catch {
             /* ignore */
           }
