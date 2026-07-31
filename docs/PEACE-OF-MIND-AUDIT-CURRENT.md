@@ -100,3 +100,20 @@ FINAL main tip (authority): 4ddf1597de0a8d41dbcb9dbc8df33437f02fcee8
 Note: a further tip-fill PR that only rewrites FINAL will move `origin/main` again; **authority is `git rev-parse origin/main` after the last audit merge.** Operator chat records the tip at session exit.
 
 Archive proof: `docs/audit/2026-07-30-mega-r2/01-L0.md` through `06-VERDICT.md`.
+
+---
+
+## Residual wave audit (delta only — 2026-07-31)
+
+**Method:** [`WAVE-AUDIT.md`](WAVE-AUDIT.md) · archive [`audit/2026-07-31-residual-wave/`](audit/2026-07-31-residual-wave/)  
+**Verdict:** **PASS-WITH-RESIDUALS** (not go-live; does not rewrite scoreboard above)
+
+```
+WAVE TIP (post #239):      cd277dcc3fc2f71d3694b2eccc12b20d0fdb3f00
+SINCE (#224 high water):   f42d41cc2f5440109bba5abe8e536c34bb6da179
+PRODUCT THROUGH:           #238 Activity honesty
+OPEN CLASS M:              #226 live EVM rail — Denon; no Nitro merge
+DUAL-BOOK ADR / SECRETS:   still human/owner
+```
+
+L0 at wave tip: brand/custody/vendor-shell/tracker **PASS**. Full PEACE floor above still authority for go/no-go language.
