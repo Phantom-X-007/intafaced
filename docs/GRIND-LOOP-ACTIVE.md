@@ -7,12 +7,11 @@
 **Last tip:** re-check · high water through **#258** · do not re-ship **#110–#258** without regression
 
 ```
-STATUS 2026-07-31T residual-coord continuous
-tip: re-check origin/main (expect ≥ #278 F3 + #280 pay)
-open PRs: re-check gh — leave #267 frontend
-campaign: R6 futures F1–F3 on main; F4 positionUpdated shipping; R3 pay broadcast+#280
-next: merge F4 · F5 liq/funding research · smart-accounts residual · NO vendor/** Wave A
-do not: invent marks; collide stream-a-ui; fake futures done
+STATUS 2026-07-31T residual-coord continue
+tip: re-check (expect #288 AMM mint/swap + #287 tracker)
+open: leave #267 frontend · leave #289 order-route
+next: funding job skeleton OR smart-accounts residual · WAVE-AUDIT optional
+do not: invent marks; collide vendor shell; fake futures done
 ```
 
 ---

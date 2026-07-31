@@ -85,3 +85,8 @@ Typical tip order (newest first at write of this doc): brand #285 · funding F5 
 _Update this file same turn as high-water advances._
 
 **Update:** F4 #281 + insurance #284 + F5 #282 + brand #285 on main. Next: funding cron research · AMM mint/swap · leave #267.
+
+---
+
+**Update (continue fire):** #287 tracker · **#288 AMM mint+swap onchain** on main.  
+**Next:** funding cron/job skeleton · leave #267 frontend · leave #289 order-route.
