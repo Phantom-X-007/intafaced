@@ -29,7 +29,7 @@
 
 1. **“Stop vibe coding” is mainstream messaging** for serious agent work (X threads citing SDD / Spec Kit as the alternative to prompt-and-pray).  
 2. **GitHub Spec Kit** framed as the default “constitution → specify → plan → tasks → implement” toolkit; star counts in community posts cited 90k+ (API now **~125k**).  
-3. **r/SpecDrivenDevelopment + r/ClaudeCode + r/AI_Agents** are active discussion homes — SDD is a *community*, not a blog fad.  
+3. **r/SpecDrivenDevelopment + coding-agent communities + r/AI_Agents** are active discussion homes — SDD is a *community*, not a blog fad.  
 4. **Brownfield preference:** independent comparisons (mid-2026) often rank **OpenSpec** high for delta/change management on existing codebases; **BMAD** for complex greenfield/enterprise with high ceremony cost; **Spec Kit** for team standardization + constitution.  
 5. Community consensus we adopt: **plan before code**; agents fail fastest on fuzzy briefs; combine light exploration with hard Spec once design is clear.
 
