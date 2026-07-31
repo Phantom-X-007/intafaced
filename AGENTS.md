@@ -103,6 +103,36 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 
 ---
 
+## GitHub Actions thrift (mandatory — Nitro and Denon agents)
+
+**Intent:** cut **wasted** Actions spend on a private repo. Does **not** slow parallel shipping, kill automation, or add a Denon review gate.  
+**Full law + economics:** [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Keep this section and that doc in sync.
+
+### Speed / autonomy preserved (explicit)
+
+- **Parallel agents and many open PRs are allowed** — no thrift max-PR cap.
+- **No new human approval** beyond existing asymmetric review + green CI.
+- **Remote CI stays the merge seal** (full matrix green). Local `pnpm verify` is the filter so we do not pay for “push to discover red.”
+- Budget stop-at-cap is Denon’s **high fuse** (infra), not a reason to open fewer PRs.
+
+### Do
+
+1. **`pnpm verify` green locally** before the push that opens or updates a **code** PR.
+2. **Batch** coherent change-sets; avoid push storms (push → CI → push 2 min later → cancel → repeat) while iterating without local green.
+3. Prefer **pure docs/markdown** commits when the work is docs-only (`ci.yml` path-ignore skips full CI).
+4. **Re-run all jobs** only for flake or known infra fix.
+
+### Never (false thrift)
+
+- Make the repo public, skip doctrine/money tests, claim green without verify, or disable required checks “to save money.”
+
+### Denon-only infra (agents may implement workflow PR after he installs the runner app)
+
+- Actions budget ~$50–80/mo, stop-when-reached ON, alerts.
+- Prefer cheaper managed runners (e.g. Ubicloud) for heavy jobs — same GitHub checks UI; see spend-control doc.
+
+---
+
 ## The six that get a PR rejected
 
 1. Writing SQL against another service's tables. Use `packages/contracts` or `packages/events`.

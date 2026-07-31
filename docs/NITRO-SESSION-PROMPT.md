@@ -43,6 +43,7 @@ MANDATORY WORKFLOW
 4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no Stream B edits.
 5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand).
 6. No commits/PRs unless I asked to ship. No random new architecture.
+7. GitHub Actions thrift (mandatory, does NOT slow parallel/autonomy): local pnpm verify green before the push that opens/updates a code PR; batch fixes — no push storms using remote CI as debugger; pure docs PRs when work is docs; never public-repo / skip-tests / fake-green to save $. Parallel PRs allowed. Full law: docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md + AGENTS.md thrift section.
 
 RIGHT WAY (quality bar)
 - Senior, surgical, doctrine-true. Prefer smallest green PR over hero branch.

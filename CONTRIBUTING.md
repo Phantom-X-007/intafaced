@@ -168,11 +168,13 @@ Every PR runs, and all of it must be green to merge:
 | `Tests`              | every package's suite, against real Postgres/Redis/NATS                 |
 | `Definition of Done` | the §14 gate per service                                                |
 
-Run the same thing locally before pushing — it is faster than waiting for CI:
+Run the same thing locally before pushing — it is faster than waiting for CI, and it is **required thrift** on this private repo (Actions is metered after free minutes):
 
 ```bash
 pnpm verify    # build · typecheck · test · DoD gate
 ```
+
+**Actions thrift (both of you / all agents):** local green first; batch coherent pushes — do not use remote CI as a debugger (push storms still bill partial minutes when cancelled). Parallel PRs stay allowed. Docs-only changes skip full CI via `paths-ignore` in `.github/workflows/ci.yml`. Full law: [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md) · `AGENTS.md`. Does **not** add a review gate or cap how many PRs you open.
 
 Because merging is not _blocked_ on CI (see §1), reading the checks before you approve is a real responsibility rather than a formality. A green tick you did not look at is the same as no CI at all.
 
