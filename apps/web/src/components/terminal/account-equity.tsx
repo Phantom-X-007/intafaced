@@ -20,6 +20,7 @@ const copy = {
   title: 'Account equity',
   loading: 'Reading balances…',
   empty: 'No balances on this account',
+  dualBook: 'Platform ledger projection (TypeScript books) — not the exchange venue wallet shell.',
   signIn: 'Sign in to load equity',
   columns: { asset: 'Asset', free: 'Free', used: 'Used', total: 'Total' },
 } as const;
@@ -80,6 +81,9 @@ export function AccountEquity() {
 
   return (
     <Panel title={copy.title} live={state.status === 'live'}>
+      <p className={styles.socketReason} role="note">
+        {copy.dualBook}
+      </p>
       {state.status === 'anonymous' && <p className={styles.socketReason}>{copy.signIn}</p>}
       {state.status === 'loading' && <LoadingNotice label={copy.loading} />}
       {state.status === 'empty' && <p className={styles.socketReason}>{copy.empty}</p>}
