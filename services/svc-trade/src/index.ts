@@ -14,6 +14,7 @@ import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
+import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { parseAmount } from '@intafaced/ledger-client';
 
 /**
@@ -131,11 +132,29 @@ await app.register(fastifyTRPCPlugin, {
   } satisfies FastifyTRPCPluginOptions<TradeRouter>['trpcOptions'],
 });
 
+// Futures residual jobs — default OFF. Enabling requires explicit env + market ids.
+// Started after Fastify so job errors can use app.log.
+const futuresJobs = startFuturesJobs({
+  sql,
+  ledger,
+  matching,
+  bus,
+  config: {
+    enabled: env.TRADE_FUTURES_JOBS_ENABLED,
+    liqIntervalMs: env.TRADE_FUTURES_LIQ_INTERVAL_MS,
+    fundingIntervalMs: env.TRADE_FUTURES_FUNDING_INTERVAL_MS,
+    fundingMarketIds: parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS),
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
+});
+
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
   {
     port: env.HTTP_PORT,
     spotEnabled: env.TRADE_SPOT_ENABLED,
+    futuresJobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
+    futuresJobs: futuresJobs.host.list(),
     trpc: true,
     publicRest: [
       '/api/v1/markets',
@@ -169,6 +188,7 @@ app.log.info(
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
+      futuresJobs.stop();
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();
       await bus.close();

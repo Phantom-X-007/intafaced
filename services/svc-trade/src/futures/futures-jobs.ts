@@ -1,0 +1,124 @@
+/**
+ * Futures job assembly (trade.futures residual).
+ *
+ * Wires loaders + stores + marks/rates + ticks into JobHost.
+ * Default OFF — ops must enable. Never invents marks, rates, or market lists.
+ */
+import type { Sql } from 'postgres';
+import type { LedgerClient } from '@intafaced/ledger-client';
+import type { EventBus } from '@intafaced/events';
+import type { MatchingClient } from '../spot/matching-client.js';
+import { createJobHost, type JobHost } from './job-host.js';
+import { runFundingTick } from './funding-tick.js';
+import { runLiquidationTick } from './liquidation-tick.js';
+import { markSourceFromDepth } from './mark-from-depth.js';
+import { memoryFundingRateBook, type FundingRateEntry } from './funding-rate-source.js';
+import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
+import { sqlFundingPeriodStore, sqlLiquidationAttemptStore, sqlPositionCloser } from './tick-stores.js';
+
+export interface FuturesJobsConfig {
+  /** Master kill — false = host created but no intervals started. */
+  enabled: boolean;
+  /** Liquidation scan interval. Default 15s when enabled. */
+  liqIntervalMs: number;
+  /** Funding tick interval per market. Default 8h when enabled. */
+  fundingIntervalMs: number;
+  /**
+   * Market ids to run funding for. Empty = funding job not scheduled
+   * (never invent a market list).
+   */
+  fundingMarketIds: readonly string[];
+}
+
+export interface FuturesJobsDeps {
+  sql: Sql;
+  ledger: Pick<LedgerClient, 'post'>;
+  matching: MatchingClient;
+  bus: EventBus | null;
+  config: FuturesJobsConfig;
+  /**
+   * Optional external rate publisher hook for tests.
+   * Production ops publishes into memoryFundingRateBook via a real oracle later.
+   */
+  seedFundingRate?: (entry: FundingRateEntry) => void;
+  now?: () => Date;
+  onError?: (name: string, err: unknown) => void;
+}
+
+export interface FuturesJobsHandle {
+  host: JobHost;
+  /** Rate book so ops/oracle can publish without invent. */
+  publishFundingRate: (entry: FundingRateEntry) => void;
+  stop(): void;
+}
+
+/**
+ * Assemble futures jobs. Does not invent markets or rates.
+ * When disabled, returns a stopped host (list empty).
+ */
+export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
+  const host = createJobHost({ onError: deps.onError });
+  const rates = memoryFundingRateBook({ now: () => (deps.now ?? (() => new Date()))().getTime() });
+
+  const publishFundingRate = (entry: FundingRateEntry) => {
+    rates.set(entry);
+    deps.seedFundingRate?.(entry);
+  };
+
+  if (!deps.config.enabled) {
+    return {
+      host,
+      publishFundingRate,
+      stop: () => host.stopAll(),
+    };
+  }
+
+  const marks = markSourceFromDepth((marketId) => deps.matching.depth(marketId));
+  const liqLoader = sqlLiquidationPositionLoader(deps.sql);
+  const attempts = sqlLiquidationAttemptStore(deps.sql);
+  const closer = sqlPositionCloser(deps.sql, deps.bus);
+  const fundLoader = sqlFundingPositionLoader(deps.sql);
+  const periods = sqlFundingPeriodStore(deps.sql);
+
+  host.every('futures.liquidation', deps.config.liqIntervalMs, async () => {
+    await runLiquidationTick({
+      marks,
+      positions: liqLoader,
+      closer,
+      attempts,
+      ledger: deps.ledger,
+      now: deps.now,
+    });
+  });
+
+  for (const marketId of deps.config.fundingMarketIds) {
+    if (!marketId.trim()) continue;
+    host.every(`futures.funding.${marketId}`, deps.config.fundingIntervalMs, async () => {
+      await runFundingTick(
+        {
+          rates: rates.source(),
+          positions: fundLoader,
+          periods,
+          ledger: deps.ledger,
+          now: deps.now,
+        },
+        marketId,
+      );
+    });
+  }
+
+  return {
+    host,
+    publishFundingRate,
+    stop: () => host.stopAll(),
+  };
+}
+
+/** Parse comma-separated market ids. Empty / whitespace → []. */
+export function parseFundingMarketIds(raw: string | undefined): string[] {
+  if (raw == null || raw.trim() === '') return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
