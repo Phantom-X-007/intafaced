@@ -337,7 +337,7 @@ export default {
 }
 
 .order_box.active {
-  border-bottom: 2px solid #ff6b00;
+  border-bottom: 2px solid #00c2a8;
 }
 
 .order_box.search {
@@ -362,7 +362,7 @@ export default {
             border: none;
             box-shadow: none;
             a {
-              color: #ff6b00;
+              color: #00c2a8;
             }
           }
         }
@@ -372,17 +372,17 @@ export default {
 .ivu-tabs-nav-container {
 .ivu-tabs-nav-scroll {
 .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
-              background-color: #ff6b00;
+              background-color: #00c2a8;
             }
 .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
-              color: #ff6b00;
+              color: #00c2a8;
               &:hover {
-                color: #ff6b00;
+                color: #00c2a8;
               }
             }
 .ivu-tabs-tab {
               &:hover {
-                color: #ff6b00;
+                color: #00c2a8;
               }
             }
           }

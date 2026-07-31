@@ -283,9 +283,9 @@ export default {
                 }
               }
 .ivu-btn.ivu-btn-info {
-                border: 1px solid #ff8534;
+                border: 1px solid #1ad4bc;
                 span {
-                  color: #ff8534;
+                  color: #1ad4bc;
                 }
               }
 .ivu-btn.ivu-btn-error {
@@ -336,10 +336,10 @@ export default {
 }
 
 .header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #ff8534;color: #ff8534;
+  float:right;padding: 5px 15px;border: 1px solid #1ad4bc;color: #1ad4bc;
   margin-left: 20px;
   &:hover{
-    background: #ff8534;
+    background: #1ad4bc;
     color: #000;
     cursor: pointer;
   }
@@ -410,7 +410,7 @@ export default {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #ff6b00;
+    background: #00c2a8;
 }
 
 .bill_box {

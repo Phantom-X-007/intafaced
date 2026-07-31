@@ -519,7 +519,7 @@ export default {
 
 .trade-right-box.trade-operation.price-box.show-price span {
   font-size: 18px;
-  color: #ff8534;
+  color: #1ad4bc;
   font-weight: bolder;
 }
 
@@ -528,7 +528,7 @@ export default {
   border: 0;
   color: white;
   padding: 14px 20px;
-  background-color: #ff8534;
+  background-color: #1ad4bc;
   cursor: pointer;
   width: 20%;
   text-align: center;
@@ -653,7 +653,7 @@ export default {
   -webkit-box-align: center;
   -ms-flex-align: center;
   align-items: center;
-  background: #ff6b00;
+  background: #00c2a8;
   height: 60px;
   width: 60px;
   color: #fff;

@@ -1925,7 +1925,7 @@ export default {
 <style scoped lang="scss">
 /* Palette comes from assets/css/intafaced.css. Fallbacks keep the terminal
    readable if this page is ever rendered before that sheet loads. */
-$orange: var(--ix-orange, #ff6b00);
+$orange: var(--ix-orange, #00c2a8);
 $up: var(--ix-up, #00b275);
 $down: var(--ix-down, #ff4a68);
 $text: var(--ix-text, #f2f2f2);
@@ -2170,7 +2170,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
     border-radius: $radius-sm;
     &.is-active {
       color: $orange;
-      background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+      background: var(--ix-orange-soft, rgba(0, 194, 168, 0.12));
       &::after {
         display: none;
       }
@@ -2215,7 +2215,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
   }
   &.is-current {
     border-left-color: $orange;
-    background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+    background: var(--ix-orange-soft, rgba(0, 194, 168, 0.12));
     color: $text;
   }
 }
@@ -2277,15 +2277,15 @@ $radius-sm: var(--ix-radius-sm, 8px);
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 107, 0, 0.35);
+  border: 1px solid rgba(0, 194, 168, 0.35);
   border-radius: 6px;
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(0, 194, 168, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #ff6b00;
+  color: #00c2a8;
   font-weight: 600;
 }
 .ix-empty-error {
@@ -2707,7 +2707,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
       border-radius: 999px;
       background: $orange;
       border: 2px solid #000;
-      box-shadow: 0 0 0 1px var(--ix-orange-glow, rgba(255, 107, 0, 0.28));
+      box-shadow: 0 0 0 1px var(--ix-orange-glow, rgba(0, 194, 168, 0.28));
       cursor: pointer;
     }
     &::-moz-range-thumb {
@@ -2740,7 +2740,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
       color: $orange;
     }
     &.is-active {
-      background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+      background: var(--ix-orange-soft, rgba(0, 194, 168, 0.12));
       border-color: $orange;
       color: $orange;
     }

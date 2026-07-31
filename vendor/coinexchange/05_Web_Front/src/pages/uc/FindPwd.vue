@@ -62,7 +62,7 @@
     margin-left: -175px;
     margin-top: -205px;
     border-radius: 5px;
-    border-top: 4px solid #ff8534;
+    border-top: 4px solid #1ad4bc;
 .tel-title{
       font-size:25px;
       color: #fff;
@@ -83,7 +83,7 @@
           }
           #sendCode {
             position: absolute;
-            border: 1px solid #ff8534;
+            border: 1px solid #1ad4bc;
             background: transparent;
             top: -10px;
             outline: none;

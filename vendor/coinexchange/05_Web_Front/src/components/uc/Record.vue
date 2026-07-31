@@ -28,7 +28,7 @@
             <Select v-model="recordValue" clearable style="width:200px" @on-change="getType" :placeholder="$t('common.pleaseselect')">
               <Option v-for="item in recordType" :value="item.value" :key="item.value">{{ item.label }}</Option>
             </Select>
-            <Button type="warning" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#ff6b00;border-color:#ff6b00">{{$t('uc.finance.record.search')}}</Button>
+            <Button type="warning" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#00c2a8;border-color:#00c2a8">{{$t('uc.finance.record.search')}}</Button>
           </div>
           <div class="order-table">
             <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">

@@ -650,7 +650,7 @@ export default {
 .account-box.account-in.account-item.account-item-in.btn {
     padding: 8px 10px;
     cursor: pointer;
-    color: #ff6b00;
+    color: #00c2a8;
 }
 
 .tips-g {
@@ -697,7 +697,7 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #ff6b00;
+    color: #00c2a8;
     transition: all.2s ease-in-out;
     cursor: pointer;
 }
@@ -710,7 +710,7 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #ff6b00;
+    color: #00c2a8;
     transition: all.2s ease-in-out;
     cursor: pointer;
 }
@@ -782,7 +782,7 @@ p.describe {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #ff6b00;
+    background: #00c2a8;
 }
 
 .bill_box {
@@ -945,7 +945,7 @@ p.describe {
 }
 
 .order_box.active {
-    border-bottom: 2px solid #ff6b00;
+    border-bottom: 2px solid #00c2a8;
 }
 
 .order_box.search {
@@ -958,8 +958,8 @@ p.describe {
     /* border: #cccccc solid 1px; */
 }
 .ivu-btn-primary{
-    background-color: #ff6b00;
-    border-color: #ff6b00;
+    background-color: #00c2a8;
+    border-color: #00c2a8;
 }
 
 @media screen and (max-width:768px){

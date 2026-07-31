@@ -384,7 +384,7 @@ export default {
 
 .trade-item:hover.trade-btn {
   color: #fff;
-  background: #ff6b00;
+  background: #00c2a8;
 }
 
 .trade-item.trade-btn.icon {

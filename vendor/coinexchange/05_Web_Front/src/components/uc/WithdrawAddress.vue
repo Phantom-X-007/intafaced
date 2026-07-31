@@ -28,7 +28,7 @@
               </div>
             </div>
             <div class="btnbox">
-              <Button id="addrSubmit" @click='addAddr' size="large" style="width:86px;color:#fff;background:#ff6b00;border:1px solid #ff6b00;">{{$t('uc.finance.withdraw.add')}}</Button>
+              <Button id="addrSubmit" @click='addAddr' size="large" style="width:86px;color:#fff;background:#00c2a8;border:1px solid #00c2a8;">{{$t('uc.finance.withdraw.add')}}</Button>
             </div>
             <div class="action-content">
               <div class="action-body">
@@ -52,7 +52,7 @@
     <!-- model -->
     <Modal v-model="modal2" width="360">
       <p slot="header" style="color:#f60;text-align:center">
-        <Icon type="ios-mail" size="20" color="#ff6b00;" />
+        <Icon type="ios-mail" size="20" color="#00c2a8;" />
         <span>{{$t('uc.finance.withdraw.safevalidate')}}</span>
       </p>
       <div style="text-align:center">

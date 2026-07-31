@@ -24,7 +24,7 @@
       </div>
     </div>
     <!-- <div class="help_container">
-          <div style="line-height: 40px;font-size:16px;"><router-link to="/help" style="color:#ff6b00;">{{$t('cms.servicecenter')}}</router-link>->{{$t('cms.notice')}}</div>
+          <div style="line-height: 40px;font-size:16px;"><router-link to="/help" style="color:#00c2a8;">{{$t('cms.servicecenter')}}</router-link>->{{$t('cms.notice')}}</div>
 
             <Col span="24" style="padding:0 2%;color:#000;font-size:18px;background:#fff">
                 <div class="faqlist">
@@ -88,7 +88,7 @@
           white-space: nowrap;
           width: 70%;
           &:hover{
-            color: #ff6b00;
+            color: #00c2a8;
           }
         }
       }

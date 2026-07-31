@@ -150,7 +150,7 @@
       </Form>
       <div slot="footer">
         <span style="margin-right:50px" @click="cancel">Cancel</span>
-        <span style="background:#ff8534;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">Confirm</span>
+        <span style="background:#1ad4bc;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">Confirm</span>
       </div>
     </Modal>
 
@@ -1020,7 +1020,7 @@ export default {
   outline: none;
   right: 0;
   width: 30%;
-  color: #ff8534;
+  color: #1ad4bc;
   cursor: pointer;
   height: 20px;
   line-height: 20px;
@@ -1037,14 +1037,14 @@ export default {
     font-size: 18px;
 }
 .ctc.ivu-tabs-nav.ivu-tabs-tab:hover{
-    color: #ff6b00;
+    color: #00c2a8;
 }
 .ctc.ivu-tabs-nav.ivu-tabs-tab:hover,.ctc.ivu-tabs-nav.ivu-tabs-tab-active{
-    color: #ff6b00;
+    color: #00c2a8;
     font-size: 18px;
 }
 .ctc.ivu-tabs-ink-bar{
-    background-color: #ff6b00;
+    background-color: #00c2a8;
 }
 .ctc.buy_total{
   border-top: 1px solid #2b2b2b;
@@ -1083,7 +1083,7 @@ export default {
     float:right;
 }
 .ctc-order-status{
-  text-align:center;margin-bottom: 15px;background: #ff6b00;padding: 5px 0px;border-radius: 2px;color: #000000;
+  text-align:center;margin-bottom: 15px;background: #00c2a8;padding: 5px 0px;border-radius: 2px;color: #000000;
 }
 .ctc.trade_panel.panel.hd b {
     padding-left: 0;

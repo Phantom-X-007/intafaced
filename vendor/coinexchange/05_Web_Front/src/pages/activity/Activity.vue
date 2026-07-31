@@ -516,13 +516,13 @@ export default {
         border-bottom: 1px solid #dcdee2;
     }
 .activity.ivu-tabs-nav.ivu-tabs-tab:hover{
-        color: #ff6b00;
+        color: #00c2a8;
     }
 .activity.ivu-tabs-nav.ivu-tabs-tab:hover,.activity.ivu-tabs-nav.ivu-tabs-tab-active{
-        color: #ff6b00;
+        color: #00c2a8;
     }
 .activity.ivu-tabs-ink-bar{
-        background-color: #ff6b00;
+        background-color: #00c2a8;
     }
 .app_bottom{
       display: none;

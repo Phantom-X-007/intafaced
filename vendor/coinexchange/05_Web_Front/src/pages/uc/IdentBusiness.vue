@@ -58,7 +58,7 @@
         </Steps>
 
         <div v-if="certStatus == 6" style="width: 500px;margin: 0 auto;text-align: center;">
-          <Button type="warning" style="width: 120px;background:#ff8534;border-color:#ff8534" @click="modal_return=true" long size="large">{{$t("uc.identity.shenagain")}}</Button>
+          <Button type="warning" style="width: 120px;background:#1ad4bc;border-color:#1ad4bc" @click="modal_return=true" long size="large">{{$t("uc.identity.shenagain")}}</Button>
           <div class="fail-reason" style="margin-top: 50px;font-size: 16px;">
             <Icon type="md-alert" color="red" size="16" />
             <span style="margin-left: 10px;">{{$t('uc.identity.yuanyin')}}: {{refuseReason}}</span>
@@ -66,11 +66,11 @@
         </div>
 
         <div v-if="certStatus == 7" style="width: 500px;margin: 0 auto;text-align: center;">
-          <Button type="warning" style="width: 120px;background:#ff8534;border-color:#ff8534" @click="modal_read=true" long size="large">{{$t("uc.identity.sheqinggain")}}</Button>
+          <Button type="warning" style="width: 120px;background:#1ad4bc;border-color:#1ad4bc" @click="modal_read=true" long size="large">{{$t("uc.identity.sheqinggain")}}</Button>
         </div>
 
         <div v-if="certStatus == 3" style="width: 500px;margin: 0 auto;text-align: center;">
-          <Button type="warning" style="width: 120px;background:#ff8534;border-color:#ff8534" @click="modal_read=true" long size="large">{{$t("uc.identity.shenagain")}}</Button>
+          <Button type="warning" style="width: 120px;background:#1ad4bc;border-color:#1ad4bc" @click="modal_read=true" long size="large">{{$t("uc.identity.shenagain")}}</Button>
           <div class="fail-reason" style="margin-top: 50px;font-size: 16px;">
             <Icon type="md-alert" color="red" size="16" />
             <span style="margin-left: 10px;">{{$t("uc.identity.reason")}}: {{certReason}}</span>
@@ -78,7 +78,7 @@
         </div>
 
         <div v-else-if="certStatus == 2" style="width: 500px;margin: 0 auto;text-align: center;">
-          <Button type="warning" style="width: 120px;background:#ff8534;border-color:#ff8534" @click="publishAd" long size="large">{{$t('nav.fabu')}}</Button>
+          <Button type="warning" style="width: 120px;background:#1ad4bc;border-color:#1ad4bc" @click="publishAd" long size="large">{{$t('nav.fabu')}}</Button>
           <div style="margin-top: 30px;font-size: 16px;text-align: center;">
             <a @click="returnAdit" style="color: #aaa;">{{$t("uc.identity.shenqingtuibao")}}</a>
           </div>
@@ -121,11 +121,11 @@
         <div v-show="certStatus === 0" style="text-align: center;font-size: 16px;margin-top:50px">
           <Checkbox v-model="single"></Checkbox>
           <span>{{$t("uc.identity.read")}}</span>
-          <router-link target="_blank" to="/helpdetail?cate=1&id=11&cateTitle=FAQ" class="cur" style="color:#ff6b00">{{$t('uc.identity.agreement')}}</router-link>
+          <router-link target="_blank" to="/helpdetail?cate=1&id=11&cateTitle=FAQ" class="cur" style="color:#00c2a8">{{$t('uc.identity.agreement')}}</router-link>
         </div>
         <!-- step-one button -->
         <div v-show="certStatus === 0" class="sq">
-          <Button @click="apply" style="background:#ff6b00;color:#fff;outline:none;">{{$t("uc.identity.lijishenqing")}}</Button>
+          <Button @click="apply" style="background:#00c2a8;color:#fff;outline:none;">{{$t("uc.identity.lijishenqing")}}</Button>
         </div>
       </div>
 
@@ -164,9 +164,9 @@
         <div style="text-align: left;padding: 30px 0;">
           <Checkbox v-model="agreeFrozen"></Checkbox> {{$t('uc.identity.second.agree')}}
           <span>
-            <font color="#ff6b00">{{auditText}}</font>{{$t('uc.identity.second.agreec')}}</span>
+            <font color="#00c2a8">{{auditText}}</font>{{$t('uc.identity.second.agreec')}}</span>
         </div>
-        <Button @click="apply2" long style="font-size: 16px;background:#ff6b00;color:#fff;border:1px solid #ff6b00;">{{$t('uc.identity.second.shenqingchngweishangjia')}}</Button>
+        <Button @click="apply2" long style="font-size: 16px;background:#00c2a8;color:#fff;border:1px solid #00c2a8;">{{$t('uc.identity.second.shenqingchngweishangjia')}}</Button>
       </div>
       <p slot="footer">
         <!--<span style="text-align: left">-->
@@ -230,7 +230,7 @@
             </Col>
           </Row>
           <FormItem style="margin-top: 20px;">
-            <Button style="width:100%;background:#ff6b00;color:#fff;border:1px solid #ff6b00;" type="info" @click="apply3('apply_form')" :disabled="applyBtn">{{$t("uc.identity.lijishenqing")}}</Button>
+            <Button style="width:100%;background:#00c2a8;color:#fff;border:1px solid #00c2a8;" type="info" @click="apply3('apply_form')" :disabled="applyBtn">{{$t("uc.identity.lijishenqing")}}</Button>
           </FormItem>
         </Form>
       </div>
@@ -599,7 +599,7 @@ export default {
 .tit {
   font-size: 16px;
   line-height: 25px;
-  border-left: 5px solid #ff6b00;
+  border-left: 5px solid #00c2a8;
   padding-left: 15px;
 }
 .plancon {
@@ -777,7 +777,7 @@ export default {
 .ivu-upload.ivu-upload-drag {
               background-color: transparent;
               &:hover {
-                border-color: #ff6b00;
+                border-color: #00c2a8;
               }
             }
           }
@@ -802,14 +802,14 @@ export default {
 .ivu-modal-footer {
         border: none;
 .ivu-btn-primary {
-          background-color: #ff6b00;
+          background-color: #00c2a8;
           color: #fff;
           border-color: #f0ac70;
         }
 .ivu-btn-text {
           &:hover,
           &:focus {
-            color: #ff6b00;
+            color: #00c2a8;
           }
         }
       }
@@ -817,26 +817,26 @@ export default {
   }
 }
 .ivu-btn-primary {
-  background: #ff6b00;
-  border: 1px solid #ff6b00;
+  background: #00c2a8;
+  border: 1px solid #00c2a8;
   &:hover {
-    background: #ff6b00;
-    border: 1px solid #ff6b00;
+    background: #00c2a8;
+    border: 1px solid #00c2a8;
   }
 }
 .ivu-btn-text {
   &:hover {
-    color: #ff6b00;
+    color: #00c2a8;
   }
 }
 .ivu-checkbox-checked.ivu-checkbox-inner {
-  background-color: #ff6b00!important;
-  border: 1px solid #ff6b00!important;
+  background-color: #00c2a8!important;
+  border: 1px solid #00c2a8!important;
 }
 li.ivu-upload-list-file.ivu-upload-list-file-finish {
   &:hover {
     span {
-      color: #ff6b00;
+      color: #00c2a8;
     }
   }
 }
@@ -847,14 +847,14 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ivu-steps-tail {
         i {
           &:after {
-            background: #ff6b00;
+            background: #00c2a8;
           }
         }
       }
 .ivu-steps-head {
 .ivu-steps-head-inner {
-          background-color: #ff6b00;
-          border-color: #ff6b00;
+          background-color: #00c2a8;
+          border-color: #00c2a8;
         }
       }
 .ivu-steps-main {
@@ -867,8 +867,8 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ivu-steps-item.ivu-steps-status-process {
 .ivu-steps-head {
 .ivu-steps-head-inner {
-          background-color: #ff6b00;
-          border-color: #ff6b00;
+          background-color: #00c2a8;
+          border-color: #00c2a8;
         }
       }
     }

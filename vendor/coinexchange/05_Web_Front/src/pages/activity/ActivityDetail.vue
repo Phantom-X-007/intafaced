@@ -168,7 +168,7 @@
         <!-- model -->
         <Modal v-model="modal2" width="360">
           <p slot="header" style="color:#f60;text-align:center">
-            <Icon type="ios-mail" size="20" color="#ff6b00;" />
+            <Icon type="ios-mail" size="20" color="#00c2a8;" />
             <span>{{$t('uc.finance.withdraw.safevalidate')}}</span>
           </p>
           <div style="text-align:center">

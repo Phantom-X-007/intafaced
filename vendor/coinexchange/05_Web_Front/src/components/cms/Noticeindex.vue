@@ -127,7 +127,7 @@ export default {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #ff6b00;
+    background: #00c2a8;
 }
 
 .notice.merchant-top.tips-word {
@@ -181,7 +181,7 @@ export default {
 }
 
 .notice.order_box.active {
-    border-bottom: 2px solid #ff6b00;
+    border-bottom: 2px solid #00c2a8;
 }
 
 .notice.order_box.search {

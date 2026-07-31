@@ -192,11 +192,11 @@ export default {
 }
 
 .leftmenu li a:hover {
-  color: #ff6b00;
+  color: #00c2a8;
 }
 
 .leftmenu li.cur a {
-  color: #ff6b00;
+  color: #00c2a8;
 }
 .content {
   padding-top: 20px;

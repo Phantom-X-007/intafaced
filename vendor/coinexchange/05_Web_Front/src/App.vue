@@ -717,11 +717,11 @@ export default {
     font-size: 14px;
     color: #8a8a8a;
     &:hover {
-      color: #ff6b00;
+      color: #00c2a8;
     }
   }
 .router-link-active.ix-nav-title {
-    color: #ff6b00;
+    color: #00c2a8;
   }
 }
 /* CEX / DEX plane switch — compact pill matching shell chrome, not a new kit.
@@ -745,11 +745,11 @@ export default {
   text-decoration: none;
   white-space: nowrap;
   &:hover {
-    color: var(--accent, #ff6b00);
+    color: var(--accent, #00c2a8);
   }
   &.is-active {
     color: #fff;
-    background: var(--accent, #ff6b00);
+    background: var(--accent, #00c2a8);
   }
 }
 @media screen and (max-width: 1100px) {
@@ -815,17 +815,17 @@ export default {
                   &:hover {
                     li {
                       background: none;
-                      color: #ff6b00;
+                      color: #00c2a8;
                     }
                   }
                   li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-                    color: #ff6b00;
+                    color: #00c2a8;
                         border-bottom: 3px solid #ffa800;
                   }
                 }
 .router-link-exact-active.router-link-active {
                   li {
-                    color: #ff6b00;
+                    color: #00c2a8;
                   }
                 }
               }
@@ -884,7 +884,7 @@ export default {
                 border-right: 1px solid #292929;
               }
               #register {
-                color: #ff6b00!important;
+                color: #00c2a8!important;
                 &:hover {
                   li {
                     color: #fff;
@@ -1115,11 +1115,11 @@ export default {
                   &:hover {
                     li {
                       background: none;
-                      color: #ff6b00;
+                      color: #00c2a8;
                     }
                   }
                   li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-                    color: #ff6b00;
+                    color: #00c2a8;
                     border-bottom: 3px solid #ffa800;
                   }
                   li {
@@ -1128,7 +1128,7 @@ export default {
                 }
 .router-link-exact-active.router-link-active {
                   li {
-                    color: #ff6b00;
+                    color: #00c2a8;
                   }
                 }
               }
@@ -1186,7 +1186,7 @@ export default {
                 border-right: 1px solid #292929;
               }
               #register {
-                color: #ff6b00!important;
+                color: #00c2a8!important;
                 &:hover {
                   li {
                     color: #fff;
@@ -1351,13 +1351,13 @@ export default {
   color: #ccc;
   &:hover {
     background-color: #141414;
-    color: #ff8534;
+    color: #1ad4bc;
   }
 }
 .ivu-table-filter-list.ivu-table-filter-select-item-selected {
-  color: #ff8534;
+  color: #1ad4bc;
   &:hover {
-    color: #ff8534;
+    color: #1ad4bc;
   }
 }
 
@@ -1384,8 +1384,8 @@ export default {
 }
 /* checkbox */
 .exchange.ivu-checkbox-checked.ivu-checkbox-inner {
-  background-color: #ff6b00;
-  border-color: #ff6b00;
+  background-color: #00c2a8;
+  border-color: #00c2a8;
 }
 /* modal */
 .ivu-modal-confirm-head {
@@ -1405,12 +1405,12 @@ export default {
   }
 }
 .ivu-modal-confirm-footer.ivu-btn-primary {
-  background-color: #ff6b00;
-  border-color: #ff6b00;
+  background-color: #00c2a8;
+  border-color: #00c2a8;
 }
 .ivu-modal-confirm-footer.ivu-btn-text {
   &:hover {
-    color: #ff6b00;
+    color: #00c2a8;
   }
 }
 .ivu-table-wrapper {
@@ -1642,7 +1642,7 @@ body {
     padding: 10px 16px;
     color: #ccc;
     &:hover {
-      color: #ff8534;
+      color: #1ad4bc;
     }
   }
 }
@@ -1664,7 +1664,7 @@ body {
 // }
 .ivu-dropdown-item:hover {
   background-color: #141414;
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-dropdown-item img {
   width: 14px;
@@ -1923,18 +1923,18 @@ body {
   border-color: #141414;
 }
 .ivu-page-item-active {
-  // background-color: #ff8534;
-  // border-color: #ff8534;
+  // background-color: #1ad4bc;
+  // border-color: #1ad4bc;
   // color: #fff;
   font-weight:bold;
 }
 .ivu-page-next:hover,
 .ivu-page-prev:hover {
-  border-color: #ff8534;
+  border-color: #1ad4bc;
 }
 .ivu-page-next:hover a,
 .ivu-page-prev:hover a {
-  color: #ff8534;
+  color: #1ad4bc;
 }
 
 .ivu-page-item-jump-prev a,
@@ -1943,16 +1943,16 @@ body {
 }
 .ivu-page-item-jump-prev a:hover,
 .ivu-page-item-jump-next a:hover {
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-page-item:hover {
-  border-color: #ff8534;
+  border-color: #1ad4bc;
 }
 .ivu-page-item:hover a {
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-page-item.ivu-page-item-active a {
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-page-disabled {
   a {
@@ -2049,24 +2049,24 @@ fieldset[disabled].ivu-input {
 .ivu-select-item:hover {
   background-color: #141414;
   // color:#ccc;
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-select-multiple.ivu-select-item-selected {
   background-color: #000000;
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-select-multiple.ivu-select-item-focus,
 .ivu-select-multiple.ivu-select-item-selected:hover {
   background-color: #000000;
 }
 .ivu-select-multiple.ivu-select-item-selected:after {
-  color: #ff8534;
+  color: #1ad4bc;
 }
 
 .ivu-select-item-selected,
 .ivu-select-item-selected:hover {
   background-color: #000000;
-  color: #ff8534;
+  color: #1ad4bc;
 }
 // chexkboxes
 .ivu-checkbox-inner {
@@ -2105,7 +2105,7 @@ fieldset[disabled].ivu-input {
 }
 /* loading reset */
 .ivu-spin-dot {
-  background: #ff8534;
+  background: #1ad4bc;
 }
 .ivu-tabs-bar {
   border-color: #f5f5f5;
@@ -2113,7 +2113,7 @@ fieldset[disabled].ivu-input {
 /* date picker reset */
 .ivu-picker-panel-icon-btn {
   &:hover {
-    color: #ff8534;
+    color: #1ad4bc;
   }
 }
 .ivu-date-picker-focused input {
@@ -2121,11 +2121,11 @@ fieldset[disabled].ivu-input {
   box-shadow: none;
 }
 .ivu-date-picker-cells-focused em {
-  // -moz-box-shadow: 0 0 0 1px #ff8534 inset;
-  // -webkit-box-shadow: 0 0 0 1px #ff8534 inset;
-  // box-shadow: 0 0 0 1px #ff8534 inset;
+  // -moz-box-shadow: 0 0 0 1px #1ad4bc inset;
+  // -webkit-box-shadow: 0 0 0 1px #1ad4bc inset;
+  // box-shadow: 0 0 0 1px #1ad4bc inset;
   box-shadow: none;
-  color: #ff8534;
+  color: #1ad4bc;
   &:after {
     // background: #141414;
   }
@@ -2136,7 +2136,7 @@ fieldset[disabled].ivu-input {
 .ivu-date-picker-cells-cell-selected em,
 .ivu-date-picker-cells-cell-selected:hover em {
   background: #141414;
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-date-picker-cells-cell-today em:after {
   background: #141414;
@@ -2146,7 +2146,7 @@ fieldset[disabled].ivu-input {
 }
 .ivu-date-picker-cells-cell:hover em {
   background: #141414;
-  color: #ff8534;
+  color: #1ad4bc;
 }
 /* button reset */
 
@@ -2154,20 +2154,20 @@ fieldset[disabled].ivu-input {
   border: none;
 }
 .ivu-btn-primary:hover {
-  background: #ff8534;
-  border-color: #ff8534;
+  background: #1ad4bc;
+  border-color: #1ad4bc;
 }
 .ivu-btn.ivu-btn-default {
   background-color: #141414;
   color: #FFF;
   &:hover {
-    color: #ff6b00;
+    color: #00c2a8;
     // background: #141414;
-    // border: 1px solid #ff6b00;
+    // border: 1px solid #00c2a8;
   }
   &:active {
-    color: #ff6b00;
-    // border: 1px solid #ff6b00;
+    color: #00c2a8;
+    // border: 1px solid #00c2a8;
     // background: #141414;
   }
 }
@@ -2177,12 +2177,12 @@ fieldset[disabled].ivu-input {
   border: 1px solid #141414;
 }
 .ivu-btn-primary {
-  background-color: #ff8534;
-  border-color: #ff8534;
+  background-color: #1ad4bc;
+  border-color: #1ad4bc;
 }
 .ivu-btn-text:hover {
   background-color: transparent;
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-input-group-append,
 .ivu-input-group-prepend {
@@ -2203,19 +2203,19 @@ fieldset[disabled].ivu-input {
 
 /* radio reset */
 .ivu-radio-checked.ivu-radio-inner {
-  border-color: #ff8534;
+  border-color: #1ad4bc;
 }
 .ivu-radio-checked:hover {
 .ivu-radio-inner {
-    border-color: #ff8534;
+    border-color: #1ad4bc;
   }
 }
 .ivu-radio-inner:after {
-  background: #ff8534;
+  background: #1ad4bc;
 }
 .ivu-switch-checked {
-  border-color: #ff8534;
-  background-color: #ff8534;
+  border-color: #1ad4bc;
+  background-color: #1ad4bc;
 }
 .ivu-switch:focus {
   box-shadow: none;
@@ -2241,10 +2241,10 @@ fieldset[disabled].ivu-input {
 }
 /* sort arrow reset */
 .ivu-table-sort i.on {
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-table-sort i:hover {
-  color: #ff8534;
+  color: #1ad4bc;
 }
 .ivu-modal-confirm-head-icon {
   font-size: 24px;
@@ -2343,7 +2343,7 @@ fieldset[disabled].ivu-input {
   transition: all 0.5s;
 }
 .swiper-pagination-bullet-active{
-  background: #ff6b00!important;
+  background: #00c2a8!important;
   width:30px;
   opacity: 1;
 }
@@ -2409,7 +2409,7 @@ fieldset[disabled].ivu-input {
 }
 
 .ivu-spin{
-  color:#ff6b00!important;
+  color:#00c2a8!important;
 }
 .ivu-poptip-popper[x-placement^=bottom].ivu-poptip-arrow{
   border-bottom-color: #141414;
@@ -2475,6 +2475,6 @@ fieldset[disabled].ivu-input {
   background:transparent!important;
 }
 .header_nav_mobile.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu){
-  color: #ff6b00;
+  color: #00c2a8;
 }
 </style>

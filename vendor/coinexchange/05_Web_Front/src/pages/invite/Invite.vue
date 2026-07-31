@@ -1,8 +1,8 @@
 
 <template>
   <div class="invite">
-    <div class="ix-invite-honesty" role="note" style="margin:12px 16px;padding:10px 12px;border:1px solid rgba(255,107,0,0.35);border-radius:6px;font-size:12.5px;line-height:1.5;color:#c8cdd4;">
-      <strong style="color:#ff6b00;">Affiliate numbers are not ledger balances.</strong>
+    <div class="ix-invite-honesty" role="note" style="margin:12px 16px;padding:10px 12px;border:1px solid rgba(0, 194, 168,0.35);border-radius:6px;font-size:12.5px;line-height:1.5;color:#c8cdd4;">
+      <strong style="color:#00c2a8;">Affiliate numbers are not ledger balances.</strong>
       Commission and level counts come from the exchange affiliate APIs when signed in — unknown fields stay blank rather than invented zeros for a full book.
     </div>
     <div class="header">

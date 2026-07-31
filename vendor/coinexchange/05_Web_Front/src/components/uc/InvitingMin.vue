@@ -25,7 +25,7 @@
                         {{$t('uc.finance.inviting.refere')}}: 
                         </span> -->
                         <!-- <Input v-model="value" :placeholder="$t('uc.finance.inviting.refereinput')" style="width: 200px"></Input> -->
-                        <Button type="primary" @click="queryOrder" style="padding: 6px 50px;margin-left:10px;background-color:#ff6b00;border-color:#ff6b00">{{$t('uc.finance.record.search')}}</Button>
+                        <Button type="primary" @click="queryOrder" style="padding: 6px 50px;margin-left:10px;background-color:#00c2a8;border-color:#00c2a8">{{$t('uc.finance.record.search')}}</Button>
                     </div>
                     <div class="datedaitl">
                         <span style="color: #eb6f6c">{{$t('uc.finance.inviting.start_end')}}: </span>&nbsp;&nbsp;<span>{{$t('uc.finance.inviting.chargetime')}}</span>
@@ -448,7 +448,7 @@
     }
 
 .order_box.active {
-        border-bottom: 2px solid #ff6b00;
+        border-bottom: 2px solid #00c2a8;
     }
 
 .order_box.search {

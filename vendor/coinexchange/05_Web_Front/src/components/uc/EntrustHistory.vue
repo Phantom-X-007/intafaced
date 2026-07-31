@@ -32,7 +32,7 @@
   text-align: center;
 }
 .table.ivu-table-cell-expand {
-  color: #ff6b00;
+  color: #00c2a8;
 }
 </style>
 
@@ -225,7 +225,7 @@ export default {
                 "span",
                 {
                   style: {
-                    color: "#ff6b00"
+                    color: "#00c2a8"
                   }
                 },
                 self.$t("exchange.finished")
@@ -235,7 +235,7 @@ export default {
                 "span",
                 {
                   style: {
-                    color: "#ff6b00"
+                    color: "#00c2a8"
                   }
                 },
                 self.$t("exchange.canceled")

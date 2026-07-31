@@ -103,7 +103,7 @@
     right: 0;
     font-size: 14px;
     a {
-      color: #ff6b00;
+      color: #00c2a8;
     }
   }
 }
