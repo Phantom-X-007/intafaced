@@ -75,6 +75,7 @@ function toTrpcError(err: unknown): TRPCError {
       // input is malformed, and the same request may succeed later.
       case 'bank.loan_not_settled':
       case 'bank.loan_not_drawable':
+      case 'bank.loan_liquidating':
       case 'bank.margin_call_required':
       case 'bank.loan_closed':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
