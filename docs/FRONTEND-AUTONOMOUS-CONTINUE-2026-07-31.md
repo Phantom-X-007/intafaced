@@ -22,6 +22,7 @@
 | P21 modular teal                   | #267           |
 | B5 prefs · B7 keyboard · B8 impact | #267           |
 | B9 partial fill · copy id · CSV    | #295           |
+| B12 OTC/CMS + B4 light mobile      | #301           |
 | B2/B6/B10/B14 desk + B3 money      | #297           |
 | B10 withdraw/record residual map   | #298           |
 
@@ -53,5 +54,7 @@ Fake money/candles · fixture-seeded balances as proof · partner names in UI ·
 | B13 anti-slop cert  | Needs non-implementer pass                                   |
 | B15 multi-monitor   | Optional chrome API; low ROI now                             |
 | Wave C              | Backend/heavy power after B DoD                              |
+
+Polish: activity a11y · withdraw copy-address · skip-link · expanded focus-visible.
 
 **Stop condition this session:** desk craft core B1–B10′ + B14 shipped; residual documented.

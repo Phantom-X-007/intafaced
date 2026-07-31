@@ -9,7 +9,7 @@
           <Tabs :animated="false" style="width:100%;" @on-click="tabChange">
             <TabPane :label="$t('activity.all')" name="all">
               <div class="activity-container">
-                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.all.error">{{ activityList.all.error }}</div>
+                <div class="tips-line ix-empty ix-empty-error" role="alert" tabindex="-1" v-if="activityList.all.error">{{ activityList.all.error }}</div>
                 <div class="tips-line" v-else-if="activityList.all.loaded && activityList.all.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
                 <div class="tips-line" v-if="!activityList.all.loaded && !activityList.all.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.all.items" :key="index">
@@ -70,7 +70,7 @@
             </TabPane>
             <TabPane :label="$t('activity.prepare')" name="step0">
               <div class="activity-container">
-                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.step0.error">{{ activityList.step0.error }}</div>
+                <div class="tips-line ix-empty ix-empty-error" role="alert" tabindex="-1" v-if="activityList.step0.error">{{ activityList.step0.error }}</div>
                 <div class="tips-line" v-else-if="activityList.step0.loaded && activityList.step0.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
                 <div class="tips-line" v-if="!activityList.step0.loaded && !activityList.step0.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.step0.items" :key="index">
@@ -131,7 +131,7 @@
             </TabPane>
             <TabPane :label="$t('activity.ongoing')" name="step1">
               <div class="activity-container">
-                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.step1.error">{{ activityList.step1.error }}</div>
+                <div class="tips-line ix-empty ix-empty-error" role="alert" tabindex="-1" v-if="activityList.step1.error">{{ activityList.step1.error }}</div>
                 <div class="tips-line" v-else-if="activityList.step1.loaded && activityList.step1.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
                 <div class="tips-line" v-if="!activityList.step1.loaded && !activityList.step1.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.step1.items" :key="index">
@@ -192,7 +192,7 @@
             </TabPane>
             <TabPane :label="$t('activity.distributing')" name="step2">
               <div class="activity-container">
-                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.step2.error">{{ activityList.step2.error }}</div>
+                <div class="tips-line ix-empty ix-empty-error" role="alert" tabindex="-1" v-if="activityList.step2.error">{{ activityList.step2.error }}</div>
                 <div class="tips-line" v-else-if="activityList.step2.loaded && activityList.step2.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
                 <div class="tips-line" v-if="!activityList.step2.loaded && !activityList.step2.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.step2.items" :key="index">
@@ -253,7 +253,7 @@
             </TabPane>
             <TabPane :label="$t('activity.completed')" name="step3">
               <div class="activity-container">
-                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.step3.error">{{ activityList.step3.error }}</div>
+                <div class="tips-line ix-empty ix-empty-error" role="alert" tabindex="-1" v-if="activityList.step3.error">{{ activityList.step3.error }}</div>
                 <div class="tips-line" v-else-if="activityList.step3.loaded && activityList.step3.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
                 <div class="tips-line" v-if="!activityList.step3.loaded && !activityList.step3.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.step3.items" :key="index">
