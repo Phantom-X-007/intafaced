@@ -99,7 +99,7 @@ export interface PrivateRestDeps {
       marginMode?: 'cross' | 'isolated';
     },
   ): Promise<Position>;
-  closePosition(principal: Principal, positionId: string): Promise<Position>;
+  closePosition(principal: Principal, positionId: string, exitPrice: string): Promise<Position>;
 }
 
 /** Kinds that count as locked / not free under exchange-contract free/used/total. */
@@ -665,15 +665,25 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
-  /** Close position and release remaining initial margin (v1 — no PnL yet). */
-  app.delete<{ Params: { id: string } }>('/api/v1/positions/:id', async (req, reply) => {
+  /**
+   * Close position at external exit price (query `exitPrice`).
+   * Realized PnL via planClose recipes — never invents a mark.
+   */
+  app.delete<{ Params: { id: string }; Querystring: { exitPrice?: string } }>('/api/v1/positions/:id', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
     if (!requireTradeJurisdiction(req, reply, principal)) return;
 
     try {
       requireScope(principal, 'trade:write');
-      const pos = await deps.closePosition(principal, req.params.id);
+      const exitPrice = req.query?.exitPrice;
+      if (exitPrice == null || String(exitPrice).trim() === '') {
+        return reply.code(400).send({
+          error: 'trade.exit_price_required',
+          message: 'exitPrice query required (external mark — never invent)',
+        });
+      }
+      const pos = await deps.closePosition(principal, req.params.id, String(exitPrice).trim());
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {

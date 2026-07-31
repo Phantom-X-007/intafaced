@@ -130,10 +130,24 @@ if (!available) {
       entryPrice: amt('40000'),
       leverage: amt('5'),
     });
-    // margin = 0.5 * 40000 / 5 = 4000
-    await positions.close(ALICE, pos.id!);
+    // margin = 0.5 * 40000 / 5 = 4000 — flat close at entry (no invent PnL)
+    await positions.close(ALICE, pos.id!, '40000');
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('100000');
     expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  it('refuses close without exitPrice (never invent)', async () => {
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      entryPrice: amt('50000'),
+      leverage: amt('10'),
+    });
+    await expect(positions.close(ALICE, pos.id!, '')).rejects.toMatchObject({
+      code: 'trade.exit_price_required',
+    });
   });
 
   it('publishes positionUpdated on open and close (F4 private WS feed)', async () => {
@@ -153,7 +167,7 @@ if (!available) {
       entryPrice: amt('50000'),
       leverage: amt('10'),
     });
-    await positions.close(ALICE, pos.id!);
+    await positions.close(ALICE, pos.id!, '50000');
     expect(seen).toEqual([
       { status: 'open', side: 'long' },
       { status: 'closed', side: 'long' },

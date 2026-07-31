@@ -120,7 +120,7 @@ registerPrivateRest(app, {
       leverage: parseAmount(input.leverage),
       marginMode: input.marginMode,
     }),
-  closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
+  closePosition: (principal, positionId, exitPrice) => positions.close(principal.userId, positionId, exitPrice),
 });
 
 await app.register(fastifyTRPCPlugin, {

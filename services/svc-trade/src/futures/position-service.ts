@@ -11,6 +11,7 @@ import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } fr
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
 import { initialMargin } from './initial-margin.js';
+import { planClose } from './close-planner.js';
 
 export class FuturesError extends Error {
   constructor(
@@ -77,7 +78,7 @@ export class PositionService {
           WHERE p.user_id = ${userId} AND p.status = 'open'
           ORDER BY p.opened_at DESC
         `;
-    return rows.map(presentPosition);
+    return rows.map((row) => presentPosition(row));
   }
 
   async open(input: OpenPositionInput): Promise<Position> {
@@ -167,7 +168,15 @@ export class PositionService {
     return presentPosition(row!);
   }
 
-  async close(userId: string, positionId: string): Promise<Position> {
+  /**
+   * Close an open position at an **external** exit price (never invent).
+   * Posts planClose recipes (profit / loss / flat) then marks the row closed.
+   */
+  async close(userId: string, positionId: string, exitPrice: string): Promise<Position> {
+    if (exitPrice == null || String(exitPrice).trim() === '') {
+      throw new FuturesError('exitPrice required (external mark — never invent)', 'trade.exit_price_required', 400);
+    }
+
     const [row] = await this.sql<PositionRow[]>`
       SELECT p.*, m.symbol
       FROM trade.positions p
@@ -180,17 +189,26 @@ export class PositionService {
       throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
     }
 
-    const margin = parseAmount(row.margin_initial);
-    // v1: release full initial margin (no realized PnL path yet — F4/F5).
-    await this.ledger.post(
-      recipes.futuresMarginRelease({
+    const plan = planClose({
+      closeId: `close:${row.id}:${randomUUID()}`,
+      position: {
         positionId: row.id,
         userId,
-        assetId: row.margin_asset,
-        amount: margin,
-        sequence: 0,
-      }),
-    );
+        side: row.side,
+        size: parseAmount(row.size),
+        entryPrice: parseAmount(row.entry_price),
+        margin: parseAmount(row.margin_initial),
+        marginAsset: row.margin_asset,
+      },
+      exitPrice: String(exitPrice).trim(),
+    });
+    if (!plan.close) {
+      throw new FuturesError(`cannot close: ${plan.reason}`, 'trade.close_refused', 400);
+    }
+
+    for (const recipe of plan.recipes) {
+      await this.ledger.post(recipe);
+    }
 
     await this.sql`
       UPDATE trade.positions
@@ -204,12 +222,21 @@ export class PositionService {
       JOIN trade.markets m ON m.id = p.market_id
       WHERE p.id = ${positionId}
     `;
-    await this.publishPositionUpdated(closed!);
-    return presentPosition(closed!);
+    await this.publishPositionUpdated(closed!, {
+      markPrice: formatAmount(plan.exitPrice),
+      realizedPnl: formatAmount(plan.realizedPnl),
+    });
+    return presentPosition(closed!, {
+      markPrice: formatAmount(plan.exitPrice),
+      realizedPnl: formatAmount(plan.realizedPnl),
+    });
   }
 
-  /** Fan-out for private WS — honest nulls for mark/PnL until mark path exists. */
-  private async publishPositionUpdated(row: PositionRow): Promise<void> {
+  /** Fan-out for private WS — honest nulls for mark/PnL until known. */
+  private async publishPositionUpdated(
+    row: PositionRow,
+    extras?: { markPrice?: string | null; realizedPnl?: string | null },
+  ): Promise<void> {
     if (!this.bus) return;
     const size = parseAmount(row.size);
     const entry = parseAmount(row.entry_price);
@@ -227,12 +254,12 @@ export class PositionService {
         side: row.side,
         contracts: formatAmount(size),
         entryPrice: formatAmount(entry),
-        markPrice: null,
+        markPrice: extras?.markPrice ?? null,
         notional: formatAmount(notional),
         leverage: formatAmount(parseAmount(row.leverage)),
         collateral: formatAmount(parseAmount(row.margin_initial)),
         unrealizedPnl: null,
-        realizedPnl: null,
+        realizedPnl: extras?.realizedPnl ?? null,
         liquidationPrice: row.liq_price != null ? formatAmount(parseAmount(row.liq_price)) : null,
         marginMode: row.margin_mode,
         fundingPaid: formatAmount(parseAmount(row.funding_paid ?? '0')),
@@ -243,7 +270,7 @@ export class PositionService {
   }
 }
 
-function presentPosition(row: PositionRow): Position {
+function presentPosition(row: PositionRow, extras?: { markPrice?: string | null; realizedPnl?: string | null }): Position {
   const size = parseAmount(row.size);
   const entry = parseAmount(row.entry_price);
   const leverage = parseAmount(row.leverage);
@@ -261,14 +288,14 @@ function presentPosition(row: PositionRow): Position {
     contracts: formatAmount(size),
     contractSize: null,
     entryPrice: formatAmount(entry),
-    markPrice: null,
+    markPrice: extras?.markPrice ?? null,
     notional: formatAmount(notional),
     leverage: formatAmount(leverage),
     collateral: formatAmount(margin),
     initialMargin: formatAmount(margin),
     maintenanceMargin: null,
     unrealizedPnl: null,
-    realizedPnl: null,
+    realizedPnl: extras?.realizedPnl ?? null,
     liquidationPrice: liq,
     marginMode: row.margin_mode,
     percentage: null,
