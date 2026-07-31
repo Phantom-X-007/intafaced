@@ -8,7 +8,12 @@
                     <span class="tips-g">{{$t('uc.account.pagetip')}}</span>
                 </section>
                 <section class="accountContent">
-                    <div class="account-in">
+                    <p v-if="profileLoading" class="ix-empty-loading" role="status">Loading payment methods…</p>
+                    <p v-else-if="profileError" class="ix-empty ix-empty-error" role="alert">{{ profileError }}</p>
+                    <p v-else-if="profileReachable" class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
+                      OTC payment methods on this account — unknown is not “unbound.”
+                    </p>
+                    <div class="account-in" v-if="profileReachable">
                         <div class="account-item">
                             <div class="account-item-in">
                                 <i class="icons bankfor"></i>
@@ -210,6 +215,9 @@ export default {
             msg: '',
             choseItem: 0,
             user: {},
+            profileLoading: true,
+            profileReachable: false,
+            profileError: '',
             formValidate1: {
                 name: '',
                 password: '',
@@ -508,16 +516,15 @@ export default {
             this.$Message.error(this.msg);
         },
         getAccount() {
+            this.profileLoading = true;
+            this.profileReachable = false;
+            this.profileError = '';
             this.$http.post(this.host + '/uc/approve/account/setting').then(response => {
                 var resp = response.body;
-                // console.log(resp);
-                if (resp.code == 0) {
-                    this.user = resp.data;
+                if (resp && resp.code == 0) {
+                    this.user = resp.data || {};
                     this.formValidate1.name = this.formValidate2.name = this.formValidate3.name = this.user.realName
-                    // this.usernameS = (this.user.username + '').slice(0, 1)
-                    // this.dataCount = resp.data.length
                     this.isNoName = false
-                    //Set
                     this.formValidate1.bankName = this.user.bankInfo == null? '': this.user.bankInfo.bank
                     this.formValidate1.bankBranch = this.user.bankInfo == null? '': this.user.bankInfo.branch
                     this.formValidate1.bankNo = this.user.bankInfo == null? '': this.user.bankInfo.cardNo
@@ -525,16 +532,25 @@ export default {
                     this.formValidate3.wechat = this.user.wechatPay == null? '': this.user.wechatPay.wechat
                     this.aliImg = this.aliPreview = this.user.alipay == null? '': this.user.alipay.qrCodeUrl;
                     this.weImg = this.wePreview = this.user.wechatPay == null? '': this.user.wechatPay.qrWeCodeUrl;
-
+                    this.profileReachable = true;
+                    this.profileLoading = false;
                 } else {
-                    this.msg = resp.message;
-                    //this.$Message.error(resp.message)
-                    this.$Notice.error({
+                    this.msg = (resp && resp.message) || '';
+                    this.profileError =
+                      "Payment methods did not answer — bind status is unknown, not unbound.";
+                    this.profileLoading = false;
+                    if (resp && resp.message) {
+                      this.$Notice.error({
                         title: this.$t("common.tip"),
                         desc: resp.message
                       });
-                    this.$router.push("/uc/safe");
+                    }
+                    // Do not force-route to /uc/safe on unknown — that hides the honesty state.
                 }
+            }).catch(() => {
+                this.profileError =
+                  "Payment methods service did not respond — bind status is unknown, not unbound.";
+                this.profileLoading = false;
             })
         }
 

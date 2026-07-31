@@ -3,7 +3,9 @@
       <div class="nav-right padding-right-clear">
         <div class="padding-right-clear padding-left-clear rightarea user account-box">
             <div class="rightarea-con">
-                <div class="user-top-icon">
+                <p v-if="profileLoading" class="ix-empty-loading" role="status" style="padding: 12px 20px;">Loading security settings…</p>
+                <p v-else-if="profileError" class="ix-empty ix-empty-error" role="alert" style="padding: 12px 20px;">{{ profileError }}</p>
+                <div class="user-top-icon" v-if="profileReachable">
                     <div class="user-icons">
                         <div class="user-face user-avatar-public">
                             <span class="user-avatar-in">{{usernameS}}</span>
@@ -21,7 +23,10 @@
                         </Col>
                     </Row>
                 </div>
-                <section class="accountContent">
+                <section class="accountContent" v-if="profileReachable">
+                    <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0 20px;">
+                      Security settings from the venue account service — failed load is not “unverified.”
+                    </p>
                     <div class="account-in">
                         <!-- 1 -->
                         <div class="account-item" style="display:none">
@@ -446,6 +451,9 @@ export default {
       imgNext: "",
       imgLast: "",
       loginmsg: this.$t("common.logintip"),
+      profileLoading: true,
+      profileReachable: false,
+      profileError: "",
       memberlevel:"",
       frontCardImg: require("../../assets/images/frontCardImg.png"),
       backCardImg: require("../../assets/images/backCardImg.png"),
@@ -987,19 +995,31 @@ export default {
       }
     },
     getMember() {
-      // Secure
-      var self = this;
+      // Secure — failed fetch must not look like “unverified / low.”
+      this.profileLoading = true;
+      this.profileReachable = false;
+      this.profileError = "";
       this.$http
-.post(this.host + "/uc/approve/security/setting")
-.then(response => {
+        .post(this.host + "/uc/approve/security/setting")
+        .then(response => {
           var resp = response.body;
-          if (resp.code == 0) {
+          if (resp && resp.code == 0 && resp.data) {
             this.user = resp.data;
-            this.usernameS = this.user.username.slice(0,1);
+            this.usernameS = (this.user.username || "?").slice(0, 1);
+            this.profileReachable = true;
+            this.profileLoading = false;
           } else {
-            this.$Message.error(this.loginmsg);
-            // this.$Message.error(this.$t('common.logintip'));
+            this.profileError =
+              "Security settings did not answer — verification status is unknown, not unverified.";
+            this.profileLoading = false;
+            if (resp && resp.message) this.$Message.error(resp.message);
+            else this.$Message.error(this.loginmsg);
           }
+        })
+        .catch(() => {
+          this.profileError =
+            "Security service did not respond — verification status is unknown, not unverified.";
+          this.profileLoading = false;
         });
     }
   },
@@ -1013,10 +1033,13 @@ export default {
   },
   created() {
     this.getMember();
-    let level = this.$store.getters.member.memberRate;
-    level == 0 && (this.memberlevel = "Member");
-    level == 1 && (this.memberlevel = "Super Group Owner");
-    level == 2 && (this.memberlevel = "Super Partner");
+    var member = this.$store.getters.member;
+    if (member) {
+      let level = member.memberRate;
+      level == 0 && (this.memberlevel = "Member");
+      level == 1 && (this.memberlevel = "Super Group Owner");
+      level == 2 && (this.memberlevel = "Super Partner");
+    }
   }
 };
 </script>
