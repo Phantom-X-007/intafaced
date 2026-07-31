@@ -33,9 +33,6 @@ Per `NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` §7 NEXT QUEUE — claim one lane, r
 
 ## Last board update
 
-- **2026-07-31 frontend Wave A:** #261 withdraw · #262 Account/Safe/myorder · #267 continue.
-
-
 - **2026-07-31 residual campaign ARMED:** Nitro owns residual board program. Tip `c40fd59` (#258). Open **#259**. Frontend Wave A SoT locked separately — coordinate before shell file claims. Third builder stood down.
 
 - **2026-07-31 audit-fire-mega:** claimed residual-ws (tracker honesty only). Tip re-check. Open frontend #261 left alone. Do not collide stream-a-ui.
