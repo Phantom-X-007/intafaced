@@ -1027,7 +1027,7 @@ export default {
       );
     },
 
-    /* Wave B5 — persist non-money desk chrome (pair lives in the URL). */
+    /* Wave B5 — persist non-money desk chrome (pair lives in the URL). Local only. */
     deskPrefsKey() {
       return 'ix.desk.prefs.v1';
     },
