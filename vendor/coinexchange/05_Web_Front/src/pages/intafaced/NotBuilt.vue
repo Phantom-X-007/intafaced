@@ -20,16 +20,14 @@
 
 <script>
 /**
- * The screen for a module that has no service.
+ * Reserved "module not built" shell.
  *
- * Academy (§8.3) and Launch (§8.4) are specced and unbuilt: there is no
- * `services/svc-academy`, no `services/svc-launch`, no prefix at the edge, and
- * nothing to call. So there is nothing to fetch here and no fetch is faked —
- * the page exists so the module is navigable and its absence is stated, not so
- * the navigation looks complete.
+ * Used only for routes that still have no service or no edge prefix. Academy
+ * and Launch once lived here; both now have real pages (svc-academy lobbies,
+ * protocol launch.status). Keep this component generic so a future absent
+ * module can reuse it without re-teaching stale product history.
  *
- * One component for both, parameterised from the route, rather than two files
- * that would drift.
+ * No fetch is faked — navigable honesty, not a finished product screen.
  */
 import { moduleByKey } from '../../config/intafaced.js';
 

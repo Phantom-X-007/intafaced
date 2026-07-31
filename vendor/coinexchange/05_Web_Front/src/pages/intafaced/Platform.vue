@@ -6,6 +6,11 @@
       <div class="ix-source">{{ counts }}</div>
     </div>
 
+    <div class="ix-note ix-note-quiet" style="margin-bottom:20px;" role="note">
+      <strong>{{ $t('intafaced.hub.dualSessionTitle') }}</strong>
+      <div style="margin-top:6px;">{{ $t('intafaced.hub.dualSessionLead') }}</div>
+    </div>
+
     <!-- ── platform session ────────────────────────────────────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -193,12 +198,18 @@ export default {
         if (!m.edge) {
           // No prefix at the edge at all. Nothing to probe — and saying
           // "unreachable" here would blame the network for a missing route.
-          next[m.key] = { reason: m.service === 'svc-indexer' ? 'not_routed' : 'no_service' };
+          // (Indexer historically had no edge; on tip it does — this branch is
+          // for true absences only.)
+          next[m.key] = { reason: 'no_service' };
           return;
         }
+        // edge may differ from key (chain → indexer, launch → protocol).
         pending.push(
           query(m.edge, 'health', undefined, token).then(function(res) {
-            next[m.key] = { reason: res.ok ? 'ok' : res.reason };
+            next[m.key] = {
+              reason: res.ok ? 'ok' : res.reason,
+              edge: m.edge
+            };
           })
         );
       });
