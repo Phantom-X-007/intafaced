@@ -3,8 +3,13 @@
 **Status:** CLAIMED by Nitro (`@ZenYoda3`) — **Phase 1 agent floor closed** (2026-07-29)  
 **Date:** 2026-07-29  
 **GitHub:** issue [#83](https://github.com/Phantom-X-007/intafaced/issues/83)  
-**Source of law:** Denon board on `feat/rebrand-english-black-orange (LANDS AS #86 on main — treat as done)` → `docs/SPLIT-BOARD.md` + message 2026-07-29  
-**Partner stream:** Denon = Stream B (spine) — do not edit his territory
+**Source of law:** Denon board on `feat/rebrand-english-black-orange (LANDS AS #86 on main — treat as done)` → `docs/SPLIT-BOARD.md` + message 2026-07-29
+
+> **Supersession (2026-07-31):** This file is the **trader-shell territory map** when the job is Stream A UI only.  
+> For **residual board / full-program execution**, [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md) + residual campaign win: agents **may** edit services/packages under a claimed LIVE-LANE.  
+> Still never force-push `feat/spine-*` / multi-asset crash WIP; still never invent engine product law; still doctrine money bans.
+
+**Partner stream (UI-only jobs):** Denon-designed spine — open `[cross-stream]` if you are **only** on Stream A shell work and need a spine change.
 
 **Claim tags:** `[VERIFIED 2026-07-29]` Phase 1 UI slices S0–S1 + S3–S7 on main via #98/#103/#108 + follow-ups. Open: **S2 seed** [#109](https://github.com/Phantom-X-007/intafaced/issues/109) · **S8 look tour** (Nitro only).
 

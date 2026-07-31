@@ -60,7 +60,7 @@ Strict order — **first hit wins** for “what is true right now”:
 
 **Intent:** you merge your program yourself. Gates replace “wait for Denon on every money PR.” Inventing futures product law or marking go-live done is still banned.
 
-If `GRIND-LOOP-ACTIVE` still says Class M needs Denon `merge when green` for all money, **that line is legacy** — this matrix + residual campaign §5.3 win until grind is updated (this PR updates it).
+Grind paste prompts and Class matrix must match this table. If a lower paste still says “wait for Denon on all money,” **ignore it** — this matrix + residual campaign §5.3 win.
 
 ---
 
@@ -121,7 +121,9 @@ Worktree from tip. Never implement on main checkout.
 7. Bank / Phase 5 priority
 8. Anything else only he should shape
 
-**Direction received:** _(none linked yet — add paths/issue URLs here when they land)_
+**Direction received:**
+
+- Open (land same-turn when merged): [#272](https://github.com/Phantom-X-007/intafaced/pull/272) `docs(direction): the eight decisions…` + dual-book ADR Accepted (Option B — `ledger.*` only book). Agents: do **not** invent against it; prefer merge #272 then implement obligations.
 
 ---
 

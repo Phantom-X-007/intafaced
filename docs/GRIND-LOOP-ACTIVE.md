@@ -111,42 +111,43 @@ Canonical matrix also in `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md
 ### O1 BABYSIT
 
 ```
-AFK O1 BABYSIT ONLY (Nitro away). Default is NOT auto-merge.
+AFK O1 BABYSIT (Nitro away). Merge when Class gates pass — not rubber-stamp.
 
-LAW: docs/GRIND-LOOP-ACTIVE.md on origin/main (merge matrix is hard).
+LAW: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md + this file merge matrix on origin/main.
 LIVE: gh pr list --state open · git log origin/main -10
 
-For each open PR → class M/H/P/N/X per this file.
-- M or H: NO merge. Comment gates only. Wait for Denon "merge when green" on money.
-- P: merge only if CI+local green and no hold language; prefer Denon self-merge.
+For each open PR → class M/H/P/N/X.
+- H: NO merge. Comment only.
+- M: merge ONLY after money self-audit + second-pass adversarial + green CI + no hold. Else comment blockers.
+- P: merge if CI+local green + self-audit + no hold.
 - N: audit→fix→debug→prove→merge.
 - X: never mark done.
 
 If no open PRs: honesty scans optional; update high water; stop.
-Never invent product. Never re-ship #110–#235.
-Update STATUS block before stop.
+Never invent product law. Never invent green CI. Update STATUS before stop.
 ```
 
 ### O2 STREAM-A / HYGIENE
 
 ```
-AFK O2 — Stream A / hygiene only (Nitro away).
+AFK O2 — Stream A / hygiene (Nitro away).
 
-LAW: GRIND-LOOP-ACTIVE.md · DENON-NITRO-PARALLEL-BOARD Column B · LIVE-LANES.md
-Claim a free lane on LIVE-LANES before edits. Worktree from origin/main. feat/app-* or docs/tracker only.
+LAW: ownership law + GRIND-LOOP-ACTIVE + LIVE-LANES. Residual campaign may also use services under claimed residual lanes.
+Claim LIVE-LANES before edits. Worktree from origin/main.
 
-Ship one of: empty/error states, order-entry polish, honest empty panes, tracker honesty, WAVE-AUDIT, LIVE-LANES refresh.
-Never services/**. Never Denon mountains. Never fake numbers/candles.
+Ship: empty/error honesty, order polish, tracker honesty, WAVE-AUDIT, LIVE-LANES refresh, or residual-campaign slice if lane free.
+Never invent futures/OTC product law. Never fake numbers/candles. Never force-push feat/spine-*.
 One concern per PR. Light gates. Update LIVE-LANES + grind STATUS when done.
 ```
 
 ### COOK (only if Status becomes RUNNING)
 
 ```
-AFK COOK — only if GRIND-LOOP Status is RUNNING and NEXT QUEUE is non-empty named Pool A items.
-Do not babysit-merge Denon money. Worktree. One service/docs concern per PR.
-Audit→fix→debug→prove→merge for YOUR PRs. Update this file before stop.
-If queue empty → set DRAINED / return to O1+O2. Do not invent.
+AFK COOK — GRIND Status RUNNING + named NEXT QUEUE (residual campaign / ownership law).
+Worktree. Claim LIVE-LANES. One concern per PR.
+Audit→fix→debug→prove→merge YOUR PRs under Class matrix (M needs self-audit + adversarial).
+Do not invent engine product law. Update this file before stop.
+If queue empty → rebuild queue from residual campaign or return to O1+O2.
 ```
 
 ---
