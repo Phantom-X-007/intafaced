@@ -29,6 +29,8 @@ export type BankErrorCode =
   | 'bank.loan_product_closed'
   | 'bank.loan_not_found'
   | 'bank.loan_closed'
+  /** Repay refused while a liquidation shortfall is still uncovering insurance. */
+  | 'bank.loan_liquidating'
   /** Draw refused because the loan is not in `pending` — the ordering guard. */
   | 'bank.loan_not_drawable'
   /** The requested principal puts the loan over the product's opening LTV. */
