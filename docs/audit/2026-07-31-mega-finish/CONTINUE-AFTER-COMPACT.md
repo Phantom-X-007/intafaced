@@ -1,12 +1,14 @@
 # CONTINUE AFTER COMPACT — mega FINISH fire
 
 ```
-STATUS 2026-07-31T finish-fire SHIPPED-OR-SHIPPING
+STATUS 2026-07-31T finish-fire PR #275 OPEN
 worktree: .worktrees/audit-finish-mega
 branch: audit/finish-mega-2026-07-31
+PR: https://github.com/Phantom-X-007/intafaced/pull/275
 finish: COMPLETE-WITH-HOLDS — see 06-FINISH-VERDICT.md + 02-IMPLICIT-AND-COMPLETENESS.md
 read first: 00-FINISH-DEFINITION · 02-IMPLICIT · 06-FINISH-VERDICT · this file
 leave alone: #266 durable broadcast · #267 frontend · #272 dual-book ADR
+next: babysit #275 CI · merge when green · then residual campaign queue only
 ```
 
 ## What finished means (one line)
