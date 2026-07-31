@@ -46,7 +46,7 @@
                 <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
                   Venue exchange wallet only — not the platform ledger books.
                 </p>
-                <p v-if="walletError" class="ix-empty ix-empty-error">{{ walletError }}</p>
+                <p v-if="walletError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ walletError }}</p>
                 <div class="input-group">
                   <Poptip trigger="focus" :content="$t('uc.finance.withdraw.tip1')+currentCoin.withdrawScale+$t('uc.finance.withdraw.tip11')+currentCoin.minAmount+','+$t('uc.finance.withdraw.tip2')+currentCoin.maxAmount" style="width: 100%;">
                     <InputNumber @on-change="computerAmount" v-model="withdrawAmount" :placeholder="$t('uc.finance.withdraw.numtip1')" size="large" :min="currentCoin.minAmount" :max="currentCoin.maxAmount"></InputNumber>
@@ -109,7 +109,7 @@
                 <div class="order-table">
                   <p class="acb-p2" style="margin-bottom:10px;">• {{$t('uc.finance.withdraw.click')}}
                     <i class="ivu-icon ivu-icon-funnel"></i>{{$t('uc.finance.withdraw.filtrate')}}</p>
-                  <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+                  <p v-if="listError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ listError }}</p>
                   <p v-else-if="!loading && listReachable && tableWithdraw.length === 0" class="ix-empty">No withdrawals yet</p>
                   <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsWithdraw" :data="tableWithdraw" :loading="loading"></Table>
                   <div id="pages" v-if="!listError">
