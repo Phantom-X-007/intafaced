@@ -259,7 +259,7 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual: full planner/tick/close/job-host/mark stack + SQL position loaders for ticks. Still missing: live multi-venue index, matching seed, ops cron enable. Not done.',
+    note: 'Updated 2026-07-31 residual: planners/ticks/close/job-host/marks + SQL loaders + durable funding_periods/liquidation_attempts stores + sqlPositionCloser. Still missing: live multi-venue index, matching seed, ops cron enable. Not done.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
