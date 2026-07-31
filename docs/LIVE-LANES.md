@@ -45,3 +45,5 @@ Per `NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` §7 NEXT QUEUE — claim one lane, r
 - **2026-07-31 residual-pay-m226-close:** claimed **residual-pay** — M226-01 re-verify + M226-02 refundId. No frontend #267. No futures #278.
 
 - **2026-07-31 order-route-harden ARMED:** Full program pack in `docs/ORDER-ROUTE-PROGRAM-INDEX.md` (Spec/Plan/Architect/landscape v2). Build chat claims this lane before P1 code. Denon seed-first · dual-book · chaos spine. Do not double-build with residual-trade-futures invent.
+
+- **2026-07-31 residual-coord (this chat):** tip re-derive required. Merged through futures F3 #278 + pay M226 #280 + F5 funding recipe #282. Shipping F4 positionUpdated. Leave #267 frontend Wave A alone. Claim residual-trade-futures LIVE for F4–F5. Do not invent order-route P1 here.

@@ -16,6 +16,7 @@ import {
   recipes,
   userAvailable,
 } from '@intafaced/ledger-client';
+import { MemoryEventBus } from '@intafaced/events';
 import { PositionService } from './position-service.js';
 
 const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced_test';
@@ -56,12 +57,14 @@ if (!available) {
   for (const migration of migrations) await sql.unsafe(migration);
 
   let ledger: MemoryLedger;
+  let bus: MemoryEventBus;
   let positions: PositionService;
 
   beforeEach(async () => {
     await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
-    positions = new PositionService(sql, ledger);
+    bus = new MemoryEventBus('svc-trade');
+    positions = new PositionService(sql, ledger, bus);
     await sql`
       INSERT INTO trade.markets (
         id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
@@ -131,6 +134,32 @@ if (!available) {
     await positions.close(ALICE, pos.id!);
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('100000');
     expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  it('publishes positionUpdated on open and close (F4 private WS feed)', async () => {
+    const seen: Array<{ status: string; side: string }> = [];
+    await bus.subscribe(
+      'positionUpdated',
+      async (payload) => {
+        seen.push({ status: payload.status, side: payload.side });
+      },
+      { durable: 'test-position-updated' },
+    );
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      entryPrice: amt('50000'),
+      leverage: amt('10'),
+    });
+    await positions.close(ALICE, pos.id!);
+    expect(seen).toEqual([
+      { status: 'open', side: 'long' },
+      { status: 'closed', side: 'long' },
+    ]);
+    // Also retained on the bus for idempotency inspection
+    expect(bus.emitted('positionUpdated')).toHaveLength(2);
   });
 
   it('refuses spot market as futures open', async () => {
