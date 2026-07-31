@@ -989,14 +989,42 @@ a:hover {
   font-feature-settings: var(--font-feature-num);
 }
 
-/* Keyboard focus — visible ring for order form / nav (calm §3.4). */
+/* Keyboard focus — visible ring for order form / nav (calm §3.4). B10 expand. */
 a:focus-visible,
 button:focus-visible,
 .ivu-btn:focus-visible,
 .ivu-input:focus-visible,
-.ix-plane-btn:focus-visible {
+.ivu-input-number:focus-visible,
+.ivu-select-selection:focus-visible,
+.ivu-checkbox-input:focus-visible,
+.ivu-radio-input:focus-visible,
+.ix-plane-btn:focus-visible,
+.ix-market-row:focus-visible,
+.ix-cancel:focus-visible,
+.ix-submit:focus-visible,
+.ix-linkish:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Skip to desk (keyboard floor) */
+.ix-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10000;
+  padding: 8px 12px;
+  background: var(--accent);
+  color: var(--on-accent, #041210);
+  font-weight: 600;
+  border-radius: 0 0 8px 0;
+}
+.ix-skip-link:focus {
+  left: 0;
+  outline: none;
 }
 
 /* Shared empty / error / quiet note — three distinct honesty states. */

@@ -150,7 +150,15 @@
           </div>
           <div>
             <dt>To address</dt>
-            <dd class="ix-receipt-addr">{{ receipt.address || '—' }}</dd>
+            <dd class="ix-receipt-addr">
+              <span>{{ receipt.address || '—' }}</span>
+              <button
+                v-if="receipt.address"
+                type="button"
+                class="ix-copy-addr"
+                @click="copyReceiptAddress"
+              >Copy</button>
+            </dd>
           </div>
         </dl>
         <p class="ix-empty" role="note">Estimate only — final settlement is what the venue accepts. Failed request does not mean sent.</p>
@@ -248,6 +256,39 @@ export default {
       this.modal = false;
       this.formInline.code = "";
       this.formInline.fundpwd = "";
+    },
+    /* Wave B9′ — copy full destination address from the review receipt. */
+    copyReceiptAddress() {
+      var id = this.receipt && this.receipt.address ? String(this.receipt.address) : "";
+      if (!id) {
+        this.$Notice.warning({ title: "No address", desc: "Nothing to copy." });
+        return;
+      }
+      var done = () =>
+        this.$Notice.success({ title: "Copied", desc: "Withdrawal address on clipboard." });
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(id).then(done).catch(() => {
+          if (this.fallbackCopyText(id)) done();
+        });
+      } else if (this.fallbackCopyText(id)) {
+        done();
+      }
+    },
+    fallbackCopyText(text) {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+      } catch (e) {
+        return false;
+      }
     },
     sendCode() {
       this.$http.post(this.host + "/uc/mobile/withdraw/code").then(response => {

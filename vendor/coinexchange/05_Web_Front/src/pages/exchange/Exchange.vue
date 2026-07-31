@@ -1,6 +1,7 @@
 <template>
   <div class="ix-terminal" @keydown="onDeskKeydown">
     <!-- Wave B7: / market search · Esc clear/blur · Enter in ticket submits · B/S side -->
+    <a class="ix-skip-link" href="#ix-ticket">Skip to order ticket</a>
     <!-- B10: polite live region for ticket validation (screen readers) -->
     <div class="ix-sr-only" aria-live="polite" aria-atomic="true">{{ liveAnnounce }}</div>
     <!-- ══ pair header ══════════════════════════════════════════════════ -->
@@ -570,7 +571,7 @@
       </aside>
 
       <!-- ── order entry ──────────────────────────────────────────────── -->
-      <aside class="ix-panel ix-order">
+      <aside id="ix-ticket" class="ix-panel ix-order" tabindex="-1">
         <div class="ix-side-toggle">
           <button
             type="button"
