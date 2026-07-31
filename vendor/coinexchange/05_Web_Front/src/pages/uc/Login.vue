@@ -1,11 +1,11 @@
 <template>
   <div class="login_form">
     <div class="login_right">
-      <Form ref="formInline" :model="formInline" :rules="ruleInline" inline>
+      <Form ref="formInline" :model="formInline" :rules="ruleInline" inline aria-label="Sign in">
         <div class="login_title">{{$t('uc.login.login')}}</div>
         <FormItem prop="user">
-          <Input name="user" type="text" v-model="formInline.user" :placeholder="$t('uc.login.usertip')" class="user">
-            <Select v-model="country" slot="prepend" style="width: 65px">
+          <Input name="user" type="text" v-model="formInline.user" :placeholder="$t('uc.login.usertip')" class="user" autocomplete="username">
+            <Select v-model="country" slot="prepend" style="width: 65px" aria-label="Country code">
               <Option value="+86" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">China</span></Option>
               <Option value="+65" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">Singapore</span></Option>
               <Option value="+82" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">South Korea</span></Option>
@@ -24,10 +24,10 @@
           </Input>
         </FormItem>
         <FormItem prop="password" class="password">
-          <Input type="password" v-model="formInline.password" :placeholder="$t('uc.login.pwdtip')" @on-keyup="onKeyup">
+          <Input type="password" v-model="formInline.password" :placeholder="$t('uc.login.pwdtip')" @on-keyup="onKeyup" autocomplete="current-password">
           </Input>
         </FormItem>
-        <p id="notice" class="hide">{{$t('uc.login.validatemsg')}}</p>
+        <p id="notice" class="hide" role="alert" aria-live="polite">{{$t('uc.login.validatemsg')}}</p>
         <p style="height:30px;">
           <router-link to="/findPwd" style="color:#979797;float:right;padding-right:10px;font-size:12px;">
             {{$t('uc.login.forget')}}
@@ -48,41 +48,41 @@
 <style scoped lang="scss">
 /* captcha */
 .login_form {
-  background: #0e0e0e url(../../assets/images/login_bg.png) no-repeat center center;
+  /* P21 modular tokens with fallbacks — swap palette without rewriting this page */
+  background: var(--ix-bg, #0a0c10) url(../../assets/images/login_bg.png) no-repeat center center;
   height: 760px;
   position: relative;
   overflow: hidden;
 .login_right {
     padding: 20px 30px 20px 30px;
     position: absolute;
-    background: #171717;
+    background: var(--ix-surface, #12151c);
     width: 350px;
     height: 330px;
     left: 50%;
     top: 50%;
     margin-left: -175px;
     margin-top: -165px;
-    border-top: 4px solid #1ad4bc;
+    border-top: 4px solid var(--ix-orange, #00c2a8);
     border-radius: 5px;
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
 .login_title{
         height: 70px;
-        color: #fff;
+        color: var(--ix-text, #e8ebf0);
       }
 .ivu-form-item {
 .ivu-form-item-content {
 .login_btn.ivu-btn {
             width: 100%;
-            background-color: #1ad4bc;
+            background-color: var(--ix-orange, #00c2a8);
             outline: none;
-            border-color: #1ad4bc;
-            color: #fff;
+            border-color: var(--ix-orange, #00c2a8);
+            color: var(--ix-on-accent, #041210);
             font-size: 18px;
             border-radius: 5px;
-            &:focus {
-              -moz-box-shadow: 0px 0px 0px #fff, 0px 0px 0px #fff;
-              -webkit-box-shadow: 0px 0px 0px #fff, 0px 0px 0px #fff;
-              box-shadow: 0px 0px 0px #fff, 0px 0px 0px #fff;
+            &:focus-visible {
+              outline: 2px solid var(--ix-orange-light, #1ad4bc);
+              outline-offset: 2px;
             }
           }
         }
@@ -94,10 +94,11 @@
     font-size: 12px;
     span {
       float: left;
+      color: var(--ix-text-dim, #8a909c);
     }
     a {
       float: right;
-      color: #1ad4bc;
+      color: var(--ix-orange, #00c2a8);
     }
   }
 }

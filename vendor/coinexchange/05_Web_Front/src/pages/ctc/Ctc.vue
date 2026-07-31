@@ -9,7 +9,7 @@
             <TabPane :label="'USDT' + $t('ctc.trade')" name="all">
               <div class="ctc-container">
                 <!-- Stream A: never invent C2C quotes or balances. -->
-                <p v-if="priceError" class="ix-empty ix-empty-error">{{ priceError }}</p>
+                <p v-if="priceError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ priceError }}</p>
                 <p v-else-if="priceLoading" class="ix-empty ix-empty-loading">{{ $t('common.loading') }}</p>
                 <div class="trade_wrap">
                   <div class="trade_panel">
@@ -113,7 +113,7 @@
                 </div>
               </div>
               <div class="table">
-                <p v-if="ordersError" class="ix-empty ix-empty-error">{{ ordersError }}</p>
+                <p v-if="ordersError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ ordersError }}</p>
                 <p v-else-if="!isLogin" class="ix-empty">{{ $t('ctc.ordersSignIn') }}</p>
                 <p v-else-if="!loading && ordersReachable && orders.length === 0" class="ix-empty">{{ $t('ctc.ordersEmpty') }}</p>
                 <Table v-if="!ordersError && isLogin" :no-data-text="$t('common.nodata')" :columns="columns" :data="orders" :loading="loading"></Table>

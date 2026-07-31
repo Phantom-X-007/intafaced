@@ -1,7 +1,7 @@
 <template>
   <div class="envelope">
     <!-- Stream A: never paint invented gift name/amount while loading or on failure. -->
-    <p v-if="loadError" class="ix-empty ix-empty-error" style="padding-top:120px;text-align:center;">{{ loadError }}</p>
+    <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="padding-top:120px;text-align:center;">{{ loadError }}</p>
     <template v-else-if="envelopeReady">
     <div v-if="hasInviteUser" style="width:80%;height: 35px;padding: 5px 0 5px 0px;border-radius: 35px;background-color:rgb(157, 0, 0);margin-left:10%;text-align:center;display: flex;flex-direction:row;justify-content:center;margin-bottom:10px;">
       <img style="width: 25px; height: 25px;margin-right: 10px;border-radius: 25px;" :src="inviteUserAvatar"></img>
@@ -57,7 +57,7 @@
       <div class="title">Claim history</div>
 
       <div class="content">
-        <p v-if="detailError" class="ix-empty ix-empty-error">{{ detailError }}</p>
+        <p v-if="detailError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ detailError }}</p>
         <p v-else-if="!detailLoaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
         <p v-else-if="envelopeDetailList.length == 0" class="ix-empty" style="margin: 20px 0;">No claims yet</p>
         <div class="item clearfix" v-for="(item, idx) in envelopeDetailList" :key="idx">
