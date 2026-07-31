@@ -355,6 +355,37 @@ export function futuresRealizeLoss(input: FuturesLossInput): PostRequest {
   };
 }
 
+export interface FuturesProfitInput {
+  positionId: string;
+  userId: string;
+  assetId: string;
+  amount: Amount;
+  /** Unique close/profit attempt key (idempotency). */
+  profitId: string;
+}
+
+/**
+ * Realize a profit on voluntary close (trade.futures residual).
+ *
+ * Symmetric counterpart of futuresRealizeLoss: house trade fees pot (temporary
+ * PnL counterpart until a dedicated futures PnL account exists) pays the user's
+ * available balance. Engine names the amount from an **external** exit mark —
+ * this recipe never invents a price.
+ */
+export function futuresRealizeProfit(input: FuturesProfitInput): PostRequest {
+  requirePositive('futures realized profit', input.amount);
+  return {
+    idempotencyKey: `futures.profit:${input.profitId}`,
+    module: 'trade',
+    reason: 'futures.profit.realized',
+    meta: {
+      positionId: input.positionId,
+      amount: input.amount.toString(),
+    },
+    entries: [credit(houseFees('trade', input.assetId), input.amount), debit(userAvailable(input.userId, input.assetId), input.amount)],
+  };
+}
+
 /**
  * Periodic funding payment between two positions (trade.futures F5 recipe).
  *
@@ -826,6 +857,7 @@ export const recipes = {
   futuresMarginAdd,
   futuresMarginRelease,
   futuresRealizeLoss,
+  futuresRealizeProfit,
   futuresFundingPay,
   futuresInsuranceTopup,
   escrowLock,
