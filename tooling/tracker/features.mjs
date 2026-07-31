@@ -256,7 +256,10 @@ export const FEATURES = [
   f('trade.futures', 'Perps: cross/isolated margin, funding, liquidation ladder', {
     module: 'trade',
     phase: '2',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['trade.spot'],
+    note: 'Updated 2026-07-31 residual F1–F3: ledger futuresMargin* recipes; trade.positions table; open/close REST (POST/DELETE /positions) locks/releases margin; GET lists open rows. Still missing: matching engine for futures, mark/index, liquidation job, funding 8h, positionUpdated publish, live re-leverage. Not done.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',

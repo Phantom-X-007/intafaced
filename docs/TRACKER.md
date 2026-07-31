@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**43 of 108 shipped (40%)** · 3 in progress · 35 ready to claim · 27 blocked · 19 deliberate §13 sockets
+**43 of 108 shipped (40%)** · 4 in progress · 34 ready to claim · 27 blocked · 19 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -26,7 +26,6 @@ pnpm wt feat/<the-thing>
 | Feature | Module | Phase | id |
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
-| Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
 | OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
 | Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
@@ -80,6 +79,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Feature | Owner | Module |
 |---|---|---|
+| Perps: cross/isolated margin, funding, liquidation ladder | **Nitro** | `trade` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
 | Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
@@ -131,7 +131,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
 | ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining._ | F |  | `trade.convert` |
-| 🟢 | Perps: cross/isolated margin, funding, liquidation ladder | F |  | `trade.futures` |
+| 🔨 | Perps: cross/isolated margin, funding, liquidation ladder <br/>_Updated 2026-07-31 residual F1–F3: ledger futuresMargin* recipes; trade.positions table; open/close REST (POST/DELETE /positions) locks/releases margin; GET lists open rows. Still missing: matching engine for futures, mark/index, liquidation job, funding 8h, positionUpdated publish, live re-leverage. Not done._ | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
 | 🟢 | OTC RFQ desk, staked-tier gate | F |  | `trade.otc` |
 | 🟢 | Copy trading, audited leaders, profit share | B |  | `trade.copy` |

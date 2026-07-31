@@ -13,6 +13,8 @@ import { subscribeMatchingEvents } from './events.js';
 import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
+import { PositionService } from './futures/position-service.js';
+import { parseAmount } from '@intafaced/ledger-client';
 
 /**
  * svc-trade — the product layer over the matching engine (§5.2).
@@ -56,6 +58,8 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,
   subAccounts,
 });
+
+const positions = new PositionService(sql, ledger);
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
@@ -105,6 +109,18 @@ registerPrivateRest(app, {
   markets: () => trade.markets(),
   // Self-only: route always passes principal.userId — never client ownerId.
   userBalances: (userId) => ledger.balances('user', userId),
+  listPositions: (principal, symbol) => positions.listOpen(principal.userId, symbol),
+  openPosition: (principal, input) =>
+    positions.open({
+      userId: principal.userId,
+      symbol: input.symbol,
+      side: input.side,
+      size: parseAmount(input.size),
+      entryPrice: parseAmount(input.entryPrice),
+      leverage: parseAmount(input.leverage),
+      marginMode: input.marginMode,
+    }),
+  closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -141,6 +157,8 @@ app.log.info(
       'GET /api/v1/account/fees',
       'GET /api/v1/account/balance',
       'GET /api/v1/positions',
+      'POST /api/v1/positions',
+      'DELETE /api/v1/positions/:id',
       'POST /api/v1/positions/leverage',
       'POST /api/v1/positions/margin-mode',
     ],
