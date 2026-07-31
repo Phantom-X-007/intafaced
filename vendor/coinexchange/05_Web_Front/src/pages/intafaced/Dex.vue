@@ -3,12 +3,24 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.dex.title') }}</h1>
       <p>{{ $t('intafaced.modules.dex.blurb') }}</p>
-      <div class="ix-source">svc-dex · /api/dex/trpc</div>
+      <div class="ix-source">svc-dex · /api/dex/trpc · Protocol Plane</div>
     </div>
 
     <div class="ix-note" style="margin-bottom:20px;">
-      <strong>{{ $t('intafaced.modules.dex.title') }}</strong>
-      <div style="margin-top:6px;">{{ $t('intafaced.modules.dex.note') }}</div>
+      <strong>{{ $t('intafaced.dex.planeTitle') }}</strong>
+      <div style="margin-top:6px;">{{ $t('intafaced.dex.planeLead') }}</div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <router-link to="/exchange/btc_usdt">
+          <Button size="small">{{ $t('intafaced.dex.toCex') }}</Button>
+        </router-link>
+        <router-link to="/protocol">
+          <Button size="small">{{ $t('intafaced.dex.toProtocol') }}</Button>
+        </router-link>
+      </div>
+    </div>
+
+    <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
+      {{ $t('intafaced.modules.dex.note') }}
     </div>
 
     <div class="ix-card">
@@ -38,23 +50,20 @@
       <div class="ix-note ix-note-quiet">
         {{ $t('intafaced.dex.quoteLead') }}
       </div>
+      <p class="ix-note ix-note-quiet" style="margin-top:12px;">
+        {{ $t('intafaced.dex.quoteNoForm') }}
+      </p>
     </div>
   </div>
 </template>
 
 <script>
 /**
- * svc-dex (§8.6, §17.5) — the Protocol Plane's front door.
+ * svc-dex — Protocol Plane front door (N6 plane honesty).
  *
- * `health` answers, and it answers `custodial: false`, which is the one claim
- * this module exists to make.
- *
- * `quote` is mounted and its routing arithmetic is real, but read its input:
- * it takes the venue quotes as a parameter. It does not go and find them.
- * Nothing in the platform produces that array today — there is no venue
- * adapter, no `svc-connect`, no aggregator feeding it — so a quote form here
- * would be a form where the user supplies the market and we supply the
- * division. That is not a DEX screen, so it is described rather than drawn.
+ * CEX terminal is /exchange/* (custodial venue shell). This page is protocol
+ * DEX: health says custodial:false. Quote arithmetic exists but needs venue
+ * quote inputs the platform does not supply — described, not faked as a book.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query } from '../../config/intafaced.js';

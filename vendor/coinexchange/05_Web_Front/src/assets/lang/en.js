@@ -79,6 +79,8 @@ module.exports = {
             legendPartial: "The module is behind the front door, but the surface you want is refused — and the reason is named on its screen.",
             legendAbsent: "There is nothing to call: no route at the edge, no mounted router, or no service at all.",
             open: "Open",
+            dualSessionTitle: "Two logins, on purpose — for now",
+            dualSessionLead: "Exchange shell login (ucenter) is not the platform identity session below. Balances on the exchange are venue wallet, not the TypeScript ledger. One account is the goal; this hub does not pretend they are already one.",
             sessionTitle: "Platform session",
             sessionLead: "The modules below authenticate against svc-identity through svc-edge. This is a SEPARATE session from your exchange login above — one account is the goal and this is not it yet.",
             sessionMemoryOnly: "Held in memory only. A page reload signs this session out; an httpOnly refresh cookie is the fix and it is not built.",
@@ -287,10 +289,15 @@ module.exports = {
             chainStatusLead: "Live probe of reachability and launch factory deployment. usable=false is honest, not a crash."
         },
         dex: {
+            planeTitle: "Protocol Plane — not the custodial exchange",
+            planeLead: "CEX trading is the Exchange terminal (venue books). This DEX page is non-custodial routing on the protocol plane. Switching planes never invents a book or a balance.",
+            toCex: "Open CEX terminal",
+            toProtocol: "Protocol health / launch",
             healthTitle: "Service health",
             custodial: "Custodial",
             quoteTitle: "Route a quote",
-            quoteLead: "svc-dex splits a size across venue quotes you supply. It has no venue feed of its own, so this is the arithmetic without a market behind it."
+            quoteLead: "svc-dex splits a size across venue quotes you supply. It has no venue feed of its own, so this is the arithmetic without a market behind it.",
+            quoteNoForm: "No quote form is drawn: there is no venue adapter feeding prices. A form that asked you to paste the market would not be a DEX."
         },
         chain: {
             statusTitle: "Indexer status",
