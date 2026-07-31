@@ -6,8 +6,6 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { formatAmount } from '@intafaced/ledger-client';
 import { env } from './env.js';
 import { TokenService } from './token-service.js';
-import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
-import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createTokenRouter, type TokenRouter } from './router.js';
 
@@ -45,8 +43,8 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
 const token = new TokenService(sql, ledger, bus, {
   assetId: env.TOKEN_ASSET_ID,
-  emission: DEFAULT_EMISSION_PARAMS,
-  buyback: DEFAULT_BUYBACK_PARAMS,
+  // T-02: buyback + emission from token_params, not code defaults.
+  loadParamsFromDb: true,
 });
 
 export const appRouter = createTokenRouter(token, { emissionsEnabled: env.EMISSIONS_ENABLED });
