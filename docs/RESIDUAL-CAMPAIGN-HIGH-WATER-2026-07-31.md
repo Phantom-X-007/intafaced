@@ -1,69 +1,44 @@
 # Residual campaign high water — compaction-safe
 
-**Owner program:** Nitro residual board (third-dev screenshot R1–R7)  
-**Law:** `docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` (if present) · ownership `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`  
-**Live tip:** re-check `git log origin/main -1` — do not trust SHAs below after hours.
+**Owner program:** Nitro residual board (R1–R7)  
+**Live tip:** re-check `git log origin/main -1` — git wins over SHAs below.
 
-If this file disagrees with `gh pr list` / `origin/main`, **git wins**.
+## Verdict
 
----
+**COOK RUNNING.** Futures: recipes + open/close + planners + ticks + mark/rate ports + close wire with required exitPrice. **Not product-done.**
 
-## 1. Verdict
+## Board map (complete)
 
-Residual campaign is **COOK RUNNING**. Futures money path has recipes + open/close + bus + pure planners + callable ticks. **Not product-done** for any R1–R7 title. Honest partials only.
+| Row                     | Status     | Shipped                                                                          | Still open                         |
+| ----------------------- | ---------- | -------------------------------------------------------------------------------- | ---------------------------------- |
+| web.terminal            | wip        | Wave A/B craft sibling                                                           | Sub-accounts; full hotkeys         |
+| ws.gateway              | wip        | Positions + F4 events                                                            | Mark-driven stream E2E             |
+| pay.gateway             | wip        | Live rail + broadcast + refundId                                                 | Card/merchant; go-live X           |
+| protocol.smart-accounts | ready      | Dev chain + CREATE2 honesty                                                      | Prod/audit/bundler X               |
+| protocol.amm            | ready      | Factory + mint/swap proof                                                        | Audit; prod factory                |
+| trade.futures           | wip        | F1–F5 recipes, planners, ticks, mark/rate ports, realizeProfit, close(exitPrice) | Live oracles, cron hosts, matching |
+| Phase 5                 | ready many | Shell honesty where APIs exist                                                   | Full products                      |
 
----
+## Merged this fire (do not redo)
 
-## 2. Third-dev board map (complete set)
+#291–#305 residual futures stack + #299 high water + mark #300 + frontend sibling waves on main.
 
-| Row                     | Tracker     | Shipped this campaign (main)                                                                                                                                                 | Still open                                                                         |
-| ----------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| web.terminal            | wip         | Stream A Wave A/B craft (#267+)                                                                                                                                              | Sub-accounts product; hotkeys residual                                             |
-| ws.gateway              | wip         | Positions channel; F4 positionUpdated                                                                                                                                        | E2E WS load; mark-driven updates                                                   |
-| pay.gateway             | wip         | Live rail #226; Postgres broadcast; refundId                                                                                                                                 | Card acquiring; merchant onboarding; go-live X                                     |
-| protocol.smart-accounts | ready       | Dev chain + CREATE2 + honesty note                                                                                                                                           | Prod chain (X); audit; bundler/EntryPoint                                          |
-| protocol.amm            | ready       | PoolFactory + mint/swap anvil proof                                                                                                                                          | Audit; prod factory                                                                |
-| Trade mountains         | wip futures | F1 recipes · F2 table · F3 open/close · F4 bus · F5 funding recipe · insurance · **liq planner #292** · **liq tick #296** · **funding planner #291** · **funding tick #293** | Matching engine; mark oracle product; wall-clock cron hosts; realized PnL on close |
-| Phase 5                 | ready many  | Shell honesty where APIs exist                                                                                                                                               | Full products                                                                      |
+## Collision
 
----
+| Lane             | Rule                             |
+| ---------------- | -------------------------------- |
+| #289 order-route | Do not touch from residual-coord |
+| Frontend Wave B  | Do not steal vendor shell        |
+| residual-coord   | This continuous chat             |
 
-## 3. Merged high water (this fire — re-derive)
+## NEXT QUEUE
 
-Tip order (newest first at write): funding tick **#293** · liq tick **#296** · liq planner **#292** · funding planner **#291** · AMM mint/swap **#288** · … · Wave A/B frontend sibling **#267/#295/#297/#298** (not residual-owned).
+1. Job host skeleton (ops cron wrapper)
+2. Matching / mm-bot seed
+3. Live index oracle product
+4. WAVE-AUDIT already this file
+5. Human X only: prod/secrets/go-live
 
-**Do not re-ship:** #226–#228 third-dev · #260–#298 residual/ownership/pay/futures/frontend slices already on main.
+## Hard bans
 
----
-
-## 4. Collision map
-
-| Lane                 | Status                        | Rule                                                     |
-| -------------------- | ----------------------------- | -------------------------------------------------------- |
-| Frontend Wave B      | Shipping on main              | Residual does not steal vendor shell craft               |
-| **#289** order-route | Open · may conflict           | **Do not touch** from residual-coord                     |
-| residual-coord       | This continuous residual chat | Futures ticks/planners · pay residuals · tracker honesty |
-| third-builder        | Stood down                    | No re-claim without Nitro assign                         |
-
----
-
-## 5. Named NEXT QUEUE
-
-1. **Mark/index oracle product** — external only; never invent marks (feeds liq tick)
-2. **Wall-clock cron hosts** — wire funding/liq ticks to ops scheduler (no product invent)
-3. **Matching engine / mm-bot seed** — still missing for real books
-4. **Realized PnL on close** — recipe path honesty
-5. **WAVE-AUDIT** archive every 3–4 product ships
-6. **smart-accounts** — still ready not done (prod/audit/bundler = X/sockets)
-7. Human X only: prod RPC, secrets, go-live, licences
-
----
-
-## 6. Hard bans
-
-- Fake done / candles / balances / factory addresses / invent marks or rates
-- Force-push Denon spines
-- Sole-own Class M without self-audit in PR body
-- Edit main checkout
-
-_Update this file same turn as high-water advances._
+Fake done · invent marks/rates · force-push Denon · edit main checkout
