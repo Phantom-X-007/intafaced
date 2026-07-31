@@ -27,7 +27,7 @@ const sql = postgres(env.DATABASE_URL, {
   onnotice: () => undefined,
 });
 
-await sql`SELECT 1 FROM identity.users LIMIT 1`.catch(() => {
+await sql`SELECT 1 FROM users LIMIT 1`.catch(() => {
   throw new Error('identity schema is missing — run migrations before starting svc-identity');
 });
 

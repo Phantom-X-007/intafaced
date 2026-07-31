@@ -13,6 +13,9 @@ import { RANK_TIERS, perksFor, rankForXp, tierFor, xpToNextRank, type RankTier }
  * One graph, many sources. An Academy certification and a spotless P2P record
  * are the same kind of fact here, which is why a certification can raise a P2P
  * limit without either module knowing the other exists.
+ *
+ * Schema: SQL is search_path-relative (not hard-coded `identity.*`) so tests can
+ * run in a per-suite schema via `createTestDb` without touching the shared one.
  */
 
 export interface RankSnapshot {
@@ -56,7 +59,7 @@ export class RankService {
   /** Load the ladder from the database, which is authoritative once seeded. */
   async loadTiers(): Promise<void> {
     const rows = await this.sql<Array<{ rank: number; xp_required: string; title: string; perks: RankPerks }>>`
-      SELECT rank, xp_required, title, perks FROM identity.rank_thresholds ORDER BY rank ASC
+      SELECT rank, xp_required, title, perks FROM rank_thresholds ORDER BY rank ASC
     `;
     if (rows.length > 0) {
       this.tiers = rows.map((r) => ({ rank: r.rank, xpRequired: BigInt(r.xp_required), title: r.title, perks: r.perks }));
@@ -67,7 +70,7 @@ export class RankService {
   async seedTiers(): Promise<void> {
     for (const tier of RANK_TIERS) {
       await this.sql`
-        INSERT INTO identity.rank_thresholds (rank, xp_required, title, perks)
+        INSERT INTO rank_thresholds (rank, xp_required, title, perks)
         VALUES (${tier.rank}, ${tier.xpRequired.toString()}, ${tier.title}, ${this.sql.json(tier.perks as never)})
         ON CONFLICT (rank) DO NOTHING
       `;
@@ -96,7 +99,7 @@ export class RankService {
         const current = await this.lockRankState(tx, input.userId);
 
         const inserted = await tx<Array<{ id: string }>>`
-          INSERT INTO identity.xp_events (user_id, source_module, action, xp_delta, meta, idempotency_key)
+          INSERT INTO xp_events (user_id, source_module, action, xp_delta, meta, idempotency_key)
           VALUES (
             ${input.userId}, ${input.sourceModule}, ${input.action}, ${input.xpDelta},
             ${tx.json((input.meta ?? {}) as never)}, ${input.idempotencyKey}
@@ -128,7 +131,7 @@ export class RankService {
         const updatedAt = new Date();
 
         await tx`
-          INSERT INTO identity.rank_state (user_id, rank, xp, season_xp, updated_at)
+          INSERT INTO rank_state (user_id, rank, xp, season_xp, updated_at)
           VALUES (${input.userId}, ${nextRank}, ${clampedXp.toString()}, ${clampedSeasonXp.toString()}, ${updatedAt})
           ON CONFLICT (user_id) DO UPDATE
             SET rank = EXCLUDED.rank, xp = EXCLUDED.xp, season_xp = EXCLUDED.season_xp, updated_at = EXCLUDED.updated_at
@@ -161,7 +164,7 @@ export class RankService {
 
   async get(userId: string): Promise<RankSnapshot> {
     const rows = await this.sql<Array<{ rank: number; xp: string; season_xp: string; updated_at: Date }>>`
-      SELECT rank, xp, season_xp, updated_at FROM identity.rank_state WHERE user_id = ${userId}
+      SELECT rank, xp, season_xp, updated_at FROM rank_state WHERE user_id = ${userId}
     `;
     const row = rows[0];
     // An unranked user is rank 0, not an error. Every user has a rank from the
@@ -177,13 +180,13 @@ export class RankService {
 
   /** Season reset — clears season XP, leaves lifetime XP and rank alone (§11 drop V). */
   async resetSeason(): Promise<number> {
-    const result = await this.sql`UPDATE identity.rank_state SET season_xp = 0, updated_at = now()`;
+    const result = await this.sql`UPDATE rank_state SET season_xp = 0, updated_at = now()`;
     return result.count;
   }
 
   private async lockRankState(tx: Sql, userId: string): Promise<{ rank: number; xp: bigint; seasonXp: bigint; updatedAt: Date }> {
     const rows = await tx<Array<{ rank: number; xp: string; season_xp: string; updated_at: Date }>>`
-      SELECT rank, xp, season_xp, updated_at FROM identity.rank_state WHERE user_id = ${userId} FOR UPDATE
+      SELECT rank, xp, season_xp, updated_at FROM rank_state WHERE user_id = ${userId} FOR UPDATE
     `;
     const row = rows[0];
     return row

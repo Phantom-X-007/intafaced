@@ -1,10 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
-import { assertTestDatabase } from '@intafaced/db';
+import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { verifyAccessToken, hasScope, SESSION_SCOPES } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type KeyObject } from 'node:crypto';
@@ -28,24 +27,34 @@ import {
  *   · full auth lifecycle — register → TOTP → refresh → scoped API key call
  *   · XP event → rank recalculation → perks visible to a second service
  *
- * Skips cleanly when Postgres is unreachable.
+ * Isolation: every suite run gets its own Postgres schema via `createTestDb`,
+ * built from this service's real migrations (rewritten off the hard-coded
+ * `identity` schema). Two worktrees can run this file at once without
+ * TRUNCATE races or a shared KYC queue backlog poisoning FIFO assertions.
+ *
+ * Service SQL is search_path-relative; production still uses
+ * `search_path = identity,public`. Requires a role that can CREATE SCHEMA
+ * (ops), same as svc-ledger. Skips cleanly when Postgres is unreachable;
+ * fails hard on CI via `postgresAvailable` / residual #9.
  */
 
-/**
- * The fallback is `intafaced_test`, NOT the shared `intafaced`.
- *
- * This suite applies migrations and truncates tables, so it must own its
- * database. While the default pointed at `intafaced`, an unset variable aimed a
- * destructive suite at the database the local docker fleet and every other
- * worktree share. `assertTestDatabase` below now refuses that outright,
- * whatever URL it is handed.
- */
-const URL = process.env.TEST_DATABASE_URL_IDENTITY ?? 'postgres://svc_identity:svc_identity@localhost:5433/intafaced_test';
+// Ops role can CREATE SCHEMA; the service role cannot. Host port is 5433.
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
-/** Every migration, in order. A suite that applies only 0000 tests a schema nobody deploys. */
-const migrations = ['0000_identity_init.sql', '0001_identity_kyc_review.sql', '0002_sub_accounts_revoke.sql'].map((f) =>
-  readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
-);
+const drizzleDir = join(here, '..', 'drizzle');
+
+/**
+ * EVERY forward migration, in order — not just the initial one.
+ * Read from disk rather than listed here so a new migration cannot silently
+ * leave the test schema behind production.
+ */
+const migrations = readdirSync(drizzleDir)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
+
+if (migrations.length === 0) throw new Error(`No migrations found in ${drizzleDir}`);
+
 
 const tokenConfig = {
   secret: 'an-identity-test-signing-secret-long-enough',
@@ -129,39 +138,22 @@ function softAuthenticator() {
   };
 }
 
-async function reachable(): Promise<boolean> {
-  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end({ timeout: 2 }).catch(() => undefined);
-  }
-}
-
-const available = await reachable();
+const available = await postgresAvailable(URL);
 
 if (!available) {
   describe.skip('svc-identity (Postgres unavailable — start docker compose)', () => {
     it('skipped', () => undefined);
   });
 } else {
-  const sql = postgres(URL, {
-    max: 8,
-    connection: { search_path: 'identity,public', application_name: 'svc-identity-test' },
-    onnotice: () => undefined,
+  const db: TestDb = await createTestDb({
+    service: 'identity',
+    url: URL,
+    migrations: migrations.map((body) => (schema: string) => rewriteSchemaSql(body, 'identity', schema)),
   });
 
-  // Owns its database, or does not run. Must precede the first migration.
-  await assertTestDatabase(sql, 'svc-identity');
-
-  for (const migration of migrations) await sql.unsafe(migration);
-
   const bus = new MemoryEventBus('svc-identity');
-  const rank = new RankService(sql, bus);
-  const auth = new AuthService(sql, bus, rank, tokenConfig, webauthnConfig);
+  const rank = new RankService(db.sql, bus);
+  const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig);
   await rank.seedTiers();
 
   let counter = 0;
@@ -175,30 +167,28 @@ if (!available) {
   beforeEach(async () => {
     bus.reset();
     /**
-     * Reset the review queue, not just the bus.
+     * Wipe transactional state inside THIS suite's schema only.
      *
-     * `kyc_records` is append-only in normal operation and nothing here ever
-     * removed rows, so the table grew without bound across runs — 307 pending
-     * rows on the shared database by the time this was tracked down. The queue
-     * is served oldest-first under a LIMIT, so once the backlog exceeded that
-     * limit a record created *now* could never appear in it, and the pending
-     * queue test failed with an assertion that looked exactly like a real
-     * regression. It passed on fresh Postgres, which is why CI stayed green.
-     *
-     * Truncating here rather than only scoping the assertion is deliberate:
-     * scoping would paper over the growth while leaving the table to grow
-     * forever, and the *next* limit-sensitive test would hit the same wall.
-     * The root cause is unbounded accumulation, so the fix removes it.
-     *
-     * This is a destructive statement, which is legitimate only because
-     * `assertTestDatabase` above has already proved we own this database.
-     * `kyc_records` is a leaf — nothing references it — so no CASCADE.
+     * `createTestDb` already isolates us from other worktrees; truncateAll
+     * keeps the KYC queue and session tables empty between cases so FIFO
+     * assertions and LIMIT-sensitive reads cannot see leftover rows from
+     * an earlier `it` in the same run. Seed the rank ladder again because
+     * thresholds live in a normal table, not a migration-only fixture.
      */
-    await sql`TRUNCATE identity.kyc_records`;
+    await db.truncateAll();
+    await rank.seedTiers();
   });
 
   afterAll(async () => {
-    await sql.end({ timeout: 5 });
+    await db.drop();
+  });
+
+  describe('isolation', () => {
+    it('uses a unique schema so parallel suites cannot share state', () => {
+      // Structural guarantee: createTestDb names include pid + counter.
+      expect(db.schema).toMatch(/^test_identity_\d+_\d+$/);
+      expect(db.schema).not.toBe('identity');
+    });
   });
 
   describe('registration', () => {
@@ -290,8 +280,8 @@ if (!available) {
 
     it('refuses a frozen account', async () => {
       const session = await register();
-      await sql`UPDATE identity.users SET status = 'frozen' WHERE id = ${session.userId}`;
-      const handleRow = await sql<Array<{ handle: string }>>`SELECT handle FROM identity.users WHERE id = ${session.userId}`;
+      await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
+      const handleRow = await db.sql<Array<{ handle: string }>>`SELECT handle FROM users WHERE id = ${session.userId}`;
       await expect(auth.login({ identifier: handleRow[0]!.handle, password: 'correct horse battery staple' })).rejects.toMatchObject({
         code: 'auth.account_frozen',
       });
@@ -303,15 +293,15 @@ if (!available) {
       const session = await register();
       const { secret } = await auth.startTotpEnrolment(session.userId);
 
-      const before = await sql<Array<{ totp_secret: string | null }>>`
-        SELECT totp_secret FROM identity.users WHERE id = ${session.userId}
+      const before = await db.sql<Array<{ totp_secret: string | null }>>`
+        SELECT totp_secret FROM users WHERE id = ${session.userId}
       `;
       expect(before[0]!.totp_secret).toBeNull();
 
       await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
 
-      const after = await sql<Array<{ totp_secret: string | null }>>`
-        SELECT totp_secret FROM identity.users WHERE id = ${session.userId}
+      const after = await db.sql<Array<{ totp_secret: string | null }>>`
+        SELECT totp_secret FROM users WHERE id = ${session.userId}
       `;
       expect(after[0]!.totp_secret).toBe(secret);
     });
@@ -359,8 +349,8 @@ if (!available) {
       const enrolled = await auth.confirmWebauthnRegistration(session.userId, authenticator.registrationResponse(options.challenge));
       expect(enrolled.credentialId).toBe(b64urlEncode(authenticator.credId));
 
-      const stored = await sql<Array<{ webauthn_creds: unknown }>>`
-        SELECT webauthn_creds FROM identity.users WHERE id = ${session.userId}
+      const stored = await db.sql<Array<{ webauthn_creds: unknown }>>`
+        SELECT webauthn_creds FROM users WHERE id = ${session.userId}
       `;
       expect(Array.isArray(stored[0]!.webauthn_creds)).toBe(true);
       expect((stored[0]!.webauthn_creds as unknown[]).length).toBe(1);
@@ -383,8 +373,8 @@ if (!available) {
         auth.confirmWebauthnRegistration(session.userId, authenticator.registrationResponse('not-the-challenge')),
       ).rejects.toMatchObject({ code: 'auth.webauthn_invalid' });
 
-      const stored = await sql<Array<{ webauthn_creds: unknown }>>`
-        SELECT webauthn_creds FROM identity.users WHERE id = ${session.userId}
+      const stored = await db.sql<Array<{ webauthn_creds: unknown }>>`
+        SELECT webauthn_creds FROM users WHERE id = ${session.userId}
       `;
       expect(stored[0]!.webauthn_creds).toEqual([]);
       // Real challenge must still be single-use only after a successful take —
@@ -433,7 +423,7 @@ if (!available) {
       await expect(auth.refresh('not-a-real-token')).rejects.toMatchObject({ code: 'auth.session_invalid' });
 
       const session = await register();
-      await sql`UPDATE identity.sessions SET expires_at = now() - interval '1 day' WHERE id = ${session.sessionId}`;
+      await db.sql`UPDATE sessions SET expires_at = now() - interval '1 day' WHERE id = ${session.sessionId}`;
       await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({ code: 'auth.session_invalid' });
     });
 
@@ -454,8 +444,8 @@ if (!available) {
         grantorScopes: SESSION_SCOPES,
       });
 
-      const stored = await sql<Array<{ key_hash: string; key_prefix: string }>>`
-        SELECT key_hash, key_prefix FROM identity.api_keys WHERE user_id = ${session.userId}
+      const stored = await db.sql<Array<{ key_hash: string; key_prefix: string }>>`
+        SELECT key_hash, key_prefix FROM api_keys WHERE user_id = ${session.userId}
       `;
       expect(stored[0]!.key_hash).not.toContain(key);
       expect(stored[0]!.key_prefix).toBe(prefix);
@@ -491,8 +481,8 @@ if (!available) {
 
       // The database is the backstop if that check is ever bypassed.
       await expect(
-        sql`
-          INSERT INTO identity.api_keys (user_id, name, key_hash, key_prefix, scopes)
+        db.sql`
+          INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes)
           VALUES (${session.userId}, 'x', ${'h' + Date.now()}, 'ifc_x', ARRAY['trade:withdraw'])
         `,
       ).rejects.toThrow(/api_keys_no_withdraw_ck/);
@@ -554,8 +544,8 @@ if (!available) {
       expect(listed).toHaveLength(1);
       expect(listed[0]).toMatchObject({ id, revoked: true });
 
-      const rows = await sql<Array<{ id: string; revoked: boolean }>>`
-        SELECT id, revoked FROM identity.sub_accounts WHERE id = ${id}
+      const rows = await db.sql<Array<{ id: string; revoked: boolean }>>`
+        SELECT id, revoked FROM sub_accounts WHERE id = ${id}
       `;
       expect(rows).toHaveLength(1);
       expect(rows[0]!.revoked).toBe(true);
@@ -614,7 +604,7 @@ if (!available) {
     it('ignores an expired record', async () => {
       const session = await register();
       await auth.approveKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
-      await sql`UPDATE identity.kyc_records SET expires_at = now() - interval '1 day' WHERE user_id = ${session.userId}`;
+      await db.sql`UPDATE kyc_records SET expires_at = now() - interval '1 day' WHERE user_id = ${session.userId}`;
       expect(await auth.kycTier(session.userId)).toBe('none');
     });
   });
@@ -689,7 +679,7 @@ if (!available) {
       const second = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
 
       expect(second.id).toBe(first.id);
-      const rows = await sql`SELECT id FROM identity.kyc_records WHERE user_id = ${session.userId}`;
+      const rows = await db.sql`SELECT id FROM kyc_records WHERE user_id = ${session.userId}`;
       expect(rows).toHaveLength(1);
     });
 
@@ -717,7 +707,7 @@ if (!available) {
 
       expect(twice.id).toBe(once.id);
       expect(twice.reviewedAt?.getTime()).toBe(once.reviewedAt?.getTime());
-      const rows = await sql`SELECT id FROM identity.kyc_records WHERE user_id = ${session.userId} AND status = 'approved'`;
+      const rows = await db.sql`SELECT id FROM kyc_records WHERE user_id = ${session.userId} AND status = 'approved'`;
       expect(rows).toHaveLength(1);
     });
 
@@ -863,7 +853,7 @@ if (!available) {
     it('refuses a frozen account', async () => {
       const session = await register();
       const secret = await enrol(session.userId);
-      await sql`UPDATE identity.users SET status = 'frozen' WHERE id = ${session.userId}`;
+      await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
 
       await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) })).rejects.toMatchObject({
         code: 'auth.account_frozen',
