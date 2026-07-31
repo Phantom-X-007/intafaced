@@ -58,29 +58,44 @@
             <div class="form-group-container form-group-container2">
               <div class="form-group form-fee">
                 <label class="label-amount"> {{$t('uc.finance.withdraw.fee')}}
-                  <!--<p class="label-fr">-->
-                  <!--<span>{{$t('uc.finance.withdraw.range')}}: {{currentCoin.minTxFee}} - {{currentCoin.maxTxFee}}</span>-->
-                  <!--</p>-->
+                  <p class="label-fr">
+                    <span class="ix-dim">{{ feeSourceLabel }}</span>
+                  </p>
                 </label>
                 <div class="input-group" style="margin-top:14px;position:relative;">
-                  <Slider v-if="currentCoin.maxTxFee > currentCoin.minTxFee" v-model="withdrawFee" show-input:step="(currentCoin.maxTxFee - currentCoin.minTxFee)/10" :max="currentCoin.maxTxFee" :min="currentCoin.minTxFee"></Slider>
-                  <!--<Poptip v-else trigger="focus" :content="$t('uc.finance.withdraw.tip1')+currentCoin.minTxFee+$t('uc.finance.withdraw.tip1')+currentCoin.maxTxFee" style="width: 100%;">-->
-                  <InputNumber readonly v-model="withdrawFee" :min="currentCoin.minTxFee" :max="currentCoin.maxTxFee" size="large"></InputNumber>
+                  <Slider v-if="currentCoin.maxTxFee > currentCoin.minTxFee" v-model="withdrawFee" :step="feeStep" :max="currentCoin.maxTxFee" :min="currentCoin.minTxFee" @on-change="computerAmount"></Slider>
+                  <InputNumber readonly v-model="withdrawFee" :min="currentCoin.minTxFee" :max="currentCoin.maxTxFee" size="large" @on-change="computerAmount"></InputNumber>
                   <span class="input-group-addon addon-tag uppercase">{{currentCoin.unit}}</span>
-                  <!--</Poptip>-->
                 </div>
               </div>
               <div class="form-group">
-                <label>{{$t('uc.finance.withdraw.arriamount')}}</label>
+                <label>{{$t('uc.finance.withdraw.arriamount')}}
+                  <p class="label-fr"><span class="ix-dim">estimate · amount − fee (rounded down)</span></p>
+                </label>
                 <div class="input-group" style="margin-top:14px;position:relative;">
-                  <InputNumber readonly v-model="withdrawOutAmount" :placeholder="$t('uc.finance.withdraw.arriamount')" size="large"></InputNumber>
-                  <!-- <input id="withdrawOutAmount" class="form-control form-out-amount" disabled="" maxlength="20" type="text" value="0"> -->
+                  <Input
+                    id="withdrawOutAmount"
+                    readonly
+                    :value="withdrawOutAmountDisplay"
+                    :placeholder="$t('uc.finance.withdraw.arriamount')"
+                    size="large"
+                  />
                   <span class="input-group-addon addon-tag uppercase">{{currentCoin.unit}}</span>
                 </div>
+                <p v-if="netMathError" class="ix-empty ix-empty-error" role="alert">{{ netMathError }}</p>
               </div>
             </div>
             <div class="action-foot">
-              <Button id="withdrawSubmit" long size="large" type="primary" style="height:40px;" @click="apply">{{$t('uc.finance.withdraw.pickup')}}</Button>
+              <Button
+                id="withdrawSubmit"
+                long
+                size="large"
+                type="primary"
+                style="height:40px;"
+                :disabled="submitting"
+                :loading="submitting"
+                @click="apply"
+              >{{$t('uc.finance.withdraw.pickup')}}</Button>
             </div>
             <div class="action-content pt10">
               <div class="action-body">
@@ -109,36 +124,63 @@
         </section>
       </div>
     </div>
-    <Modal v-model="modal" width="450">
-      <!-- <P style="color:red;font-weight: bold;">
-        {{$t('uc.finance.withdraw.fundpwdtip')}}<br/>
-        <Input type="password" v-model="fundpwd" :placeholder="$t('otc.chat.msg7')"></Input>
-      </p> -->
+    <Modal v-model="modal" width="480" :mask-closable="!submitting" :closable="!submitting">
       <p slot="header">
-        Notice
+        Review withdrawal
       </p>
+      <div class="ix-withdraw-receipt" role="region" aria-label="Withdrawal review receipt">
+        <dl class="ix-receipt-dl">
+          <div>
+            <dt>Asset</dt>
+            <dd>{{ receipt.unit || '—' }}</dd>
+          </div>
+          <div>
+            <dt>Amount</dt>
+            <dd>{{ receipt.amount || '—' }} <em v-if="receipt.unit">{{ receipt.unit }}</em></dd>
+          </div>
+          <div>
+            <dt>Fee</dt>
+            <dd>{{ receipt.fee || '—' }} <em v-if="receipt.unit">{{ receipt.unit }}</em>
+              <span class="ix-dim"> · {{ receipt.feeSource }}</span>
+            </dd>
+          </div>
+          <div>
+            <dt>You will receive (est.)</dt>
+            <dd class="ix-receipt-net">{{ receipt.net || '—' }} <em v-if="receipt.unit">{{ receipt.unit }}</em></dd>
+          </div>
+          <div>
+            <dt>To address</dt>
+            <dd class="ix-receipt-addr">{{ receipt.address || '—' }}</dd>
+          </div>
+        </dl>
+        <p class="ix-empty" role="note">Estimate only — final settlement is what the venue accepts. Failed request does not mean sent.</p>
+      </div>
       <Form class="withdraw-form-inline" ref="formInline" :model="formInline" inline>
-        <!-- <FormItem>
-          <Input type="text" v-model="user.mobilePhone" disabled></Input>
-        </FormItem> -->
         <FormItem prop="code">
-          <Input type="text" v-model="formInline.code" :placeholder="$t('uc.regist.smscode')">
+          <Input type="text" v-model="formInline.code" :placeholder="$t('uc.regist.smscode')" :disabled="submitting">
           </Input>
-          <input id="sendCode" @click="sendCode();" type="Button" :value="sendcodeValue" :disabled="codeIsSending">
+          <input id="sendCode" @click="sendCode();" type="Button" :value="sendcodeValue" :disabled="codeIsSending || submitting">
           </input>
         </FormItem>
         <FormItem>
-          <Input type="password" v-model="formInline.fundpwd" :placeholder="$t('otc.chat.msg7')"></Input>
+          <Input type="password" v-model="formInline.fundpwd" :placeholder="$t('otc.chat.msg7')" :disabled="submitting"></Input>
         </FormItem>
       </Form>
-      <div slot="footer">
-        <span style="margin-right:50px" @click="cancel">Cancel</span>
-        <span style="background:#ff8534;color:#fff;width:80px;border-radius:30px;display:inline-block;text-align:center;height:30px;line-height: 30px;" @click="ok">Confirm</span>
+      <div slot="footer" class="ix-withdraw-footer">
+        <Button type="text" :disabled="submitting" @click="cancel">Cancel</Button>
+        <Button
+          type="primary"
+          :loading="submitting"
+          :disabled="submitting"
+          @click="ok"
+        >{{ submitting ? 'Submitting…' : 'Confirm' }}</Button>
       </div>
     </Modal>
   </div>
 </template>
 <script>
+var withdrawMath = require('../../assets/js/withdraw-math.js');
+
 export default {
   data() {
     return {
@@ -151,6 +193,7 @@ export default {
         fundpwd: ""
       },
       modal: false,
+      submitting: false,
       fundpwd: "",
       currentCoin: {},
       transaction: {
@@ -168,7 +211,17 @@ export default {
       inputAddress: "", //address entered by the user
       withdrawAmount: 0,
       withdrawFee: 0,
-      withdrawOutAmount: 0,
+      /** Display string for net receive — never IEEE float math. */
+      withdrawOutAmountDisplay: "—",
+      netMathError: "",
+      receipt: {
+        unit: "",
+        amount: "",
+        fee: "",
+        feeSource: "",
+        net: "",
+        address: ""
+      },
       coinType: "",
       coinList: [],
       tableWithdraw: [],
@@ -177,13 +230,21 @@ export default {
   },
   watch: {
     currentCoin: function() {
-      this.withdrawFee =
-        this.currentCoin.minTxFee +
-        (this.currentCoin.maxTxFee - this.currentCoin.minTxFee) / 2;
+      var min = Number(this.currentCoin.minTxFee) || 0;
+      var max = Number(this.currentCoin.maxTxFee) || 0;
+      this.withdrawFee = min + (max - min) / 2;
+      this.computerAmount();
+    },
+    withdrawAmount: function() {
+      this.computerAmount();
+    },
+    withdrawFee: function() {
+      this.computerAmount();
     }
   },
   methods: {
     cancel() {
+      if (this.submitting) return;
       this.modal = false;
       this.formInline.code = "";
       this.formInline.fundpwd = "";
@@ -233,8 +294,37 @@ export default {
       this.withdrawAdress = "";
       this.inputAddress = "";
       this.withdrawAmount = 0;
-      // this.withdrawFee= 0;
-      this.withdrawOutAmount = 0;
+      this.withdrawOutAmountDisplay = "—";
+      this.netMathError = "";
+      this.receipt = {
+        unit: "",
+        amount: "",
+        fee: "",
+        feeSource: "",
+        net: "",
+        address: ""
+      };
+    },
+    buildReceipt() {
+      var unit = (this.currentCoin && this.currentCoin.unit) || this.coinType || "";
+      var scale =
+        this.currentCoin && this.currentCoin.withdrawScale != null
+          ? this.currentCoin.withdrawScale
+          : 8;
+      var amountStr = withdrawMath.formatAmount
+        ? withdrawMath.formatAmount(this.withdrawAmount, scale)
+        : String(this.withdrawAmount);
+      var feeStr = withdrawMath.formatAmount
+        ? withdrawMath.formatAmount(this.withdrawFee, scale)
+        : String(this.withdrawFee);
+      this.receipt = {
+        unit: unit,
+        amount: amountStr || "—",
+        fee: feeStr || "—",
+        feeSource: this.feeSourceLabel,
+        net: this.withdrawOutAmountDisplay,
+        address: this.withdrawAdress || this.inputAddress || ""
+      };
     },
     getCurrentCoinRecharge() {
       if (this.coinType!= "") {
@@ -251,6 +341,7 @@ export default {
       }
     },
     ok() {
+      if (this.submitting) return;
       if (this.formInline.code == "") {
         this.modal = true;
         this.$Message.error("Enter the SMS code");
@@ -261,24 +352,39 @@ export default {
         this.$Message.error(this.$t("otc.chat.msg7tip"));
         return;
       }
+      if (this.netMathError || !this.receipt.net || this.receipt.net === "—") {
+        this.$Message.error(
+          this.netMathError || "Cannot confirm — net amount is unknown."
+        );
+        return;
+      }
       let params = {};
-      for (let i = 0; i < this.currentCoin.addresses; i++) {
-        if(this.currentCoin.addresses[i].address == this.withdrawAdress){
-          params["remark"] = this.currentCoin.addresses[i].remark;
+      var addrs = (this.currentCoin && this.currentCoin.addresses) || [];
+      for (let i = 0; i < addrs.length; i++) {
+        if (addrs[i].address == this.withdrawAdress) {
+          params["remark"] = addrs[i].remark;
         }
       }
 
       params["unit"] = this.currentCoin.unit;
       params["address"] = this.withdrawAdress;
-      params["amount"] = this.withdrawAmount;
-      params["fee"] = this.withdrawFee;
+      params["amount"] = this.receipt.amount;
+      params["fee"] = this.receipt.fee;
       params["jyPassword"] = this.formInline.fundpwd;
       params["code"] = this.formInline.code;
+      this.submitting = true;
       this.$http
-.post(this.host + "/uc/withdraw/apply/code", params)
-.then(response => {
+        .post(this.host + "/uc/withdraw/apply/code", params)
+        .then(response => {
+          this.submitting = false;
           this.fundpwd = "";
           var resp = response.body;
+          if (!resp) {
+            this.$Message.error(
+              "Venue did not respond — withdrawal was not submitted."
+            );
+            return;
+          }
           if (resp.code == 0) {
             this.modal = false;
             this.formInline.code = "";
@@ -288,8 +394,14 @@ export default {
             this.clearValues();
             this.$Message.success(resp.message);
           } else {
-            this.$Message.error(resp.message);
+            this.$Message.error(resp.message || "Withdrawal rejected");
           }
+        })
+        .catch(() => {
+          this.submitting = false;
+          this.$Message.error(
+            "Venue did not respond — withdrawal was not submitted."
+          );
         });
     },
     getAddrList() {
@@ -361,43 +473,44 @@ export default {
           this.loading = false;
         });
     },
-    accSub(arg1, arg2) {
-      var r1, r2, m, n;
-      try {
-        r1 = arg1.toString().split(".")[1].length;
-      } catch (e) {
-        r1 = 0;
-      }
-      try {
-        r2 = arg2.toString().split(".")[1].length;
-      } catch (e) {
-        r2 = 0;
-      }
-      m = Math.pow(10, Math.max(r1, r2));
-      //last modify by deeka
-      n = r1 >= r2? r1: r2;
-      return ((arg1 * m - arg2 * m) / m).toFixed(n);
-    },
-    round(v, e) {
-      var t = 1;
-      for (; e > 0; t *= 10, e--);
-      for (; e < 0; t /= 10, e++);
-      return Math.round(v * t) / t;
-    },
     computerAmount() {
-      this.withdrawOutAmount = this.round(
-        this.accSub(this.withdrawAmount, this.withdrawFee),
-        this.currentCoin.withdrawScale
-);
-    },
-    computerAmount2() {
-      this.withdrawAmount =
-        (this.withdrawAmount + "").replace(/([0-9]+\.[0-9]{6})[0-9]*/, "$1") -
-        0;
-      this.withdrawOutAmount = this.round(
-        this.accSub(this.withdrawAmount, this.withdrawFee),
-        this.currentCoin.withdrawScale
-);
+      this.netMathError = "";
+      var scale =
+        this.currentCoin && this.currentCoin.withdrawScale != null
+          ? this.currentCoin.withdrawScale
+          : 8;
+      if (!withdrawMath || !withdrawMath.netReceive) {
+        this.withdrawOutAmountDisplay = "—";
+        this.netMathError = "Net amount unavailable — decimal math module failed to load.";
+        return;
+      }
+      // Empty / zero amount is a form state, not a known net of 0.00 from a failed calc.
+      if (
+        this.withdrawAmount === "" ||
+        this.withdrawAmount === null ||
+        this.withdrawAmount === undefined
+      ) {
+        this.withdrawOutAmountDisplay = "—";
+        return;
+      }
+      var result = withdrawMath.netReceive(
+        this.withdrawAmount,
+        this.withdrawFee,
+        scale
+      );
+      if (!result.ok) {
+        this.withdrawOutAmountDisplay = "—";
+        if (result.error === "fee_exceeds_amount") {
+          this.netMathError = "Fee is larger than amount — you would receive nothing.";
+        } else if (result.error === "invalid_amount_or_fee") {
+          this.withdrawOutAmountDisplay = "—";
+          this.netMathError = "";
+        } else {
+          this.netMathError = "Cannot compute net receive (" + result.error + ").";
+        }
+        return;
+      }
+      this.withdrawOutAmountDisplay = result.net;
     },
     valid() {
       this.withdrawAdress = this.withdrawAdress || this.inputAddress;
@@ -411,34 +524,42 @@ export default {
         this.withdrawAmount == "" ||
         this.withdrawAmount == 0 ||
         this.withdrawAmount - 0 < this.currentCoin.minAmount
-) {
+      ) {
         this.$Message.error(
           this.$t("uc.finance.withdraw.numtip2") + this.currentCoin.minAmount
-);
+        );
         return false;
       } else if (this.withdrawAmount - 0 < this.withdrawFee) {
         this.$Message.error(this.$t("uc.finance.withdraw.numtip3"));
         return false;
       } else if (
-        this.withdrawFee == "" ||
-        this.withdrawFee == 0 ||
+        this.withdrawFee === "" ||
+        this.withdrawFee === null ||
         this.withdrawFee - 0 > this.currentCoin.maxTxFee ||
         this.withdrawFee - 0 < this.currentCoin.minTxFee
-) {
+      ) {
         this.$Message.error(
           this.$t("uc.finance.withdraw.feetip1") +
             this.currentCoin.minTxFee +
             ", " +
             this.$t("uc.finance.withdraw.feetip2") +
             this.currentCoin.maxTxFee
-);
+        );
+        return false;
+      } else if (this.netMathError || this.withdrawOutAmountDisplay === "—") {
+        this.$Message.error(
+          this.netMathError || "Net amount is unknown — fix amount/fee first."
+        );
         return false;
       } else {
         return true;
       }
     },
     apply() {
+      if (this.submitting) return;
       if (this.valid()) {
+        this.computerAmount();
+        this.buildReceipt();
         this.modal = true;
         let timercode = setInterval(() => {
           if (this.countdown <= 0) {
@@ -499,6 +620,23 @@ export default {
     member: function() {
       console.log(this.$store.getters.member);
       return this.$store.getters.member;
+    },
+    feeSourceLabel() {
+      var min = this.currentCoin && this.currentCoin.minTxFee;
+      var max = this.currentCoin && this.currentCoin.maxTxFee;
+      if (min == null && max == null) {
+        return "Fee source: unknown (venue did not provide a range)";
+      }
+      if (min === max || max == null) {
+        return "Fee source: venue fixed fee (" + min + ")";
+      }
+      return "Fee source: venue range " + min + "–" + max + " (you choose within range)";
+    },
+    feeStep() {
+      var min = Number(this.currentCoin && this.currentCoin.minTxFee) || 0;
+      var max = Number(this.currentCoin && this.currentCoin.maxTxFee) || 0;
+      if (!(max > min)) return 0.00000001;
+      return (max - min) / 10;
     },
     tableColumnsWithdraw() {
       let columns = [],
@@ -573,6 +711,54 @@ export default {
     height: 40px;
     line-height: 40px;
   }
+}
+.ix-withdraw-receipt {
+  padding: 0 16px 8px;
+}
+.ix-receipt-dl {
+  margin: 0 0 12px;
+  div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  dt {
+    color: #8c979f;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  dd {
+    margin: 0;
+    text-align: right;
+    font-size: 13px;
+    word-break: break-all;
+    em {
+      font-style: normal;
+      opacity: 0.7;
+      margin-left: 4px;
+    }
+  }
+  .ix-receipt-net {
+    font-weight: 600;
+    color: #ff6b00;
+  }
+  .ix-receipt-addr {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    max-width: 280px;
+  }
+}
+.ix-withdraw-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  align-items: center;
+}
+.ix-dim {
+  opacity: 0.65;
+  font-weight: 400;
 }
 </style>
 

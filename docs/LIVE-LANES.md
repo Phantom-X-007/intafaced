@@ -16,7 +16,7 @@
 | residual-pay                  | free / claim                    | R3 pay.gateway Class M residuals                              | free after research pack             | —                         | go-live without X                           |
 | residual-terminal             | free / claim                    | R1 hotkeys/sub-accounts                                       | **check frontend first**             | —                         | same files as stream-a-ui                   |
 | residual-trade-futures        | free / claim                    | R6 futures research→MVP                                       | free after research pack             | —                         | mark done without recipes                   |
-| stream-a-ui / frontend-wave-a | **sibling frontend SoT**        | Trader shell Wave A honesty/craft                             | **assume active until proven idle**  | FRONTEND-STATE-OF-TRUTH   | residual-terminal collision                 |
+| stream-a-ui / frontend-wave-a | frontend-impl continuous | Wave A honesty shipping | **shipping** | #261 #262 #267 | residual-terminal collision |
 | denon-spine                   | Phantom-X-007                   | feat/spine-*                                                  | hold crash WIP                       | —                         | Nitro force-push / multi-asset              |
 | third-builder                 | shehzad002                      | stood down on residual board                                  | **idle**                             | #226–#228 on main         | re-claim residual rows without Nitro assign |
 
