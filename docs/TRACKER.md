@@ -131,7 +131,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
 | ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining._ | F |  | `trade.convert` |
-| 🔨 | Perps: cross/isolated margin, funding, liquidation ladder <br/>_Updated 2026-07-31 residual: F1–F5 recipes + positions open/close+bus + funding/liq planners + funding-tick + liquidation-tick (external rate/mark only, never invent). Still missing: mark oracle product, wall-clock cron hosts, matching engine, realized PnL on close. Not done._ | F |  | `trade.futures` |
+| 🔨 | Perps: cross/isolated margin, funding, liquidation ladder <br/>_Updated 2026-07-31 residual: F1–F5 recipes + open/close+bus + funding/liq planners+ticks + futures mark-source port (index/mid/last quality; default liq refuses last; never invents). Still missing: real index oracle product, wall-clock cron hosts, matching engine, realized PnL on close. Not done._ | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
 | 🟢 | OTC RFQ desk, staked-tier gate | F |  | `trade.otc` |
 | 🟢 | Copy trading, audited leaders, profit share | B |  | `trade.copy` |
