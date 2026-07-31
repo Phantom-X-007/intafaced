@@ -117,3 +117,19 @@ CLASS M HOLD:      multi-replica live rail until durable BroadcastStore
 STREAM A PROOF:    still UNVERIFIED
 SECRETS / ADR:     still human/owner
 ```
+
+---
+
+## High water (backend audit fire — 2026-07-31 continued)
+
+**Tip at write:** `656d47a66a8d8b45099782c40fcd49430650bb11` · always re-check `git rev-parse origin/main`.
+
+| PR   | What                                            |
+| ---- | ----------------------------------------------- |
+| #251 | Money-class mega archive on #226–#250           |
+| #252 | Denon #201–#218 deep + bank B-01 + pay M226-03  |
+| #253 | bank.loan_liquidating error code                |
+| #254 | P2P InsufficientFunds rehydrate                 |
+| #255 | Shared rehydrate for all service ledger clients |
+
+**Backend only.** Frontend / Stream A other chat. Multi-replica pay journal still P0 hold. Token buyback product residual (T-01/T-02). Not go-live.
