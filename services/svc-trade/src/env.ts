@@ -55,6 +55,27 @@ const schema = serviceEnvSchema
        * Execution still settles through the normal market IOC money path.
        */
       TRADE_CONVERT_SPREAD_BPS: z.coerce.number().int().min(0).max(5000).default(10),
+
+      /**
+       * Futures residual jobs (liquidation scan + funding ticks).
+       * Default OFF — must be explicitly enabled. Never invents markets/rates.
+       */
+      TRADE_FUTURES_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /** Liquidation scan interval when jobs enabled. Default 15s. */
+      TRADE_FUTURES_LIQ_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
+
+      /** Funding tick interval per market when jobs enabled. Default 8h. */
+      TRADE_FUTURES_FUNDING_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(28_800_000),
+
+      /**
+       * Comma-separated market UUIDs for funding ticks.
+       * Empty (default) = funding jobs not scheduled — never invent market list.
+       */
+      TRADE_FUTURES_FUNDING_MARKET_IDS: z.string().default(''),
     }),
   );
 
