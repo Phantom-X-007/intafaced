@@ -4,8 +4,12 @@
             <div class="bill_box rightarea padding-right-clear record">
                 <div class="col-xs-12 rightarea-con">
                     <div class="trade_accumulative">
-                        <div class="trade_accumulative_return">{{$t('uc.finance.trade.accumulative_return')}}&nbsp;&nbsp;{{new Number(accumulative_return).toFixed(8)}}</div>
-                        <div class="trade_accumulat_return">{{$t('uc.finance.trade.accumulat_return')}}&nbsp;&nbsp;{{new Number(accumulat_return).toFixed(8)}}</div>
+                        <div class="trade_accumulative_return" v-if="loading">{{$t('uc.finance.trade.accumulative_return')}}&nbsp;&nbsp;<span class="ix-empty-loading">Loading…</span></div>
+                        <div class="trade_accumulative_return" v-else-if="listError">{{$t('uc.finance.trade.accumulative_return')}}&nbsp;&nbsp;<span class="ix-dim">— unknown</span></div>
+                        <div class="trade_accumulative_return" v-else-if="listReachable">{{$t('uc.finance.trade.accumulative_return')}}&nbsp;&nbsp;{{fmtTotal(accumulative_return)}}</div>
+                        <div class="trade_accumulative_return" v-else>{{$t('uc.finance.trade.accumulative_return')}}&nbsp;&nbsp;<span class="ix-dim">—</span></div>
+                        <div class="trade_accumulat_return" v-if="listReachable">{{$t('uc.finance.trade.accumulat_return')}}&nbsp;&nbsp;{{fmtTotal(accumulat_return)}}</div>
+                        <div class="trade_accumulat_return" v-else-if="listError">{{$t('uc.finance.trade.accumulat_return')}}&nbsp;&nbsp;<span class="ix-dim">— unknown</span></div>
                     </div>
                     <div class="form-group">
                         <span>
@@ -250,8 +254,8 @@ export default {
         // }
         // },
       ],
-      accumulative_return: 0,
-      accumulat_return: 0,
+      accumulative_return: null,
+      accumulat_return: null,
       pageSize: 10,
       page: 1,
       total: 0,

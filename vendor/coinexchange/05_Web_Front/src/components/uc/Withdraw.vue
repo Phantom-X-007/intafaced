@@ -342,6 +342,11 @@ export default {
     },
     ok() {
       if (this.submitting) return;
+      if (!this.$store.getters.isLogin) {
+        this.$Message.error("Session ended — sign in again. Withdrawal was not submitted.");
+        this.modal = false;
+        return;
+      }
       if (this.formInline.code == "") {
         this.modal = true;
         this.$Message.error("Enter the SMS code");

@@ -279,7 +279,7 @@
                 <thead>
                   <tr>
                     <th>Asset</th>
-                    <th class="ix-num">Available</th>
+                    <th class="ix-num">Available (venue)</th>
                     <th class="ix-num">Value</th>
                     <th></th>
                   </tr>

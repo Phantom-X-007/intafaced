@@ -16,10 +16,10 @@
 | residual-ws                   | **audit-fire-mega (this Grok)** | R2 ws.gateway empty-honest tracker                            | **LIVE**                             | chore/residual-ws-honesty | invent trade.futures fills; vendor/**        |
 | residual-amm                  | free / claim                    | R5 protocol.amm deploy + mint/swap proof                      | blocked until R4 first cut preferred | —                         | audit theater                                |
 | residual-pay                  | free / claim                    | R3 pay.gateway Class M residuals                              | free after research pack             | —                         | go-live without X                            |
-| residual-terminal             | free / claim                    | R1 hotkeys/sub-accounts                                       | **check frontend first**             | —                         | same files as stream-a-ui                    |
+| stream-a-ui / frontend-wave-a | frontend-impl continuous        | Wave A stack + P21 + B5 prefs on #267 | **shipping**                         | #267                      | residual-terminal collision                 |
 | residual-trade-futures        | free / claim                    | R6 futures — **after seed/mm per Denon DIRECTION**            | free after research pack             | —                         | mark done without recipes; not first mountain |
 | **order-route-harden**        | **Build chat (claim on start)** | Denon order-route/DEX–CEX harden · Plan P0–P8                 | **ARMED · claim before code**        | `ORDER-ROUTE-PROGRAM-INDEX.md` | invent go-live; futures-first; skip chaos spine |
-| stream-a-ui / frontend-wave-a | **sibling frontend SoT**        | Trader shell Wave A honesty/craft                             | **assume active until proven idle**  | FRONTEND-STATE-OF-TRUTH   | residual-terminal collision                  |
+| stream-a-ui / frontend-wave-a | frontend-impl continuous        | Wave A stack + P21 + B5 prefs on #267 | **shipping**                         | #267                      | residual-terminal collision                 |
 | denon-spine                   | Phantom-X-007                   | feat/spine-*                                                  | hold crash WIP                       | —                         | Nitro force-push / multi-asset               |
 | third-builder                 | shehzad002                      | stood down on residual board                                  | **idle**                             | #226–#228 on main         | re-claim residual rows without Nitro assign  |
 
@@ -36,13 +36,9 @@ Per `NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` §7 NEXT QUEUE — claim one lane, r
 
 ## Last board update
 
-- **2026-07-31 continuous implement:** Wave A continue branch `feat/app-wave-a-continue` — remaining zero-coverage uc + cancel lock + TradingView attribution.
-
-
-
 - **2026-07-31 residual campaign ARMED:** Nitro owns residual board program. Tip `c40fd59` (#258). Open **#259**. Frontend Wave A SoT locked separately — coordinate before shell file claims. Third builder stood down.
 
-- **2026-07-31 audit-fire-mega:** claimed residual-ws (tracker honesty only). Tip re-check. Open frontend #261 left alone. Do not collide stream-a-ui.
+| stream-a-ui / frontend-wave-a | frontend-impl continuous        | Wave A stack + P21 + B5 prefs on #267 | **shipping**                         | #267                      | residual-terminal collision                 |
 
 - **2026-07-31 mega-finish:** branch `audit/finish-mega-2026-07-31` — recovery codes + residual packs + finish definition. Leave #266 pay journal and #267 frontend to their owners.
 
