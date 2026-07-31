@@ -7,11 +7,12 @@
 **Last tip:** re-check · high water through **#258** · do not re-ship **#110–#258** without regression
 
 ```
-STATUS 2026-07-31T residual-coord continue
-tip: re-check (expect #288 AMM mint/swap + #287 tracker)
-open: leave #267 frontend · leave #289 order-route
-next: funding job skeleton OR smart-accounts residual · WAVE-AUDIT optional
-do not: invent marks; collide vendor shell; fake futures done
+STATUS 2026-07-31T09:15Z residual COOK
+tip: re-check origin/main (expect post-#315)
+open residual PRs: re-check gh
+backend residual: futures stack #291–#315 on main (jobs default OFF)
+next: matching seed / live index / pay residual · leave #289
+do not invent marks rates candles balances
 ```
 
 ---
