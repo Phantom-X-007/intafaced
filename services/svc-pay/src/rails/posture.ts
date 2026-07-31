@@ -1,5 +1,5 @@
 import { isHex, type Hex } from 'viem';
-import { MemoryBroadcastStore } from './broadcast-store.js';
+import { MemoryBroadcastStore, type BroadcastStore } from './broadcast-store.js';
 import { MemoryChain, UnconfiguredChain, type CryptoChainPort } from './chain-port.js';
 import { parseEvmAssets } from './evm-assets.js';
 import { EvmLiveChain } from './evm-chain.js';
@@ -345,8 +345,13 @@ export function selectPublicCheckoutRail(
  * a chain — better a loud boot failure than a rail that looks live and cannot
  * pay out.
  */
-export function defaultChainFor(env: Record<string, string | undefined> = process.env): CryptoChainPort {
-  const live = tryLiveChainFromEnv(env);
+/**
+ * @param broadcasts Optional durable journal for live EVM sends. When omitted,
+ *   live chain uses MemoryBroadcastStore (single-process only — tests / local).
+ *   Production multi-replica MUST pass PostgresBroadcastStore from index boot.
+ */
+export function defaultChainFor(env: Record<string, string | undefined> = process.env, broadcasts?: BroadcastStore): CryptoChainPort {
+  const live = tryLiveChainFromEnv(env, broadcasts);
   if (live) return live;
 
   const appEnv = env.APP_ENV ?? 'dev';
@@ -372,7 +377,10 @@ export function shouldRegisterCardSandbox(env: Record<string, string | undefined
   return !(RAIL_POSTURE_ENFORCED_ENVS as readonly string[]).includes(appEnv);
 }
 
-export function tryLiveChainFromEnv(env: Record<string, string | undefined> = process.env): EvmLiveChain | null {
+export function tryLiveChainFromEnv(
+  env: Record<string, string | undefined> = process.env,
+  broadcasts?: BroadcastStore,
+): EvmLiveChain | null {
   const rpcUrl = env.PAY_CRYPTO_RPC_URL?.trim();
   if (!rpcUrl) return null;
 
@@ -414,7 +422,7 @@ export function tryLiveChainFromEnv(env: Record<string, string | undefined> = pr
     depositMnemonic: mnemonic!,
     hotWalletKey: hotKey as Hex,
     assets: parseEvmAssets(assetsRaw!),
-    broadcasts: new MemoryBroadcastStore(),
+    broadcasts: broadcasts ?? new MemoryBroadcastStore(),
     minConfirmations: Number.isFinite(minConfirmations) && minConfirmations >= 1 ? minConfirmations : 6,
   });
 }

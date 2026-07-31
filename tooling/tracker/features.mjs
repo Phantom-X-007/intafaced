@@ -330,7 +330,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
-    note: 'Updated 2026-07-31: hosted checkout + links remain; live crypto rail (`pay.rails`) now exists — with PAY_CRYPTO_* configured, public checkout can open on crypto-native under live-only (was hard-refused). Still wip: no card acquiring, merchant onboarding still blocked on pay:write, production RPC/custody are owner-supplied, multi-replica broadcast store not yet durable.',
+    note: 'Updated 2026-07-31 residual campaign: hosted checkout + links remain; live crypto rail (`pay.rails`) exists; PostgresBroadcastStore + pay.crypto_broadcasts (0004) journals outbound claim→put across replicas (MemoryBroadcastStore still default when no store injected). Still wip: no card acquiring, merchant onboarding still blocked on pay:write, production RPC/custody owner-supplied, crash-after-send-before-put still a residual double-send window.',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', { module: 'pay', phase: '3', dependsOn: ['pay.psp'] }),

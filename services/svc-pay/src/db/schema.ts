@@ -464,6 +464,17 @@ export const checkoutSessions = pay.table(
   ],
 );
 
+/**
+ * Outbound crypto broadcast journal (Class M). Not money — only idempotency keys
+ * and tx hashes so multi-replica live rails cannot double-send.
+ */
+export const cryptoBroadcasts = pay.table('crypto_broadcasts', {
+  idempotencyKey: text('idempotency_key').primaryKey(),
+  txHash: text('tx_hash').notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 export const schema = {
   merchants,
   paymentProfiles,
@@ -474,4 +485,5 @@ export const schema = {
   settlements,
   deposits,
   withdrawals,
+  cryptoBroadcasts,
 };

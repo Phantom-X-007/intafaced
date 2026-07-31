@@ -100,3 +100,82 @@ export class MemoryBroadcastStore implements BroadcastStore {
     for (const wake of list) wake();
   }
 }
+
+/**
+ * Minimal postgres.js surface used by the durable journal (keeps tests mockable).
+ * Call signature is intentionally loose so real `postgres.Sql` is assignable
+ * without dragging the full generic library into the type graph.
+ */
+export type BroadcastSql = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (strings: TemplateStringsArray, ...values: any[]): Promise<readonly any[]>;
+};
+
+const DEFAULT_PENDING_POLL_MS = 50;
+const DEFAULT_PENDING_MAX_WAITS = 200; // ~10s at 50ms
+
+/**
+ * Postgres-backed journal for multi-replica / crash-safe outbound crypto sends.
+ *
+ * claim uses INSERT … ON CONFLICT DO NOTHING so exactly one replica gets `mine`.
+ * Concurrent claimers poll until the winner `put`s a real hash (or stall).
+ */
+export class PostgresBroadcastStore implements BroadcastStore {
+  constructor(
+    private readonly sql: BroadcastSql,
+    private readonly opts: { pollMs?: number; maxWaits?: number } = {},
+  ) {}
+
+  async get(idempotencyKey: string): Promise<string | null> {
+    const rows = (await this.sql`
+      SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+    `) as ReadonlyArray<{ tx_hash: string }>;
+    const v = rows[0]?.tx_hash;
+    if (!v || v === BROADCAST_PENDING) return null;
+    return v;
+  }
+
+  async claim(idempotencyKey: string): Promise<ClaimResult> {
+    const inserted = (await this.sql`
+      INSERT INTO pay.crypto_broadcasts (idempotency_key, tx_hash)
+      VALUES (${idempotencyKey}, ${BROADCAST_PENDING})
+      ON CONFLICT (idempotency_key) DO NOTHING
+      RETURNING idempotency_key
+    `) as ReadonlyArray<{ idempotency_key: string }>;
+    if (inserted.length > 0) return { kind: 'mine' };
+
+    const pollMs = this.opts.pollMs ?? DEFAULT_PENDING_POLL_MS;
+    const maxWaits = this.opts.maxWaits ?? DEFAULT_PENDING_MAX_WAITS;
+    for (let i = 0; i < maxWaits; i++) {
+      const rows = (await this.sql`
+        SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+      `) as ReadonlyArray<{ tx_hash: string }>;
+      const v = rows[0]?.tx_hash;
+      if (v && v !== BROADCAST_PENDING) return { kind: 'done', txHash: v };
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+    throw new Error(`broadcast claim for ${idempotencyKey} stalled while pending`);
+  }
+
+  async put(idempotencyKey: string, txHash: string): Promise<string> {
+    if (txHash === BROADCAST_PENDING) {
+      throw new Error('txHash must not be the pending sentinel');
+    }
+    // Only replace pending (or same hash). Never overwrite a different settled hash.
+    const updated = (await this.sql`
+      UPDATE pay.crypto_broadcasts
+      SET tx_hash = ${txHash}, updated_at = now()
+      WHERE idempotency_key = ${idempotencyKey}
+        AND (tx_hash = ${BROADCAST_PENDING} OR tx_hash = ${txHash})
+      RETURNING tx_hash
+    `) as ReadonlyArray<{ tx_hash: string }>;
+    if (updated[0]?.tx_hash) return updated[0].tx_hash;
+
+    const existing = (await this.sql`
+      SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+    `) as ReadonlyArray<{ tx_hash: string }>;
+    const v = existing[0]?.tx_hash;
+    if (v && v !== BROADCAST_PENDING) return v;
+    throw new Error(`broadcast put for ${idempotencyKey}: no claim row (call claim first)`);
+  }
+}
