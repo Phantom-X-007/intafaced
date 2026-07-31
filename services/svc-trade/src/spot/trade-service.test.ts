@@ -11,6 +11,8 @@ import {
   MemoryLedger,
   formatAmount,
   houseFees,
+  marketMaker,
+  marketMakerOrderHoldAccount,
   parseAmount as amt,
   recipes,
   userAvailable,
@@ -18,7 +20,8 @@ import {
 } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
-import { orderIdFor } from './ids.js';
+import { mmSeedOrderIdFor, orderIdFor } from './ids.js';
+import { MM_MATCHING_ACCOUNT_ID } from '../mm/seed-market.js';
 import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principalFor } from './testing.js';
 
 /**
@@ -290,6 +293,28 @@ if (!available) {
       expect(emitted).toHaveLength(2);
       expect(emitted.map((e) => e.payload.userId).sort()).toEqual([ALICE, BOB].sort());
       expect(emitted.every((e) => e.payload.sourceModule === 'trade')).toBe(true);
+    });
+
+    it('settles user take against house MM seed maker (marketMakerMakerFill)', async () => {
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'mm-wire-1' }));
+      const mmOrderId = mmSeedOrderIdFor('wire-run', btcusdt.id, 'sell', 1);
+      await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrderId, assetId: 'BTC', amount: amt('1') }));
+      await fund(ALICE, 'USDT', '1000');
+
+      matching.scriptFills([{ makerOrderId: mmOrderId, makerAccountId: MM_MATCHING_ACCOUNT_ID, price: '100', qty: '1' }]);
+      await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-vs-mm');
+
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(1);
+      expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe('0');
+      // maker 10 bps of 100 USDT quote → MM receives 99.9
+      expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('99.9');
+      // user received base (minus taker 20 bps of 1 BTC)
+      expect(await avail(ALICE, 'BTC')).toBe('0.998');
+      const legs = await sql<Array<{ liquidity: string; user_id: string }>>`
+        SELECT liquidity, user_id::text FROM trade.fills ORDER BY liquidity ASC
+      `;
+      expect(legs).toHaveLength(2);
+      expect(legs.find((l) => l.liquidity === 'taker')?.user_id).toBe(ALICE);
     });
   });
 
