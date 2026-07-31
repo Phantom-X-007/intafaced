@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InsufficientFundsError } from '@intafaced/ledger-client';
-import { rehydrateLedgerHttpError } from './ledger-client.js';
+import { rehydrateLedgerHttpError } from '@intafaced/ledger-client';
 
 describe('rehydrateLedgerHttpError (P2P-01)', () => {
   it('rebuilds InsufficientFundsError from structured s2s body', () => {
