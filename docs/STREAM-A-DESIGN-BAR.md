@@ -46,10 +46,10 @@ Implement as CSS variables in `intafaced.css` `:root` (the modular swap point). 
 | Token group | Minimum set                                                                                          |
 | ----------- | ---------------------------------------------------------------------------------------------------- |
 | **Color**   | `--bg`, `--panel`, `--border`, `--text`, `--text-muted`, `--up`, `--down`, `--accent` (P21 teal now) |
-| **Space**   | 4 / 8 / 12 / 16 / 24                                                                           |
-| **Type**    | 11 / 12 / 13 / 14 / 16; **tabular nums** for prices and sizes                                  |
-| **Control** | order-form control height; radius small/medium                                                 |
-| **Z**       | drawer / modal / toast scale                                                                   |
+| **Space**   | 4 / 8 / 12 / 16 / 24                                                                                 |
+| **Type**    | 11 / 12 / 13 / 14 / 16; **tabular nums** for prices and sizes                                        |
+| **Control** | order-form control height; radius small/medium                                                       |
+| **Z**       | drawer / modal / toast scale                                                                         |
 
 **How agents restyle:** iView via variables + local SCSS overrides — never fork the kit.
 

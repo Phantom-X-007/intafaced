@@ -86,12 +86,12 @@ Do **not** re-run cold-start styleboard. Disk facts:
 
 ## How Nitro starts the new chat
 
-| Step | Where |
-| --- | --- |
-| 1 | New coding chat on **Sovereign** repo |
-| 2 | Paste the fenced block above |
-| 3 | Say **go implement** (if not already in paste context) |
-| 4 | Keep **Orca** open |
+| Step | Where                                                  |
+| ---- | ------------------------------------------------------ |
+| 1    | New coding chat on **Sovereign** repo                  |
+| 2    | Paste the fenced block above                           |
+| 3    | Say **go implement** (if not already in paste context) |
+| 4    | Keep **Orca** open                                     |
 
 That is all. No need to re-read methodology yourself.
 
@@ -105,10 +105,10 @@ The locked frontend docs live under `docs/FRONTEND-*` and related files in this 
 
 ## Peace checklist for close-this-chat
 
-- [x] State of truth  
-- [x] Methodology v3.1 free-hands  
-- [x] Master plan v3.1 + Wave Admin  
-- [x] Design Bar free-hands (not #86 law)  
-- [x] Implement paste (this file)  
-- [x] L1 AUDIT-PASS · Stream A claim · Ops Orca  
-- [x] **go implement** (PR #261) in new chat  
+- [x] State of truth
+- [x] Methodology v3.1 free-hands
+- [x] Master plan v3.1 + Wave Admin
+- [x] Design Bar free-hands (not #86 law)
+- [x] Implement paste (this file)
+- [x] L1 AUDIT-PASS · Stream A claim · Ops Orca
+- [x] **go implement** (PR #261) in new chat
