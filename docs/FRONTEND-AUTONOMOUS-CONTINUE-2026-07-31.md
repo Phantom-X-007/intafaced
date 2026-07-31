@@ -22,6 +22,8 @@
 | P21 modular teal                   | #267           |
 | B5 prefs · B7 keyboard · B8 impact | #267           |
 | B9 partial fill · copy id · CSV    | #295           |
+| B2/B6/B10/B14 desk + B3 money      | #297           |
+| B10 withdraw/record residual map   | #298           |
 
 ## Next craft order (this program)
 
@@ -42,13 +44,14 @@ Fake money/candles · fixture-seeded balances as proof · partner names in UI ·
 
 ## Residual (defer — not blocking autonomy stop)
 
-| ID                 | Why deferred                                                 |
-| ------------------ | ------------------------------------------------------------ |
-| B4 mobile panic    | Larger UX; needs device matrix + focus-trap library judgment |
-| B11 entry on chart | Needs live position stream; fleet/auth                       |
-| B12 CMS/OTC craft  | Explicitly last after desk+money                             |
-| B13 anti-slop cert | Needs non-implementer pass                                   |
-| B15 multi-monitor  | Optional chrome API; low ROI now                             |
-| Wave C             | Backend/heavy power after B DoD                              |
+| ID                  | Why deferred                                                 |
+| ------------------- | ------------------------------------------------------------ |
+| B4 light mobile     | Sticky ticket + larger cancel on phone (full panic UX later) |
+| B4 full mobile trap | Full focus-trap drawer later if needed                       |
+| B11 entry on chart  | Needs live position stream; fleet/auth                       |
+| B12 CMS/OTC craft   | In progress — honesty/a11y + dual-book notes                 |
+| B13 anti-slop cert  | Needs non-implementer pass                                   |
+| B15 multi-monitor   | Optional chrome API; low ROI now                             |
+| Wave C              | Backend/heavy power after B DoD                              |
 
 **Stop condition this session:** desk craft core B1–B10′ + B14 shipped; residual documented.

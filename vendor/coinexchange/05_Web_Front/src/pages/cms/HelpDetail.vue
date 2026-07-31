@@ -6,7 +6,7 @@
       <router-link :to="{path:'helplist',query:{cate:cate,cateTitle:cateTitle}}">{{cateTitle}}</router-link>
     </div>
     <!-- Stream A: failed detail must not paint a blank article as if it loaded. -->
-    <p v-if="loadError" class="ix-empty ix-empty-error" style="margin-top:40px;">{{ loadError }}</p>
+    <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="margin-top:40px;">{{ loadError }}</p>
     <p v-else-if="!loaded" class="ix-empty ix-empty-loading" style="margin-top:40px;">{{ $t("common.loading") }}</p>
     <div class="main" v-else-if="articleReady">
       <div class="menu">

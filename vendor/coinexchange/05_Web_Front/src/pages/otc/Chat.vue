@@ -4,6 +4,9 @@
             <p style="padding: 10px 0 10px 20px;font-size: 16px;">
               <router-link to="/uc/order" style="color:#00c2a8;">{{$t('otc.myorder')}}</router-link> ><span style="font-size:14px;">Order details</span>
               </p>
+            <p class="ix-empty" role="note" style="padding:0 20px 8px;margin:0;">
+              Irreversible actions use a single-flight lock. A failed venue response never claims paid, cancelled, released, or appealed.
+            </p>
             <Row class="chat-in">
                 <Col span="4">
                 <div class="leftmenu left-box chat-right">

@@ -6,7 +6,7 @@
     </div>
     <div class="main">
       <!-- Stream A: failed announcement list must not look like empty success. -->
-      <p v-if="loadError" class="ix-empty ix-empty-error">{{ loadError }}</p>
+      <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ loadError }}</p>
       <p v-else-if="!loaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
       <p v-else-if="FAQList.length === 0" class="ix-empty">{{ $t("cms.noticeEmpty") }}</p>
       <div class="list" v-else>

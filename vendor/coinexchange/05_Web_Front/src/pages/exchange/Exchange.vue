@@ -3241,19 +3241,57 @@ $radius-sm: var(--ix-radius-sm, 8px);
     height: auto;
     max-height: 420px;
   }
-  /* Order form must stay fully usable on phone — do not clip the submit button. */
+  /* B4 light — order form stays fully usable; sticky submit for panic/place. */
   .ix-order {
     height: auto;
     max-height: none;
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+    background: var(--ix-surface, #12151c);
   }
   .ix-order-body {
     overflow: visible;
   }
+  .ix-submit {
+    min-height: 44px;
+    font-size: 15px;
+  }
   .ix-chart-panel {
-    height: 320px;
+    height: 280px;
   }
   .ix-account {
-    max-height: 360px;
+    max-height: 420px;
+  }
+  /* Panic cancel stays reachable on open-orders blotter */
+  .ix-actions {
+    position: sticky;
+    right: 0;
+    background: var(--ix-surface, #12151c);
+  }
+  .ix-cancel {
+    min-height: 36px;
+    padding: 0 12px;
+  }
+  .ix-kbd-hint {
+    display: none;
+  }
+  .ix-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .ix-stat {
+    min-width: 72px;
+  }
+}
+
+@media (max-width: 520px) {
+  .ix-markets {
+    display: none;
+  }
+  .ix-chart-panel {
+    height: 240px;
   }
 }
 </style>

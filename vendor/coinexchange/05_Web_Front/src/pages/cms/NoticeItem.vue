@@ -5,7 +5,7 @@
         <div class="main">
           <h2>{{$t("cms.noticecenter")}}</h2>
           <!-- Stream A: list failure ≠ empty list. -->
-          <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+          <p v-if="listError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ listError }}</p>
           <p v-else-if="!listLoaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
           <p v-else-if="FAQList.length === 0" class="ix-empty">{{ $t("cms.noticeEmpty") }}</p>
           <div class="list" v-else>
@@ -20,7 +20,7 @@
       </Col>
       <Col :xs="24" :sm="24" :md="5" :lg="19">
         <div class="content-wrap">
-            <p v-if="detailError" class="ix-empty ix-empty-error" style="margin-top:15%;">{{ detailError }}</p>
+            <p v-if="detailError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="margin-top:15%;">{{ detailError }}</p>
             <div v-else-if="hasContent">
               <div class="header">
                 <h2>{{data.info.title}}</h2>
@@ -56,7 +56,7 @@
     </Row>
     <div class="bottom-list">
       <p style="font-size: 18px;margin: 15px 0;">Latest announcements</p>
-      <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+      <p v-if="listError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ listError }}</p>
       <p v-else-if="listLoaded && FAQList.length === 0" class="ix-empty">{{ $t("cms.noticeEmpty") }}</p>
       <div class="notice-item" v-for="item in FAQList" :key="'m-'+item.id" @click="noticedeail(item.id)">
         <span class="text">[{{item.createTime | subTime}}] {{item.title}}</span>

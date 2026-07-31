@@ -8,7 +8,7 @@
     <div class="container">
       <h1>{{cateTitle}}</h1>
       <!-- Stream A: failed page-query must not look like an empty category. -->
-      <p v-if="loadError" class="ix-empty ix-empty-error">{{ loadError }}</p>
+      <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ loadError }}</p>
       <p v-else-if="!loaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
       <p v-else-if="list.length === 0" class="ix-empty">{{ $t("cms.helpEmpty") }}</p>
       <div class="list" v-else>

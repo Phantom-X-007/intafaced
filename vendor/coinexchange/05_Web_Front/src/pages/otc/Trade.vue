@@ -8,7 +8,7 @@
     <!-- </section> -->
     <section class="list-content">
       <!-- Stream A: failed ad API must not look like "no ads". -->
-      <p v-if="adsError" class="ix-empty ix-empty-error">{{ adsError }}</p>
+      <p v-if="adsError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ adsError }}</p>
       <Tabs :value="tabPage" v-model="tabPage" v-if="!adsError">
         <TabPane :label="$t('otc.buyin')" name="buy">
           <div class="table-responsive list-table">
