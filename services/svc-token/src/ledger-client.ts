@@ -6,6 +6,7 @@ import {
   type LedgerClient,
   type LedgerTx,
   type PostRequest,
+  rehydrateLedgerHttpError,
 } from '@intafaced/ledger-client';
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 
@@ -58,7 +59,7 @@ export function createLedgerClient(baseUrl: string, internalSecret: string): Led
       // Preserve the ledger's own error text: 'ledger.insufficient_funds' and
       // 'ledger.frozen' mean very different things to a caller, and collapsing
       // them into "request failed" would make both unactionable.
-      throw new Error(`svc-ledger ${path} failed (${response.status}): ${detail}`);
+      throw rehydrateLedgerHttpError(path, response.status, detail);
     }
 
     return (await response.json()) as T;

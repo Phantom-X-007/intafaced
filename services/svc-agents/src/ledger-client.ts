@@ -6,6 +6,7 @@ import {
   type LedgerClient,
   type LedgerTx,
   type PostRequest,
+  rehydrateLedgerHttpError,
 } from '@intafaced/ledger-client';
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 
@@ -60,7 +61,7 @@ export function createLedgerClient(baseUrl: string, internalSecret: string): Led
       // 'ledger.frozen' mean very different things to a caller — the first is a
       // user who cannot afford their usage, the second is a platform freeze —
       // and collapsing them into "request failed" makes both unactionable.
-      throw new Error(`svc-ledger ${path} failed (${response.status}): ${detail}`);
+      throw rehydrateLedgerHttpError(path, response.status, detail);
     }
 
     return (await response.json()) as T;

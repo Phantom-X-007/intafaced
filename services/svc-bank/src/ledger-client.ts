@@ -6,6 +6,7 @@ import {
   type LedgerClient,
   type LedgerTx,
   type PostRequest,
+  rehydrateLedgerHttpError,
 } from '@intafaced/ledger-client';
 import { serviceAuthHeaders } from '@intafaced/contracts';
 import type { HistoryRange, LedgerEntryRecord, LedgerHistory } from './analytics/ledger-history.js';
@@ -148,7 +149,7 @@ async function call<T>(base: string, path: string, body: unknown, auth: () => Re
     // Preserve the ledger's own error text: 'ledger.insufficient_funds' and
     // 'ledger.frozen' mean very different things to a caller, and collapsing
     // them into "request failed" would make both unactionable.
-    throw new Error(`svc-ledger ${path} failed (${response.status}): ${detail}`);
+    throw rehydrateLedgerHttpError(path, response.status, detail);
   }
 
   return (await response.json()) as T;
