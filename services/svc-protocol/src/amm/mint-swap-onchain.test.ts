@@ -7,6 +7,7 @@
  * Skips without chain / viem. CI with REQUIRE_EVM_CHAIN=1 must run this.
  * Deployer index 4 — avoid races with deploy-dev (0) and other onchain suites.
  */
+import { createHash } from 'node:crypto';
 import { describe, expect, it, beforeAll } from 'vitest';
 import { loadArtifact } from '../chain/artifacts.js';
 import { parseTokenParams } from '../launch/params.js';
@@ -60,8 +61,7 @@ describeOnChain('AMM mint + swapExactIn onchain', () => {
         totalSupply: '1000000',
         recipient: deployer,
       });
-      // unique salt per tag
-      const userSalt = `0x${Buffer.from(saltTag.padEnd(32, '\0')).toString('hex').slice(0, 64)}` as Hex;
+      const userSalt = (`0x${createHash('sha256').update(saltTag).digest('hex')}`) as Hex;
       const predicted = computeTokenAddress({
         factory: tokenFactory,
         creator: deployer,
