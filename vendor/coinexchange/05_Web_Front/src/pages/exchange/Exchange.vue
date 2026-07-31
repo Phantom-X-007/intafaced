@@ -1709,6 +1709,9 @@ export default {
     },
 
     placeOrder(amount, price) {
+      if (!this.isLogin) {
+        return this.warn('Session ended — sign in again. No order was placed.');
+      }
       this.submitting = true;
       return this.request(this.api.exchange.orderAdd, {
         symbol: this.currentCoin.symbol,
@@ -1729,7 +1732,12 @@ export default {
           this.accountTab = 'open';
           this.loadAccount();
         } else {
-          this.$Notice.error({ title: 'Order rejected', desc: body.message || 'Unknown error' });
+          // auth-ish failures: do not claim placed
+          var msg = body.message || 'Unknown error';
+          if (body.code == 4000 || /login|session|auth|token/i.test(String(msg))) {
+            msg = 'Session invalid — sign in again. Order was not placed. (' + msg + ')';
+          }
+          this.$Notice.error({ title: 'Order rejected', desc: msg });
         }
       });
     },
