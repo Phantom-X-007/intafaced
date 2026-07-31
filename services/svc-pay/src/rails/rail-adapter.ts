@@ -183,7 +183,7 @@ export interface RailEvent {
  *   capabilities: RailCapability[];
  *   authorize(p: PaymentIntent): Promise<RailResult>;
  *   capture(ref: string): Promise<RailResult>;
- *   refund(ref: string, amount: Amount): Promise<RailResult>;
+ *   refund(ref: string, amount: Amount, opts?: RailRefundOptions): Promise<RailResult>;
  *   payout(s: SettlementInstruction): Promise<RailResult>;
  *   verifyWebhook(req): RailEvent | null;
  * }
@@ -196,7 +196,20 @@ export interface RailEvent {
  * Note what `capture` takes: a reference, and nothing else. Partial capture is
  * not expressible through this interface, so the core refuses it rather than
  * pretending — changing that is a change to this file, reviewed on its own.
+ *
+ * `refund` optional `refundId` (M226-02): irreversible chain refunds must key
+ * the outbound broadcast on the core's durable refund id, not a process-local
+ * counter. Sandbox rails may ignore it.
  */
+/** Optional third argument to `RailAdapter.refund` (backward compatible). */
+export interface RailRefundOptions {
+  /**
+   * Durable business key from the payment core (ledger / payment_events).
+   * Live crypto rails MUST use this in the chain send idempotency key when set.
+   */
+  readonly refundId?: string;
+}
+
 export interface RailAdapter {
   readonly id: string;
   readonly capabilities: readonly RailCapability[];
@@ -214,7 +227,7 @@ export interface RailAdapter {
 
   authorize(p: PaymentIntent): Promise<RailResult>;
   capture(ref: string): Promise<RailResult>;
-  refund(ref: string, amount: Amount): Promise<RailResult>;
+  refund(ref: string, amount: Amount, opts?: RailRefundOptions): Promise<RailResult>;
   payout(s: SettlementInstruction): Promise<RailResult>;
 
   /**

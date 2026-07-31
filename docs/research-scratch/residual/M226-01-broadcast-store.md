@@ -1,24 +1,24 @@
-# Residual pack — M226-01 MemoryBroadcastStore
+# Residual pack — M226-01 broadcast journal
 
-**Severity:** P0 multi-replica / P1 single-process crash window  
-**Status 2026-07-31:** **OWNED BY OPEN PR #266** `feat(pay): durable Postgres crypto broadcast journal`  
-**This finish fire:** do **not** implement competing store. Disposition: babysit #266 to green; re-verify M226-01 after merge.
+**Severity (updated):** multi-replica P0 **CLOSED on tip** · send→put crash window **P1 residual**  
+**Tip re-check:** after #266 `b0d7b69` · re-verified residual-pay close 2026-07-31
 
-## Law
+## Re-verify (code on main)
 
-Outbound Class M claim→send→put must survive process death and multi-replica.
+| DoD                               | Evidence                                                                            |
+| --------------------------------- | ----------------------------------------------------------------------------------- |
+| Durable journal migration         | `services/svc-pay/drizzle/0004_pay_crypto_broadcasts.sql` — `pay.crypto_broadcasts` |
+| PostgresBroadcastStore            | `broadcast-store.ts` — INSERT ON CONFLICT claim · put never overwrites settled hash |
+| Live boot injects durable store   | `index.ts` — `new PostgresBroadcastStore(sql)` passed to `defaultChainFor`          |
+| Multi-replica claim atomic        | unit tests fake SQL concurrent claimers; restart sim “rows stay”                    |
+| Memory remains test/local default | `defaultChainFor` without store → MemoryBroadcastStore                              |
 
-## Gap
+## Residual still open (honest, not multi-replica)
 
-In-process `MemoryBroadcastStore` only (pre-#266).
+Crash **after** `eth_sendRawTransaction` **before** `put` can still double-send on retry (hash never journalled). Documented in svc-pay README. put-before-receipt closes wait-for-inclusion only.
 
-## DoD when closed
-
-- Durable journal migration + tests
-- posture injects durable store in prod posture
-- multi-replica claim atomic
-- PEACE residual M226-01 HOLDS or CLOSED with tip SHA
+**PEACE line:** multi-replica journal **CLOSED**; send→put window **P1** pilot residual.
 
 ## Collision
 
-#266 files: broadcast-store, posture, drizzle 0004 — exclusive.
+#266 merged. Do not re-implement a second store.
