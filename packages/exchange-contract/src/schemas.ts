@@ -211,7 +211,12 @@ export const orderSchema = z.object({
   amount: decimal,
   filled: decimal,
   remaining: decimal,
-  cost: decimal,
+  /**
+   * Quote notional of fills. `"0"` when unfilled. `null` when filled but
+   * quote is not known without loading fills (e.g. market sell — no limit
+   * price, no protectionPrice). Never invent a confident `"0"` for that case.
+   */
+  cost: decimal.nullable(),
   status: orderStatusSchema,
   fee: z.object({ cost: decimal, currency: z.string() }).nullable(),
   trades: z.array(tradeSchema),

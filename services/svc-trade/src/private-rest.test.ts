@@ -102,6 +102,58 @@ describe('toCcxtOrderStatus / presentCcxtOrder / presentCcxtMyTrade / fees', () 
     expect(wire.cost).not.toBe('0');
   });
 
+  it('filled market sell without fills: cost is null, never confident "0" (PEACE residual)', () => {
+    const order = fakeOrder({
+      type: 'market',
+      side: 'sell',
+      price: null,
+      protectionPrice: null,
+      qty: parseAmount('1.5'),
+      filledQty: parseAmount('1.5'),
+      status: 'filled',
+    });
+    const wire = presentCcxtOrder(order, 'BTC/USDT');
+    expect(orderSchema.safeParse(wire).success).toBe(true);
+    expect(wire.price).toBeNull();
+    expect(wire.cost).toBeNull();
+    expect(wire.cost).not.toBe('0');
+  });
+
+  it('unfilled market sell still reports cost "0" (nothing moved)', () => {
+    const order = fakeOrder({
+      type: 'market',
+      side: 'sell',
+      price: null,
+      protectionPrice: null,
+      qty: parseAmount('1'),
+      filledQty: parseAmount('0'),
+      status: 'open',
+    });
+    const wire = presentCcxtOrder(order, 'BTC/USDT');
+    expect(orderSchema.safeParse(wire).success).toBe(true);
+    expect(wire.cost).toBe('0');
+  });
+
+  it('filled market sell with fills loaded: cost is Σ fill quoteAmount', () => {
+    const order = fakeOrder({
+      type: 'market',
+      side: 'sell',
+      price: null,
+      protectionPrice: null,
+      qty: parseAmount('2'),
+      filledQty: parseAmount('2'),
+      status: 'filled',
+    });
+    const fills = [
+      fakeFill({ quoteAmount: parseAmount('100.5'), qty: parseAmount('1') }),
+      fakeFill({ quoteAmount: parseAmount('99.5'), qty: parseAmount('1') }),
+    ];
+    const wire = presentCcxtOrder(order, 'BTC/USDT', { fills });
+    expect(orderSchema.safeParse(wire).success).toBe(true);
+    expect(wire.cost).toBe('200');
+    expect(wire.cost).not.toBe('0');
+  });
+
   it('presents a fill that validates against tradeSchema with decimal strings', () => {
     const fill = fakeFill({
       price: parseAmount('100.5'),
