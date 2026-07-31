@@ -40,3 +40,15 @@
 ## Verdict
 
 Wave is **honest partial progress** on trade.futures. Safe to keep COOKING; do not mark futures done.
+
+## Addendum — jobs wire (#308–#312)
+
+| PR   | What                                                       |
+| ---- | ---------------------------------------------------------- |
+| #308 | job-host interval wrapper                                  |
+| #309 | mark-from-depth                                            |
+| #310 | SQL position loaders                                       |
+| #311 | funding_periods + liquidation_attempts + sqlPositionCloser |
+| #312 | startFuturesJobs in svc-trade **default OFF**              |
+
+**Adversarial:** default-off prevents silent money on boot. Empty FUNDING_MARKET_IDS schedules no funding jobs. Depth empty → liq skip. Rate book empty → funding skip.
