@@ -207,9 +207,12 @@ export class PositionService {
 function presentPosition(row: PositionRow): Position {
   const size = parseAmount(row.size);
   const entry = parseAmount(row.entry_price);
+  const leverage = parseAmount(row.leverage);
+  const margin = parseAmount(row.margin_initial);
   const SCALE = 10n ** 18n;
   const notional = (size * entry) / SCALE;
   const opened = row.opened_at instanceof Date ? row.opened_at : new Date(row.opened_at);
+  const liq = row.liq_price != null ? formatAmount(parseAmount(row.liq_price)) : null;
   return {
     id: row.id,
     symbol: row.symbol,
@@ -221,13 +224,13 @@ function presentPosition(row: PositionRow): Position {
     entryPrice: formatAmount(entry),
     markPrice: null,
     notional: formatAmount(notional),
-    leverage: row.leverage,
-    collateral: row.margin_initial,
-    initialMargin: row.margin_initial,
+    leverage: formatAmount(leverage),
+    collateral: formatAmount(margin),
+    initialMargin: formatAmount(margin),
     maintenanceMargin: null,
     unrealizedPnl: null,
     realizedPnl: null,
-    liquidationPrice: row.liq_price,
+    liquidationPrice: liq,
     marginMode: row.margin_mode,
     percentage: null,
   };
