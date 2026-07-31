@@ -40,6 +40,7 @@ import {
   accountFactoryAt,
   assertDisposableChain,
   deployAccountSuite,
+  deployPoolFactory,
   deployTokenFactory,
   devChainClients,
   DEV_CHAIN_ID,
@@ -87,6 +88,8 @@ const expected = {
   // deployment before them would silently move both and point the whole fleet
   // at addresses with no code.
   tokenFactory: getContractAddress({ from: clients.deployer, nonce: 2n }),
+  // APPENDED at nonce 3 — same rule: never insert before the addresses above.
+  poolFactory: getContractAddress({ from: clients.deployer, nonce: 3n }),
 };
 
 const factoryArtifact = loadArtifact('AccountFactory');
@@ -222,6 +225,76 @@ if (tokenMismatches > 0) {
   process.exit(1);
 }
 
+/**
+ * AMM PoolFactory (`protocol.amm`) — APPENDED at nonce 3.
+ *
+ * Compile is already unblocked; this is the missing deploy-dev step so
+ * PROTOCOL_AMM_FACTORY_ADDRESS can be non-zero on the local anvil without a
+ * human hand-copying a random address. Still not an audit, still not prod.
+ */
+const existingPoolFactoryCode = await publicClient.getCode({ address: expected.poolFactory });
+let poolFactory: Address;
+
+if (existingPoolFactoryCode && existingPoolFactoryCode !== '0x') {
+  console.log('\nPoolFactory already deployed at the deterministic address — reusing, not redeploying');
+  poolFactory = expected.poolFactory;
+} else {
+  const amm = await deployPoolFactory(clients);
+  console.log(`\nPoolFactory    ${amm.factory}  tx ${amm.tx}`);
+  poolFactory = amm.factory;
+  if (poolFactory.toLowerCase() !== expected.poolFactory.toLowerCase()) {
+    console.error(
+      `\nPoolFactory landed at ${poolFactory}, expected CREATE nonce-3 address ${expected.poolFactory}. ` +
+        `Deployer nonce ordering drifted — do not wire this address into compose.`,
+    );
+    process.exit(1);
+  }
+}
+
+/**
+ * CREATE2 predict vs create for one pair — same class of failure as accounts:
+ * a UI that shows a pool address before create must match where create lands.
+ * Idempotent: re-running chain:deploy after a prior create skips the second mint.
+ */
+const TOKEN_A: Address = '0x00000000000000000000000000000000000000a1';
+const TOKEN_B: Address = '0x00000000000000000000000000000000000000b1';
+const FEE_BPS = 30;
+const poolFactoryAbi = loadArtifact('PoolFactory').abi;
+const predictedPool = (await publicClient.readContract({
+  address: poolFactory,
+  abi: poolFactoryAbi,
+  functionName: 'predictPoolAddress',
+  args: [TOKEN_A, TOKEN_B, FEE_BPS],
+})) as Address;
+const existingPoolCode = await publicClient.getCode({ address: predictedPool });
+if (!existingPoolCode || existingPoolCode === '0x') {
+  const createTx = await clients.walletClient.writeContract({
+    address: poolFactory,
+    abi: poolFactoryAbi,
+    functionName: 'createPool',
+    args: [TOKEN_A, TOKEN_B, FEE_BPS],
+    account: clients.walletClient.account!,
+    chain: clients.walletClient.chain,
+  });
+  await publicClient.waitForTransactionReceipt({ hash: createTx });
+}
+const onFactory = (await publicClient.readContract({
+  address: poolFactory,
+  abi: poolFactoryAbi,
+  functionName: 'getPool',
+  args: [TOKEN_A, TOKEN_B, FEE_BPS],
+})) as Address;
+const poolCode = await publicClient.getCode({ address: predictedPool });
+const poolOk =
+  predictedPool.toLowerCase() === onFactory.toLowerCase() && !!poolCode && poolCode !== '0x';
+console.log(
+  `\nAMM createPool cross-check: ${poolOk ? 'OK' : 'FAIL'} predicted ${predictedPool} getPool ${onFactory}`,
+);
+if (!poolOk) {
+  console.error('Pool address predict/create disagree or no code at pool — stop. Do not wire AMM factory.');
+  process.exit(1);
+}
+
 console.log('\nAdd to .env (dev only — these are the deterministic anvil addresses):');
 console.log(`PROTOCOL_CHAIN_ID=${chainId}`);
 console.log(`PROTOCOL_RPC_URL=${rpcUrl}`);
@@ -230,7 +303,8 @@ console.log(`PROTOCOL_RPC_URL=${rpcUrl}`);
 console.log(`PROTOCOL_FACTORY_ADDRESS=${toChecksum(deployed.factory)}`);
 console.log(`PROTOCOL_IMPLEMENTATION_ADDRESS=${toChecksum(deployed.implementation)}`);
 console.log(`PROTOCOL_TOKEN_FACTORY_ADDRESS=${toChecksum(tokenFactory)}`);
+console.log(`PROTOCOL_AMM_FACTORY_ADDRESS=${toChecksum(poolFactory)}`);
 console.log(
   `\nNo EntryPoint and no bundler on this chain, so relayUserOperation still refuses. ` +
-    `Reads, address prediction, deployment calldata and session state are live.`,
+    `Reads, address prediction, deployment calldata, session state, and AMM factory createPool are live on anvil only.`,
 );
