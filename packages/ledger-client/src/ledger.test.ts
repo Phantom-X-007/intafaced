@@ -24,6 +24,7 @@ import { formatAmount, parseAmount as amt, sum } from './money.js';
 import { assertBalanced, assertPairedLocks, assertPurposedHolds, assertValidPost } from './client.js';
 import {
   houseFees,
+  insuranceFund,
   merchantClearing,
   positionCollateralAccount,
   userAvailable,
@@ -479,6 +480,36 @@ describe('recipes — the money paths', () => {
     );
     expect(formatAmount((await ledger.balance(positionCollateralAccount(USER_A, 'USDT', 'pos-loss'))).amount)).toBe('0');
     expect(formatAmount((await ledger.balance(houseFees('trade', 'USDT'))).amount)).toBe('150'); // 50 fee + 100 loss
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('futures insurance topup + realize loss draws fund (liq stack)', async () => {
+    await fund(USER_A, 'USDT', '100');
+    await fund(USER_B, 'USDT', '50');
+    await ledger.post(
+      recipes.feeCharge({
+        chargeId: 'fee-for-ins',
+        userId: USER_B,
+        module: 'trade',
+        mode: 'asset',
+        assetId: 'USDT',
+        amount: amt('50'),
+      }),
+    );
+    await ledger.post(recipes.futuresInsuranceTopup({ topupId: 'ins-1', assetId: 'USDT', amount: amt('50') }));
+    expect(formatAmount((await ledger.balance(insuranceFund('USDT'))).amount)).toBe('50');
+    await ledger.post(recipes.futuresMarginLock({ positionId: 'pos-liq', userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+    await ledger.post(
+      recipes.futuresRealizeLoss({
+        positionId: 'pos-liq',
+        userId: USER_A,
+        assetId: 'USDT',
+        fromMargin: amt('100'),
+        fromInsurance: amt('20'),
+        lossId: 'liq-1',
+      }),
+    );
+    expect(formatAmount((await ledger.balance(insuranceFund('USDT'))).amount)).toBe('30');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 

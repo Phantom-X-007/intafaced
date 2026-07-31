@@ -392,6 +392,21 @@ export function futuresFundingPay(input: FuturesFundingInput): PostRequest {
   };
 }
 
+/**
+ * Seed or top up the futures insurance fund from house trade fees.
+ * Liquidation shortfalls draw via futuresRealizeLoss({ fromInsurance }).
+ */
+export function futuresInsuranceTopup(input: { topupId: string; assetId: string; amount: Amount }): PostRequest {
+  requirePositive('insurance topup amount', input.amount);
+  return {
+    idempotencyKey: `futures.insurance.topup:${input.topupId}`,
+    module: 'trade',
+    reason: 'futures.insurance.topup',
+    meta: { topupId: input.topupId },
+    entries: [credit(houseFees('trade', input.assetId), input.amount), debit(insuranceFund(input.assetId), input.amount)],
+  };
+}
+
 // ── P2P escrow (§6.2) ────────────────────────────────────────────────────────
 
 export interface EscrowInput {
@@ -812,6 +827,7 @@ export const recipes = {
   futuresMarginRelease,
   futuresRealizeLoss,
   futuresFundingPay,
+  futuresInsuranceTopup,
   escrowLock,
   escrowRelease,
   escrowRefund,
