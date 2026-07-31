@@ -287,7 +287,7 @@ export const FEATURES = [
     status: 'ready',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual: NOT built. Research pack docs/research-scratch/residual/trade.mm-bot.md. Books stay empty until real orders or a seeder with honest house money path. Unblocks futures mid marks / bot empty-book residual. Not done.',
+    note: 'Updated 2026-07-31 residual: research pack + pure seed planner (planSeedQuotes) — external mid only, never invent. Still missing: seeder job with house money path (ledger house/market-maker), explicit market list, ops enable. Not done.',
   }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
