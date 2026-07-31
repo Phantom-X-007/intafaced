@@ -38,7 +38,7 @@ Strict order — **first hit wins** for “what is true right now”:
 | 5        | **`docs/FRONTEND-STATE-OF-TRUTH-*.md`**          | Frontend look/plan lock                           | Spine status                         |
 | 6        | **`docs/GRIND-LOOP-ACTIVE.md`**                  | Compaction-safe cook/babysit loop                 | Overrides ownership law              |
 | 7        | **`docs/START-HERE.md`**                         | Nitro plain map                                   | Eternal tip SHA                      |
-| 8        | **Grok/Claude chat or experimental memory**      | Soft prefs (“plain language”)                     | Lanes, tip, merge rights, high water |
+| 8        | **Chat session or experimental memory**          | Soft prefs (“plain language”)                     | Lanes, tip, merge rights, high water |
 
 **One home per fact.** Do not fork a second “ownership v2” doc. Update this file or the campaign home.
 
@@ -135,7 +135,7 @@ Worktree from tip. Never implement on main checkout.
 | New chat paste    | `docs/NITRO-SESSION-PROMPT.md`                       |
 | Nitro orientation | `docs/START-HERE.md`                                 |
 | Parallel cook     | LIVE-LANES + residual campaign + grind               |
-| Claude entry      | `CLAUDE.md` → AGENTS + this file                     |
+| Repo agent brief  | root agent brief → AGENTS + this file                |
 
 ---
 
