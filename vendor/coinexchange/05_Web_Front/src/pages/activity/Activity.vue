@@ -9,8 +9,9 @@
           <Tabs :animated="false" style="width:100%;" @on-click="tabChange">
             <TabPane :label="$t('activity.all')" name="all">
               <div class="activity-container">
-                <div class="tips-line" v-if="activityList.all.loaded && activityList.all.total == 0"><img src="../../assets/images/emptydata.png"></img></div>
-                <div class="tips-line" v-if="!activityList.all.loaded"><Spin size="large"></Spin></div>
+                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.all.error">{{ activityList.all.error }}</div>
+                <div class="tips-line" v-else-if="activityList.all.loaded && activityList.all.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
+                <div class="tips-line" v-if="!activityList.all.loaded && !activityList.all.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.all.items" :key="index">
                   <div class="activity-type" v-if="item.type==1">{{$t('activity.activitytype1')}}</div>
                   <div class="activity-type" v-if="item.type==2">{{$t('activity.activitytype2')}}</div>
@@ -69,8 +70,9 @@
             </TabPane>
             <TabPane :label="$t('activity.prepare')" name="step0">
               <div class="activity-container">
-                <div class="tips-line" v-if="activityList.step0.loaded && activityList.step0.total == 0"><img src="../../assets/images/emptydata.png"></img></div>
-                <div class="tips-line" v-if="!activityList.step0.loaded"><Spin size="large"></Spin></div>
+                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.step0.error">{{ activityList.step0.error }}</div>
+                <div class="tips-line" v-else-if="activityList.step0.loaded && activityList.step0.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
+                <div class="tips-line" v-if="!activityList.step0.loaded && !activityList.step0.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.step0.items" :key="index">
                   <div class="activity-type" v-if="item.type==1">{{$t('activity.activitytype1')}}</div>
                   <div class="activity-type" v-if="item.type==2">{{$t('activity.activitytype2')}}</div>
@@ -129,8 +131,9 @@
             </TabPane>
             <TabPane :label="$t('activity.ongoing')" name="step1">
               <div class="activity-container">
-                <div class="tips-line" v-if="activityList.step1.loaded && activityList.step1.total == 0"><img src="../../assets/images/emptydata.png"></img></div>
-                <div class="tips-line" v-if="!activityList.step1.loaded"><Spin size="large"></Spin></div>
+                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.step1.error">{{ activityList.step1.error }}</div>
+                <div class="tips-line" v-else-if="activityList.step1.loaded && activityList.step1.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
+                <div class="tips-line" v-if="!activityList.step1.loaded && !activityList.step1.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.step1.items" :key="index">
                   <div class="activity-type" v-if="item.type==1">{{$t('activity.activitytype1')}}</div>
                   <div class="activity-type" v-if="item.type==2">{{$t('activity.activitytype2')}}</div>
@@ -189,8 +192,9 @@
             </TabPane>
             <TabPane :label="$t('activity.distributing')" name="step2">
               <div class="activity-container">
-                <div class="tips-line" v-if="activityList.step2.loaded && activityList.step2.total == 0"><img src="../../assets/images/emptydata.png"></img></div>
-                <div class="tips-line" v-if="!activityList.step2.loaded"><Spin size="large"></Spin></div>
+                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.step2.error">{{ activityList.step2.error }}</div>
+                <div class="tips-line" v-else-if="activityList.step2.loaded && activityList.step2.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
+                <div class="tips-line" v-if="!activityList.step2.loaded && !activityList.step2.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.step2.items" :key="index">
                   <div class="activity-type" v-if="item.type==1">{{$t('activity.activitytype1')}}</div>
                   <div class="activity-type" v-if="item.type==2">{{$t('activity.activitytype2')}}</div>
@@ -249,8 +253,9 @@
             </TabPane>
             <TabPane :label="$t('activity.completed')" name="step3">
               <div class="activity-container">
-                <div class="tips-line" v-if="activityList.step3.loaded && activityList.step3.total == 0"><img src="../../assets/images/emptydata.png"></img></div>
-                <div class="tips-line" v-if="!activityList.step3.loaded"><Spin size="large"></Spin></div>
+                <div class="tips-line ix-empty ix-empty-error" v-if="activityList.step3.error">{{ activityList.step3.error }}</div>
+                <div class="tips-line" v-else-if="activityList.step3.loaded && activityList.step3.total == 0"><img src="../../assets/images/emptydata.png"></img><p class="ix-empty" style="margin-top:8px;">No activities</p></div>
+                <div class="tips-line" v-if="!activityList.step3.loaded && !activityList.step3.error"><Spin size="large"></Spin></div>
                 <div class="activity-item" v-for="(item, index) in activityList.step3.items" :key="index">
                   <div class="activity-type" v-if="item.type==1">{{$t('activity.activitytype1')}}</div>
                   <div class="activity-type" v-if="item.type==2">{{$t('activity.activitytype2')}}</div>
@@ -330,6 +335,7 @@ export default {
       activityList:{
         all:{
           loaded: false,
+          error: "",
           pageSize: 10,
           pageNo: 1,
           total: 0,
@@ -337,6 +343,7 @@ export default {
         },
         step0:{
           loaded: false,
+          error: "",
           pageSize: 10,
           pageNo: 1,
           total: 0,
@@ -344,6 +351,7 @@ export default {
         },
         step1:{
           loaded: false,
+          error: "",
           pageSize: 10,
           pageNo: 1,
           total: 0,
@@ -351,6 +359,7 @@ export default {
         },
         step2:{
           loaded: false,
+          error: "",
           pageSize: 10,
           pageNo: 1,
           total: 0,
@@ -358,6 +367,7 @@ export default {
         },
         step3:{
           loaded: false,
+          error: "",
           pageSize: 10,
           pageNo: 1,
           total: 0,
@@ -434,6 +444,20 @@ export default {
         this.getData(3);
       }
     },
+    bucketForStep(step) {
+      if (step == -1) return this.activityList.all;
+      if (step == 0) return this.activityList.step0;
+      if (step == 1) return this.activityList.step1;
+      if (step == 2) return this.activityList.step2;
+      return this.activityList.step3;
+    },
+    markBucketError(step, message) {
+      const b = this.bucketForStep(step);
+      b.loaded = true;
+      b.error = message;
+      b.items = [];
+      b.total = 0;
+    },
     getData(step = -1) {
       let param = {};
       param["step"] = step;
@@ -445,9 +469,12 @@ export default {
       if(step == 3) param["pageNo"] = this.activityList.step3.pageNo;
 
       param["pageSize"] = 10;
+      const bucket = this.bucketForStep(step);
+      bucket.error = "";
+      bucket.loaded = false;
       this.$http.post(this.host + "/uc/activity/page-query", param).then(res => {
-        if (res.status == 200 && res.body.code == 0) {
-          let aList = res.body.data.content;
+        if (res.status == 200 && res.body && res.body.code == 0 && res.body.data) {
+          let aList = res.body.data.content || [];
           // Holdings Split (: 0, : 50, : 75%, Ended: 100
           for (var i = 0; i < aList.length; i++) {
             if(aList[i].type ==3){
@@ -462,30 +489,22 @@ export default {
                 }
             }
           }
-          if(step == -1){
-            this.activityList.all.loaded = true;
-            this.activityList.all.items = aList;
-            this.activityList.all.total = res.body.data.totalElements;
-          }else if(step == 0){
-            this.activityList.step0.loaded = true;
-            this.activityList.step0.items = aList;
-            this.activityList.step0.total = res.body.data.totalElements;
-          }else if(step == 1){
-            this.activityList.step1.loaded = true;
-            this.activityList.step1.items = aList;
-            this.activityList.step1.total = res.body.data.totalElements;
-          }else if(step == 2){
-            this.activityList.step2.loaded = true;
-            this.activityList.step2.items = aList;
-            this.activityList.step2.total = res.body.data.totalElements;
-          }else if(step == 3){
-            this.activityList.step3.loaded = true;
-            this.activityList.step3.items = aList;
-            this.activityList.step3.total = res.body.data.totalElements;
-          }
+          bucket.loaded = true;
+          bucket.error = "";
+          bucket.items = aList;
+          bucket.total = res.body.data.totalElements || 0;
         } else {
-          this.$Message.error(res.body.message);
+          const msg =
+            (res.body && res.body.message) ||
+            "Activity service did not answer — list is unknown, not empty.";
+          this.markBucketError(step, msg);
+          this.$Message.error(msg);
         }
+      }).catch(() => {
+        this.markBucketError(
+          step,
+          "Activity service did not respond — list is unknown, not empty."
+        );
       });
     }
   }
