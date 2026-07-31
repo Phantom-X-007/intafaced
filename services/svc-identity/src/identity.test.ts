@@ -55,7 +55,6 @@ const migrations = readdirSync(drizzleDir)
 
 if (migrations.length === 0) throw new Error(`No migrations found in ${drizzleDir}`);
 
-
 const tokenConfig = {
   secret: 'an-identity-test-signing-secret-long-enough',
   issuer: 'intafaced',
