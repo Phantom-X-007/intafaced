@@ -3,8 +3,7 @@
       <div class="nav-right padding-right-clear">
         <div class="padding-right-clear padding-left-clear rightarea user account-box">
             <div class="rightarea-con">
-                <p v-if="profileLoading" class="ix-empty-loading" role="status" style="padding: 12px 20px;">Loading security settings…</p>
-                <p v-else-if="profileError" class="ix-empty ix-empty-error" role="alert" style="padding: 12px 20px;">{{ profileError }}</p>
+                <div style="padding: 12px 20px;"><IxHonestState v-if="profileLoading" kind="loading" message="Loading security settings…" /><IxHonestState v-else-if="profileError" kind="error" :message="profileError" /></div>
                 <div class="user-top-icon" v-if="profileReachable">
                     <div class="user-icons">
                         <div class="user-face user-avatar-public">
@@ -362,6 +361,8 @@
     </div>
 </template>
 <script>
+import IxHonestState from './IxHonestState.vue';
+
 export default {
   components: {},
   data() {

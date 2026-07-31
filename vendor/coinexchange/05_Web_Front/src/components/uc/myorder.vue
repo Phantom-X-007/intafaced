@@ -6,8 +6,8 @@
           <Tabs value="name1" @on-click="showItem">
             <TabPane :label="$t('uc.otcorder.unpaid')" name="name1">
               <div class="order-table">
-                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
-                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <IxHonestState v-if="listError" kind="error" :message="listError" />
+                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
                 <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
                 <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
@@ -18,8 +18,8 @@
             </TabPane>
             <TabPane :label="$t('uc.otcorder.paided')" name="name2">
               <div class="order-table">
-                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
-                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <IxHonestState v-if="listError" kind="error" :message="listError" />
+                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
                 <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
                 <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
@@ -30,8 +30,8 @@
             </TabPane>
             <TabPane :label="$t('uc.otcorder.finished')" name="name3">
               <div class="order-table">
-                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
-                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <IxHonestState v-if="listError" kind="error" :message="listError" />
+                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
                 <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
                 <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
@@ -42,8 +42,8 @@
             </TabPane>
             <TabPane :label="$t('uc.otcorder.canceled')" name="name0">
               <div class="order-table">
-                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
-                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <IxHonestState v-if="listError" kind="error" :message="listError" />
+                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
                 <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
                 <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
@@ -54,8 +54,8 @@
             </TabPane>
             <TabPane :label="$t('uc.otcorder.appealing')" name="name4">
               <div class="order-table">
-                <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
-                <p v-else-if="!loading && listReachable && tableOrder.length === 0" class="ix-empty">No OTC orders in this tab yet</p>
+                <IxHonestState v-if="listError" kind="error" :message="listError" />
+                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
                 <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
                 <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
                   <div style="float: right;">
@@ -73,8 +73,10 @@
   </div>
 </template>
 <script>
+import IxHonestState from './IxHonestState.vue';
+
 export default {
-  components: {},
+  components: { IxHonestState },
   data() {
     return {
       ordKeyword: "",
