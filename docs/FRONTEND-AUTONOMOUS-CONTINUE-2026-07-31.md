@@ -39,3 +39,16 @@
 ## Hard bans
 
 Fake money/candles · fixture-seeded balances as proof · partner names in UI · pure `#000` brand tattoo forever · re-opening style marathon · order-route / futures invent
+
+## Residual (defer — not blocking autonomy stop)
+
+| ID                 | Why deferred                                                 |
+| ------------------ | ------------------------------------------------------------ |
+| B4 mobile panic    | Larger UX; needs device matrix + focus-trap library judgment |
+| B11 entry on chart | Needs live position stream; fleet/auth                       |
+| B12 CMS/OTC craft  | Explicitly last after desk+money                             |
+| B13 anti-slop cert | Needs non-implementer pass                                   |
+| B15 multi-monitor  | Optional chrome API; low ROI now                             |
+| Wave C             | Backend/heavy power after B DoD                              |
+
+**Stop condition this session:** desk craft core B1–B10′ + B14 shipped; residual documented.

@@ -34,7 +34,7 @@
             <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
               Venue exchange wallet ledger only — not the platform TypeScript ledger books.
             </p>
-            <p v-if="listError" class="ix-empty ix-empty-error">{{ listError }}</p>
+            <p v-if="listError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ listError }}</p>
             <p v-else-if="!loading && listReachable && tableRecord.length === 0" class="ix-empty">No transactions yet</p>
             <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :disabled-hover="true" :loading="loading"></Table>
             <div style="margin: 10px;overflow: hidden" v-if="!listError">
