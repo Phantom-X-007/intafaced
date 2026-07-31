@@ -7,13 +7,12 @@
 **Last tip:** re-check · high water through **#258** · do not re-ship **#110–#258** without regression
 
 ```
-STATUS 2026-07-31T04:00Z
-tip: re-check origin/main
-open PRs: #261 frontend withdraw honesty — LEAVE (sibling Wave A)
-campaign: NITRO-RESIDUAL-CAMPAIGN · LIVE-LANES residual-ws claimed by audit-fire-mega
-backend high water: #251–#259 · residual-ws tracker honesty shipping
-next: merge residual-ws · then residual-smart-accounts research OR ID-P1-1 · NO vendor/**
-do not: collide stream-a-ui; invent futures positions; fake done
+STATUS 2026-07-31T residual-coord continuous
+tip: re-check origin/main (expect ≥ #278 F3 + #280 pay)
+open PRs: re-check gh — leave #267 frontend
+campaign: R6 futures F1–F3 on main; F4 positionUpdated shipping; R3 pay broadcast+#280
+next: merge F4 · F5 liq/funding research · smart-accounts residual · NO vendor/** Wave A
+do not: invent marks; collide stream-a-ui; fake futures done
 ```
 
 ---

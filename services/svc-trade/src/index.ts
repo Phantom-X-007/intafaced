@@ -59,7 +59,7 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   subAccounts,
 });
 
-const positions = new PositionService(sql, ledger);
+const positions = new PositionService(sql, ledger, bus);
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 

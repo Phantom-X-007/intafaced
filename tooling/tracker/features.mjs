@@ -259,7 +259,7 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual F1–F3: ledger futuresMargin* recipes; trade.positions table; open/close REST (POST/DELETE /positions) locks/releases margin; GET lists open rows. Still missing: matching engine for futures, mark/index, liquidation job, funding 8h, positionUpdated publish, live re-leverage. Not done.',
+    note: 'Updated 2026-07-31 residual F1–F4: ledger futuresMargin* recipes; trade.positions table; open/close REST; GET lists open rows; positionUpdated published on open/close (ws private positions can fan real events). Still missing: matching engine for futures, mark/index, liquidation job, funding 8h, live re-leverage, realized PnL on close. Not done.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
@@ -322,7 +322,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['matching.engine', 'ws.depth'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'Updated 2026-07-31 residual-ws: four fan-out *channels* exist — public depth (ws.depth), public trade tape, private orders+fills (JWT /private/stream), private positions channel (#227). Positions stream is **empty-honest**: ready frame only until trade.futures publishes positionUpdated (source+hub tests prove no invented rows). REST GET /positions also []. Status stays **wip** because title product "positions" means live futures events, not only a silent channel. Do not mark done without trade.futures or a doctrine change that empty-honest channels complete the title.',
+    note: 'Updated 2026-07-31 residual F4: four channels — depth, tape, private orders/fills, private positions. trade.futures now publishes positionUpdated on open/close so positions channel is no longer permanently silent when futures opens exist. Still wip until futures product complete (mark/liq/funding) and end-to-end private WS probe under load. Do not mark done as full product gateway.',
   }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────

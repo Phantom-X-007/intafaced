@@ -1,14 +1,15 @@
 /**
- * Futures position open/close (trade.futures F3 residual).
+ * Futures position open/close + positionUpdated fan-out (trade.futures F3–F4).
  *
  * STATE in trade.positions; MARGIN only via ledger recipes (Doctrine §0.6).
- * No matching engine yet — this is the funded position lifecycle skeleton.
- * Mark / liquidation / funding remain later slices; markPrice is null on wire.
+ * Publishes `positionUpdated` so svc-ws private positions channel is not silent
+ * after real opens. Mark/liquidation/funding remain later slices (markPrice null).
  */
 import type { Sql } from 'postgres';
 import { randomUUID } from 'node:crypto';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
+import type { EventBus } from '@intafaced/events';
 import { initialMargin } from './initial-margin.js';
 
 export class FuturesError extends Error {
@@ -56,6 +57,8 @@ export class PositionService {
   constructor(
     private readonly sql: Sql,
     private readonly ledger: LedgerClient,
+    /** Optional: tests may omit; production passes JetStream bus. */
+    private readonly bus: EventBus | null = null,
   ) {}
 
   async listOpen(userId: string, symbol?: string): Promise<Position[]> {
@@ -160,6 +163,7 @@ export class PositionService {
       JOIN trade.markets m ON m.id = p.market_id
       WHERE p.id = ${positionId}
     `;
+    await this.publishPositionUpdated(row!);
     return presentPosition(row!);
   }
 
@@ -200,7 +204,42 @@ export class PositionService {
       JOIN trade.markets m ON m.id = p.market_id
       WHERE p.id = ${positionId}
     `;
+    await this.publishPositionUpdated(closed!);
     return presentPosition(closed!);
+  }
+
+  /** Fan-out for private WS — honest nulls for mark/PnL until mark path exists. */
+  private async publishPositionUpdated(row: PositionRow): Promise<void> {
+    if (!this.bus) return;
+    const size = parseAmount(row.size);
+    const entry = parseAmount(row.entry_price);
+    const SCALE = 10n ** 18n;
+    const notional = (size * entry) / SCALE;
+    const ts = new Date().toISOString();
+    await this.bus.publish(
+      'positionUpdated',
+      {
+        positionId: row.id,
+        userId: row.user_id,
+        marketId: row.market_id,
+        symbol: row.symbol,
+        status: row.status,
+        side: row.side,
+        contracts: formatAmount(size),
+        entryPrice: formatAmount(entry),
+        markPrice: null,
+        notional: formatAmount(notional),
+        leverage: formatAmount(parseAmount(row.leverage)),
+        collateral: formatAmount(parseAmount(row.margin_initial)),
+        unrealizedPnl: null,
+        realizedPnl: null,
+        liquidationPrice: row.liq_price != null ? formatAmount(parseAmount(row.liq_price)) : null,
+        marginMode: row.margin_mode,
+        fundingPaid: formatAmount(parseAmount(row.funding_paid ?? '0')),
+        ts,
+      },
+      { idempotencyKey: `trade.position.updated:${row.id}:${row.status}:${ts}` },
+    );
   }
 }
 
