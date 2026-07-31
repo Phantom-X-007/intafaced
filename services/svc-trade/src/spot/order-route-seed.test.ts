@@ -11,7 +11,7 @@ import type { Market } from './types.js';
 import { StubMatching, StubPerks, principalFor } from './testing.js';
 
 /**
- * Seed / mm honesty (Spec SD-2, SD-3, SD-4 · Plan P4-2/P4-3 · chaos F8).
+ * Seed / mm honesty (brand-clean finish) (Spec SD-2, SD-3, SD-4 · Plan P4-2/P4-3 · chaos F8).
  */
 
 const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced_test';
