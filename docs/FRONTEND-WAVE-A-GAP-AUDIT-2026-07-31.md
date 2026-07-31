@@ -13,15 +13,20 @@
 | A7′        | Plane/feed                     | Already tip #240; no delta needed          | —                                                  |
 | A-x4/x5    | Precision / fee withdraw-class | Withdraw bignumber; fee source labels      | Display toFixed remains on non-money growth UI     |
 | A6         | LWC v5 plan                    | Doc only                                   | Wave C                                             |
-| Styleboard | N1–N4                          | Draft                                      | **Nitro pick** (only human stop)                   |
+| Styleboard | N1–N4 systems                  | Draft only                                 | Full system pick **deferred** (not blocking)       |
+| Color      | Modular palette                | **P21 applied** on branch                  | Swap any time via tokens; Orca prove live shell    |
 
 ## Drift check
 
 - Stream A paths only (vendor 05_Web_Front components/pages/assets)
 - No rebuild of shipped ticket/book controls
-- No Wave B retheme without pick
+- Color pick **done provisional (P21)** — Wave B craft unblocked on tokens
 - No Admin-1 before Wave A foundation
+- #267 **CONFLICTING** with moving main — restack before claim merge-ready
 
 ## Next autonomous
 
-Babysit CI green on #267 · optional close #261/#262 as superseded by stack · more IxHonestState adoption
+1. Restack #267 onto `origin/main` (resolve conflicts)  
+2. Orca-prove P21 on exchange + one money surface  
+3. CI green · then Wave B craft / residual honesty  
+4. #261/#262 already merged — do not re-ship  
