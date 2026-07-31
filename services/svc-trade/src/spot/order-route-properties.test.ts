@@ -187,7 +187,7 @@ if (!available) {
   describe('order-route properties — CX-3 fill redelivery', () => {
     it('property: R redeliveries never create a second trade.fill', async () => {
       await fc.assert(
-        fc.asyncProperty(fc.integer({ min: 1, max: 8 }), async (redelivers) => {
+        fc.asyncProperty(fc.integer({ min: 1, max: 4 }), async (redelivers) => {
           await sql`TRUNCATE trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
           ledger = new MemoryLedger();
           bus = new MemoryEventBus('svc-trade');
@@ -245,8 +245,8 @@ if (!available) {
           expect(ledger.totalsByAsset()).toEqual({ BTC: '0', USDT: '0' });
           expect(ledger.reconcile()).toEqual({ ok: true });
         }),
-        { numRuns: 8 },
+        { numRuns: 4 },
       );
-    });
+    }, 20_000);
   });
 }

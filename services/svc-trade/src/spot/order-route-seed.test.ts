@@ -5,7 +5,7 @@ import postgres from 'postgres';
 import { assertTestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
-import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
+import { MemoryLedger, formatAmount, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
 import type { Market } from './types.js';
 import { StubMatching, StubPerks, principalFor } from './testing.js';
@@ -251,10 +251,10 @@ if (!available) {
       });
 
       const tape = await trade.publicTape(btcusdt.id, 50);
-      // Only the user↔user print (qty 1 @ 101), not seed↔seed (qty 2 @ 100).
+      // Only the user↔user print (qty 1 @ 101), not seed-involving fill.
       expect(tape).toHaveLength(1);
-      expect(Number(tape[0]!.qty)).toBe(1);
-      expect(Number(tape[0]!.price)).toBe(101);
+      expect(formatAmount(tape[0]!.qty)).toBe('1');
+      expect(formatAmount(tape[0]!.price)).toBe('101');
     });
   });
 }
