@@ -8,7 +8,8 @@ import {
   recipes,
 } from '@intafaced/ledger-client';
 import type { EngineSubmitRequest, EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
-import { MM_MATCHING_ACCOUNT_ID, seedMarket, summarizeSeedMarket } from './seed-market.js';
+import { isHouseMmAccount, MM_MATCHING_ACCOUNT_ID, seedMarket, summarizeSeedMarket } from './seed-market.js';
+import { mmSeedOrderIdFor } from '../spot/ids.js';
 
 async function fundMm(ledger: MemoryLedger, asset: string, amount: string, seedId: string) {
   await ledger.post(recipes.marketMakerSeedFund({ assetId: asset, amount: amt(amount), seedId }));
@@ -49,6 +50,19 @@ class SeedStubMatching implements Pick<MatchingClient, 'submit'> {
     };
   }
 }
+
+describe('mm seed ids', () => {
+  it('mmSeedOrderIdFor is deterministic uuid; isHouseMmAccount matches STP id', () => {
+    const a = mmSeedOrderIdFor('run-a', 'mkt', 'buy', 1);
+    const b = mmSeedOrderIdFor('run-a', 'mkt', 'buy', 1);
+    expect(a).toBe(b);
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(isHouseMmAccount(MM_MATCHING_ACCOUNT_ID)).toBe(true);
+    expect(isHouseMmAccount(ALICE_FAKE)).toBe(false);
+  });
+});
+
+const ALICE_FAKE = '11111111-1111-4111-8111-111111111111';
 
 describe('seedMarket', () => {
   it('refuses missing mid — no hold, no submit', async () => {

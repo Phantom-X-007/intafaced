@@ -22,6 +22,8 @@ import type { RankPerksSource } from './rank-perks.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
 import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from './matching-client.js';
 import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
+import { isHouseMmAccount } from '../mm/seed-market.js';
+import { HOUSE_MM_USER_UUID } from './ids.js';
 import {
   TradeError,
   type Candle,
@@ -726,7 +728,103 @@ export class TradeService {
 
     const maker = await this.findOrder(fill.makerOrderId);
     const taker = await this.findOrder(fill.takerOrderId);
-    if (!maker || !taker) {
+    const makerIsHouseMm = isHouseMmAccount(fill.makerAccountId);
+
+    // House MM seed orders are not in trade.orders (seedMarket holds + matching
+    // only). User taker must still exist. MM-as-taker is residual.
+    if (!taker) {
+      throw new TradeError(
+        `fill ${fill.sequence} references an order this service does not know (${fill.makerOrderId} / ${fill.takerOrderId})`,
+        'trade.order_not_found',
+      );
+    }
+    if (!maker && !makerIsHouseMm) {
+      throw new TradeError(
+        `fill ${fill.sequence} references an order this service does not know (${fill.makerOrderId} / ${fill.takerOrderId})`,
+        'trade.order_not_found',
+      );
+    }
+
+    // ── House MM maker path (trade.mm-bot) ──────────────────────────────────
+    if (makerIsHouseMm && !maker) {
+      const rates = ratesForFill(market, 0, taker.feeDiscountBps);
+      const takerBuys = fill.takerSide === 'buy';
+      const takerFee = mulBps(takerBuys ? qty : quoteAmount, rates.takerFeeBps);
+      const makerFee = mulBps(takerBuys ? quoteAmount : qty, rates.makerFeeBps);
+      const makerSide = takerBuys ? ('sell' as const) : ('buy' as const);
+      const makerFeeAsset = takerBuys ? market.quoteAsset : market.baseAsset;
+      const takerFeeAsset = takerBuys ? market.baseAsset : market.quoteAsset;
+
+      await this.sql`
+        INSERT INTO trade.fills (
+          id, order_id, counter_order_id, market_id, user_id, side, liquidity,
+          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
+        ) VALUES (
+          ${fillLegIdFor(market.id, fill.sequence, 'maker')}, ${fill.makerOrderId}, ${taker.id},
+          ${market.id}, ${HOUSE_MM_USER_UUID}, ${makerSide}, ${'maker'},
+          ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
+          ${makerFeeAsset}, ${formatAmount(makerFee)}::numeric, ${rates.makerFeeBps}, ${fill.sequence}
+        )
+        ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
+      `;
+      await this.sql`
+        INSERT INTO trade.fills (
+          id, order_id, counter_order_id, market_id, user_id, side, liquidity,
+          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
+        ) VALUES (
+          ${fillLegIdFor(market.id, fill.sequence, 'taker')}, ${taker.id}, ${fill.makerOrderId},
+          ${market.id}, ${taker.userId}, ${fill.takerSide}, ${'taker'},
+          ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
+          ${takerFeeAsset}, ${formatAmount(takerFee)}::numeric, ${rates.takerFeeBps}, ${fill.sequence}
+        )
+        ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
+      `;
+
+      await this.refreshFilledQty(taker.id);
+
+      await this.ledger.post(
+        recipes.marketMakerMakerFill({
+          fillId: fillIdFor(market.id, fill.sequence),
+          takerId: taker.userId,
+          makerOrderId: fill.makerOrderId,
+          takerOrderId: taker.id,
+          baseAsset: market.baseAsset,
+          quoteAsset: market.quoteAsset,
+          qty,
+          quoteAmount,
+          takerSide: fill.takerSide,
+          makerFeeBps: rates.makerFeeBps,
+          takerFeeBps: rates.takerFeeBps,
+        }),
+      );
+
+      await this.bus.publish(
+        'fillSettled',
+        {
+          fillId: fillLegIdFor(market.id, fill.sequence, 'taker'),
+          orderId: taker.id,
+          userId: taker.userId,
+          marketId: market.id,
+          side: fill.takerSide,
+          liquidity: 'taker',
+          price: formatAmount(price),
+          qty: formatAmount(qty),
+          quoteAmount: formatAmount(quoteAmount),
+          feeAsset: takerFeeAsset,
+          feeAmount: formatAmount(takerFee),
+          feeBps: rates.takerFeeBps,
+          sequence: fill.sequence,
+          ts: new Date().toISOString(),
+        },
+        { idempotencyKey: `trade.fill.settled:${market.id}:${fill.sequence}:taker` },
+      );
+      const latest = await this.findOrder(taker.id);
+      if (latest) await this.publishOrderUpdated(latest);
+      return;
+    }
+
+    // Both user orders — classic path.
+    if (!maker) {
       throw new TradeError(
         `fill ${fill.sequence} references an order this service does not know (${fill.makerOrderId} / ${fill.takerOrderId})`,
         'trade.order_not_found',

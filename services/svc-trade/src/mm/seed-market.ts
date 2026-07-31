@@ -5,18 +5,24 @@
  * matching submit (post-only GTC limits) under house MM identity.
  *
  * Does NOT invent mid, market list, or inventory. Fund the pot first via
- * marketMakerSeedFund. House-side fill settlement (tradeFill for MM) is still
- * residual — seed uses post-only so orders rest or reject, never take.
+ * marketMakerSeedFund. Seed uses post-only so orders rest or reject, never take.
+ * House maker fill: recipes.marketMakerMakerFill + settleFill branch when
+ * makerAccountId is house:market-maker (no trade.orders row required).
  *
  * Default: call site / ops enables. This module is pure orchestration with
  * injected ports — no wall-clock job here.
  */
 import { formatAmount, mul, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
+import { mmSeedOrderIdFor } from '../spot/ids.js';
 import { planSeedQuotes, type SeedLevelIntent, type SeedPlanInput } from './seed-planner.js';
 
 /** Matching STP account for house market-maker — distinct from user ids. */
 export const MM_MATCHING_ACCOUNT_ID = 'house:market-maker';
+
+export function isHouseMmAccount(accountId: string): boolean {
+  return accountId === MM_MATCHING_ACCOUNT_ID;
+}
 
 export interface SeedMarketSpec extends SeedPlanInput {
   marketId: string;
@@ -63,8 +69,8 @@ function holdForSeed(
 }
 
 function defaultOrderId(runId: string, marketId: string, intent: SeedLevelIntent): string {
-  // Deterministic: same run + market + side + level → same hold key.
-  return `mm-seed:${runId}:${marketId}:${intent.side}:L${intent.level}`;
+  // Deterministic UUID: fills table + hold keys need uuid shape.
+  return mmSeedOrderIdFor(runId, marketId, intent.side, intent.level);
 }
 
 /**
