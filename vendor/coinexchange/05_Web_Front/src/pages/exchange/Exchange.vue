@@ -1,6 +1,8 @@
 <template>
   <div class="ix-terminal" @keydown="onDeskKeydown">
     <!-- Wave B7: / market search · Esc clear/blur · Enter in ticket submits · B/S side -->
+    <!-- B10: polite live region for ticket validation (screen readers) -->
+    <div class="ix-sr-only" aria-live="polite" aria-atomic="true">{{ liveAnnounce }}</div>
     <!-- ══ pair header ══════════════════════════════════════════════════ -->
     <header class="ix-head">
       <div class="ix-head-pair">
@@ -104,6 +106,35 @@
             Market list unavailable — not empty
           </p>
           <template v-else>
+            <!-- B6 — watchlist rail: favourites pinned above the full list -->
+            <div
+              class="ix-watch-rail"
+              v-if="isLogin && baseFilter !== 'favor' && watchlistMarkets.length"
+            >
+              <div class="ix-watch-rail-hd">
+                <span>Watchlist</span>
+                <button type="button" class="ix-linkish" @click="baseFilter = 'favor'">
+                  All ★
+                </button>
+              </div>
+              <button
+                type="button"
+                class="ix-market-row ix-market-row-watch"
+                :class="{ 'is-current': row.symbol === currentCoin.symbol }"
+                v-for="row in watchlistMarkets"
+                :key="'w-' + row.symbol"
+                @click="openPair(row)"
+              >
+                <span class="ix-market-name">
+                  <i class="ix-star ix-star-inline is-on" @click.stop="toggleRowFavorite(row)">
+                    <Icon type="ios-star" size="12" />
+                  </i>
+                  {{ row.coin }}<em>/{{ row.base }}</em>
+                </span>
+                <span class="ix-num">{{ marketNum(row.close, 6) }}</span>
+                <span class="ix-num" :class="roseClass(row.rose)">{{ marketStat(row.rose) }}</span>
+              </button>
+            </div>
             <p class="ix-empty" v-if="visibleMarkets.length === 0">No markets</p>
             <button
               type="button"
@@ -660,7 +691,13 @@
             <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>Enter</kbd> submit · <kbd>B</kbd>/<kbd>S</kbd> side
           </p>
 
-          <p class="ix-order-note ix-order-error" v-if="orderValidationError">{{ orderValidationError }}</p>
+          <p
+            ref="orderError"
+            class="ix-order-note ix-order-error"
+            role="alert"
+            tabindex="-1"
+            v-if="orderValidationError"
+          >{{ orderValidationError }}</p>
           <p class="ix-order-note" v-if="!isLogin">
             <router-link to="/login">Sign in</router-link> or
             <router-link to="/register">register</router-link> to trade.
@@ -811,7 +848,9 @@ export default {
       submitting: false,
       cancellingId: null,
       /** Inline field validation message; empty when fields look usable. */
-      orderValidationError: ''
+      orderValidationError: '',
+      /** B10 — screen-reader announcements (order rejects, validation). */
+      liveAnnounce: ''
     };
   },
 
@@ -866,6 +905,15 @@ export default {
         rows = rows.filter(r => (r.coin || '').indexOf(key) === 0);
       }
       return rows;
+    },
+    /* B6 — favourites for the pinned watchlist rail (capped for density). */
+    watchlistMarkets() {
+      const key = this.searchKey.trim().toUpperCase();
+      let rows = this.markets.filter(r => r.isFavor);
+      if (key) {
+        rows = rows.filter(r => (r.coin || '').indexOf(key) === 0);
+      }
+      return rows.slice(0, 8);
     },
     balanceRows() {
       return [
@@ -1018,9 +1066,10 @@ export default {
     },
     feeLabel() {
       if (!this.feeKnown) {
-        return 'unknown (market did not provide fee)';
+        return 'unknown · market did not provide fee (not free)';
       }
-      return (this.num(this.symbolFee) * 100).toFixed(2) + '% · market schedule';
+      /* B9′ — venue pair schedule already on the page; never invent a rate. */
+      return (this.num(this.symbolFee) * 100).toFixed(2) + '% · venue schedule for this pair';
     },
     tradesEmptyLabel() {
       if (!this.tradesReachable && !this.feedLive) {
@@ -1873,20 +1922,33 @@ export default {
       return '';
     },
 
+    /** B10 — focus the first order error + announce for AT. */
+    focusOrderError(msg) {
+      this.orderValidationError = msg || this.orderValidationError;
+      this.liveAnnounce = this.orderValidationError || '';
+      this.$nextTick(() => {
+        const el = this.$refs.orderError;
+        if (el && typeof el.focus === 'function') {
+          el.focus();
+        }
+      });
+    },
+
     submitOrder() {
       if (!this.tradable || this.submitting) {
         return;
       }
       if (this.orderBlockReason) {
-        this.orderValidationError = this.orderBlockReason;
+        this.focusOrderError(this.orderBlockReason);
         return this.warn(this.orderBlockReason);
       }
       const fieldErr = this.validateOrderFields();
       if (fieldErr) {
-        this.orderValidationError = fieldErr;
+        this.focusOrderError(fieldErr);
         return this.warn(fieldErr);
       }
       this.orderValidationError = '';
+      this.liveAnnounce = '';
 
       const amount = this.num(this.form.amount);
       const price = this.num(this.form.price);
@@ -2846,6 +2908,11 @@ $radius-sm: var(--ix-radius-sm, 8px);
   overscroll-behavior: contain;
 }
 
+/* B14 — cheap virtualization assist for long blotters */
+.ix-table tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 32px;
+}
 .ix-table {
   width: 100%;
   border-collapse: collapse;
@@ -3246,6 +3313,55 @@ $radius-sm: var(--ix-radius-sm, 8px);
 }
 .ix-actions .ix-cancel {
   margin-left: 8px;
+}
+/* B6 watchlist rail */
+.ix-watch-rail {
+  border-bottom: 1px solid var(--ix-hairline, #242a34);
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+}
+.ix-watch-rail-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ix-text-dim, #8a909c);
+}
+.ix-market-row-watch {
+  background: rgba(0, 194, 168, 0.04);
+}
+/* B10 screen-reader only */
+.ix-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* B2 density — pair head + stats tighter */
+.ix-terminal .ix-head {
+  min-height: 44px;
+}
+.ix-terminal .ix-stat dt {
+  font-size: 10px;
+}
+.ix-terminal .ix-stat dd {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ix-terminal .ix-order .ix-meta {
+  font-size: 12px;
+}
+.ix-order-note.ix-order-error:focus {
+  outline: 1px solid var(--ix-orange, #00c2a8);
+  outline-offset: 2px;
 }
 </style>
 

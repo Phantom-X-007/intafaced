@@ -43,3 +43,15 @@
 | B8 book impact est  | Done market ticket estimate from plate |
 
 **Collision:** order-route docs not owned here — restored to main for #289.
+
+## Wave B continue (post-#295 · craft PR)
+
+| ID | Status |
+| --- | --- |
+| B2 density | Desk head/stats/ticket tighter |
+| B6 watchlist rail | Favourites pinned above market list |
+| B9′ fee schedule copy | Venue schedule wording on ticket |
+| B10 a11y | Live region + focus order/wallet errors |
+| B14 blotter | content-visibility on desk tables |
+| B3 uc | MoneyIndex error focus + tabular money table |
+

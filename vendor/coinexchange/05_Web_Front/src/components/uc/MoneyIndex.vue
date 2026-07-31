@@ -20,9 +20,22 @@
             <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0; clear: both;">
               Two books. Venue exchange wallet only — not the platform ledger books.
             </p>
-            <p v-if="walletError" class="ix-empty ix-empty-error">{{ walletError }}</p>
+            <p
+              v-if="walletError"
+              class="ix-empty ix-empty-error"
+              role="alert"
+              tabindex="-1"
+              ref="walletError"
+            >{{ walletError }}</p>
             <p v-else-if="!loading && walletReachable && tableMoneyShow.length === 0" class="ix-empty">No balances yet</p>
-            <Table v-if="!walletError" :columns="tableColumnsMoney" :data="tableMoneyShow" :loading="loading" :disabled-hover="true"></Table>
+            <Table
+              v-if="!walletError"
+              class="ix-money-table"
+              :columns="tableColumnsMoney"
+              :data="tableMoneyShow"
+              :loading="loading"
+              :disabled-hover="true"
+            ></Table>
           </div>
         </div>
       </div>
@@ -86,13 +99,21 @@ export default {
               "Wallet did not answer — totals are unknown, not zero.";
             this.loading = false;
             this.$Message.error(this.loginmsg);
+            this.focusWalletError();
           }
         })
         .catch(() => {
           this.walletError =
             "Wallet service did not respond — totals are unknown, not zero.";
           this.loading = false;
+          this.focusWalletError();
         });
+    },
+    focusWalletError() {
+      this.$nextTick(() => {
+        const el = this.$refs.walletError;
+        if (el && typeof el.focus === "function") el.focus();
+      });
     },
     getGCCMatchAmount() {
       this.$http
@@ -474,4 +495,12 @@ export default {
   }
 }
 
+
+.ix-money-table {
+  font-variant-numeric: tabular-nums;
+}
+.ix-empty-error:focus {
+  outline: 1px solid var(--ix-orange, #00c2a8);
+  outline-offset: 2px;
+}
 </style>
