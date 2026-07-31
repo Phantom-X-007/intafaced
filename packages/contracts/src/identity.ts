@@ -89,3 +89,16 @@ export const BASE_PERKS: RankPerks = {
   otcAccess: false,
   launchpadTier: 0,
 };
+
+/**
+ * S2S ownership snapshot for a sub-account (svc-trade placeOrder gate).
+ *
+ * Internal only — not the interactive list shape. Caller compares
+ * `parentUserId` to the edge principal and refuses when `revoked`.
+ */
+export const subAccountOwnershipSchema = z.object({
+  id: z.string().uuid(),
+  parentUserId: z.string().uuid(),
+  revoked: z.boolean(),
+});
+export type SubAccountOwnership = z.infer<typeof subAccountOwnershipSchema>;

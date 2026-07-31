@@ -15,7 +15,7 @@ const schema = serviceEnvSchema
       /** svc-ledger's internal address. All value movement goes through it. */
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
-      /** svc-identity — read only, and only for `rank.perks.feeDiscountBps`. */
+      /** svc-identity — rank perks at order accept + sub-account ownership gate. */
       IDENTITY_URL: z.string().url().default('http://localhost:4002'),
 
       /** svc-matching — the book. This service never runs one of its own. */

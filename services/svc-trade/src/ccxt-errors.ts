@@ -91,11 +91,14 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.convert_invalid_qty': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_missing_id': { ccxt: 'BadRequest', status: 400 },
   /**
-   * Sub-account ownership checks are not wired, so we refuse rather than store
-   * an unvalidated id. From the caller's side the field is not accepted yet —
-   * that is `NotSupported`, not "your order was bad".
+   * Identity S2S ownership consult failed. Retryable — same posture as
+   * `trade.perks_unavailable`: we will not guess ownership while identity is down.
    */
-  'trade.sub_account_ungated': { ccxt: 'NotSupported', status: 501 },
+  'trade.sub_account_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  /** Missing or foreign sub-account. Permanent for this id + principal. */
+  'trade.sub_account_denied': { ccxt: 'PermissionDenied', status: 403 },
+  /** Soft-revoked sub-account — create a new book; do not retry the same id. */
+  'trade.sub_account_revoked': { ccxt: 'PermissionDenied', status: 403 },
 
   // ── Order lifecycle ───────────────────────────────────────────────────────
   'trade.order_not_found': { ccxt: 'OrderNotFound', status: 404 },

@@ -19,6 +19,7 @@ import {
 } from './risk.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
+import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
 import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from './matching-client.js';
 import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
 import {
@@ -89,6 +90,12 @@ export interface TradeServiceOptions {
    * Production leaves it unset and gets the real clock.
    */
   now?: () => Date;
+  /**
+   * Identity S2S ownership source for `subAccountId` on placeOrder.
+   * Defaults to a source that answers "unknown" for every id (fail-closed:
+   * any supplied subAccountId is denied until a real client is injected).
+   */
+  subAccounts?: SubAccountOwnershipSource;
 }
 
 export interface ConvertQuoteRequest {
@@ -162,6 +169,7 @@ export class TradeService {
   private readonly convertSpreadBps: number;
   private readonly convertQuoteTtlMs: number;
   private readonly now: () => Date;
+  private readonly subAccounts: SubAccountOwnershipSource;
 
   constructor(
     private readonly sql: Sql,
@@ -177,6 +185,7 @@ export class TradeService {
     this.convertSpreadBps = options.convertSpreadBps ?? 10;
     this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? 15_000;
     this.now = options.now ?? (() => new Date());
+    this.subAccounts = options.subAccounts ?? new NoSubAccounts();
   }
 
   // ── Listings (operator surface) ────────────────────────────────────────────
@@ -394,11 +403,11 @@ export class TradeService {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
 
-    // Fail closed on sub-accounts: accept-and-store would label orders with any
-    // UUID, including revoked or foreign ones. Ownership/revoked check needs an
-    // identity S2S read that is not mounted yet — refuse until it is (mega-audit R5).
+    // Ownership + revoked gate (identity S2S). Before any row or hold — a
+    // foreign or revoked id must never land on trade.orders.sub_account_id.
+    // Transport failure refuses the order (fail closed), same as rank perks.
     if (input.subAccountId != null) {
-      throw new TradeError('sub-account orders are not enabled until ownership and revoked checks are wired', 'trade.sub_account_ungated');
+      await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
     }
 
     // ── 2 · RISK CHECKS ─────────────────────────────────────────────────────

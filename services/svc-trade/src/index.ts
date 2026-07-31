@@ -7,6 +7,7 @@ import { env } from './env.js';
 import { TradeService } from './spot/trade-service.js';
 import { createMatchingClient } from './spot/matching-client.js';
 import { createRankPerksClient } from './spot/rank-perks.js';
+import { createSubAccountOwnershipClient } from './spot/sub-account-ownership.js';
 import { createLedgerClient } from './ledger-client.js';
 import { subscribeMatchingEvents } from './events.js';
 import { createTradeRouter, type TradeRouter } from './router.js';
@@ -38,6 +39,7 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 // §5.1 draws that line and a second book would be a second truth.
 const matching = createMatchingClient(env.MATCHING_URL, env.INTERNAL_SERVICE_SECRET);
 const perks = createRankPerksClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
+const subAccounts = createSubAccountOwnershipClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
@@ -52,6 +54,7 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   marketSlippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
   convertEnabled: env.TRADE_CONVERT_ENABLED,
   convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,
+  subAccounts,
 });
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);

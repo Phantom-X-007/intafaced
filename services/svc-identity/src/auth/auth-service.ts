@@ -985,6 +985,25 @@ export class AuthService {
   }
 
   /**
+   * S2S ownership read for money services (svc-trade placeOrder gate).
+   *
+   * Returns the row even when revoked so the caller can distinguish "not yours"
+   * from "yours but retired". Missing id → null (same answer for a foreign
+   * guess once the caller checks parentUserId).
+   */
+  async getSubAccountOwnership(subAccountId: string): Promise<{ id: string; parentUserId: string; revoked: boolean } | null> {
+    const rows = await this.sql<Array<{ id: string; parent_user_id: string; revoked: boolean }>>`
+      SELECT id, parent_user_id, revoked
+        FROM identity.sub_accounts
+       WHERE id = ${subAccountId}
+       LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    return { id: row.id, parentUserId: row.parent_user_id, revoked: row.revoked };
+  }
+
+  /**
    * Scopes granted to a normal interactive session.
    *
    * The list itself is SESSION_SCOPES in `@intafaced/auth`, next to the scope

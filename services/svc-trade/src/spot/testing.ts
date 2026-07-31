@@ -9,6 +9,9 @@ import type {
   MatchingClient,
 } from './matching-client.js';
 import type { RankPerksSource } from './rank-perks.js';
+import type { SubAccountOwnershipSource } from './sub-account-ownership.js';
+import type { SubAccountOwnership } from '@intafaced/contracts';
+import { TradeError } from './types.js';
 
 /**
  * TEST DOUBLES.
@@ -222,6 +225,28 @@ export class StubPerks implements RankPerksSource {
   async perksOf(userId: string): Promise<RankPerks> {
     if (this.unavailable) throw new Error('svc-identity is unreachable');
     return { ...BASE_PERKS, feeDiscountBps: this.discounts.get(userId) ?? 0 };
+  }
+}
+
+/** Scriptable identity S2S for sub-account ownership on placeOrder. */
+export class StubSubAccounts implements SubAccountOwnershipSource {
+  readonly rows = new Map<string, SubAccountOwnership>();
+  /** When true, get() throws the same fail-closed code as a down identity. */
+  unavailable = false;
+  /** Observed lookups — proves the gate runs before hold. */
+  readonly lookedUp: string[] = [];
+
+  seed(row: SubAccountOwnership): this {
+    this.rows.set(row.id, row);
+    return this;
+  }
+
+  async get(subAccountId: string): Promise<SubAccountOwnership | null> {
+    this.lookedUp.push(subAccountId);
+    if (this.unavailable) {
+      throw new TradeError('svc-identity is unreachable', 'trade.sub_account_unavailable');
+    }
+    return this.rows.get(subAccountId) ?? null;
   }
 }
 
