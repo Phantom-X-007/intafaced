@@ -340,14 +340,14 @@ if (!available) {
       const before = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
         SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
       `;
-      expect(before[0]!.recovery_code_hashes).toEqual([]);
+      expect(normalizeStringList(before[0]!.recovery_code_hashes)).toEqual([]);
 
       await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
 
       const after = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
         SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
       `;
-      const hashes = after[0]!.recovery_code_hashes as string[];
+      const hashes = normalizeStringList(after[0]!.recovery_code_hashes);
       expect(hashes).toHaveLength(recoveryCodes.length);
       // Hashes are hex digests — never the plaintext code shape.
       for (const h of hashes) {
@@ -372,7 +372,7 @@ if (!available) {
       const remaining = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
         SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
       `;
-      expect(remaining[0]!.recovery_code_hashes as string[]).toHaveLength(recoveryCodes.length - 1);
+      expect(normalizeStringList(remaining[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length - 1);
 
       // Live TOTP still works after a recovery login.
       const withTotp = await auth.login({
@@ -1138,4 +1138,18 @@ if (!available) {
       expect(checkAccess({ module: 'bank', region: 'DE', plane: 'fiat', kycTier: await auth.kycTier(session.userId) }).allowed).toBe(true);
     });
   });
+}
+
+/** JSONB may arrive as array or JSON text depending on driver path. */
+function normalizeStringList(raw: unknown): string[] {
+  let value: unknown = raw;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value.filter((x): x is string => typeof x === 'string');
 }
