@@ -608,6 +608,10 @@ services:
       # deployment before them would move both and point this service at
       # addresses holding no code.
       PROTOCOL_TOKEN_FACTORY_ADDRESS: ${PROTOCOL_TOKEN_FACTORY_ADDRESS:-0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0}
+      # protocol.amm PoolFactory — CREATE from anvil account #0 at nonce 3 after
+      # suite (0–1) + token factory (2). Zero until chain:deploy; eth_getCode still
+      # decides usable, same as the other factories.
+      PROTOCOL_AMM_FACTORY_ADDRESS: ${PROTOCOL_AMM_FACTORY_ADDRESS:-0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4012']
     extra_hosts:

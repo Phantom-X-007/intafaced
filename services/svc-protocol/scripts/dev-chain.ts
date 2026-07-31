@@ -249,3 +249,33 @@ export async function deployTokenFactory(clients: DevChainClients): Promise<{ fa
 export function tokenFactoryAt(clients: DevChainClients, address: Address) {
   return getContract({ address, abi: loadArtifact('TokenFactory').abi, client: clients.publicClient });
 }
+
+/**
+ * Deploy the AMM `PoolFactory` (`protocol.amm`).
+ *
+ * No constructor args — pools are CREATE2'd later per (token0, token1, feeBps).
+ * Same disposable-chain rules as the rest of this file.
+ */
+export async function deployPoolFactory(clients: DevChainClients): Promise<{ factory: Address; tx: Hex }> {
+  const { publicClient, walletClient } = clients;
+  const account = walletClient.account;
+  if (!account) throw new Error('deployPoolFactory needs a wallet client with an account');
+
+  const artifact = loadArtifact('PoolFactory');
+  const tx = await walletClient.deployContract({
+    abi: artifact.abi,
+    bytecode: artifact.bytecode,
+    account,
+    chain: walletClient.chain,
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
+  if (receipt.status !== 'success' || !receipt.contractAddress) {
+    throw new Error(`PoolFactory deployment failed: ${tx}`);
+  }
+  return { factory: receipt.contractAddress, tx };
+}
+
+/** The deployed AMM factory, ready to read. */
+export function poolFactoryAt(clients: DevChainClients, address: Address) {
+  return getContract({ address, abi: loadArtifact('PoolFactory').abi, client: clients.publicClient });
+}
