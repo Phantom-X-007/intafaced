@@ -259,7 +259,7 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual: F1–F5 recipes + positions open/close+bus + funding/liq planners + funding-tick + liquidation-tick (external rate/mark only, never invent). Still missing: mark oracle product, wall-clock cron hosts, matching engine, realized PnL on close. Not done.',
+    note: 'Updated 2026-07-31 residual: F1–F5 recipes + open/close+bus + funding/liq planners+ticks + futures mark-source port (index/mid/last quality; default liq refuses last; never invents). Still missing: real index oracle product, wall-clock cron hosts, matching engine, realized PnL on close. Not done.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
