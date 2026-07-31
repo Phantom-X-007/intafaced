@@ -14,7 +14,7 @@
 | A-x4/x5    | Precision / fee withdraw-class | Withdraw bignumber; fee source labels      | Display toFixed remains on non-money growth UI     |
 | A6         | LWC v5 plan                    | Doc only                                   | Wave C                                             |
 | Styleboard | N1–N4 systems                  | Draft only                                 | Full system pick **deferred** (not blocking)       |
-| Color      | Modular palette                | **P21 applied** on branch                  | Swap any time via tokens; Orca prove live shell    |
+| Color      | Modular palette                | **P21 applied + Orca desk shot**           | Swap any time via tokens; shot `styleboard/shots/P21-exchange-live.png` |
 
 ## Drift check
 
@@ -26,7 +26,8 @@
 
 ## Next autonomous
 
-1. Restack #267 onto `origin/main` (resolve conflicts)  
-2. Orca-prove P21 on exchange + one money surface  
-3. CI green · then Wave B craft / residual honesty  
-4. #261/#262 already merged — do not re-ship  
+1. ~~Restack #267~~ done (force-with-lease onto tip main)  
+2. ~~Orca-prove P21~~ desk shot green teal (no orange)  
+3. Brand-scan fix after rebase docs  
+4. CI green · Wave B craft next  
+5. #261/#262 already merged — do not re-ship  

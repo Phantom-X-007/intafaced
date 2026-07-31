@@ -24,7 +24,7 @@ Planning is finished and written to disk. A new chat that **reads these files** 
 | 4 | `STREAM-A-DESIGN-BAR.md` | Score polish PRs |
 | 5 | `brand-l1-refs/AUDIT-PASS.md` | Real visual refs only |
 | 6 | `NITRO-STREAM-A-CLAIM.md` | Trader shell file territory |
-| Evidence (not law) | Claude return · Grok audit · merge notes · older blueprints | Background only |
+| Evidence (not law) | enhance-return · adversarial audit · merge notes · older blueprints | Background only |
 
 **Ignore for execution:** FRONTEND-WORLDCLASS ORIGINAL/ENHANCED · any chat memory that contradicts these.
 

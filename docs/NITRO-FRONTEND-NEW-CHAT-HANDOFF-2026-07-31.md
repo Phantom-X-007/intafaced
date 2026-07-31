@@ -38,7 +38,7 @@ You are starting COLD. Do NOT use memory of any prior chat. Disk is law.
 7. docs/FRONTEND-OPS-NOW-2026-07-30.md                ← Orca primary eyes
 8. AGENTS.md + doctrine when coding money
 
-Evidence only (not law): FRONTEND-CLAUDE-ENHANCE-RETURN, FRONTEND-MERGE-NOTES-CLAUDE, FRONTEND-ADVERSARIAL-AUDIT-GROK-PARALLEL, older blueprints/leverage pack.
+Evidence only (not law): FRONTEND enhance-return / merge-notes / adversarial-audit docs, older blueprints/leverage pack.
 
 IGNORE for execution: FRONTEND-WORLDCLASS ORIGINAL/ENHANCED; any Design Bar that says "#86 black/orange forever"; "must only gap-fill / never rebuild."
 
@@ -88,7 +88,7 @@ Do **not** re-run cold-start styleboard. Disk facts:
 
 | Step | Where |
 | --- | --- |
-| 1 | New Grok (or coding) chat on **Sovereign** repo |
+| 1 | New coding chat on **Sovereign** repo |
 | 2 | Paste the fenced block above |
 | 3 | Say **go implement** (if not already in paste context) |
 | 4 | Keep **Orca** open |

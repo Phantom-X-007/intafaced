@@ -1,7 +1,7 @@
 # Color lock — P21 (provisional)
 
 **Status:** provisional operator pick · 2026-07-31  
-**Scope:** Stream A shell (`vendor/coinexchange/05_Web_Front` on `:8090`)  
+**Scope:** Stream A shell (`vendor/*/05_Web_Front` on `:8090`)  
 **Board:** `docs/styleboard/VIEW-COLOR-PALETTES.html` → **P21 Deep neutral · teal**
 
 ## Verdict
@@ -12,7 +12,7 @@ Nitro locked **P21** for now. This is **not** a forever brand tattoo.
 
 | Layer | What it is | How you change palette |
 | ----- | ---------- | ---------------------- |
-| **Token source of truth** | `:root` in `vendor/coinexchange/05_Web_Front/src/assets/css/intafaced.css` | Edit the hex block once; chrome that uses `var(--ix-*)` / `var(--accent)` follows |
+| **Token source of truth** | `:root` in `vendor/*/05_Web_Front/src/assets/css/intafaced.css` | Edit the hex block once; chrome that uses `var(--ix-*)` / `var(--accent)` follows |
 | **Legacy template hex** | Many Vue/CSS literals still carry brand colors (from historical `retheme.mjs`) | Re-run a brand remap (same class of pass used for P21) or gradually replace with CSS vars |
 | **What does not change with brand** | Market **up/down** green/red | Left alone on purpose — traders read them as direction |
 
