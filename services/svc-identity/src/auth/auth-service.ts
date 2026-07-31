@@ -288,11 +288,19 @@ export class AuthService {
 
     /** Explicit, so `in` narrows rather than the generic collapsing the union. */
     type RefreshOutcome =
-      { kind: 'reuse'; userId: string; sessionId: string } | { kind: 'expired' } | { kind: 'rotated'; tokens: SessionTokens };
+      | { kind: 'reuse'; userId: string; sessionId: string }
+      | { kind: 'frozen'; userId: string; sessionId: string; status: string }
+      | { kind: 'expired' }
+      | { kind: 'rotated'; tokens: SessionTokens };
 
     const result = await transaction<RefreshOutcome>(this.sql, async (tx) => {
-      const rows = await tx<Array<{ id: string; user_id: string; revoked: boolean; mfa: boolean; expires_at: Date }>>`
-        SELECT id, user_id, revoked, mfa, expires_at FROM sessions WHERE refresh_hash = ${hash} FOR UPDATE
+      // Join users so status is locked with the session row (ID-P1-2).
+      const rows = await tx<Array<{ id: string; user_id: string; revoked: boolean; mfa: boolean; expires_at: Date; user_status: string }>>`
+        SELECT s.id, s.user_id, s.revoked, s.mfa, s.expires_at, u.status AS user_status
+          FROM sessions s
+          JOIN users u ON u.id = s.user_id
+         WHERE s.refresh_hash = ${hash}
+         FOR UPDATE OF s, u
       `;
       const session = rows[0];
       if (!session) throw new AuthError('Session not found', 'auth.session_invalid');
@@ -311,13 +319,11 @@ export class AuthService {
 
       // Mirror login / ifc_ exchange: frozen or closed accounts must not mint new
       // access tokens from a still-valid refresh (ID-P1-2).
-      const users = await tx<Array<{ status: string }>>`
-        SELECT status FROM users WHERE id = ${session.user_id} FOR UPDATE
-      `;
-      const status = users[0]?.status;
-      if (!status || status !== 'active') {
+      if (session.user_status !== 'active') {
         await tx`UPDATE sessions SET revoked = true WHERE id = ${session.id}`;
-        throw new AuthError(`Account is ${status ?? 'unknown'}`, 'auth.account_frozen');
+        // Throw AFTER the update, but AuthError inside sql.begin aborts the txn —
+        // so return a dedicated outcome and revoke + throw outside, same as reuse.
+        return { kind: 'frozen', userId: session.user_id, sessionId: session.id, status: session.user_status };
       }
 
       await tx`UPDATE sessions SET revoked = true, last_used_at = now() WHERE id = ${session.id}`;
@@ -364,6 +370,12 @@ export class AuthService {
       `;
       await this.sql`UPDATE sessions SET reuse_detected_at = now() WHERE id = ${result.sessionId}`;
       throw new AuthError('Refresh token reuse detected — all sessions revoked', 'auth.session_reused');
+    }
+
+    if (result.kind === 'frozen') {
+      // Committed: presented session is dead so a thaw cannot reuse this refresh.
+      await this.sql`UPDATE sessions SET revoked = true WHERE id = ${result.sessionId}`;
+      throw new AuthError(`Account is ${result.status}`, 'auth.account_frozen');
     }
 
     if (result.kind === 'expired') throw new AuthError('Session expired', 'auth.session_invalid');
