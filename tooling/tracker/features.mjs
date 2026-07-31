@@ -419,7 +419,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['protocol.smart-accounts'],
     requires: ['services/svc-protocol/contracts/amm', 'services/svc-protocol/src/amm'],
-    note: 'Updated 2026-07-31 residual campaign: COMPILE unblocked + deploy-dev now deploys PoolFactory at anvil nonce 3 (PROTOCOL_AMM_FACTORY_ADDRESS compose default 0xCf7E…); createPool predict/create cross-check in chain:deploy; pool-factory-onchain.test.ts proves predict==create+code when anvil up. Still not `done`: no mint/swap liquidity e2e with real ERC-20s in CI path yet, NOTHING AUDITED, env default remains 0x0 outside compose so unconfigured stacks still refuse. Unlocks lending/router work once factory is on the target chain.',
+    note: 'Updated 2026-07-31 residual: compile + deploy-dev PoolFactory + mint/swap onchain suite (TokenFactory tokens → mint LP → swapExactIn on anvil when REQUIRE_EVM_CHAIN). Still not done: no audit, no prod factory, funding/router product. ',
   }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', {
     module: 'protocol',
