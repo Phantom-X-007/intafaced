@@ -28,6 +28,7 @@ import {
   marketMaker,
   marketMakerOrderHoldAccount,
   merchantClearing,
+  orderHoldAccount,
   positionCollateralAccount,
   userAvailable,
   userEscrow,
@@ -446,6 +447,87 @@ describe('recipes — the money paths', () => {
     await ledger.post(recipes.marketMakerOrderHoldRelease({ orderId, assetId: 'USDT', amount: amt('100') }));
     expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('1000');
     expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('USDT', orderId))).amount)).toBe('0');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('marketMakerMakerFill: user takes against MM seed (taker buy) — hold draw + pot receive', async () => {
+    // MM seeds sell base: holds 1 BTC; user buys with 100 USDT hold.
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'mm-btc' }));
+    const mmOrder = 'mm-seed-sell-1';
+    await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrder, assetId: 'BTC', amount: amt('1') }));
+    await fund(USER_A, 'USDT', '1000');
+    const takerOrder = 'user-buy-1';
+    await ledger.post(recipes.orderHold({ orderId: takerOrder, userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+
+    await ledger.post(
+      recipes.marketMakerMakerFill({
+        fillId: 'fill-mm-1',
+        takerId: USER_A,
+        makerOrderId: mmOrder,
+        takerOrderId: takerOrder,
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        qty: amt('1'),
+        quoteAmount: amt('100'),
+        takerSide: 'buy',
+        makerFeeBps: 0,
+        takerFeeBps: 10, // 0.1% of base received
+      }),
+    );
+
+    // User paid 100 USDT from hold; MM got 100 USDT into pot; MM spent 1 BTC hold;
+    // user got 1 BTC - fee. 10 bps of 1 = 0.001 BTC fee → user 0.999 BTC.
+    expect(formatAmount((await ledger.balance(orderHoldAccount(USER_A, 'USDT', takerOrder))).amount)).toBe('0');
+    expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrder))).amount)).toBe('0');
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('100');
+    expect(formatAmount((await ledger.balance(userAvailable(USER_A, 'BTC'))).amount)).toBe('0.999');
+    // idempotent
+    await ledger.post(
+      recipes.marketMakerMakerFill({
+        fillId: 'fill-mm-1',
+        takerId: USER_A,
+        makerOrderId: mmOrder,
+        takerOrderId: takerOrder,
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        qty: amt('1'),
+        quoteAmount: amt('100'),
+        takerSide: 'buy',
+        makerFeeBps: 0,
+        takerFeeBps: 10,
+      }),
+    );
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('100');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('marketMakerMakerFill: user sells into MM bid (taker sell)', async () => {
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'USDT', amount: amt('1000'), seedId: 'mm-usdt' }));
+    const mmOrder = 'mm-seed-buy-1';
+    await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrder, assetId: 'USDT', amount: amt('100') }));
+    await fund(USER_A, 'BTC', '5');
+    const takerOrder = 'user-sell-1';
+    await ledger.post(recipes.orderHold({ orderId: takerOrder, userId: USER_A, assetId: 'BTC', amount: amt('1') }));
+
+    await ledger.post(
+      recipes.marketMakerMakerFill({
+        fillId: 'fill-mm-sell',
+        takerId: USER_A,
+        makerOrderId: mmOrder,
+        takerOrderId: takerOrder,
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        qty: amt('1'),
+        quoteAmount: amt('100'),
+        takerSide: 'sell',
+        makerFeeBps: 0,
+        takerFeeBps: 10, // 0.1% of quote received = 0.1 USDT
+      }),
+    );
+
+    expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe('1');
+    expect(formatAmount((await ledger.balance(userAvailable(USER_A, 'USDT'))).amount)).toBe('99.9');
+    expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('USDT', mmOrder))).amount)).toBe('0');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 

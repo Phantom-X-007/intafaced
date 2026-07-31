@@ -310,6 +310,79 @@ export function marketMakerOrderHoldRelease(input: MarketMakerOrderHoldInput & {
   };
 }
 
+/**
+ * Fill where house market-maker is the **maker** and a user is the taker
+ * (trade.mm-bot residual — user takes against a seed quote).
+ *
+ * Same six-entry economics as `tradeFill`, but maker legs use
+ * `marketMakerOrderHoldAccount` / `marketMaker` instead of user hold/available.
+ * Does not invent fees or amounts — caller supplies engine qty/quote + bps.
+ *
+ * Wiring into svc-trade settleFill still residual (seed orders need store rows).
+ */
+export interface MarketMakerMakerFillInput {
+  fillId: string;
+  /** User taker id. */
+  takerId: string;
+  makerOrderId: string;
+  takerOrderId: string;
+  baseAsset: string;
+  quoteAsset: string;
+  qty: Amount;
+  quoteAmount: Amount;
+  takerSide: 'buy' | 'sell';
+  makerFeeBps: number;
+  takerFeeBps: number;
+}
+
+export function marketMakerMakerFill(input: MarketMakerMakerFillInput): PostRequest {
+  requirePositive('fill qty', input.qty);
+  requirePositive('fill quote amount', input.quoteAmount);
+
+  const takerBuys = input.takerSide === 'buy';
+  const takerPaysAsset = takerBuys ? input.quoteAsset : input.baseAsset;
+  const takerPaysAmount = takerBuys ? input.quoteAmount : input.qty;
+  const makerPaysAsset = takerBuys ? input.baseAsset : input.quoteAsset;
+  const makerPaysAmount = takerBuys ? input.qty : input.quoteAmount;
+
+  const takerFee = mulBps(makerPaysAmount, input.takerFeeBps);
+  const makerFee = mulBps(takerPaysAmount, input.makerFeeBps);
+  const takerReceives = sub(makerPaysAmount, takerFee);
+  const makerReceives = sub(takerPaysAmount, makerFee);
+
+  if (takerReceives < 0n || makerReceives < 0n) {
+    throw new InvalidEntryError('Fee exceeds fill value — check fee bps configuration');
+  }
+
+  const entries: EntryInput[] = [
+    // Taker paid: out of user order hold → house MM available + house fees.
+    credit(orderHoldAccount(input.takerId, takerPaysAsset, input.takerOrderId), takerPaysAmount),
+    debit(marketMaker(takerPaysAsset), makerReceives),
+    ...(makerFee > 0n ? [debit(houseFees('trade', takerPaysAsset), makerFee)] : []),
+
+    // MM paid: out of MM order hold → user available + house fees.
+    credit(marketMakerOrderHoldAccount(makerPaysAsset, input.makerOrderId), makerPaysAmount),
+    debit(userAvailable(input.takerId, makerPaysAsset), takerReceives),
+    ...(takerFee > 0n ? [debit(houseFees('trade', makerPaysAsset), takerFee)] : []),
+  ];
+
+  return {
+    idempotencyKey: `trade.fill.mm-maker:${input.fillId}`,
+    module: 'trade',
+    reason: 'trade.fill.mm_maker',
+    meta: {
+      fillId: input.fillId,
+      takerSide: input.takerSide,
+      makerFeeBps: input.makerFeeBps,
+      takerFeeBps: input.takerFeeBps,
+      makerOrderId: input.makerOrderId,
+      takerOrderId: input.takerOrderId,
+      house: 'market-maker',
+    },
+    entries,
+  };
+}
+
 // ── Futures margin (§5.2 / trade.futures) ────────────────────────────────────
 //
 // Pure recipes only — no mark price, no liquidation engine. svc-trade posts
@@ -922,6 +995,7 @@ export const recipes = {
   orderHoldRelease,
   marketMakerOrderHold,
   marketMakerOrderHoldRelease,
+  marketMakerMakerFill,
   futuresMarginLock,
   futuresMarginAdd,
   futuresMarginRelease,
