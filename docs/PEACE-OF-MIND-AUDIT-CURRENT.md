@@ -144,3 +144,12 @@ SECRETS / ADR:     still human/owner
 **M226-01:** open PR **#266** owns durable BroadcastStore — do not re-implement.  
 **Dual-book ADR:** Denon **#272** Accepted (docs) — re-check merge.  
 **Tip authority:** `git rev-parse origin/main` after merge.
+
+---
+
+## Mega finish close complete (2026-07-31 late)
+
+**PRs:** #275 recovery+archive · **#277** sql.json Tests green (required — #275 merged red).  
+**Also on main:** #266 durable BroadcastStore — M226-01 re-verify next residual pass.  
+**Verdict still:** COMPLETE-WITH-HOLDS · **not go-live**.  
+**Archive:** [`audit/2026-07-31-mega-finish/`](audit/2026-07-31-mega-finish/)
