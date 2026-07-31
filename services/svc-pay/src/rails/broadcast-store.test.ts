@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BROADCAST_PENDING,
-  MemoryBroadcastStore,
-  PostgresBroadcastStore,
-  type BroadcastSql,
-} from './broadcast-store.js';
+import { BROADCAST_PENDING, MemoryBroadcastStore, PostgresBroadcastStore, type BroadcastSql } from './broadcast-store.js';
 
 /** In-process fake that mimics INSERT ON CONFLICT / SELECT / UPDATE for the journal. */
 function fakePgSql(): BroadcastSql & { rows: Map<string, string> } {

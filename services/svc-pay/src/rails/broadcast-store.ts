@@ -101,12 +101,14 @@ export class MemoryBroadcastStore implements BroadcastStore {
   }
 }
 
-/** Minimal postgres.js surface used by the durable journal (keeps tests mockable). */
+/**
+ * Minimal postgres.js surface used by the durable journal (keeps tests mockable).
+ * Call signature is intentionally loose so real `postgres.Sql` is assignable
+ * without dragging the full generic library into the type graph.
+ */
 export type BroadcastSql = {
-  <T extends Record<string, unknown> = Record<string, unknown>>(
-    strings: TemplateStringsArray,
-    ...values: unknown[]
-  ): Promise<T[]>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (strings: TemplateStringsArray, ...values: any[]): Promise<readonly any[]>;
 };
 
 const DEFAULT_PENDING_POLL_MS = 50;

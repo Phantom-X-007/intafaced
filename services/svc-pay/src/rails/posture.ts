@@ -350,10 +350,7 @@ export function selectPublicCheckoutRail(
  *   live chain uses MemoryBroadcastStore (single-process only — tests / local).
  *   Production multi-replica MUST pass PostgresBroadcastStore from index boot.
  */
-export function defaultChainFor(
-  env: Record<string, string | undefined> = process.env,
-  broadcasts?: BroadcastStore,
-): CryptoChainPort {
+export function defaultChainFor(env: Record<string, string | undefined> = process.env, broadcasts?: BroadcastStore): CryptoChainPort {
   const live = tryLiveChainFromEnv(env, broadcasts);
   if (live) return live;
 
