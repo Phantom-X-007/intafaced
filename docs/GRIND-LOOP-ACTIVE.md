@@ -1,17 +1,18 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** **O1+O2** · backend micro-queue still **DRAINED** · money-class mega **closed this fire** (docs archive)  
-**Operator decision:** 2026-07-30 Nitro chose **O1+O2** (see `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`)  
+**Status:** **COOK RUNNING** · residual campaign armed · O1 babysit always on  
+**Operator decision:** 2026-07-31 Nitro claimed full residual board (third-dev screenshot program) — see `docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
-**Last tip:** money-class mega audited tip `#250` · do not re-ship **#110–#250** without regression
+**Last tip:** re-check · high water through **#258** · do not re-ship **#110–#258** without regression
 
 ```
-STATUS 2026-07-31T03:25Z
-tip: re-check origin/main (expect post-#255)
-open PRs: re-check gh
-backend audit fire: #251–#255 landed — money-class + denon-wave + B-01 + M226-03 + funds rehydrate fleet
-next: O1 babysit · more backend residuals · NO frontend
-do not invent BroadcastStore / buyback product
+STATUS 2026-07-31T residual-campaign
+tip: re-check origin/main (expect ≥ c40fd59 #258)
+open PRs: #259 identity freeze-refresh test — babysit Class N
+campaign: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md
+LIVE-LANES: residual-coord LIVE; ≤3 code lanes; frontend Wave A = sibling
+next: Wave 0 (merge plan PR + #259) → Wave 1 R4 smart-accounts + R2 ws honesty + tracker
+do not: fake done; collide stream-a-ui; force-push Denon spine; skip Class M adversarial
 ```
 
 ---
