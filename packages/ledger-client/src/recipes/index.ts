@@ -12,6 +12,7 @@ import {
   positionCollateralAccount,
   insuranceFund,
   railBoundary,
+  marketMaker,
   rewardsEngine,
   userAvailable,
   tradeEscrowAccount,
@@ -71,6 +72,31 @@ export interface WithdrawInput {
   amount: Amount;
   rail: string;
   withdrawalId: string;
+}
+
+/**
+ * Seed inventory into the house market-maker pot (trade.mm-bot residual).
+ *
+ * Value enters from a named rail boundary (ops/treasury seed), not invented.
+ * Seeder jobs spend this pot via orderHold under the MM house identity.
+ */
+export function marketMakerSeedFund(input: {
+  assetId: string;
+  amount: Amount;
+  /** Unique seed id for idempotency. */
+  seedId: string;
+  /** Rail label for the boundary pot, e.g. 'mm-seed' or 'treasury'. */
+  rail?: string;
+}): PostRequest {
+  requirePositive('market-maker seed amount', input.amount);
+  const rail = input.rail ?? 'mm-seed';
+  return {
+    idempotencyKey: `mm.seed.fund:${input.seedId}:${input.assetId}`,
+    module: 'trade',
+    reason: 'mm.seed.funded',
+    meta: { seedId: input.seedId, rail },
+    entries: [credit(railBoundary(rail, input.assetId), input.amount), debit(marketMaker(input.assetId), input.amount)],
+  };
 }
 
 /** Step 1: funds leave `available` and sit in `hold` while the rail works. */
@@ -847,6 +873,7 @@ export * from './loans.js';
 
 export const recipes = {
   deposit,
+  marketMakerSeedFund,
   withdrawHold,
   withdrawSettle,
   withdrawReverse,

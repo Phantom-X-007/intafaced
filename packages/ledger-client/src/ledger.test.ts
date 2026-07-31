@@ -25,6 +25,7 @@ import { assertBalanced, assertPairedLocks, assertPurposedHolds, assertValidPost
 import {
   houseFees,
   insuranceFund,
+  marketMaker,
   merchantClearing,
   positionCollateralAccount,
   userAvailable,
@@ -413,6 +414,28 @@ describe('reconciliation — snapshots must equal replay', () => {
 });
 
 describe('recipes — the money paths', () => {
+  it('marketMakerSeedFund: rail boundary → house market-maker pot (mm-bot seed)', async () => {
+    await ledger.post(
+      recipes.marketMakerSeedFund({
+        assetId: 'USDT',
+        amount: amt('10000'),
+        seedId: 'seed-1',
+      }),
+    );
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('10000');
+    expect(formatAmount((await ledger.balance(railBoundary('mm-seed', 'USDT'))).amount)).toBe('-10000');
+    // idempotent
+    await ledger.post(
+      recipes.marketMakerSeedFund({
+        assetId: 'USDT',
+        amount: amt('10000'),
+        seedId: 'seed-1',
+      }),
+    );
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('10000');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
   it('futures margin: lock, add, release — purpose-keyed pots do not share', async () => {
     await fund(USER_A, 'USDT', '1000');
 
