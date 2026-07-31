@@ -127,29 +127,29 @@ export class PostgresBroadcastStore implements BroadcastStore {
   ) {}
 
   async get(idempotencyKey: string): Promise<string | null> {
-    const rows = await this.sql<{ tx_hash: string }>`
+    const rows = (await this.sql`
       SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
-    `;
+    `) as ReadonlyArray<{ tx_hash: string }>;
     const v = rows[0]?.tx_hash;
     if (!v || v === BROADCAST_PENDING) return null;
     return v;
   }
 
   async claim(idempotencyKey: string): Promise<ClaimResult> {
-    const inserted = await this.sql<{ idempotency_key: string }>`
+    const inserted = (await this.sql`
       INSERT INTO pay.crypto_broadcasts (idempotency_key, tx_hash)
       VALUES (${idempotencyKey}, ${BROADCAST_PENDING})
       ON CONFLICT (idempotency_key) DO NOTHING
       RETURNING idempotency_key
-    `;
+    `) as ReadonlyArray<{ idempotency_key: string }>;
     if (inserted.length > 0) return { kind: 'mine' };
 
     const pollMs = this.opts.pollMs ?? DEFAULT_PENDING_POLL_MS;
     const maxWaits = this.opts.maxWaits ?? DEFAULT_PENDING_MAX_WAITS;
     for (let i = 0; i < maxWaits; i++) {
-      const rows = await this.sql<{ tx_hash: string }>`
+      const rows = (await this.sql`
         SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
-      `;
+      `) as ReadonlyArray<{ tx_hash: string }>;
       const v = rows[0]?.tx_hash;
       if (v && v !== BROADCAST_PENDING) return { kind: 'done', txHash: v };
       await new Promise((r) => setTimeout(r, pollMs));
@@ -162,18 +162,18 @@ export class PostgresBroadcastStore implements BroadcastStore {
       throw new Error('txHash must not be the pending sentinel');
     }
     // Only replace pending (or same hash). Never overwrite a different settled hash.
-    const updated = await this.sql<{ tx_hash: string }>`
+    const updated = (await this.sql`
       UPDATE pay.crypto_broadcasts
       SET tx_hash = ${txHash}, updated_at = now()
       WHERE idempotency_key = ${idempotencyKey}
         AND (tx_hash = ${BROADCAST_PENDING} OR tx_hash = ${txHash})
       RETURNING tx_hash
-    `;
+    `) as ReadonlyArray<{ tx_hash: string }>;
     if (updated[0]?.tx_hash) return updated[0].tx_hash;
 
-    const existing = await this.sql<{ tx_hash: string }>`
+    const existing = (await this.sql`
       SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
-    `;
+    `) as ReadonlyArray<{ tx_hash: string }>;
     const v = existing[0]?.tx_hash;
     if (v && v !== BROADCAST_PENDING) return v;
     throw new Error(`broadcast put for ${idempotencyKey}: no claim row (call claim first)`);
