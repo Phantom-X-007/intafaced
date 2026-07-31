@@ -163,8 +163,12 @@ export type TradeErrorCode =
   | 'trade.convert_bad_depth'
   | 'trade.convert_bad_spread'
   | 'trade.convert_spread_too_high'
-  /** subAccountId supplied but ownership/revoked gate is not wired yet — refuse rather than store an unvalidated id */
-  | 'trade.sub_account_ungated';
+  /** Identity S2S ownership consult failed — refuse rather than store an unvalidated id */
+  | 'trade.sub_account_unavailable'
+  /** Missing or foreign sub-account (existence not leaked) */
+  | 'trade.sub_account_denied'
+  /** Caller owns the id but it is soft-revoked */
+  | 'trade.sub_account_revoked';
 
 export class TradeError extends Error {
   constructor(

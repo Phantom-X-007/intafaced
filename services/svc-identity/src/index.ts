@@ -93,6 +93,22 @@ app.get<{ Params: { userId: string } }>('/internal/rank/:userId/perks', async (r
   return rank.perks(req.params.userId);
 });
 
+/**
+ * Service-to-service sub-account ownership (svc-trade placeOrder gate).
+ * Fail-closed at the caller: missing credentials → 401; unknown id → 404.
+ * Body is the published `subAccountOwnershipSchema` contract.
+ */
+app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccountId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
+  }
+  const row = await auth.getSubAccountOwnership(req.params.subAccountId);
+  if (!row) {
+    return reply.code(404).send({ error: 'sub-account not found', code: 'identity.sub_account_not_found' });
+  }
+  return row;
+});
+
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {

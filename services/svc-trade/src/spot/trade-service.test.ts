@@ -19,7 +19,7 @@ import {
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
 import { orderIdFor } from './ids.js';
-import { StubMatching, StubPerks, UnreachableMatching, principalFor } from './testing.js';
+import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principalFor } from './testing.js';
 
 /**
  * svc-trade money paths (§5.2).
@@ -671,6 +671,137 @@ if (!available) {
 
       expect(await sql`SELECT id FROM trade.orders`).toHaveLength(0);
       expect(await held(ALICE, 'USDT')).toBe('0');
+    });
+
+    /**
+     * Sub-account ownership S2S gate (PEACE residual · mega-audit R5 follow-on).
+     *
+     * Accept-and-store of any UUID was the bug; fail-closed ungated was the
+     * interim. These cases prove identity consult runs before hold, and only an
+     * active parent-owned book is labelled onto the order.
+     */
+    describe('sub-account ownership gate', () => {
+      const SUB_ALICE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const SUB_BOB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+      function tradeWith(subAccounts: StubSubAccounts) {
+        return new TradeService(sql, ledger, matching, perks, bus, {
+          spotEnabled: true,
+          marketSlippageCapBps: 200,
+          subAccounts,
+        });
+      }
+
+      it('labels an order when the sub-account is owned and active', async () => {
+        const subAccounts = new StubSubAccounts().seed({
+          id: SUB_ALICE,
+          parentUserId: ALICE,
+          revoked: false,
+        });
+        const gated = tradeWith(subAccounts);
+        await fund(ALICE, 'USDT', '1000');
+
+        const order = await gated.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('2'),
+          price: amt('100'),
+          clientOrderId: 'alice-sub-1',
+          subAccountId: SUB_ALICE,
+        });
+
+        expect(order.subAccountId).toBe(SUB_ALICE);
+        expect(subAccounts.lookedUp).toEqual([SUB_ALICE]);
+        expect(await held(ALICE, 'USDT')).toBe('200');
+        expect(matching.submitted).toHaveLength(1);
+      });
+
+      it('refuses a foreign sub-account before any hold', async () => {
+        const subAccounts = new StubSubAccounts().seed({
+          id: SUB_BOB,
+          parentUserId: BOB,
+          revoked: false,
+        });
+        const gated = tradeWith(subAccounts);
+        await fund(ALICE, 'USDT', '1000');
+
+        await expect(
+          gated.placeOrder(principalFor(ALICE), {
+            marketId: btcusdt.id,
+            side: 'buy',
+            type: 'limit',
+            qty: amt('2'),
+            price: amt('100'),
+            subAccountId: SUB_BOB,
+          }),
+        ).rejects.toMatchObject({ code: 'trade.sub_account_denied' });
+
+        expect(await held(ALICE, 'USDT')).toBe('0');
+        expect(await sql`SELECT id FROM trade.orders`).toHaveLength(0);
+        expect(matching.submitted).toHaveLength(0);
+      });
+
+      it('refuses a revoked sub-account before any hold', async () => {
+        const subAccounts = new StubSubAccounts().seed({
+          id: SUB_ALICE,
+          parentUserId: ALICE,
+          revoked: true,
+        });
+        const gated = tradeWith(subAccounts);
+        await fund(ALICE, 'USDT', '1000');
+
+        await expect(
+          gated.placeOrder(principalFor(ALICE), {
+            marketId: btcusdt.id,
+            side: 'buy',
+            type: 'limit',
+            qty: amt('2'),
+            price: amt('100'),
+            subAccountId: SUB_ALICE,
+          }),
+        ).rejects.toMatchObject({ code: 'trade.sub_account_revoked' });
+
+        expect(await held(ALICE, 'USDT')).toBe('0');
+        expect(matching.submitted).toHaveLength(0);
+      });
+
+      it('fail-closes when identity is unreachable', async () => {
+        const subAccounts = new StubSubAccounts();
+        subAccounts.unavailable = true;
+        const gated = tradeWith(subAccounts);
+        await fund(ALICE, 'USDT', '1000');
+
+        await expect(
+          gated.placeOrder(principalFor(ALICE), {
+            marketId: btcusdt.id,
+            side: 'buy',
+            type: 'limit',
+            qty: amt('2'),
+            price: amt('100'),
+            subAccountId: SUB_ALICE,
+          }),
+        ).rejects.toMatchObject({ code: 'trade.sub_account_unavailable' });
+
+        expect(await held(ALICE, 'USDT')).toBe('0');
+        expect(matching.submitted).toHaveLength(0);
+      });
+
+      it('default (no client) still denies any supplied subAccountId', async () => {
+        // beforeEach TradeService uses NoSubAccounts — every id is unknown.
+        await fund(ALICE, 'USDT', '1000');
+        await expect(
+          trade.placeOrder(principalFor(ALICE), {
+            marketId: btcusdt.id,
+            side: 'buy',
+            type: 'limit',
+            qty: amt('2'),
+            price: amt('100'),
+            subAccountId: SUB_ALICE,
+          }),
+        ).rejects.toMatchObject({ code: 'trade.sub_account_denied' });
+        expect(await held(ALICE, 'USDT')).toBe('0');
+      });
     });
 
     it('refuses on a halted market, and holds nothing', async () => {

@@ -570,6 +570,26 @@ if (!available) {
       const still = await auth.listSubAccounts(owner.userId);
       expect(still[0]).toMatchObject({ id, revoked: false });
     });
+
+    it('S2S ownership snapshot returns parent + revoked, null when missing', async () => {
+      const owner = await register();
+      const { id } = await auth.createSubAccount(owner.userId, 's2s-book');
+
+      await expect(auth.getSubAccountOwnership(id)).resolves.toEqual({
+        id,
+        parentUserId: owner.userId,
+        revoked: false,
+      });
+
+      await auth.revokeSubAccount(owner.userId, id);
+      await expect(auth.getSubAccountOwnership(id)).resolves.toEqual({
+        id,
+        parentUserId: owner.userId,
+        revoked: true,
+      });
+
+      await expect(auth.getSubAccountOwnership('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
+    });
   });
 
   describe('KYC', () => {

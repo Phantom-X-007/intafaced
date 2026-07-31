@@ -63,7 +63,7 @@ Items 1–4 below shipped during the AFK cook (#156 OTEL, tracker honesty waves,
 
 - Human: GitHub Actions billing / zero-step CI failures
 - Product: candle aggregation, futures positions, real pay rails, chain factory deploy
-- Residual agent: identity S2S ownership gate for sub-account orders (fail-closed until then)
+- ~~Residual agent: identity S2S ownership gate for sub-account orders~~ → wired (identity internal + trade placeOrder gate)
 
 ## Grind continuation (same AFK)
 

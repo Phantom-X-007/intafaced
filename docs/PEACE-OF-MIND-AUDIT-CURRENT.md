@@ -61,19 +61,19 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 ## Still open (honest residuals)
 
-| Item                                                  | Verdict                                        | Who                           |
-| ----------------------------------------------------- | ---------------------------------------------- | ----------------------------- |
-| GitHub Actions zero-step failures (billing)           | **CANNOT VERIFY green** — e.g. run 30518974758 | **Human**                     |
-| Money e2e / PG suites local                           | **SKIPPED** — no Docker/Postgres               | Human install or CI when paid |
-| OHLCV / positions                                     | **HOLDS** honest empty                         | Product (candles / futures)   |
-| Factory / chain                                       | **HOLDS** honesty; not deployed                | **Denon**                     |
-| Pay rails sandbox                                     | residual double-submit until real rails        | Money agent when rails real   |
-| Market sell CCXT `cost` still `"0"` without fill load | residual after R6                              | Agent later                   |
-| Sub-account ownership S2S                             | fail-closed now; wire identity later           | Agent                         |
-| Stream A PROOF / Chromium                             | **UNVERIFIED**                                 | Nitro desktop                 |
-| Terminal equity **UI wire** (API exists)              | honesty OK; live panel still product           | Stream A / web later          |
-| Licences · wallet secrets · counsel list · kill drill | human/ops/law                                  | Denon + you                   |
-| Dual-book policy discipline                           | habit                                          | All                           |
+| Item                                                  | Verdict                                                                                                                        | Who                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| GitHub Actions zero-step failures (billing)           | **CANNOT VERIFY green** — e.g. run 30518974758                                                                                 | **Human**                     |
+| Money e2e / PG suites local                           | **SKIPPED** — no Docker/Postgres                                                                                               | Human install or CI when paid |
+| OHLCV / positions                                     | **HOLDS** honest empty                                                                                                         | Product (candles / futures)   |
+| Factory / chain                                       | **HOLDS** honesty; not deployed                                                                                                | **Denon**                     |
+| Pay rails sandbox                                     | residual double-submit until real rails                                                                                        | Money agent when rails real   |
+| Market sell CCXT `cost` still `"0"` without fill load | residual after R6                                                                                                              | Agent later                   |
+| Sub-account ownership S2S                             | **CLOSED** — identity `/internal/sub-accounts/:id` + trade placeOrder gate (owned + not revoked; fail-closed on identity down) | shipped this wave             |
+| Stream A PROOF / Chromium                             | **UNVERIFIED**                                                                                                                 | Nitro desktop                 |
+| Terminal equity **UI wire** (API exists)              | honesty OK; live panel still product                                                                                           | Stream A / web later          |
+| Licences · wallet secrets · counsel list · kill drill | human/ops/law                                                                                                                  | Denon + you                   |
+| Dual-book policy discipline                           | habit                                                                                                                          | All                           |
 
 ---
 
