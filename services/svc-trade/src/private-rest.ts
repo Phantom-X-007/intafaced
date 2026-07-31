@@ -3,7 +3,7 @@ import { requireScope, type Principal } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext, type Context, type EdgeRequest } from '@intafaced/contracts';
 import { createOrderRequestSchema, type CreateOrderRequest } from '@intafaced/exchange-contract';
-import { formatAmount, mul, parseAmount, type AccountKind, type Balance } from '@intafaced/ledger-client';
+import { ZERO, add, formatAmount, mul, parseAmount, type AccountKind, type Amount, type Balance } from '@intafaced/ledger-client';
 import {
   UNAUTHENTICATED,
   badRequest,
@@ -155,21 +155,42 @@ export function toCcxtOrderStatus(status: OrderStatus): 'open' | 'closed' | 'can
 }
 
 /**
+ * Quote notional for a CCXT order wire.
+ *
+ * Priority:
+ *   1. Σ fill.quoteAmount when fills are loaded (true cost — audit ideal).
+ *   2. limit price × filled, or market-buy protectionPrice × filled (R6).
+ *   3. unfilled → `"0"` (nothing moved).
+ *   4. filled but no basis and no fills → `null` (honest unknown).
+ *
+ * Market sells have no limit price and no protectionPrice, so without a fill
+ * load the residual used to invent confident `"0"`. That lies about quote
+ * moved — never do it (PEACE residual after R6).
+ */
+export function presentCcxtOrderCost(order: OrderRecord, fills?: readonly Pick<FillRecord, 'quoteAmount'>[]): string | null {
+  if (order.filledQty === 0n) return '0';
+  if (fills !== undefined) {
+    let total: Amount = ZERO;
+    for (const f of fills) total = add(total, f.quoteAmount);
+    return formatAmount(total);
+  }
+  const costBasis = order.price ?? order.protectionPrice;
+  if (costBasis === null) return null;
+  return formatAmount(mul(costBasis, order.filledQty));
+}
+
+/**
  * CCXT `Order` shape (decimal strings). Fees/trades omitted on list/get unless
  * the fill set is loaded elsewhere — bots re-fetch fills via account/trades.
+ * Pass `fills` when loaded so `cost` is Σ quote (true notional), not null.
  */
-export function presentCcxtOrder(order: OrderRecord, symbol: string) {
+export function presentCcxtOrder(order: OrderRecord, symbol: string, opts?: { fills?: readonly Pick<FillRecord, 'quoteAmount'>[] }) {
   const ts = order.createdAt.getTime();
   const amount = formatAmount(order.qty);
   const filled = formatAmount(order.filledQty);
   const remaining = formatAmount(order.qty - order.filledQty);
-  // Limit: use limit price. Market: limit price is null — use protectionPrice
-  // (the funding/engine ceiling) so filled market cost is never a silent "0"
-  // that pretends no quote moved (mega-audit R6). Still "0" when unfilled or
-  // when neither price is known.
   const price = order.price === null ? null : formatAmount(order.price);
-  const costBasis = order.price ?? order.protectionPrice;
-  const cost = order.filledQty === 0n || costBasis === null ? '0' : formatAmount(mul(costBasis, order.filledQty));
+  const cost = presentCcxtOrderCost(order, opts?.fills);
 
   return {
     id: order.id,
