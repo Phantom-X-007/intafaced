@@ -105,8 +105,10 @@ export class CryptoChainWatcher {
     });
 
     if (!res.ok && res.status !== 202) {
+      // Do not mark emitted — next tick re-drains and retries (M226-03).
       this.log('chain watcher delivery rejected', { status: res.status, address, txHash: transfer.txHash });
     } else {
+      this.options.chain.markFinalizedEmitted(address);
       this.log('chain watcher delivered', { address, txHash: transfer.txHash, status: res.status });
     }
   }

@@ -252,19 +252,25 @@ export class EvmLiveChain implements CryptoChainPort {
   }
 
   /**
-   * Transfers that have reached `minConfirmations` since the last drain.
-   * The watcher turns each into a signed webhook exactly once.
+   * Transfers that have reached `minConfirmations` and have not yet been
+   * successfully delivered by the watcher. **Does not mark** — call
+   * `markFinalizedEmitted` only after webhook 2xx/202 so a failed POST retries.
    */
   drainFinalized(): FinalizedInbound[] {
     const out: FinalizedInbound[] = [];
     for (const [address, observed] of this.observed) {
       if (observed.confirmations < this.minConfirmations) continue;
       if (this.finalizedEmitted.has(address)) continue;
-      this.finalizedEmitted.add(address);
       const { blockNumber: _b, ...transfer } = observed;
       out.push({ address: getAddress(address), transfer });
     }
     return out;
+  }
+
+  /** Record successful webhook delivery so the address is not re-drained. */
+  markFinalizedEmitted(address: string): void {
+    // Keys in `observed` / `finalizedEmitted` are lowercased (see `record`).
+    this.finalizedEmitted.add(address.toLowerCase());
   }
 
   /** Test helper — force the scan cursor (e.g. after anvil restart). */
