@@ -2,12 +2,12 @@
 
 ## L0 machine truth (this tip, local)
 
-| Gate | Command | Result |
-| ---- | ------- | ------ |
-| Brand | `node tooling/ci/brand-scan.mjs` | **PASS** — 721 files, 0 forbidden names |
-| Custody | `node tooling/ci/custody-scan.mjs` | **PASS** — 95 files / 3 Protocol Plane services |
-| Vendor shell | `node tooling/ci/vendor-shell-scan.mjs` | **PASS** — 1105 vendor files, 9 hazard patterns |
-| Tracker | `node tooling/scripts/tracker.mjs --check` | **PASS** — docs/TRACKER.md + README.md up to date |
+| Gate         | Command                                    | Result                                            |
+| ------------ | ------------------------------------------ | ------------------------------------------------- |
+| Brand        | `node tooling/ci/brand-scan.mjs`           | **PASS** — 721 files, 0 forbidden names           |
+| Custody      | `node tooling/ci/custody-scan.mjs`         | **PASS** — 95 files / 3 Protocol Plane services   |
+| Vendor shell | `node tooling/ci/vendor-shell-scan.mjs`    | **PASS** — 1105 vendor files, 9 hazard patterns   |
+| Tracker      | `node tooling/scripts/tracker.mjs --check` | **PASS** — docs/TRACKER.md + README.md up to date |
 
 **Not run this fire (delta-scoped WAVE-AUDIT, not full verify):** full `pnpm verify` (build/typecheck/test/format). Product CI on post-#238 tip `46d688e` was **Actions SUCCESS** on main.
 
@@ -20,10 +20,10 @@
 
 ### L2 auth / ownership
 
-- **#229 cascade HOLDS pattern:**  
-  - set on `blueprintCreated` by `userId`  
-  - clear on `blueprintDeleted` **only if** `profiles.blueprint_id` still equals deleted id (match-guard)  
-  - no cross-service SQL from svc-blueprint  
+- **#229 cascade HOLDS pattern:**
+  - set on `blueprintCreated` by `userId`
+  - clear on `blueprintDeleted` **only if** `profiles.blueprint_id` still equals deleted id (match-guard)
+  - no cross-service SQL from svc-blueprint
   - durable JetStream + idempotent consumers (per PR claim; unit test present)
 - Tracker marks `blueprint.ownership` **done** with identity requirement — consistent with code path.
 
@@ -64,14 +64,14 @@
 
 ## False-done check (this wave)
 
-| Claim risk | Check |
-| ---------- | ----- |
-| Cascade "done" | Code + match-guard + test files present on tip — **not** docs-only |
+| Claim risk            | Check                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| Cascade "done"        | Code + match-guard + test files present on tip — **not** docs-only                          |
 | OTC/C2C empty honesty | Fake merchant / 7.00 / 21212 removed per PR paths — UI residual closed for those inventions |
-| Vendor wallet safe | Dead mutators deleted; scan would fail if reintroduced |
-| Dual-book "solved" | **Must not claim** — banners only |
-| Live pay ready | **Must not claim** — #226 open Class M |
-| Go-live | **Must not claim** |
+| Vendor wallet safe    | Dead mutators deleted; scan would fail if reintroduced                                      |
+| Dual-book "solved"    | **Must not claim** — banners only                                                           |
+| Live pay ready        | **Must not claim** — #226 open Class M                                                      |
+| Go-live               | **Must not claim**                                                                          |
 
 ## Adversarial posture (maker-checker)
 

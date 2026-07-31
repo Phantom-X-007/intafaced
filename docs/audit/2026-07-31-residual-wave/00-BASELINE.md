@@ -6,22 +6,22 @@
 
 ## Tip freeze
 
-| Field | Value |
-| ----- | ----- |
-| **Tip SHA (this audit)** | `cd277dcc3fc2f71d3694b2eccc12b20d0fdb3f00` |
-| **Tip one-liner** | `docs: residual ownership high water through #238 (#239)` |
+| Field                        | Value                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| **Tip SHA (this audit)**     | `cd277dcc3fc2f71d3694b2eccc12b20d0fdb3f00`                                       |
+| **Tip one-liner**            | `docs: residual ownership high water through #238 (#239)`                        |
 | **Since (prior high water)** | `f42d41cc2f5440109bba5abe8e536c34bb6da179` · `#224` docs high water through #223 |
-| **Commits in delta** | 11 (`f42d41c..cd277dc`) |
-| **Post-product CI tip** | `46d688e` (#238 Activity) — Actions **SUCCESS** run on main |
-| **Tip after docs #239** | `cd277dc` — docs-only; no product delta vs #238 |
+| **Commits in delta**         | 11 (`f42d41c..cd277dc`)                                                          |
+| **Post-product CI tip**      | `46d688e` (#238 Activity) — Actions **SUCCESS** run on main                      |
+| **Tip after docs #239**      | `cd277dc` — docs-only; no product delta vs #238                                  |
 
 ## Open PRs at audit time (pre-merge, babysit only)
 
-| PR | Title | Class | CI (audit time) | Nitro merge? |
-| -- | ----- | ----- | --------------- | ------------ |
-| **#226** | feat(pay): live EVM crypto rail for crypto-native | **M** money | green (Doctrine/Tests/Build/DoD) | **NO** — Denon money self-audit then author/Denon merge |
-| **#227** | feat(ws): private positions stream completes ws.gateway | **P** spine | green | Prefer Denon; babysit only |
-| **#228** | feat: AMM compile unblock + terminal charts/equity + owner ops checklist | **P+N** mixed | green | Prefer Denon merge / split; no Nitro auto-merge |
+| PR       | Title                                                                    | Class         | CI (audit time)                  | Nitro merge?                                            |
+| -------- | ------------------------------------------------------------------------ | ------------- | -------------------------------- | ------------------------------------------------------- |
+| **#226** | feat(pay): live EVM crypto rail for crypto-native                        | **M** money   | green (Doctrine/Tests/Build/DoD) | **NO** — Denon money self-audit then author/Denon merge |
+| **#227** | feat(ws): private positions stream completes ws.gateway                  | **P** spine   | green                            | Prefer Denon; babysit only                              |
+| **#228** | feat: AMM compile unblock + terminal charts/equity + owner ops checklist | **P+N** mixed | green                            | Prefer Denon merge / split; no Nitro auto-merge         |
 
 ## Prior partial
 
