@@ -3,15 +3,17 @@
 **Status:** **O1+O2 OVERNIGHT** · backend micro-queue still **DRAINED** (do not invent Denon product) · **O1 babysit** + **O2 Stream A / hygiene** only  
 **Operator decision:** 2026-07-30 Nitro chose **O1+O2** (see `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`)  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
-**Last tip:** high water through **#238** (Activity honesty) + **#236** OTC/C2C + **#229–#235** residual wave · do not re-ship **#110–#238**
+**Last tip:** high water through **#238** (Activity honesty) + **#239** residual ownership · WAVE-AUDIT residual archive · do not re-ship **#110–#238**
 
 ```
-STATUS 2026-07-31T00:20Z
-tip: re-check origin/main (post #236–#238 residual ownership)
-open PRs: #226 Class M CI-green NO Nitro merge · #227/#228 third-party (rebase/conflict may remain)
-merged this residual session: #229 cascade · #230 tracker · #231 N2 · #232 N3 · #233 depth · #234 vendor-shell · #235 UC · #236 OTC/C2C · #237 high-water · #238 Activity
+STATUS 2026-07-31T00:42Z
+tip: cd277dc post #239 (re-check origin/main)
+open PRs: #226 Class M CI-green NO Nitro merge · #227/#228 third-party (prefer Denon)
+merged residual wave: #229–#238 product + #239 high water
+WAVE-AUDIT: docs/audit/2026-07-31-residual-wave/ → PASS-WITH-RESIDUALS
 money holds: #226 Class M — Denon money self-audit then author/Denon merge
-next: O1 babysit third-party; Stream A N5 leftovers; WAVE-AUDIT archive; no Denon invent
+dual-book ADR + secrets: still human/owner
+next: O1 babysit #226–#228; Stream A N5 leftovers optional; no Denon invent; orchestrator merges audit PR (Class N)
 ```
 
 ---
@@ -22,7 +24,7 @@ next: O1 babysit third-party; Stream A N5 leftovers; WAVE-AUDIT archive; no Deno
 2. Read `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md` + `docs/GRIND-LOOP-WHAT-IT-DOES-AND-PROMPT-FIX-2026-07-30.md`.
 3. `git fetch origin main && git log --oneline origin/main -25`
 4. `gh pr list --state open` and `gh pr list --state merged --limit 20`
-5. **Never re-ship MERGED** (#110–#238 high water).
+5. **Never re-ship MERGED** (#110–#238 high water; WAVE-AUDIT residual archive is docs Class N only).
 6. **Worktree only.** Never edit the main checkout. Never push main.
 7. Light gates every product PR; wave audit every 3–4 product ships.
 8. **Update this file** before you stop (queue + high water + STATUS block).
