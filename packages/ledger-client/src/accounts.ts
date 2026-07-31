@@ -162,6 +162,17 @@ export function marketMaker(assetId: string): AccountRef {
   return { ownerType: 'house', ownerId: 'market-maker', assetId, kind: 'available' };
 }
 
+/** House hold FOR ONE PURPOSE (mm-bot order reservations). */
+export function houseHold(ownerId: string, assetId: string, purpose: string): AccountRef {
+  if (!purpose) throw new Error('houseHold requires a purpose — e.g. `order:<id>`');
+  return { ownerType: 'house', ownerId, assetId, kind: 'hold', purpose };
+}
+
+/** Market-maker reservation for one seed/open order. */
+export function marketMakerOrderHoldAccount(assetId: string, orderId: string): AccountRef {
+  return houseHold('market-maker', assetId, `order:${orderId}`);
+}
+
 /** A module's own working account (e.g. p2p dispute pool). */
 export function moduleAccount(module: string, purpose: string, assetId: string): AccountRef {
   return { ownerType: 'module', ownerId: `${module}:${purpose}`, assetId, kind: 'available' };

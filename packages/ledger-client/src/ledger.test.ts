@@ -26,6 +26,7 @@ import {
   houseFees,
   insuranceFund,
   marketMaker,
+  marketMakerOrderHoldAccount,
   merchantClearing,
   positionCollateralAccount,
   userAvailable,
@@ -433,6 +434,18 @@ describe('recipes — the money paths', () => {
       }),
     );
     expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('10000');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('marketMakerOrderHold / release: inventory reserved per seed order', async () => {
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'USDT', amount: amt('1000'), seedId: 'seed-hold' }));
+    const orderId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await ledger.post(recipes.marketMakerOrderHold({ orderId, assetId: 'USDT', amount: amt('100') }));
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('900');
+    expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('USDT', orderId))).amount)).toBe('100');
+    await ledger.post(recipes.marketMakerOrderHoldRelease({ orderId, assetId: 'USDT', amount: amt('100') }));
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('1000');
+    expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('USDT', orderId))).amount)).toBe('0');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 

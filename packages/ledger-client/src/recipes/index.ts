@@ -13,6 +13,7 @@ import {
   insuranceFund,
   railBoundary,
   marketMaker,
+  marketMakerOrderHoldAccount,
   rewardsEngine,
   userAvailable,
   tradeEscrowAccount,
@@ -266,6 +267,45 @@ export function orderHoldRelease(input: OrderHoldInput & { sequence?: number }):
     entries: [
       credit(orderHoldAccount(input.userId, input.assetId, input.orderId), input.amount),
       debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export interface MarketMakerOrderHoldInput {
+  orderId: string;
+  assetId: string;
+  amount: Amount;
+}
+
+/**
+ * Reserve house market-maker inventory for one seed/open order (trade.mm-bot).
+ * Draws from marketMaker available — fund via marketMakerSeedFund first.
+ */
+export function marketMakerOrderHold(input: MarketMakerOrderHoldInput): PostRequest {
+  requirePositive('mm order hold amount', input.amount);
+  return {
+    idempotencyKey: `order.hold.mm:${input.orderId}`,
+    module: 'trade',
+    reason: 'order.hold.mm',
+    meta: { orderId: input.orderId, house: 'market-maker' },
+    entries: [
+      credit(marketMaker(input.assetId), input.amount),
+      debit(marketMakerOrderHoldAccount(input.assetId, input.orderId), input.amount),
+    ],
+  };
+}
+
+/** Release unfilled MM seed order hold back to house market-maker available. */
+export function marketMakerOrderHoldRelease(input: MarketMakerOrderHoldInput & { sequence?: number }): PostRequest {
+  requirePositive('mm order release amount', input.amount);
+  return {
+    idempotencyKey: `order.release.mm:${input.orderId}:${input.sequence ?? 0}`,
+    module: 'trade',
+    reason: 'order.hold.mm.released',
+    meta: { orderId: input.orderId, house: 'market-maker' },
+    entries: [
+      credit(marketMakerOrderHoldAccount(input.assetId, input.orderId), input.amount),
+      debit(marketMaker(input.assetId), input.amount),
     ],
   };
 }
@@ -880,6 +920,8 @@ export const recipes = {
   tradeFill,
   orderHold,
   orderHoldRelease,
+  marketMakerOrderHold,
+  marketMakerOrderHoldRelease,
   futuresMarginLock,
   futuresMarginAdd,
   futuresMarginRelease,
