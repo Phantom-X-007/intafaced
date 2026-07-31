@@ -27,3 +27,6 @@ A1 decisions + A2/A3 spine mountains · `feat/multi-asset-instruments` · money 
 
 - **2026-07-30 night — live re-orient:** main `2e0bb87` (#220), CI green, zero open PRs at start of fire. Denon messages that said "token-factory still on branch" are **stale** — #217/#218/#221 on main. O2 shipping shell honesty + hygiene wave audit.
 - **2026-07-30 evening — O1+O2 overnight armed** via #219.
+
+- **2026-07-31 residual ownership session:** merged Class N #229–#236/#238; babysat #226 Class M (CI green, no Nitro merge); third-party #227/#228 left for author rebase. Free: Stream A N5 leftovers · WAVE-AUDIT archive · tracker honesty re-pass.
+
