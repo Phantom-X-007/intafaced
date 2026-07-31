@@ -287,7 +287,7 @@ export const FEATURES = [
     status: 'ready',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual: research + planSeedQuotes + seedMarket + ops job host default OFF (TRADE_MM_SEED_*, empty books only, env mids). Still missing: house tradeFill on MM fills, cancel/reseed lifecycle, live mid oracle. Not done.',
+    note: 'Updated 2026-07-31 residual: seedMarket + job OFF + marketMakerMakerFill recipe (user takes vs MM maker). Still missing: settleFill wire + seed order rows, cancel/reseed lifecycle, live mid oracle. Not done.',
   }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
