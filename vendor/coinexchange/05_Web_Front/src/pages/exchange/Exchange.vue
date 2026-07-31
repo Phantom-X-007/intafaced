@@ -973,6 +973,25 @@ export default {
         this.trend = next > this.lastTick ? 1 : -1;
       }
       this.lastTick = next;
+    },
+    /* Wave B5 — cheap desk memory (local only; never money). */
+    bookMode() {
+      this.saveDeskPrefs();
+    },
+    bookGroup() {
+      this.saveDeskPrefs();
+    },
+    interval() {
+      this.saveDeskPrefs();
+    },
+    mainTab() {
+      this.saveDeskPrefs();
+    },
+    railTab() {
+      this.saveDeskPrefs();
+    },
+    baseFilter() {
+      this.saveDeskPrefs();
     }
   },
 
@@ -988,6 +1007,7 @@ export default {
     this.depthPending = false;
     this.lastTick = 0;
 
+    this.loadDeskPrefs();
     this.init();
   },
 
@@ -1005,6 +1025,59 @@ export default {
         response => (response && response.body) || null,
         () => null
       );
+    },
+
+    /* Wave B5 — persist non-money desk chrome (pair lives in the URL). */
+    deskPrefsKey() {
+      return 'ix.desk.prefs.v1';
+    },
+    loadDeskPrefs() {
+      try {
+        const raw = window.localStorage.getItem(this.deskPrefsKey());
+        if (!raw) return;
+        const p = JSON.parse(raw);
+        if (!p || typeof p !== 'object') return;
+        const modes = { all: 1, bids: 1, asks: 1 };
+        if (modes[p.bookMode]) this.bookMode = p.bookMode;
+        if ([1, 10, 50, 100].indexOf(Number(p.bookGroup)) >= 0) {
+          this.bookGroup = Number(p.bookGroup);
+        }
+        const ivals = this.intervals.map(i => i.value);
+        if (ivals.indexOf(p.interval) >= 0) this.interval = p.interval;
+        const mains = { chart: 1, depth: 1, book: 1, trades: 1 };
+        if (mains[p.mainTab]) this.mainTab = p.mainTab;
+        const rails = { book: 1, trades: 1 };
+        if (rails[p.railTab]) this.railTab = p.railTab;
+        if (typeof p.baseFilter === 'string' && p.baseFilter) {
+          this.baseFilter = p.baseFilter;
+        }
+        if (typeof p.pair === 'string' && /^[a-z0-9]+_[a-z0-9]+$/i.test(p.pair)) {
+          this.defaultPair = p.pair.toLowerCase();
+        }
+      } catch (e) {
+        /* private mode / bad JSON — leave defaults */
+      }
+    },
+    saveDeskPrefs() {
+      try {
+        const pair =
+          (this.$route && this.$route.params && this.$route.params.pair) ||
+          this.defaultPair;
+        window.localStorage.setItem(
+          this.deskPrefsKey(),
+          JSON.stringify({
+            pair: String(pair || this.defaultPair).toLowerCase(),
+            bookMode: this.bookMode,
+            bookGroup: this.bookGroup,
+            interval: this.interval,
+            mainTab: this.mainTab,
+            railTab: this.railTab,
+            baseFilter: this.baseFilter
+          })
+        );
+      } catch (e) {
+        /* ignore quota / private mode */
+      }
     },
 
     init() {
@@ -1025,7 +1098,12 @@ export default {
         base,
         symbol: coin + '/' + base
       });
-      this.baseFilter = base;
+      /* Keep a remembered market-list filter when it is "favor"; otherwise
+         follow the pair's quote so the list matches the desk. */
+      if (this.baseFilter !== 'favor') {
+        this.baseFilter = base;
+      }
+      this.saveDeskPrefs();
       this.trend = 0;
       this.lastTick = 0;
       this.chartFailed = false;
