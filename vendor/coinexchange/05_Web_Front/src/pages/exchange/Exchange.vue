@@ -313,41 +313,60 @@
             </div>
 
             <!-- Open orders -->
-            <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'open' && !ordersReachable">
-              Order service did not respond — open orders are unknown, not empty.
-            </p>
-            <table class="ix-table" v-else-if="accountTab === 'open'">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Market</th>
-                  <th>Type</th>
-                  <th>Side</th>
-                  <th class="ix-num">Price</th>
-                  <th class="ix-num">Amount</th>
-                  <th class="ix-num">Filled</th>
-                  <th class="ix-num">Value</th>
-                  <th class="ix-num"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, i) in openOrders" :key="row.orderId || i">
-                  <td class="ix-dim">{{ date(row.time) }}</td>
-                  <td>{{ row.symbol }}</td>
-                  <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? 'Market' : 'Limit' }}</td>
-                  <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                    {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
-                  </td>
-                  <td class="ix-num">{{ priceLabel(row) }}</td>
-                  <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
-                  <td class="ix-num">{{ fmt(row.tradedAmount, coinScale) }}</td>
-                  <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
-                  <td class="ix-num">
-                    <button type="button" class="ix-cancel" :disabled="!!cancellingId" @click="cancelOrder(row)">{{ cancellingId === row.orderId ? 'Cancelling…' : 'Cancel' }}</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div v-else-if="accountTab === 'open'">
+              <p class="ix-empty ix-empty-error" v-if="!ordersReachable">
+                Order service did not respond — open orders are unknown, not empty.
+              </p>
+              <template v-else>
+                <div class="ix-blotter-tools">
+                  <button
+                    type="button"
+                    class="ix-linkish"
+                    :disabled="!openOrders.length"
+                    @click="exportOpenOrdersCsv"
+                  >Export CSV</button>
+                </div>
+                <p class="ix-empty" v-if="openOrders.length === 0">No open orders</p>
+                <table class="ix-table" v-else>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Market</th>
+                      <th>Type</th>
+                      <th>Side</th>
+                      <th class="ix-num">Price</th>
+                      <th class="ix-num">Amount</th>
+                      <th class="ix-num">Filled</th>
+                      <th class="ix-num">Value</th>
+                      <th class="ix-num"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, i) in openOrders" :key="row.orderId || i">
+                      <td class="ix-dim">{{ date(row.time) }}</td>
+                      <td>{{ row.symbol }}</td>
+                      <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? 'Market' : 'Limit' }}</td>
+                      <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
+                        {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
+                      </td>
+                      <td class="ix-num">{{ priceLabel(row) }}</td>
+                      <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
+                      <td class="ix-num" :title="fillTitle(row)">{{ fillLabel(row) }}</td>
+                      <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
+                      <td class="ix-num ix-actions">
+                        <button
+                          type="button"
+                          class="ix-linkish"
+                          :title="'Copy order id ' + (row.orderId || '')"
+                          @click="copyOrderId(row)"
+                        >ID</button>
+                        <button type="button" class="ix-cancel" :disabled="!!cancellingId" @click="cancelOrder(row)">{{ cancellingId === row.orderId ? 'Cancelling…' : 'Cancel' }}</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </template>
+            </div>
 
             <!-- Trade history (fills) -->
             <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'fills' && !ordersReachable">
@@ -2104,6 +2123,87 @@ export default {
       return row.type === 'MARKET_PRICE' ? 'Market' : this.fmt(row.price, this.baseCoinScale);
     },
 
+    /* Wave B9 — partial fill + id tools from data already on the blotter. */
+    fillLabel(row) {
+      const filled = this.num(row.tradedAmount);
+      const total = this.num(row.amount);
+      if (total <= 0) return this.fmt(row.tradedAmount, this.coinScale);
+      return this.fmt(filled, this.coinScale) + ' / ' + this.fmt(total, this.coinScale);
+    },
+    fillTitle(row) {
+      const filled = this.num(row.tradedAmount);
+      const total = this.num(row.amount);
+      if (total <= 0) return '';
+      const pct = ((filled / total) * 100).toFixed(1);
+      return pct + '% filled';
+    },
+    copyOrderId(row) {
+      const id = row && row.orderId != null ? String(row.orderId) : '';
+      if (!id) {
+        this.$Notice.warning({ title: 'No order id', desc: 'This row has no id to copy.' });
+        return;
+      }
+      const done = () =>
+        this.$Notice.success({ title: 'Copied', desc: 'Order id on clipboard.' });
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(id).then(done).catch(() => {
+          this.fallbackCopy(id) && done();
+        });
+      } else if (this.fallbackCopy(id)) {
+        done();
+      }
+    },
+    fallbackCopy(text) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch (e) {
+        return false;
+      }
+    },
+    exportOpenOrdersCsv() {
+      if (!this.openOrders.length) return;
+      const esc = v => {
+        const s = v == null ? '' : String(v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      const lines = [
+        ['time', 'symbol', 'type', 'side', 'price', 'amount', 'filled', 'turnover', 'orderId'].join(',')
+      ];
+      this.openOrders.forEach(row => {
+        lines.push(
+          [
+            esc(this.date(row.time)),
+            esc(row.symbol),
+            esc(row.type === 'MARKET_PRICE' ? 'Market' : 'Limit'),
+            esc(row.direction),
+            esc(row.type === 'MARKET_PRICE' ? 'Market' : row.price),
+            esc(row.amount),
+            esc(row.tradedAmount),
+            esc(row.turnover),
+            esc(row.orderId)
+          ].join(',')
+        );
+      });
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'open-orders.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+
     statusLabel(status) {
       if (status === 'COMPLETED') return 'Filled';
       if (status === 'CANCELED') return 'Cancelled';
@@ -3118,6 +3218,34 @@ $radius-sm: var(--ix-radius-sm, 8px);
   font-family: inherit;
   color: var(--ix-text-dim, #8a909c);
   background: var(--ix-surface-raised, #161a22);
+}
+.ix-blotter-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.ix-linkish {
+  background: transparent;
+  border: 0;
+  color: var(--ix-orange, #00c2a8);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 0 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ix-linkish:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+.ix-actions {
+  white-space: nowrap;
+}
+.ix-actions .ix-cancel {
+  margin-left: 8px;
 }
 </style>
 
