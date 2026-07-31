@@ -31,6 +31,9 @@ export const users = identity.table(
      */
     totpSecret: text('totp_secret'),
     totpEnrolledAt: tstz('totp_enrolled_at'),
+    /** SHA-256 hashes of single-use recovery codes; plaintext never stored. */
+    recoveryCodeHashes: jsonb('recovery_code_hashes').notNull().default([]),
+
     /** WebAuthn credentials — array of {credentialId, publicKey, counter, ...}. */
     webauthnCreds: jsonb('webauthn_creds').notNull().default([]),
     status: userStatusEnum('status').notNull().default('active'),

@@ -329,6 +329,59 @@ if (!available) {
       const principal = await verifyAccessToken(withMfa.accessToken, tokenConfig);
       expect(principal.mfa).toBe(true);
     });
+
+    it('stores hashed recovery codes on confirm and redeems once at login (ID-P1-1)', async () => {
+      const handle = unique();
+      const session = await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      const { secret, recoveryCodes } = await auth.startTotpEnrolment(session.userId);
+      expect(recoveryCodes.length).toBeGreaterThan(0);
+
+      // Plaintext never lands before confirm.
+      const before = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      expect(before[0]!.recovery_code_hashes).toEqual([]);
+
+      await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
+
+      const after = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      const hashes = after[0]!.recovery_code_hashes as string[];
+      expect(hashes).toHaveLength(recoveryCodes.length);
+      // Hashes are hex digests — never the plaintext code shape.
+      for (const h of hashes) {
+        expect(h).toMatch(/^[a-f0-9]{64}$/);
+        expect(recoveryCodes).not.toContain(h);
+      }
+
+      const code = recoveryCodes[0]!;
+      const recovered = await auth.login({
+        identifier: handle,
+        password: 'correct horse battery staple',
+        totpCode: code,
+      });
+      const principal = await verifyAccessToken(recovered.accessToken, tokenConfig);
+      expect(principal.mfa).toBe(true);
+
+      // Single-use: same code fails after burn.
+      await expect(auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: code })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+
+      const remaining = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      expect(remaining[0]!.recovery_code_hashes as string[]).toHaveLength(recoveryCodes.length - 1);
+
+      // Live TOTP still works after a recovery login.
+      const withTotp = await auth.login({
+        identifier: handle,
+        password: 'correct horse battery staple',
+        totpCode: totp(secret),
+      });
+      expect((await verifyAccessToken(withTotp.accessToken, tokenConfig)).mfa).toBe(true);
+    });
   });
 
   describe('WebAuthn registration + assertion', () => {

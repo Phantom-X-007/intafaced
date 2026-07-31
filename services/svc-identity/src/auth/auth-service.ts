@@ -152,6 +152,9 @@ const DEFAULT_WEBAUTHN: WebAuthnConfig = {
 };
 
 export class AuthService {
+  /** Pending TOTP secret + recovery hashes until confirm (ID-P1-1). */
+  private readonly pendingTotpEnrolment = new Map<string, { secret: string; recoveryHashes: string[] }>();
+
   private readonly challenges = new ChallengeStore();
   private readonly webauthn: WebAuthnConfig;
 
@@ -235,8 +238,15 @@ export class AuthService {
     let mfa = false;
     if (user.totp_secret) {
       if (!input.totpCode) throw new AuthError('Two-factor code required', 'auth.mfa_required');
-      if (!verifyTotp(user.totp_secret, input.totpCode)) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
-      mfa = true;
+      if (verifyTotp(user.totp_secret, input.totpCode)) {
+        mfa = true;
+      } else {
+        // Single-use recovery code path (ID-P1-1). Totp first so a valid TOTP
+        // never burns a recovery code.
+        const redeemed = await this.tryRedeemRecoveryCode(user.id, input.totpCode);
+        if (!redeemed) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+        mfa = true;
+      }
     }
 
     // Opportunistic upgrade: a scrypt hash becomes argon2id on next login, so
@@ -394,6 +404,29 @@ export class AuthService {
 
   // ── TOTP ───────────────────────────────────────────────────────────────────
 
+  /**
+   * Consume one recovery code if its hash is present. Returns true when burned.
+   */
+  private async tryRedeemRecoveryCode(userId: string, code: string): Promise<boolean> {
+    const hash = hashToken(code.trim());
+    return transaction(this.sql, async (tx) => {
+      const rows = await tx<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${userId} FOR UPDATE
+      `;
+      const raw = rows[0]?.recovery_code_hashes;
+      const hashes: string[] = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
+      const idx = hashes.indexOf(hash);
+      if (idx < 0) return false;
+      const next = hashes.slice(0, idx).concat(hashes.slice(idx + 1));
+      await tx`
+        UPDATE users
+           SET recovery_code_hashes = ${JSON.stringify(next)}::jsonb, updated_at = now()
+         WHERE id = ${userId}
+      `;
+      return true;
+    });
+  }
+
   async startTotpEnrolment(userId: string): Promise<{ secret: string; uri: string; recoveryCodes: string[] }> {
     const rows = await this.sql<Array<{ email: string; totp_secret: string | null }>>`
       SELECT email, totp_secret FROM users WHERE id = ${userId}
@@ -404,6 +437,12 @@ export class AuthService {
 
     const secret = generateSecret();
     const recoveryCodes = generateRecoveryCodes();
+    // Hold secret + recovery hashes until confirm. Plaintext codes return once;
+    // hashes persist only after a valid TOTP proves enrolment (ID-P1-1).
+    this.pendingTotpEnrolment.set(userId, {
+      secret,
+      recoveryHashes: recoveryCodes.map((c) => hashToken(c)),
+    });
 
     // The secret is NOT persisted yet — only a confirmed code proves the user
     // actually scanned it. Storing it now would lock out anyone who abandoned
@@ -414,10 +453,20 @@ export class AuthService {
   async confirmTotpEnrolment(userId: string, secret: string, code: string): Promise<void> {
     if (!verifyTotp(secret, code)) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
 
+    const pending = this.pendingTotpEnrolment.get(userId);
+    if (!pending || pending.secret !== secret) {
+      throw new AuthError('TOTP enrolment session expired or secret mismatch — start enrolment again', 'auth.mfa_invalid');
+    }
+
     await this.sql`
-      UPDATE users SET totp_secret = ${secret}, totp_enrolled_at = now(), updated_at = now()
+      UPDATE users
+         SET totp_secret = ${secret},
+             totp_enrolled_at = now(),
+             recovery_code_hashes = ${JSON.stringify(pending.recoveryHashes)}::jsonb,
+             updated_at = now()
        WHERE id = ${userId} AND totp_secret IS NULL
     `;
+    this.pendingTotpEnrolment.delete(userId);
 
     await this.rank.awardXp({
       userId,

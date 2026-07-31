@@ -38,3 +38,5 @@ Per `NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` §7 NEXT QUEUE — claim one lane, r
 - **2026-07-31 residual campaign ARMED:** Nitro owns residual board program. Tip `c40fd59` (#258). Open **#259**. Frontend Wave A SoT locked separately — coordinate before shell file claims. Third builder stood down.
 
 - **2026-07-31 audit-fire-mega:** claimed residual-ws (tracker honesty only). Tip re-check. Open frontend #261 left alone. Do not collide stream-a-ui.
+
+- **2026-07-31 mega-finish:** branch `audit/finish-mega-2026-07-31` — recovery codes + residual packs + finish definition. Leave #266 pay journal and #267 frontend to their owners.

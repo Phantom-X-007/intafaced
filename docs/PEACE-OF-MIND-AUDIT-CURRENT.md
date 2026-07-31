@@ -133,3 +133,14 @@ SECRETS / ADR:     still human/owner
 | #255 | Shared rehydrate for all service ledger clients |
 
 **Backend only.** Frontend / Stream A other chat. Multi-replica pay journal still P0 hold. Token buyback product residual (T-01/T-02). Not go-live.
+
+---
+
+## Mega finish close (2026-07-31)
+
+**Verdict:** **COMPLETE-WITH-HOLDS** · archive [`audit/2026-07-31-mega-finish/`](audit/2026-07-31-mega-finish/)  
+**Not go-live.** Local money PG e2e blocked (no Docker/Postgres on audit host).  
+**ID-P1-1 recovery codes:** hashed store + redeem on login (this PR).  
+**M226-01:** open PR **#266** owns durable BroadcastStore — do not re-implement.  
+**Dual-book ADR:** Denon **#272** Accepted (docs) — re-check merge.  
+**Tip authority:** `git rev-parse origin/main` after merge.
