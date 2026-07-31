@@ -27,20 +27,34 @@ import type { LedgerService } from './service.js';
  * DoD gate can require a real import from a test without booting Postgres.
  */
 
-export function httpError(err: unknown): { status: number; body: { message: string } } {
-  if (err instanceof InsufficientFundsError) return { status: 400, body: { message: err.message } };
+export function httpError(err: unknown): { status: number; body: Record<string, unknown> } {
+  // Insufficient funds must rehydrate as InsufficientFundsError on callers
+  // (P2P void-on-failed-lock). Message alone is lossy under string-wrapped throws.
+  if (err instanceof InsufficientFundsError) {
+    return {
+      status: 400,
+      body: {
+        message: err.message,
+        code: err.code,
+        accountId: err.accountId,
+        assetId: err.assetId,
+        requested: err.requested,
+        availableBalance: err.availableBalance,
+      },
+    };
+  }
   if (err instanceof UnbalancedTransactionError || err instanceof InvalidEntryError) {
-    return { status: 500, body: { message: err.message } };
+    return { status: 500, body: { message: err.message, code: err.code } };
   }
   // 401, not 403: the caller has not said who it is. "Known and not allowed" is
   // a different answer and must stay distinguishable to a calling service.
   if (err instanceof LedgerError && err.code === 'ledger.unauthenticated') {
-    return { status: 401, body: { message: err.message } };
+    return { status: 401, body: { message: err.message, code: err.code } };
   }
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
-    return { status: 412, body: { message: err.message } };
+    return { status: 412, body: { message: err.message, code: err.code } };
   }
-  if (err instanceof LedgerError) return { status: 500, body: { message: err.message } };
+  if (err instanceof LedgerError) return { status: 500, body: { message: err.message, code: err.code } };
   if (err instanceof z.ZodError) return { status: 400, body: { message: err.message } };
   return { status: 500, body: { message: 'Ledger request failed' } };
 }
