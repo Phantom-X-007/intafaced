@@ -29,4 +29,3 @@ A1 decisions + A2/A3 spine mountains · `feat/multi-asset-instruments` · money 
 - **2026-07-30 evening — O1+O2 overnight armed** via #219.
 
 - **2026-07-31 residual ownership session:** merged Class N #229–#236/#238; babysat #226 Class M (CI green, no Nitro merge); third-party #227/#228 left for author rebase. Free: Stream A N5 leftovers · WAVE-AUDIT archive · tracker honesty re-pass.
-

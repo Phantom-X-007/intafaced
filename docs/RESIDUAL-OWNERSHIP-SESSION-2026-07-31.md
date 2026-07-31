@@ -9,32 +9,32 @@ Tip includes through **#238** Activity honesty. Re-check: `git log -1 --oneline 
 
 ## A+B owned (do not re-ship)
 
-| PR | What |
-| --- | --- |
+| PR   | What                                                  |
+| ---- | ----------------------------------------------------- |
 | #229 | blueprint cascade into identity profiles.blueprint_id |
-| #230 | Tracker honesty |
-| #231 | Stream A N2 order entry |
-| #232 | Stream A N3–N5 dual-book + mobile (+ N6 plane) |
-| #237 | High water docs for that wave |
+| #230 | Tracker honesty                                       |
+| #231 | Stream A N2 order entry                               |
+| #232 | Stream A N3–N5 dual-book + mobile (+ N6 plane)        |
+| #237 | High water docs for that wave                         |
 
 ## Residual session merged
 
-| PR | Result |
-| --- | --- |
-| #229–#232 | Audited + merged (coordination with A+B) |
-| #233 | Depth empty vs waiting |
-| #234 | vendor-shell-scan + dead wallet mutators removed |
-| #235 | UC money panes empty≠error |
-| #236 | OTC/C2C honesty (removed invented 7.00 / 21212) |
-| #238 | Activity empty≠error |
+| PR        | Result                                           |
+| --------- | ------------------------------------------------ |
+| #229–#232 | Audited + merged (coordination with A+B)         |
+| #233      | Depth empty vs waiting                           |
+| #234      | vendor-shell-scan + dead wallet mutators removed |
+| #235      | UC money panes empty≠error                       |
+| #236      | OTC/C2C honesty (removed invented 7.00 / 21212)  |
+| #238      | Activity empty≠error                             |
 
 ## Third-party open
 
-| PR | Class | Gate |
-| --- | --- | --- |
-| #226 | M live EVM rail | CI green. **No Nitro merge.** Denon money self-audit then merge. |
-| #227 | P ws positions | Author rebase if conflicted; prefer Denon merge |
-| #228 | P+N AMM + apps/web | Prefer Denon merge / split |
+| PR   | Class              | Gate                                                             |
+| ---- | ------------------ | ---------------------------------------------------------------- |
+| #226 | M live EVM rail    | CI green. **No Nitro merge.** Denon money self-audit then merge. |
+| #227 | P ws positions     | Author rebase if conflicted; prefer Denon merge                  |
+| #228 | P+N AMM + apps/web | Prefer Denon merge / split                                       |
 
 ## Decision blockers for Nitro human
 
