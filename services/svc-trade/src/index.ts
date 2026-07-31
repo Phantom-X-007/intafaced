@@ -16,6 +16,7 @@ import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
+import { parseMmSeedMids, parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { parseAmount } from '@intafaced/ledger-client';
 
 /**
@@ -85,6 +86,33 @@ const futuresJobs = startFuturesJobs({
     fundingMarketIds: parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS),
   },
   onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
+});
+
+// MM seed job — default OFF. Empty markets or missing mids → no invent.
+const mmSeedMids = parseMmSeedMids(env.TRADE_MM_SEED_MIDS);
+const mmSeedJobs = startMmSeedJobs({
+  ledger,
+  matching,
+  midSource: (marketId) => mmSeedMids.get(marketId) ?? null,
+  config: {
+    enabled: env.TRADE_MM_SEED_ENABLED,
+    intervalMs: env.TRADE_MM_SEED_INTERVAL_MS,
+    halfSpreadBps: env.TRADE_MM_SEED_HALF_SPREAD_BPS,
+    stepBps: env.TRADE_MM_SEED_STEP_BPS,
+    levels: env.TRADE_MM_SEED_LEVELS,
+    qtyPerLevel: env.TRADE_MM_SEED_QTY,
+    targets: parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS),
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'mm seed job tick failed'),
+  onResult: (marketId, result) => {
+    if ('skipped' in result) {
+      app.log.info({ marketId, skipped: result.skipped }, 'mm seed skipped');
+    } else if (result.ok) {
+      app.log.info({ marketId, mid: result.mid, placements: result.placements.length }, 'mm seed ok');
+    } else {
+      app.log.warn({ marketId, reason: result.reason }, 'mm seed failed');
+    }
+  },
 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
@@ -174,6 +202,8 @@ app.log.info(
     spotEnabled: env.TRADE_SPOT_ENABLED,
     futuresJobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     futuresJobs: futuresJobs.host.list(),
+    mmSeedEnabled: env.TRADE_MM_SEED_ENABLED,
+    mmSeedJobs: mmSeedJobs.host.list(),
     trpc: true,
     publicRest: [
       '/api/v1/markets',
@@ -208,6 +238,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       futuresJobs.stop();
+      mmSeedJobs.stop();
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();
       await bus.close();
