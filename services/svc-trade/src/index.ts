@@ -15,6 +15,7 @@ import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
+import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { parseAmount } from '@intafaced/ledger-client';
 
 /**
@@ -105,7 +106,7 @@ registerPublicRest(app, {
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit, sinceMs) => trade.publicTape(marketId, limit, sinceMs),
   candles: (marketId, timeframe, limit, sinceMs) => trade.candles(marketId, timeframe, limit, sinceMs),
-  fundingRateForMarket: (marketId, symbol) => {
+  fundingRateForMarket: (marketId, _symbol) => {
     const entry = futuresJobs.getPublishedRate(marketId);
     if (!entry) return null;
     const fundingDatetime = new Date(entry.asOfMs).toISOString();
@@ -118,6 +119,12 @@ registerPublicRest(app, {
       indexPrice: null,
     };
   },
+});
+
+// S2S: oracle/ops publish funding rates (public GET only reflects published).
+registerInternalFundingRate(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  publishFundingRate: (entry) => futuresJobs.publishFundingRate(entry),
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
