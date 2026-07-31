@@ -287,7 +287,7 @@ export const FEATURES = [
     status: 'ready',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual: research pack + pure seed planner (planSeedQuotes) — external mid only, never invent. Still missing: seeder job with house money path (ledger house/market-maker), explicit market list, ops enable. Not done.',
+    note: 'Updated 2026-07-31 residual: research + planSeedQuotes + seedMarket orchestrator (marketMakerOrderHold → matching PO submit, account house:market-maker). Still missing: ops job/host wiring, explicit market list env, house tradeFill on MM fills, reseed/cancel lifecycle. Not done.',
   }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
