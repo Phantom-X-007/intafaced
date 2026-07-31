@@ -319,7 +319,7 @@ export const FEATURES = [
     owner: 'Nitro',
     dependsOn: ['matching.engine', 'ws.depth'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'Depth done + public TRADE tape + private orders/fills on /private/stream (orderUpdated+fillSettled, JWT). Futures positions still missing — title names four streams; three of four is not done.',
+    note: 'Updated 2026-07-31 residual-ws: four fan-out *channels* exist — public depth (ws.depth), public trade tape, private orders+fills (JWT /private/stream), private positions channel (#227). Positions stream is **empty-honest**: ready frame only until trade.futures publishes positionUpdated (source+hub tests prove no invented rows). REST GET /positions also []. Status stays **wip** because title product "positions" means live futures events, not only a silent channel. Do not mark done without trade.futures or a doctrine change that empty-honest channels complete the title.',
   }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
