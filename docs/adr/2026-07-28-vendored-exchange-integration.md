@@ -1,7 +1,51 @@
 # ADR: integrating the vendored exchange platform
 
-**Status:** In progress — source vendored, infrastructure running, build in flight.
+**Status:** **Accepted — 2026-07-31. Option B: `ledger.*` is the only book.**
 **Decision owner:** repo owner (directed). **Written by:** Denon.
+
+> ### The decision, taken 2026-07-31
+>
+> This ADR sat at _"In progress"_ for three days, ending on a recommendation that
+> nobody ever converted into a decision. **Eleven documents named "dual-book" as a
+> known risk and none of them could close.** Deciding it now.
+>
+> **`ledger.*` is the only book. There is no second book, so there is nothing to
+> reconcile.**
+>
+> **Option C is rejected on evidence, not preference.** Its entire premise is that
+> the vendored side holds a book worth preserving. The audit counted it: `member`
+> **0 rows**, `member_wallet` **0 rows**, `exchange_order` **0 rows**. Nobody has
+> ever registered on it. There is no book there to preserve — "two reconciled
+> books" would have meant permanently reconciling a live ledger against an empty
+> table.
+>
+> **What this obliges, implemented as written:**
+>
+> 1. `member_wallet` becomes a **read-only projection** of `ledger.*`. Nothing in
+>    Java writes it, ever.
+> 2. The **25 money controllers are disabled at the door** — not rewritten in
+>    place, not left reachable-but-unused. A controller that can still be called
+>    is still a second book.
+> 3. The four `MemberWalletDao` mutators — `increaseBalance`, `decreaseBalance`,
+>    `freezeBalance`, `thawBalance` — become **hard-banned by scan**.
+>
+> **Two enforcement gaps must close alongside it, or this is unenforced:**
+>
+> - **`custody-scan` walks `.ts`/`.tsx` only. It has never read a line of Java.**
+> - **`vendor-shell-scan` bans seven exotic mint patterns while permitting the
+>   four mutators every money controller actually calls.** Invert it.
+>
+> **Why the asymmetry decided it.** Rebuilding what already works costs time —
+> bounded, visible, reversible. Adopting a `member_wallet` writer costs the
+> ledger's core property _silently_: no journal entry, so replay reconciliation
+> reports **clean**; the posting freeze and kill-switches act on `ledger.*` and
+> would not stop a Java `UPDATE`; and `decimal(18,8)` against `numeric(38,18)`
+> truncates, so a later reconciliation finds drift it cannot attribute. Those are
+> not two points on a spectrum. One is expensive; the other is the failure mode.
+>
+> Full evidence: `docs/VENDORED-OVERLAP-AUDIT.md` (#213).
+> Execution direction: `docs/DIRECTION-2026-07-31.md` §4.
+
 **Source:** https://github.com/jammy928/CoinExchange_CryptoExchange_Java · Apache-2.0 · 1.7k★ · 10 commits, inactive.
 
 ---
