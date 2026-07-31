@@ -1529,6 +1529,33 @@ export default {
       this.$router.push({ name: 'ExchangePair', params: { pair: row.href } });
     },
 
+    /**
+     * Display grouping only. N=1 is raw book. Higher N folds by N×10^(-scale).
+     */
+    groupPlate(rows, side) {
+      var list = rows || [];
+      var g = Number(this.bookGroup) || 1;
+      if (g <= 1 || list.length === 0) return list;
+      var scale = this.baseCoinScale || 2;
+      var step = g * Math.pow(10, -scale);
+      if (!(step > 0)) return list;
+      var map = {};
+      var order = [];
+      for (var i = 0; i < list.length; i++) {
+        var row = list[i];
+        var px = this.num(row.price);
+        if (!isFinite(px)) continue;
+        var bucket = side === 'bid' ? Math.floor(px / step) * step : Math.ceil(px / step) * step;
+        var key = bucket.toFixed(Math.min(scale + 4, 12));
+        if (!map[key]) {
+          map[key] = { price: key, amount: 0, totalAmount: 0 };
+          order.push(key);
+        }
+        map[key].amount += this.num(row.amount) || 0;
+        map[key].totalAmount += this.num(row.totalAmount != null ? row.totalAmount : row.amount) || 0;
+      }
+      return order.map(function (k) { return map[k]; });
+    },
     useBookPrice(row) {
       const price = this.num(row.price);
       if (price <= 0) {
