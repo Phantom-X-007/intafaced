@@ -355,6 +355,43 @@ export function futuresRealizeLoss(input: FuturesLossInput): PostRequest {
   };
 }
 
+/**
+ * Periodic funding payment between two positions (trade.futures F5 recipe).
+ *
+ * Engine chooses who pays whom and the amount from the funding rate × notional.
+ * Value leaves the payer's position collateral and lands in the payee's
+ * available balance (received funding is free cash, not forced re-margin).
+ * Keyed on fundingId so an 8h period settles exactly once per pair.
+ */
+export interface FuturesFundingInput {
+  /** Unique period key, e.g. `${marketId}:${periodStartIso}:${payerPositionId}`. */
+  fundingId: string;
+  payerUserId: string;
+  payerPositionId: string;
+  payeeUserId: string;
+  payeePositionId: string;
+  assetId: string;
+  amount: Amount;
+}
+
+export function futuresFundingPay(input: FuturesFundingInput): PostRequest {
+  requirePositive('futures funding amount', input.amount);
+  return {
+    idempotencyKey: `futures.funding:${input.fundingId}`,
+    module: 'trade',
+    reason: 'futures.funding.paid',
+    meta: {
+      fundingId: input.fundingId,
+      payerPositionId: input.payerPositionId,
+      payeePositionId: input.payeePositionId,
+    },
+    entries: [
+      credit(positionCollateralAccount(input.payerUserId, input.assetId, input.payerPositionId), input.amount),
+      debit(userAvailable(input.payeeUserId, input.assetId), input.amount),
+    ],
+  };
+}
+
 // ── P2P escrow (§6.2) ────────────────────────────────────────────────────────
 
 export interface EscrowInput {
@@ -774,6 +811,7 @@ export const recipes = {
   futuresMarginAdd,
   futuresMarginRelease,
   futuresRealizeLoss,
+  futuresFundingPay,
   escrowLock,
   escrowRelease,
   escrowRefund,
