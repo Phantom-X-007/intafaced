@@ -534,6 +534,48 @@ describe('recipes — the money paths', () => {
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
+  it('futures realize profit: house fees pot pays user available (close stack)', async () => {
+    await fund(USER_A, 'USDT', '1000');
+    await fund(USER_B, 'USDT', '100');
+    // Seed house fees so profit has a counterpart (no invent).
+    await ledger.post(
+      recipes.feeCharge({
+        chargeId: 'pnl-seed',
+        userId: USER_B,
+        module: 'trade',
+        mode: 'asset',
+        assetId: 'USDT',
+        amount: amt('100'),
+      }),
+    );
+    await ledger.post(recipes.futuresMarginLock({ positionId: 'pos-win', userId: USER_A, assetId: 'USDT', amount: amt('200') }));
+    await ledger.post(
+      recipes.futuresRealizeProfit({
+        positionId: 'pos-win',
+        userId: USER_A,
+        assetId: 'USDT',
+        amount: amt('40'),
+        profitId: 'close-win-1',
+      }),
+    );
+    // 1000 - 200 margin + 40 profit = 840 available
+    expect(await balanceOf(USER_A, 'USDT')).toBe('840');
+    expect(formatAmount((await ledger.balance(houseFees('trade', 'USDT'))).amount)).toBe('60');
+    // residual margin still locked until release
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(USER_A, 'USDT', 'pos-win'))).amount)).toBe('200');
+    await ledger.post(
+      recipes.futuresMarginRelease({
+        positionId: 'pos-win',
+        userId: USER_A,
+        assetId: 'USDT',
+        amount: amt('200'),
+        sequence: 1,
+      }),
+    );
+    expect(await balanceOf(USER_A, 'USDT')).toBe('1040');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
   it('trade fill: six entries, fees to house, books closed', async () => {
     await fund(USER_A, 'USDT', '1000'); // taker, buying
     await fund(USER_B, 'BTC', '2'); // maker, selling
