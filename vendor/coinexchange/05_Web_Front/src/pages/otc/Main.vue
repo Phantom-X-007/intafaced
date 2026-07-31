@@ -10,8 +10,11 @@
         </div>
       </div>
       <div class="content">
+        <p class="ix-empty" role="note" style="padding:8px 0;margin:0;clear:both;">
+          Two books. OTC balances here are venue P2P books — not the TypeScript platform ledgers.
+        </p>
         <!-- Stream A: empty coin list ≠ coin API down. -->
-        <p v-if="coinsError" class="ix-empty ix-empty-error">{{ coinsError }}</p>
+        <p v-if="coinsError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ coinsError }}</p>
         <p v-else-if="coinsLoading" class="ix-empty ix-empty-loading">{{ $t('common.loading') }}</p>
         <p v-else-if="coinsReachable && coins.length === 0" class="ix-empty">{{ $t('otc.coinsEmpty') }}</p>
         <Menu v-if="!coinsError && coins.length > 0" ref="navMenu" mode="horizontal" width="auto" :active-name="activeMenuName" @on-select="menuSelected" class='tradelist'>

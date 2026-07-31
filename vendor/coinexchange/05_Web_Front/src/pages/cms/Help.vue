@@ -4,7 +4,7 @@
     <div class="help_container">
       <h1>{{$t("header.helpcenter")}}</h1>
       <!-- Stream A: failed help API must not look like an empty catalog. -->
-      <p v-if="loadError" class="ix-empty ix-empty-error" style="margin-top:80px;">{{ loadError }}</p>
+      <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="margin-top:80px;">{{ loadError }}</p>
       <p v-else-if="!loaded" class="ix-empty ix-empty-loading" style="margin-top:80px;">{{ $t("common.loading") }}</p>
       <p v-else-if="helpData.length === 0" class="ix-empty" style="margin-top:80px;">{{ $t("cms.helpEmpty") }}</p>
       <div class="main" v-else>

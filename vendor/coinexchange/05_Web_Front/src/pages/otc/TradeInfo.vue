@@ -1,7 +1,7 @@
 <template>
     <div class="content-wrap">
             <!-- Stream A: never paint a blank/fake offer when pre-order fails. -->
-            <p v-if="loadError" class="ix-empty ix-empty-error" style="padding-top: 100px; text-align: center;">{{ loadError }}</p>
+            <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="padding-top: 100px; text-align: center;">{{ loadError }}</p>
             <p v-else-if="loading" class="ix-empty ix-empty-loading" style="padding-top: 100px; text-align: center;">{{ $t('common.loading') }}</p>
             <div class="container" id="List" v-else-if="offerReady">
                 <Row>
