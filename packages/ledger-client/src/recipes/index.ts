@@ -9,6 +9,8 @@ import {
   merchantClearing,
   mintBoundary,
   orderHoldAccount,
+  positionCollateralAccount,
+  insuranceFund,
   railBoundary,
   rewardsEngine,
   userAvailable,
@@ -239,6 +241,117 @@ export function orderHoldRelease(input: OrderHoldInput & { sequence?: number }):
       credit(orderHoldAccount(input.userId, input.assetId, input.orderId), input.amount),
       debit(userAvailable(input.userId, input.assetId), input.amount),
     ],
+  };
+}
+
+// ── Futures margin (§5.2 / trade.futures) ────────────────────────────────────
+//
+// Pure recipes only — no mark price, no liquidation engine. svc-trade posts
+// these when positions open/close/adjust. Insurance fund path is for realized
+// losses that the user's margin cannot cover (engine decides amounts).
+
+export interface FuturesMarginInput {
+  positionId: string;
+  userId: string;
+  /** Margin asset (typically quote, e.g. USDT). */
+  assetId: string;
+  amount: Amount;
+}
+
+/** Lock margin into purpose-keyed collateral for one position. */
+export function futuresMarginLock(input: FuturesMarginInput): PostRequest {
+  requirePositive('futures margin lock amount', input.amount);
+  return {
+    idempotencyKey: `futures.margin.lock:${input.positionId}`,
+    module: 'trade',
+    reason: 'futures.margin.lock',
+    meta: { positionId: input.positionId },
+    entries: [
+      credit(userAvailable(input.userId, input.assetId), input.amount),
+      debit(positionCollateralAccount(input.userId, input.assetId, input.positionId), input.amount),
+    ],
+  };
+}
+
+/**
+ * Add margin to an open position (same pot). Sequence in the key so repeated
+ * top-ups do not collide with the open lock idempotency key.
+ */
+export function futuresMarginAdd(input: FuturesMarginInput & { sequence: number }): PostRequest {
+  requirePositive('futures margin add amount', input.amount);
+  if (input.sequence < 1) throw new InvalidEntryError('futures margin add sequence must be >= 1');
+  return {
+    idempotencyKey: `futures.margin.add:${input.positionId}:${input.sequence}`,
+    module: 'trade',
+    reason: 'futures.margin.add',
+    meta: { positionId: input.positionId, sequence: input.sequence },
+    entries: [
+      credit(userAvailable(input.userId, input.assetId), input.amount),
+      debit(positionCollateralAccount(input.userId, input.assetId, input.positionId), input.amount),
+    ],
+  };
+}
+
+/** Release remaining margin on close / cancel before open risk. */
+export function futuresMarginRelease(input: FuturesMarginInput & { sequence?: number }): PostRequest {
+  requirePositive('futures margin release amount', input.amount);
+  return {
+    idempotencyKey: `futures.margin.release:${input.positionId}:${input.sequence ?? 0}`,
+    module: 'trade',
+    reason: 'futures.margin.release',
+    meta: { positionId: input.positionId },
+    entries: [
+      credit(positionCollateralAccount(input.userId, input.assetId, input.positionId), input.amount),
+      debit(userAvailable(input.userId, input.assetId), input.amount),
+    ],
+  };
+}
+
+export interface FuturesLossInput {
+  positionId: string;
+  userId: string;
+  assetId: string;
+  /** Loss covered from the position's own margin. */
+  fromMargin: Amount;
+  /** Residual loss taken from insurance fund (may be 0n — then omit by not calling). */
+  fromInsurance: Amount;
+  /** Realized PnL sink: house trade fees pot until a dedicated PnL account exists. */
+  lossId: string;
+}
+
+/**
+ * Realize a loss against position margin (+ optional insurance).
+ *
+ * Entries balance per asset: margin (+ insurance) leave user/house pots into
+ * house fees:trade as the temporary realized-loss sink (engine names the amounts).
+ * Full insurance accounting may refine the sink later without changing the lock shape.
+ */
+export function futuresRealizeLoss(input: FuturesLossInput): PostRequest {
+  if (input.fromMargin < 0n || input.fromInsurance < 0n) {
+    throw new InvalidEntryError('futures loss legs must be non-negative');
+  }
+  const total = input.fromMargin + input.fromInsurance;
+  requirePositive('futures realized loss total', total);
+
+  const entries: EntryInput[] = [];
+  if (input.fromMargin > 0n) {
+    entries.push(credit(positionCollateralAccount(input.userId, input.assetId, input.positionId), input.fromMargin));
+  }
+  if (input.fromInsurance > 0n) {
+    entries.push(credit(insuranceFund(input.assetId), input.fromInsurance));
+  }
+  entries.push(debit(houseFees('trade', input.assetId), total));
+
+  return {
+    idempotencyKey: `futures.loss:${input.lossId}`,
+    module: 'trade',
+    reason: 'futures.loss.realized',
+    meta: {
+      positionId: input.positionId,
+      fromMargin: input.fromMargin.toString(),
+      fromInsurance: input.fromInsurance.toString(),
+    },
+    entries,
   };
 }
 
@@ -657,6 +770,10 @@ export const recipes = {
   tradeFill,
   orderHold,
   orderHoldRelease,
+  futuresMarginLock,
+  futuresMarginAdd,
+  futuresMarginRelease,
+  futuresRealizeLoss,
   escrowLock,
   escrowRelease,
   escrowRefund,
