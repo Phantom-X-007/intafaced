@@ -161,7 +161,7 @@ Every Spec REQ → ≥1 task. Plan fails if any REQ unmapped.
 
 #### P2-4 · Disable controllers at door (DB-1, DB-2)
 - **Architect:** Seam A1  
-- **Files:** vendor Spring security/filter under the vendored exchange tree  
+- **Files:** vendor Spring security/filter under `vendor/**/ (exchange vendor tree)`  
 - **Check:** sample money controller call refused; inventory list covered  
 - **Class:** M posture — **carve-out risk**; adversarial + Denon note if needed  
 - **Depends:** P2-1  

@@ -46,7 +46,7 @@ Do **not** replace these with fashionable alternatives.
 | **Playwright uiproof** | Shell proof | Only when Stream A honesty collides (DX-9) |
 | **Class M matrix + thrift** | Merge / CI economics | Non-negotiable |
 | **Doubt-driven / review skills** | Fresh adversarial | Every Spec/Arch/money PR |
-| **Multi-session coding agents** | Builder ≠ verifier | Session topology from Frame |
+| **Multi-session agents** | Builder ≠ verifier | Session topology from Frame |
 
 **Verdict:** We are not tool-poor. We are **workflow-incomplete** (chaos suite, dual-book scan depth, assembled path as first-class, Spec as gate).
 

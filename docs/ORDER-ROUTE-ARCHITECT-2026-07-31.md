@@ -23,7 +23,7 @@ Ambiguous seams only. Everything else is mechanical implementation of Spec.
 
 **Shape:**
 
-1. **Inventory PR (docs/tooling):** script lists controllers + `MemberWalletDao` mutators under the vendored exchange tree (`vendor/<exchange>/…` — paths already include `MemberWalletController`, finance controllers, etc.).  
+1. **Inventory PR (docs/tooling):** script lists controllers + `MemberWalletDao` mutators under `vendor/**/ (exchange vendor tree)` (paths already include `MemberWalletController`, finance controllers, etc.).  
 2. **Scan PR:** extend `tooling/ci/vendor-shell-scan.mjs` with four mutator patterns; extend `custody-scan` or sibling `vendor-java-money-scan.mjs` to walk `.java`.  
 3. **Runtime PR:** Spring-level block on money mutator endpoints / DAO write methods (prefer filter on URL patterns + fail-closed default).  
 4. **ADR:** ensure dual-book Accepted lands via #272 merge (LW-1).  
