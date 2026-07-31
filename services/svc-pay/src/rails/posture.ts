@@ -1,4 +1,8 @@
+import { isHex, type Hex } from 'viem';
+import { MemoryBroadcastStore } from './broadcast-store.js';
 import { MemoryChain, UnconfiguredChain, type CryptoChainPort } from './chain-port.js';
+import { parseEvmAssets } from './evm-assets.js';
+import { EvmLiveChain } from './evm-chain.js';
 import { VALUE_LEAVING_CAPABILITIES, isUsable, type RailAdapter, type RailCapability } from './rail-adapter.js';
 import type { RailRegistry } from './registry.js';
 
@@ -327,21 +331,90 @@ export function selectPublicCheckoutRail(
 }
 
 /**
- * The chain to put behind `crypto-native` when nothing real is configured.
+ * The chain to put behind `crypto-native`.
  *
- * In an enforced environment the answer is `UnconfiguredChain`, which refuses
- * every call. In dev and test it is `MemoryChain`, which is the fixture the
- * whole suite is built on.
+ * THREE STATES, still — but the live one is no longer missing from the tree:
  *
- * THIS IS THE §13 SOCKET, and the reason it takes no URL: there is no
- * implementation of `CryptoChainPort` against a real node in this repository. A
- * `PAY_CHAIN_WATCHER_URL` would read as though supplying it made the rail live,
- * and the honest shape of "not built yet" is a refusing implementation plus an
- * error message naming what the owner has to obtain — not a config key with
- * nothing behind it.
+ *   1. `PAY_CRYPTO_RPC_URL` (+ chain id, mnemonic, hot key, assets) set →
+ *      `EvmLiveChain` with `posture: 'live'`. crypto-native becomes a live rail.
+ *   2. Enforced env (`staging`/`prod`) with nothing set → `UnconfiguredChain`
+ *      (refuses every call — never a quiet MemoryChain in production).
+ *   3. `dev`/`test` with nothing set → `MemoryChain` (the suite fixture).
+ *
+ * A partial live config (RPC without keys, keys without RPC) REFUSES TO BUILD
+ * a chain — better a loud boot failure than a rail that looks live and cannot
+ * pay out.
  */
 export function defaultChainFor(env: Record<string, string | undefined> = process.env): CryptoChainPort {
+  const live = tryLiveChainFromEnv(env);
+  if (live) return live;
+
   const appEnv = env.APP_ENV ?? 'dev';
   const enforced = (RAIL_POSTURE_ENFORCED_ENVS as readonly string[]).includes(appEnv);
   return enforced ? new UnconfiguredChain() : new MemoryChain();
+}
+
+/**
+ * Whether `card-sandbox` may be registered alongside crypto-native.
+ *
+ * In `staging`/`prod`, a registered sandbox rail fails boot unless
+ * `PAY_ALLOW_SANDBOX_RAILS=true`. A deployment that has wired a live crypto
+ * rail should not also register the sandbox acquirer by default — that would
+ * force the override flag and re-open the fabricated-payout hole on the card
+ * path. Dev/test keep the sandbox: it is the fixture.
+ *
+ * Override with `PAY_REGISTER_CARD_SANDBOX=true|false`.
+ */
+export function shouldRegisterCardSandbox(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.PAY_REGISTER_CARD_SANDBOX === 'true') return true;
+  if (env.PAY_REGISTER_CARD_SANDBOX === 'false') return false;
+  const appEnv = env.APP_ENV ?? 'dev';
+  return !(RAIL_POSTURE_ENFORCED_ENVS as readonly string[]).includes(appEnv);
+}
+
+export function tryLiveChainFromEnv(env: Record<string, string | undefined> = process.env): EvmLiveChain | null {
+  const rpcUrl = env.PAY_CRYPTO_RPC_URL?.trim();
+  if (!rpcUrl) return null;
+
+  const missing: string[] = [];
+  const chainIdRaw = env.PAY_CRYPTO_CHAIN_ID?.trim();
+  const mnemonic = env.PAY_CRYPTO_DEPOSIT_MNEMONIC?.trim();
+  const hotKey = env.PAY_CRYPTO_HOT_WALLET_KEY?.trim();
+  const assetsRaw = env.PAY_CRYPTO_ASSETS?.trim();
+
+  if (!chainIdRaw) missing.push('PAY_CRYPTO_CHAIN_ID');
+  if (!mnemonic) missing.push('PAY_CRYPTO_DEPOSIT_MNEMONIC');
+  if (!hotKey) missing.push('PAY_CRYPTO_HOT_WALLET_KEY');
+  if (!assetsRaw) missing.push('PAY_CRYPTO_ASSETS');
+
+  if (missing.length > 0) {
+    throw new Error(
+      `PAY_CRYPTO_RPC_URL is set, but live crypto rail config is incomplete. Missing: ${missing.join(', ')}. ` +
+        `Either supply all of them, or unset PAY_CRYPTO_RPC_URL to keep the ${
+          (RAIL_POSTURE_ENFORCED_ENVS as readonly string[]).includes(env.APP_ENV ?? 'dev')
+            ? 'UnconfiguredChain refusal'
+            : 'MemoryChain sandbox'
+        }.`,
+    );
+  }
+
+  const chainId = Number(chainIdRaw);
+  if (!Number.isInteger(chainId) || chainId <= 0) {
+    throw new Error(`PAY_CRYPTO_CHAIN_ID must be a positive integer (got "${chainIdRaw}")`);
+  }
+  if (!hotKey || !isHex(hotKey) || hotKey.length !== 66) {
+    throw new Error('PAY_CRYPTO_HOT_WALLET_KEY must be a 32-byte hex private key (0x + 64 hex chars)');
+  }
+
+  const minConfirmations = env.PAY_MIN_CONFIRMATIONS ? Number(env.PAY_MIN_CONFIRMATIONS) : 6;
+
+  return new EvmLiveChain({
+    rpcUrl,
+    chainId,
+    depositMnemonic: mnemonic!,
+    hotWalletKey: hotKey as Hex,
+    assets: parseEvmAssets(assetsRaw!),
+    broadcasts: new MemoryBroadcastStore(),
+    minConfirmations: Number.isFinite(minConfirmations) && minConfirmations >= 1 ? minConfirmations : 6,
+  });
 }

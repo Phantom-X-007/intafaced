@@ -88,6 +88,40 @@ const schema = serviceEnvSchema
       PAY_ALLOW_SANDBOX_RAILS: z.enum(['true', 'false']).default('false'),
 
       /**
+       * LIVE crypto rail — JSON-RPC endpoint for the chain behind `crypto-native`.
+       *
+       * When set, `defaultChainFor` builds an `EvmLiveChain` (`posture: 'live'`)
+       * and the following sibling keys become mandatory. When unset, staging/prod
+       * keep `UnconfiguredChain` and dev/test keep `MemoryChain`.
+       */
+      PAY_CRYPTO_RPC_URL: z.string().url().optional(),
+      PAY_CRYPTO_CHAIN_ID: z.coerce.number().int().positive().optional(),
+      /**
+       * BIP-39 mnemonic that derives per-payment acceptance addresses.
+       * Never the hot wallet — deposits land here; payouts leave from the hot key.
+       */
+      PAY_CRYPTO_DEPOSIT_MNEMONIC: z.string().min(20).optional(),
+      /** Hex private key (0x…) that signs outbound payouts and refunds. */
+      PAY_CRYPTO_HOT_WALLET_KEY: z
+        .string()
+        .regex(/^0x[0-9a-fA-F]{64}$/, 'must be 0x + 64 hex chars')
+        .optional(),
+      /**
+       * Asset map, e.g. `ETH:native` or `ETH:native,USDT:0xabc…:6`.
+       * See `rails/evm-assets.ts`.
+       */
+      PAY_CRYPTO_ASSETS: z.string().min(1).optional(),
+      /**
+       * Register `card-sandbox` at boot. Default: yes in dev/test, no in
+       * staging/prod (so a live crypto deployment is not forced to also carry a
+       * sandbox acquirer). See `shouldRegisterCardSandbox`.
+       */
+      PAY_REGISTER_CARD_SANDBOX: z.enum(['true', 'false']).optional(),
+      /** Start the in-process chain watcher that POSTs finalized deposits. Default true when live. */
+      PAY_CRYPTO_WATCHER_ENABLED: z.enum(['true', 'false']).default('true'),
+      PAY_CRYPTO_WATCHER_INTERVAL_MS: z.coerce.number().int().min(500).max(60_000).default(2_000),
+
+      /**
        * WHICH RAILS MAY SERVE THE PUBLIC HOSTED CHECKOUT, in preference order,
        * as `railId:method` — e.g. `crypto-native:crypto`.
        *
