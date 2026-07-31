@@ -152,9 +152,9 @@
 .ivu-form-item-content {
 .register_btn.ivu-btn {
             width: 100%;
-            background-color: #1ad4bc;
+            background-color: var(--ix-orange, #00c2a8);
             outline: none;
-            border-color: #1ad4bc;
+            border-color: var(--ix-orange, #00c2a8);
             color: #fff;
             border-radius: 5px;
             font-size: 18px;
@@ -172,13 +172,13 @@
           }
           #sendCode {
             position: absolute;
-            border: 1px solid #0e0e0e;
+            border: 1px solid var(--ix-bg, #0a0c10);
             background: transparent;
             top: -10px;
             outline: none;
             right: 0;
             width: 30%;
-            color: #1ad4bc;
+            color: var(--ix-orange, #00c2a8);
             cursor: pointer;
           }
         }
@@ -190,14 +190,14 @@
         font-size: 12px;
         cursor: default;
         a {
-          color: #1ad4bc;
+          color: var(--ix-orange, #00c2a8);
           margin-left: -10px;
         }
 .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
 .ivu-checkbox.ivu-checkbox-checked {
 .ivu-checkbox-inner {
-              border: 1px solid #1ad4bc;
-              background-color: #1ad4bc;
+              border: 1px solid var(--ix-orange, #00c2a8);
+              background-color: var(--ix-orange, #00c2a8);
             }
           }
         }
@@ -591,8 +591,8 @@ export default {
 .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
 .ivu-checkbox.ivu-checkbox-checked {
 .ivu-checkbox-inner {
-              border: 1px solid #1ad4bc;
-              background-color: #1ad4bc;
+              border: 1px solid var(--ix-orange, #00c2a8);
+              background-color: var(--ix-orange, #00c2a8);
             }
           }
 
@@ -620,7 +620,7 @@ export default {
     right: 4px;
   }
 .mob-login.ivu-form-item-error.ivu-input-group-append,.mob-login.ivu-form-item-error.ivu-input-group-prepend,.mob-login.ivu-input-group-append,.mob-login.ivu-input-group-prepend{
-    background-color: #0e0e0e!important;
+    background-color: var(--ix-bg, #0a0c10)!important;
     border-top:none;
     border-left: none;
     border-right: none;
