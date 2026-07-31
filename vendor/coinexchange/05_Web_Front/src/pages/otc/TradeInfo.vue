@@ -1,6 +1,9 @@
 <template>
     <div class="content-wrap">
-            <div class="container" id="List">
+            <!-- Stream A: never paint a blank/fake offer when pre-order fails. -->
+            <p v-if="loadError" class="ix-empty ix-empty-error" style="padding-top: 100px; text-align: center;">{{ loadError }}</p>
+            <p v-else-if="loading" class="ix-empty ix-empty-loading" style="padding-top: 100px; text-align: center;">{{ $t('common.loading') }}</p>
+            <div class="container" id="List" v-else-if="offerReady">
                 <Row>
                     <Col span="4">
                     <div class="leftmenu left-box">
@@ -154,12 +157,14 @@ export default {
       submitBtn: false,
       btnType: "",
       type: "",
-      user: {
-          username:"aaa"
-      },
+      /* Never invent a merchant or price before pre-order answers. */
+      loading: true,
+      loadError: "",
+      offerReady: false,
+      user: {},
       // price: '',
       buyPrice: "",
-      nuyNum: 0,
+      nuyNum: "",
       minLimit: 100,
       maxLimit: 1000,
       // number:0.6,
@@ -215,12 +220,16 @@ export default {
       }
     },
     getIdAdv() {
-      // id
+      // pre-order — fail must not paint a blank or fake offer
+      this.loading = true;
+      this.loadError = "";
+      this.offerReady = false;
+      this.user = {};
       this.$http
-.post(this.host + "/otc/order/pre", { id: this.$route.query.tradeId })
-.then(response => {
+        .post(this.host + "/otc/order/pre", { id: this.$route.query.tradeId })
+        .then(response => {
           var resp = response.body;
-          if (resp.code == 0) {
+          if (resp && resp.code == 0 && resp.data) {
             this.user = resp.data;
             this.text1 =
               this.$t("otc.tradeinfo.warning2") +
@@ -242,11 +251,23 @@ export default {
               this.type = this.$t("otc.tradeinfo.sellout");
             }
             this.usernameS = (this.user.username + "")
-.replace(/^\s+|\s+$/g, "")
-.slice(0, 1);
+              .replace(/^\s+|\s+$/g, "")
+              .slice(0, 1);
+            this.offerReady = true;
+            this.loading = false;
           } else {
-            this.$Message.error(resp.message);
+            this.loadError =
+              this.$t("otc.offerUnavailable") ||
+              "Offer did not load — details are unknown, not blank.";
+            this.loading = false;
+            if (resp && resp.message) this.$Message.error(resp.message);
           }
+        })
+        .catch(() => {
+          this.loadError =
+            this.$t("otc.offerUnavailable") ||
+            "Offer service did not respond — details are unknown, not blank.";
+          this.loading = false;
         });
     },
     submit() {
@@ -356,6 +377,9 @@ export default {
       return Math.round(v * t) / t;
     },
     strpro(str) {
+      if (!str) {
+        return "";
+      }
       let newStr = str;
       str = str.slice(1);
       var re = /[\D\d]*/g;

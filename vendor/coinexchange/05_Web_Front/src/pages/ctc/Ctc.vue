@@ -8,6 +8,9 @@
           <Tabs :animated="false" style="width:100%;">
             <TabPane :label="'USDT' + $t('ctc.trade')" name="all">
               <div class="ctc-container">
+                <!-- Stream A: never invent C2C quotes or balances. -->
+                <p v-if="priceError" class="ix-empty ix-empty-error">{{ priceError }}</p>
+                <p v-else-if="priceLoading" class="ix-empty ix-empty-loading">{{ $t('common.loading') }}</p>
                 <div class="trade_wrap">
                   <div class="trade_panel">
                     <div class="trade_bd_ctc">
@@ -16,7 +19,7 @@
                           <Form>
                             <FormItem class="buy-input">
                               <label class="before">{{$t('ctc.buyprice')}}</label>
-                              <Input v-model="buyPrice" disabled></Input>
+                              <Input :value="buyPriceLabel" disabled></Input>
                               <label class="after" style="color: #45b854;">CNY</label>
                             </FormItem>
                             <FormItem class="trade-input">
@@ -53,7 +56,7 @@
                           <Form ref="formValidate">
                             <FormItem class="sell-input">
                               <label class="before">{{$t('ctc.sellprice')}}</label>
-                              <Input v-model="sellPrice" disabled></Input>
+                              <Input :value="sellPriceLabel" disabled></Input>
                               <label class="after" style="color: #f2334f;">CNY</label>
                             </FormItem>
                             <FormItem class="trade-input">
@@ -63,7 +66,7 @@
                             </FormItem>
                             <p style="font-size: 12px;margin-top: -20px;text-align:right;margin-bottom: 10px;">
                               <span>{{$t('ctc.avabalance')}}</span>: 
-                              <span>21212</span><span style="margin-left: 5px;">USDT</span>
+                              <span>{{ avaBalanceLabel }}</span><span style="margin-left: 5px;">USDT</span>
                             </p>
                             <FormItem>
                               <label class="before">{{$t('ctc.receiveType')}}: </label>
@@ -110,8 +113,11 @@
                 </div>
               </div>
               <div class="table">
-                <Table :no-data-text="$t('common.nodata')" :columns="columns" :data="orders" :loading="loading"></Table>
-                <div class="page">
+                <p v-if="ordersError" class="ix-empty ix-empty-error">{{ ordersError }}</p>
+                <p v-else-if="!isLogin" class="ix-empty">{{ $t('ctc.ordersSignIn') }}</p>
+                <p v-else-if="!loading && ordersReachable && orders.length === 0" class="ix-empty">{{ $t('ctc.ordersEmpty') }}</p>
+                <Table v-if="!ordersError && isLogin" :no-data-text="$t('common.nodata')" :columns="columns" :data="orders" :loading="loading"></Table>
+                <div class="page" v-if="!ordersError && isLogin">
                   <Page :total="total" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
                 </div>
               </div>
@@ -287,10 +293,18 @@ export default {
       direction: "buy",
       receiveType: "bank",
       payType: "bank",
-      buyPrice: 7.00,
+      /* Never invent a CNY quote — only paint after /market/ctc-usdt answers. */
+      buyPrice: null,
       buyAmount: null,
-      sellPrice: 7.00,
+      sellPrice: null,
       sellAmount: null,
+      priceLoading: true,
+      priceReachable: false,
+      priceError: "",
+      /* Never invent USDT available balance (was hard-coded 21212). */
+      usdtBalance: null,
+      balanceLoading: false,
+      balanceError: "",
       modal: false,
       detailModal: false,
       formInline: {
@@ -301,9 +315,11 @@ export default {
       codeIsSending: false,
       sendcodeValue: this.$t("uc.regist.sendcode"),
       loading: false,
+      ordersReachable: false,
+      ordersError: "",
       pageSize: 10,
       pageNo: 1,
-      total: 10,
+      total: 0,
       user: {},
       userAccount: {},
       orders: [],
@@ -505,10 +521,46 @@ export default {
     isLogin: function() {
       return this.$store.getters.isLogin;
     },
-    totalBuyMoney(){
+    buyPriceLabel() {
+      if (this.priceLoading && !this.priceReachable) {
+        return "…";
+      }
+      if (this.buyPrice == null) {
+        return "—";
+      }
+      return this.buyPrice;
+    },
+    sellPriceLabel() {
+      if (this.priceLoading && !this.priceReachable) {
+        return "…";
+      }
+      if (this.sellPrice == null) {
+        return "—";
+      }
+      return this.sellPrice;
+    },
+    avaBalanceLabel() {
+      if (!this.isLogin) {
+        return "—";
+      }
+      if (this.balanceError) {
+        return "—";
+      }
+      if (this.usdtBalance == null) {
+        return this.balanceLoading ? "…" : "—";
+      }
+      return this.usdtBalance;
+    },
+    totalBuyMoney() {
+      if (this.buyPrice == null || this.buyAmount == null || this.buyAmount === "") {
+        return "—";
+      }
       return (this.buyPrice * this.buyAmount).toFixed(2);
     },
-    totalSellMoney(){
+    totalSellMoney() {
+      if (this.sellPrice == null || this.sellAmount == null || this.sellAmount === "") {
+        return "—";
+      }
       return (this.sellPrice * this.sellAmount).toFixed(2);
     }
   },
@@ -516,10 +568,11 @@ export default {
     init() {
       this.$store.commit("navigate", "nav-ctc");
       this.getC2cPrice();
-      if(this.isLogin){
+      if (this.isLogin) {
         this.getOrderList();
         this.getAccount();
         this.getAccountSecurity();
+        this.getUsdtBalance();
       }
     },
     cancelOrderClick () {
@@ -622,36 +675,117 @@ export default {
             }
         })
     },
-    getC2cPrice(){
+    getC2cPrice() {
+      /* Keep last good quote on poll failure; never invent 7.00. */
+      if (!this.priceReachable) {
+        this.priceLoading = true;
+      }
       this.$http
-.post(this.host + "/market/ctc-usdt")
-.then(response => {
+        .post(this.host + "/market/ctc-usdt")
+        .then(response => {
           var resp = response.body;
-          this.buyPrice = resp.data.buy;
-          this.sellPrice = resp.data.sell;
+          if (
+            resp &&
+            resp.data &&
+            resp.data.buy != null &&
+            resp.data.sell != null
+          ) {
+            this.buyPrice = resp.data.buy;
+            this.sellPrice = resp.data.sell;
+            this.priceReachable = true;
+            this.priceError = "";
+            this.priceLoading = false;
+          } else if (!this.priceReachable) {
+            this.buyPrice = null;
+            this.sellPrice = null;
+            this.priceError =
+              this.$t("ctc.priceUnavailable") ||
+              "C2C price did not answer — quote is unknown, not a fixed rate.";
+            this.priceLoading = false;
+          } else {
+            this.priceLoading = false;
+          }
+        })
+        .catch(() => {
+          if (!this.priceReachable) {
+            this.buyPrice = null;
+            this.sellPrice = null;
+            this.priceError =
+              this.$t("ctc.priceUnavailable") ||
+              "C2C price service did not respond — quote is unknown, not a fixed rate.";
+          }
+          this.priceLoading = false;
         });
     },
-    getOrderList(){
+    getUsdtBalance() {
+      /* Venue exchange wallet only — never invent a balance. */
+      this.balanceLoading = true;
+      this.balanceError = "";
+      this.usdtBalance = null;
+      this.$http
+        .post(this.host + "/uc/asset/wallet")
+        .then(response => {
+          var resp = response.body;
+          if (resp && resp.code == 0 && Array.isArray(resp.data)) {
+            var found = null;
+            for (var i = 0; i < resp.data.length; i++) {
+              var row = resp.data[i];
+              if (row.coin && row.coin.unit === "USDT") {
+                found = row.balance;
+                break;
+              }
+            }
+            this.usdtBalance = found;
+            this.balanceLoading = false;
+          } else {
+            this.balanceError =
+              "Wallet did not answer — available USDT is unknown, not zero.";
+            this.balanceLoading = false;
+          }
+        })
+        .catch(() => {
+          this.balanceError =
+            "Wallet service did not respond — available USDT is unknown, not zero.";
+          this.balanceLoading = false;
+        });
+    },
+    getOrderList() {
+      // C2C orders — fail must not look like "no orders"
       this.loading = true;
+      this.ordersReachable = false;
+      this.ordersError = "";
       let params = {};
       params.pageNo = this.pageNo;
       params.pageSize = this.pageSize;
       this.orders = [];
       this.$http
-.post(this.host + "/uc/ctc/page-query", params)
-.then(response => {
+        .post(this.host + "/uc/ctc/page-query", params)
+        .then(response => {
           var resp = response.body;
           let rows = [];
-          if(resp.code == 0){
-            if (resp.data.content.length > 0) {
-              this.total = resp.data.totalElements;
-              for (var i = 0; i < resp.data.content.length; i++) {
-                var row = resp.data.content[i];
-                rows.push(row);
-              }
-              this.orders = rows;
+          if (resp && resp.code == 0) {
+            var content =
+              resp.data && Array.isArray(resp.data.content)
+                ? resp.data.content
+                : [];
+            this.total = (resp.data && resp.data.totalElements) || 0;
+            for (var i = 0; i < content.length; i++) {
+              rows.push(content[i]);
             }
+            this.orders = rows;
+            this.ordersReachable = true;
+            this.loading = false;
+          } else {
+            this.ordersError =
+              this.$t("ctc.ordersUnavailable") ||
+              "C2C orders did not answer — list is unknown, not empty.";
+            this.loading = false;
           }
+        })
+        .catch(() => {
+          this.ordersError =
+            this.$t("ctc.ordersUnavailable") ||
+            "C2C orders service did not respond — list is unknown, not empty.";
           this.loading = false;
         });
     },
@@ -775,6 +909,13 @@ export default {
     valid(type){
       if(!this.isLogin){
         this.$Message.error("Please sign in first.");
+        return false;
+      }
+      if (!this.priceReachable || this.buyPrice == null || this.sellPrice == null) {
+        this.$Message.error(
+          this.$t("ctc.priceUnavailable") ||
+            "Price unavailable — cannot place order on an unknown quote."
+        );
         return false;
       }
       if(this.user.realVerified!= 1){
