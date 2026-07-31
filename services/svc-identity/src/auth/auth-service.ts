@@ -309,6 +309,17 @@ export class AuthService {
         return { kind: 'expired' };
       }
 
+      // Mirror login / ifc_ exchange: frozen or closed accounts must not mint new
+      // access tokens from a still-valid refresh (ID-P1-2).
+      const users = await tx<Array<{ status: string }>>`
+        SELECT status FROM users WHERE id = ${session.user_id} FOR UPDATE
+      `;
+      const status = users[0]?.status;
+      if (!status || status !== 'active') {
+        await tx`UPDATE sessions SET revoked = true WHERE id = ${session.id}`;
+        throw new AuthError(`Account is ${status ?? 'unknown'}`, 'auth.account_frozen');
+      }
+
       await tx`UPDATE sessions SET revoked = true, last_used_at = now() WHERE id = ${session.id}`;
 
       const nextToken = generateToken(48);
