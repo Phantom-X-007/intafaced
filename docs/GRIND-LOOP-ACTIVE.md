@@ -7,12 +7,11 @@
 **Last tip:** re-check · high water through **#258** · do not re-ship **#110–#258** without regression
 
 ```
-STATUS 2026-07-31T09:15Z residual COOK
-tip: re-check origin/main (expect post-#315)
-open residual PRs: re-check gh
-backend residual: futures stack #291–#315 on main (jobs default OFF)
-next: matching seed / live index / pay residual · leave #289
-do not invent marks rates candles balances
+STATUS 2026-07-31T09:55Z residual COOK
+tip: re-check origin/main (expect post-#321)
+open: #289 order-route (leave) · #279 stale
+residual: futures #291–#315 · mm seed planner #321 · pay honesty
+next: house seeder money path OR candle job · no invent mid
 ```
 
 ---
