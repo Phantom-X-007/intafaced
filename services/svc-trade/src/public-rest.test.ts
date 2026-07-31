@@ -583,6 +583,53 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/funding-rate/:symbol refuses futures when no rate published (never invents 0)', async () => {
+    const perp = fakeMarket({
+      id: '11111111-1111-4111-8111-111111111111',
+      symbol: 'BTC/USDT-PERP',
+      kind: 'futures',
+    });
+    const app = await build(
+      deps({
+        marketBySymbol: async (s) => (s === perp.symbol ? perp : null),
+        fundingRateForMarket: async () => null,
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/funding-rate/BTC%2FUSDT-PERP' });
+    expect(res.statusCode).toBe(501);
+    expect(res.json().code).toBe('NotSupported');
+    expect(res.json().intafacedCode).toBe('trade.funding_rate_unavailable');
+    expect(JSON.stringify(res.json())).not.toMatch(/"fundingRate"/);
+    await app.close();
+  });
+
+  it('GET /api/v1/funding-rate/:symbol returns published futures rate only', async () => {
+    const perp = fakeMarket({
+      id: '11111111-1111-4111-8111-111111111111',
+      symbol: 'BTC/USDT-PERP',
+      kind: 'futures',
+    });
+    const app = await build(
+      deps({
+        marketBySymbol: async (s) => (s === perp.symbol ? perp : null),
+        fundingRateForMarket: async () => ({
+          fundingRate: '0.0001',
+          fundingTimestamp: 1_700_000_000_000,
+          fundingDatetime: '2023-11-14T22:13:20.000Z',
+          nextFundingTimestamp: null,
+          markPrice: null,
+          indexPrice: null,
+        }),
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/funding-rate/BTC%2FUSDT-PERP' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.symbol).toBe('BTC/USDT-PERP');
+    expect(body.fundingRate).toBe('0.0001');
+    await app.close();
+  });
+
   /**
    * The whole point of the taxonomy: every failure on this surface validates
    * against `exchangeErrorSchema`, so a CCXT client can branch on the class

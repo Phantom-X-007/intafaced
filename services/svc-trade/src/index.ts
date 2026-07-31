@@ -71,6 +71,21 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
+// Futures residual jobs — default OFF. Rate book is process-local for public REST peeks.
+const futuresJobs = startFuturesJobs({
+  sql,
+  ledger,
+  matching,
+  bus,
+  config: {
+    enabled: env.TRADE_FUTURES_JOBS_ENABLED,
+    liqIntervalMs: env.TRADE_FUTURES_LIQ_INTERVAL_MS,
+    fundingIntervalMs: env.TRADE_FUTURES_FUNDING_INTERVAL_MS,
+    fundingMarketIds: parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS),
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
+});
+
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 app.get('/ready', async (_req, reply) => {
@@ -90,6 +105,19 @@ registerPublicRest(app, {
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit, sinceMs) => trade.publicTape(marketId, limit, sinceMs),
   candles: (marketId, timeframe, limit, sinceMs) => trade.candles(marketId, timeframe, limit, sinceMs),
+  fundingRateForMarket: (marketId, symbol) => {
+    const entry = futuresJobs.getPublishedRate(marketId);
+    if (!entry) return null;
+    const fundingDatetime = new Date(entry.asOfMs).toISOString();
+    return {
+      fundingRate: entry.rate,
+      fundingTimestamp: entry.asOfMs,
+      fundingDatetime,
+      nextFundingTimestamp: null,
+      markPrice: null,
+      indexPrice: null,
+    };
+  },
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
@@ -130,22 +158,6 @@ await app.register(fastifyTRPCPlugin, {
     router: appRouter,
     createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
   } satisfies FastifyTRPCPluginOptions<TradeRouter>['trpcOptions'],
-});
-
-// Futures residual jobs — default OFF. Enabling requires explicit env + market ids.
-// Started after Fastify so job errors can use app.log.
-const futuresJobs = startFuturesJobs({
-  sql,
-  ledger,
-  matching,
-  bus,
-  config: {
-    enabled: env.TRADE_FUTURES_JOBS_ENABLED,
-    liqIntervalMs: env.TRADE_FUTURES_LIQ_INTERVAL_MS,
-    fundingIntervalMs: env.TRADE_FUTURES_FUNDING_INTERVAL_MS,
-    fundingMarketIds: parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS),
-  },
-  onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });

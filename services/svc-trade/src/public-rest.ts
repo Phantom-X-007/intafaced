@@ -51,6 +51,31 @@ export interface PublicRestDeps {
   candles(marketId: string, timeframe: Timeframe, limit: number, sinceMs?: number): Promise<Candle[]>;
   /** Injectable clock for tests. */
   now?: () => number;
+  /**
+   * Published funding rate for a futures market. Null → not served (never invent zero).
+   * Spot markets never call this.
+   */
+  fundingRateForMarket?: (
+    marketId: string,
+    symbol: string,
+  ) =>
+    | Promise<{
+        fundingRate: string;
+        fundingTimestamp: number;
+        fundingDatetime: string;
+        nextFundingTimestamp: number | null;
+        markPrice: string | null;
+        indexPrice: string | null;
+      } | null>
+    | {
+        fundingRate: string;
+        fundingTimestamp: number;
+        fundingDatetime: string;
+        nextFundingTimestamp: number | null;
+        markPrice: string | null;
+        indexPrice: string | null;
+      }
+    | null;
 }
 
 /** Send an already-mapped CCXT error. */
@@ -432,7 +457,23 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       return sendCcxt(reply, notSupported(`${market.symbol} is a spot market and has no funding rate`, 'trade.funding_rate_spot_market'));
     }
 
-    return sendCcxt(reply, notSupported(`funding rates are not served yet for ${market.symbol}`, 'trade.funding_rate_unavailable'));
+    // Futures: only answer when an external rate has been published. Never invent "0".
+    if (!deps.fundingRateForMarket) {
+      return sendCcxt(reply, notSupported(`funding rates are not served yet for ${market.symbol}`, 'trade.funding_rate_unavailable'));
+    }
+    const quote = await deps.fundingRateForMarket(market.id, market.symbol);
+    if (!quote) {
+      return sendCcxt(reply, notSupported(`no published funding rate for ${market.symbol}`, 'trade.funding_rate_unavailable'));
+    }
+    return reply.code(200).send({
+      symbol: market.symbol,
+      markPrice: quote.markPrice,
+      indexPrice: quote.indexPrice,
+      fundingRate: quote.fundingRate,
+      fundingTimestamp: quote.fundingTimestamp,
+      fundingDatetime: quote.fundingDatetime,
+      nextFundingTimestamp: quote.nextFundingTimestamp,
+    });
   });
 }
 

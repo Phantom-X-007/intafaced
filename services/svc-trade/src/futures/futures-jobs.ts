@@ -49,6 +49,8 @@ export interface FuturesJobsHandle {
   host: JobHost;
   /** Rate book so ops/oracle can publish without invent. */
   publishFundingRate: (entry: FundingRateEntry) => void;
+  /** Peek published rate for a market — null if none/stale (never invent). */
+  getPublishedRate: (marketId: string) => FundingRateEntry | null;
   stop(): void;
 }
 
@@ -65,10 +67,13 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
     deps.seedFundingRate?.(entry);
   };
 
+  const getPublishedRate = (marketId: string) => rates.peek(marketId);
+
   if (!deps.config.enabled) {
     return {
       host,
       publishFundingRate,
+      getPublishedRate,
       stop: () => host.stopAll(),
     };
   }
@@ -110,6 +115,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
   return {
     host,
     publishFundingRate,
+    getPublishedRate,
     stop: () => host.stopAll(),
   };
 }
