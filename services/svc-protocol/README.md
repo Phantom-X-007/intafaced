@@ -284,4 +284,4 @@ Configuration lives in `src/env.ts`: chain id, RPC, EntryPoint, factory, impleme
 
 Constant-product pools under `contracts/amm/`. Permissionless tRPC: `amm.quoteExactIn`, `amm.buildCreatePool`, `amm.buildSwapExactIn`, `amm.buildMintLiquidity`. Platform never holds LP keys. Factory address: `PROTOCOL_AMM_FACTORY_ADDRESS`.
 
-**`ConstantProductPool` does not compile** (see above). Standing up the dev chain is what revealed it. Until it is fixed there is no pool bytecode to deploy, so `PROTOCOL_AMM_FACTORY_ADDRESS` stays zero and every AMM chain read refuses.
+**`ConstantProductPool` compiles** (see AMM compile note above; artefacts under `contracts/out/`). Factory deploy on the dev chain and external audit remain open, so `PROTOCOL_AMM_FACTORY_ADDRESS` still defaults to zero and every AMM **chain** read refuses until an operator deploys and configures a real factory.

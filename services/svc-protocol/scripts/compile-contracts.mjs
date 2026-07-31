@@ -9,8 +9,10 @@
  * code, and `AccountFactory.getAddress` was the one function in this repository
  * whose disagreement with TypeScript would cost a user real money.
  *
- * The first run proved the point immediately: see the `amm` suite in
- * `contract-sources.mjs`. `ConstantProductPool` does not compile and never has.
+ * Historical note: the first run proved the point — see the `amm` suite in
+ * `contract-sources.mjs`. `ConstantProductPool` once failed to compile (external
+ * `swap` call by name); that is fixed via private `_swap`. The suite now
+ * `expect: 'compiles'` and artefacts are committed under `contracts/out/`.
  *
  * ── Why solc-js and not Foundry/Hardhat ─────────────────────────────────────
  *

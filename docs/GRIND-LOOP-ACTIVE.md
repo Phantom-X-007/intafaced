@@ -1,17 +1,18 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** **O1+O2 OVERNIGHT** · backend micro-queue still **DRAINED** (do not invent Denon product) · **O1 babysit** + **O2 Stream A / hygiene** only  
+**Status:** **O1+O2** · backend micro-queue still **DRAINED** · money-class mega **closed this fire** (docs archive)  
 **Operator decision:** 2026-07-30 Nitro chose **O1+O2** (see `docs/OVERNIGHT-LOOP-PLAN-2026-07-30.md`)  
 **Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
-**Last tip:** peace shell close through **#228** + residual fire · PEACE re-derived · do not re-ship **#110–#249/#228**
+**Last tip:** money-class mega audited tip `#250` · do not re-ship **#110–#250** without regression
 
 ```
-STATUS 2026-07-31T02:00Z
-tip: re-check origin/main (post #228 AMM/equity)
-open PRs: re-check gh (expect empty or babysit only)
-merged overnight parallel: #226 money · #227 ws · #228 AMM/equity · residual fire #240–#249
-peace shell: scoreboard closed agent residuals (#244/#246/#228 equity wire); Stream A PROOF still unverified; dual-book ADR still human
-next: O1 babysit idle · Stream A browser proof when :8090 · no Denon invent
+STATUS 2026-07-31T02:35Z
+tip: re-check origin/main after money-class PR merge
+open PRs: re-check gh
+money-class mega: PASS-WITH-RESIDUALS · archive docs/audit/2026-07-31-money-class-mega/
+  #246/#227/#228/#244 PASS · #226 PASS-WITH-RESIDUALS (MemoryBroadcastStore P0 multi-replica hold)
+next: O1 babysit · no invent durable journal without Denon · Stream A browser proof · dual-book ADR human
+do not re-audit money-class closed surfaces without tip move
 ```
 
 ---
