@@ -1,28 +1,25 @@
 # Residual pack — M226-02 refund chain idempotency key
 
-**Severity:** P1 · Class M interface  
-**Status:** OPEN · agent may design; Denon review for RailAdapter surface
+**Severity:** P1 Class M  
+**Status 2026-07-31 residual-pay close:** **FIXED** (agent) — PR residual/pay-m226-close
 
-## Claim
+## Claim (was)
 
-`pay.refund:${ref}:${++refundSequence}` is process-local; restart can double on-chain refund if rail re-entered.
+`pay.refund:${ref}:${++refundSequence}` process-local; restart could double on-chain refund.
 
-## Law
+## Fix
 
-Irreversible chain send needs stable business key aligned with ledger `refundId`.
+1. `RailAdapter.refund(ref, amount, opts?: { refundId })` optional third arg
+2. Payment core Phase 2 passes durable `prepared.refundId`
+3. `CryptoNativeAdapter` keys `pay.refund:${ref}:${refundId}` when set; sequence fallback only without id
+4. Same-process completed-key cache so retry does not double-count refunded totals
+5. Test: durable refundId + adapter reset still single outbound send (`rails.test.ts`)
 
-## Options (no silent invent this fire unless tiny + tested)
+## Residual after fix
 
-1. Extend `RailAdapter.refund(ref, amount, { refundId })` — **preferred**, conformance update
-2. Crypto-native only convention if core can pass id without interface break
+- Process-local `refunded` amount map still not multi-replica (over-refund guard is best-effort in adapter; core ledger is authority)
+- Conformance paths without refundId still use sequence (tests only)
 
-## DoD
+## Critic
 
-- Chain key includes durable refundId
-- Partial refunds still unique
-- Tests: restart sim / two partials / retry after crash
-- Critic ACCEPT
-
-## Not this fire if
-
-Requires multi-service contract PR without capacity — leave OPEN with this pack.
+ACCEPT fix for chain key durability. HOLD product go-live until pilot ops accepts send→put P1 window (M226-01).

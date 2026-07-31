@@ -1260,9 +1260,9 @@ export class PayService {
    *     gets their money back in the same call.
    *
    * A retry of a refund id that is already in flight is REFUSED rather than
-   * re-sent. `RailAdapter.refund(ref, amount)` carries no refund id (§6.1), so
-   * the rail cannot dedupe it for us, and "send it again and hope" is how one
-   * refund becomes two.
+   * re-sent. The rail receives the durable `refundId` (M226-02) so live crypto
+   * can journal the outbound chain send under a stable key; "send it again and
+   * hope" is how one refund becomes two.
    */
   async refund(paymentId: string, amount: Amount, options: { refundId?: string } = {}): Promise<PaymentView> {
     return withMoneySpan('pay.refund', { operation: 'refund', paymentId, amount: formatAmount(amount) }, async () =>
@@ -1358,7 +1358,7 @@ export class PayService {
     // ── Phase 2: send it. The book already says this money is on its way out.
     const adapter = this.rails.require(prepared.row.rail_adapter, 'refund');
     const railRef = prepared.row.rail_ref!;
-    const result = await withRailSpan(adapter.id, 'refund', async () => adapter.refund(railRef, amount));
+    const result = await withRailSpan(adapter.id, 'refund', async () => adapter.refund(railRef, amount, { refundId: prepared.refundId }));
 
     // ── Phase 3: record what the rail did, and reverse the ledger if it refused.
     const settled = await transaction(

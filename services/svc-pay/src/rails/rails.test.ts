@@ -221,6 +221,33 @@ describe('crypto-native — finality is the whole rail', () => {
     expect(localChain.totalSent('USDT')).toBe('100');
   });
 
+  it('keys on-chain refunds with durable refundId so restart does not double-send (M226-02)', async () => {
+    const address = await localChain.acceptanceAddress('p-fin-1', 'USDT');
+    localChain.credit({ address, assetId: 'USDT', amount: amt('100'), from: '0xbuyer', confirmations: 12 });
+    const auth = await adapter.authorize(intent());
+    await adapter.capture(auth.railRef);
+
+    const first = await adapter.refund(auth.railRef, amt('40'), { refundId: 'pay-1:1' });
+    expect(first.ok).toBe(true);
+    expect(first.raw).toMatchObject({ idempotencyKey: `pay.refund:${auth.railRef}:pay-1:1` });
+    expect(localChain.outboundTransfers()).toHaveLength(1);
+
+    // Process-local sequence would mint a new key after restart; durable id must not.
+    adapter.reset();
+    // reset clears in-adapter refunded totals — re-seed capture path via new adapter state
+    // but the chain still holds the first send under the business key.
+    const second = await adapter.refund(auth.railRef, amt('40'), { refundId: 'pay-1:1' });
+    expect(second.ok).toBe(true);
+    expect(localChain.outboundTransfers()).toHaveLength(1);
+    expect(localChain.totalSent('USDT')).toBe('40');
+
+    // A different refundId is a different partial refund (second real send).
+    const third = await adapter.refund(auth.railRef, amt('30'), { refundId: 'pay-1:2' });
+    expect(third.ok).toBe(true);
+    expect(localChain.outboundTransfers()).toHaveLength(2);
+    expect(localChain.totalSent('USDT')).toBe('70');
+  });
+
   it('never broadcasts a payout twice for one settlement', async () => {
     const instruction = {
       settlementId: 's-1',

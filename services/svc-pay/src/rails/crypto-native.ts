@@ -94,6 +94,8 @@ export class CryptoNativeAdapter implements RailAdapter {
    * one buyer.
    */
   private readonly refunded = new Map<string, Amount>();
+  /** Successful refunds by chain idempotency key — same-process retry must not re-add totals (M226-02). */
+  private readonly completedRefundKeys = new Map<string, RailResult>();
   private refundSequence = 0;
   private lastContact: Date;
   private up = true;
@@ -133,6 +135,7 @@ export class CryptoNativeAdapter implements RailAdapter {
 
   reset(): void {
     this.refunded.clear();
+    this.completedRefundKeys.clear();
     this.refundSequence = 0;
     this.up = true;
     this.lastContact = this.now();
@@ -303,7 +306,7 @@ export class CryptoNativeAdapter implements RailAdapter {
     };
   }
 
-  async refund(ref: string, amount: Amount): Promise<RailResult> {
+  async refund(ref: string, amount: Amount, opts?: { refundId?: string }): Promise<RailResult> {
     this.lastContact = this.now();
 
     let transfer: Awaited<ReturnType<CryptoChainPort['inboundTransfer']>>;
@@ -356,10 +359,17 @@ export class CryptoNativeAdapter implements RailAdapter {
     }
 
     // An on-chain refund is a new transfer back to the payer, and it is
-    // irreversible the moment it is broadcast. The sequence makes the
-    // idempotency key unique per refund — two identical partial refunds of one
-    // payment are two real refunds, not a retry of one.
-    const idempotencyKey = `pay.refund:${ref}:${++this.refundSequence}`;
+    // irreversible the moment it is broadcast. Prefer the core's durable
+    // refundId (M226-02) so process restart reuses the same broadcast key via
+    // BroadcastStore. Process-local sequence is fallback for conformance /
+    // direct adapter calls that do not pass an id.
+    const refundId = opts?.refundId?.trim();
+    const usedSequenceFallback = !refundId;
+    const sequencePart = refundId && refundId.length > 0 ? refundId : String(++this.refundSequence);
+    const idempotencyKey = `pay.refund:${ref}:${sequencePart}`;
+
+    const prior = this.completedRefundKeys.get(idempotencyKey);
+    if (prior) return prior;
 
     try {
       const { txHash } = await this.chain.send({
@@ -371,20 +381,22 @@ export class CryptoNativeAdapter implements RailAdapter {
 
       this.refunded.set(ref, already + amount);
 
-      return {
+      const ok: RailResult = {
         ok: true,
         railRef: ref,
         status: 'refunded',
         amount,
         assetId: transfer.assetId,
         at: this.now(),
-        raw: { txHash, to: transfer.from, refundedTotal: formatAmount(already + amount) },
+        raw: { txHash, to: transfer.from, refundedTotal: formatAmount(already + amount), idempotencyKey },
       };
+      this.completedRefundKeys.set(idempotencyKey, ok);
+      return ok;
     } catch (err) {
       // Nothing is stranded: the broadcast did not happen, the refunded total
       // was not advanced, and the value is still in the merchant's clearing
       // account where the core left it. The caller retries or gives up.
-      this.refundSequence--;
+      if (usedSequenceFallback) this.refundSequence--;
       return railFailure({
         railRef: ref,
         amount,
