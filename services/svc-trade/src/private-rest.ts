@@ -643,7 +643,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const marginMode = body.marginMode === 'cross' || body.marginMode === 'isolated' ? body.marginMode : undefined;
       if (!symbol || !side || !size || !entryPrice) {
         return reply.code(400).send({
-          ...badRequest('symbol, side, size|contracts, entryPrice required').body,
+          ...badRequest('symbol, side, size|contracts, entryPrice required', 'trade.bad_request').body,
         });
       }
       const pos = await deps.openPosition(principal, {

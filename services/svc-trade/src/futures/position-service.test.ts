@@ -65,7 +65,7 @@ if (!available) {
     await sql`
       INSERT INTO trade.markets (
         id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
-        maker_bps, taker_bps, status, display_name
+        maker_bps, taker_bps, status, display_name, listed_at
       ) VALUES (
         'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         'BTC/USDT-PERP',
@@ -79,7 +79,8 @@ if (!available) {
         10,
         20,
         'active',
-        'BTC perpetual'
+        'BTC perpetual',
+        now()
       )
     `;
     await ledger.post(
@@ -136,7 +137,7 @@ if (!available) {
     await sql`
       INSERT INTO trade.markets (
         id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
-        maker_bps, taker_bps, status, display_name
+        maker_bps, taker_bps, status, display_name, listed_at
       ) VALUES (
         'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         'ETH/USDT',
@@ -150,7 +151,8 @@ if (!available) {
         10,
         20,
         'active',
-        'ETH spot'
+        'ETH spot',
+        now()
       )
     `;
     await expect(
