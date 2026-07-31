@@ -827,7 +827,15 @@ export class LoanService {
     if (loan.status === 'repaid' || loan.status === 'liquidated')
       throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
     if (loan.status === 'pending') throw new BankError(`Loan ${loan.id} has no drawn principal to repay`, 'bank.loan_not_drawable');
+    if (loan.status === 'liquidating')
+      throw new BankError(`Loan ${loan.id} is mid-liquidation — wait for insurance cover / sweep before repay`, 'bank.loan_liquidating');
     if (input.amount <= 0n) throw new BankError('A repayment must be positive', 'bank.below_minimum');
+
+    // Open shortfall rows mean insurance (or a re-drive) still owns the residual debt.
+    // Allowing repay here dual-covers the hole with the borrower (critic B-01 residual).
+    if (await this.hasOpenShortfall(loan.id)) {
+      throw new BankError(`Loan ${loan.id} has uncovered liquidation shortfall — insurance re-drive required`, 'bank.loan_liquidating');
+    }
 
     const debt = await this.outstanding(loan.id);
     if (debt.total <= 0n) {
@@ -1033,8 +1041,24 @@ export class LoanService {
     const collateral = await this.collateralOf(loan);
 
     if (debt.total <= 0n) {
-      // Repaid or fully recovered while the sweep was running. Not a risk event.
-      await this.sql`UPDATE bank.loans SET margin_called_at = NULL, updated_at = now() WHERE id = ${loan.id}`;
+      // Fully recovered — including after coverOpenShortfalls stamped insurance.
+      // If any liquidate row settled, close as liquidated (not stuck `liquidating`).
+      const liq = await this.sql<Array<{ n: string }>>`
+        SELECT COUNT(*)::text AS n FROM bank.loan_liquidations
+         WHERE loan_id = ${loan.id} AND status = 'settled'
+      `;
+      if (Number(liq[0]?.n ?? 0) > 0) {
+        const held = await this.collateralOf(loan);
+        if (held > 0n) await this.releaseCollateral(loan, held);
+        await this.sql`
+          UPDATE bank.loans
+             SET status = 'liquidated', closed_at = COALESCE(closed_at, ${now}),
+                 margin_called_at = NULL, updated_at = now()
+           WHERE id = ${loan.id}
+        `;
+      } else {
+        await this.sql`UPDATE bank.loans SET margin_called_at = NULL, updated_at = now() WHERE id = ${loan.id}`;
+      }
       await this.clearMarginCalls(loan.id, now);
       return 'cleared';
     }
@@ -1319,6 +1343,17 @@ export class LoanService {
       }
       throw err;
     }
+  }
+
+  private async hasOpenShortfall(loanId: string): Promise<boolean> {
+    const rows = await this.sql<Array<{ n: string }>>`
+      SELECT COUNT(*)::text AS n FROM bank.loan_liquidations
+       WHERE loan_id = ${loanId}
+         AND status = 'settled'
+         AND shortfall > 0
+         AND bad_debt_ledger_tx_id IS NULL
+    `;
+    return Number(rows[0]?.n ?? 0) > 0;
   }
 
   /** Retry any settled liquidations whose shortfall never made it onto the insurance fund (B-01). */

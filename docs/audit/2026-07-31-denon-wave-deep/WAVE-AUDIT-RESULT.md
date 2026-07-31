@@ -56,3 +56,7 @@ Deep backend pass on **bank loans #202**, **hosted checkout #214**, **trade #201
 - `pnpm --filter @intafaced/svc-pay test` — 334 passed (incl. new watcher + broadcast)
 - `pnpm --filter @intafaced/svc-bank test` — 58 passed (PG service suite still skippable)
 - Full monorepo build green in worktree before ship
+
+## Critic on B-01 patch (04-CRITIC-B01.md)
+
+**DOWNGRADE of “fully fixed” claim:** core HIGH hole closed; follow-up patch closes status-stuck + repay dual-cover residuals. Still two ledger posts (not atomic). Service PG failure test still residual (B-04).
