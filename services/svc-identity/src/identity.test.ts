@@ -398,6 +398,14 @@ if (!available) {
   });
 
   describe('session refresh and rotation', () => {
+    it('refuses refresh when the account is frozen (ID-P1-2)', async () => {
+      const session = await register();
+      await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
+      await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({ code: 'auth.account_frozen' });
+      await db.sql`UPDATE users SET status = 'active' WHERE id = ${session.userId}`;
+      await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({ code: 'auth.session_invalid' });
+    });
+
     it('issues a new refresh token and invalidates the old one', async () => {
       const session = await register();
       const refreshed = await auth.refresh(session.refreshToken);
