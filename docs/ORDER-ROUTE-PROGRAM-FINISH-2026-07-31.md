@@ -43,13 +43,13 @@ No REQ left silent. No “stable for real money” claim (RS-2).
 
 ## P4-1 seeder (code on tip — ops residual)
 
-| Fact                   | Value                                                                                                                                                     |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fact                   | Value                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Code                   | On main: `vendor/<exchange>/seed-market-data.mjs` + `.js`, Mongo driver 3.12.14 pin in `00_framework/pom.xml`, thumb init fix in `DefaultCoinProcessor` |
-| Run                    | `docker compose -f vendor/<exchange>-compose.yml up -d` then `node vendor/<exchange>/seed-market-data.mjs [--restart-market]`                         |
-| Agent probe 2026-07-31 | docker unavailable in agent environment; seeder correctly refused with “container not running” (honest, not fake green)                                   |
-| Known limit            | seeds history not live market; re-run daily until real fills exist                                                                                        |
-| Residual               | ops/Denon: prove non-zero thumbs on a machine with compose                                                                                                |
+| Run                    | `docker compose -f vendor/<exchange>-compose.yml up -d` then `node vendor/<exchange>/seed-market-data.mjs [--restart-market]`                           |
+| Agent probe 2026-07-31 | docker unavailable in agent environment; seeder correctly refused with “container not running” (honest, not fake green)                                 |
+| Known limit            | seeds history not live market; re-run daily until real fills exist                                                                                      |
+| Residual               | ops/Denon: prove non-zero thumbs on a machine with compose                                                                                              |
 
 ---
 
