@@ -413,14 +413,13 @@ export class AuthService {
       const rows = await tx<Array<{ recovery_code_hashes: unknown }>>`
         SELECT recovery_code_hashes FROM users WHERE id = ${userId} FOR UPDATE
       `;
-      const raw = rows[0]?.recovery_code_hashes;
-      const hashes: string[] = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
+      const hashes = asStringList(rows[0]?.recovery_code_hashes);
       const idx = hashes.indexOf(hash);
       if (idx < 0) return false;
       const next = hashes.slice(0, idx).concat(hashes.slice(idx + 1));
       await tx`
         UPDATE users
-           SET recovery_code_hashes = ${JSON.stringify(next)}::jsonb, updated_at = now()
+           SET recovery_code_hashes = ${tx.json(next as never)}, updated_at = now()
          WHERE id = ${userId}
       `;
       return true;
@@ -462,7 +461,7 @@ export class AuthService {
       UPDATE users
          SET totp_secret = ${secret},
              totp_enrolled_at = now(),
-             recovery_code_hashes = ${JSON.stringify(pending.recoveryHashes)}::jsonb,
+             recovery_code_hashes = ${this.sql.json(pending.recoveryHashes as never)},
              updated_at = now()
        WHERE id = ${userId} AND totp_secret IS NULL
     `;
@@ -1110,6 +1109,20 @@ function asCredentialList(raw: unknown): StoredWebAuthnCredential[] {
       typeof (c as StoredWebAuthnCredential).publicKey === 'string' &&
       typeof (c as StoredWebAuthnCredential).counter === 'number',
   );
+}
+
+/** JSONB string arrays — driver may return array or JSON text. */
+function asStringList(raw: unknown): string[] {
+  let value: unknown = raw;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value.filter((x): x is string => typeof x === 'string');
 }
 
 function normalizeCredId(id: string): string {
