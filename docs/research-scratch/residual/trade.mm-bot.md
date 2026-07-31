@@ -12,29 +12,29 @@ Futures mark-from-depth + liq ticks need a two-sided book. Journals only seed ma
 
 - `matching.engine` **done** — book, depth, submit, journal/replay
 - `trade.spot` money path places real orders that journal markets
-- `trade.mm-bot` tracker row exists with **no status/note** (not started)
-- No mm-bot service package
+- `planSeedQuotes` pure planner (external mid only)
+- Ledger: `marketMakerSeedFund` + `marketMakerOrderHold` / release
+- `seedMarket` orchestrator: hold → matching PO submit as `house:market-maker`
+- Still no wall-clock job / env market list / house tradeFill
 
 ## Gaps
 
-1. Seed process that posts two-sided quotes without lying about money
-2. Who holds inventory (house ledger accounts) for seed size
+1. ~~Seed process that posts two-sided quotes without lying about money~~ — **seedMarket** (partial)
+2. ~~Who holds inventory~~ — `house/market-maker` pot + per-order holds
 3. Which markets get seeds (explicit list — never invent all)
 4. Restart: reseed vs journal replay ownership
-5. Risk: self-trade prevention per user — seed must use distinct house account ids
+5. House fill settlement when a user hits a seed order (`tradeFill` still user-shaped)
+6. Ops job host default OFF
 
 ## DoD candidates (smallest ships)
 
-| #   | Ship                                                     | Proof                 |
-| --- | -------------------------------------------------------- | --------------------- |
-| 1   | Research pack (this file)                                | Named residual set    |
-| 2   | Design: house seeder account + recipe path               | Doctrine review       |
-| 3   | Dev-only seeder CLI against matching submit + trade hold | Anvil/dev compose     |
-| 4   | Optional trade.mm-bot service                            | Not invent prod depth |
-
-## First PR
-
-This research pack only. **Do not invent depth** without money path.
+| #   | Ship                                       | Proof                  |
+| --- | ------------------------------------------ | ---------------------- |
+| 1   | Research pack (this file)                  | Named residual set     |
+| 2   | Design: house seeder account + recipe path | Recipes + tests        |
+| 3   | `seedMarket` hold + matching PO submit     | Unit tests (no invent) |
+| 4   | Ops job + market list env (default OFF)    | residual               |
+| 5   | House tradeFill / cancel lifecycle         | residual               |
 
 ## Collision
 
