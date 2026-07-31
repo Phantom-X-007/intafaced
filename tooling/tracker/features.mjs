@@ -259,7 +259,7 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-07-31 residual F1–F5+ins: recipes (margin/funding/insurance/loss); positions table; open/close REST; positionUpdated bus. Still missing: matching engine, mark/index, liquidation JOB, funding CRON, realized PnL on close. Not done.',
+    note: 'Updated 2026-07-31 residual: F1–F5 recipes + open/close + positionUpdated + funding planner + liquidation PLANNER (mark external). Still missing: matching engine, mark feed, funding CRON, liquidation JOB runner, realized PnL path. Not done.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
