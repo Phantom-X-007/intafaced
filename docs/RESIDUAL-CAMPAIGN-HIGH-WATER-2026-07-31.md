@@ -11,16 +11,16 @@
 
 ## Board (complete)
 
-| Row                     | Status     | On main                                          | Still open                       |
-| ----------------------- | ---------- | ------------------------------------------------ | -------------------------------- |
-| web.terminal            | wip        | Wave A/B + auth shell sibling                    | Sub-accounts product             |
-| ws.gateway              | wip        | Positions + F4 events                            | Mark-driven E2E                  |
-| pay.gateway             | wip        | Checkout + live crypto + merchant.create honesty | Card · KYB product · go-live X   |
-| protocol.smart-accounts | ready      | Dev CREATE2 honesty                              | Prod/audit/bundler X             |
-| protocol.amm            | ready      | Factory + mint/swap                              | Audit · prod factory             |
-| trade.futures           | wip        | Full residual stack #291–#315                    | Live index · ops jobs ON         |
-| trade.mm-bot            | ready      | seedMarket + **job host OFF** (TRADE_MM_SEED_*)  | House fill · live mid oracle     |
-| Phase 5                 | ready many | Shell honesty                                    | Full products                    |
+| Row                     | Status     | On main                                          | Still open                     |
+| ----------------------- | ---------- | ------------------------------------------------ | ------------------------------ |
+| web.terminal            | wip        | Wave A/B + auth shell sibling                    | Sub-accounts product           |
+| ws.gateway              | wip        | Positions + F4 events                            | Mark-driven E2E                |
+| pay.gateway             | wip        | Checkout + live crypto + merchant.create honesty | Card · KYB product · go-live X |
+| protocol.smart-accounts | ready      | Dev CREATE2 honesty                              | Prod/audit/bundler X           |
+| protocol.amm            | ready      | Factory + mint/swap                              | Audit · prod factory           |
+| trade.futures           | wip        | Full residual stack #291–#315                    | Live index · ops jobs ON       |
+| trade.mm-bot            | ready      | seedMarket + **job host OFF** (TRADE_MM_SEED_*)  | House fill · live mid oracle   |
+| Phase 5                 | ready many | Shell honesty                                    | Full products                  |
 
 ## Merged residual (do not redo)
 
