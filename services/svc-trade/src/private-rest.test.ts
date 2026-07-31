@@ -330,6 +330,13 @@ describe('private REST — mount boundary + order write path', () => {
       marketById: async (id) => (id === market.id ? market : null),
       markets: async () => [market],
       userBalances: async () => [],
+      listPositions: async () => [],
+      openPosition: async () => {
+        throw new Error('openPosition not stubbed');
+      },
+      closePosition: async () => {
+        throw new Error('closePosition not stubbed');
+      },
       ...overrides,
     };
   }
@@ -1195,7 +1202,7 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
-  // ── GET /positions (honest empty until trade.futures) ──────────────────────
+  // ── GET /positions (open rows; [] when none — F3) ───────────────────────────
 
   it('GET /positions: anonymous → 401', async () => {
     const app = await build();
@@ -1230,7 +1237,7 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
-  it('GET /positions: signed principal → 200 + [] (no futures engine)', async () => {
+  it('GET /positions: signed principal → 200 + [] when none open', async () => {
     const app = await build();
     const res = await app.inject({
       method: 'GET',
@@ -1239,6 +1246,39 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /positions: returns stubbed open rows', async () => {
+    const sample = {
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      symbol: 'BTC/USDT',
+      timestamp: 1,
+      datetime: '1970-01-01T00:00:00.001Z',
+      side: 'long' as const,
+      contracts: '1',
+      contractSize: null,
+      entryPrice: '50000',
+      markPrice: null,
+      notional: '50000',
+      leverage: '10',
+      collateral: '5000',
+      initialMargin: '5000',
+      maintenanceMargin: null,
+      unrealizedPnl: null,
+      realizedPnl: null,
+      liquidationPrice: null,
+      marginMode: 'isolated' as const,
+      percentage: null,
+    };
+    const app = await build(deps({ listPositions: async () => [sample] }));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([sample]);
     await app.close();
   });
 

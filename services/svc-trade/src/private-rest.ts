@@ -14,8 +14,10 @@ import {
   toCcxtError,
   type CcxtErrorResponse,
 } from './ccxt-errors.js';
+import type { Position } from '@intafaced/exchange-contract';
 import type { PlaceOrderInput } from './spot/trade-service.js';
 import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus } from './spot/types.js';
+import { FuturesError } from './futures/position-service.js';
 
 /**
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
@@ -30,7 +32,9 @@ import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderS
  *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
- *   GET    /api/v1/positions       scope: trade:read  (honest [] until trade.futures)
+ *   GET    /api/v1/positions       scope: trade:read  (open futures rows; [] when none)
+ *   POST   /api/v1/positions       scope: trade:write (open funded position — F3)
+ *   DELETE /api/v1/positions/:id   scope: trade:write (close + release margin — F3)
  *
  * Auth is the mount boundary: edge terminates the bearer (JWT or API key) and
  * forwards a signed principal on every `/api/*` hop. This service never parses
@@ -82,6 +86,20 @@ export interface PrivateRestDeps {
    * self-only is enforced here at the edge of this surface.
    */
   userBalances(userId: string): Promise<readonly Balance[]>;
+  /** Open futures positions for the principal (empty [] when none). */
+  listPositions(principal: Principal, symbol?: string): Promise<Position[]>;
+  openPosition(
+    principal: Principal,
+    input: {
+      symbol: string;
+      side: 'long' | 'short';
+      size: string;
+      entryPrice: string;
+      leverage: string;
+      marginMode?: 'cross' | 'isolated';
+    },
+  ): Promise<Position>;
+  closePosition(principal: Principal, positionId: string): Promise<Position>;
 }
 
 /** Kinds that count as locked / not free under exchange-contract free/used/total. */
@@ -590,11 +608,8 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   /**
    * Derivatives positions — REST_ROUTES.fetchPositions.
    *
-   * Spot-only honesty: trade.futures is not built, so there are no positions.
-   * Edge-signed principal + trade:read required (same fail-closed gate as open
-   * orders). Always 200 + []. Optional ?symbol= is accepted and ignored so
-   * CCXT clients that pass a filter still get a valid empty list, not 404.
-   * Does NOT invent leverage/margin state — see the two routes below.
+   * Lists open rows from trade.positions (F2/F3). Empty [] when none — never
+   * invents leverage/mark. Optional ?symbol= filters. Auth fail-closed.
    */
   app.get<{ Querystring: { symbol?: string } }>('/api/v1/positions', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
@@ -602,9 +617,8 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
 
     try {
       requireScope(principal, 'trade:read');
-      // symbol query intentionally unused — no position store to filter.
-      void req.query.symbol;
-      return reply.code(200).send([]);
+      const rows = await deps.listPositions(principal, req.query.symbol);
+      return reply.code(200).send(rows);
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
@@ -612,24 +626,68 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
+  /** Open a funded futures position (margin via ledger recipes). */
+  app.post('/api/v1/positions', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const symbol = typeof body.symbol === 'string' ? body.symbol : '';
+      const side = body.side === 'long' || body.side === 'short' ? body.side : null;
+      const size = typeof body.size === 'string' ? body.size : typeof body.contracts === 'string' ? body.contracts : '';
+      const entryPrice = typeof body.entryPrice === 'string' ? body.entryPrice : '';
+      const leverage = typeof body.leverage === 'string' ? body.leverage : '1';
+      const marginMode = body.marginMode === 'cross' || body.marginMode === 'isolated' ? body.marginMode : undefined;
+      if (!symbol || !side || !size || !entryPrice) {
+        return reply.code(400).send({
+          ...badRequest('symbol, side, size|contracts, entryPrice required').body,
+        });
+      }
+      const pos = await deps.openPosition(principal, {
+        symbol,
+        side,
+        size,
+        entryPrice,
+        leverage,
+        marginMode,
+      });
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send({ error: err.code, message: err.message });
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /** Close position and release remaining initial margin (v1 — no PnL yet). */
+  app.delete<{ Params: { id: string } }>('/api/v1/positions/:id', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+      const pos = await deps.closePosition(principal, req.params.id);
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send({ error: err.code, message: err.message });
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
   /**
-   * POST /api/v1/positions/leverage   — REST_ROUTES.setLeverage
-   * POST /api/v1/positions/margin-mode — REST_ROUTES.setMarginMode
-   *
-   * Both are declared in the contract and were not mounted at all, so a CCXT
-   * client calling either got Fastify's generic 404. That is the wrong answer
-   * twice over: it reads as a bad URL rather than an unsupported capability,
-   * and it is indistinguishable from a routing or deploy fault — an integrator
-   * spends the afternoon checking the edge instead of reading one line.
-   *
-   * `NotSupported` (501) is the honest answer. This venue is spot-only:
-   * `/positions` is permanently `[]`, so there is no position to lever and no
-   * margin mode to set. Accepting either call and returning 200 would be worse
-   * than the 404 — a bot would believe it had set 10x leverage and size its
-   * next order against margin that does not exist.
-   *
-   * Auth is still enforced first. An unauthenticated caller must not be able to
-   * enumerate which capabilities a venue supports.
+   * POST leverage / margin-mode still 501: open path sets mode at open time;
+   * in-place leverage change is not built (would re-margin live risk).
    */
   const derivativesNotSupported = (what: string, intafacedCode: string) =>
     async function handler(req: FastifyRequest, reply: FastifyReply) {
@@ -644,7 +702,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         throw err;
       }
 
-      return sendCcxt(reply, notSupported(`${what} is not available: this venue lists spot markets only`, intafacedCode));
+      return sendCcxt(reply, notSupported(`${what} is not available: set margin mode at open; live re-leverage not built`, intafacedCode));
     };
 
   app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', 'trade.leverage_unsupported'));
