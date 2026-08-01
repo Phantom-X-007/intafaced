@@ -6,8 +6,9 @@
 **Update rule:** same turn as every merge that moves a row.  
 **Tip check:** `git log origin/main -1 --oneline`
 
-**Campaign status:** `PROCESS READY — awaiting GO` (unspoken needs + process loops + enhanced paste landed)  
-**Last scoreboard edit:** 2026-08-01 · after GO → `RUNNING` · when all rows Done/Cut → `COMPLETE`
+**Campaign status:** `PREFLIGHT PASSED — awaiting GO`  
+**Last scoreboard edit:** 2026-08-01 preflight · after GO → `RUNNING` · all Done/Cut → `COMPLETE`  
+**Known dirty:** #289 CONFLICTING — P-OR rebase first-class
 
 ---
 

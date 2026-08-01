@@ -17,7 +17,7 @@ WHAT THIS IS
 - Law (engineering SoT): INTAFACED_DEFINITIVE_BUILD.md — same as Denon’s “DEFINITIVE BUILD” v2.2.
 - Product vision: INTAFACED SOVEREIGN OS.pdf (Vol. I). Do not invent architecture outside the law.
 - Board: docs/TRACKER.md · README status band · `pnpm tracker ready`.
-- **ACTIVE CAMPAIGN — BOARD CLEAR (finish product table; full autonomy):** docs/BOARD-CLEAR-GO-READINESS.md · docs/BOARD-CLEAR-UNSPOKEN-NEEDS.md · docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md · docs/BOARD-CLEAR-PROCESS-LOOPS.md · docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md · docs/BOARD-CLEAR-SCOREBOARD.md · docs/BOARD-CLEAR-NEXT.md · **paste GO:** docs/BOARD-CLEAR-AUTONOMOUS-RUN.md. Locked B decisions. Goal = every row Done/Cut; never stop for continue; never residual theater.
+- **ACTIVE CAMPAIGN — BOARD CLEAR (finish product table; full autonomy):** docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-GO-READINESS.md · docs/BOARD-CLEAR-UNSPOKEN-NEEDS.md · docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md · docs/BOARD-CLEAR-PROCESS-LOOPS.md · docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md · docs/BOARD-CLEAR-SCOREBOARD.md · docs/BOARD-CLEAR-NEXT.md · **paste GO:** docs/BOARD-CLEAR-AUTONOMOUS-RUN.md. UI = vendor :8090 not apps/web. #289 rebase required. Locked B decisions. Goal = every row Done/Cut; never stop for continue; never residual theater.
 - Plain map: docs/START-HERE.md · Ownership: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Older residual mode: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md (superseded when Board Clear docs present) · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
 - Stream A / UI: docs/NITRO-STREAM-A-CLAIM.md · #83 · docs/FRONTEND-STATE-OF-TRUTH-2026-07-31.md under Board Clear web.terminal Done bar.
 - History boards (not live law): docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md · docs/POST-MERGE-RESIDUAL-AFTER-86.md.
@@ -29,7 +29,7 @@ PARTNER + OWNERSHIP (durable — see NITRO-OWNERSHIP doc)
 - Never force-push origin/feat/spine-* or feat/multi-asset-*. Orient before touching his crash WIP; prefer greenfield on tip after he specs abandon vs resume.
 - Board Clear (Nitro locked 2026-08-01): ship all trade mountains to Done bars in constitution — thin honest product or §13 cut; still **never invent** mid/rates/depth/balances. Do not wait for Denon chat mid-campaign.
 - Class X human-only if truly no sandbox path: prod-only secrets, real customer money go-live, licence purchase, sanctions content. Prefer sandbox Done + §13; never halt whole campaign.
-- LIVE-LANES claim before code. ≤3 parallel code lanes. Re-derive tip + open PRs every session (never trust chat memory for high water).
+- LIVE-LANES claim before code. **Board Clear:** parallel by program map (P-UI…P-P5), not residual ≤3. Re-derive tip + open PRs every session (never trust chat memory for high water).
 
 ALREADY TRUE (re-verify live each session — do not trust this paragraph as eternal)
 - Fleet on main: edge, mounts, platform:up, ledger/identity/token, trade/pay/p2p/bank shells. Do not rebuild services already on main.
@@ -42,7 +42,7 @@ MANDATORY WORKFLOW
 1. Read AGENTS.md + ownership law + agent protocol. App/UI: also NITRO-STREAM-A-CLAIM / FRONTEND-STATE-OF-TRUTH. If on main checkout: create worktree; never implement on main.
 2. GitHub for agents: export GH_TOKEN from ~/.grok/agent-auth/github_token (never print).
 3. Claim LIVE-LANES + one tracker/campaign item; one concern per PR; contracts/events PR before service if cross-boundary.
-4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no inventing Denon product law; no force-push of his spine branches.
+4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no invent mid/depth/rates; no force-push of his spine branches. Board Clear Done bars for trade mountains = Nitro-authorized (thin/§13 OK).
 5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand) + Class M path.
 6. No commits/PRs unless I asked to ship (or residual campaign / I said go all-out ship). No random new architecture.
 7. GitHub Actions thrift (mandatory, does NOT slow parallel/autonomy): local pnpm verify green before the push that opens/updates a code PR; batch fixes — no push storms using remote CI as debugger; pure docs PRs when work is docs; never public-repo / skip-tests / fake-green to save $. Parallel PRs allowed. Full law: docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md + AGENTS.md thrift section.

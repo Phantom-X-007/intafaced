@@ -1,48 +1,31 @@
 # LIVE LANES — multi-agent claims
 
 **Rule:** No code edits until your lane is on this board. First claimer wins.  
-**How to use:** `docs/NITRO-PARALLEL-OPS.md`.  
-**Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` (Denon directs · Nitro executes/merges).  
-**Residual campaign law:** `docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`  
-**Full Denon ↔ Nitro backlog (history only):** `docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md` — do not use to block residual execution.  
-**Overnight posture:** `docs/GRIND-LOOP-ACTIVE.md`  
-**PR numbers / session names in the table lag** — re-derive with `gh pr list` before acting.
+**Active campaign:** **Board Clear** — law `docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md` · plan · scoreboard · NEXT · process loops · GO paste.  
+**Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` (Board Clear supersedes product-law wait for campaign Done bars).  
+**Parallel:** one agent (or non-overlapping sub-slice) per **program** below — not residual ≤3.
 
-| Lane id                       | Owner session                   | Scope                                                         | Status                               | PR / proof                     | Do not touch                                    |
-| ----------------------------- | ------------------------------- | ------------------------------------------------------------- | ------------------------------------ | ------------------------------ | ----------------------------------------------- |
-| **residual-coord**            | **this campaign chat**          | Residual board R1–R7 coordinator · NEXT QUEUE · collision map | **LIVE**                             | campaign doc                   | invent done; steal frontend without check       |
-| **o1-babysit**                | residual-coord / any            | Open PRs · Class matrix · merge policy                        | **LIVE**                             | re-derive `gh pr list`         | Class M merge without self-audit+adversarial    |
-| residual-smart-accounts       | free / claim                    | R4 protocol.smart-accounts deploy-dev proofs                  | free after Wave 0                    | —                              | prod RPC as done; force-push spine              |
-| residual-ws                   | **audit-fire-mega (this Grok)** | R2 ws.gateway empty-honest tracker                            | **LIVE**                             | chore/residual-ws-honesty      | invent trade.futures fills; vendor/**           |
-| residual-amm                  | free / claim                    | R5 protocol.amm deploy + mint/swap proof                      | blocked until R4 first cut preferred | —                              | audit theater                                   |
-| residual-pay                  | free / claim                    | R3 pay.gateway Class M residuals                              | free after research pack             | —                              | go-live without X                               |
-| stream-a-ui / frontend-wave-a | frontend-impl continuous        | Wave B continue B9 blotter tools · post-#267                  | **shipping**                         | next PR                        | residual-terminal · order-route-harden          |
-| residual-trade-futures        | free / claim                    | R6 futures — **after seed/mm per Denon DIRECTION**            | free after research pack             | —                              | mark done without recipes; not first mountain   |
-| **order-route-harden**        | **Build chat (claim on start)** | Denon order-route/DEX–CEX harden · Plan P0–P8                 | **ARMED · claim before code**        | `ORDER-ROUTE-PROGRAM-INDEX.md` | invent go-live; futures-first; skip chaos spine |
-| denon-spine                   | Phantom-X-007                   | feat/spine-*                                                  | hold crash WIP                       | —                              | Nitro force-push / multi-asset                  |
-| third-builder                 | shehzad002                      | stood down on residual board                                  | **idle**                             | #226–#228 on main              | re-claim residual rows without Nitro assign     |
-
-## Free mountains (after Wave 0)
-
-Per `NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md` §7 NEXT QUEUE — claim one lane, research pack first on greenfield.
+| Lane id / program     | Owner session        | Scope                                                                          | Status          | Do not touch                         |
+| --------------------- | -------------------- | ------------------------------------------------------------------------------ | --------------- | ------------------------------------ |
+| **board-clear-coord** | GO orchestrator chat | L0 loop, scoreboard, NEXT, babysit merges, fan-out                             | **CLAIM ON GO** | residual-only mode; invent done      |
+| **P-UI**              | claim                | web.terminal — **vendor shell :8090** (`vendor/**/05_Web_Front`), not apps/web | free            | apps/web as product                  |
+| **P-WS**              | claim                | svc-ws private streams E2E                                                     | free            | invent futures events                |
+| **P-PAY**             | claim                | pay.gateway incl. **card** (sandbox OK)                                        | free            | Class X prod go-live as done         |
+| **P-PROT**            | claim                | smart-accounts + amm deploy proof + audit packages                             | free            | force-push spine; prod RPC as live X |
+| **P-TRADE**           | claim                | spot/futures/mm-bot/otc/copy/algo/venue Done bars                              | free            | invent mid/depth/rates/candles       |
+| **P-OR**              | claim                | **#289** rebase/merge or absorb (was CONFLICTING)                              | free            | leave orphan forever                 |
+| **P-P5**              | claim                | bank/academy/ops/agents thin or §13                                            | free            | fake whole Phase 5 done              |
+| **P-TRACK**           | coord or claim       | tracker + Board Clear scoreboard docs                                          | free            | lie on Done                          |
+| denon-spine           | Phantom-X-007        | feat/spine-*                                                                   | hold            | Nitro force-push                     |
 
 ## Hard bans
 
 - Main checkout edits
-- Double-build open PR paths (#259 identity)
+- Double-build same paths without claim
 - Fake candles / balances / factory addresses / CI green
-- Mark tracker `done` without reachable+tested+unpropped
+- Mark tracker `done` without constitution Done bar + proof
+- Residual-only “never finish rows” while Board Clear active
 
 ## Last board update
 
-- **2026-07-31 frontend-impl:** #267 Wave B7/B8 keyboard + impact est; order-route docs **restored to main** (no collision with #289).
-
-- **2026-07-31 residual campaign ARMED:** Nitro owns residual board program. Tip `c40fd59` (#258). Open **#259**. Frontend Wave A SoT locked separately — coordinate before shell file claims. Third builder stood down.
-
-- **2026-07-31 mega-finish:** branch `audit/finish-mega-2026-07-31` — recovery codes + residual packs + finish definition. Leave #266 pay journal and #267 frontend to their owners.
-
-- **2026-07-31 residual-pay-m226-close:** claimed **residual-pay** — M226-01 re-verify + M226-02 refundId. No frontend #267. No futures #278.
-
-- **2026-07-31 order-route-harden ARMED:** Full program pack in `docs/ORDER-ROUTE-PROGRAM-INDEX.md` (Spec/Plan/Architect/landscape v2). Build chat claims this lane before P1 code. Denon seed-first · dual-book · chaos spine. Do not double-build with residual-trade-futures invent.
-
-- **2026-07-31 residual-coord (this chat):** tip re-derive required. Merged through futures F3 #278 + pay M226 #280 + F5 funding recipe #282. Shipping F4 positionUpdated. Leave #267 frontend Wave A alone. Claim residual-trade-futures LIVE for F4–F5. Do not invent order-route P1 here.
+- **2026-08-01 preflight:** LIVE-LANES rewritten for Board Clear programs. Residual-era lanes retired. UI = vendor :8090. #289 dirty → P-OR first-class.

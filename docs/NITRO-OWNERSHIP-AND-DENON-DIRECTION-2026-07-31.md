@@ -3,8 +3,9 @@
 **Status:** DECISION LOCKED · Denon direction brief **sent** by Nitro (2026-07-31)  
 **This file is LAW, not a status dashboard.**  
 **Live tip / open PRs / CI / lane claims:** never trust frozen lists here — re-derive (§6).  
-**Precedence:** engineering doctrine (`INTAFACED_DEFINITIVE_BUILD.md` + agent protocol) → **this file** → residual campaign → grind/LIVE-LANES.  
-If an older prompt says “only Stream A / never Stream B / Class M needs Denon every time,” **this file wins** (still no force-push of his spine branches; still no Class X close).
+**Precedence:** engineering doctrine (`INTAFACED_DEFINITIVE_BUILD.md` + agent protocol) → **Board Clear constitution when campaign active** (`docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md`) → **this file** → residual campaign → grind/LIVE-LANES.  
+If an older prompt says “only Stream A / never Stream B / Class M needs Denon every time,” **this file wins** over residual theater (still no force-push of his spine branches; still no Class X close).  
+**Board Clear exception (Nitro locked 2026-08-01):** shipping **Done bars** for futures/otc/copy/algo/mm/venue (thin honest product or §13) is **authorized** without waiting for new Denon chat. Still **never invent** mid/rates/depth/balances; still no fake go-live Class X.
 
 ---
 
@@ -71,7 +72,7 @@ Grind paste prompts and Class matrix must match this table. If a lower paste sti
 3. Prod chain/RPC as **live** money posture
 4. Licence purchases
 5. Sanctions / geo **list content** (counsel)
-6. **Product law** for futures / OTC / copy / algo / MM / multi-asset (research packs OK; direction + acceptance is Denon)
+6. **Product law** for futures / OTC / copy / algo / MM / multi-asset — default Denon direction; **overridden for Board Clear Done bars** (constitution) as Nitro accept 2026-08-01: ship thin/§13, never invent prices/depth
 7. Force decisions on **his** `feat/spine-*` crash WIP (he specs abandon vs resume; agents may greenfield on tip after that)
 8. Anything he explicitly **holds**
 
@@ -82,7 +83,7 @@ Grind paste prompts and Class matrix must match this table. If a lower paste sti
 ## 5. Error-mitigation stack (merge-ready without human code review)
 
 1. Re-derive live tip + open PRs every fire
-2. LIVE-LANES claim; ≤3 code lanes
+2. LIVE-LANES claim; Board Clear uses program ownership map (not residual ≤3 cap)
 3. Research pack before invent (especially money/protocol)
 4. Written DoD / smallest honest PR
 5. `pnpm verify` real output (or documented CI equivalent)

@@ -2,8 +2,9 @@
 
 **Status:** BINDING for the Board Clear campaign  
 **Scoreboard to change:** the residual “all No” product table (web.terminal … Phase 5)  
-**Git floor when written:** `origin/main` @ `2fbdb45` — re-check `git log origin/main -1` before acting  
-**Owner of this doc:** any orchestrator agent; Nitro is not in the loop
+**Git floor:** re-check `git log origin/main -1` every session (do not trust a frozen SHA)  
+**Owner of this doc:** any orchestrator agent; Nitro is not in the loop  
+**Preflight:** `docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md` (blockers hunted 2026-08-01)
 
 ---
 
@@ -52,14 +53,16 @@ If a later chat “softens” these without Nitro, **this table wins**.
 
 ### 3.1 `web.terminal`
 
+**Product surface:** vendored exchange shell at **http://localhost:8090** (`vendor/**/05_Web_Front` per FRONTEND-STATE-OF-TRUTH). **`apps/web` is not the product.**
+
 **Done when all true:**
 
-- Authenticated pro trade shell: markets, orderbook, place/cancel, open/closed orders, balances, positions, trades tape, charts/equity already on main **wired and honest**
+- Authenticated pro trade shell: markets, orderbook, place/cancel, open/closed orders, balances, positions, trades tape, charts/equity **wired and honest**
 - Hotkeys for primary trade actions
 - Sub-accounts UI **or** §13 socket + tracker note if identity API incomplete — prefer ship
 - Empty states honest (no fake depth/PnL)
 - A11y baseline (keyboard, focus, alerts)
-- CI green; visual smoke documented (screenshot path or playwright if present)
+- CI green; visual smoke documented (screenshot path or playwright/Orca if present)
 
 ### 3.2 `ws.gateway`
 
@@ -112,7 +115,7 @@ If a later chat “softens” these without Nitro, **this table wins**.
 
 ### 3.7 Order-route (#289 claimed)
 
-**Done when:** program PRs merged or restacked to green; chaos/dual-book/seed specs either live or residual explicitly absorbed into trade/matching with tracker honesty. No orphan open forever.
+**Done when:** #289 rebased onto main (was CONFLICTING/dirty at preflight), CI green, merged **or** split and absorbed with tracker honesty. **No orphan open forever.** First-class P-OR ship on GO.
 
 ### 3.8 Phase 5
 
