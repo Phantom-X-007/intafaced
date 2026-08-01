@@ -6,22 +6,22 @@
 **Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`.  
 **Parallel:** agents on AGENT rows only; **never implement HUMAN-CLAIMED**.
 
-| Lane id / program     | Owner session                    | Scope                                                                 | Status            | Do not touch                    |
-| --------------------- | -------------------------------- | --------------------------------------------------------------------- | ----------------- | ------------------------------- |
-| **board-clear-coord** | Board Clear GO orchestrator      | L0, scoreboard, NEXT, babysit, fan-out **agent** programs only        | **RUNNING**       | residual-only; steal H-\*       |
-| **P-UI**              | Nitro agents                     | vendor shell `:8090` craft/hotkeys/honesty                            | **AGENT**         | apps/web product; human exclusive |
-| **P-WS**              | Nitro agents                     | svc-ws E2E (futures events may wait on human M3)                      | **AGENT**         | invent futures events           |
-| **P-OR**              | Board Clear GO · A-OR-1          | **#289** rebase/merge/absorb                                          | **RUNNING**       | leave orphan; dual-edit shehzad |
-| **P-TRADE-LIGHT**     | Nitro agents                     | mm recovery/reseed/mid residual; spot OHLCV; venue mount              | **AGENT**         | futures risk / otc / copy / algo |
-| **P-P5-LIGHT**        | Nitro agents                     | academy / ops thin / agents usefulness                                | **AGENT**         | bank earn/cards/ramps money     |
-| **P-TRACK**           | coord / agents                   | tracker + scoreboard honesty                                          | **AGENT**         | lie on Done                     |
-| **H-PAY / M1**        | **shehzad002**                   | Pay OS — card + merchant + pay.* expansion                            | **HUMAN-CLAIMED** | agent A-PAY / card recipes      |
-| **H-PROT / M2**       | **shehzad002**                   | Protocol OS — SA, AMM, lending, escrow, router, merchant              | **HUMAN-CLAIMED** | agent SA/AMM product            |
-| **H-TRADE-HARD / M3–M4** | **shehzad002**                | Futures risk + real OTC/copy/algo                                     | **HUMAN-CLAIMED** | agent invent engines            |
-| **H-ID-SUB / M5**     | **shehzad002**                   | Identity sub-account money graph                                      | **HUMAN-CLAIMED** | agent invent money routing      |
-| **H-P5-MONEY / M6**   | **shehzad002**                   | Bank earn/cards/ramps/sovereign-card                                  | **HUMAN-CLAIMED** | agent bank money                |
-| **H-OR-JAVA / M7**    | **shehzad002** (after #289)      | Vendor Java dual-book residual                                        | **QUEUED**        | start before #289 closed        |
-| denon-spine           | Phantom-X-007                    | feat/spine-*                                                          | hold              | Nitro force-push                |
+| Lane id / program        | Owner session               | Scope                                                          | Status            | Do not touch                      |
+| ------------------------ | --------------------------- | -------------------------------------------------------------- | ----------------- | --------------------------------- |
+| **board-clear-coord**    | Board Clear GO orchestrator | L0, scoreboard, NEXT, babysit, fan-out **agent** programs only | **RUNNING**       | residual-only; steal H-\*         |
+| **P-UI**                 | Nitro agents                | vendor shell `:8090` craft/hotkeys/honesty                     | **AGENT**         | apps/web product; human exclusive |
+| **P-WS**                 | Nitro agents                | svc-ws E2E (futures events may wait on human M3)               | **AGENT**         | invent futures events             |
+| **P-OR**                 | Board Clear GO · A-OR-1     | **#289** rebase/merge/absorb                                   | **RUNNING**       | leave orphan; dual-edit shehzad   |
+| **P-TRADE-LIGHT**        | Nitro agents                | mm recovery/reseed/mid residual; spot OHLCV; venue mount       | **AGENT**         | futures risk / otc / copy / algo  |
+| **P-P5-LIGHT**           | Nitro agents                | academy / ops thin / agents usefulness                         | **AGENT**         | bank earn/cards/ramps money       |
+| **P-TRACK**              | coord / agents              | tracker + scoreboard honesty                                   | **AGENT**         | lie on Done                       |
+| **H-PAY / M1**           | **shehzad002**              | Pay OS — card + merchant + pay.* expansion                     | **HUMAN-CLAIMED** | agent A-PAY / card recipes        |
+| **H-PROT / M2**          | **shehzad002**              | Protocol OS — SA, AMM, lending, escrow, router, merchant       | **HUMAN-CLAIMED** | agent SA/AMM product              |
+| **H-TRADE-HARD / M3–M4** | **shehzad002**              | Futures risk + real OTC/copy/algo                              | **HUMAN-CLAIMED** | agent invent engines              |
+| **H-ID-SUB / M5**        | **shehzad002**              | Identity sub-account money graph                               | **HUMAN-CLAIMED** | agent invent money routing        |
+| **H-P5-MONEY / M6**      | **shehzad002**              | Bank earn/cards/ramps/sovereign-card                           | **HUMAN-CLAIMED** | agent bank money                  |
+| **H-OR-JAVA / M7**       | **shehzad002** (after #289) | Vendor Java dual-book residual                                 | **QUEUED**        | start before #289 closed          |
+| denon-spine              | Phantom-X-007               | feat/spine-*                                                   | hold              | Nitro force-push                  |
 
 ## Hard bans
 
