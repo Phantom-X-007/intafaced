@@ -28,7 +28,7 @@
 | trade.copy                      | **OPEN** | Not product                                          | A-TRADE-COPY-1   | —     |
 | trade.algo                      | **OPEN** | Not product                                          | A-TRADE-ALGO-1   | —     |
 | venue.aggregation               | **OPEN** | Fabric exists; not mounted                           | A-TRADE-VENUE-1  | —     |
-| order-route #289                | **OPEN** | Claimed; PR must close                               | A-OR-1           | —     |
+| order-route #289                | **OPEN** | Claimed; **CONFLICTING** vs main — rebase first      | A-OR-1           | —     |
 | Phase 5 bank/academy/ops/agents | **OPEN** | Claimable                                            | A-P5-1..3        | —     |
 
 Status vocabulary: `OPEN` | `WIP` | `DONE` | `CUT` (§13)
