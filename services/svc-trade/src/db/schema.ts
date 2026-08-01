@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -311,6 +311,31 @@ export const fills = trade.table(
     index('fills_order_idx').on(t.orderId),
     index('fills_user_ts_idx').on(t.userId, t.ts),
     index('fills_market_ts_idx').on(t.marketId, t.ts),
+  ],
+);
+
+/**
+ * Materialized spot OHLCV (A-TRADE-SPOT-1). Closed buckets only, from non-seeded
+ * taker fills. REST still reads live fills; this table is the durable job
+ * output (default OFF). Absence of a row is honest silence — never zero-fill.
+ */
+export const spotCandles = trade.table(
+  'spot_candles',
+  {
+    marketId: uuid('market_id')
+      .notNull()
+      .references(() => markets.id),
+    timeframe: text('timeframe').notNull(),
+    openTimeMs: bigint('open_time_ms', { mode: 'number' }).notNull(),
+    open: amount('open').notNull(),
+    high: amount('high').notNull(),
+    low: amount('low').notNull(),
+    close: amount('close').notNull(),
+    volume: amount('volume').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.marketId, t.timeframe, t.openTimeMs] }),
+    index('spot_candles_market_tf_time_idx').on(t.marketId, t.timeframe, t.openTimeMs),
   ],
 );
 

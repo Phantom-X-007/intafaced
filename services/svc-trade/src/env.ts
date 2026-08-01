@@ -121,6 +121,32 @@ const schema = serviceEnvSchema
        * Unmapped market → null mark for that id (never invent symbol).
        */
       TRADE_VENUE_MARK_SYMBOLS: z.string().default(''),
+
+      /**
+       * Spot candle materialization job (A-TRADE-SPOT-1).
+       * Default OFF — REST OHLCV always reads live fills; this job only
+       * copies closed non-seeded buckets into trade.spot_candles.
+       * Never invents empty candles or a market list.
+       */
+      TRADE_CANDLE_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /** Materialization tick interval when enabled. Default 60s. */
+      TRADE_CANDLE_JOBS_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(60_000),
+
+      /**
+       * Comma-separated market UUIDs to materialize.
+       * Empty (default) = job not scheduled even when enabled.
+       */
+      TRADE_CANDLE_JOBS_MARKET_IDS: z.string().default(''),
+
+      /**
+       * Comma-separated timeframes (e.g. `1m,1h`). Invalid tokens dropped.
+       * Empty → `1m` only when markets are set.
+       */
+      TRADE_CANDLE_JOBS_TIMEFRAMES: z.string().default('1m'),
     }),
   );
 

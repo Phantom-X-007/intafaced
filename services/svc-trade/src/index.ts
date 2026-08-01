@@ -18,6 +18,8 @@ import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.
 import { createConfiguredVenueMarkSource } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { parseMmSeedMids, parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
+import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
+import { startCandleJobs } from './spot/candle-jobs.js';
 import { parseAmount } from '@intafaced/ledger-client';
 
 /**
@@ -102,6 +104,26 @@ const futuresJobs = startFuturesJobs({
     fundingMarketIds: parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS),
   },
   onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
+});
+
+// Spot candle materialization — default OFF. REST OHLCV still live from fills.
+const candleJobs = startCandleJobs({
+  sql,
+  config: {
+    enabled: env.TRADE_CANDLE_JOBS_ENABLED,
+    intervalMs: env.TRADE_CANDLE_JOBS_INTERVAL_MS,
+    marketIds: parseCandleMarketIds(env.TRADE_CANDLE_JOBS_MARKET_IDS),
+    timeframes: parseCandleTimeframes(env.TRADE_CANDLE_JOBS_TIMEFRAMES),
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'candle job tick failed'),
+  onResult: (r) => {
+    if (r.written > 0) {
+      app.log.info(
+        { marketId: r.marketId, timeframe: r.timeframe, candleCount: r.candleCount, written: r.written },
+        'candle materialize ok',
+      );
+    }
+  },
 });
 
 // MM seed job — default OFF. Empty markets or missing mids → no invent.
@@ -222,6 +244,8 @@ app.log.info(
     futuresJobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     futuresJobs: futuresJobs.host.list(),
     venueMark: venueMarkConfigured ? { venueId: venueMarkConfigured.venueId, symbols: venueMarkConfigured.symbolCount } : null,
+    candleJobsEnabled: env.TRADE_CANDLE_JOBS_ENABLED,
+    candleJobs: candleJobs.host.list(),
     mmSeedEnabled: env.TRADE_MM_SEED_ENABLED,
     mmSeedJobs: mmSeedJobs.host.list(),
     trpc: true,
@@ -258,6 +282,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       futuresJobs.stop();
+      candleJobs.stop();
       mmSeedJobs.stop();
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();
