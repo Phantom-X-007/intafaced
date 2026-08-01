@@ -107,6 +107,53 @@ a retry from a bot, a redelivery from JetStream, or an operator replaying a day 
 ledger returns the original transaction. `crypto.randomUUID()` appears exactly once in this service, for an order
 whose caller chose not to supply a client id — and that order is the only one a retry can double.
 
+### Seed / mm honesty (Spec SD-2…SD-4)
+
+| Rule              | Behavior                                                                       |
+| ----------------- | ------------------------------------------------------------------------------ |
+| **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`)         |
+| **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (kill-switch SD-4) |
+| **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)         |
+| **F8**            | seed↔seed prints never inflate public tape                                     |
+
+Seeder process resume (SD-1/SD-6, branch `feat/spine-market-seeder`) is a separate eng residual.
+
+### Reconcile open ↔ hold ↔ engine (Spec CX-9)
+
+Operator recovery for a **single** suspect order (not cancel-all):
+
+| Case                    | Detection                              | Action                                                     |
+| ----------------------- | -------------------------------------- | ---------------------------------------------------------- |
+| **orphan pending**      | `pending` + ledger hold 0              | delete row                                                 |
+| **open+hold no engine** | `open` + hold > 0 + engine cancel miss | release remainder once                                     |
+| **open+engine no hold** | `open` + hold 0                        | **fail closed** — never invent hold; cancel free book risk |
+
+```ts
+await trade.reconcileOrder(orderId);
+// tests: src/spot/order-route-reconcile.test.ts
+```
+
+### Order-path smoke (Spec CX-8)
+
+Assembled health probe (trade + matching + ledger HTTP):
+
+```bash
+pnpm order-path-smoke
+# fleet up → PROOF_OK assembled-health
+# fleet down → HONEST_SKIP exit 0 (set ORDER_PATH_SMOKE_STRICT=1 to fail CI when down)
+```
+
+In-process chaos + property suites (`order-route-chaos.test.ts`, `order-route-properties.test.ts`) are the CI seal for hold/fill/idempotency without inventing live fills.
+
+### clientOrderId policy (Spec CX-11)
+
+| Rule                   | Guidance                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Recommend**          | Always send a unique `clientOrderId` per intent (global unique or day-scoped + user+market is enough). Retries must reuse the **same** id. |
+| **Exactly-once place** | Same `(userId, marketId, clientOrderId)` → one order, one hold, one engine submit (chaos F1).                                              |
+| **Unsafe**             | Place without `clientOrderId` then retry on timeout — a second UUID is a second hold.                                                      |
+| **Constraint**         | Uniqueness is enforced by deterministic order id derivation + order row insert; DB unique on client id is optional hardening residual.     |
+
 ### Where the money is, at every point
 
 | State                               | Where the funds are                                       |

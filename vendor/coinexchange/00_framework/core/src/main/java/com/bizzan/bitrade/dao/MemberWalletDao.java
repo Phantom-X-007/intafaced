@@ -16,58 +16,40 @@ import java.util.List;
 public interface MemberWalletDao extends BaseDao<MemberWallet> {
 
     /**
-     * 增加钱包余额
-     *
-     * @param walletId
-     * @param amount
-     * @return
+     * Dual-book Option B (INTAFACED order-route 2026-07-31): no live second book.
+     * Upstream mutated wallet.balance / frozenBalance. Shell is not the books —
+     * TS ledger remains balance of record. Queries are no-ops (0 rows); service
+     * layer throws. Scan: tooling/ci/vendor-java-money-scan.mjs.
      */
+    @Transactional
     @Modifying
-    @Query("update MemberWallet wallet set wallet.balance = wallet.balance + :amount where wallet.id = :walletId")
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int increaseBalance(@Param("walletId") long walletId, @Param("amount") BigDecimal amount);
 
-    /**
-     * 减少钱包余额
-     *
-     * @param walletId
-     * @param amount
-     * @return
-     */
+    /** Dual-book no-op — see increaseBalance. */
+    @Transactional
     @Modifying
-    @Query("update MemberWallet wallet set wallet.balance = wallet.balance - :amount where wallet.id = :walletId and wallet.balance >= :amount")
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int decreaseBalance(@Param("walletId") long walletId, @Param("amount") BigDecimal amount);
 
-    /**
-     * 冻结钱包余额
-     *
-     * @param walletId
-     * @param amount
-     * @return
-     */
+    /** Dual-book no-op — see increaseBalance. */
+    @Transactional
     @Modifying
-    @Query("update MemberWallet wallet set wallet.balance = wallet.balance - :amount,wallet.frozenBalance=wallet.frozenBalance + :amount where wallet.id = :walletId and wallet.balance >= :amount")
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int freezeBalance(@Param("walletId") long walletId, @Param("amount") BigDecimal amount);
 
-    /**
-     * 解冻钱包余额
-     *
-     * @param walletId
-     * @param amount
-     * @return
-     */
+    /** Dual-book no-op — see increaseBalance. */
+    @Transactional
     @Modifying
-    @Query("update MemberWallet wallet set wallet.balance = wallet.balance + :amount,wallet.frozenBalance=wallet.frozenBalance - :amount where wallet.id = :walletId and wallet.frozenBalance >= :amount")
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int thawBalance(@Param("walletId") long walletId, @Param("amount") BigDecimal amount);
 
     /**
-     * 减少冻结余额
-     *
-     * @param walletId
-     * @param amount
-     * @return
+     * Dual-book no-op — decrease frozen without returning to available.
      */
+    @Transactional
     @Modifying
-    @Query("update MemberWallet wallet set wallet.frozenBalance=wallet.frozenBalance - :amount where wallet.id = :walletId and wallet.frozenBalance >= :amount")
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int decreaseFrozen(@Param("walletId") long walletId, @Param("amount") BigDecimal amount);
 
 
@@ -129,14 +111,16 @@ public interface MemberWalletDao extends BaseDao<MemberWallet> {
     @Query(value="UPDATE member_wallet SET id = id WHERE 1 = 0 AND member_id=:teamId",nativeQuery = true)
     int updateTeamWallet(@Param("teamBalance")BigDecimal teamBalance,@Param("teamId")long teamId);
 
+    /** Dual-book no-op — freeze-from-available path. */
     @Transactional
     @Modifying
-    @Query(value="UPDATE member_wallet SET balance=balance-:normalBalance,frozen_balance=frozen_balance+:normalBalance where coin_id=:coinId AND member_id=:memberId",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int updateMemberWalletByMemberIdAndCoinId(@Param("normalBalance")BigDecimal normalBalance,@Param("coinId")String coinId,@Param("memberId")long memberId);
 
+    /** Dual-book no-op — thaw-into-available path. */
     @Transactional
     @Modifying
-    @Query(value="UPDATE member_wallet SET balance=balance+:allBalance,frozen_balance=frozen_balance-:forzenBalance where coin_id=:coinId AND member_id=:memberId",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int updateMemberWalletByMemberIdAndCoinId(@Param("allBalance")BigDecimal allBalance,@Param("forzenBalance")BigDecimal forzenBalance,@Param("coinId")String coinId,@Param("memberId")long memberId);
 
     
@@ -174,19 +158,17 @@ public interface MemberWalletDao extends BaseDao<MemberWallet> {
      * @param amount
      * @return
      */
+    /** Dual-book no-op — contest/game debit. */
     @Transactional(rollbackFor = Exception.class)
     @Modifying
-    @Query(value = "UPDATE member_wallet SET balance=balance-:amount WHERE id=:id and balance>=:amount",nativeQuery = true)
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
     int updateBalanceByIdAndAmount (@Param("id") long id,@Param("amount") double amount);
 
     /**
-     * 增加冻结资产
-     * @param id
-     * @param amount
-     * @return
+     * Dual-book no-op — increase frozen without debiting available.
      */
     @Transactional(rollbackFor = Exception.class)
     @Modifying
-    @Query("update MemberWallet wallet set wallet.frozenBalance=wallet.frozenBalance + :amount where wallet.id = :walletId")
+    @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
 	int increaseFrozen(@Param("walletId") Long walletId, @Param("amount") BigDecimal amount);
 }

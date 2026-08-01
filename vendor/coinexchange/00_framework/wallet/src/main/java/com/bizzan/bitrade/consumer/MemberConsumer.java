@@ -139,8 +139,8 @@ public class MemberConsumer {
             //保存
             memberWalletService.save(wallet);
         }
-        //注册活动奖励
-        RewardActivitySetting rewardActivitySetting = rewardActivitySettingService.findByType(ActivityRewardType.REGISTER);
+        //注册活动奖励 — dual-book disabled (INTAFACED): do not mint shell balances
+        RewardActivitySetting rewardActivitySetting = null; // was findByType; dual-book disable
         if (rewardActivitySetting!=null){
             MemberWallet memberWallet=memberWalletService.findByCoinAndMemberId(rewardActivitySetting.getCoin(),json.getLong("uid"));
             if (memberWallet==null){return;}

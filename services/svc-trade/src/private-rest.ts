@@ -867,6 +867,7 @@ export function fakeOrder(partial: {
     feeDiscountBps: 0,
     protectionPrice: partial.protectionPrice === undefined ? null : partial.protectionPrice,
     engineSequence: 1,
+    seeded: false,
     rejectCode: null,
     createdAt: partial.createdAt ?? new Date('2023-11-14T22:13:20.000Z'),
   };

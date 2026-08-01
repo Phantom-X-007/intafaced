@@ -3,7 +3,17 @@ import { transaction } from '@intafaced/db';
 import { TIMEFRAME_MS, type Timeframe } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
 import { requireScope, type Principal } from '@intafaced/auth';
-import { formatAmount, mul, mulBps, parseAmount, recipes, sub, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import {
+  formatAmount,
+  mul,
+  mulBps,
+  orderHoldAccount,
+  parseAmount,
+  recipes,
+  sub,
+  type Amount,
+  type LedgerClient,
+} from '@intafaced/ledger-client';
 import { withMoneySpan } from '../tracing.js';
 import { ratesForFill } from './fees.js';
 import { fillIdFor, fillLegIdFor, orderIdFor } from './ids.js';
@@ -34,6 +44,7 @@ import {
   type OrderStatus,
   type OrderType,
   type PublicTapePrint,
+  type ReconcileResult,
   type TimeInForce,
 } from './types.js';
 
@@ -68,6 +79,11 @@ import {
 export interface TradeServiceOptions {
   /** Mirror of the `trade.spot` flag. OFF refuses new orders; cancels still work. */
   spotEnabled?: boolean;
+  /**
+   * Seed/mm bot place path (SD-4 kill-switch). OFF refuses `seeded: true` places.
+   * Default false — seed must be deliberately enabled.
+   */
+  seedPlaceEnabled?: boolean;
   /** How far above the best ask a market buy may be funded. See `protectionPriceFor`. */
   marketSlippageCapBps?: number;
   /** Mirror of the `trade.convert` flag. OFF refuses convert quote + execute. */
@@ -138,6 +154,11 @@ export interface PlaceOrderInput {
    * client maxAvgPrice binds execution, not only the pre-trade RFQ check.
    */
   maxProtectionPrice?: Amount | null;
+  /**
+   * Seed/mm honesty (SD-2). Only accepted when `seedPlaceEnabled` is on.
+   * Flagged orders are excluded from public volume / tape (SD-3).
+   */
+  seeded?: boolean;
 }
 
 export interface ListMarketInput {
@@ -166,6 +187,7 @@ export interface ListMarketInput {
 
 export class TradeService {
   private readonly spotEnabled: boolean;
+  private readonly seedPlaceEnabled: boolean;
   private readonly slippageCapBps: number;
   private readonly convertEnabled: boolean;
   private readonly convertSpreadBps: number;
@@ -182,6 +204,7 @@ export class TradeService {
     options: TradeServiceOptions = {},
   ) {
     this.spotEnabled = options.spotEnabled ?? true;
+    this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
     this.convertEnabled = options.convertEnabled ?? true;
     this.convertSpreadBps = options.convertSpreadBps ?? 10;
@@ -405,6 +428,11 @@ export class TradeService {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
 
+    const seeded = input.seeded === true;
+    if (seeded && !this.seedPlaceEnabled) {
+      throw new TradeError('seed/mm place is disabled by the operator kill-switch', 'trade.seed_disabled');
+    }
+
     // Ownership + revoked gate (identity S2S). Before any row or hold — a
     // foreign or revoked id must never land on trade.orders.sub_account_id.
     // Transport failure refuses the order (fail closed), same as rank perks.
@@ -426,7 +454,15 @@ export class TradeService {
     const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
 
-    const tif: TimeInForce = input.tif ?? 'GTC';
+    // SD-5: seed/mm is liquidity provision only — never take liquidity (no
+    // market orders, force post-only so the engine refuses unfair crosses).
+    let tif: TimeInForce = input.tif ?? 'GTC';
+    if (seeded) {
+      if (orderType !== 'limit') {
+        throw new TradeError('seed/mm orders must be limit post-only (liquidity provision only)', 'trade.seed_must_make');
+      }
+      tif = 'PO';
+    }
     if (tif === 'PO' && orderType !== 'limit') {
       // Post-only is a promise to be a maker, and only a priced order can make
       // it. Refused here rather than by the engine so no hold is taken first.
@@ -494,14 +530,15 @@ export class TradeService {
     const inserted = await this.sql<Array<{ id: string }>>`
       INSERT INTO trade.orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
-        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price
+        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
       ) VALUES (
         ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId ?? null},
         ${input.side}, ${orderType},
         ${input.price == null ? null : formatAmount(input.price)}::numeric,
         ${formatAmount(input.qty)}::numeric, 'pending', ${tif},
         ${hold.assetId}, ${formatAmount(hold.amount)}::numeric, ${perks.feeDiscountBps},
-        ${protectionPrice === null ? null : formatAmount(protectionPrice)}::numeric
+        ${protectionPrice === null ? null : formatAmount(protectionPrice)}::numeric,
+        ${seeded}
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING id
@@ -1303,6 +1340,98 @@ export class TradeService {
     return row ? toOrder(row) : null;
   }
 
+  /**
+   * CX-9 — open ↔ hold ↔ engine reconcile (Plan P1-5).
+   *
+   * Operator / recovery entry for a **single** suspect order. Not a cancel-all.
+   *
+   * | Case | Detection | Action |
+   * | --- | --- | --- |
+   * | orphan pending | `pending` + hold 0 | delete row (never held) |
+   * | open+hold no engine | `open` + hold > 0 + cancel miss | release remainder once |
+   * | open+engine no hold | `open` + hold 0 | **fail closed** — do not invent hold; cancel free book risk if live |
+   *
+   * Fail closed means: never mint a hold from this path; never mark filled without fills.
+   */
+  async reconcileOrder(orderId: string): Promise<ReconcileResult> {
+    return withMoneySpan('trade.reconcileOrder', { operation: 'reconcile_order', orderId }, async () => {
+      const order = await this.findOrder(orderId);
+      if (!order) {
+        return {
+          orderId,
+          case: 'not_found',
+          action: 'none',
+          holdBefore: '0',
+          engineLive: null,
+          detail: 'no order row',
+        };
+      }
+
+      if (order.status !== 'pending' && order.status !== 'open') {
+        return {
+          orderId,
+          case: 'terminal',
+          action: 'none',
+          holdBefore: '0',
+          engineLive: null,
+          detail: `status=${order.status}`,
+        };
+      }
+
+      const holdBal = (await this.ledger.balance(orderHoldAccount(order.userId, order.holdAsset, order.id))).amount;
+      const holdBefore = formatAmount(holdBal);
+
+      // ── orphan pending: intent row, never funded ───────────────────────────
+      if (order.status === 'pending' && holdBal === 0n) {
+        await this.sql`DELETE FROM trade.orders WHERE id = ${orderId} AND status = 'pending'`;
+        return {
+          orderId,
+          case: 'orphan_pending',
+          action: 'deleted',
+          holdBefore,
+          engineLive: false,
+          detail: 'pending row with no hold — deleted (fail-closed safe)',
+        };
+      }
+
+      // ── open (or pending-with-hold) + no ledger hold — FAIL CLOSED ────────
+      // Spec: open+engine no hold. We treat any open/pending with zero hold as
+      // fail-closed: never invent a hold. Best-effort cancel removes free book
+      // risk if the engine still has the order.
+      if (holdBal === 0n) {
+        const eng = await this.matching.cancel(order.marketId, orderId);
+        const engineLive = eng.cancelled;
+        // Terminalize without release (remainder already 0). Do not invent money.
+        await this.finalize(orderId, 'cancelled');
+        return {
+          orderId,
+          case: 'open_engine_no_hold',
+          action: 'fail_closed',
+          holdBefore,
+          engineLive,
+          detail: engineLive
+            ? 'open/pending with zero hold while engine had the order — cancelled free book risk; NO hold invented'
+            : 'open/pending with zero hold and engine miss — terminalized; NO hold invented',
+        };
+      }
+
+      // ── open+hold: cancel probe then release remainder once ───────────────
+      const eng = await this.matching.cancel(order.marketId, orderId);
+      const engineLive = eng.cancelled;
+      await this.finalize(orderId, 'cancelled');
+      return {
+        orderId,
+        case: engineLive ? 'open_hold_engine_cleared' : 'open_hold_no_engine',
+        action: 'released',
+        holdBefore,
+        engineLive,
+        detail: engineLive
+          ? 'open+hold; engine cancelled; remainder released once'
+          : 'open+hold; engine miss (never live / already gone); remainder released once',
+      };
+    });
+  }
+
   async marketById(marketId: string): Promise<Market | null> {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
@@ -1345,22 +1474,31 @@ export class TradeService {
       sequence: number;
       ts: Date;
     };
+    // SD-3: exclude prints involving any seeded order (seed volume is not "real activity").
     const rows = sinceDate
       ? await this.sql<TapeRow[]>`
-          SELECT id, side, price, qty, quote_amount, sequence, ts
-            FROM trade.fills
-           WHERE market_id = ${marketId}
-             AND liquidity = 'taker'
-             AND ts >= ${sinceDate}
-           ORDER BY sequence DESC
+          SELECT f.id, f.side, f.price, f.qty, f.quote_amount, f.sequence, f.ts
+            FROM trade.fills f
+            INNER JOIN trade.orders o ON o.id = f.order_id
+            INNER JOIN trade.orders c ON c.id = f.counter_order_id
+           WHERE f.market_id = ${marketId}
+             AND f.liquidity = 'taker'
+             AND f.ts >= ${sinceDate}
+             AND o.seeded = false
+             AND c.seeded = false
+           ORDER BY f.sequence DESC
            LIMIT ${capped}
         `
       : await this.sql<TapeRow[]>`
-          SELECT id, side, price, qty, quote_amount, sequence, ts
-            FROM trade.fills
-           WHERE market_id = ${marketId}
-             AND liquidity = 'taker'
-           ORDER BY sequence DESC
+          SELECT f.id, f.side, f.price, f.qty, f.quote_amount, f.sequence, f.ts
+            FROM trade.fills f
+            INNER JOIN trade.orders o ON o.id = f.order_id
+            INNER JOIN trade.orders c ON c.id = f.counter_order_id
+           WHERE f.market_id = ${marketId}
+             AND f.liquidity = 'taker'
+             AND o.seeded = false
+             AND c.seeded = false
+           ORDER BY f.sequence DESC
            LIMIT ${capped}
         `;
     return rows.map((row) => ({
@@ -1412,6 +1550,7 @@ export class TradeService {
     // not money, so a double carries it exactly for the next ~285,000 years.
     const bucketExpr = this.sql`(floor(extract(epoch from ts) * 1000 / ${spanMs}::bigint)::bigint * ${spanMs}::bigint)`;
 
+    // SD-3: candles/volume exclude fills involving seeded orders.
     const rows = await this.sql<CandleRow[]>`
       SELECT bucket_ms::text                                              AS bucket_ms,
              (array_agg(price ORDER BY sequence ASC))[1]                  AS open,
@@ -1420,11 +1559,15 @@ export class TradeService {
              (array_agg(price ORDER BY sequence DESC))[1]                 AS close,
              sum(qty)                                                     AS volume
         FROM (
-          SELECT ${bucketExpr} AS bucket_ms, price, qty, sequence
-            FROM trade.fills
-           WHERE market_id = ${marketId}
-             AND liquidity = 'taker'
-             ${sinceDate ? this.sql`AND ts >= ${sinceDate}` : this.sql``}
+          SELECT ${bucketExpr} AS bucket_ms, f.price, f.qty, f.sequence
+            FROM trade.fills f
+            INNER JOIN trade.orders o ON o.id = f.order_id
+            INNER JOIN trade.orders c ON c.id = f.counter_order_id
+           WHERE f.market_id = ${marketId}
+             AND f.liquidity = 'taker'
+             AND o.seeded = false
+             AND c.seeded = false
+             ${sinceDate ? this.sql`AND f.ts >= ${sinceDate}` : this.sql``}
         ) AS binned
        GROUP BY bucket_ms
        -- Newest buckets are the ones a chart opens on, so LIMIT must keep the

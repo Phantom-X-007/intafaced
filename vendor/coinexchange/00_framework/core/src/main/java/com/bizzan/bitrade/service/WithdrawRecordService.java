@@ -119,29 +119,8 @@ public class WithdrawRecordService extends BaseService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long[] ids, WithdrawStatus status) {
-        WithdrawRecord withdrawRecord;
-        for (Long id : ids) {
-            //20	4.70000000	0	2018-02-27 17:47:37		0.30000000	0	28	0	5.00000000			GalaxyChain
-            withdrawRecord = withdrawApplyDao.findOne(id);
-            //确认提现申请存在
-            notNull(withdrawRecord, "不存在");
-            //确认订单状态是审核中
-            isTrue(withdrawRecord.getStatus() == PROCESSING, "id为" + id + "不是审核状态的提现");
-            //确认提现类型不是自动提现
-            isTrue(withdrawRecord.getIsAuto() == IS_FALSE, "id为" + id + "不是人工审核提现");
-            //审核
-            if (status == FAIL) {
-                //审核不通过
-                MemberWallet wallet = walletService.findByCoinAndMemberId(withdrawRecord.getCoin(), withdrawRecord.getMemberId());
-                notNull(wallet, "wallet null!");
-                wallet.setBalance(wallet.getBalance().add(withdrawRecord.getTotalAmount()));
-                wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(withdrawRecord.getTotalAmount()));
-                walletService.save(wallet);
-            }
-            withdrawRecord.setStatus(status);
-            withdrawRecord.setDealTime(new Date());
-            withdrawApplyDao.save(withdrawRecord);
-        }
+        throw new IllegalStateException(
+                "withdraw audit is disabled: Java shell must not mutate balances (INTAFACED dual-book)");
     }
 
     /**
@@ -152,27 +131,8 @@ public class WithdrawRecordService extends BaseService {
      */
     @Transactional
     public void withdrawSuccess(Long withdrawId, String txid) {
-        WithdrawRecord record = findOne(withdrawId);
-        if (record != null) {
-            record.setTransactionNumber(txid);
-            record.setStatus(WithdrawStatus.SUCCESS);
-            MemberWallet wallet = walletService.findByCoinUnitAndMemberId(record.getCoin().getUnit(), record.getMemberId());
-            if (wallet != null) {
-                wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(record.getTotalAmount()));
-                MemberTransaction transaction = new MemberTransaction();
-                transaction.setAmount(record.getTotalAmount());
-                transaction.setSymbol(wallet.getCoin().getUnit());
-                transaction.setAddress(wallet.getAddress());
-                transaction.setMemberId(wallet.getMemberId());
-                transaction.setType(TransactionType.WITHDRAW);
-                transaction.setFee(record.getFee());
-                transaction.setDiscountFee("0");
-                transaction.setRealFee(record.getFee()+"");
-                transaction.setCreateTime(new Date());
-                transaction = transactionService.save(transaction);
-
-            }
-        }
+        throw new IllegalStateException(
+                "withdrawSuccess is disabled: Java shell must not mutate balances (INTAFACED dual-book)");
     }
 
     /**
@@ -182,16 +142,8 @@ public class WithdrawRecordService extends BaseService {
      */
     @Transactional
     public void withdrawFail(Long withdrawId) {
-        WithdrawRecord record = findOne(withdrawId);
-        if (record == null || record.getStatus() != WithdrawStatus.PROCESSING) {
-            return;
-        }
-        MemberWallet wallet = walletService.findByCoinAndAddress(record.getCoin(), record.getAddress());
-        if (wallet != null) {
-            wallet.setBalance(wallet.getBalance().add(record.getTotalAmount()));
-            wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(record.getTotalAmount()));
-            record.setStatus(WithdrawStatus.FAIL);
-        }
+        throw new IllegalStateException(
+                "withdrawFail is disabled: Java shell must not mutate balances (INTAFACED dual-book)");
     }
 
     /**

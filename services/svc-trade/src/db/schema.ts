@@ -1,4 +1,4 @@
-import { index, integer, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -236,6 +236,11 @@ export const orders = trade.table(
     protectionPrice: amount('protection_price'),
     /** Engine acceptance sequence — ties an order to the matching journal. */
     engineSequence: integer('engine_sequence'),
+    /**
+     * Seed/mm honesty (SD-2). True when placed via the seed bot path.
+     * Public volume / tape stats exclude fills involving seeded orders (SD-3).
+     */
+    seeded: boolean('seeded').notNull().default(false),
     /** Engine reject code (`post_only_would_cross`, `fok_unfillable`, …). */
     rejectCode: text('reject_code'),
     createdAt: createdAt(),

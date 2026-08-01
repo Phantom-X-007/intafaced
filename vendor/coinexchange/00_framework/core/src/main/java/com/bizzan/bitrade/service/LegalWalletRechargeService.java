@@ -68,7 +68,7 @@ public class LegalWalletRechargeService extends TopBaseService<LegalWalletRechar
     //充值通过
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public void pass(MemberWallet wallet, LegalWalletRecharge legalWalletRecharge) {
-        wallet.setBalance(BigDecimalUtils.add(wallet.getBalance(), legalWalletRecharge.getAmount()));//充值到账
-        legalWalletRecharge.setState(LegalWalletState.COMPLETE);//标记完成
+        throw new IllegalStateException(
+                "legal wallet recharge pass is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
 }

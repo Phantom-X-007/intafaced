@@ -36,11 +36,13 @@ public class OrderEvent {
     private CoinExchangeFactory coins;
 
     public void onOrderCompleted(Order order) {
+        // Dual-book: balance mints in this handler are disabled (INTAFACED).
         Member member = memberDao.findOne(order.getMemberId());
         member.setTransactions(member.getTransactions() + 1);
         Member member1 = memberDao.findOne(order.getCustomerId());
         member1.setTransactions(member1.getTransactions() + 1);
-        RewardPromotionSetting rewardPromotionSetting = rewardPromotionSettingService.findByType(PromotionRewardType.TRANSACTION);
+        // Dual-book: promotion wallet mints disabled — ledger is the only book.
+        RewardPromotionSetting rewardPromotionSetting = null; // was findByType; dual-book disable
         if (rewardPromotionSetting != null && coins.get("USDT").compareTo(BigDecimal.ZERO) > 0) {
             Member[] array = {member, member1};
             Arrays.stream(array).forEach(

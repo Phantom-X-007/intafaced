@@ -1,27 +1,41 @@
 # Order-route readiness scoreboard
 
-**Status:** LIVING · update after each ship  
+**Status:** LIVING · agent program finish gate  
 **Program plan:** `ORDER-ROUTE-PLAN-2026-07-31.md`  
+**Finish gate:** `ORDER-ROUTE-PROGRAM-FINISH-2026-07-31.md`  
 **Rule:** Never say “stable for real money” unless agent axes green **and** Human X residual named.
 
-| Axis                                                            | Status                | Proof                                                | Notes                                 |
-| --------------------------------------------------------------- | --------------------- | ---------------------------------------------------- | ------------------------------------- |
-| Law / DIRECTION on tip                                          | **green**             | #272 merged · `docs/DIRECTION-2026-07-31.md` on main | P0-1 done                             |
-| LIVE-LANES claim                                                | **armed in pack**     | `LIVE-LANES.md` row `order-route-harden`             | Build chat marks LIVE on first code   |
-| Residual seed-first pointer                                     | partial               | START-HERE pointer + Plan GC-5                       | P0-3 residual campaign line if needed |
-| CEX unit guard (CX-1–6)                                         | unproven this program | existing suite on tip                                | P1-0                                  |
-| CEX chaos F1–F4                                                 | red                   | —                                                    | P1-1                                  |
-| CEX property tests                                              | red                   | —                                                    | P1-2                                  |
-| CEX assembled path                                              | red                   | —                                                    | P1-3                                  |
-| CEX chaos F5–F8                                                 | red                   | —                                                    | P1-4                                  |
-| CEX reconcile                                                   | red                   | —                                                    | P1-5                                  |
-| Dual-book scans                                                 | red                   | —                                                    | P2-2, P2-3                            |
-| Dual-book door-kill                                             | red                   | —                                                    | P2-4 Class M carve-out                |
-| DEX honesty residual                                            | red                   | —                                                    | P3-*                                  |
-| Seed honesty                                                    | red                   | —                                                    | P4-* Denon #1                         |
-| Multi-asset resume                                              | red                   | —                                                    | P5-*                                  |
-| Pay durable                                                     | check tip             | #266 successors / pay PRs                            | P6-1                                  |
-| Futures/copy bounds honest                                      | check tip             | #278 era REST ≠ MVP done                             | P7-1                                  |
-| **Human X** secrets / go-live / prod RPC / kill drill / counsel | **human**             | —                                                    | Never agent-green                     |
+| Axis                     | Status              | Proof                                         | Notes                      |
+| ------------------------ | ------------------- | --------------------------------------------- | -------------------------- |
+| Law / DIRECTION          | **green**           | #272                                          | P0-1                       |
+| LIVE-LANES               | **LIVE**            | order-route-harden                            | P0-2                       |
+| Residual seed-first      | **green**           | campaign R6                                   | P0-3                       |
+| CEX unit guard           | **CI**              | svc-trade suite                               | P1-0                       |
+| CEX chaos F1–F8          | **landed**          | chaos + seed tests                            | P1-1, P1-4                 |
+| CEX properties           | **landed**          | fast-check                                    | P1-2                       |
+| CEX assembled            | **honest residual** | order-path-smoke                              | fleet two-user residual    |
+| CEX reconcile            | **landed**          | reconcileOrder                                | P1-5                       |
+| Dual-book scans          | **green**           | vendor-java-money + door-scan                 | P2-2/3                     |
+| Dual-book door + service | **landed**          | interceptor + throws                          | P2-4; dead-branch residual |
+| Dual-book ADR            | **Accepted**        | DIRECTION #272 era                            | P2-5                       |
+| DEX honesty              | **green on tip**    | quote suite + routePreview test               | P3                         |
+| Seed honesty             | **green (code)**    | flag + kill + tape + make-only; seeder on tip | ops compose boot residual  |
+| Multi-asset              | **green on tip**    | migrations + schedule refuse tests            | MA-2/3                     |
+| Pay durable              | **green on tip**    | #266 broadcast journal                        | PY-1                       |
+| Futures/copy bounds      | **honest**          | tracker futures 🔨 not done; no copy invent   | FT-1…4                     |
+| WAVE-AUDIT               | **this wave**       | ORDER-ROUTE-PROGRAM-FINISH                    | SC-5                       |
+| **Human X**              | **human**           | secrets / go-live / prod RPC / kill drill     | SC-4 · never agent-green   |
 
-**Last update:** 2026-07-31 — Architect+Plan landed; #272 green.
+**Last update:** 2026-07-31 — Agent finish gate written. **Not go-live. Not stable-for-real-money.**
+
+## Anti-compromise checklist
+
+| Tier A item               | Status               |
+| ------------------------- | -------------------- |
+| REQ-driven PRs            | yes                  |
+| Chaos F1–F8               | yes                  |
+| Assembled smoke honest    | yes                  |
+| Java mutator + door scans | yes                  |
+| fast-check                | yes                  |
+| Fresh adversarial         | yes on Class M ships |
+| Door-kill A1              | yes                  |

@@ -70,6 +70,7 @@ export interface OrderRow {
   fee_discount_bps: string;
   protection_price: string | null;
   engine_sequence: number | null;
+  seeded: boolean;
   reject_code: string | null;
   created_at: Date;
 }
@@ -93,6 +94,7 @@ export function toOrder(row: OrderRow): OrderRecord {
     feeDiscountBps: Number(row.fee_discount_bps),
     protectionPrice: row.protection_price === null ? null : parseAmount(row.protection_price),
     engineSequence: row.engine_sequence,
+    seeded: Boolean(row.seeded),
     rejectCode: row.reject_code,
     createdAt: row.created_at,
   };

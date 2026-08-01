@@ -190,13 +190,13 @@ Each row from the third-dev screenshot is a **program**, not one PR.
 
 ### R6 — Trade mountains (futures / otc / copy / algo / mm-bot / ccxt…)
 
-|                      |                                                                                                                                                                 |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Means**            | Product **engines**, not route stubs                                                                                                                            |
-| **On main**          | Spot core; CCXT partial; venue fabric package not production-mounted; **no** futures engine                                                                     |
-| **Order (leverage)** | (1) **trade.futures** research+design+MVP (unlocks R2 positions) (2) **trade.mm-bot** seed books (3) **trade.ccxt-api** honesty close (4) otc (5) copy (6) algo |
-| **Right way**        | Each gets full research pack + money-path recipes + failure tests; **one engine at a time** as active lane                                                      |
-| **Lane id**          | `residual-trade-<engine>`                                                                                                                                       |
+|                      |                                                                                                                                                                                                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Means**            | Product **engines**, not route stubs                                                                                                                                                                                                                                       |
+| **On main**          | Spot core; CCXT partial; venue fabric package not production-mounted; **no** futures engine                                                                                                                                                                                |
+| **Order (leverage)** | **Denon DIRECTION / Spec GC-5 (seed-first):** (1) **trade.mm-bot** seed books honesty (2) multi-asset (3) **trade.futures** research+design+MVP (unlocks R2 positions) (4) **trade.ccxt-api** honesty close (5) otc (6) copy (7) algo — see `ORDER-ROUTE-PROGRAM-INDEX.md` |
+| **Right way**        | Each gets full research pack + money-path recipes + failure tests; **one engine at a time** as active lane                                                                                                                                                                 |
+| **Lane id**          | `residual-trade-<engine>`                                                                                                                                                                                                                                                  |
 
 ### R7 — Phase 5 (bank earn/cards/ramps, academy, ops, agents…)
 
@@ -243,7 +243,7 @@ Each row from the third-dev screenshot is a **program**, not one PR.
 | #   | Item                                                                                                        | Class |
 | --- | ----------------------------------------------------------------------------------------------------------- | ----- |
 | 3.1 | R1 hotkeys / sub-accounts **if** frontend lane free; else spine-only sub-account gates                      | N/P   |
-| 3.2 | R6 futures **research pack + design brief** (no code until brief accepted by adversarial pass in-session)   | —     |
+| 3.2 | R6 seed/mm **honesty residual** (order-route P4; not futures-first) · see ORDER-ROUTE plan                  | —     |
 | 3.3 | R6 futures MVP slice 1 (markets/margin model stubs **only** if doctrine-aligned; else journal+recipe first) | M     |
 
 ### Wave 4 — trade expansion + Phase 5

@@ -81,6 +81,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /** Operator kill-switch across the whole spot plane — venue-wide, retryable. */
   'trade.spot_disabled': { ccxt: 'OnMaintenance', status: 503 },
+  'trade.seed_disabled': { ccxt: 'OnMaintenance', status: 503 },
+  'trade.seed_must_make': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_disabled': { ccxt: 'OnMaintenance', status: 503 },
 
   // ── The order itself is malformed: fix it, then resubmit ──────────────────

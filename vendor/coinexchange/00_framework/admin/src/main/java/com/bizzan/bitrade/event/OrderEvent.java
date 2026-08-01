@@ -37,7 +37,8 @@ public class OrderEvent {
         member.setTransactions(member.getTransactions() + 1);
         Member member1 = memberDao.findOne(order.getCustomerId());
         member1.setTransactions(member1.getTransactions() + 1);
-        RewardPromotionSetting rewardPromotionSetting = rewardPromotionSettingService.findByType(PromotionRewardType.TRANSACTION);
+        // Dual-book: promotion wallet mints disabled — ledger is the only book.
+        RewardPromotionSetting rewardPromotionSetting = null; // was findByType; dual-book disable
         if (rewardPromotionSetting != null) {
             Member[] array = {member, member1};
             Arrays.stream(array).forEach(

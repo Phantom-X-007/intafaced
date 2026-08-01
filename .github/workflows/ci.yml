@@ -40,6 +40,10 @@ jobs:
         run: pnpm scan:custody
       - name: Vendor shell residue (mass-credit / CORS *)
         run: pnpm scan:vendor-shell
+      - name: Vendor Java money mutators (dual-book Option B)
+        run: pnpm scan:vendor-java-money
+      - name: Dual-book door-kill registration (Architect A1)
+        run: pnpm scan:dual-book-door
       # Cheap, needs no database, and catches at review time the mistake that
       # otherwise only shows up as someone else's `main` going red.
       - name: Test DB isolation scan

@@ -84,27 +84,9 @@ public class MemberWalletService extends BaseService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MessageResult recharge(MemberWallet wallet, BigDecimal amount) {
-        if (wallet == null) {
-            return new MessageResult(500, "wallet cannot be null");
-        }
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            return new MessageResult(500, "amount must large then 0");
-        }
-        int result = memberWalletDao.increaseBalance(wallet.getId(), amount);
-        if (result > 0) {
-            MemberTransaction transaction = new MemberTransaction();
-            transaction.setAmount(amount);
-            transaction.setSymbol(wallet.getCoin().getUnit());
-            transaction.setAddress(wallet.getAddress());
-            transaction.setMemberId(wallet.getMemberId());
-            transaction.setType(TransactionType.RECHARGE);
-            transaction.setFee(BigDecimal.ZERO);
-            transactionService.save(transaction);
-            //增加记录
-            return new MessageResult(0, "success");
-        } else {
-            return new MessageResult(500, "recharge failed");
-        }
+        // Dual-book Option B: Java shell must not mint balances.
+        throw new IllegalStateException(
+                "recharge is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
 
     /**
@@ -117,45 +99,8 @@ public class MemberWalletService extends BaseService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MessageResult recharge(Coin coin, String address, BigDecimal amount, String txid) {
-        MemberWallet wallet = findByCoinAndAddress(coin, address);
-        if (wallet == null) {
-            return new MessageResult(500, "wallet cannot be null");
-        }
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            return new MessageResult(500, "amount must large then 0");
-        }
-        MemberDeposit deposit = new MemberDeposit();
-        deposit.setAddress(address);
-        deposit.setAmount(amount);
-        deposit.setMemberId(wallet.getMemberId());
-        deposit.setTxid(txid);
-        deposit.setUnit(wallet.getCoin().getUnit());
-        depositDao.save(deposit);
-
-        wallet.setBalance(wallet.getBalance().add(amount)); // 为用户增加余额
-        
-        MemberTransaction transaction = new MemberTransaction();
-        transaction.setAmount(amount);
-        transaction.setSymbol(wallet.getCoin().getUnit());
-        transaction.setAddress(wallet.getAddress());
-        transaction.setMemberId(wallet.getMemberId());
-        transaction.setType(TransactionType.RECHARGE);
-        transaction.setFee(BigDecimal.ZERO);
-        transaction.setDiscountFee("0");
-        transaction.setRealFee("0");
-        transaction.setCreateTime(new Date());
-
-        transaction = transactionService.save(transaction);
-
-        Member mRes = memberDao.findOne(wallet.getMemberId());
-        if(mRes != null ) {
-        	try {
-				smsProvider.sendCustomMessage(mRes.getMobilePhone(), "尊敬的用户：恭喜您充值"+ wallet.getCoin().getUnit() + "成功，充值数量为：" + amount.stripTrailingZeros().toPlainString());
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-        }
-        return new MessageResult(0, "success");
+        throw new IllegalStateException(
+                "recharge is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
     
     /**
@@ -168,44 +113,8 @@ public class MemberWalletService extends BaseService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MessageResult recharge2(Long userId, Coin coin, String address, BigDecimal amount, String txid) {
-        MemberWallet wallet = findByCoinAndMemberId(coin, userId);
-        if (wallet == null) {
-            return new MessageResult(500, "wallet cannot be null");
-        }
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            return new MessageResult(500, "amount must large then 0");
-        }
-        MemberDeposit deposit = new MemberDeposit();
-        deposit.setAddress(address);
-        deposit.setAmount(amount);
-        deposit.setMemberId(wallet.getMemberId());
-        deposit.setTxid(txid);
-        deposit.setUnit(wallet.getCoin().getUnit());
-        depositDao.save(deposit);
-
-        wallet.setBalance(wallet.getBalance().add(amount));
-        MemberTransaction transaction = new MemberTransaction();
-        transaction.setAmount(amount);
-        transaction.setSymbol(wallet.getCoin().getUnit());
-        transaction.setAddress(address);
-        transaction.setMemberId(wallet.getMemberId());
-        transaction.setType(TransactionType.RECHARGE);
-        transaction.setFee(BigDecimal.ZERO);
-        transaction.setDiscountFee("0");
-        transaction.setRealFee("0");
-        transaction.setCreateTime(new Date());
-
-        transaction = transactionService.save(transaction);
-
-        Member mRes = memberDao.findOne(wallet.getMemberId());
-        if(mRes != null ) {
-        	try {
-				smsProvider.sendCustomMessage(mRes.getMobilePhone(), "尊敬的用户：恭喜您充值"+ wallet.getCoin().getUnit() + "成功，充值数量为：" + amount.stripTrailingZeros().toPlainString());
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-        }
-        return new MessageResult(0, "success");
+        throw new IllegalStateException(
+                "recharge2 is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
 
 
@@ -262,12 +171,8 @@ public class MemberWalletService extends BaseService {
      * @return
      */
     public MessageResult freezeBalance(MemberWallet memberWallet, BigDecimal amount) {
-        int ret = memberWalletDao.freezeBalance(memberWallet.getId(), amount);
-        if (ret > 0) {
-            return MessageResult.success();
-        } else {
-            return MessageResult.error("Information Expired");
-        }
+        throw new IllegalStateException(
+                "freezeBalance is disabled: Java shell must not freeze balances (INTAFACED dual-book)");
     }
 
     /**
@@ -278,13 +183,8 @@ public class MemberWalletService extends BaseService {
      * @return
      */
     public MessageResult thawBalance(MemberWallet memberWallet, BigDecimal amount) {
-        int ret = memberWalletDao.thawBalance(memberWallet.getId(), amount);
-        if (ret > 0) {
-            return MessageResult.success();
-        } else {
-            log.info("====order cancel=====订单取消异常（amount）："+amount);
-            return MessageResult.error("Information Expired");
-        }
+        throw new IllegalStateException(
+                "thawBalance is disabled: Java shell must not thaw balances (INTAFACED dual-book)");
     }
 
     /**
@@ -295,32 +195,8 @@ public class MemberWalletService extends BaseService {
      * @throws InformationExpiredException
      */
     public void transfer(Order order, int ret) throws InformationExpiredException {
-        if (ret == 1) {
-            MemberWallet customerWallet = findByOtcCoinAndMemberId(order.getCoin(), order.getCustomerId());
-            int is = memberWalletDao.decreaseFrozen(customerWallet.getId(), order.getNumber());
-            if (is > 0) {
-                MemberWallet memberWallet = findByOtcCoinAndMemberId(order.getCoin(), order.getMemberId());
-                int a = memberWalletDao.increaseBalance(memberWallet.getId(), BigDecimalUtils.sub(order.getNumber(), order.getCommission()));
-                if (a <= 0) {
-                    throw new InformationExpiredException("Information Expired");
-                }
-            } else {
-                throw new InformationExpiredException("Information Expired");
-            }
-        } else {
-            MemberWallet customerWallet = findByOtcCoinAndMemberId(order.getCoin(), order.getMemberId());
-            int is = memberWalletDao.decreaseFrozen(customerWallet.getId(), BigDecimalUtils.add(order.getNumber(), order.getCommission()));
-            if (is > 0) {
-                MemberWallet memberWallet = findByOtcCoinAndMemberId(order.getCoin(), order.getCustomerId());
-                int a = memberWalletDao.increaseBalance(memberWallet.getId(), order.getNumber());
-                if (a <= 0) {
-                    throw new InformationExpiredException("Information Expired");
-                }
-            } else {
-                throw new InformationExpiredException("Information Expired");
-            }
-        }
-
+        throw new IllegalStateException(
+                "transfer is disabled: Java shell must not move balances (INTAFACED dual-book)");
     }
 
 
@@ -335,41 +211,19 @@ public class MemberWalletService extends BaseService {
      * @throws InformationExpiredException
      */
     public void transferAdmin(Order order, int ret) throws InformationExpiredException {
-        if (ret == 1 || ret == 4) {
-            trancerDetail(order, order.getCustomerId(), order.getMemberId());
-        } else {
-            trancerDetail(order, order.getMemberId(), order.getCustomerId());
-
-        }
-
+        throw new IllegalStateException(
+                "transferAdmin is disabled: Java shell must not move balances (INTAFACED dual-book)");
     }
 
 
     private void trancerDetail(Order order, long sellerId, long buyerId) throws InformationExpiredException {
-        MemberWallet customerWallet = findByOtcCoinAndMemberId(order.getCoin(), sellerId);
-        //卖币者，买币者要处理的金额
-        BigDecimal sellerAmount, buyerAmount;
-        if (order.getMemberId() == sellerId) {
-            sellerAmount = BigDecimalUtils.add(order.getNumber(), order.getCommission());
-            buyerAmount = order.getNumber();
-        } else {
-            sellerAmount = order.getNumber();
-            buyerAmount = order.getNumber().subtract(order.getCommission());
-        }
-        int is = memberWalletDao.decreaseFrozen(customerWallet.getId(), sellerAmount);
-        if (is > 0) {
-            MemberWallet memberWallet = findByOtcCoinAndMemberId(order.getCoin(), buyerId);
-            int a = memberWalletDao.increaseBalance(memberWallet.getId(), buyerAmount);
-            if (a <= 0) {
-                throw new InformationExpiredException("Information Expired");
-            }
-        } else {
-            throw new InformationExpiredException("Information Expired");
-        }
+        throw new IllegalStateException(
+                "trancerDetail is disabled: Java shell must not move balances (INTAFACED dual-book)");
     }
 
     public int deductBalance(MemberWallet memberWallet, BigDecimal amount) {
-        return memberWalletDao.decreaseBalance(memberWallet.getId(), amount);
+        throw new IllegalStateException(
+                "deductBalance is disabled: Java shell must not debit balances (INTAFACED dual-book)");
     }
 
     @Override
@@ -449,11 +303,13 @@ public class MemberWalletService extends BaseService {
     }
 
     public void decreaseFrozen(Long walletId,BigDecimal amount){
-        memberWalletDao.decreaseFrozen(walletId,amount);
+        throw new IllegalStateException(
+                "decreaseFrozen is disabled: Java shell must not debit frozen balances (INTAFACED dual-book)");
     }
 
     public void increaseBalance(Long walletId,BigDecimal amount){
-        memberWalletDao.increaseBalance(walletId,amount);
+        throw new IllegalStateException(
+                "increaseBalance is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
     
     /**
@@ -536,7 +392,8 @@ public class MemberWalletService extends BaseService {
 
 
     public int updateBalanceByIdAndAmount (long id,double amount){
-        return memberWalletDao.updateBalanceByIdAndAmount(id,amount);
+        throw new IllegalStateException(
+                "updateBalanceByIdAndAmount is disabled: Java shell must not debit balances (INTAFACED dual-book)");
     }
 
     /**
@@ -545,6 +402,7 @@ public class MemberWalletService extends BaseService {
      * @param amount
      */
 	public void increaseFrozen(Long id, BigDecimal amount) {
-		memberWalletDao.increaseFrozen(id, amount);
+		throw new IllegalStateException(
+                "increaseFrozen is disabled: Java shell must not freeze balances (INTAFACED dual-book)");
 	}
 }

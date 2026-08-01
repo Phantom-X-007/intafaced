@@ -188,18 +188,8 @@ public class MemberService extends BaseService {
     //签到事件
     @Transactional(rollbackFor = Exception.class)
     public void signInIncident(Member member, MemberWallet memberWallet, Sign sign) {
-        member.setSignInAbility(false);//失去签到能力
-        memberWallet.setBalance(BigDecimalUtils.add(memberWallet.getBalance(), sign.getAmount()));//签到收益
-
-        // 签到记录
-        signRecordDao.save(new MemberSignRecord(member, sign));
-        //账单明细
-        MemberTransaction memberTransaction = new MemberTransaction();
-        memberTransaction.setMemberId(member.getId());
-        memberTransaction.setAmount(sign.getAmount());
-        memberTransaction.setType(ACTIVITY_AWARD);
-        memberTransaction.setSymbol(sign.getCoin().getUnit());
-        transactionDao.save(memberTransaction);
+        throw new IllegalStateException(
+                "signInIncident is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
 
     //重置会员签到
