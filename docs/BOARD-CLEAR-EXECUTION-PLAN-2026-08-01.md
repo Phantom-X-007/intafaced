@@ -10,20 +10,20 @@
 
 **Human hard lock (2026-08-01):** `@shehzad002` — full ship list in [`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md). Agents **babysit only** on H-\* programs.
 
-| Program ID         | Board rows                                      | Owner            | Worktree prefix                                   | Collision ban                                      |
-| ------------------ | ----------------------------------------------- | ---------------- | ------------------------------------------------- | -------------------------------------------------- |
-| **P-UI**           | web.terminal                                    | **AGENT**        | `feat/ui-` `feat/app-`                            | **vendor/** shell :8090 — not apps/web             |
-| **P-WS**           | ws.gateway                                      | **AGENT**        | `feat/ws-`                                        | invent futures events                              |
-| **H-PAY**          | pay.gateway (card)                              | **shehzad002**   | `feat/pay-`                                       | agent card/merchant money PRs                      |
-| **H-PROT**         | smart-accounts, amm                             | **shehzad002**   | `feat/protocol-`                                  | agent SA/AMM Done ships                            |
-| **P-TRADE-LIGHT**  | spot OHLCV, mm residual, venue                  | **AGENT**        | `feat/trade-mm-` `feat/trade-spot-` `feat/venue-` | futures risk / otc / copy / algo                   |
-| **H-TRADE-HARD**   | futures risk, otc, copy, algo                   | **shehzad002**   | `feat/trade-fut-` `feat/trade-otc-` …             | agent product invent                               |
-| **P-OR**           | order-route #289 rebase                         | **AGENT**        | `feat/order-route-`                               | leave orphan; dual-edit human                      |
-| **H-OR-JAVA**      | dual-book residual after #289                   | **shehzad002**   | after A-OR-1                                      | start before #289 closed                           |
-| **H-P5-MONEY**     | bank earn/cards/ramps                           | **shehzad002**   | `feat/bank-`                                      | agent bank money                                   |
-| **P-P5-LIGHT**     | academy, ops, agents                            | **AGENT**        | `feat/academy-` `feat/ops-` `feat/agents-`        | bank money                                         |
-| **H-ID-SUB**       | identity sub-account money routing              | **shehzad002**   | `feat/identity-sub-`                              | agent invent money routing                         |
-| **P-TRACK**        | scoreboard/tracker                              | **AGENT**        | `chore/tracker-` `docs/board-`                    | lie on Done                                        |
+| Program ID        | Board rows                         | Owner          | Worktree prefix                                   | Collision ban                          |
+| ----------------- | ---------------------------------- | -------------- | ------------------------------------------------- | -------------------------------------- |
+| **P-UI**          | web.terminal                       | **AGENT**      | `feat/ui-` `feat/app-`                            | **vendor/** shell :8090 — not apps/web |
+| **P-WS**          | ws.gateway                         | **AGENT**      | `feat/ws-`                                        | invent futures events                  |
+| **H-PAY**         | pay.gateway (card)                 | **shehzad002** | `feat/pay-`                                       | agent card/merchant money PRs          |
+| **H-PROT**        | smart-accounts, amm                | **shehzad002** | `feat/protocol-`                                  | agent SA/AMM Done ships                |
+| **P-TRADE-LIGHT** | spot OHLCV, mm residual, venue     | **AGENT**      | `feat/trade-mm-` `feat/trade-spot-` `feat/venue-` | futures risk / otc / copy / algo       |
+| **H-TRADE-HARD**  | futures risk, otc, copy, algo      | **shehzad002** | `feat/trade-fut-` `feat/trade-otc-` …             | agent product invent                   |
+| **P-OR**          | order-route #289 rebase            | **AGENT**      | `feat/order-route-`                               | leave orphan; dual-edit human          |
+| **H-OR-JAVA**     | dual-book residual after #289      | **shehzad002** | after A-OR-1                                      | start before #289 closed               |
+| **H-P5-MONEY**    | bank earn/cards/ramps              | **shehzad002** | `feat/bank-`                                      | agent bank money                       |
+| **P-P5-LIGHT**    | academy, ops, agents               | **AGENT**      | `feat/academy-` `feat/ops-` `feat/agents-`        | bank money                             |
+| **H-ID-SUB**      | identity sub-account money routing | **shehzad002** | `feat/identity-sub-`                              | agent invent money routing             |
+| **P-TRACK**       | scoreboard/tracker                 | **AGENT**      | `chore/tracker-` `docs/board-`                    | lie on Done                            |
 
 Orchestrator may run **one agent per AGENT program** (or more if non-overlapping). **Never** spawn implementers for H-\* while HUMAN-CLAIMED.
 
@@ -54,32 +54,32 @@ Agent Wave A parallel on AGENT programs only. Human runs H-\* on his schedule.
 
 ### Wave A — fan-out (start immediately after Wave 0 merges)
 
-| Ship ID         | Program | Deliverable                                                   | Proof                             |
-| --------------- | ------- | ------------------------------------------------------------- | --------------------------------- |
-| A-UI-1          | P-UI    | Hotkeys + order ticket keyboard path                          | tests / e2e / manual script in PR |
-| A-UI-2          | P-UI    | Sub-accounts selector wired or §13                            | PR                                |
-| A-UI-3          | P-UI    | Honesty pass: empty book, errors, envelope                    | PR                                |
-| A-TRADE-MM-1    | P-TRADE-LIGHT | orderFilled makerAccountId + MM recovery                 | tests                             |
-| A-TRADE-MM-2    | P-TRADE-LIGHT | Cancel/reseed lifecycle                                  | tests                             |
-| A-TRADE-MM-3    | P-TRADE-LIGHT | Mid oracle port (config + optional venue)                | tests                             |
-| A-TRADE-SPOT-1  | P-TRADE-LIGHT | Candle aggregation job or honest pipeline                | tests                             |
-| A-TRADE-VENUE-1 | P-TRADE-LIGHT | Mount venue fabric into mark or public path              | tests                             |
-| A-OR-1          | P-OR          | **#289 rebase onto main** then merge/absorb              | green merged or closed            |
-| A-P5-2          | P-P5-LIGHT    | Academy thin slice or §13                                | PR                                |
-| A-P5-3          | P-P5-LIGHT    | Ops surface + agents usefulness or §13                   | PR                                |
-| A-WS-1          | P-WS          | Harden private channels + tests (may mock until B)       | CI                                |
+| Ship ID         | Program       | Deliverable                                                             | Proof                                            |
+| --------------- | ------------- | ----------------------------------------------------------------------- | ------------------------------------------------ |
+| A-UI-1          | P-UI          | Hotkeys + order ticket keyboard path                                    | tests / e2e / manual script in PR                |
+| A-UI-2          | P-UI          | Sub-accounts selector wired or §13                                      | PR                                               |
+| A-UI-3          | P-UI          | Honesty pass: empty book, errors, envelope                              | PR                                               |
+| A-TRADE-MM-1    | P-TRADE-LIGHT | orderFilled makerAccountId + MM recovery                                | tests                                            |
+| A-TRADE-MM-2    | P-TRADE-LIGHT | Cancel/reseed lifecycle                                                 | tests                                            |
+| A-TRADE-MM-3    | P-TRADE-LIGHT | Mid oracle port (config + optional venue)                               | tests                                            |
+| A-TRADE-SPOT-1  | P-TRADE-LIGHT | Candle aggregation job or honest pipeline                               | tests                                            |
+| A-TRADE-VENUE-1 | P-TRADE-LIGHT | Mount venue fabric into mark or public path                             | tests                                            |
+| A-OR-1          | P-OR          | **#289 rebase onto main** then merge/absorb                             | green merged or closed                           |
+| A-P5-2          | P-P5-LIGHT    | Academy thin slice or §13                                               | PR                                               |
+| A-P5-3          | P-P5-LIGHT    | Ops surface + agents usefulness or §13                                  | PR                                               |
+| A-WS-1          | P-WS          | Harden private channels + tests (may mock until B)                      | CI                                               |
 | —               | **H-\***      | **All PAY / PROT / FUT risk / OTC / COPY / ALGO / BANK money / ID-SUB** | **shehzad002 only** — see SHEHZAD-HARD-OWNERSHIP |
 
 ### Wave B — integrate
 
-| Ship ID  | Depends               | Deliverable                                      |
-| -------- | --------------------- | ------------------------------------------------ |
-| B-WS-2   | shehzad FUT events + A-WS | Real futures position stream E2E (agent fan-out) |
-| B-UI-4   | A-UI + A-WS               | Terminal consumes live WS where available        |
-| B-PROT-4 | **shehzad** PROT-\*       | AMM Done — human only                            |
-| B-PAY-5  | **shehzad** PAY-\*        | pay.gateway Done — human only                    |
+| Ship ID  | Depends                   | Deliverable                                         |
+| -------- | ------------------------- | --------------------------------------------------- |
+| B-WS-2   | shehzad FUT events + A-WS | Real futures position stream E2E (agent fan-out)    |
+| B-UI-4   | A-UI + A-WS               | Terminal consumes live WS where available           |
+| B-PROT-4 | **shehzad** PROT-\*       | AMM Done — human only                               |
+| B-PAY-5  | **shehzad** PAY-\*        | pay.gateway Done — human only                       |
 | B-OR-2   | A-OR-1                    | Order-route #289 closed (agent); ORJ optional human |
-| B-SCORE  | all                       | Tracker Done/Cut; human rows need his proof      |
+| B-SCORE  | all                       | Tracker Done/Cut; human rows need his proof         |
 
 ### Wave C — closeout
 
