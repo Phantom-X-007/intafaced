@@ -7,13 +7,13 @@
 
 | Lane id / program     | Owner session        | Scope                                                                          | Status          | Do not touch                         |
 | --------------------- | -------------------- | ------------------------------------------------------------------------------ | --------------- | ------------------------------------ |
-| **board-clear-coord** | GO orchestrator chat | L0 loop, scoreboard, NEXT, babysit merges, fan-out                             | **CLAIM ON GO** | residual-only mode; invent done      |
+| **board-clear-coord** | Board Clear GO orchestrator    | L0 loop, scoreboard, NEXT, babysit merges, fan-out                             | **RUNNING** | residual-only mode; invent done      |
 | **P-UI**              | claim                | web.terminal — **vendor shell :8090** (`vendor/**/05_Web_Front`), not apps/web | free            | apps/web as product                  |
 | **P-WS**              | claim                | svc-ws private streams E2E                                                     | free            | invent futures events                |
 | **P-PAY**             | claim                | pay.gateway incl. **card** (sandbox OK)                                        | free            | Class X prod go-live as done         |
 | **P-PROT**            | claim                | smart-accounts + amm deploy proof + audit packages                             | free            | force-push spine; prod RPC as live X |
 | **P-TRADE**           | claim                | spot/futures/mm-bot/otc/copy/algo/venue Done bars                              | free            | invent mid/depth/rates/candles       |
-| **P-OR**              | claim                | **#289** rebase/merge or absorb (was CONFLICTING)                              | free            | leave orphan forever                 |
+| **P-OR**              | Board Clear GO · A-OR-1 | **#289** rebase/merge or absorb (was CONFLICTING)                              | **RUNNING** | leave orphan forever                 |
 | **P-P5**              | claim                | bank/academy/ops/agents thin or §13                                            | free            | fake whole Phase 5 done              |
 | **P-TRACK**           | coord or claim       | tracker + Board Clear scoreboard docs                                          | free            | lie on Done                          |
 | denon-spine           | Phantom-X-007        | feat/spine-*                                                                   | hold            | Nitro force-push                     |
@@ -29,3 +29,5 @@
 ## Last board update
 
 - **2026-08-01 preflight:** LIVE-LANES rewritten for Board Clear programs. Residual-era lanes retired. UI = vendor :8090. #289 dirty → P-OR first-class.
+
+- **2026-08-01 Board Clear GO:** `board-clear-coord` + **P-OR** RUNNING — A-OR-1 rebasing #289 onto main.

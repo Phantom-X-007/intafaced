@@ -16,3 +16,5 @@
 | 2026-08-01 | Wave audit every 4 product ships                                                   | Quality heartbeat                   | Mega harden  |
 
 <!-- APPEND BELOW — do not edit above -->
+
+| 2026-08-01 | Board Clear GO executed — campaign RUNNING; A-OR-1 rebase started | Nitro said GO on AUTONOMOUS-RUN | Board Clear GO |

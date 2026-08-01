@@ -6,8 +6,8 @@
 **Update rule:** same turn as every merge that moves a row.  
 **Tip check:** `git log origin/main -1 --oneline`
 
-**Campaign status:** `MEGA-HARDENED — awaiting GO`  
-**Last scoreboard edit:** 2026-08-01 mega audit · after GO → `RUNNING` · all Done/Cut → `COMPLETE`  
+**Campaign status:** `RUNNING`  
+**Last scoreboard edit:** 2026-08-01 Board Clear GO — RUNNING; A-OR-1 rebase in flight  
 **Known dirty:** #289 CONFLICTING — P-OR rebase first-class  
 **Standards:** ENGINEERING-STANDARD + SUBAGENT-PROTOCOL binding
 
@@ -29,7 +29,7 @@
 | trade.copy                      | **OPEN** | Not product                                          | A-TRADE-COPY-1   | —     |
 | trade.algo                      | **OPEN** | Not product                                          | A-TRADE-ALGO-1   | —     |
 | venue.aggregation               | **OPEN** | Fabric exists; not mounted                           | A-TRADE-VENUE-1  | —     |
-| order-route #289                | **OPEN** | Claimed; **CONFLICTING** vs main — rebase first      | A-OR-1           | —     |
+| order-route #289                | **WIP**  | Rebased onto main tip; push + CI then merge          | A-OR-1           | rebase local |
 | Phase 5 bank/academy/ops/agents | **OPEN** | Claimable                                            | A-P5-1..3        | —     |
 
 Status vocabulary: `OPEN` | `WIP` | `DONE` | `CUT` (§13)
@@ -52,7 +52,8 @@ _Re-derive with `gh pr list` each session. Do not trust this table alone._
 
 | PR                                      | Program | Status |
 | --------------------------------------- | ------- | ------ |
-| _(none for constitution until this PR)_ | P-TRACK | —      |
+| #289 order-route harden                 | P-OR    | WIP rebased — CI after push |
+| chore/board-clear-coord-go (this)       | P-TRACK | claim RUNNING |
 
 ---
 
