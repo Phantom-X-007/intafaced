@@ -1183,12 +1183,8 @@ export class TradeService {
 
     // Prefer event payload; then orders table for user legs. Never invent house MM.
     const makerRow = await this.findOrder(input.makerOrderId);
-    const makerAccountId =
-      (input.makerAccountId && input.makerAccountId.trim()) ||
-      (makerRow ? makerRow.userId : '') ||
-      '';
-    const takerAccountId =
-      (input.takerAccountId && input.takerAccountId.trim()) || taker.userId;
+    const makerAccountId = (input.makerAccountId && input.makerAccountId.trim()) || (makerRow ? makerRow.userId : '') || '';
+    const takerAccountId = (input.takerAccountId && input.takerAccountId.trim()) || taker.userId;
 
     await withMoneySpan(
       'trade.settleFillEvent',

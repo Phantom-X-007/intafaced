@@ -22,14 +22,7 @@ import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
 import { mmSeedOrderIdFor, orderIdFor } from './ids.js';
 import { MM_MATCHING_ACCOUNT_ID } from '../mm/seed-market.js';
-import {
-  StubMatching,
-  StubPerks,
-  StubSubAccounts,
-  UnreachableMatching,
-  principalFor,
-  restsInFull,
-} from './testing.js';
+import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principalFor, restsInFull } from './testing.js';
 
 /**
  * svc-trade money paths (§5.2).
