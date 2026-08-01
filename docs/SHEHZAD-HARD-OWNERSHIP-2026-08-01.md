@@ -1,275 +1,250 @@
-# Shehzad hard ownership — Board Clear split · 2026-08-01
+# Shehzad hard ownership — big spine mountains · 2026-08-01
 
-**Status:** BINDING ownership lock · on main via PR  
-**GitHub human:** **`@shehzad002`** (repo write collaborator; Nitro refers as “sheezad”)  
-**Operator:** Nitro (`@ZenYoda3`) · Direction: Denon (`@Phantom-X-007`)  
-**Companion:** agents keep shell + Board Clear light programs — see §2  
-**Tip floor when written:** re-check `git log origin/main -1`  
-
-If this file disagrees with LIVE-LANES on a program claim, **this file + LIVE-LANES claim row** win for who codes; constitution Done bars still define “Done.”
+**Status:** BINDING on main · re-audit after Board Clear GO started  
+**GitHub:** **`@shehzad002`** (Nitro says “sheezad”)  
+**Operator:** Nitro `@ZenYoda3` · Direction: Denon `@Phantom-X-007`  
+**Companion cook:** Board Clear autonomous agents — `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`  
+**If git disagrees:** re-fetch; LIVE-LANES + this file win for *who codes*; constitution wins for *Done*.
 
 ---
 
-## 0 · Audit verdict (no compromise)
+## 0 · Final peace audit (no compromise)
 
 | Check | Result |
 | --- | --- |
-| Stealing Stream A / vendor `:8090` shell from Nitro agents? | **No** — agents keep **P-UI** entirely |
-| Stealing Board Clear coordinator / #289 rebase? | **No** — agents keep **board-clear-coord** + **P-OR** |
-| Stealing MM recovery / spot candles / venue mount / academy thin? | **No** — agents keep **P-TRADE-LIGHT** + **P-P5-LIGHT** + **P-WS** |
-| Giving him busywork polish? | **No** — only irreversible-class mountains |
-| Enough work for a very fast senior for a long time? | **Yes** — ordered multi-phase backlog §4 (many PR-sized ships; weeks+) |
-| Board Clear GO chat collision on pay/protocol/trade engines? | **Blocked** — LIVE-LANES + GO prompt + NEXT forbid agent code on his programs |
-| Fake Done risk? | Constitution Done bars + Class M self-audit + no invent mid/rates/balances |
+| Collides with Board Clear GO cook? | **No — if GO obeys tip.** Agents: shell, #289, MM/spot/venue light, WS, academy/ops. **You:** money/protocol/engines. |
+| GO PR risk | Open **#334** was cut **before** ownership lock and listed agent **A-PAY / A-PROT** — **must not merge as-is** (rebase or close; see decision log). |
+| Steal Nitro shell / frontend? | **No** |
+| Steal #289 rebase? | **No** — agents |
+| Micro-manage him? | **No** — §3 is **big mountains**; he designs PR DAGs |
+| Enough work for a very fast senior for a long time? | **Yes** — multi-module Phase 2–5 spine (§3), not a ticket list |
+| Quality compromise? | **No** — doctrine + Class M + no invent mid/rates/balances + Done bars |
 
-**Rule of split:**  
-**He owns mountains where a wrong line costs money, custody, or a multi-month rewrite.**  
-**Agents own shell craft, patterned residuals, babysit, thin honesty, and campaign orchestration.**
+**Split rule:** he owns where a wrong line costs money, custody, security, or months of rewrite. Agents own craft, orchestration, patterned residuals.
 
 ---
 
-## 1 · Who he is (for every cold agent)
+## 1 · Who codes what (collision wall)
 
-| Field | Value |
+### YOU (`@shehzad002`) — HUMAN-CLAIMED
+
+| ID | Mountain | Path gravity (you lead) |
+| --- | --- | --- |
+| **M1 Pay OS** | Full pay product beyond “crypto rail exists” | `services/svc-pay/**`, pay ledger recipes, pay contracts/events |
+| **M2 Protocol OS** | Self-custody stack to production-ready proof | `services/svc-protocol/**`, forge/contracts |
+| **M3 Derivatives risk** | Futures as a real risk product | `services/svc-trade/**` futures risk/margin/liq/funding truth |
+| **M4 Desk engines** | OTC + copy + algo as real products | `services/svc-trade/**` otc/copy/algo |
+| **M5 Identity money graph** | Sub-accounts + money ownership graph | `services/svc-identity/**` subaccounts / money-adjacent gates |
+| **M6 Bank money** | Earn / cards / ramps / sovereign-card path | `services/svc-bank/**` money products |
+| **M7 Custody residual** | Vendor Java dual-book kill residual | vendor Java money doors — **only after #289 agent merge** |
+
+### AGENTS (Board Clear GO) — do not take as primary
+
+| Program | What they cook |
 | --- | --- |
-| GitHub | **`shehzad002`** |
-| Role | Senior spine builder (Denon-adjacent) |
-| Already shipped | **#226** live crypto pay rail · **#227** private positions WS · **#228** AMM compile + terminal charts/equity |
-| Not | Stream A product UI owner · Board Clear orchestrator · Class X ops (secrets/go-live) |
+| board-clear-coord | Scoreboard, NEXT, fan-out, babysit |
+| **P-UI** | Vendor shell `:8090` craft/hotkeys/honesty |
+| **P-OR** | **#289** rebase/merge |
+| **P-TRADE-LIGHT** | MM recovery/reseed/mid *following existing pattern*; spot OHLCV; venue mount |
+| **P-WS** | Channel harden (real futures events wait on you) |
+| **P-P5-LIGHT** | Academy / ops thin / agents usefulness |
+| **P-TRACK** | Tracker honesty |
+
+### Shared seams (handshake, not fight)
+
+- You ship **API/contracts/events** → agents wire **shell**.
+- You publish **correct trade/futures events** → agents finish **WS E2E**.
+- Agents finish **#289** → you may take **M7 Java residual**.
+- Never force-push Denon `feat/spine-*`. Multi-asset enum remains law-gated.
 
 ---
 
-## 2 · Collision map (agents MUST obey)
+## 2 · How you work (senior mandate — not a script)
 
-### 2.1 Human hard programs — **`shehzad002` ONLY**
+1. **You figure out the design.** Mountains below state *outcome + Done bar*, not every commit. Decompose into PRs yourself.
+2. **Doctrine is law:** ledger-client only for value; no money as `number`; no cross-service SQL; no invent mid/depth/rates/balances/candles/fees/factory addresses.
+3. **One concern per PR**, tip worktree, CI green, Class **M** self-audit on money.
+4. **Sandbox/dev proof** counts for Done when prod secrets missing; §13 for prod-only; **never** claim go-live / Class X.
+5. **Parallel:** 2–4 of *your* worktrees inside your mountains OK. Do not enter agent-owned paths.
+6. **Tracker + Board Clear scoreboard** move only with proof that matches constitution Done bars.
+7. **Brand:** partner/PSP names stay in adapters, not user-facing copy.
+8. **When blocked:** research → thinner honest product → §13 — do not stop the world, do not invent prices.
 
-Agents **must not** open implementation PRs on these paths while status is `HUMAN-WIP` / `CLAIMED` unless he comments **`agents free on <path>`** on the open PR or this doc is updated.
+**Priority when you want a default order (optional):**  
+**M1 → M2 → M3 → M5 → M4 → M6 → M7**  
+You may reorder if dependencies force it (e.g. sovereign-card after smart-accounts).
 
-| Program | Board rows | Path ban (agent) | Status |
-| --- | --- | --- | --- |
-| **H-PAY** | `pay.gateway` full Done bar (card required) | `services/svc-pay/**`, pay ledger recipes, pay contracts/events for card | **CLAIMED shehzad002** |
-| **H-PROT** | `protocol.smart-accounts` + `protocol.amm` | `services/svc-protocol/**`, forge/contracts for SA/AMM product Done | **CLAIMED shehzad002** |
-| **H-TRADE-HARD** | `trade.futures` **risk**, `trade.otc`, `trade.copy`, `trade.algo` as **real products** | New engines / risk math / RFQ / copy follow / algo jobs beyond thin §13 | **CLAIMED shehzad002** |
-| **H-P5-MONEY** | bank **earn / cards / ramps** money paths | `services/svc-bank/**` earn/cards/ramps money | **CLAIMED shehzad002** |
-| **H-ID-SUB** | identity **sub-account money routing** (not UI dropdown) | `services/svc-identity/**` subaccount money + trade ownership gates for subaccts | **CLAIMED shehzad002** |
-| **H-OR-JAVA** | Java dual-book residual **after** #289 lands | vendor Java balance/Spring residual only when #289 closed or handed | **QUEUED** (agents finish A-OR-1 first) |
+---
 
-### 2.2 Agent / Nitro programs — **do not give him as primary**
+## 3 · Big work blocks (needed for the future — start now)
 
-| Program | Why agents keep |
+These are **product mountains**, not chores. Each can occupy a strong senior for a long stretch. Expand each into your own multi-PR program.
+
+### M1 — Pay OS (Phase 3 money surface)
+
+**Why future:** gateway is the merchant + user money exterior; crypto rail alone is not a pay company.
+
+**Own end-to-end (design + ship):**
+
+- **Card acquiring** on sandbox (auth → hold → capture → settle → refund, failures, idempotency)
+- **Merchant path:** onboarding minimum, payment links/checkout residual honesty, durable multi-replica status (no silent drop)
+- **pay.psp / pay.payfac** direction toward merchant trees (thin verticals OK if honest)
+- **pay.fraud** risk scoring / chargeback hooks (ledger-safe; no fake declines theater)
+- **pay.subscriptions** recurring card+crypto skeleton
+- **pay.routing / pay.settlement** smart route + dual settlement design as far as doctrine allows without invent
+- **pay.public-api** REST + webhooks + sandbox discipline
+- **Crypto rail regression:** #226 path must stay green
+
+**Done when:** Board Clear `pay.gateway` bar met (card required, sandbox OK) **and** you have either shipped or honestly §13-scoped the adjacent pay.* rows you touched.  
+**Not yours:** prod PSP keys, go-live yes, shell retheme.
+
+---
+
+### M2 — Protocol OS (Phase 3P self-custody)
+
+**Why future:** smart accounts unlock vaults, merchant contracts, sovereign card, AMM liquidity, non-custodial escrow.
+
+**Own end-to-end:**
+
+- **protocol.smart-accounts** — passkeys, session keys, CREATE2, deploy to configured env, **adversarial audit package**, not “code exists”
+- **protocol.amm** — deploy, mint/swap proof, invariants audit (after SA)
+- **protocol.lending** — markets + keeper liquidation path (or explicit multi-PR program with §13 if chain env blocks)
+- **protocol.escrow** — non-custodial P2P escrow contracts
+- **protocol.router** — book vs pool best execution spine
+- **protocol.merchant** — Lane A merchant contracts (zero-KYB architecture per doctrine)
+- Related deploy/runbooks + `docs/audit/*` packages
+
+**Done when:** SA + AMM constitution bars met; further protocol rows either Done with proof or §13 with residual honesty.  
+**Not yours:** prod RPC as live money Class X; force-push spine branches.
+
+---
+
+### M3 — Derivatives risk engine (`trade.futures`)
+
+**Why future:** residual jobs/scaffolds exist; **risk truth** is the product.
+
+**Own end-to-end:**
+
+- Mark/index multi-source **without invent**
+- Margin / collateral vs ledger recipes
+- Liquidation ladder correctness under edge cases
+- Funding settle: missing rate = refuse, never invent
+- Enable path + ops posture (default-safe)
+- Position open/close money path correctness
+- Event payloads agents can fan out on WS
+
+**Done when:** constitution `trade.futures` bar met with proof.  
+**Not yours:** shell chart cosmetics; inventing mids to “make demo green.”
+
+---
+
+### M4 — Desk engines (OTC · copy · algo)
+
+**Why future:** Phase 2 trade mountains; doctrine already describes RFQ, copy profit-share, TWAP/VWAP/POV.
+
+**Own as three sequential (or carefully parallel) products — you design each:**
+
+1. **trade.otc** — staked-tier gate, RFQ workflow, ledger-safe fill/spread to house  
+2. **trade.copy** — leaders, follows, sizing guardrails, profit-share recipe, kill/unfollow  
+3. **trade.algo** — TWAP/VWAP/POV (or honest subset), child orders ledger-safe, pause/cancel  
+
+**Done when:** each row meets constitution Done **or** explicit §13 with research proof “not now.” Prefer ship thin **real** verticals over fake Done.  
+**Not yours:** agent “thin stub overnight” theater on these rows while you own them.
+
+---
+
+### M5 — Identity money graph
+
+**Why future:** pro desks need sub-accounts; money leak across subaccounts is catastrophic.
+
+**Own:**
+
+- Sub-account create/list/revoke ownership model complete
+- Order/balance/position scoping — no cross-leak
+- Trade placeOrder (and related) ownership gates
+- Contracts/events so **P-UI** can wire selectors later
+- API-key / exchange key money boundaries if still incomplete on tip (identity exchange surface)
+
+**Done when:** money cannot cross sub-accounts; tests prove it; UI can consume without inventing.  
+**Not yours:** Vue dropdown polish (agents).
+
+---
+
+### M6 — Bank money suite (Phase 5 money)
+
+**Why future:** bank is a plane of the OS; loans already exist — earn/cards/ramps/sovereign-card are the growth surface.
+
+**Own:**
+
+- **bank.earn** yield pools ledger-safe  
+- **bank.cards** issuer adapter + sim auth path  
+- **bank.ramps** fiat on/off reusing pay adapters  
+- **bank.sovereign-card** path once SA allows (JIT conversion architecture per doctrine)  
+- Honest §13 only where secrets/partner truly block  
+
+**Done when:** thin verticals with ledger proof **or** honest §13 — not tracker fantasy.  
+**Not yours:** academy/ops content (agents).
+
+---
+
+### M7 — Custody / dual-book residual (after agents land #289)
+
+**Why future:** dual-book write residual is custody posture; agents partially no-op’d paths on #289.
+
+**Own after #289 merged/absorbed:** remaining entity/Spring live balance doors, scans, Denon-visible self-audit.  
+**Not yours:** rebasing #289 itself.
+
+---
+
+### M8 — Optional expansion (only if M1–M4 have oxygen)
+
+Still hard, still future, still allowed under your spine role if you want more:
+
+- **pay.user-money** deposit/withdraw product correctness (not shell)  
+- **Matching / order integrity** beyond agent chaos suite (coordinate with P-OR after #289)  
+- **Indexer read-models** required by protocol/pay proofs  
+- **P2P money residual** if ledger escrow paths still incomplete (do not steal shell OTC UI)  
+
+If you take M8 items, claim them in PR body + LIVE-LANES note so agents do not double-build.
+
+---
+
+## 4 · Explicit ban list (peace of mind)
+
+| Do not | Why |
 | --- | --- |
-| **board-clear-coord** | Orchestration, scoreboard, fan-out, babysit |
-| **P-UI** | Vendor shell `:8090` Wave B/C craft, hotkeys UI, honesty, a11y |
-| **P-OR** | Rebase/merge **#289** (CONFLICTING) — agent day-one |
-| **P-WS** | Channel harden + tests; real futures events wait on H-TRADE-HARD |
-| **P-TRADE-LIGHT** | `trade.mm-bot` recovery/reseed/mid residual following existing pattern; `trade.spot` OHLCV honest pipeline; `venue.aggregation` mount |
-| **P-P5-LIGHT** | academy thin, ops surface thin, svc-agents usefulness / §13 |
-| **P-TRACK** | tracker + scoreboard honesty |
-
-### 2.3 Shared boundaries
-
-| Surface | Rule |
-| --- | --- |
-| Shell needs new API | He ships service contract; agents wire UI |
-| WS needs futures events | He publishes correct events; agents finish E2E fan-out |
-| #289 | Agents rebase/merge; **then** he may take H-OR-JAVA residual |
-| Denon `feat/spine-*` | Never force-push; coordinate if overlapping |
-| Multi-asset instruments | Still not free invent — Denon direction / explicit law |
+| Own `vendor/**/05_Web_Front` product craft | Board Clear P-UI autonomous cook |
+| Rebase/take over **#289** without handoff | P-OR agent |
+| “Help” by implementing agent MM/spot OHLCV/venue | P-TRADE-LIGHT |
+| Mark go-live / prod keys / sanctions content | Class X Nitro |
+| Invent prices/depth/mids/funding to close rows | Doctrine |
+| Merge tracker Done without constitution proof | Honesty |
+| Dual-edit agent worktrees | Collision |
 
 ---
 
-## 3 · Quality bar (same as Board Clear + stricter on money)
+## 5 · Agent GO steers (binding for autonomous session)
 
-1. Doctrine: money only via `packages/ledger-client` recipes; no money as `number`; no cross-service SQL  
-2. Never invent mid / depth / rates / balances / candles / fees / factory addresses  
-3. One service/concern per PR; worktree from tip; CI green  
-4. Class **M**: self-audit in PR body + failure tests; prefer Denon eyes when online  
-5. Tracker / Board Clear scoreboard: only `done` when constitution Done bar + proof  
-6. Sandbox/dev proof OK for Done when prod keys missing; §13 for prod-only; **never** claim go-live  
-7. Brand-scan clean; partner names out of user-facing copy  
+When `BOARD-CLEAR-AUTONOMOUS-RUN` is cooking:
 
----
-
-## 4 · Long occupation backlog (ordered — many ships)
-
-He works **fast**. This list is intentionally **large and serial-priority**. He may run **2–3 of his own worktrees in parallel** inside claimed programs. Agents stay out.
-
-**Priority rule when overloaded:** H-PAY → H-PROT → H-TRADE-HARD (futures risk) → H-ID-SUB → OTC → copy → algo → H-P5-MONEY → H-OR-JAVA.
-
-### Phase H-PAY — `pay.gateway` Done (card required)
-
-| Ship ID | Deliverable | Proof |
-| --- | --- | --- |
-| PAY-01 | Card domain model + ledger recipe stubs (hold) | recipe unit tests |
-| PAY-02 | Capture + settle recipes + failure tests | ledger + svc tests |
-| PAY-03 | Refund + partial refund + idempotency keys | tests |
-| PAY-04 | Provider **port** interface (no vendor in UI copy) | contract tests |
-| PAY-05 | Sandbox adapter + webhook verify path | integration |
-| PAY-06 | REST merchant create payment / status / cancel | CI |
-| PAY-07 | Merchant onboarding minimum (create + KYB stub or real) | CI |
-| PAY-08 | Durable multi-replica payment status (no silent drop) | tests + design note |
-| PAY-09 | Reconciliation job skeleton (external truth, no invent) | tests |
-| PAY-10 | Crypto rail regression suite (must not break #226 path) | CI |
-| PAY-11 | Tracker + scoreboard `pay.gateway` → Done only if constitution §3.3 met | docs |
-
-### Phase H-PROT — smart-accounts then AMM
-
-| Ship ID | Deliverable | Proof |
-| --- | --- | --- |
-| PROT-01 | SA anvil proof suite hardened (session keys, CREATE2) | forge/anvil log |
-| PROT-02 | Deploy script + runbook for configured env | artifact |
-| PROT-03 | Deploy executed on configured target | log |
-| PROT-04 | Adversarial audit package `docs/audit/smart-accounts-…` | md + threat list |
-| PROT-05 | Tracker SA Done only after 01–04 | tracker |
-| PROT-06 | AMM deploy + pool create address prediction | on-chain/anvil |
-| PROT-07 | Mint + swap proof | log |
-| PROT-08 | AMM audit package + invariants | md |
-| PROT-09 | Scoreboard SA + AMM Done | docs |
-
-### Phase H-TRADE-HARD — futures **risk** (not another empty job host)
-
-Jobs/planners already exist (default OFF). He owns **correctness**.
-
-| Ship ID | Deliverable | Proof |
-| --- | --- | --- |
-| FUT-01 | Mark/index multi-source port (config + optional venue) — **never invent** | tests fail on invent |
-| FUT-02 | Margin / collateral truth vs ledger recipes | money tests |
-| FUT-03 | Liquidation edge cases (partial, multi-position, bad mark refusal) | tests |
-| FUT-04 | Funding settle correctness under missing rate = refuse not invent | tests |
-| FUT-05 | Jobs enable path + ops runbook (still default-safe) | CI + doc |
-| FUT-06 | Position open/close money path E2E | tests |
-| FUT-07 | Event publish for WS (`positionUpdated` etc.) correct payloads | contract |
-| FUT-08 | Scoreboard futures Done only if constitution bar met | docs |
-
-### Phase H-TRADE-HARD — real engines (one at a time after FUT core green)
-
-| Ship ID | Deliverable | Proof |
-| --- | --- | --- |
-| OTC-01 | Thin RFC: OTC RFQ vs desk — written DoD | docs PR |
-| OTC-02 | Ledger-safe hold/release path | tests |
-| OTC-03 | API + failure modes | CI |
-| OTC-04 | Constitution Done or honest §13 | tracker |
-| COPY-01 | RFC + profit-share / follow risk rules | docs |
-| COPY-02 | Ledger-safe follow execution skeleton | tests |
-| COPY-03 | Kill / unfollow / refusal paths | tests |
-| COPY-04 | Done or §13 | tracker |
-| ALGO-01 | RFC TWAP/slice types | docs |
-| ALGO-02 | Job host + ledger-safe child orders | tests |
-| ALGO-03 | Cancel / pause / partial fill honesty | tests |
-| ALGO-04 | Done or §13 | tracker |
-
-### Phase H-ID-SUB — sub-accounts money (spine)
-
-| Ship ID | Deliverable | Proof |
-| --- | --- | --- |
-| ID-01 | Sub-account list/create/revoke ownership model complete | tests |
-| ID-02 | Trade placeOrder ownership gate for sub-accounts (extend existing) | tests |
-| ID-03 | Balances/orders scoped correctly (no cross-leak) | tests |
-| ID-04 | Contract note for P-UI selector wiring | contracts/docs |
-
-Agents may wire **UI selector** only after ID-01+ APIs exist.
-
-### Phase H-P5-MONEY — bank money only
-
-| Ship ID | Deliverable | Proof |
-| --- | --- | --- |
-| BANK-01 | Earn product path ledger-safe thin vertical **or** §13 | PR |
-| BANK-02 | Cards/ramps: spec + one rail path **or** §13 tied to pay | PR |
-| BANK-03 | Scoreboard Phase 5 money portion honest | tracker |
-
-Academy / ops / agents usefulness remain **agent P-P5-LIGHT**.
-
-### Phase H-OR-JAVA — only after #289 closed or explicit handoff
-
-| Ship ID | Deliverable | Proof |
-| --- | --- | --- |
-| ORJ-01 | Inventory residual entity `setBalance` / Spring doors post-#289 | doc |
-| ORJ-02 | Kill remaining live dual-book write paths | scans + tests |
-| ORJ-03 | Denon-visible custody self-audit | PR body |
+1. **Never implement M1–M7** (babysit only).  
+2. Day-one fan-out: **#289, P-UI, P-TRADE-LIGHT, P-WS, P-P5-LIGHT** only.  
+3. **Reject / close** any docs PR that reverts HUMAN-CLAIMED rows to free agent P-PAY/P-PROT (e.g. pre-#333 style NEXT with A-PAY-1).  
+4. Fill the board with agent ships while shehzad deep-works — do not idle, do not steal.  
+5. Re-read this file every compact.
 
 ---
 
-## 5 · What “occupied a long time” means in practice
+## 6 · Message block (send to shehzad002)
 
-Rough sizing for a **very fast** senior (not a promise of calendar days):
-
-| Phase | Scale |
-| --- | --- |
-| H-PAY PAY-01…11 | multi-PR money program |
-| H-PROT PROT-01…09 | multi-PR security program |
-| FUT-01…08 | multi-PR risk program |
-| OTC+COPY+ALGO | three product engines |
-| ID + BANK + ORJ | additional money/spine |
-
-**Agents will still ship continuously** on UI, #289, MM light, spot candles, venue, academy, babysit — so the board moves even while he is deep in pay/protocol.
+See latest PR body / Nitro chat for the paste-ready human message. Canonical facts are **this file + LIVE-LANES**.
 
 ---
 
-## 6 · Paste assignment (for Telegram / Discord to shehzad002)
+## 7 · Maintenance
 
-See § message in PR body / Nitro chat — also mirrored below for durability.
+- Free a mountain for agents only by PR editing this file + LIVE-LANES.  
+- Append decision log when ownership changes.  
+- Do not delete while any M1–M7 row is open.
 
-```
-@shehzad002 — hard spine ownership is locked on main.
-
-READ:
-- docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md  (this file — full backlog)
-- docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md §3 (Done bars)
-- docs/LIVE-LANES.md (your claims)
-- AGENTS.md + doctrine
-
-YOU OWN (code freely; multi-PR; long runway):
-1) pay.gateway card path (sandbox OK) — full PAY-01…11
-2) protocol.smart-accounts → protocol.amm — PROT-01…09
-3) trade.futures RISK correctness — FUT-01…08
-4) real OTC → copy → algo engines (after FUT core)
-5) identity sub-account money routing
-6) bank earn/cards/ramps money
-7) Java dual-book residual AFTER #289 is merged (agents own #289 rebase)
-
-YOU DO NOT OWN:
-- vendor shell :8090 UI craft/hotkeys/honesty (Nitro agents)
-- Board Clear orchestrator
-- #289 open PR rebase (agents)
-- MM recovery/reseed patterned residual, spot OHLCV, venue mount (agents)
-- academy/ops thin (agents)
-- secrets / prod go-live (Nitro human)
-
-START: claim worktrees under feat/pay-* first. One concern per PR. Class M self-audit. Never invent mids/rates/balances. Update Board Clear scoreboard when a row honestly Done.
-```
-
----
-
-## 7 · Agent GO chat — mandatory steers (unspoken needs → explicit)
-
-When Board Clear orchestrator runs:
-
-1. **Do not** fan-out A-PAY-* or A-PROT-* agent implementers — **human owns**.  
-2. **Do not** implement OTC/copy/algo/futures **risk** product — human owns; agents may only touch **P-TRADE-LIGHT**.  
-3. **Do** fan-out: P-UI, P-OR #289, P-TRADE-LIGHT (MM/spot/venue), P-WS, P-P5-LIGHT, P-TRACK.  
-4. **Babysit** his PRs: classify Class M, comment gates, do not steal his branch.  
-5. If scoreboard blocked on pay/protocol, **do not invent** agent substitute code — wait on his merges or document WIP.  
-6. Speed without stealing: fill the board with agent-owned ships while he deep-works money/protocol.
-
----
-
-## 8 · Nitro unspoken needs (hardened)
-
-1. Friend must stay busy for a **long** time on **hard** work — not two tickets.  
-2. Agents must still go all-out on **their** half — board must not freeze.  
-3. Zero collision with the cooking Board Clear / frontend chat.  
-4. Ownership must live on **GitHub**, not chat memory.  
-5. Quality > volume theater; many small correct PRs beat one giant.  
-6. He already proved pay/ws/protocol spine — lean into that skill.  
-7. You do not want git homework — agents maintain lanes/docs.  
-8. “sheezad” in speech = GitHub **`shehzad002`**.  
-
----
-
-## 9 · Maintenance
-
-- When he finishes a program, update LIVE-LANES status + scoreboard same day.  
-- To free a program for agents: PR that edits this file + LIVE-LANES.  
-- Do not delete this file while any H-* row is open.
-
-*Audit pass: 2026-08-01 · no shell theft · no #289 theft · long hard backlog · GO chat steers explicit.*
+*Final audit 2026-08-01: GO collision wall explicit; mountains not micro-tickets; future Phase 2–5 spine included.*

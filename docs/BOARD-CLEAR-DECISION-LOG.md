@@ -15,5 +15,8 @@
 | 2026-08-01 | Evidence block mandatory before merge                                              | Verification-before-completion      | Mega harden  |
 | 2026-08-01 | Wave audit every 4 product ships                                                   | Quality heartbeat                   | Mega harden  |
 | 2026-08-01 | **@shehzad002** HUMAN-CLAIMED: H-PAY, H-PROT, H-TRADE-HARD, H-P5-MONEY, H-ID-SUB; agents keep P-UI/P-OR/P-TRADE-LIGHT/P-WS/P-P5-LIGHT; long backlog in SHEHZAD-HARD-OWNERSHIP | Nitro: occupy senior on irreversible mountains; no collision with cooking GO chat | Ownership PR |
+| 2026-08-01 | v2: shehzad owns **big mountains M1–M7** (Pay OS, Protocol OS, futures risk, OTC/copy/algo, identity money, bank money, Java residual); he designs PR DAGs; micro-ship lists demoted | Nitro: more work + autonomy; no collision with GO | Ownership v2 |
+| 2026-08-01 | **#334 hold** — GO claim PR reintroduced agent A-PAY/A-PROT against tip after #333; must rebase/close not merge as-is | Collision peace audit | Ownership v2 |
+| 2026-08-01 | Campaign **RUNNING** with agent lanes only; coord + P-OR RUNNING without wiping H-\* | GO session coexist | Ownership v2 |
 
 <!-- APPEND BELOW — do not edit above -->
