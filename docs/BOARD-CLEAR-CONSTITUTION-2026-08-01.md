@@ -194,9 +194,13 @@ Open PRs for this campaign are merged or closed with reason.
 | Fact                       | Home                                                     |
 | -------------------------- | -------------------------------------------------------- |
 | Campaign law / Done bars   | **This file**                                            |
+| Unspoken needs             | `docs/BOARD-CLEAR-UNSPOKEN-NEEDS.md`                     |
+| Process loops              | `docs/BOARD-CLEAR-PROCESS-LOOPS.md`                      |
 | PR DAG / waves / owners    | `docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md`          |
 | Paste / forever-run prompt | `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`                     |
+| GO readiness               | `docs/BOARD-CLEAR-GO-READINESS.md`                       |
 | Live scoreboard            | `docs/BOARD-CLEAR-SCOREBOARD.md`                         |
+| Exact next action          | `docs/BOARD-CLEAR-NEXT.md`                               |
 | Feature status             | `tooling/tracker/features.mjs` + `docs/TRACKER.md`       |
 | Law                        | `INTAFACED_DEFINITIVE_BUILD.md`                          |
 | Agent rules                | `AGENTS.md` + `tooling/agent-protocol/AGENT_PROTOCOL.md` |
