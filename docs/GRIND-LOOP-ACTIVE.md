@@ -1,10 +1,13 @@
 # GRIND LOOP — ACTIVE (compaction-safe)
 
-**Status:** **COOK RUNNING** · residual campaign armed · O1 babysit always on  
-**Operator decision:** 2026-07-31 Nitro claimed full residual board (third-dev screenshot program) — see `docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`  
-**Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` — Denon = direction; Nitro agents execute **and merge** under Class matrix (this file must not re-block Class M after gates).  
-**Scheduler:** every **45 minutes** re-read **this file** on `origin/main`  
-**Last tip:** re-check · high water through **#258** · do not re-ship **#110–#258** without regression
+> **SUPERSEDED for campaign goal by Board Clear (2026-08-01).**  
+> Use `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md` + constitution + mega audit.  
+> This file remains historical babysit reference only. Do **not** follow residual “leave #289” or “wait for Denon product law” while Board Clear is active.
+
+**Status:** **SUPERSEDED** by Board Clear · O1 babysit still useful under Board Clear L0  
+**Board Clear law:** `docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md`  
+**Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` (Board Clear precedence for Done bars)  
+**Last tip:** re-check `origin/main`
 
 ```
 STATUS 2026-07-31T09:55Z residual COOK

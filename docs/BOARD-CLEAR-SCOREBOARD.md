@@ -6,9 +6,10 @@
 **Update rule:** same turn as every merge that moves a row.  
 **Tip check:** `git log origin/main -1 --oneline`
 
-**Campaign status:** `PREFLIGHT PASSED — awaiting GO`  
-**Last scoreboard edit:** 2026-08-01 preflight · after GO → `RUNNING` · all Done/Cut → `COMPLETE`  
-**Known dirty:** #289 CONFLICTING — P-OR rebase first-class
+**Campaign status:** `MEGA-HARDENED — awaiting GO`  
+**Last scoreboard edit:** 2026-08-01 mega audit · after GO → `RUNNING` · all Done/Cut → `COMPLETE`  
+**Known dirty:** #289 CONFLICTING — P-OR rebase first-class  
+**Standards:** ENGINEERING-STANDARD + SUBAGENT-PROTOCOL binding
 
 ---
 

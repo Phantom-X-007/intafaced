@@ -1,52 +1,43 @@
-# Board Clear — GO readiness (final)
+# Board Clear — GO readiness (mega-hardened)
 
-**Preflight audit:** [`BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`](BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md)  
-**Question:** Can Nitro say **GO** once?
+**Audits:**
 
----
-
-## GREEN LIGHT: **YES**
-
-All critical methodology blockers found in preflight are **fixed in docs** (ownership precedence, LIVE-LANES, UI path, #289 named, session prompt).
-
-Process + Done bars + loops + anti-compromise rules are enough for a competent orchestrator to run until scoreboard COMPLETE **without Nitro decisions**.
+- [`BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`](BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md)
+- [`BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`](BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md)
 
 ---
 
-## Criteria
+## GREEN LIGHT: **YES (mega-hardened)**
 
-| Criterion                                  | Status                       |
-| ------------------------------------------ | ---------------------------- |
-| Locked B decisions                         | YES                          |
-| Done bars                                  | YES (+ vendor UI path)       |
-| Process loops + anti-stall                 | YES                          |
-| Unspoken needs                             | YES                          |
-| Ownership no longer blocks trade mountains | YES (Board Clear precedence) |
-| LIVE-LANES Board Clear programs            | YES                          |
-| #289 dirty named as P-OR work              | YES                          |
-| Compaction / re-paste recovery             | YES                          |
-| Invent / money bans intact                 | YES                          |
-| Preflight audit written                    | YES                          |
+| Layer                          | Status |
+| ------------------------------ | ------ |
+| Product decisions locked       | YES    |
+| Done bars                      | YES    |
+| Process loops L0–L9            | YES    |
+| Anti-slop engineering standard | YES    |
+| Subagent orchestrator protocol | YES    |
+| Decision log                   | YES    |
+| Preflight conflict fixes       | YES    |
+| Wave audit heartbeat           | YES    |
+| Evidence-before-claims         | YES    |
+| Compaction read order          | YES    |
 
----
+**Peace of mind claim:** The **system** is ready to operate as a world-class autonomous engineering campaign without Nitro in the tech loop and without residual theater.
 
-## What you still must do (host only)
-
-1. Open a coding agent on this repo.
-2. Paste **entire** GO block from `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`.
-3. Say **GO**.
-4. If that **session dies**, open a new one and paste the **same** GO again (no new decisions).
-
-There is no separate OS daemon: **an agent session must be running** (or re-opened). Docs make resume zero-decision.
+**Not claimed:** product already Done; zero agent mistakes; session never dies.
 
 ---
 
-## What green light does not claim
+## Your actions
 
-Product already Done · zero agent error · external audit firm · prod card keys · infinite free CI.
+1. Confirm this mega PR is on `main`
+2. New coding chat
+3. Paste **entire** GO block from `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`
+4. Say **GO**
+5. If session dies → same paste again
 
 ---
 
-## Verdict line
+## Verdict
 
-**Final green light: YES. Say GO. Preflight passed after conflict fixes.**
+**Final mega green light: YES. Say GO after this pack is on main.**
