@@ -11,8 +11,8 @@
 
 | Source / practice              | Lesson                                                                           | Board Clear control                  |
 | ------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------ |
-| Anthropic multi-agent research | Orchestrator-worker; parallel clean contexts; plan saved to memory past overflow | SUBAGENT-PROTOCOL; NEXT/DECISION-LOG |
-| Anthropic context engineering  | Compaction + structured notes + subagents                                        | Read order; NEXT; workers            |
+| Industry multi-agent research | Orchestrator-worker; parallel clean contexts; plan saved to memory past overflow | SUBAGENT-PROTOCOL; NEXT/DECISION-LOG |
+| Industry context engineering  | Compaction + structured notes + subagents                                        | Read order; NEXT; workers            |
 | Building effective agents      | Orchestrator for unpredictable file sets                                         | Lead re-plans Wave A/B               |
 | Production agent anti-patterns | God prompt; vibe-check as testing                                                | Engineering standard; evidence block |
 | Vibe coding risks              | Secrets, insecure defaults, no audit trail                                       | Bans; Class M; PR evidence           |
