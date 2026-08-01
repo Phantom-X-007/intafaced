@@ -4,14 +4,16 @@
 
 **Read order (every cold start / compact):**
 
-1. [`BOARD-CLEAR-UNSPOKEN-NEEDS.md`](BOARD-CLEAR-UNSPOKEN-NEEDS.md)
-2. [`BOARD-CLEAR-CONSTITUTION-2026-08-01.md`](BOARD-CLEAR-CONSTITUTION-2026-08-01.md)
-3. [`BOARD-CLEAR-PROCESS-LOOPS.md`](BOARD-CLEAR-PROCESS-LOOPS.md)
-4. [`BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md`](BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md)
-5. [`BOARD-CLEAR-SCOREBOARD.md`](BOARD-CLEAR-SCOREBOARD.md)
-6. [`BOARD-CLEAR-NEXT.md`](BOARD-CLEAR-NEXT.md)
-7. `AGENTS.md`
-8. `git fetch` · `git log origin/main -3` · `gh pr list`
+1. [`BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`](BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md)
+2. [`BOARD-CLEAR-UNSPOKEN-NEEDS.md`](BOARD-CLEAR-UNSPOKEN-NEEDS.md)
+3. [`BOARD-CLEAR-CONSTITUTION-2026-08-01.md`](BOARD-CLEAR-CONSTITUTION-2026-08-01.md)
+4. [`BOARD-CLEAR-PROCESS-LOOPS.md`](BOARD-CLEAR-PROCESS-LOOPS.md)
+5. [`BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md`](BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md)
+6. [`BOARD-CLEAR-SCOREBOARD.md`](BOARD-CLEAR-SCOREBOARD.md)
+7. [`BOARD-CLEAR-NEXT.md`](BOARD-CLEAR-NEXT.md)
+8. [`LIVE-LANES.md`](LIVE-LANES.md)
+9. `AGENTS.md`
+10. `git fetch` · `git log origin/main -3` · `gh pr list`
 
 ---
 
@@ -24,13 +26,21 @@ You are the orchestrator. Nitro is NOT in the loop. Do not ask him to continue.
 Do not ask tech questions. Do not stop until every board row is DONE or CUT.
 
 READ FIRST (in order, full files):
+docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md
 docs/BOARD-CLEAR-UNSPOKEN-NEEDS.md
 docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md
 docs/BOARD-CLEAR-PROCESS-LOOPS.md
 docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md
 docs/BOARD-CLEAR-SCOREBOARD.md
 docs/BOARD-CLEAR-NEXT.md
+docs/LIVE-LANES.md
 AGENTS.md
+
+FACTS FROM PREFLIGHT (do not re-discover as surprise):
+- Product UI = vendor shell :8090 — NOT apps/web
+- #289 was CONFLICTING — rebase onto main is A-OR-1 day-one work
+- Board Clear supersedes ownership "wait for Denon product law" for Done bars (thin/§13, never invent prices)
+- LIVE-LANES uses Board Clear programs P-UI…P-P5 (not residual ≤3)
 
 LOCKED (never reopen):
 1) Protocol Done = deploy proof + adversarial audit package

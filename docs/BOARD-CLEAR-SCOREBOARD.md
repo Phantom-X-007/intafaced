@@ -6,8 +6,9 @@
 **Update rule:** same turn as every merge that moves a row.  
 **Tip check:** `git log origin/main -1 --oneline`
 
-**Campaign status:** `PROCESS READY — awaiting GO` (unspoken needs + process loops + enhanced paste landed)  
-**Last scoreboard edit:** 2026-08-01 · after GO → `RUNNING` · when all rows Done/Cut → `COMPLETE`
+**Campaign status:** `PREFLIGHT PASSED — awaiting GO`  
+**Last scoreboard edit:** 2026-08-01 preflight · after GO → `RUNNING` · all Done/Cut → `COMPLETE`  
+**Known dirty:** #289 CONFLICTING — P-OR rebase first-class
 
 ---
 
@@ -27,7 +28,7 @@
 | trade.copy                      | **OPEN** | Not product                                          | A-TRADE-COPY-1   | —     |
 | trade.algo                      | **OPEN** | Not product                                          | A-TRADE-ALGO-1   | —     |
 | venue.aggregation               | **OPEN** | Fabric exists; not mounted                           | A-TRADE-VENUE-1  | —     |
-| order-route #289                | **OPEN** | Claimed; PR must close                               | A-OR-1           | —     |
+| order-route #289                | **OPEN** | Claimed; **CONFLICTING** vs main — rebase first      | A-OR-1           | —     |
 | Phase 5 bank/academy/ops/agents | **OPEN** | Claimable                                            | A-P5-1..3        | —     |
 
 Status vocabulary: `OPEN` | `WIP` | `DONE` | `CUT` (§13)

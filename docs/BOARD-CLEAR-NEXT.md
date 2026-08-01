@@ -1,31 +1,28 @@
-# Board Clear — NEXT (always overwrite; never empty while campaign open)
+# Board Clear — NEXT
 
-**Rule:** Last agent action of every turn updates this file. Compaction recovery starts here.
+**Campaign status:** `PREFLIGHT PASSED — awaiting GO`  
+**After GO:** set `RUNNING` and execute below.
 
-## Campaign status
+## Immediate next (orchestrator)
 
-`SPEC+PROCESS READY` — execution not complete. After user says **GO**, status becomes `RUNNING` until scoreboard COMPLETE.
-
-## Immediate next actions (ordered)
-
-1. **Confirm main has** Board Clear docs (`BOARD-CLEAR-CONSTITUTION*`, PROCESS-LOOPS, this file). If not, merge autonomy-harden PR first.
-2. **User/orchestrator GO** → set status RUNNING.
-3. **Babysit** any open campaign PRs to green merge.
-4. **Fan-out Wave A** (max parallel, separate worktrees) — priority:
-   - A-TRADE-MM-1 (event recovery)
-   - A-PAY-1 (card recipes)
-   - A-UI-1 (hotkeys)
-   - A-PROT-1 (SA proof/deploy path)
-   - A-OR-1 (#289 triage)
-5. After each merge: update `BOARD-CLEAR-SCOREBOARD.md` + this file.
+1. Confirm main includes preflight PR (LIVE-LANES, ownership precedence, UI path, this audit).
+2. On **GO**: claim `board-clear-coord` on LIVE-LANES.
+3. Fan-out Wave A (parallel worktrees):
+   - **P-OR:** rebase #289 onto main (CONFLICTING at preflight)
+   - **P-TRADE:** A-TRADE-MM-1 recovery
+   - **P-PAY:** A-PAY-1 card recipes
+   - **P-UI:** A-UI-1 hotkeys on **vendor :8090**
+   - **P-PROT:** A-PROT-1 SA proof path
+4. Babysit CI; merge; update SCOREBOARD + this file every merge.
+5. Loop L0 until all rows DONE/CUT.
 
 ## Do not
 
 - Wait for Nitro
-- Re-open locked B decisions
-- Exit with OPEN rows and empty next list
+- Use apps/web as product UI
+- Leave #289 orphan
+- Obey residual ≤3 if it blocks Board Clear fan-out
 
 ## Last updated
 
-2026-08-01 — autonomy harden (process loops + unspoken needs).  
-Tip: re-check `git log origin/main -1`.
+2026-08-01 preflight audit — critical conflicts fixed.

@@ -10,7 +10,7 @@
 
 | Program ID  | Board rows                                    | Worktree prefix                                         | Collision ban                               |
 | ----------- | --------------------------------------------- | ------------------------------------------------------- | ------------------------------------------- |
-| **P-UI**    | web.terminal                                  | `feat/ui-` `feat/web-`                                  | apps/web, design tokens only                |
+| **P-UI**    | web.terminal                                  | `feat/ui-` `feat/web-`                                  | **vendor/** shell :8090 — not apps/web      |
 | **P-WS**    | ws.gateway                                    | `feat/ws-`                                              | services/svc-ws (or actual ws package)      |
 | **P-PAY**   | pay.gateway                                   | `feat/pay-`                                             | services/svc-pay, pay recipes               |
 | **P-PROT**  | smart-accounts, amm                           | `feat/protocol-`                                        | services/svc-protocol, contracts            |
@@ -39,44 +39,42 @@ Everything else is **Wave A parallel**.
 
 ## 2. Wave plan
 
-### Wave 0 — Constitution live (this PR)
+### Wave 0 — Constitution live
 
-- [x] Constitution
-- [x] Execution plan
-- [x] Autonomous run prompt
-- [ ] Scoreboard file
-- [ ] START-HERE + session prompt pointers
-- [ ] Tracker campaign note
+- [x] Constitution + plan + GO + loops + unspoken needs
+- [x] Scoreboard + NEXT
+- [x] START-HERE + session prompt pointers
+- [x] Preflight audit + LIVE-LANES Board Clear rewrite
 
 ### Wave A — fan-out (start immediately after Wave 0 merges)
 
-| Ship ID         | Program | Deliverable                                              | Proof                             |
-| --------------- | ------- | -------------------------------------------------------- | --------------------------------- |
-| A-UI-1          | P-UI    | Hotkeys + order ticket keyboard path                     | tests / e2e / manual script in PR |
-| A-UI-2          | P-UI    | Sub-accounts selector wired or §13                       | PR                                |
-| A-UI-3          | P-UI    | Honesty pass: empty book, errors, envelope               | PR                                |
-| A-PAY-1         | P-PAY   | Card domain model + ledger recipes (sandbox)             | ledger tests                      |
-| A-PAY-2         | P-PAY   | Card provider port + sandbox adapter                     | unit + contract tests             |
-| A-PAY-3         | P-PAY   | Capture/settle/refund money path + REST                  | CI                                |
-| A-PAY-4         | P-PAY   | Merchant onboarding minimum                              | CI                                |
-| A-PROT-1        | P-PROT  | Smart-accounts anvil proof suite hardened                | forge/anvil                       |
-| A-PROT-2        | P-PROT  | Deploy script + runbook + deploy to env                  | log artifact                      |
-| A-PROT-3        | P-PROT  | Adversarial audit package SA                             | docs/audit                        |
-| A-TRADE-MM-1    | P-TRADE | orderFilled makerAccountId + MM recovery                 | tests                             |
-| A-TRADE-MM-2    | P-TRADE | Cancel/reseed lifecycle                                  | tests                             |
-| A-TRADE-MM-3    | P-TRADE | Mid oracle port (config + optional venue)                | tests                             |
-| A-TRADE-FUT-1   | P-TRADE | Mark/index multi-source non-invent                       | tests                             |
-| A-TRADE-FUT-2   | P-TRADE | Jobs enable path + ops doc                               | CI                                |
-| A-TRADE-SPOT-1  | P-TRADE | Candle aggregation job or honest pipeline                | tests                             |
-| A-TRADE-VENUE-1 | P-TRADE | Mount venue fabric into mark or public path              | tests                             |
-| A-TRADE-OTC-1   | P-TRADE | Thin OTC or §13 research+socket                          | PR                                |
-| A-TRADE-COPY-1  | P-TRADE | Thin copy or §13                                         | PR                                |
-| A-TRADE-ALGO-1  | P-TRADE | Thin algo or §13                                         | PR                                |
-| A-OR-1          | P-OR    | Triage #289: merge / fix CI / split residual             | green or closed                   |
-| A-P5-1          | P-P5    | Bank earn thin slice or §13                              | PR                                |
-| A-P5-2          | P-P5    | Academy thin slice or §13                                | PR                                |
-| A-P5-3          | P-P5    | Ops surface + agents usefulness or §13                   | PR                                |
-| A-WS-1          | P-WS    | Harden private channels + tests (may mock trade until B) | CI                                |
+| Ship ID         | Program | Deliverable                                                   | Proof                             |
+| --------------- | ------- | ------------------------------------------------------------- | --------------------------------- |
+| A-UI-1          | P-UI    | Hotkeys + order ticket keyboard path                          | tests / e2e / manual script in PR |
+| A-UI-2          | P-UI    | Sub-accounts selector wired or §13                            | PR                                |
+| A-UI-3          | P-UI    | Honesty pass: empty book, errors, envelope                    | PR                                |
+| A-PAY-1         | P-PAY   | Card domain model + ledger recipes (sandbox)                  | ledger tests                      |
+| A-PAY-2         | P-PAY   | Card provider port + sandbox adapter                          | unit + contract tests             |
+| A-PAY-3         | P-PAY   | Capture/settle/refund money path + REST                       | CI                                |
+| A-PAY-4         | P-PAY   | Merchant onboarding minimum                                   | CI                                |
+| A-PROT-1        | P-PROT  | Smart-accounts anvil proof suite hardened                     | forge/anvil                       |
+| A-PROT-2        | P-PROT  | Deploy script + runbook + deploy to env                       | log artifact                      |
+| A-PROT-3        | P-PROT  | Adversarial audit package SA                                  | docs/audit                        |
+| A-TRADE-MM-1    | P-TRADE | orderFilled makerAccountId + MM recovery                      | tests                             |
+| A-TRADE-MM-2    | P-TRADE | Cancel/reseed lifecycle                                       | tests                             |
+| A-TRADE-MM-3    | P-TRADE | Mid oracle port (config + optional venue)                     | tests                             |
+| A-TRADE-FUT-1   | P-TRADE | Mark/index multi-source non-invent                            | tests                             |
+| A-TRADE-FUT-2   | P-TRADE | Jobs enable path + ops doc                                    | CI                                |
+| A-TRADE-SPOT-1  | P-TRADE | Candle aggregation job or honest pipeline                     | tests                             |
+| A-TRADE-VENUE-1 | P-TRADE | Mount venue fabric into mark or public path                   | tests                             |
+| A-TRADE-OTC-1   | P-TRADE | Thin OTC or §13 research+socket                               | PR                                |
+| A-TRADE-COPY-1  | P-TRADE | Thin copy or §13                                              | PR                                |
+| A-TRADE-ALGO-1  | P-TRADE | Thin algo or §13                                              | PR                                |
+| A-OR-1          | P-OR    | **#289 rebase onto main** (was CONFLICTING) then merge/absorb | green merged or closed            |
+| A-P5-1          | P-P5    | Bank earn thin slice or §13                                   | PR                                |
+| A-P5-2          | P-P5    | Academy thin slice or §13                                     | PR                                |
+| A-P5-3          | P-P5    | Ops surface + agents usefulness or §13                        | PR                                |
+| A-WS-1          | P-WS    | Harden private channels + tests (may mock trade until B)      | CI                                |
 
 ### Wave B — integrate
 
@@ -102,10 +100,10 @@ Everything else is **Wave A parallel**.
 
 ### 3.1 P-UI (web.terminal)
 
-**Research first:** read `docs/FRONTEND-*` latest truth, brand locks, stream A design bar.  
-**Do not** redesign whole app if shell works — finish gaps.  
-**Ships:** hotkeys map (doc + impl), sub-accounts, order form validation honesty, loading/error, mobile breakpoints if already in scope.  
-**Done proof:** PR list + optional playwright; tracker web.terminal → done or wip→done.
+**Research first:** `docs/FRONTEND-STATE-OF-TRUTH-*.md`, brand locks, stream A claim; tree under **vendor shell :8090**.  
+**Do not** build `apps/web` as product. Do not redesign whole app if shell works — finish gaps.  
+**Ships:** hotkeys, sub-accounts, order form honesty, empty book honesty, a11y.  
+**Done proof:** PR list + Orca/playwright/screenshot; tracker web.terminal → done.
 
 ### 3.2 P-WS
 
