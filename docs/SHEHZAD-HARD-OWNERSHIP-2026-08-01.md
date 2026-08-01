@@ -4,21 +4,21 @@
 **GitHub:** **`@shehzad002`** (Nitro says “sheezad”)  
 **Operator:** Nitro `@ZenYoda3` · Direction: Denon `@Phantom-X-007`  
 **Companion cook:** Board Clear autonomous agents — `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`  
-**If git disagrees:** re-fetch; LIVE-LANES + this file win for *who codes*; constitution wins for *Done*.
+**If git disagrees:** re-fetch; LIVE-LANES + this file win for _who codes_; constitution wins for _Done_.
 
 ---
 
 ## 0 · Final peace audit (no compromise)
 
-| Check | Result |
-| --- | --- |
-| Collides with Board Clear GO cook? | **No — if GO obeys tip.** Agents: shell, #289, MM/spot/venue light, WS, academy/ops. **You:** money/protocol/engines. |
-| GO PR risk | Open **#334** was cut **before** ownership lock and listed agent **A-PAY / A-PROT** — **must not merge as-is** (rebase or close; see decision log). |
-| Steal Nitro shell / frontend? | **No** |
-| Steal #289 rebase? | **No** — agents |
-| Micro-manage him? | **No** — §3 is **big mountains**; he designs PR DAGs |
-| Enough work for a very fast senior for a long time? | **Yes** — multi-module Phase 2–5 spine (§3), not a ticket list |
-| Quality compromise? | **No** — doctrine + Class M + no invent mid/rates/balances + Done bars |
+| Check                                               | Result                                                                                                                                              |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collides with Board Clear GO cook?                  | **No — if GO obeys tip.** Agents: shell, #289, MM/spot/venue light, WS, academy/ops. **You:** money/protocol/engines.                               |
+| GO PR risk                                          | Open **#334** was cut **before** ownership lock and listed agent **A-PAY / A-PROT** — **must not merge as-is** (rebase or close; see decision log). |
+| Steal Nitro shell / frontend?                       | **No**                                                                                                                                              |
+| Steal #289 rebase?                                  | **No** — agents                                                                                                                                     |
+| Micro-manage him?                                   | **No** — §3 is **big mountains**; he designs PR DAGs                                                                                                |
+| Enough work for a very fast senior for a long time? | **Yes** — multi-module Phase 2–5 spine (§3), not a ticket list                                                                                      |
+| Quality compromise?                                 | **No** — doctrine + Class M + no invent mid/rates/balances + Done bars                                                                              |
 
 **Split rule:** he owns where a wrong line costs money, custody, security, or months of rewrite. Agents own craft, orchestration, patterned residuals.
 
@@ -28,27 +28,27 @@
 
 ### YOU (`@shehzad002`) — HUMAN-CLAIMED
 
-| ID | Mountain | Path gravity (you lead) |
-| --- | --- | --- |
-| **M1 Pay OS** | Full pay product beyond “crypto rail exists” | `services/svc-pay/**`, pay ledger recipes, pay contracts/events |
-| **M2 Protocol OS** | Self-custody stack to production-ready proof | `services/svc-protocol/**`, forge/contracts |
-| **M3 Derivatives risk** | Futures as a real risk product | `services/svc-trade/**` futures risk/margin/liq/funding truth |
-| **M4 Desk engines** | OTC + copy + algo as real products | `services/svc-trade/**` otc/copy/algo |
-| **M5 Identity money graph** | Sub-accounts + money ownership graph | `services/svc-identity/**` subaccounts / money-adjacent gates |
-| **M6 Bank money** | Earn / cards / ramps / sovereign-card path | `services/svc-bank/**` money products |
-| **M7 Custody residual** | Vendor Java dual-book kill residual | vendor Java money doors — **only after #289 agent merge** |
+| ID                          | Mountain                                     | Path gravity (you lead)                                         |
+| --------------------------- | -------------------------------------------- | --------------------------------------------------------------- |
+| **M1 Pay OS**               | Full pay product beyond “crypto rail exists” | `services/svc-pay/**`, pay ledger recipes, pay contracts/events |
+| **M2 Protocol OS**          | Self-custody stack to production-ready proof | `services/svc-protocol/**`, forge/contracts                     |
+| **M3 Derivatives risk**     | Futures as a real risk product               | `services/svc-trade/**` futures risk/margin/liq/funding truth   |
+| **M4 Desk engines**         | OTC + copy + algo as real products           | `services/svc-trade/**` otc/copy/algo                           |
+| **M5 Identity money graph** | Sub-accounts + money ownership graph         | `services/svc-identity/**` subaccounts / money-adjacent gates   |
+| **M6 Bank money**           | Earn / cards / ramps / sovereign-card path   | `services/svc-bank/**` money products                           |
+| **M7 Custody residual**     | Vendor Java dual-book kill residual          | vendor Java money doors — **only after #289 agent merge**       |
 
 ### AGENTS (Board Clear GO) — do not take as primary
 
-| Program | What they cook |
-| --- | --- |
-| board-clear-coord | Scoreboard, NEXT, fan-out, babysit |
-| **P-UI** | Vendor shell `:8090` craft/hotkeys/honesty |
-| **P-OR** | **#289** rebase/merge |
-| **P-TRADE-LIGHT** | MM recovery/reseed/mid *following existing pattern*; spot OHLCV; venue mount |
-| **P-WS** | Channel harden (real futures events wait on you) |
-| **P-P5-LIGHT** | Academy / ops thin / agents usefulness |
-| **P-TRACK** | Tracker honesty |
+| Program           | What they cook                                                               |
+| ----------------- | ---------------------------------------------------------------------------- |
+| board-clear-coord | Scoreboard, NEXT, fan-out, babysit                                           |
+| **P-UI**          | Vendor shell `:8090` craft/hotkeys/honesty                                   |
+| **P-OR**          | **#289** rebase/merge                                                        |
+| **P-TRADE-LIGHT** | MM recovery/reseed/mid _following existing pattern_; spot OHLCV; venue mount |
+| **P-WS**          | Channel harden (real futures events wait on you)                             |
+| **P-P5-LIGHT**    | Academy / ops thin / agents usefulness                                       |
+| **P-TRACK**       | Tracker honesty                                                              |
 
 ### Shared seams (handshake, not fight)
 
@@ -61,11 +61,11 @@
 
 ## 2 · How you work (senior mandate — not a script)
 
-1. **You figure out the design.** Mountains below state *outcome + Done bar*, not every commit. Decompose into PRs yourself.
+1. **You figure out the design.** Mountains below state _outcome + Done bar_, not every commit. Decompose into PRs yourself.
 2. **Doctrine is law:** ledger-client only for value; no money as `number`; no cross-service SQL; no invent mid/depth/rates/balances/candles/fees/factory addresses.
 3. **One concern per PR**, tip worktree, CI green, Class **M** self-audit on money.
 4. **Sandbox/dev proof** counts for Done when prod secrets missing; §13 for prod-only; **never** claim go-live / Class X.
-5. **Parallel:** 2–4 of *your* worktrees inside your mountains OK. Do not enter agent-owned paths.
+5. **Parallel:** 2–4 of _your_ worktrees inside your mountains OK. Do not enter agent-owned paths.
 6. **Tracker + Board Clear scoreboard** move only with proof that matches constitution Done bars.
 7. **Brand:** partner/PSP names stay in adapters, not user-facing copy.
 8. **When blocked:** research → thinner honest product → §13 — do not stop the world, do not invent prices.
@@ -144,9 +144,9 @@ These are **product mountains**, not chores. Each can occupy a strong senior for
 
 **Own as three sequential (or carefully parallel) products — you design each:**
 
-1. **trade.otc** — staked-tier gate, RFQ workflow, ledger-safe fill/spread to house  
-2. **trade.copy** — leaders, follows, sizing guardrails, profit-share recipe, kill/unfollow  
-3. **trade.algo** — TWAP/VWAP/POV (or honest subset), child orders ledger-safe, pause/cancel  
+1. **trade.otc** — staked-tier gate, RFQ workflow, ledger-safe fill/spread to house
+2. **trade.copy** — leaders, follows, sizing guardrails, profit-share recipe, kill/unfollow
+3. **trade.algo** — TWAP/VWAP/POV (or honest subset), child orders ledger-safe, pause/cancel
 
 **Done when:** each row meets constitution Done **or** explicit §13 with research proof “not now.” Prefer ship thin **real** verticals over fake Done.  
 **Not yours:** agent “thin stub overnight” theater on these rows while you own them.
@@ -176,11 +176,11 @@ These are **product mountains**, not chores. Each can occupy a strong senior for
 
 **Own:**
 
-- **bank.earn** yield pools ledger-safe  
-- **bank.cards** issuer adapter + sim auth path  
-- **bank.ramps** fiat on/off reusing pay adapters  
-- **bank.sovereign-card** path once SA allows (JIT conversion architecture per doctrine)  
-- Honest §13 only where secrets/partner truly block  
+- **bank.earn** yield pools ledger-safe
+- **bank.cards** issuer adapter + sim auth path
+- **bank.ramps** fiat on/off reusing pay adapters
+- **bank.sovereign-card** path once SA allows (JIT conversion architecture per doctrine)
+- Honest §13 only where secrets/partner truly block
 
 **Done when:** thin verticals with ledger proof **or** honest §13 — not tracker fantasy.  
 **Not yours:** academy/ops content (agents).
@@ -200,10 +200,10 @@ These are **product mountains**, not chores. Each can occupy a strong senior for
 
 Still hard, still future, still allowed under your spine role if you want more:
 
-- **pay.user-money** deposit/withdraw product correctness (not shell)  
-- **Matching / order integrity** beyond agent chaos suite (coordinate with P-OR after #289)  
-- **Indexer read-models** required by protocol/pay proofs  
-- **P2P money residual** if ledger escrow paths still incomplete (do not steal shell OTC UI)  
+- **pay.user-money** deposit/withdraw product correctness (not shell)
+- **Matching / order integrity** beyond agent chaos suite (coordinate with P-OR after #289)
+- **Indexer read-models** required by protocol/pay proofs
+- **P2P money residual** if ledger escrow paths still incomplete (do not steal shell OTC UI)
 
 If you take M8 items, claim them in PR body + LIVE-LANES note so agents do not double-build.
 
@@ -211,15 +211,15 @@ If you take M8 items, claim them in PR body + LIVE-LANES note so agents do not d
 
 ## 4 · Explicit ban list (peace of mind)
 
-| Do not | Why |
-| --- | --- |
-| Own `vendor/**/05_Web_Front` product craft | Board Clear P-UI autonomous cook |
-| Rebase/take over **#289** without handoff | P-OR agent |
-| “Help” by implementing agent MM/spot OHLCV/venue | P-TRADE-LIGHT |
-| Mark go-live / prod keys / sanctions content | Class X Nitro |
-| Invent prices/depth/mids/funding to close rows | Doctrine |
-| Merge tracker Done without constitution proof | Honesty |
-| Dual-edit agent worktrees | Collision |
+| Do not                                           | Why                              |
+| ------------------------------------------------ | -------------------------------- |
+| Own `vendor/**/05_Web_Front` product craft       | Board Clear P-UI autonomous cook |
+| Rebase/take over **#289** without handoff        | P-OR agent                       |
+| “Help” by implementing agent MM/spot OHLCV/venue | P-TRADE-LIGHT                    |
+| Mark go-live / prod keys / sanctions content     | Class X Nitro                    |
+| Invent prices/depth/mids/funding to close rows   | Doctrine                         |
+| Merge tracker Done without constitution proof    | Honesty                          |
+| Dual-edit agent worktrees                        | Collision                        |
 
 ---
 
@@ -227,10 +227,10 @@ If you take M8 items, claim them in PR body + LIVE-LANES note so agents do not d
 
 When `BOARD-CLEAR-AUTONOMOUS-RUN` is cooking:
 
-1. **Never implement M1–M7** (babysit only).  
-2. Day-one fan-out: **#289, P-UI, P-TRADE-LIGHT, P-WS, P-P5-LIGHT** only.  
-3. **Reject / close** any docs PR that reverts HUMAN-CLAIMED rows to free agent P-PAY/P-PROT (e.g. pre-#333 style NEXT with A-PAY-1).  
-4. Fill the board with agent ships while shehzad deep-works — do not idle, do not steal.  
+1. **Never implement M1–M7** (babysit only).
+2. Day-one fan-out: **#289, P-UI, P-TRADE-LIGHT, P-WS, P-P5-LIGHT** only.
+3. **Reject / close** any docs PR that reverts HUMAN-CLAIMED rows to free agent P-PAY/P-PROT (e.g. pre-#333 style NEXT with A-PAY-1).
+4. Fill the board with agent ships while shehzad deep-works — do not idle, do not steal.
 5. Re-read this file every compact.
 
 ---
@@ -243,8 +243,8 @@ See latest PR body / Nitro chat for the paste-ready human message. Canonical fac
 
 ## 7 · Maintenance
 
-- Free a mountain for agents only by PR editing this file + LIVE-LANES.  
-- Append decision log when ownership changes.  
+- Free a mountain for agents only by PR editing this file + LIVE-LANES.
+- Append decision log when ownership changes.
 - Do not delete while any M1–M7 row is open.
 
-*Final audit 2026-08-01: GO collision wall explicit; mountains not micro-tickets; future Phase 2–5 spine included.*
+_Final audit 2026-08-01: GO collision wall explicit; mountains not micro-tickets; future Phase 2–5 spine included._
