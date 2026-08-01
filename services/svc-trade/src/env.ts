@@ -106,6 +106,21 @@ const schema = serviceEnvSchema
       TRADE_MM_SEED_STEP_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
       TRADE_MM_SEED_LEVELS: z.coerce.number().int().min(1).max(50).default(3),
       TRADE_MM_SEED_QTY: z.string().default('1'),
+
+      /**
+       * Venue fabric mark source (A-TRADE-VENUE-1 / venue.aggregation).
+       * Empty (default) = off — marks fall back to matching depth mid only.
+       * Known id today: `binance-spot` (public MarketDataAdapter, no keys).
+       * Unknown id → no adapter (refuse invent). Never invents mid.
+       */
+      TRADE_VENUE_MARK_VENUE: z.string().default(''),
+
+      /**
+       * Map our market UUIDs to venue unified symbols for the mark port:
+       * `marketId:BTC/USDT,other:ETH/USDT`.
+       * Unmapped market → null mark for that id (never invent symbol).
+       */
+      TRADE_VENUE_MARK_SYMBOLS: z.string().default(''),
     }),
   );
 

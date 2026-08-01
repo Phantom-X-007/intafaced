@@ -15,6 +15,7 @@ import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
+import { createConfiguredVenueMarkSource } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { parseMmSeedMids, parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { parseAmount } from '@intafaced/ledger-client';
@@ -73,12 +74,27 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
+// Venue fabric public mid → mark path (A-TRADE-VENUE-1). Empty venue = off.
+// Unknown venue id → null (refuse invent). Symbol map required per market.
+const venueMarkConfigured = createConfiguredVenueMarkSource({
+  venueId: env.TRADE_VENUE_MARK_VENUE,
+  symbols: env.TRADE_VENUE_MARK_SYMBOLS,
+});
+if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
+  // Typo / unsupported venue — say so once; do not invent a mid adapter.
+  console.warn(
+    `[svc-trade] TRADE_VENUE_MARK_VENUE=${env.TRADE_VENUE_MARK_VENUE.trim()} is not a known public MarketDataAdapter; venue mark off (never invent). Supported: binance-spot`,
+  );
+}
+
 // Futures residual jobs — default OFF. Rate book is process-local for public REST peeks.
+// Marks: venue fabric preferred when configured, else matching depth mid — never invent.
 const futuresJobs = startFuturesJobs({
   sql,
   ledger,
   matching,
   bus,
+  venueMarkSource: venueMarkConfigured?.source ?? null,
   config: {
     enabled: env.TRADE_FUTURES_JOBS_ENABLED,
     liqIntervalMs: env.TRADE_FUTURES_LIQ_INTERVAL_MS,
@@ -134,16 +150,19 @@ registerPublicRest(app, {
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit, sinceMs) => trade.publicTape(marketId, limit, sinceMs),
   candles: (marketId, timeframe, limit, sinceMs) => trade.candles(marketId, timeframe, limit, sinceMs),
-  fundingRateForMarket: (marketId, _symbol) => {
+  fundingRateForMarket: async (marketId, _symbol) => {
     const entry = futuresJobs.getPublishedRate(marketId);
     if (!entry) return null;
     const fundingDatetime = new Date(entry.asOfMs).toISOString();
+    // Public mark: same non-inventing port as liquidation (venue fabric → depth).
+    // Null when no book / unmapped — never invent index or mark.
+    const markPrice = await futuresJobs.markPrice(marketId);
     return {
       fundingRate: entry.rate,
       fundingTimestamp: entry.asOfMs,
       fundingDatetime,
       nextFundingTimestamp: null,
-      markPrice: null,
+      markPrice,
       indexPrice: null,
     };
   },
@@ -202,6 +221,7 @@ app.log.info(
     spotEnabled: env.TRADE_SPOT_ENABLED,
     futuresJobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     futuresJobs: futuresJobs.host.list(),
+    venueMark: venueMarkConfigured ? { venueId: venueMarkConfigured.venueId, symbols: venueMarkConfigured.symbolCount } : null,
     mmSeedEnabled: env.TRADE_MM_SEED_ENABLED,
     mmSeedJobs: mmSeedJobs.host.list(),
     trpc: true,
