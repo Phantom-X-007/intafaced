@@ -94,6 +94,28 @@ A **flat subscription** — follower pays the leader a fixed amount per period f
 
 **Not permitted in v1:** any fee computed from follower P&L, in any form — percentage of gains, high-water mark, hurdle rate, or "success fee". If we ever want that, it is a licence conversation first, code second.
 
+### The economics — why this is more profitable, not a compromise
+
+The instinct is that giving up a performance fee gives up money. It does not, and the reason is worth stating because it decides how the parameters get set.
+
+**A performance fee is paid by the follower out of gains. A fee-share is paid by us out of revenue we already collect.** The first is a transfer from the customer; the second is a customer-acquisition cost. So the right comparison is not "20% of profits vs a few bps" — it is **fee-share against every other way we would have spent to acquire that follower.**
+
+A leader who brings 200 followers is a distribution channel. Paying them a slice of the fees those followers generate is the cheapest acquisition we have, it is **self-funding** (it only pays out when revenue exists), and it **cannot run at a loss** — unlike paid marketing, which spends whether or not anyone trades.
+
+**Parameters, and the constraint that sets them:**
+
+| parameter          | constraint                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `leader_share_bps` | a **share of our fee**, never a markup on it — the follower must pay the same fee copying as trading alone |
+| earnings cap       | per follower per period — the churn brake                                                                  |
+| decay threshold    | round-trips per period before the rate falls                                                               |
+
+**The load-bearing one is the first.** The follower must pay **exactly the same trading fee** whether they copy or trade alone. We fund the leader from our existing take, and we do not raise fees on followers to cover it.
+
+The moment we mark the fee up for copiers, the follower is paying the leader after all — and we have rebuilt the performance fee's economics with a worse story, because now it is opaque. **Same fee, funded from our side, is what makes the "we pay for order flow" characterisation true rather than a label.**
+
+`leader_share_bps` is a revenue decision and sits in §8 with the other fee recipes. It is not agent-settable, and it should be set once with the acquisition-cost comparison above in front of you rather than by analogy to competitors' profit splits.
+
 ---
 
 ## 4 · What we deliberately do not build
