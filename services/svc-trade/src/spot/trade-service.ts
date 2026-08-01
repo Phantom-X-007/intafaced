@@ -1156,6 +1156,12 @@ export class TradeService {
    * settling it heals when the event is delivered. Every step is keyed on
    * (market, engine sequence), so this and the inline path cannot double-settle
    * each other.
+   *
+   * `makerAccountId` / `takerAccountId` come from the matching event when the
+   * catalog carries them. House MM seed makers have no `trade.orders` row and
+   * are identified only by matching STP id `house:market-maker` — empty string
+   * must not invent that path. User makers may fall back to the order row's
+   * userId (matching uses user id as accountId for users).
    */
   async settleFillEvent(input: {
     marketId: string;
@@ -1164,12 +1170,21 @@ export class TradeService {
     price: string;
     qty: string;
     sequence: number;
+    /** Matching STP account for the maker leg — required for house MM recovery. */
+    makerAccountId?: string;
+    /** Matching STP account for the taker leg (users: userId). */
+    takerAccountId?: string;
   }): Promise<void> {
     const market = await this.marketById(input.marketId);
     if (!market) throw new TradeError(`market ${input.marketId} not found`, 'trade.market_not_found');
 
     const taker = await this.findOrder(input.takerOrderId);
     if (!taker) throw new TradeError(`order ${input.takerOrderId} not found`, 'trade.order_not_found');
+
+    // Prefer event payload; then orders table for user legs. Never invent house MM.
+    const makerRow = await this.findOrder(input.makerOrderId);
+    const makerAccountId = (input.makerAccountId && input.makerAccountId.trim()) || (makerRow ? makerRow.userId : '') || '';
+    const takerAccountId = (input.takerAccountId && input.takerAccountId.trim()) || taker.userId;
 
     await withMoneySpan(
       'trade.settleFillEvent',
@@ -1178,9 +1193,9 @@ export class TradeService {
         await this.settleFill(market, {
           sequence: input.sequence,
           makerOrderId: input.makerOrderId,
-          makerAccountId: '',
+          makerAccountId,
           takerOrderId: input.takerOrderId,
-          takerAccountId: '',
+          takerAccountId,
           takerSide: taker.side,
           price: input.price,
           qty: input.qty,

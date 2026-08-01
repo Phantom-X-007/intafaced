@@ -323,6 +323,13 @@ export const orderFilled = defineEvent(
     qty: amountSchema,
     sequence: z.number().int(),
     ts: z.string().datetime({ offset: true }),
+    /**
+     * Matching STP account ids (users: userId; house MM: `house:market-maker`).
+     * Optional for catalog roll-forward with older producers; svc-trade recovery
+     * needs makerAccountId for house MM seed makers (no trade.orders row).
+     */
+    makerAccountId: z.string().min(1).optional(),
+    takerAccountId: z.string().min(1).optional(),
   }),
   'A match occurred. svc-trade turns this into a tradeFill ledger recipe.',
 );

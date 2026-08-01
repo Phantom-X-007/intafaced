@@ -22,7 +22,7 @@ import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
 import { mmSeedOrderIdFor, orderIdFor } from './ids.js';
 import { MM_MATCHING_ACCOUNT_ID } from '../mm/seed-market.js';
-import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principalFor } from './testing.js';
+import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principalFor, restsInFull } from './testing.js';
 
 /**
  * svc-trade money paths (§5.2).
@@ -577,12 +577,82 @@ if (!available) {
         price: '100',
         qty: '2',
         sequence,
+        makerAccountId: BOB,
+        takerAccountId: ALICE,
       });
 
       expect(postsWithReason('trade.fill')).toHaveLength(1);
       expect(await sql`SELECT id FROM trade.fills`).toHaveLength(2);
       expect(await avail(ALICE, 'BTC')).toBe('1.996');
       expect(ledger.totalsByAsset()).toEqual({ BTC: '0', USDT: '0' });
+    });
+
+    it('recovery settleFillEvent with house MM makerAccountId settles marketMakerMakerFill', async () => {
+      // Inline path already covered above; this is the crash-between-engine-and-
+      // settle recovery path: no trade.orders row for the seed maker, only the
+      // matching event carrying makerAccountId = house:market-maker.
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'mm-rec-1' }));
+      const mmOrderId = mmSeedOrderIdFor('recovery-run', btcusdt.id, 'sell', 1);
+      await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrderId, assetId: 'BTC', amount: amt('1') }));
+      await fund(ALICE, 'USDT', '1000');
+
+      // Rest taker only (no match yet). Hold funded; then simulate engine fill
+      // arriving as an event with real house MM account id.
+      matching.script1((request, next) => restsInFull(request, next()));
+      const taker = await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-mm-recovery');
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(0);
+      expect(await sql`SELECT id FROM trade.orders WHERE id = ${mmOrderId}`).toHaveLength(0);
+
+      await trade.settleFillEvent({
+        marketId: btcusdt.id,
+        makerOrderId: mmOrderId,
+        takerOrderId: taker.id,
+        price: '100',
+        qty: '1',
+        sequence: 42,
+        makerAccountId: MM_MATCHING_ACCOUNT_ID,
+        takerAccountId: ALICE,
+      });
+
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(1);
+      expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe('0');
+      expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('99.9');
+      expect(await avail(ALICE, 'BTC')).toBe('0.998');
+      expect(ledger.totalsByAsset()).toEqual({ BTC: '0', USDT: '0' });
+    });
+
+    it('recovery without makerAccountId does not invent house MM or balances for unknown maker', async () => {
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'mm-rec-empty' }));
+      const mmOrderId = mmSeedOrderIdFor('empty-acct-run', btcusdt.id, 'sell', 1);
+      await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrderId, assetId: 'BTC', amount: amt('1') }));
+      await fund(ALICE, 'USDT', '1000');
+
+      matching.script1((request, next) => restsInFull(request, next()));
+      const taker = await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-empty-maker-acct');
+      const usdtBefore = await avail(ALICE, 'USDT');
+      const btcBefore = await avail(ALICE, 'BTC');
+      const mmHoldBefore = formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount);
+
+      // Empty / omitted makerAccountId + no trade.orders row → order_not_found.
+      // Must not route through marketMakerMakerFill or move balances.
+      await expect(
+        trade.settleFillEvent({
+          marketId: btcusdt.id,
+          makerOrderId: mmOrderId,
+          takerOrderId: taker.id,
+          price: '100',
+          qty: '1',
+          sequence: 99,
+          makerAccountId: '',
+          takerAccountId: ALICE,
+        }),
+      ).rejects.toMatchObject({ code: 'trade.order_not_found' });
+
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(0);
+      expect(postsWithReason('trade.fill')).toHaveLength(0);
+      expect(await avail(ALICE, 'USDT')).toBe(usdtBefore);
+      expect(await avail(ALICE, 'BTC')).toBe(btcBefore);
+      expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe(mmHoldBefore);
     });
   });
 

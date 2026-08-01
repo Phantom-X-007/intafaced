@@ -283,6 +283,10 @@ function filledEvent(marketId: MarketId, fill: Fill, at: string): PendingEvent {
       qty: formatAmount(fill.qty),
       sequence: fill.sequence,
       ts: at,
+      // STP account ids — svc-trade recovery uses makerAccountId for house MM
+      // (no trade.orders row). Never invent; take from the engine fill only.
+      makerAccountId: fill.makerAccountId,
+      takerAccountId: fill.takerAccountId,
     },
     // The engine sequence is the business key: one fill, one sequence, forever.
     key: `matching.order.filled:${marketId}:${fill.sequence}`,
