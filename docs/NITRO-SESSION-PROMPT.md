@@ -17,17 +17,18 @@ WHAT THIS IS
 - Law (engineering SoT): INTAFACED_DEFINITIVE_BUILD.md — same as Denon’s “DEFINITIVE BUILD” v2.2.
 - Product vision: INTAFACED SOVEREIGN OS.pdf (Vol. I). Do not invent architecture outside the law.
 - Board: docs/TRACKER.md · README status band · `pnpm tracker ready`.
-- Plain map: docs/START-HERE.md · Ownership law: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Residual campaign: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
-- Stream A claim (trader shell): docs/NITRO-STREAM-A-CLAIM.md · issue #83 · frontend SoT when building UI: docs/FRONTEND-STATE-OF-TRUTH-2026-07-31.md.
-- History boards (not live law): docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md · docs/POST-MERGE-RESIDUAL-AFTER-86.md — use only if residual campaign is silent.
+- **ACTIVE CAMPAIGN — BOARD CLEAR (finish product table; full autonomy):** docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md · docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md · docs/BOARD-CLEAR-SCOREBOARD.md · paste forever-run: docs/BOARD-CLEAR-AUTONOMOUS-RUN.md. Locked: protocol deploy+audit package; all trade mountains; pay card required (sandbox OK); Phase 5 included; #289 claimed. Goal = rows Done/Cut not residual theater.
+- Plain map: docs/START-HERE.md · Ownership: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Older residual mode: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md (superseded when Board Clear docs present) · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
+- Stream A / UI: docs/NITRO-STREAM-A-CLAIM.md · #83 · docs/FRONTEND-STATE-OF-TRUTH-2026-07-31.md under Board Clear web.terminal Done bar.
+- History boards (not live law): docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md · docs/POST-MERGE-RESIDUAL-AFTER-86.md.
 
 PARTNER + OWNERSHIP (durable — see NITRO-OWNERSHIP doc)
 - Denon (@Phantom-X-007) = **direction** (high-altitude plan/spec for engines + money/spine law). I am @ZenYoda3. Shared private GitHub.
 - Nitro agents = **execution** of residual board + Stream A + honesty/audits/research packs under doctrine. Denon is not the default residual ship machine.
 - Review is asymmetric: he merges his PRs on green CI + self-audit. Nitro agents merge Class N/P/M when ownership-law gates pass (M = self-audit + second adversarial + green; no merge on hold). You do not wait for Denon Approve on gated work.
 - Never force-push origin/feat/spine-* or feat/multi-asset-*. Orient before touching his crash WIP; prefer greenfield on tip after he specs abandon vs resume.
-- Do **not** invent futures/OTC/copy/algo/MM/multi-asset **product law** — research packs OK; wait for his direction (or explicit Nitro accept of a research-only stub).
-- Class X human-only: secrets, go-live, prod RPC as live, licence purchase, sanctions content. Never mark those agent-done.
+- Board Clear (Nitro locked 2026-08-01): ship all trade mountains to Done bars in constitution — thin honest product or §13 cut; still **never invent** mid/rates/depth/balances. Do not wait for Denon chat mid-campaign.
+- Class X human-only if truly no sandbox path: prod-only secrets, real customer money go-live, licence purchase, sanctions content. Prefer sandbox Done + §13; never halt whole campaign.
 - LIVE-LANES claim before code. ≤3 parallel code lanes. Re-derive tip + open PRs every session (never trust chat memory for high water).
 
 ALREADY TRUE (re-verify live each session — do not trust this paragraph as eternal)

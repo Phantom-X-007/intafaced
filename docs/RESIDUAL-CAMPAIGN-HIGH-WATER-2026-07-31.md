@@ -5,9 +5,10 @@
 
 ## Verdict
 
-**COOK RUNNING.** Agent-safe residual for **trade.futures** and **mm-bot** through seed job host (default OFF).
+**SUPERSEDED for campaign goal by Board Clear 2026-08-01.**  
+Use [`BOARD-CLEAR-CONSTITUTION-2026-08-01.md`](BOARD-CLEAR-CONSTITUTION-2026-08-01.md) + scoreboard. Residual partials remain useful foundation (mm-bot seed/fill on main) but **product Done** is defined only there.
 
-**Not done:** house tradeFill for MM fills, live mid oracle, live multi-venue index, pay card/go-live X, order-route #289 (other program).
+**Still open under Board Clear:** full board (UI, WS, pay card, protocol deploy+audit, all trade mountains, #289, Phase 5).
 
 ## Board (complete)
 
