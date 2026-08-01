@@ -107,12 +107,14 @@ describe('svc-academy mount — the router is actually mounted', () => {
     });
   });
 
-  it('exposes the lobby surface §8.3 names, and nothing half-built beside it', () => {
+  it('exposes the lobby surface §8.3 names plus the thin curriculum catalog', () => {
     const procedures = Object.keys(createAcademyRouter(stubAcademy())._def.procedures).sort();
 
     expect(procedures).toEqual(
       [
         'createRoom',
+        'curriculum',
+        'curriculumItem',
         'endSession',
         'health',
         'invite',
@@ -127,6 +129,37 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'updateScene',
       ].sort(),
     );
+  });
+});
+
+describe('svc-academy mount — curriculum catalog is real, not empty', () => {
+  it('lists the day-one spine under academy:read', async () => {
+    const items = await createAcademyRouter(stubAcademy()).createCaller(signed()).curriculum();
+    expect(items.length).toBeGreaterThanOrEqual(4);
+    expect(items.every((i) => typeof i.slug === 'string' && typeof i.summary === 'string')).toBe(true);
+    // List is metadata only — body lives on curriculumItem.
+    expect(items[0]).not.toHaveProperty('body');
+  });
+
+  it('filters curriculum by Blueprint path', async () => {
+    const items = await createAcademyRouter(stubAcademy()).createCaller(signed()).curriculum({ path: 'foundations' });
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i) => i.path === 'foundations')).toBe(true);
+  });
+
+  it('returns body for a known slug and NOT_FOUND for an unknown one', async () => {
+    const caller = createAcademyRouter(stubAcademy()).createCaller(signed());
+    const item = await caller.curriculumItem({ slug: 'foundations-risk-first' });
+    expect(item.body).toContain('# Risk first');
+
+    await expect(caller.curriculumItem({ slug: 'no-such-playbook' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('refuses curriculum without academy:read', async () => {
+    const ctx = signed(principal({ scopes: [] }));
+    await expect(createAcademyRouter(stubAcademy()).createCaller(ctx).curriculum()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
   });
 });
 

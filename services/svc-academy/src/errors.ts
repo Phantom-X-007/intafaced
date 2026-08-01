@@ -23,7 +23,9 @@ export type AcademyErrorCode =
   | 'academy.stream_unavailable'
   /** §4.1 `rank_thresholds.perks.lobbyHostRights` — this rank does not host. */
   | 'academy.host_rights_required'
-  | 'academy.host_rights_unavailable';
+  | 'academy.host_rights_unavailable'
+  /** Curriculum catalog slug is not in the day-one spine. */
+  | 'academy.curriculum_not_found';
 
 export class AcademyError extends Error {
   constructor(
