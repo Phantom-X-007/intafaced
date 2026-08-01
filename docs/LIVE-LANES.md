@@ -11,7 +11,7 @@
 | **board-clear-coord**    | Board Clear GO orchestrator | L0, scoreboard, NEXT, babysit, fan-out **agent** programs only | **RUNNING**       | residual-only; steal H-\*         |
 | **P-UI**                 | Nitro agents                | vendor shell `:8090` craft/hotkeys/honesty                     | **AGENT**         | apps/web product; human exclusive |
 | **P-WS**                 | Nitro agents                | svc-ws E2E (futures events may wait on human M3)               | **AGENT**         | invent futures events             |
-| **P-OR**              | Board Clear GO · A-OR-1          | **#289** MERGED (`e29748f`) — H-OR-JAVA unblocked for shehzad         | **DONE**          | re-open orphan PR               |
+| **P-OR**                 | Board Clear GO · A-OR-1     | **#289** MERGED (`e29748f`) — H-OR-JAVA unblocked for shehzad  | **DONE**          | re-open orphan PR                 |
 | **P-TRADE-LIGHT**        | Nitro agents                | mm recovery/reseed/mid residual; spot OHLCV; venue mount       | **AGENT**         | futures risk / otc / copy / algo  |
 | **P-P5-LIGHT**           | Nitro agents                | academy / ops thin / agents usefulness                         | **AGENT**         | bank earn/cards/ramps money       |
 | **P-TRACK**              | coord / agents              | tracker + scoreboard honesty                                   | **AGENT**         | lie on Done                       |
