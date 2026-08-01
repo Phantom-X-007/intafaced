@@ -213,19 +213,25 @@
                   <span class="ix-num">Total</span>
                 </div>
                 <div class="ix-scroll">
-                  <p class="ix-empty" v-if="bids.length === 0">{{ bookSideEmpty('bids') }}</p>
-                  <button
-                    type="button"
-                    class="ix-book-row is-bid"
-                    v-for="(row, i) in bids"
-                    :key="'fb' + i"
-                    @click="useBookPrice(row)"
-                  >
-                    <span class="ix-depth-bar" :style="{ width: barWidth(row, 'bid') }"></span>
-                    <span class="ix-num ix-up">{{ fmt(row.price, baseCoinScale) }}</span>
-                    <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
-                    <span class="ix-num ix-dim">{{ fmt(row.totalAmount, coinScale) }}</span>
-                  </button>
+                  <p
+                    class="ix-empty"
+                    :class="{ 'ix-empty-loading': bookLoading, 'ix-empty-error': !bookLoading && !bookReachable }"
+                    v-if="bookLoading || !bookReachable || bids.length === 0"
+                  >{{ bookSideEmpty('bids') }}</p>
+                  <template v-if="bookReachable && !bookLoading">
+                    <button
+                      type="button"
+                      class="ix-book-row is-bid"
+                      v-for="(row, i) in bids"
+                      :key="'fb' + i"
+                      @click="useBookPrice(row)"
+                    >
+                      <span class="ix-depth-bar" :style="{ width: barWidth(row, 'bid') }"></span>
+                      <span class="ix-num ix-up">{{ fmt(row.price, baseCoinScale) }}</span>
+                      <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
+                      <span class="ix-num ix-dim">{{ fmt(row.totalAmount, coinScale) }}</span>
+                    </button>
+                  </template>
                 </div>
               </div>
               <div class="ix-book-col">
@@ -235,19 +241,25 @@
                   <span class="ix-num">Total</span>
                 </div>
                 <div class="ix-scroll">
-                  <p class="ix-empty" v-if="asksAscending.length === 0">{{ bookSideEmpty('asks') }}</p>
-                  <button
-                    type="button"
-                    class="ix-book-row is-ask"
-                    v-for="(row, i) in asksAscending"
-                    :key="'fa' + i"
-                    @click="useBookPrice(row)"
-                  >
-                    <span class="ix-depth-bar" :style="{ width: barWidth(row, 'ask') }"></span>
-                    <span class="ix-num ix-down">{{ fmt(row.price, baseCoinScale) }}</span>
-                    <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
-                    <span class="ix-num ix-dim">{{ fmt(row.totalAmount, coinScale) }}</span>
-                  </button>
+                  <p
+                    class="ix-empty"
+                    :class="{ 'ix-empty-loading': bookLoading, 'ix-empty-error': !bookLoading && !bookReachable }"
+                    v-if="bookLoading || !bookReachable || asksAscending.length === 0"
+                  >{{ bookSideEmpty('asks') }}</p>
+                  <template v-if="bookReachable && !bookLoading">
+                    <button
+                      type="button"
+                      class="ix-book-row is-ask"
+                      v-for="(row, i) in asksAscending"
+                      :key="'fa' + i"
+                      @click="useBookPrice(row)"
+                    >
+                      <span class="ix-depth-bar" :style="{ width: barWidth(row, 'ask') }"></span>
+                      <span class="ix-num ix-down">{{ fmt(row.price, baseCoinScale) }}</span>
+                      <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
+                      <span class="ix-num ix-dim">{{ fmt(row.totalAmount, coinScale) }}</span>
+                    </button>
+                  </template>
                 </div>
               </div>
             </div>
@@ -260,15 +272,21 @@
                 <span class="ix-num">Value</span>
               </div>
               <div class="ix-scroll">
-                <p class="ix-empty" v-if="trades.length === 0">{{ tradesEmptyLabel }}</p>
-                <div class="ix-trade-row is-wide" v-for="(row, i) in trades" :key="'ft' + i">
-                  <span class="ix-dim">{{ time(row.time) }}</span>
-                  <span class="ix-num" :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                    {{ fmt(row.price, baseCoinScale) }}
-                  </span>
-                  <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
-                  <span class="ix-num ix-dim">{{ fmt(row.price * row.amount, 2) }}</span>
-                </div>
+                <p
+                  class="ix-empty"
+                  :class="{ 'ix-empty-loading': tradesLoading, 'ix-empty-error': !tradesLoading && !tradesReachable }"
+                  v-if="tradesLoading || !tradesReachable || trades.length === 0"
+                >{{ tradesEmptyLabel }}</p>
+                <template v-if="tradesReachable && !tradesLoading">
+                  <div class="ix-trade-row is-wide" v-for="(row, i) in trades" :key="'ft' + i">
+                    <span class="ix-dim">{{ time(row.time) }}</span>
+                    <span class="ix-num" :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
+                      {{ fmt(row.price, baseCoinScale) }}
+                    </span>
+                    <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
+                    <span class="ix-num ix-dim">{{ fmt(row.price * row.amount, 2) }}</span>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -512,42 +530,54 @@
           </div>
 
           <div class="ix-book-side ix-book-asks" v-show="bookMode !== 'bids'">
-            <p class="ix-empty" v-if="asks.length === 0">{{ bookSideEmpty('asks') }}</p>
-            <button
-              type="button"
-              class="ix-book-row is-ask"
-              v-for="(row, i) in asks"
-              :key="'a' + i"
-              @click="useBookPrice(row)"
-            >
-              <span class="ix-depth-bar" :style="{ width: barWidth(row, 'ask') }"></span>
-              <span class="ix-num ix-down">{{ zero(row.price, baseCoinScale) }}</span>
-              <span class="ix-num">{{ zero(row.amount, coinScale) }}</span>
-              <span class="ix-num ix-dim">{{ zero(row.totalAmount, coinScale) }}</span>
-            </button>
+            <p
+              class="ix-empty"
+              :class="{ 'ix-empty-loading': bookLoading, 'ix-empty-error': !bookLoading && !bookReachable }"
+              v-if="bookLoading || !bookReachable || asks.length === 0"
+            >{{ bookSideEmpty('asks') }}</p>
+            <template v-if="bookReachable && !bookLoading">
+              <button
+                type="button"
+                class="ix-book-row is-ask"
+                v-for="(row, i) in asks"
+                :key="'a' + i"
+                @click="useBookPrice(row)"
+              >
+                <span class="ix-depth-bar" :style="{ width: barWidth(row, 'ask') }"></span>
+                <span class="ix-num ix-down">{{ zero(row.price, baseCoinScale) }}</span>
+                <span class="ix-num">{{ zero(row.amount, coinScale) }}</span>
+                <span class="ix-num ix-dim">{{ zero(row.totalAmount, coinScale) }}</span>
+              </button>
+            </template>
           </div>
 
           <div class="ix-book-mid">
             <span class="ix-book-price" :class="trendClass">{{ lastPriceLabel }}</span>
             <Icon v-if="trend > 0" type="md-arrow-up" class="ix-up" size="14" />
             <Icon v-else-if="trend < 0" type="md-arrow-down" class="ix-down" size="14" />
-            <span class="ix-book-spread" v-if="spread !== null">Spread {{ spread }}</span>
+            <span class="ix-book-spread" v-if="spread !== null && bookReachable">Spread {{ spread }}</span>
           </div>
 
           <div class="ix-book-side ix-book-bids" v-show="bookMode !== 'asks'">
-            <p class="ix-empty" v-if="bids.length === 0">{{ bookSideEmpty('bids') }}</p>
-            <button
-              type="button"
-              class="ix-book-row is-bid"
-              v-for="(row, i) in bids"
-              :key="'b' + i"
-              @click="useBookPrice(row)"
-            >
-              <span class="ix-depth-bar" :style="{ width: barWidth(row, 'bid') }"></span>
-              <span class="ix-num ix-up">{{ zero(row.price, baseCoinScale) }}</span>
-              <span class="ix-num">{{ zero(row.amount, coinScale) }}</span>
-              <span class="ix-num ix-dim">{{ zero(row.totalAmount, coinScale) }}</span>
-            </button>
+            <p
+              class="ix-empty"
+              :class="{ 'ix-empty-loading': bookLoading, 'ix-empty-error': !bookLoading && !bookReachable }"
+              v-if="bookLoading || !bookReachable || bids.length === 0"
+            >{{ bookSideEmpty('bids') }}</p>
+            <template v-if="bookReachable && !bookLoading">
+              <button
+                type="button"
+                class="ix-book-row is-bid"
+                v-for="(row, i) in bids"
+                :key="'b' + i"
+                @click="useBookPrice(row)"
+              >
+                <span class="ix-depth-bar" :style="{ width: barWidth(row, 'bid') }"></span>
+                <span class="ix-num ix-up">{{ zero(row.price, baseCoinScale) }}</span>
+                <span class="ix-num">{{ zero(row.amount, coinScale) }}</span>
+                <span class="ix-num ix-dim">{{ zero(row.totalAmount, coinScale) }}</span>
+              </button>
+            </template>
           </div>
         </div>
 
@@ -558,14 +588,20 @@
             <span class="ix-num">Amount</span>
           </div>
           <div class="ix-scroll">
-            <p class="ix-empty" v-if="trades.length === 0">{{ tradesEmptyLabel }}</p>
-            <div class="ix-trade-row" v-for="(row, i) in trades" :key="'t' + i">
-              <span class="ix-dim">{{ time(row.time) }}</span>
-              <span class="ix-num" :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                {{ fmt(row.price, baseCoinScale) }}
-              </span>
-              <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
-            </div>
+            <p
+              class="ix-empty"
+              :class="{ 'ix-empty-loading': tradesLoading, 'ix-empty-error': !tradesLoading && !tradesReachable }"
+              v-if="tradesLoading || !tradesReachable || trades.length === 0"
+            >{{ tradesEmptyLabel }}</p>
+            <template v-if="tradesReachable && !tradesLoading">
+              <div class="ix-trade-row" v-for="(row, i) in trades" :key="'t' + i">
+                <span class="ix-dim">{{ time(row.time) }}</span>
+                <span class="ix-num" :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
+                  {{ fmt(row.price, baseCoinScale) }}
+                </span>
+                <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
+              </div>
+            </template>
           </div>
         </div>
       </aside>
@@ -766,6 +802,7 @@ var Stomp = require('stompjs');
 var SockJS = require('sockjs-client');
 var moment = require('moment');
 var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
+var bookHonesty = require('../../assets/js/book-honesty.js');
 
 const BOOK_DEPTH = 14;
 const TRADE_LIMIT = 40;
@@ -828,7 +865,11 @@ export default {
 
       marketsLoading: false,
       marketsReachable: false,
+      /** True until first plate REST settles — loading ≠ unavailable. */
+      bookLoading: true,
       bookReachable: false,
+      /** True until first trades REST settles. */
+      tradesLoading: true,
       tradesReachable: false,
 
       plate: { asks: [], bids: [], askTotal: 0, bidTotal: 0 },
@@ -1074,13 +1115,10 @@ export default {
       return (this.num(this.symbolFee) * 100).toFixed(2) + '% · venue schedule for this pair';
     },
     tradesEmptyLabel() {
-      if (!this.tradesReachable && !this.feedLive) {
-        return 'Trades unavailable — market did not respond';
-      }
-      if (!this.tradesReachable) {
-        return 'Trades unavailable — market did not respond';
-      }
-      return 'No trades yet';
+      return bookHonesty.tradesEmptyLabel({
+        loading: this.tradesLoading,
+        reachable: this.tradesReachable
+      });
     }
   },
 
@@ -1368,12 +1406,15 @@ export default {
       this.feeKnown = false;
       this.marketsLoading = false;
       this.marketsReachable = false;
+      this.bookLoading = true;
       this.bookReachable = false;
+      this.tradesLoading = true;
       this.tradesReachable = false;
       this.plate = { asks: [], bids: [], askTotal: 0, bidTotal: 0 };
       this.trades = [];
       this.percent = 0;
       this.form = { price: '', amount: '' };
+      this.orderValidationError = '';
 
       this.$store.commit('navigate', 'nav-exchange');
       this.$store.commit('setSkin', 'night');
@@ -1580,8 +1621,11 @@ export default {
 
     getPlate() {
       this.request(this.api.market.platemini, { symbol: this.currentCoin.symbol }).then(body => {
+        this.bookLoading = false;
         if (!body) {
+          /* Unreachable — clear any prior levels so we never paint a stale book. */
           this.bookReachable = false;
+          this.plate = { asks: [], bids: [], askTotal: 0, bidTotal: 0 };
           return;
         }
         this.bookReachable = true;
@@ -1591,26 +1635,21 @@ export default {
     },
 
     bookSideEmpty(side) {
-      if (!this.bookReachable) {
-        return 'Book unavailable — market did not respond';
-      }
-      return side === 'asks' ? 'No asks' : 'No bids';
+      return bookHonesty.bookSideEmptyLabel({
+        loading: this.bookLoading,
+        reachable: this.bookReachable,
+        side: side
+      });
     },
 
     /* One shape for both the REST snapshot and the websocket delta, so the
-       book cannot drift between the two sources. Asks are stored best-last. */
+       book cannot drift between the two sources. Asks are stored best-last.
+       Invalid (≤0) levels are dropped — never pad with zero-price placeholders. */
     applyPlate(direction, items) {
-      let total = 0;
-      const rows = items.slice(0, BOOK_DEPTH).map(item => {
-        total += this.num(item.amount);
-        return {
-          price: this.num(item.price),
-          amount: this.num(item.amount),
-          totalAmount: total
-        };
-      });
+      const rows = bookHonesty.normalizePlateLevels(items, BOOK_DEPTH, v => this.num(v));
+      const total = rows.length ? rows[rows.length - 1].totalAmount : 0;
       if (direction === 'SELL') {
-        this.plate.asks = rows.reverse();
+        this.plate.asks = rows.slice().reverse();
         this.plate.askTotal = total;
       } else {
         this.plate.bids = rows;
@@ -1645,6 +1684,7 @@ export default {
 
     getTrades() {
       this.request(this.api.market.trade, { symbol: this.currentCoin.symbol, size: TRADE_LIMIT }).then(body => {
+        this.tradesLoading = false;
         if (body == null) {
           this.tradesReachable = false;
           this.trades = [];
@@ -1770,11 +1810,13 @@ export default {
         }
         /* Bounded list. The vendor pushed unbounded then trimmed; this keeps
            the DOM row count fixed so the panel never grows the page. */
+        self.tradesLoading = false;
         self.tradesReachable = true;
         self.trades = resp.concat(self.trades).slice(0, TRADE_LIMIT);
       });
 
       on('/topic/market/trade-plate/' + symbol, resp => {
+        self.bookLoading = false;
         self.bookReachable = true;
         self.applyPlate(resp.direction, resp.items || []);
         self.getPlateFull();
@@ -2059,7 +2101,9 @@ export default {
 
     placeOrder(amount, price) {
       if (!this.isLogin) {
-        return this.warn('Session ended — sign in again. No order was placed.');
+        const sessionMsg = 'Session ended — sign in again. No order was placed.';
+        this.focusOrderError(sessionMsg);
+        return this.warn(sessionMsg);
       }
       this.submitting = true;
       return this.request(this.api.exchange.orderAdd, {
@@ -2071,23 +2115,21 @@ export default {
         useDiscount: '0'
       }).then(body => {
         this.submitting = false;
-        if (!body) {
-          return this.warn('The exchange did not respond. Your order was not placed.');
-        }
-        if (body.code == 0) {
+        /* MessageResult envelope: code == 0 only. Anything else is reject copy
+           in the ticket (not toast-only) so the form never looks like success. */
+        const rejectMsg = bookHonesty.formatOrderRejectEnvelope(body);
+        if (!rejectMsg) {
+          this.orderValidationError = '';
+          this.liveAnnounce = '';
           this.$Notice.success({ title: 'Order placed', desc: this.submitLabel });
           this.form.amount = '';
           this.percent = 0;
           this.accountTab = 'open';
           this.loadAccount();
-        } else {
-          // auth-ish failures: do not claim placed
-          var msg = body.message || 'Unknown error';
-          if (body.code == 4000 || /login|session|auth|token/i.test(String(msg))) {
-            msg = 'Session invalid — sign in again. Order was not placed. (' + msg + ')';
-          }
-          this.$Notice.error({ title: 'Order rejected', desc: msg });
+          return;
         }
+        this.focusOrderError(rejectMsg);
+        this.$Notice.error({ title: 'Order rejected', desc: rejectMsg });
       });
     },
 
@@ -2199,8 +2241,8 @@ export default {
       return value;
     },
 
-    /* Book rows are padded with zero-price placeholders so the ladder keeps a
-       constant height; those render as a dash, not as 0.000000. */
+    /* Display helper: never paint 0.000000 as a real print. Ladder rows are
+       not padded — invalid levels are dropped in applyPlate (A-UI-2). */
     zero(value, scale) {
       const n = parseFloat(value);
       if (!isFinite(n) || n === 0) {
