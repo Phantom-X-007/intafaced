@@ -1,21 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
-import type { EngineDepth, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
+import {
+  formatAmount,
+  marketMaker,
+  MemoryLedger,
+  parseAmount as amt,
+  recipes,
+} from '@intafaced/ledger-client';
+import type {
+  EngineCancelResult,
+  EngineDepth,
+  EngineSubmitRequest,
+  EngineSubmitResult,
+  MatchingClient,
+} from '../spot/matching-client.js';
 import { parseMmSeedMids, parseMmSeedTargets, startMmSeedJobs } from './seed-jobs.js';
 import { MM_MATCHING_ACCOUNT_ID } from './seed-market.js';
 
-class JobStubMatching implements Pick<MatchingClient, 'submit' | 'depth'> {
+class JobStubMatching implements Pick<MatchingClient, 'submit' | 'depth' | 'cancel'> {
   readonly submitted: Array<{ marketId: string; request: EngineSubmitRequest }> = [];
+  readonly cancelled: string[] = [];
+  readonly live = new Set<string>();
   depthReply: EngineDepth = { bids: [], asks: [], sequence: 0 };
   private seq = 0;
+  /** When true, depth follows live set (empty when no live orders). */
+  trackDepthFromLive = false;
 
   async depth(_marketId: string, _limit?: number): Promise<EngineDepth> {
+    if (this.trackDepthFromLive) {
+      if (this.live.size === 0) return { bids: [], asks: [], sequence: this.seq };
+      return { bids: [['99', '1']], asks: [['101', '1']], sequence: this.seq };
+    }
     return this.depthReply;
   }
 
   async submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult> {
     this.submitted.push({ marketId, request });
     const sequence = ++this.seq;
+    this.live.add(request.orderId);
     return {
       accepted: true,
       sequence,
@@ -32,6 +53,27 @@ class JobStubMatching implements Pick<MatchingClient, 'submit' | 'depth'> {
       rejected: null,
       cancellations: [],
       triggered: [],
+    };
+  }
+
+  async cancel(_marketId: string, orderId: string): Promise<EngineCancelResult> {
+    this.cancelled.push(orderId);
+    if (!this.live.has(orderId)) {
+      return { cancelled: false, orderId, sequence: null, cancellation: null };
+    }
+    this.live.delete(orderId);
+    const sequence = ++this.seq;
+    return {
+      cancelled: true,
+      orderId,
+      sequence,
+      cancellation: {
+        orderId,
+        accountId: MM_MATCHING_ACCOUNT_ID,
+        remainingQty: '1',
+        sequence,
+        reason: 'requested',
+      },
     };
   }
 }
@@ -211,6 +253,83 @@ describe('startMmSeedJobs', () => {
         h.stop();
         reject(new Error('tick timeout'));
       }, 2000);
+    });
+  });
+
+  it('cancel+reseed when book empty after levels cleared — new runId, holds redrawn', async () => {
+    const matching = new JobStubMatching();
+    matching.trackDepthFromLive = true;
+    const ledger = new MemoryLedger();
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'USDT', amount: amt('10000'), seedId: 'rs1' }));
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('100'), seedId: 'rs2' }));
+
+    let seedCount = 0;
+    let cancelCount = 0;
+    const runIds: string[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      const h = startMmSeedJobs({
+        ledger,
+        matching,
+        midSource: () => '100',
+        config: {
+          enabled: true,
+          intervalMs: 25,
+          halfSpreadBps: 100,
+          stepBps: 0,
+          levels: 1,
+          qtyPerLevel: '1',
+          targets: [{ marketId: 'btc-usdt', baseAsset: 'BTC', quoteAsset: 'USDT' }],
+        },
+        runIdFor: (marketId) => {
+          const id = `ops-seed:${marketId}:g${runIds.length + 1}`;
+          runIds.push(id);
+          return id;
+        },
+        onCancelResult: () => {
+          cancelCount += 1;
+        },
+        onResult: async (_id, result) => {
+          try {
+            if ('skipped' in result) {
+              // book_not_empty between first seed and clear is fine
+              return;
+            }
+            if (!('ok' in result) || !result.ok) {
+              h.stop();
+              reject(new Error(`unexpected seed fail: ${'reason' in result ? result.reason : '?'}`));
+              return;
+            }
+            seedCount += 1;
+            if (seedCount === 1) {
+              expect(matching.submitted).toHaveLength(2);
+              expect(matching.live.size).toBe(2);
+              // Simulate levels cancelled / filled — book empty, holds still present
+              matching.live.clear();
+              return;
+            }
+            if (seedCount === 2) {
+              expect(cancelCount).toBeGreaterThanOrEqual(1);
+              expect(runIds[0]).not.toBe(runIds[1]);
+              // second seed used new order ids (4 submits total)
+              expect(matching.submitted.length).toBe(4);
+              expect(matching.cancelled.length).toBe(2);
+              // pot still drawn for live second seed
+              expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('9901');
+              expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe('99');
+              h.stop();
+              resolve();
+            }
+          } catch (e) {
+            h.stop();
+            reject(e);
+          }
+        },
+      });
+      setTimeout(() => {
+        h.stop();
+        reject(new Error(`reseed timeout seedCount=${seedCount} cancelCount=${cancelCount}`));
+      }, 3000);
     });
   });
 });
