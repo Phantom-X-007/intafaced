@@ -18,13 +18,14 @@ import { withAcademySpan } from './tracing.js';
  *
  * ── What is deliberately NOT here ───────────────────────────────────────────
  *
- * The curriculum, certification and ambassador halves of §8.3 are absent, and
- * that is a scope decision rather than an oversight:
+ * Curriculum READ is a separate pure module (`curriculum/catalog.ts`) wired on
+ * the router — not on this class. Progress, certifications and ambassador pay
+ * remain absent on purpose:
  *
- *   · CURRICULUM is `academy.curriculum` on the tracker — "DERIV//DESK library
- *     import, 20 playbooks + 3 workbooks". The engine without the library is a
- *     path with nothing in it, and the library is the work.
- *   · CERTIFICATIONS need that curriculum to certify against.
+ *   · FULL DERIV//DESK library (20 playbooks + 3 workbooks) is residual —
+ *     proprietary content is not in this monorepo; the thin spine is platform-
+ *     native so the list + content path is real rather than empty.
+ *   · CERTIFICATIONS need progress tracking against that curriculum.
  *   · AMBASSADOR PAY and lobby subscriptions MOVE VALUE. They need ledger
  *     recipes that do not exist, and a half-built pay path is worse than an
  *     absent one.

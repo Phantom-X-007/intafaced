@@ -3,23 +3,27 @@ import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
+import { getCurriculumItem, listCurriculum } from './curriculum/catalog.js';
 
 /**
- * svc-academy's API — lobbies (§8.3, §XIII).
+ * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
  *
  * ── Authorisation, stated once ──────────────────────────────────────────────
  *
- * A SEAT is the only thing this service grants, and it grants it to
- * `ctx.principal.userId` and nobody else. No procedure takes a userId from the
- * input except `invite`, where naming someone else IS the operation — and that
- * one is host-only, so the caller must already own the room they are inviting
- * into.
+ * A SEAT is the only thing this service grants on the lobby surface, and it
+ * grants it to `ctx.principal.userId` and nobody else. No procedure takes a
+ * userId from the input except `invite`, where naming someone else IS the
+ * operation — and that one is host-only, so the caller must already own the
+ * room they are inviting into.
  *
  * Host-side procedures take the same principal and let the service compare it
  * against the room's or session's `host_id`. Whether an account may open a room
  * in the FIRST place is not a scope question at all: it is §4.1's
  * `lobbyHostRights` perk, read from svc-identity at `createRoom`. See
  * host-rights.ts for why the scope could not carry that.
+ *
+ * Curriculum procedures are read-only catalog lookups. They take no userId and
+ * write no progress — certification and XP are a later feature.
  *
  * `academy` is `minTier: 'none'` in the jurisdiction matrix (nothing custodial
  * happens here), so `{ module: 'academy' }` is doing region work, not
@@ -33,6 +37,9 @@ const amountString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are unsigne
 const roomKind = z.enum(['general', 'futures', 'options', 'meme_war_room', 'forex', 'defi_lab', 'merchant_clinic']);
 const roomAccess = z.enum(['free', 'staked', 'invite']);
 const sessionStatus = z.enum(['scheduled', 'live', 'ended', 'cancelled']);
+/** Matches Blueprint `curriculumPath` — the only paths the catalog knows. */
+const curriculumPath = z.enum(['foundations', 'markets', 'builder', 'sovereign']);
+const curriculumKind = z.enum(['playbook', 'workbook', 'lesson']);
 
 const roomOut = z.object({
   id: z.string().uuid(),
@@ -58,6 +65,19 @@ const sessionOut = z.object({
   scene: z.record(z.unknown()),
 });
 
+const curriculumSummaryOut = z.object({
+  slug: z.string(),
+  title: z.string(),
+  kind: curriculumKind,
+  path: curriculumPath,
+  order: z.number().int(),
+  summary: z.string(),
+});
+
+const curriculumItemOut = curriculumSummaryOut.extend({
+  body: z.string(),
+});
+
 const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room, minStake: formatAmount(room.minStake) });
 
 /**
@@ -76,6 +96,7 @@ function toTrpcError(err: unknown): TRPCError {
   switch (err.code) {
     case 'academy.room_not_found':
     case 'academy.session_not_found':
+    case 'academy.curriculum_not_found':
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
 
     case 'academy.not_host':
@@ -112,6 +133,35 @@ export function createAcademyRouter(academy: AcademyService) {
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-academy') }))
       .query(() => ({ ok: true, service: 'svc-academy' as const })),
+
+    // ── Curriculum (thin catalog — A-P5-2) ───────────────────────────────────
+    //
+    // Pure in-process spine. No progress write, no XP, no money. Full
+    // proprietary library import is residual (see curriculum/catalog.ts).
+
+    curriculum: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ path: curriculumPath.optional(), kind: curriculumKind.optional() }).optional())
+      .output(z.array(curriculumSummaryOut))
+      .query(({ input }) => listCurriculum({ ...(input?.path ? { path: input.path } : {}), ...(input?.kind ? { kind: input.kind } : {}) })),
+
+    /**
+     * One curriculum item including markdown body.
+     *
+     * Unknown slug → `academy.curriculum_not_found` (NOT_FOUND). We do not
+     * invent titles for the residual DERIV//DESK library that is not in-repo.
+     */
+    curriculumItem: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ slug: z.string().min(1).max(120) }))
+      .output(curriculumItemOut)
+      .query(({ input }) =>
+        guard(async () => {
+          const item = getCurriculumItem(input.slug);
+          if (!item) {
+            throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
+          }
+          return item;
+        }),
+      ),
 
     // ── Lobbies ──────────────────────────────────────────────────────────────
 

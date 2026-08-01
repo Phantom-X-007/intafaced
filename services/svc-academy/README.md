@@ -1,19 +1,20 @@
 # svc-academy
 
-**Live lobbies with capacity tiers (§8.3, §XIII).** Rooms gated free / staked / invite, sessions inside them, presence, and a serializable 2D scene.
+**Live lobbies with capacity tiers (§8.3, §XIII)** plus a **thin curriculum catalog** (list + content path). Rooms gated free / staked / invite, sessions inside them, presence, a serializable 2D scene, and Blueprint-path playbooks/lessons.
 
 > §8.3: _"Lobbies: rooms (capacity tiers: free/staked/invite), stage + chat + shared charts via ws-gateway; streaming ingest v1 = LiveKit self-hosted (WebRTC SFU, self-hosted per sovereignty; behind `StreamProvider` interface)."_
 
-**Scope of this PR — `academy.lobbies` only.** Rooms and their access terms, invitations, sessions, seating and presence, the scene canvas, and the `StreamProvider` seam.
+**Shipped here.** Lobbies (`academy.lobbies`) and thin curriculum READ (`curriculum` + `curriculumItem` — A-P5-2).
 
-**Deliberately not started here**, each for a stated reason:
+**Deliberately not finished here**, each for a stated reason:
 
-| Absent                                         | Why                                                                                                                                                                    |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live audio/video                               | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                                           |
-| Curriculum, workbooks, certifications          | `academy.curriculum` is the DERIV//DESK import (20 playbooks + 3 workbooks). The engine without the library is a path with nothing in it, and the library is the work. |
-| Ambassador residencies and per-session IFC pay | **Money.** Needs ledger recipes that do not exist. A stubbed pay path that looks finished is worse than an honest gap.                                                 |
-| Tournaments, seasonal ladders, prize pools     | Money again, and gated on the season engine.                                                                                                                           |
+| Absent                                                | Why                                                                                                                                               |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Live audio/video                                      | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                      |
+| Full DERIV//DESK library (20 playbooks + 3 workbooks) | Proprietary library is **not in this monorepo**. Day-one spine is platform-native seed so the API is real; full import is residual, not invented. |
+| Progress, certifications, XP                          | Need `academy.certs` + identity rank. Catalog is read-only — no completion write.                                                                 |
+| Ambassador residencies and per-session IFC pay        | **Money.** Needs ledger recipes that do not exist. A stubbed pay path that looks finished is worse than an honest gap.                            |
+| Tournaments, seasonal ladders, prize pools            | Money again, and gated on the season engine.                                                                                                      |
 
 ---
 
@@ -79,6 +80,8 @@ tRPC, mounted at `/trpc`, reached through svc-edge at `/api/academy` (port 4016)
 | Procedure                     | Scope           | Purpose                                                     |
 | ----------------------------- | --------------- | ----------------------------------------------------------- |
 | `health`                      | public          | Liveness                                                    |
+| `curriculum`                  | `academy:read`  | List day-one spine (filter by Blueprint path / kind)        |
+| `curriculumItem`              | `academy:read`  | One playbook/lesson/workbook including markdown body        |
 | `rooms` / `room`              | `academy:read`  | Lobbies and their terms                                     |
 | `session`                     | `academy:read`  | One session and its live occupancy                          |
 | `join` / `leave`              | `academy:write` | Take or vacate a seat                                       |
@@ -88,6 +91,13 @@ tRPC, mounted at `/trpc`, reached through svc-edge at `/api/academy` (port 4016)
 | `scheduleSession`             | `academy:write` | Schedule a session in a room (host only)                    |
 | `startSession` / `endSession` | `academy:write` | Host controls                                               |
 | `updateScene`                 | `academy:write` | Write the 2D scene (host only)                              |
+
+### Curriculum (thin)
+
+- Paths are exactly Blueprint `curriculumPath`: `foundations` · `markets` · `builder` · `sovereign`.
+- Kinds: `playbook` · `workbook` · `lesson`.
+- Pure in-process catalog (`src/curriculum/catalog.ts`) — no DB table, no progress, no money.
+- Unknown slug → `academy.curriculum_not_found` (NOT_FOUND).
 
 A seat belongs to `ctx.principal.userId`. **No procedure takes a userId from the input except `invite`**, where naming somebody else _is_ the operation — and that one is host-only, so the caller must already own the room. The scene is written **whole** by the host, not merged per attendee: merging would need a conflict model this does not have, and half a merge is a room that renders differently for different people.
 
@@ -119,8 +129,9 @@ That is the answer to the question this codebase asks everywhere — _if the pro
 | `src/access/room-access.test.ts` | The seating rule: every access tier, the ordering of refusals, host bypass, invite expiry |
 | `src/host-rights.test.ts`        | The §4.1 hosting perk, and that every unreadable answer refuses                           |
 | `src/stream/provider.test.ts`    | That no fabricated join credential can leave the module                                   |
-| `src/router.mount.test.ts`       | The mount boundary, scope enforcement, and that the surface is real rather than 404       |
+| `src/curriculum/catalog.test.ts` | Day-one spine non-empty, path/kind filters, content body, unknown slug null               |
+| `src/router.mount.test.ts`       | The mount boundary, scope enforcement, curriculum surface, real rather than 404           |
 
-All four are pure and need **no database** — none opens a connection, and none points at the shared `intafaced` instance.
+All five are pure and need **no database** — none opens a connection, and none points at the shared `intafaced` instance.
 
 The service's SQL paths are exercised through the fleet's e2e suite rather than a per-service Postgres harness: this service holds no value, and its failure mode is an empty room rather than a lost balance, so the harness cost is better spent on services that move money. The one SQL path that would repay a harness is the capacity race under `FOR UPDATE`, and that is the honest gap in this suite.
