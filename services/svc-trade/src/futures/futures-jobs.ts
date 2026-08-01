@@ -3,6 +3,10 @@
  *
  * Wires loaders + stores + marks/rates + ticks into JobHost.
  * Default OFF — ops must enable. Never invents marks, rates, or market lists.
+ *
+ * Marks: matching depth mid by default. When a venue fabric MarkSource is
+ * injected (A-TRADE-VENUE-1), that public mid is preferred; depth remains the
+ * fallback. Either path returns null rather than inventing.
  */
 import type { Sql } from 'postgres';
 import type { LedgerClient } from '@intafaced/ledger-client';
@@ -10,8 +14,9 @@ import type { EventBus } from '@intafaced/events';
 import type { MatchingClient } from '../spot/matching-client.js';
 import { createJobHost, type JobHost } from './job-host.js';
 import { runFundingTick } from './funding-tick.js';
-import { runLiquidationTick } from './liquidation-tick.js';
+import { runLiquidationTick, type MarkSource } from './liquidation-tick.js';
 import { markSourceFromDepth } from './mark-from-depth.js';
+import { markSourcePrefer } from './mark-from-venue.js';
 import { memoryFundingRateBook, type FundingRateEntry } from './funding-rate-source.js';
 import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
 import { sqlFundingPeriodStore, sqlLiquidationAttemptStore, sqlPositionCloser } from './tick-stores.js';
@@ -37,6 +42,11 @@ export interface FuturesJobsDeps {
   bus: EventBus | null;
   config: FuturesJobsConfig;
   /**
+   * Optional venue-fabric (or other external) mark source.
+   * When set, preferred over matching depth mid. Null marks stay null.
+   */
+  venueMarkSource?: MarkSource | null;
+  /**
    * Optional external rate publisher hook for tests.
    * Production ops publishes into memoryFundingRateBook via a real oracle later.
    */
@@ -51,12 +61,18 @@ export interface FuturesJobsHandle {
   publishFundingRate: (entry: FundingRateEntry) => void;
   /** Peek published rate for a market — null if none/stale (never invent). */
   getPublishedRate: (marketId: string) => FundingRateEntry | null;
+  /**
+   * Mark for a market from the same source liquidation uses
+   * (venue fabric preferred, then matching depth mid). Null when unknown.
+   * Available even when jobs are disabled so public REST can serve mark honestly.
+   */
+  markPrice: (marketId: string, at?: Date) => Promise<string | null>;
   stop(): void;
 }
 
 /**
  * Assemble futures jobs. Does not invent markets or rates.
- * When disabled, returns a stopped host (list empty).
+ * When disabled, returns a stopped host (list empty) but still exposes markPrice.
  */
 export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
   const host = createJobHost({ onError: deps.onError });
@@ -69,16 +85,22 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
 
   const getPublishedRate = (marketId: string) => rates.peek(marketId);
 
+  // Mark path always assembled — public REST + liq share one non-inventing port.
+  const depthMarks = markSourceFromDepth((marketId) => deps.matching.depth(marketId));
+  const marks: MarkSource = deps.venueMarkSource ? markSourcePrefer(deps.venueMarkSource, depthMarks) : depthMarks;
+
+  const markPrice = async (marketId: string, at?: Date) => marks.markPrice({ marketId, at: at ?? (deps.now ? deps.now() : new Date()) });
+
   if (!deps.config.enabled) {
     return {
       host,
       publishFundingRate,
       getPublishedRate,
+      markPrice,
       stop: () => host.stopAll(),
     };
   }
 
-  const marks = markSourceFromDepth((marketId) => deps.matching.depth(marketId));
   const liqLoader = sqlLiquidationPositionLoader(deps.sql);
   const attempts = sqlLiquidationAttemptStore(deps.sql);
   const closer = sqlPositionCloser(deps.sql, deps.bus);
@@ -116,6 +138,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
     host,
     publishFundingRate,
     getPublishedRate,
+    markPrice,
     stop: () => host.stopAll(),
   };
 }

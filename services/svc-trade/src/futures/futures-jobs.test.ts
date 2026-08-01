@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseFundingMarketIds, startFuturesJobs } from './futures-jobs.js';
+import type { MarkSource } from './liquidation-tick.js';
 
 describe('parseFundingMarketIds', () => {
   it('empty → no invent list', () => {
@@ -62,5 +63,54 @@ describe('startFuturesJobs', () => {
     handle.stop();
     expect(handle.host.list()).toEqual([]);
     void timers;
+  });
+
+  it('markPrice prefers venue fabric over matching depth', async () => {
+    const venue: MarkSource = {
+      markPrice: async ({ marketId }) => (marketId === 'm1' ? '50000' : null),
+    };
+    const depth = vi.fn(async () => ({
+      bids: [['99', '1']],
+      asks: [['101', '1']],
+      sequence: 1,
+    }));
+    const handle = startFuturesJobs({
+      sql: {} as never,
+      ledger: { post: vi.fn() },
+      matching: { depth } as never,
+      bus: null,
+      venueMarkSource: venue,
+      config: {
+        enabled: false,
+        liqIntervalMs: 1000,
+        fundingIntervalMs: 1000,
+        fundingMarketIds: [],
+      },
+    });
+    expect(await handle.markPrice('m1')).toBe('50000');
+    expect(depth).not.toHaveBeenCalled();
+    // Unmapped on venue → depth fallback mid
+    expect(await handle.markPrice('m2')).toBe('100');
+    expect(depth).toHaveBeenCalled();
+    handle.stop();
+  });
+
+  it('markPrice null when no venue and empty depth (never invent)', async () => {
+    const handle = startFuturesJobs({
+      sql: {} as never,
+      ledger: { post: vi.fn() },
+      matching: {
+        depth: async () => ({ bids: [], asks: [], sequence: 0 }),
+      } as never,
+      bus: null,
+      config: {
+        enabled: false,
+        liqIntervalMs: 1000,
+        fundingIntervalMs: 1000,
+        fundingMarketIds: [],
+      },
+    });
+    expect(await handle.markPrice('m1')).toBeNull();
+    handle.stop();
   });
 });
