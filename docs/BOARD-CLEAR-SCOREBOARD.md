@@ -16,24 +16,24 @@
 
 ## Board (must all become Done or Cut)
 
-| Row                              | Status   | Owner                    | Reality                                                      | Next ship           | Proof                  |
-| -------------------------------- | -------- | ------------------------ | ------------------------------------------------------------ | ------------------- | ---------------------- |
-| web.terminal                     | **WIP**  | **AGENT P-UI**           | Hotkeys A-UI-1 on main (#337); sub-accounts/honesty residual | A-UI-2/3            | #337                   |
-| ws.gateway                       | **WIP**  | **AGENT P-WS**           | A-WS-1 private harden on main (#336); B-WS-2 E2E residual    | B-WS-2              | #336                   |
+| Row                              | Status   | Owner                    | Reality                                                                       | Next ship           | Proof                  |
+| -------------------------------- | -------- | ------------------------ | ----------------------------------------------------------------------------- | ------------------- | ---------------------- |
+| web.terminal                     | **WIP**  | **AGENT P-UI**           | Hotkeys A-UI-1 on main (#337); sub-accounts/honesty residual                  | A-UI-2/3            | #337                   |
+| ws.gateway                       | **WIP**  | **AGENT P-WS**           | A-WS-1 private harden on main (#336); B-WS-2 E2E residual                     | B-WS-2              | #336                   |
 | pay.gateway (+ pay.* expand)     | **WIP**  | **HUMAN M1 shehzad002**  | gateway Done bar shipping (card sandbox + KYB stub + list); expand pay.* next | M1 Pay OS           | feat/pay-os-m1-gateway |
-| protocol.smart-accounts          | **OPEN** | **HUMAN M2 shehzad002**  | Code ready; deploy + audit package                           | M2 Protocol OS      | —                      |
-| protocol.amm (+ lending/escrow…) | **OPEN** | **HUMAN M2 shehzad002**  | Compile unblocked; suite after SA                            | M2 Protocol OS      | —                      |
-| trade.spot                       | **OPEN** | **AGENT P-TRADE-LIGHT**  | REST solid; OHLCV empty-honest                               | A-TRADE-SPOT-1      | —                      |
-| trade.futures                    | **OPEN** | **HUMAN M3 shehzad002**  | Jobs OFF residual; **risk engine**                           | M3 Derivatives risk | —                      |
-| trade.mm-bot                     | **WIP**  | **AGENT P-TRADE-LIGHT**  | Recovery A-TRADE-MM-1 on main (#338); reseed #340 in CI      | A-TRADE-MM-2/3      | #338                   |
-| trade.otc                        | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                | M4 Desk engines     | —                      |
-| trade.copy                       | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                | M4 Desk engines     | —                      |
-| trade.algo                       | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                | M4 Desk engines     | —                      |
-| venue.aggregation                | **OPEN** | **AGENT P-TRADE-LIGHT**  | Fabric exists; not mounted                                   | A-TRADE-VENUE-1     | —                      |
-| order-route #289                 | **DONE** | **AGENT P-OR** → M7 open | #289 merged A-OR-1 (`e29748f`)                               | complete            | #289                   |
-| Phase 5 bank money               | **OPEN** | **HUMAN M6 shehzad002**  | earn/cards/ramps/sovereign-card                              | M6 Bank money       | —                      |
-| Phase 5 academy/ops/agents       | **OPEN** | **AGENT P-P5-LIGHT**     | thin or §13                                                  | A-P5-2..3           | —                      |
-| identity sub-account money       | **OPEN** | **HUMAN M5 shehzad002**  | money graph / no cross-leak                                  | M5 Identity money   | —                      |
+| protocol.smart-accounts          | **OPEN** | **HUMAN M2 shehzad002**  | Code ready; deploy + audit package                                            | M2 Protocol OS      | —                      |
+| protocol.amm (+ lending/escrow…) | **OPEN** | **HUMAN M2 shehzad002**  | Compile unblocked; suite after SA                                             | M2 Protocol OS      | —                      |
+| trade.spot                       | **OPEN** | **AGENT P-TRADE-LIGHT**  | REST solid; OHLCV empty-honest                                                | A-TRADE-SPOT-1      | —                      |
+| trade.futures                    | **OPEN** | **HUMAN M3 shehzad002**  | Jobs OFF residual; **risk engine**                                            | M3 Derivatives risk | —                      |
+| trade.mm-bot                     | **WIP**  | **AGENT P-TRADE-LIGHT**  | Recovery A-TRADE-MM-1 on main (#338); reseed #340 in CI                       | A-TRADE-MM-2/3      | #338                   |
+| trade.otc                        | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                                 | M4 Desk engines     | —                      |
+| trade.copy                       | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                                 | M4 Desk engines     | —                      |
+| trade.algo                       | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                                 | M4 Desk engines     | —                      |
+| venue.aggregation                | **OPEN** | **AGENT P-TRADE-LIGHT**  | Fabric exists; not mounted                                                    | A-TRADE-VENUE-1     | —                      |
+| order-route #289                 | **DONE** | **AGENT P-OR** → M7 open | #289 merged A-OR-1 (`e29748f`)                                                | complete            | #289                   |
+| Phase 5 bank money               | **OPEN** | **HUMAN M6 shehzad002**  | earn/cards/ramps/sovereign-card                                               | M6 Bank money       | —                      |
+| Phase 5 academy/ops/agents       | **OPEN** | **AGENT P-P5-LIGHT**     | thin or §13                                                                   | A-P5-2..3           | —                      |
+| identity sub-account money       | **OPEN** | **HUMAN M5 shehzad002**  | money graph / no cross-leak                                                   | M5 Identity money   | —                      |
 
 Status vocabulary: `OPEN` | `WIP` | `DONE` | `CUT` (§13)
 
