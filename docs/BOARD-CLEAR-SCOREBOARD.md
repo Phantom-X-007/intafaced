@@ -6,8 +6,8 @@
 **Update rule:** same turn as every merge that moves a row.  
 **Tip check:** `git log origin/main -1 --oneline`
 
-**Campaign status:** `SPEC LIVE` — constitution/plan landing; execution not finished  
-**Last scoreboard edit:** 2026-08-01 `[ASSUMED until main tip re-checked after merge]`
+**Campaign status:** `PROCESS READY — awaiting GO` (unspoken needs + process loops + enhanced paste landed)  
+**Last scoreboard edit:** 2026-08-01 · after GO → `RUNNING` · when all rows Done/Cut → `COMPLETE`
 
 ---
 
