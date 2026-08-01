@@ -77,14 +77,55 @@ describe('PrivateOrderHub', () => {
     expect(bob.sent).toHaveLength(0);
   });
 
-  it('refuses attach when at capacity', () => {
+  it('refuses attach when at capacity (null detach — no subscription)', () => {
     const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 1 });
     const first = sink();
     const second = sink();
-    hub.attach('user-a', first);
-    hub.attach('user-b', second);
+    const d1 = hub.attach('user-a', first);
+    const d2 = hub.attach('user-b', second);
+    expect(d1).not.toBeNull();
+    expect(d2).toBeNull();
     expect(second.closed?.code).toBe(1013);
     expect(hub.connections).toBe(1);
+  });
+
+  it('reconnect after detach gets no replay of past orders (push-only)', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const first = sink();
+    const detach = hub.attach('user-a', first);
+    hub.publish(update('user-a', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
+    expect(first.sent).toHaveLength(1);
+    detach!();
+
+    const second = sink();
+    hub.attach('user-a', second);
+    expect(second.sent).toHaveLength(0);
+
+    hub.publish(update('user-a', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'));
+    expect(second.sent).toHaveLength(1);
+    expect(JSON.parse(second.sent[0]!).orderId).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+  });
+
+  it('evicts a lagging order subscriber without inventing fills', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10 });
+    const lagging = {
+      sent: [] as string[],
+      get bufferedBytes() {
+        return 100;
+      },
+      send() {
+        throw new Error('should not send while lagging');
+      },
+      closed: null as { code: number; reason: string } | null,
+      close(code: number, reason: string) {
+        this.closed = { code, reason };
+      },
+    };
+    hub.attach('user-a', lagging);
+    hub.publish(update('user-a'));
+    hub.publish(update('user-a'));
+    expect(lagging.closed?.code).toBe(1008);
+    expect(lagging.sent).toHaveLength(0);
   });
 
   it('fans positions only to the owning user on channel positions', () => {

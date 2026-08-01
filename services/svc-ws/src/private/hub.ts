@@ -103,10 +103,16 @@ export class PrivateOrderHub {
     };
   }
 
-  attach(userId: string, sink: PrivateSink): () => void {
+  /**
+   * Register a sink for `userId`. Returns a detach function, or `null` when the
+   * hub is at capacity (sink is closed with 1013 before return). Callers must
+   * not send ready frames after a null — that would claim a subscription the
+   * hub never held.
+   */
+  attach(userId: string, sink: PrivateSink): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
       sink.close(CLOSE_TRY_LATER, 'private gateway at capacity');
-      return () => undefined;
+      return null;
     }
 
     const sub: Subscription = { userId, sink, lagTicks: 0, closed: false };
