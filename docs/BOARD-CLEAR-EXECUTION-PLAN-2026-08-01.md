@@ -8,32 +8,38 @@
 
 ## 0. Programs (parallel ownership)
 
-| Program ID  | Board rows                                    | Worktree prefix                                         | Collision ban                               |
-| ----------- | --------------------------------------------- | ------------------------------------------------------- | ------------------------------------------- |
-| **P-UI**    | web.terminal                                  | `feat/ui-` `feat/web-`                                  | **vendor/** shell :8090 — not apps/web      |
-| **P-WS**    | ws.gateway                                    | `feat/ws-`                                              | services/svc-ws (or actual ws package)      |
-| **P-PAY**   | pay.gateway                                   | `feat/pay-`                                             | services/svc-pay, pay recipes               |
-| **P-PROT**  | smart-accounts, amm                           | `feat/protocol-`                                        | services/svc-protocol, contracts            |
-| **P-TRADE** | spot, futures, mm-bot, otc, copy, algo, venue | `feat/trade-`                                           | services/svc-trade, matching only if needed |
-| **P-OR**    | order-route #289                              | existing order-route branch / `feat/order-route-`       | order-route docs+code only                  |
-| **P-P5**    | bank, academy, ops, agents                    | `feat/bank-` `feat/academy-` `feat/ops-` `feat/agents-` | respective services                         |
-| **P-TRACK** | scoreboard/tracker                            | `chore/tracker-` `docs/board-`                          | docs + tracker only                         |
+**Human hard lock (2026-08-01):** `@shehzad002` — full ship list in [`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md). Agents **babysit only** on H-\* programs.
 
-Orchestrator may run **one agent per program** (or more if sub-sliced with non-overlapping paths).
+| Program ID         | Board rows                                      | Owner            | Worktree prefix                                   | Collision ban                                      |
+| ------------------ | ----------------------------------------------- | ---------------- | ------------------------------------------------- | -------------------------------------------------- |
+| **P-UI**           | web.terminal                                    | **AGENT**        | `feat/ui-` `feat/app-`                            | **vendor/** shell :8090 — not apps/web             |
+| **P-WS**           | ws.gateway                                      | **AGENT**        | `feat/ws-`                                        | invent futures events                              |
+| **H-PAY**          | pay.gateway (card)                              | **shehzad002**   | `feat/pay-`                                       | agent card/merchant money PRs                      |
+| **H-PROT**         | smart-accounts, amm                             | **shehzad002**   | `feat/protocol-`                                  | agent SA/AMM Done ships                            |
+| **P-TRADE-LIGHT**  | spot OHLCV, mm residual, venue                  | **AGENT**        | `feat/trade-mm-` `feat/trade-spot-` `feat/venue-` | futures risk / otc / copy / algo                   |
+| **H-TRADE-HARD**   | futures risk, otc, copy, algo                   | **shehzad002**   | `feat/trade-fut-` `feat/trade-otc-` …             | agent product invent                               |
+| **P-OR**           | order-route #289 rebase                         | **AGENT**        | `feat/order-route-`                               | leave orphan; dual-edit human                      |
+| **H-OR-JAVA**      | dual-book residual after #289                   | **shehzad002**   | after A-OR-1                                      | start before #289 closed                           |
+| **H-P5-MONEY**     | bank earn/cards/ramps                           | **shehzad002**   | `feat/bank-`                                      | agent bank money                                   |
+| **P-P5-LIGHT**     | academy, ops, agents                            | **AGENT**        | `feat/academy-` `feat/ops-` `feat/agents-`        | bank money                                         |
+| **H-ID-SUB**       | identity sub-account money routing              | **shehzad002**   | `feat/identity-sub-`                              | agent invent money routing                         |
+| **P-TRACK**        | scoreboard/tracker                              | **AGENT**        | `chore/tracker-` `docs/board-`                    | lie on Done                                        |
+
+Orchestrator may run **one agent per AGENT program** (or more if non-overlapping). **Never** spawn implementers for H-\* while HUMAN-CLAIMED.
 
 ---
 
 ## 1. Dependency graph (hard)
 
 ```
-P-PROT smart-accounts ──► P-PROT amm
-P-TRADE futures/mm events ──► P-WS E2E
-P-TRADE spot money ──► P-UI trade actions truth
-P-PAY card recipes ──► P-PAY REST/UI hooks
-P-OR may touch matching/trade docs — coordinate with P-TRADE via contracts first
+H-PROT smart-accounts (shehzad) ──► H-PROT amm (shehzad)
+H-TRADE-HARD futures events (shehzad) ──► P-WS E2E (agent)
+P-TRADE-LIGHT / spot money ──► P-UI trade actions truth (agent)
+H-PAY card (shehzad) ──► optional P-UI pay surfaces (agent, after APIs)
+P-OR #289 (agent) ──► H-OR-JAVA residual (shehzad)
 ```
 
-Everything else is **Wave A parallel**.
+Agent Wave A parallel on AGENT programs only. Human runs H-\* on his schedule.
 
 ---
 
@@ -53,39 +59,27 @@ Everything else is **Wave A parallel**.
 | A-UI-1          | P-UI    | Hotkeys + order ticket keyboard path                          | tests / e2e / manual script in PR |
 | A-UI-2          | P-UI    | Sub-accounts selector wired or §13                            | PR                                |
 | A-UI-3          | P-UI    | Honesty pass: empty book, errors, envelope                    | PR                                |
-| A-PAY-1         | P-PAY   | Card domain model + ledger recipes (sandbox)                  | ledger tests                      |
-| A-PAY-2         | P-PAY   | Card provider port + sandbox adapter                          | unit + contract tests             |
-| A-PAY-3         | P-PAY   | Capture/settle/refund money path + REST                       | CI                                |
-| A-PAY-4         | P-PAY   | Merchant onboarding minimum                                   | CI                                |
-| A-PROT-1        | P-PROT  | Smart-accounts anvil proof suite hardened                     | forge/anvil                       |
-| A-PROT-2        | P-PROT  | Deploy script + runbook + deploy to env                       | log artifact                      |
-| A-PROT-3        | P-PROT  | Adversarial audit package SA                                  | docs/audit                        |
-| A-TRADE-MM-1    | P-TRADE | orderFilled makerAccountId + MM recovery                      | tests                             |
-| A-TRADE-MM-2    | P-TRADE | Cancel/reseed lifecycle                                       | tests                             |
-| A-TRADE-MM-3    | P-TRADE | Mid oracle port (config + optional venue)                     | tests                             |
-| A-TRADE-FUT-1   | P-TRADE | Mark/index multi-source non-invent                            | tests                             |
-| A-TRADE-FUT-2   | P-TRADE | Jobs enable path + ops doc                                    | CI                                |
-| A-TRADE-SPOT-1  | P-TRADE | Candle aggregation job or honest pipeline                     | tests                             |
-| A-TRADE-VENUE-1 | P-TRADE | Mount venue fabric into mark or public path                   | tests                             |
-| A-TRADE-OTC-1   | P-TRADE | Thin OTC or §13 research+socket                               | PR                                |
-| A-TRADE-COPY-1  | P-TRADE | Thin copy or §13                                              | PR                                |
-| A-TRADE-ALGO-1  | P-TRADE | Thin algo or §13                                              | PR                                |
-| A-OR-1          | P-OR    | **#289 rebase onto main** (was CONFLICTING) then merge/absorb | green merged or closed            |
-| A-P5-1          | P-P5    | Bank earn thin slice or §13                                   | PR                                |
-| A-P5-2          | P-P5    | Academy thin slice or §13                                     | PR                                |
-| A-P5-3          | P-P5    | Ops surface + agents usefulness or §13                        | PR                                |
-| A-WS-1          | P-WS    | Harden private channels + tests (may mock trade until B)      | CI                                |
+| A-TRADE-MM-1    | P-TRADE-LIGHT | orderFilled makerAccountId + MM recovery                 | tests                             |
+| A-TRADE-MM-2    | P-TRADE-LIGHT | Cancel/reseed lifecycle                                  | tests                             |
+| A-TRADE-MM-3    | P-TRADE-LIGHT | Mid oracle port (config + optional venue)                | tests                             |
+| A-TRADE-SPOT-1  | P-TRADE-LIGHT | Candle aggregation job or honest pipeline                | tests                             |
+| A-TRADE-VENUE-1 | P-TRADE-LIGHT | Mount venue fabric into mark or public path              | tests                             |
+| A-OR-1          | P-OR          | **#289 rebase onto main** then merge/absorb              | green merged or closed            |
+| A-P5-2          | P-P5-LIGHT    | Academy thin slice or §13                                | PR                                |
+| A-P5-3          | P-P5-LIGHT    | Ops surface + agents usefulness or §13                   | PR                                |
+| A-WS-1          | P-WS          | Harden private channels + tests (may mock until B)       | CI                                |
+| —               | **H-\***      | **All PAY / PROT / FUT risk / OTC / COPY / ALGO / BANK money / ID-SUB** | **shehzad002 only** — see SHEHZAD-HARD-OWNERSHIP |
 
 ### Wave B — integrate
 
 | Ship ID  | Depends               | Deliverable                                      |
 | -------- | --------------------- | ------------------------------------------------ |
-| B-WS-2   | A-TRADE-FUT/MM events | Real futures position stream E2E                 |
-| B-UI-4   | A-TRADE + A-WS        | Terminal consumes live WS where available        |
-| B-PROT-4 | A-PROT-1..3           | AMM deploy + mint/swap proof + audit package     |
-| B-PAY-5  | A-PAY-*               | pay.gateway tracker Done criteria met            |
-| B-OR-2   | A-OR-1                | Order-route closed or absorbed                   |
-| B-SCORE  | all                   | Tracker Done/Cut for every row; scoreboard final |
+| B-WS-2   | shehzad FUT events + A-WS | Real futures position stream E2E (agent fan-out) |
+| B-UI-4   | A-UI + A-WS               | Terminal consumes live WS where available        |
+| B-PROT-4 | **shehzad** PROT-\*       | AMM Done — human only                            |
+| B-PAY-5  | **shehzad** PAY-\*        | pay.gateway Done — human only                    |
+| B-OR-2   | A-OR-1                    | Order-route #289 closed (agent); ORJ optional human |
+| B-SCORE  | all                       | Tracker Done/Cut; human rows need his proof      |
 
 ### Wave C — closeout
 
@@ -111,43 +105,31 @@ Everything else is **Wave A parallel**.
 **Ships:** subscription auth, backfill policy, position fan-out E2E.  
 **Done proof:** integration test with trade publishing events.
 
-### 3.3 P-PAY
+### 3.3 H-PAY (**shehzad002 only**)
 
-**Research:** existing pay recipes, merchant.create honesty, rails live crypto.  
-**Ships:** card adapter interface; sandbox Stripe-or-equivalent **only if already allowed by doctrine** — if doctrine forbids named vendor in UI, vendor stays in adapter not copy.  
-**Money:** hold → capture → settle → refund recipes with failure tests.  
-**Done proof:** recipe tests + service tests; tracker pay.gateway done.
+**Full ship list:** `SHEHZAD-HARD-OWNERSHIP` PAY-01…11.  
+**Agents:** babysit PRs only — do not implement card recipes.
 
-### 3.4 P-PROT
+### 3.4 H-PROT (**shehzad002 only**)
 
-**Research:** svc-protocol README, forge tests, factory addresses.  
-**Ships:** SA deploy + audit package → AMM mint/swap + audit.  
-**Done proof:** anvil log + audit md + tracker done.
+**Full ship list:** PROT-01…09.  
+**Agents:** babysit only.
 
-### 3.5 P-TRADE
+### 3.5 Trade split
 
-**Research:** residual high-water, mm-bot research, futures jobs env.  
-**Priority order inside trade:**
+**P-TRADE-LIGHT (agent):** mm-bot recovery/reseed/mid residual; spot OHLCV; venue mount.  
+**H-TRADE-HARD (shehzad002):** futures **risk** FUT-01…08; real OTC/copy/algo engines.  
+**Agents must not** “thin stub” OTC/copy/algo to mark Done if human owns real engines — leave OPEN until he ships or §13.
 
-1. mm-bot recovery + reseed + mid port (unlocks books)
-2. futures mark/index + jobs ops
-3. spot candles
-4. venue mount
-5. otc/copy/algo thin or §13
+### 3.6 P-OR (agent) then H-OR-JAVA (shehzad)
 
-**Done proof:** each sub-feature tracker note → done when bar met.
+**Agent:** rebase/merge #289.  
+**Human after:** Java dual-book residual ORJ-\*.
 
-### 3.6 P-OR
+### 3.7 Phase 5 split
 
-**Research:** open PR #289 state, CI, conflicts with main.  
-**Ships:** green merge or split into claimable residuals with constitution acknowledgment.  
-**Ban:** infinite open PR.
-
-### 3.7 P-P5
-
-**Research:** tracker Phase 5 rows, doctrine phase gates.  
-**Ships:** one vertical slice per area **or** §13 with why not now.  
-**Ban:** marking whole Phase 5 done without slices.
+**H-P5-MONEY (shehzad):** bank earn/cards/ramps.  
+**P-P5-LIGHT (agent):** academy / ops / agents thin or §13.
 
 ---
 
@@ -164,14 +146,15 @@ loop until scoreboard all Done|Cut:
   7. Never wait for Nitro
 ```
 
-### Priority when overloaded
+### Priority when overloaded (agent orchestrator)
 
-1. Money path correctness (pay card, trade settle, protocol deploy)
-2. web.terminal Done (visible product)
-3. ws E2E
-4. trade completeness (mm, futures, venue)
-5. order-route close
-6. Phase 5 slices
+1. #289 P-OR close
+2. web.terminal P-UI Done (visible product)
+3. P-TRADE-LIGHT (mm/spot/venue)
+4. P-WS E2E (mock until human futures events)
+5. P-P5-LIGHT academy/ops
+6. Babysit shehzad Class M PRs
+7. **Never** “help” by coding H-PAY/H-PROT/H-TRADE-HARD
 
 ---
 

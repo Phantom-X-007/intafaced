@@ -6,31 +6,33 @@
 **Update rule:** same turn as every merge that moves a row.  
 **Tip check:** `git log origin/main -1 --oneline`
 
-**Campaign status:** `MEGA-HARDENED — awaiting GO`  
-**Last scoreboard edit:** 2026-08-01 mega audit · after GO → `RUNNING` · all Done/Cut → `COMPLETE`  
-**Known dirty:** #289 CONFLICTING — P-OR rebase first-class  
-**Standards:** ENGINEERING-STANDARD + SUBAGENT-PROTOCOL binding
+**Campaign status:** `HUMAN SPLIT LOCKED — awaiting GO`  
+**Last scoreboard edit:** 2026-08-01 shehzad hard ownership · after GO → `RUNNING` · all Done/Cut → `COMPLETE`  
+**Known dirty:** #289 CONFLICTING — **P-OR agent** rebase first-class  
+**Standards:** ENGINEERING-STANDARD + SUBAGENT-PROTOCOL binding  
+**Human hard owner:** **`@shehzad002`** — full backlog `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`
 
 ---
 
 ## Board (must all become Done or Cut)
 
-| Row                             | Status   | Reality                                              | Next ship        | Proof |
-| ------------------------------- | -------- | ---------------------------------------------------- | ---------------- | ----- |
-| web.terminal                    | **OPEN** | Charts/equity on main; hotkeys/sub-accounts missing  | A-UI-1           | —     |
-| ws.gateway                      | **OPEN** | Position events partial; E2E incomplete              | A-WS-1 → B-WS-2  | —     |
-| pay.gateway                     | **OPEN** | Live crypto rails done; **card required**            | A-PAY-1          | —     |
-| protocol.smart-accounts         | **OPEN** | Code ready; need deploy + audit package              | A-PROT-1..3      | —     |
-| protocol.amm                    | **OPEN** | Compile unblocked; need deploy proof after SA        | B-PROT-4         | —     |
-| trade.spot                      | **OPEN** | REST solid; OHLCV empty-honest                       | A-TRADE-SPOT-1   | —     |
-| trade.futures                   | **OPEN** | Residual stack; jobs OFF; index residual             | A-TRADE-FUT-1..2 | —     |
-| trade.mm-bot                    | **OPEN** | Seed+hold+fill on main; recovery/reseed/mid residual | A-TRADE-MM-1..3  | —     |
-| trade.otc                       | **OPEN** | Not product                                          | A-TRADE-OTC-1    | —     |
-| trade.copy                      | **OPEN** | Not product                                          | A-TRADE-COPY-1   | —     |
-| trade.algo                      | **OPEN** | Not product                                          | A-TRADE-ALGO-1   | —     |
-| venue.aggregation               | **OPEN** | Fabric exists; not mounted                           | A-TRADE-VENUE-1  | —     |
-| order-route #289                | **OPEN** | Claimed; **CONFLICTING** vs main — rebase first      | A-OR-1           | —     |
-| Phase 5 bank/academy/ops/agents | **OPEN** | Claimable                                            | A-P5-1..3        | —     |
+| Row                             | Status   | Owner                         | Reality                                              | Next ship              | Proof |
+| ------------------------------- | -------- | ----------------------------- | ---------------------------------------------------- | ---------------------- | ----- |
+| web.terminal                    | **OPEN** | **AGENT P-UI**                | Charts/equity on main; hotkeys/sub-accounts missing  | A-UI-1                 | —     |
+| ws.gateway                      | **OPEN** | **AGENT P-WS**                | Position events partial; E2E incomplete              | A-WS-1 → B-WS-2        | —     |
+| pay.gateway                     | **OPEN** | **HUMAN shehzad002 H-PAY**    | Live crypto rails done; **card required**            | PAY-01…11              | —     |
+| protocol.smart-accounts         | **OPEN** | **HUMAN shehzad002 H-PROT**   | Code ready; need deploy + audit package              | PROT-01…05             | —     |
+| protocol.amm                    | **OPEN** | **HUMAN shehzad002 H-PROT**   | Compile unblocked; need deploy proof after SA        | PROT-06…09             | —     |
+| trade.spot                      | **OPEN** | **AGENT P-TRADE-LIGHT**       | REST solid; OHLCV empty-honest                       | A-TRADE-SPOT-1         | —     |
+| trade.futures                   | **OPEN** | **HUMAN shehzad002 H-TRADE**  | Residual stack; jobs OFF; **risk** residual          | FUT-01…08              | —     |
+| trade.mm-bot                    | **OPEN** | **AGENT P-TRADE-LIGHT**       | Seed+hold+fill on main; recovery/reseed/mid residual | A-TRADE-MM-1..3        | —     |
+| trade.otc                       | **OPEN** | **HUMAN shehzad002 H-TRADE**  | Not product — **real engine**                        | OTC-01…04              | —     |
+| trade.copy                      | **OPEN** | **HUMAN shehzad002 H-TRADE**  | Not product — **real engine**                        | COPY-01…04             | —     |
+| trade.algo                      | **OPEN** | **HUMAN shehzad002 H-TRADE**  | Not product — **real engine**                        | ALGO-01…04             | —     |
+| venue.aggregation               | **OPEN** | **AGENT P-TRADE-LIGHT**       | Fabric exists; not mounted                           | A-TRADE-VENUE-1        | —     |
+| order-route #289                | **OPEN** | **AGENT P-OR** then H-OR-JAVA | Claimed; **CONFLICTING** — agent rebase first        | A-OR-1 → ORJ-\* later  | —     |
+| Phase 5 bank money              | **OPEN** | **HUMAN shehzad002 H-P5-M**   | earn/cards/ramps                                     | BANK-01…03             | —     |
+| Phase 5 academy/ops/agents      | **OPEN** | **AGENT P-P5-LIGHT**          | thin or §13                                          | A-P5-2..3              | —     |
 
 Status vocabulary: `OPEN` | `WIP` | `DONE` | `CUT` (§13)
 
