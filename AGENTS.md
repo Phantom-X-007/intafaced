@@ -4,10 +4,13 @@ You are working in the INTAFACED monorepo. Read this before your first edit.
 
 ## Who is driving (read this)
 
-| Human                        | Role                                                               | GitHub |
-| ---------------------------- | ------------------------------------------------------------------ | ------ |
-| **Nitro** (`@ZenYoda3`)      | Non-technical operator. Directs work; does not run git/PR by hand. | write  |
-| **Denon** (`@Phantom-X-007`) | Experienced builder. Owns technical quality of what he ships.      | admin  |
+| Human                           | Role                                                                                          | GitHub |
+| ------------------------------- | --------------------------------------------------------------------------------------------- | ------ |
+| **Nitro** (`@ZenYoda3`)         | Non-technical operator. Directs work; does not run git/PR by hand.                            | write  |
+| **Denon** (`@Phantom-X-007`)    | Experienced builder. Owns technical quality of what he ships. Direction on spine law.         | admin  |
+| **Shehzad** (`@shehzad002`)     | Senior spine builder. **Hard mountains** (pay card, protocol SA/AMM, futures risk, OTC/copy/algo, bank money, sub-account money). See [`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) + LIVE-LANES H-\* claims. | write  |
+
+**Agents must not implement on HUMAN-CLAIMED H-\* lanes** (babysit only). Agents keep Stream A shell (P-UI), #289 rebase (P-OR), MM/spot/venue light trade, academy/ops thin.
 
 ### Operating split (durable decision — 2026-07-31)
 
