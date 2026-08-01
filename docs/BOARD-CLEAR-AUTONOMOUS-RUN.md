@@ -1,132 +1,122 @@
 # Board Clear — Autonomous Run (GO prompt)
 
-**Purpose:** One paste. Agent runs until the product board is Done/Cut. Nitro does not return.
-
-**Read order (every cold start / compact):**
-
-1. [`BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`](BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md)
-2. [`BOARD-CLEAR-UNSPOKEN-NEEDS.md`](BOARD-CLEAR-UNSPOKEN-NEEDS.md)
-3. [`BOARD-CLEAR-CONSTITUTION-2026-08-01.md`](BOARD-CLEAR-CONSTITUTION-2026-08-01.md)
-4. [`BOARD-CLEAR-PROCESS-LOOPS.md`](BOARD-CLEAR-PROCESS-LOOPS.md)
-5. [`BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md`](BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md)
-6. [`BOARD-CLEAR-SCOREBOARD.md`](BOARD-CLEAR-SCOREBOARD.md)
-7. [`BOARD-CLEAR-NEXT.md`](BOARD-CLEAR-NEXT.md)
-8. [`LIVE-LANES.md`](LIVE-LANES.md)
-9. `AGENTS.md`
-10. `git fetch` · `git log origin/main -3` · `gh pr list`
+**Purpose:** One paste. World-class agentic engineering until the product board is Done/Cut.  
+**Nitro is not in the tech loop.** No continue prompts. No vibe-code slop.
 
 ---
 
-## Enhanced GO prompt (copy entire block)
+## Cold start / compact read order (full files)
+
+1. `docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`
+2. `docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`
+3. `docs/BOARD-CLEAR-UNSPOKEN-NEEDS.md`
+4. `docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md`
+5. `docs/BOARD-CLEAR-ENGINEERING-STANDARD.md`
+6. `docs/BOARD-CLEAR-PROCESS-LOOPS.md`
+7. `docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md`
+8. `docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md`
+9. `docs/BOARD-CLEAR-SCOREBOARD.md`
+10. `docs/BOARD-CLEAR-NEXT.md`
+11. `docs/BOARD-CLEAR-DECISION-LOG.md`
+12. `docs/LIVE-LANES.md`
+13. `AGENTS.md`
+14. `git fetch` · `git log origin/main -3` · `gh pr list`
+
+---
+
+## Enhanced GO prompt (copy entire fenced block)
 
 ```text
 BOARD CLEAR — FULL AUTONOMY UNTIL SCOREBOARD COMPLETE.
+World-class agentic engineering. Zero vibe-code slop. Nitro NOT in the loop.
 
-You are the orchestrator. Nitro is NOT in the loop. Do not ask him to continue.
-Do not ask tech questions. Do not stop until every board row is DONE or CUT.
-
-READ FIRST (in order, full files):
+READ (full files, in order):
+docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md
 docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md
 docs/BOARD-CLEAR-UNSPOKEN-NEEDS.md
 docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md
+docs/BOARD-CLEAR-ENGINEERING-STANDARD.md
 docs/BOARD-CLEAR-PROCESS-LOOPS.md
+docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md
 docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md
 docs/BOARD-CLEAR-SCOREBOARD.md
 docs/BOARD-CLEAR-NEXT.md
+docs/BOARD-CLEAR-DECISION-LOG.md
 docs/LIVE-LANES.md
 AGENTS.md
+Then: git fetch && git log origin/main -3 --oneline && gh pr list --state open
 
-FACTS FROM PREFLIGHT (do not re-discover as surprise):
-- Product UI = vendor shell :8090 — NOT apps/web
-- #289 was CONFLICTING — rebase onto main is A-OR-1 day-one work
-- Board Clear supersedes ownership "wait for Denon product law" for Done bars (thin/§13, never invent prices)
-- LIVE-LANES uses Board Clear programs P-UI…P-P5 (not residual ≤3)
-
-LOCKED (never reopen):
+LOCKED B (never reopen):
 1) Protocol Done = deploy proof + adversarial audit package
 2) All trade mountains in scope
 3) Pay card required (sandbox E2E OK if no prod keys)
 4) Phase 5 included (thin slice or §13)
-5) #289 order-route claimed — close or absorb
+5) #289 claimed — rebase/merge/absorb (was CONFLICTING)
 
-WHAT "RIGHT" MEANS (priority):
-1 Doctrine-true money (ledger only; never invent mid/depth/rates/balances/candles)
-2 Constitution Done bar met with proof for each row
-3 Tracker + scoreboard honest same turn as merge
-4 Parallel without file collisions
-5 Speed only after 1–3
+PREFLIGHT FACTS:
+- UI product = vendor shell :8090 — NOT apps/web
+- Board Clear supersedes residual-only and ownership "wait for Denon product law" for Done bars (thin/§13; never invent prices/depth)
+- LIVE-LANES = P-UI…P-P5 programs (not residual ≤3)
 
-WHAT FAILED BEFORE (ban):
-- Residual partials celebrated as success
-- Waiting for human "continue"
-- Spec only in chat (compaction loss)
-- Research forever, no PR
-- Leaving #289 / card / protocol / Phase 5 as "someone else"
+WHAT RIGHT MEANS (priority):
+1) Doctrine-true money (ledger only; never invent mid/depth/rates/balances/candles)
+2) Constitution Done bar + PROOF (evidence block)
+3) Tracker + scoreboard honest same turn
+4) Parallel without path collisions
+5) Speed only after 1–4
 
-MANDATORY LOOPS (BOARD-CLEAR-PROCESS-LOOPS.md):
-- L0 outer loop until scoreboard complete
-- L1 per ship: Research → Spec → Plan → Build → Verify → Review → Merge → Update
-- L2 parallel coordinator
-- L3 money/protocol quality
-- L4 replan when stuck (never Nitro)
-- L5 compaction recovery
-- L6 stall detector — if stalling, open smallest ship now
-- L7 finish gate only when all Done/Cut
+ANTI-SLOP (ENGINEERING-STANDARD) — refuse:
+vibe-green, mock theater, happy-path-only, god branch, invent-to-unblock,
+spec amnesia, partial forever, UI on apps/web, CI-as-debugger, orphan PRs
+
+IRON LAW: no completion claim without fresh verification command output in-session.
+
+LOOPS (all mandatory):
+L0 outer until scoreboard complete
+L1 per ship R→S→P→B→V→RV→M→U
+L2 parallel coordinator
+L3 money/protocol quality
+L4 replan (never Nitro)
+L5 compaction recovery
+L6 stall detector
+L7 finish gate
+L8 anti-slop evidence gate
+L9 wave audit every 4 product merges
+
+SUBAGENTS:
+- You = orchestrator; spawn 3–5 workers with SUBAGENT-PROTOCOL brief template
+- PATHS_ONLY exclusive; closed Done bar; evidence return contract
+- Strong model on money/security/judgment; never silent cheap on Class M
 
 EVERY TURN:
 - Worktree never main checkout
-- Update docs/BOARD-CLEAR-NEXT.md before you stop generating (exact next ship)
-- Update scoreboard when a row moves
-- Babysit red CI; merge green Class N/P; Class M with self-audit
-- GH: export GH_TOKEN from ~/.grok/agent-auth/github_token (never print)
+- Update BOARD-CLEAR-NEXT.md before stop (exact next ship)
+- Evidence block on every PR before merge
+- Babysit CI; merge Class N/P when green; Class M + self-audit + L8
+- GH_TOKEN from ~/.grok/agent-auth/github_token (never print)
 - CI thrift: local verify before push storms
-
-PARALLEL:
-- Programs P-UI P-WS P-PAY P-PROT P-TRADE P-OR P-P5 per execution plan ownership
-- Separate worktrees; ≤5 open code PRs unless babysitting well
-- Fan-out Wave A immediately after GO
-
-SECRETS / BLOCKERS:
-- Search existing env/agent-auth/compose
-- Prefer sandbox proof for Done
-- §13 for prod-only gaps
-- NEVER halt the whole campaign; NEVER wait for Nitro
-
-FINISH:
-Only stop when BOARD-CLEAR-SCOREBOARD shows all DONE or CUT and EXECUTION PLAN §7 checklist passes.
-Then write campaign status COMPLETE on scoreboard + NEXT = "campaign complete".
+- Append DECISION-LOG if plan interpretation changes
 
 START NOW:
-1) Mark NEXT status RUNNING
-2) Fan-out Wave A ships (MM recovery, pay card recipes, UI hotkeys, protocol SA path, #289 triage, …)
-3) Loop L0 forever until finished
+1) Claim board-clear-coord on LIVE-LANES; status RUNNING on NEXT
+2) Day-one: P-OR rebase #289; fan-out MM recovery, pay card recipes, UI hotkeys (vendor), SA path
+3) Loop L0 until every row DONE or CUT with proof
+4) Only then SCOREBOARD COMPLETE — then stop
 
-Reply to Nitro only if: campaign COMPLETE, or a physical impossibility that cannot sandbox/§13 (rare). No process theater.
+Report to Nitro ONLY: campaign COMPLETE, or physical impossibility that cannot sandbox/§13.
+No process theater. No continue requests.
 ```
 
 ---
 
-## Subagent spawn stub
+## Host rule (honest)
 
-```text
-Program: <P-ID>. Own only paths: <paths>.
-Done bar: <quote constitution>.
-Ships: <ids>. Loops: L1 full; no Nitro; no invent.
-Worktree; PR; CI; merge if allowed; update SCOREBOARD + NEXT for your row.
-If blocked on another program: stop your ship, write blocker on NEXT, exit cleanly.
-```
+An **agent session must run** this prompt. If the session dies, open a new one and paste the **same** block. Docs make resume zero-decision. There is no separate unsupervised OS daemon unless you attach a scheduler that re-fires this same paste.
 
 ---
 
-## If this session compacts mid-run
-
-Do **not** ask Nitro. Re-read the read order above and resume `BOARD-CLEAR-NEXT.md`. Same GO mandate.
-
----
-
-## Auth / tooling
+## Auth
 
 ```bash
 export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
-# pnpm: monorepo store / corepack if needed — do not block campaign on global path
 ```

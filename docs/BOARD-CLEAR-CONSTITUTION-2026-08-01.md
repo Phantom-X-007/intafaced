@@ -204,6 +204,11 @@ Open PRs for this campaign are merged or closed with reason.
 | GO readiness               | `docs/BOARD-CLEAR-GO-READINESS.md`                       |
 | Live scoreboard            | `docs/BOARD-CLEAR-SCOREBOARD.md`                         |
 | Exact next action          | `docs/BOARD-CLEAR-NEXT.md`                               |
+| Engineering standard       | `docs/BOARD-CLEAR-ENGINEERING-STANDARD.md`               |
+| Subagent protocol          | `docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md`                  |
+| Decision log               | `docs/BOARD-CLEAR-DECISION-LOG.md`                       |
+| Mega audit                 | `docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`              |
+| Wave audit latest          | `docs/BOARD-CLEAR-WAVE-AUDIT-LATEST.md`                  |
 | Feature status             | `tooling/tracker/features.mjs` + `docs/TRACKER.md`       |
 | Law                        | `INTAFACED_DEFINITIVE_BUILD.md`                          |
 | Agent rules                | `AGENTS.md` + `tooling/agent-protocol/AGENT_PROTOCOL.md` |

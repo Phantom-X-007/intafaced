@@ -114,10 +114,36 @@ You are **stalling** if any is true:
 
 ```
 for each constitution board row:
-  assert DONE or CUT with proof link
+  assert DONE or CUT with proof link + evidence
 run EXECUTION PLAN §7 checklist
 if any fail → L0
 if all pass → write SCOREBOARD campaign status COMPLETE; stop
 ```
 
 Only then may the agent stop.
+
+---
+
+## L8 — Anti-slop / evidence gate (every ship)
+
+Before merge:
+
+1. Run `docs/BOARD-CLEAR-ENGINEERING-STANDARD.md` anti-slop catalog against the PR
+2. Evidence block present (commands + exit)
+3. Invent check clean
+4. RV1 adversarial: would an elite reviewer reject this? if yes, fix
+
+Fail any → do not merge.
+
+---
+
+## L9 — Wave quality heartbeat
+
+Every **4 merged product ships**:
+
+1. Overwrite `docs/BOARD-CLEAR-WAVE-AUDIT-LATEST.md`
+2. Sample PRs for slop
+3. Confirm scoreboard ≡ tracker
+4. Resume L0
+
+Not a stop for Nitro.
