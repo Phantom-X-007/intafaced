@@ -11,11 +11,13 @@
  *
  * Crypto regression: run scripts/live-rail-e2e.mjs separately with PAY_CRYPTO_*.
  */
+import { randomUUID } from 'node:crypto';
 import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 
 const PAY_URL = process.env.PAY_URL ?? 'http://127.0.0.1:4006';
 const EDGE_SECRET = process.env.EDGE_PRINCIPAL_SECRET ?? 'dev-only-edge-secret-at-least-32-chars-long';
-const USER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+/** Fresh principal each run so KYB stub is not stuck on a prior approved row. */
+const USER = process.env.PAY_E2E_USER_ID ?? randomUUID();
 const REGION = 'DE';
 
 function fail(msg, detail) {
@@ -46,13 +48,22 @@ function signedHeaders(scopes) {
   };
 }
 
-async function trpc(procedure, input, scopes) {
-  const url = `${PAY_URL}/trpc/${procedure}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: signedHeaders(scopes),
-    body: JSON.stringify(input === undefined ? {} : input),
-  });
+async function trpc(procedure, input, scopes, { query = false } = {}) {
+  const headers = signedHeaders(scopes);
+  let res;
+  if (query) {
+    // No transformer on svc-pay — GET input is the bare procedure input object
+    // (same as svc-dex indexer clients), not `{ json: … }`.
+    const qs = input === undefined ? '' : `?input=${encodeURIComponent(JSON.stringify(input))}`;
+    const url = `${PAY_URL}/trpc/${procedure}${qs}`;
+    res = await fetch(url, { method: 'GET', headers });
+  } else {
+    res = await fetch(`${PAY_URL}/trpc/${procedure}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(input === undefined ? {} : input),
+    });
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) fail(`${procedure} HTTP ${res.status}`, body);
   if (body.error) fail(`${procedure} tRPC error`, body.error);
@@ -71,20 +82,24 @@ async function main() {
   const created = await trpc('merchant.create', { mode: 'gateway', pricing: { feeBps: 100 } }, ['pay:write']);
   ok('merchant.create', created);
 
-  const me = await trpc('merchant.me', undefined, ['pay:read']);
+  const me = await trpc('merchant.me', undefined, ['pay:read'], { query: true });
   if (!me?.id) fail('merchant.me empty', me);
-  ok('merchant.me', { id: me.id, kybStatus: me.kybStatus });
+  ok('merchant.me', { id: me.id, kybStatus: me.kybStatus, userId: USER });
 
-  const kyb = await trpc('merchant.submitKyb', { merchantId: me.id, kybRef: 'e2e-case-1' }, ['pay:write']);
-  if (kyb.kybStatus !== 'pending') fail('KYB not pending', kyb);
-  ok('merchant.submitKyb', kyb);
-
-  if (ready.valueMovement === 'live-only') {
-    ok('skip decideKybStub under live-only (operator required)');
+  if (me.kybStatus === 'approved') {
+    ok('KYB already approved — skip stub');
   } else {
-    const decided = await trpc('merchant.decideKybStub', { merchantId: me.id, decision: 'approved' }, ['pay:write']);
-    if (decided.kybStatus !== 'approved') fail('KYB not approved', decided);
-    ok('merchant.decideKybStub', decided);
+    const kyb = await trpc('merchant.submitKyb', { merchantId: me.id, kybRef: `e2e-${USER.slice(0, 8)}` }, ['pay:write']);
+    if (kyb.kybStatus !== 'pending') fail('KYB not pending', kyb);
+    ok('merchant.submitKyb', kyb);
+
+    if (ready.valueMovement === 'live-only') {
+      ok('skip decideKybStub under live-only (operator required)');
+    } else {
+      const decided = await trpc('merchant.decideKybStub', { merchantId: me.id, decision: 'approved' }, ['pay:write']);
+      if (decided.kybStatus !== 'approved') fail('KYB not approved', decided);
+      ok('merchant.decideKybStub', decided);
+    }
   }
 
   const payment = await trpc(
@@ -113,10 +128,10 @@ async function main() {
   const settlement = await trpc('settlement.run', { merchantId: me.id, window, assetId: 'USDT' }, ['pay:write']);
   ok('settlement.run', { id: settlement.id, status: settlement.status, net: settlement.net });
 
-  const listed = await trpc('payment.list', { merchantId: me.id, status: 'settled' }, ['pay:read']);
+  const listed = await trpc('payment.list', { merchantId: me.id, status: 'settled' }, ['pay:read'], { query: true });
   if (!Array.isArray(listed) || !listed.some((p) => p.id === payment.id)) {
     // may still be captured if settle didn't include — accept captured|settled
-    const any = await trpc('payment.list', { merchantId: me.id }, ['pay:read']);
+    const any = await trpc('payment.list', { merchantId: me.id }, ['pay:read'], { query: true });
     if (!any.some((p) => p.id === payment.id)) fail('payment.list missing payment', { listed, any });
     ok('payment.list', { count: any.length, status: any.find((p) => p.id === payment.id)?.status });
   } else {
