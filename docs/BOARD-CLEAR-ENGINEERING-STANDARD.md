@@ -2,7 +2,7 @@
 
 **Status:** BINDING under Board Clear  
 **Purpose:** Kill vibe-coding / AI slop while staying fully autonomous (no human in the loop for tech).  
-**Grounded in:** Anthropic multi-agent + context engineering practice; agentic production anti-patterns; verification-before-completion; INTAFACED doctrine.
+**Grounded in:** industry multi-agent + context engineering practice; agentic production anti-patterns; verification-before-completion; INTAFACED doctrine.
 
 ---
 
