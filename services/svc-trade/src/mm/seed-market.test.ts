@@ -7,12 +7,7 @@ import {
   parseAmount as amt,
   recipes,
 } from '@intafaced/ledger-client';
-import type {
-  EngineCancelResult,
-  EngineSubmitRequest,
-  EngineSubmitResult,
-  MatchingClient,
-} from '../spot/matching-client.js';
+import type { EngineCancelResult, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
 import {
   cancelSeedMarket,
   isHouseMmAccount,

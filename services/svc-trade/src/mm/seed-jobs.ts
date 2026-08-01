@@ -14,12 +14,7 @@
 import type { LedgerClient } from '@intafaced/ledger-client';
 import type { MatchingClient } from '../spot/matching-client.js';
 import { createJobHost, type JobHost } from '../futures/job-host.js';
-import {
-  cancelSeedMarket,
-  seedMarket,
-  type CancelSeedResult,
-  type SeedMarketResult,
-} from './seed-market.js';
+import { cancelSeedMarket, seedMarket, type CancelSeedResult, type SeedMarketResult } from './seed-market.js';
 
 export interface MmSeedTarget {
   marketId: string;
@@ -148,10 +143,7 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
 
       // Track runs that may leave live orders or stranded holds for cancel path.
       const trackable = result.placements.some(
-        (p) =>
-          p.status === 'resting' ||
-          p.status === 'submit_indeterminate' ||
-          p.status === 'rejected',
+        (p) => p.status === 'resting' || p.status === 'submit_indeterminate' || p.status === 'rejected',
       );
       if (trackable) {
         lastRun.set(target.marketId, { runId, levels: deps.config.levels });

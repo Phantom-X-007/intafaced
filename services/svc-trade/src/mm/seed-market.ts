@@ -238,12 +238,7 @@ export interface CancelSeedDeps {
 }
 
 export type CancelSeedPlacementStatus =
-  | 'cancelled_and_released'
-  | 'not_live_released'
-  | 'not_live_no_hold'
-  | 'cancelled_no_hold'
-  | 'cancel_indeterminate'
-  | 'release_failed';
+  'cancelled_and_released' | 'not_live_released' | 'not_live_no_hold' | 'cancelled_no_hold' | 'cancel_indeterminate' | 'release_failed';
 
 export interface CancelSeedPlacement {
   orderId: string;
@@ -257,8 +252,7 @@ export interface CancelSeedPlacement {
 }
 
 export type CancelSeedResult =
-  | { ok: true; placements: CancelSeedPlacement[] }
-  | { ok: false; reason: string; placements: CancelSeedPlacement[] };
+  { ok: true; placements: CancelSeedPlacement[] } | { ok: false; reason: string; placements: CancelSeedPlacement[] };
 
 export interface SeedOrderRef {
   orderId: string;
@@ -327,8 +321,7 @@ export async function cancelSeedMarket(spec: CancelSeedSpec, deps: CancelSeedDep
     }
 
     // Buy holds quote, sell holds base — try primary then other (honest zero skip).
-    const assets =
-      ref.side === 'buy' ? [spec.quoteAsset, spec.baseAsset] : [spec.baseAsset, spec.quoteAsset];
+    const assets = ref.side === 'buy' ? [spec.quoteAsset, spec.baseAsset] : [spec.baseAsset, spec.quoteAsset];
 
     let released: { asset: string; amount: string } | null = null;
     let releaseFailed = false;
@@ -402,8 +395,6 @@ export function summarizeCancelSeed(result: CancelSeedResult): string {
   if (!result.ok) {
     return `cancel fail (${result.reason}) placements=${result.placements.length}`;
   }
-  const released = result.placements.filter(
-    (p) => p.status === 'cancelled_and_released' || p.status === 'not_live_released',
-  ).length;
+  const released = result.placements.filter((p) => p.status === 'cancelled_and_released' || p.status === 'not_live_released').length;
   return `cancel ok released=${released}/${result.placements.length}`;
 }
