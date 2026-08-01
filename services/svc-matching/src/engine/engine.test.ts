@@ -171,6 +171,8 @@ describe('events', () => {
       price: '100.25',
       qty: '1.5',
       sequence: result.fills[0]!.sequence,
+      makerAccountId: 'mm',
+      takerAccountId: 'tk',
     });
   });
 
