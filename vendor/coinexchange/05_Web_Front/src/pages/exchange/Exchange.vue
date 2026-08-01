@@ -1,6 +1,6 @@
 <template>
   <div class="ix-terminal" @keydown="onDeskKeydown">
-    <!-- Wave B7: / market search · Esc clear/blur · Enter in ticket submits · B/S side -->
+    <!-- A-UI-1 / B7+: / markets · Esc clear · B/S buy-sell ticket · T ticket · Enter submit · X cancel last -->
     <a class="ix-skip-link" href="#ix-ticket">Skip to order ticket</a>
     <!-- B10: polite live region for ticket validation (screen readers) -->
     <div class="ix-sr-only" aria-live="polite" aria-atomic="true">{{ liveAnnounce }}</div>
@@ -688,8 +688,8 @@
           >
             {{ submitting ? 'Placing…' : submitLabel }}
           </button>
-          <p class="ix-order-note ix-dim ix-kbd-hint" title="Keyboard floor">
-            <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>Enter</kbd> submit · <kbd>B</kbd>/<kbd>S</kbd> side
+          <p class="ix-order-note ix-dim ix-kbd-hint" title="Keyboard trade shortcuts (desk)">
+            <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>Enter</kbd> submit · <kbd>X</kbd> cancel last
           </p>
 
           <p
@@ -765,6 +765,7 @@ import DepthGraph from '@components/exchange/DepthGraph.vue';
 var Stomp = require('stompjs');
 var SockJS = require('sockjs-client');
 var moment = require('moment');
+var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
 
 const BOOK_DEPTH = 14;
 const TRADE_LIMIT = 40;
@@ -1160,59 +1161,119 @@ export default {
     /* ── plumbing ──────────────────────────────────────────────────────── */
 
     /**
-     * Wave B7 keyboard floor (desk only — no new backend).
+     * A-UI-1 / Wave B7+ keyboard floor (desk only — no new backend).
+     * Map lives in assets/js/desk-hotkeys.js; handlers call existing methods only.
      * @param {KeyboardEvent} e
-     * @param {boolean} fromWindow capture-phase for global / and Esc
+     * @param {boolean} fromWindow capture-phase for global shortcuts when focus is outside the desk tree
      */
     onDeskKeydown(e, fromWindow) {
       if (!e || e.defaultPrevented) return;
-      if (e.altKey || e.ctrlKey || e.metaKey) return;
       const t = e.target;
       const tag = (t && t.tagName) || '';
-      const typing =
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
-        (t && t.isContentEditable);
+      const typing = deskHotkeys.isTypingTarget(tag, t && t.isContentEditable);
+      const hit = deskHotkeys.resolveDeskHotkey(e, {
+        typing: typing,
+        fromWindow: !!fromWindow
+      });
+      if (!hit) return;
+      if (hit.preventDefault) e.preventDefault();
 
-      if (e.key === 'Escape') {
-        if (this.searchKey) {
-          this.searchKey = '';
-          e.preventDefault();
-        }
-        if (typing && t && typeof t.blur === 'function') {
-          t.blur();
-          e.preventDefault();
-        }
-        return;
+      switch (hit.action) {
+        case 'escape':
+          if (this.searchKey) this.searchKey = '';
+          if (typing && t && typeof t.blur === 'function') t.blur();
+          break;
+        case 'focus_market_search':
+          this.focusMarketSearch();
+          break;
+        case 'focus_buy_ticket':
+          this.focusTicket('BUY');
+          break;
+        case 'focus_sell_ticket':
+          this.focusTicket('SELL');
+          break;
+        case 'focus_ticket':
+          this.focusTicket();
+          break;
+        case 'cancel_last_open':
+          this.cancelLastOpenOrder();
+          break;
+        case 'submit':
+          /* Field @keydown.enter.prevent also calls submitOrder; defaultPrevented
+             on the bubbled event skips a second resolve. This path is for
+             direct/tests and any non-prevented field bubble. */
+          this.submitOrder();
+          break;
+        default:
+          break;
       }
+    },
 
-      /* / focuses market search when not already typing in a field. */
-      if (!typing && e.key === '/') {
-        e.preventDefault();
-        const el = this.$refs.marketSearch;
+    focusMarketSearch() {
+      const el = this.$refs.marketSearch;
+      if (el && typeof el.focus === 'function') {
+        el.focus();
+        if (typeof el.select === 'function') el.select();
+      }
+    },
+
+    /**
+     * Focus the order ticket; optional side flips Buy/Sell first (clears amount via setSide).
+     * Prefers price (limit) then amount — real inputs only, no invented values.
+     * @param {'BUY'|'SELL'|undefined} side
+     */
+    focusTicket(side) {
+      if ((side === 'BUY' || side === 'SELL') && this.side !== side) {
+        this.setSide(side);
+      }
+      this.$nextTick(() => {
+        const priceEl = this.$refs.ticketPrice;
+        const amountEl = this.$refs.ticketAmount;
+        let el = null;
+        if (this.orderType === 'LIMIT_PRICE' && priceEl && !priceEl.disabled) {
+          el = priceEl;
+        } else if (amountEl) {
+          el = amountEl;
+        }
         if (el && typeof el.focus === 'function') {
           el.focus();
           if (typeof el.select === 'function') el.select();
+          return;
         }
-        return;
-      }
+        const panel =
+          typeof document !== 'undefined' ? document.getElementById('ix-ticket') : null;
+        if (panel && typeof panel.focus === 'function') panel.focus();
+      });
+    },
 
-      /* B / S flip ticket side when not typing. */
-      if (!typing && (e.key === 'b' || e.key === 'B')) {
-        e.preventDefault();
-        this.setSide('BUY');
-        return;
+    /**
+     * Cancel the most recent open order via existing cancelOrder (confirm modal).
+     * Does not invent order ids or skip venue confirm.
+     */
+    cancelLastOpenOrder() {
+      if (this.cancellingId) return;
+      if (!this.isLogin) {
+        return this.warn('Sign in to cancel orders.');
       }
-      if (!typing && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        this.setSide('SELL');
-        return;
+      if (!this.ordersReachable) {
+        return this.warn('Open orders unknown — cannot cancel from keyboard.');
       }
-
-      /* Enter on ticket inputs is handled by @keydown.enter on the fields.
-         Avoid double-fire from window capture. */
-      if (fromWindow) return;
+      const list = this.openOrders || [];
+      if (!list.length) {
+        return this.warn('No open orders to cancel.');
+      }
+      let order = list[0];
+      for (let i = 1; i < list.length; i++) {
+        const row = list[i];
+        if (row && order && Number(row.time) > Number(order.time)) {
+          order = row;
+        }
+      }
+      if (!order || !order.orderId) {
+        return this.warn('No cancellable open order found.');
+      }
+      this.accountTab = 'open';
+      this.cancelOrder(order);
     },
 
     /* Never rejects. A dead backend produces null, and every caller treats
