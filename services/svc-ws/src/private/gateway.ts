@@ -58,11 +58,11 @@ function reject(socket: Duplex, status: number, message: string): void {
 }
 
 function tokenFrom(url: URL, headers: IncomingMessage['headers']): string | null {
-  const q = url.searchParams.get('access_token');
+  const q = url.searchParams.get('access_token')?.trim();
   if (q) return q;
   const raw = headers.authorization;
   if (!raw || Array.isArray(raw)) return null;
-  const m = /^Bearer\s+(.+)$/i.exec(raw.trim());
+  const m = /^Bearer\s+(\S+)$/i.exec(raw.trim());
   return m?.[1] ?? null;
 }
 
@@ -111,21 +111,28 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         }
 
         wss.handleUpgrade(req, socket, head, (ws) => {
-          live++;
           const detach = hub.attach(userId, sinkFor(ws));
+          // Capacity refuse closes the sink inside attach — never announce ready
+          // for a subscription the hub did not take (fail-closed, no false start).
+          if (!detach) {
+            return;
+          }
+
+          live++;
+          let cleaned = false;
           const heartbeat = setInterval(() => {
             if (ws.readyState === ws.OPEN) ws.ping();
           }, heartbeatMs);
-
-          ws.on('close', () => {
+          const cleanup = () => {
+            if (cleaned) return;
+            cleaned = true;
             clearInterval(heartbeat);
             detach();
             live = Math.max(0, live - 1);
-          });
-          ws.on('error', () => {
-            clearInterval(heartbeat);
-            detach();
-          });
+          };
+
+          ws.on('close', cleanup);
+          ws.on('error', cleanup);
           // Inbound frames are ignored — private stream is push-only, same as public.
           ws.on('message', () => undefined);
 

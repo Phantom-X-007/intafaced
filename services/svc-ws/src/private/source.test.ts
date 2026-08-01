@@ -77,6 +77,76 @@ describe('private bus → hub sources', () => {
     expect(alice.sent).toHaveLength(0);
   });
 
+  it('maps orderUpdated amounts as decimal strings on the orders channel', async () => {
+    const bus = new MemoryEventBus('svc-ws-test');
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    hub.attach(USER_A, alice);
+    await subscribePrivateOrders({ bus, hub, durable: 'ws-test-orders-money' });
+
+    await bus.publish(
+      'orderUpdated',
+      validatePayload('orderUpdated', {
+        orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        userId: USER_A,
+        marketId: 'btc-usdt',
+        status: 'open',
+        side: 'buy',
+        type: 'limit',
+        qty: '2.5',
+        filledQty: '0.5',
+        price: '64000.25',
+        clientOrderId: 'cli-1',
+        ts: '2026-07-31T00:00:00.000Z',
+      }),
+    );
+
+    expect(alice.sent).toHaveLength(1);
+    const frame = JSON.parse(alice.sent[0]!);
+    expect(frame.channel).toBe('orders');
+    expect(typeof frame.qty).toBe('string');
+    expect(typeof frame.filledQty).toBe('string');
+    expect(typeof frame.price).toBe('string');
+    expect(frame.qty).toBe('2.5');
+    expect(frame.price).toBe('64000.25');
+  });
+
+  it('maps fillSettled amounts as decimal strings on the fills channel', async () => {
+    const bus = new MemoryEventBus('svc-ws-test');
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    hub.attach(USER_A, alice);
+    await subscribePrivateFills({ bus, hub, durable: 'ws-test-fills-money' });
+
+    await bus.publish(
+      'fillSettled',
+      validatePayload('fillSettled', {
+        fillId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        userId: USER_A,
+        marketId: 'btc-usdt',
+        side: 'buy',
+        liquidity: 'maker',
+        price: '100.5',
+        qty: '0.01',
+        quoteAmount: '1.005',
+        feeAsset: 'USDT',
+        feeAmount: '0.001005',
+        feeBps: 10,
+        sequence: 7,
+        ts: '2026-07-31T00:00:00.000Z',
+      }),
+    );
+
+    expect(alice.sent).toHaveLength(1);
+    const frame = JSON.parse(alice.sent[0]!);
+    expect(frame.channel).toBe('fills');
+    expect(typeof frame.price).toBe('string');
+    expect(typeof frame.qty).toBe('string');
+    expect(typeof frame.quoteAmount).toBe('string');
+    expect(typeof frame.feeAmount).toBe('string');
+  });
+
   it('keeps order / fill / position channels isolated by owner', async () => {
     const bus = new MemoryEventBus('svc-ws-test');
     const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
