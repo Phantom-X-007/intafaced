@@ -48,16 +48,18 @@ docs/LIVE-LANES.md
 AGENTS.md
 Then: git fetch && git log origin/main -3 --oneline && gh pr list --state open
 
-HUMAN HARD OWNER (do not steal — @shehzad002):
-- H-PAY: pay.gateway card / merchant / durable status (PAY-01…11)
-- H-PROT: smart-accounts + amm deploy + audit (PROT-01…09)
-- H-TRADE-HARD: futures RISK, real OTC/copy/algo
-- H-P5-MONEY: bank earn/cards/ramps
-- H-ID-SUB: identity sub-account money routing
-- H-OR-JAVA: only AFTER #289 agent merge
-Agents: BABYSIT his PRs only. Never open implement PRs on his paths.
+HUMAN HARD OWNER @shehzad002 — BIG MOUNTAINS (do not steal; do not micro-implement):
+M1 Pay OS (card + merchant + pay.* expansion)
+M2 Protocol OS (SA, AMM, lending, escrow, router, merchant + audits)
+M3 Futures RISK engine
+M4 Real OTC + copy + algo products
+M5 Identity sub-account money graph
+M6 Bank money (earn/cards/ramps/sovereign-card)
+M7 Java dual-book residual ONLY after #289 agent merge
+Details: docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md
+Agents: BABYSIT his PRs only. NEVER open implement PRs on his paths/services.
 
-AGENT-OWNED (you fan-out hard here):
+AGENT-OWNED (fan-out hard HERE only):
 - P-UI vendor :8090 shell (hotkeys, honesty, craft)
 - P-OR #289 rebase/merge/absorb
 - P-TRADE-LIGHT: mm recovery/reseed/mid residual, spot OHLCV, venue mount
@@ -65,48 +67,53 @@ AGENT-OWNED (you fan-out hard here):
 - P-P5-LIGHT: academy/ops/agents thin
 - P-TRACK + scoreboard honesty + babysit
 
+COLLISION IRON LAWS:
+- NEVER fan-out A-PAY / A-PROT / futures risk / OTC/copy/algo product / bank money / identity money
+- NEVER merge a docs PR that reverts HUMAN-CLAIMED rows to free agent P-PAY/P-PROT (reject #334-style)
+- Re-read SHEHZAD-HARD-OWNERSHIP + LIVE-LANES every compact / every fan-out
+
 LOCKED B (never reopen):
-1) Protocol Done = deploy proof + audit package (human ships)
-2) All trade mountains in scope (HARD = human; LIGHT = agent)
-3) Pay card required (human ships; sandbox OK)
-4) Phase 5 included (money = human; academy/ops = agent)
-5) #289 claimed — agent rebase first
+1) Protocol Done = deploy proof + audit package (human M2)
+2) Trade mountains: HARD = human M3/M4; LIGHT = agent
+3) Pay card + Pay OS = human M1 (sandbox OK)
+4) Phase 5 money = human M6; academy/ops = agent
+5) #289 = agent first
 
 PREFLIGHT FACTS:
 - UI product = vendor shell :8090 — NOT apps/web
 - Never invent mid/depth/rates/balances/candles
-- LIVE-LANES marks HUMAN-CLAIMED vs AGENT — obey
+- LIVE-LANES HUMAN-CLAIMED vs AGENT — absolute
 
-WHAT RIGHT MEANS (priority):
+WHAT RIGHT MEANS:
 1) Doctrine-true money
 2) Constitution Done bar + PROOF
 3) Tracker + scoreboard honest same turn
-4) Parallel without path collisions — especially vs shehzad002
+4) Zero path collision with shehzad002
 5) Speed only after 1–4
-6) Fill the board with AGENT ships while human deep-works money/protocol — do not idle waiting on him, do not implement his rows
+6) Fill AGENT board hard while human deep-works — never steal his mountains to "go faster"
 
-ANTI-SLOP — refuse: vibe-green, mock theater, invent-to-unblock, apps/web as product, orphan PRs, stealing HUMAN-CLAIMED paths
+ANTI-SLOP — refuse: vibe-green, invent-to-unblock, apps/web as product, orphan PRs, stealing M1–M7
 
 IRON LAW: no completion claim without fresh verification output in-session.
 
-LOOPS: L0–L9 as process-loops doc (finish gate only when ALL rows Done/Cut including human-owned with HIS proof)
+LOOPS: L0–L9 until ALL rows Done/Cut (human rows need HIS proof)
 
-SUBAGENTS: 3–5 on AGENT programs only; PATHS_ONLY exclusive; never assign H-PAY/H-PROT/H-TRADE-HARD implementers
+SUBAGENTS: 3–5 on AGENT programs only; never assign M1–M7 implementers
 
 EVERY TURN:
 - Worktree never main checkout
 - Update BOARD-CLEAR-NEXT.md before stop
 - Evidence block on every PR before merge
-- Babysit CI + babysit shehzad PRs (comment gates; no branch steal)
+- Babysit CI + babysit shehzad PRs (comment only; no branch steal)
 - GH_TOKEN from ~/.grok/agent-auth/github_token (never print)
 - CI thrift: local verify before push storms
 
-START NOW:
-1) Claim board-clear-coord; status RUNNING on NEXT
-2) Day-one AGENT fan-out: P-OR #289 rebase; A-UI-1 hotkeys; A-TRADE-MM-1 recovery; A-WS-1; academy/ops thin
-3) Do NOT day-one agent pay card or SA path
-4) Loop L0 until every row DONE or CUT with proof (human rows wait on his merges)
-5) Only then SCOREBOARD COMPLETE — then stop
+START NOW (or CONTINUE if already RUNNING):
+1) board-clear-coord + NEXT status RUNNING
+2) AGENT fan-out only: P-OR #289; A-UI-1; A-TRADE-MM-1; A-WS-1; academy/ops thin
+3) NEVER agent pay card / SA path / futures risk / OTC/copy/algo / bank money
+4) Loop L0 until scoreboard complete
+5) Then SCOREBOARD COMPLETE — stop
 
 Report to Nitro ONLY: campaign COMPLETE, or physical impossibility that cannot sandbox/§13.
 No process theater. No continue requests.
