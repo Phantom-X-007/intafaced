@@ -1,18 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  formatAmount,
-  marketMaker,
-  MemoryLedger,
-  parseAmount as amt,
-  recipes,
-} from '@intafaced/ledger-client';
-import type {
-  EngineCancelResult,
-  EngineDepth,
-  EngineSubmitRequest,
-  EngineSubmitResult,
-  MatchingClient,
-} from '../spot/matching-client.js';
+import { formatAmount, marketMaker, MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
+import type { EngineCancelResult, EngineDepth, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
 import { parseMmSeedMids, parseMmSeedTargets, startMmSeedJobs } from './seed-jobs.js';
 import { MM_MATCHING_ACCOUNT_ID } from './seed-market.js';
 
