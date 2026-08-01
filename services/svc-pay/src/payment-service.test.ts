@@ -64,8 +64,8 @@ const here = dirname(fileURLToPath(import.meta.url));
  * mid-assertion. 0001's tables (`deposits`, `withdrawals`) are disjoint, which
  * is precisely why `user-money-service.test.ts` legitimately gets its own file.
  */
-const migrations = ['0000_pay_init.sql', '0002_pay_payment_links.sql', '0003_pay_checkout_sessions.sql'].map((f) =>
-  readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
+const migrations = ['0000_pay_init.sql', '0002_pay_payment_links.sql', '0003_pay_checkout_sessions.sql', '0005_pay_merchant_kyb.sql'].map(
+  (f) => readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
 );
 
 /** Shared by every svc-pay suite that brings the schema up. Any constant, as long as it is the same one. */
@@ -1448,6 +1448,55 @@ if (!available) {
       // about anybody's money.
       expect((await pay.getPayment(paymentId)).status).toBe('created');
       expect(await pay.clearingBalance(m.id, 'USDT')).toBe(0n);
+    });
+  });
+
+  // ── M1 pay.gateway Done bar: KYB stub + durable payment list ───────────────
+
+  describe('merchant KYB stub + payment list', () => {
+    it('submits KYB then decideKybStub approves under allow-sandbox', async () => {
+      const m = await merchant();
+      expect(m.kybStatus).toBe('none');
+      expect(m.kybRef).toBeNull();
+
+      const pending = await pay.submitKyb({ merchantId: m.id, kybRef: 'case-abc' });
+      expect(pending.kybStatus).toBe('pending');
+      expect(pending.kybRef).toBe('case-abc');
+
+      const approved = await pay.decideKybStub({ merchantId: m.id, decision: 'approved' });
+      expect(approved.kybStatus).toBe('approved');
+      expect(approved.kybRef).toBe('case-abc');
+    });
+
+    it('refuses decideKybStub under live-only (no invented operator KYB)', async () => {
+      const livePay = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
+      const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
+      await livePay.submitKyb({ merchantId: m.id, kybRef: 'case-live' });
+      await expect(livePay.decideKybStub({ merchantId: m.id, decision: 'approved' })).rejects.toMatchObject({
+        code: 'pay.kyb_operator_required',
+      });
+    });
+
+    it('lists payments by durable status projection after card lifecycle', async () => {
+      const m = await merchant();
+      const payment = await cardPayment(m.id, '25');
+      await pay.capture(payment.id);
+
+      const listed = await pay.listPayments({ merchantId: m.id, status: 'captured' });
+      expect(listed).toHaveLength(1);
+      expect(listed[0]!.id).toBe(payment.id);
+      expect(listed[0]!.status).toBe('captured');
+      expect(formatAmount(listed[0]!.capturedAmount)).toBe('25');
+    });
+
+    it('card path still refunds after capture (acquiring E2E on sandbox)', async () => {
+      const m = await merchant();
+      const payment = await cardPayment(m.id, '40');
+      await pay.capture(payment.id);
+      const refunded = await pay.refund(payment.id, amt('40'));
+      expect(refunded.status).toBe('refunded');
+      expect(formatAmount(refunded.refundedAmount)).toBe('40');
+      expect(ledger.reconcile()).toEqual({ ok: true });
     });
   });
 }

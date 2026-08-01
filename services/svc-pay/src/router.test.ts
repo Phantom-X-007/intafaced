@@ -150,6 +150,7 @@ function stubService(): Stub {
     mode: 'gateway' as const,
     tier: 0,
     kybStatus: 'none' as const,
+    kybRef: null as string | null,
     status: 'active' as const,
     pricing: { feeBps: 250 },
     settlementPrefs: {},
@@ -158,6 +159,10 @@ function stubService(): Stub {
   const service = {
     createMerchant: record('createMerchant', merchant),
     getMerchant: record('getMerchant', merchant),
+    getMerchantByUserId: record('getMerchantByUserId', merchant),
+    submitKyb: record('submitKyb', () => ({ ...merchant(), kybStatus: 'pending' as const, kybRef: 'dossier-1' })),
+    decideKybStub: record('decideKybStub', () => ({ ...merchant(), kybStatus: 'approved' as const, kybRef: 'dossier-1' })),
+    listPayments: record('listPayments', () => [paymentView({ status: 'captured', capturedAmount: amt('100') })]),
     createProfile: record('createProfile', () => ({ id: SETTLEMENT, merchantId: MERCHANT })),
     clearingBalance: record('clearingBalance', () => amt('100.5')),
     merchantBalance: record('merchantBalance', () => amt('97.5')),
