@@ -7,8 +7,8 @@
 **Tip check:** `git log origin/main -1 --oneline`
 
 **Campaign status:** `RUNNING`  
-**Last scoreboard edit:** 2026-08-01 v2 shehzad M1–M7 + GO agent lanes  
-**Known dirty:** #289 — **P-OR agent** rebase/merge first-class  
+**Last scoreboard edit:** 2026-08-01 A-OR-1 #289 MERGED; fan-out #336–#338  
+**Known dirty:** none for #289 — **DONE**; agent PRs #336–#338 open  
 **Standards:** ENGINEERING-STANDARD + SUBAGENT-PROTOCOL binding  
 **Human hard owner:** **`@shehzad002`** — big mountains `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md` (M1–M7)
 
@@ -30,7 +30,7 @@
 | trade.copy                       | **OPEN** | **HUMAN M4 shehzad002**   | Not product — **real engine**                       | M4 Desk engines     | —     |
 | trade.algo                       | **OPEN** | **HUMAN M4 shehzad002**   | Not product — **real engine**                       | M4 Desk engines     | —     |
 | venue.aggregation                | **OPEN** | **AGENT P-TRADE-LIGHT**   | Fabric exists; not mounted                          | A-TRADE-VENUE-1     | —     |
-| order-route #289                 | **WIP**  | **AGENT P-OR** → later M7 | Agent rebase/merge; then human Java residual        | A-OR-1              | —     |
+| order-route #289                | **DONE** | **AGENT P-OR** → M7 open      | #289 merged A-OR-1 (`e29748f`) | complete | #289 |
 | Phase 5 bank money               | **OPEN** | **HUMAN M6 shehzad002**   | earn/cards/ramps/sovereign-card                     | M6 Bank money       | —     |
 | Phase 5 academy/ops/agents       | **OPEN** | **AGENT P-P5-LIGHT**      | thin or §13                                         | A-P5-2..3           | —     |
 | identity sub-account money       | **OPEN** | **HUMAN M5 shehzad002**   | money graph / no cross-leak                         | M5 Identity money   | —     |

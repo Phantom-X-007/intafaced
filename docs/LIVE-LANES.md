@@ -11,7 +11,7 @@
 | **board-clear-coord**    | Board Clear GO orchestrator | L0, scoreboard, NEXT, babysit, fan-out **agent** programs only | **RUNNING**       | residual-only; steal H-\*         |
 | **P-UI**                 | Nitro agents                | vendor shell `:8090` craft/hotkeys/honesty                     | **AGENT**         | apps/web product; human exclusive |
 | **P-WS**                 | Nitro agents                | svc-ws E2E (futures events may wait on human M3)               | **AGENT**         | invent futures events             |
-| **P-OR**                 | Board Clear GO · A-OR-1     | **#289** rebase/merge/absorb                                   | **RUNNING**       | leave orphan; dual-edit shehzad   |
+| **P-OR**              | Board Clear GO · A-OR-1          | **#289** MERGED (`e29748f`) — H-OR-JAVA unblocked for shehzad         | **DONE**          | re-open orphan PR               |
 | **P-TRADE-LIGHT**        | Nitro agents                | mm recovery/reseed/mid residual; spot OHLCV; venue mount       | **AGENT**         | futures risk / otc / copy / algo  |
 | **P-P5-LIGHT**           | Nitro agents                | academy / ops thin / agents usefulness                         | **AGENT**         | bank earn/cards/ramps money       |
 | **P-TRACK**              | coord / agents              | tracker + scoreboard honesty                                   | **AGENT**         | lie on Done                       |
@@ -37,3 +37,4 @@
 - **2026-08-01 v2 hard mountains:** shehzad M1–M7 big blocks (not micro tickets). GO coord + P-OR RUNNING. Agents never A-PAY/A-PROT.
 - **2026-08-01 #333:** initial human/agent split.
 - **2026-08-01 Board Clear GO:** campaign cooking; must obey SHEHZAD-HARD-OWNERSHIP on tip.
+- **2026-08-01 A-OR-1 MERGED:** #289 squash-merged (`e29748f`). P-OR DONE. M7 free for shehzad002.

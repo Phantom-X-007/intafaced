@@ -4,31 +4,35 @@
 **Human hard owner:** `@shehzad002` — mountains **M1–M7** in `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`  
 **Agent cook:** `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md` — **agent lanes only**
 
+## Just shipped
+
+- **A-OR-1 DONE:** #289 squash-merged to main (`e29748f`). Order-route row **DONE**.
+
 ## Active now (agents)
 
-1. **P-OR / A-OR-1:** #289 rebase → CI → merge/absorb (do not leave orphan).
-2. Fan-out **agent-only** (claim then ship):
-   - **A-UI-1** hotkeys / craft on **vendor :8090**
-   - **A-TRADE-MM-1** recovery (P-TRADE-LIGHT only)
-   - **A-TRADE-SPOT-1** / venue as capacity allows
-   - **A-WS-1** channel harden
-   - **A-P5-2/3** academy/ops/agents thin (**not** bank money)
-3. Babysit `@shehzad002` PRs (Class M comments; **no branch steal**).
-4. Evidence block + L8 every PR; wave audit every 4 product merges.
-5. L0 until scoreboard all DONE/CUT — **human rows only move on his merges**.
+1. Babysit → merge when green:
+   - **#336** A-WS-1 private channel harden
+   - **#337** A-UI-1 vendor hotkeys
+   - **#338** A-TRADE-MM-1 recovery makerAccountId
+2. Next fan-out after those:
+   - A-TRADE-MM-2 cancel/reseed
+   - A-TRADE-SPOT-1 / A-TRADE-VENUE-1
+   - A-UI-2/3 honesty / sub-accounts UI (money routing still H-ID-SUB)
+   - A-P5-2/3 academy/ops thin
+3. Babysit `@shehzad002` PRs only — **no A-PAY / A-PROT / futures risk / bank money**.
+4. Evidence + L8 every PR; wave audit every 4 product merges.
+5. L0 until scoreboard all DONE/CUT.
 
-## Active now (human — do not agent-implement)
+## Active now (human)
 
-- **M1 Pay OS** · **M2 Protocol OS** · **M3 Futures risk** · **M4 OTC/copy/algo** · **M5 Identity money** · **M6 Bank money** · **M7 Java residual** (after #289)
+- **M1–M7** per SHEHZAD-HARD-OWNERSHIP — **M7 H-OR-JAVA now unblocked** (#289 closed)
 
 ## Do not
 
-- Fan-out **A-PAY-*** / **A-PROT-*** / futures risk / OTC/copy/algo product / bank money / identity money routing
-- Merge docs PRs that wipe HUMAN-CLAIMED rows (e.g. pre-#333 NEXT with agent pay card)
+- Fan-out A-PAY / A-PROT / invent engines
 - apps/web as product
-- Empty NEXT at turn end
-- Idle waiting on shehzad — ship agent rows hard
+- Empty NEXT
 
 ## Last updated
 
-2026-08-01 v2 — GO RUNNING + shehzad big mountains M1–M7; agent fan-out excludes all H-\*.
+2026-08-01 A-OR-1 #289 MERGED; workers #336–#338 in CI.

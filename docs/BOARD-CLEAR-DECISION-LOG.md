@@ -20,3 +20,4 @@
 | 2026-08-01 | Campaign **RUNNING** with agent lanes only; coord + P-OR RUNNING without wiping H-\*                                                                                                 | GO session coexist                                                                | Ownership v2 |
 
 <!-- APPEND BELOW — do not edit above -->
+| 2026-08-01 | A-OR-1 #289 squash-merged to main; P-OR DONE; M7 unblocked for shehzad | CI green + Class M self-audit; Board Clear B5 | Board Clear GO |
