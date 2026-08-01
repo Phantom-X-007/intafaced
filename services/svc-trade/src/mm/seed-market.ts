@@ -4,6 +4,10 @@
  * Orchestrates: external mid → planSeedQuotes → ledger marketMakerOrderHold →
  * matching submit (post-only GTC limits) under house MM identity.
  *
+ * Cancel/reseed: cancelSeedMarket cancels known seed order ids for a prior run
+ * and releases remaining MM holds (balance-read, never invent amount). A new
+ * seed cycle MUST use a new runId — hold keys are idempotent per order id.
+ *
  * Does NOT invent mid, market list, or inventory. Fund the pot first via
  * marketMakerSeedFund. Seed uses post-only so orders rest or reject, never take.
  * House maker fill: recipes.marketMakerMakerFill + settleFill branch when
@@ -12,7 +16,15 @@
  * Default: call site / ops enables. This module is pure orchestration with
  * injected ports — no wall-clock job here.
  */
-import { formatAmount, mul, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import {
+  formatAmount,
+  marketMakerOrderHoldAccount,
+  mul,
+  parseAmount,
+  recipes,
+  type Amount,
+  type LedgerClient,
+} from '@intafaced/ledger-client';
 import type { EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
 import { mmSeedOrderIdFor } from '../spot/ids.js';
 import { planSeedQuotes, type SeedLevelIntent, type SeedPlanInput } from './seed-planner.js';
@@ -204,4 +216,194 @@ export function summarizeSeedMarket(result: SeedMarketResult): string {
   }
   const resting = result.placements.filter((p) => p.status === 'resting').length;
   return `seed ok mid=${result.mid} resting=${resting}/${result.placements.length}`;
+}
+
+// ── Cancel / reseed lifecycle ────────────────────────────────────────────────
+
+export interface CancelSeedSpec {
+  marketId: string;
+  baseAsset: string;
+  quoteAsset: string;
+  /** Levels used in the prior seed run (defines order-id set). */
+  levels: number;
+  /** Prior run id — same ids seedMarket used. */
+  runId: string;
+}
+
+export interface CancelSeedDeps {
+  ledger: Pick<LedgerClient, 'post' | 'balance'>;
+  matching: Pick<MatchingClient, 'cancel'>;
+  /** Override order id generation (tests) — must match seed. */
+  orderIdFor?: (side: 'buy' | 'sell', level: number) => string;
+}
+
+export type CancelSeedPlacementStatus =
+  | 'cancelled_and_released'
+  | 'not_live_released'
+  | 'not_live_no_hold'
+  | 'cancelled_no_hold'
+  | 'cancel_indeterminate'
+  | 'release_failed';
+
+export interface CancelSeedPlacement {
+  orderId: string;
+  side: 'buy' | 'sell';
+  level: number;
+  status: CancelSeedPlacementStatus;
+  /** Engine cancelled live order; null if cancel call threw. */
+  engineCancelled: boolean | null;
+  releasedAsset?: string;
+  releasedAmount?: string;
+}
+
+export type CancelSeedResult =
+  | { ok: true; placements: CancelSeedPlacement[] }
+  | { ok: false; reason: string; placements: CancelSeedPlacement[] };
+
+export interface SeedOrderRef {
+  orderId: string;
+  side: 'buy' | 'sell';
+  level: number;
+}
+
+/**
+ * Deterministic seed order ids for a run (buy+sell × levels).
+ * Never invents a market or run — caller supplies both.
+ */
+export function seedOrderIdsForRun(
+  runId: string,
+  marketId: string,
+  levels: number,
+  orderIdFor?: (side: 'buy' | 'sell', level: number) => string,
+): SeedOrderRef[] {
+  const out: SeedOrderRef[] = [];
+  if (!Number.isInteger(levels) || levels < 1) return out;
+  for (let level = 1; level <= levels; level++) {
+    for (const side of ['buy', 'sell'] as const) {
+      const orderId = orderIdFor?.(side, level) ?? mmSeedOrderIdFor(runId, marketId, side, level);
+      out.push({ orderId, side, level });
+    }
+  }
+  return out;
+}
+
+/**
+ * Cancel house MM seed orders for a prior run and release remaining holds.
+ *
+ * Engine cancel first; on transport failure → cancel_indeterminate and do NOT
+ * release (order may still be live). When engine answers (live or not), release
+ * remaining hold from ledger balance — never invent the amount.
+ */
+export async function cancelSeedMarket(spec: CancelSeedSpec, deps: CancelSeedDeps): Promise<CancelSeedResult> {
+  if (!spec.marketId.trim() || !spec.baseAsset.trim() || !spec.quoteAsset.trim()) {
+    return { ok: false, reason: 'invalid_market', placements: [] };
+  }
+  if (!spec.runId.trim()) {
+    return { ok: false, reason: 'missing_run_id', placements: [] };
+  }
+  if (!Number.isInteger(spec.levels) || spec.levels < 1 || spec.levels > 50) {
+    return { ok: false, reason: 'invalid_levels', placements: [] };
+  }
+
+  const placements: CancelSeedPlacement[] = [];
+  let anyIndeterminate = false;
+  let anyReleaseFailed = false;
+
+  for (const ref of seedOrderIdsForRun(spec.runId, spec.marketId, spec.levels, deps.orderIdFor)) {
+    let engineCancelled: boolean | null = null;
+    try {
+      const cancelResult = await deps.matching.cancel(spec.marketId, ref.orderId);
+      engineCancelled = cancelResult.cancelled;
+    } catch {
+      anyIndeterminate = true;
+      placements.push({
+        orderId: ref.orderId,
+        side: ref.side,
+        level: ref.level,
+        status: 'cancel_indeterminate',
+        engineCancelled: null,
+      });
+      continue;
+    }
+
+    // Buy holds quote, sell holds base — try primary then other (honest zero skip).
+    const assets =
+      ref.side === 'buy' ? [spec.quoteAsset, spec.baseAsset] : [spec.baseAsset, spec.quoteAsset];
+
+    let released: { asset: string; amount: string } | null = null;
+    let releaseFailed = false;
+
+    for (const assetId of assets) {
+      let amount: Amount;
+      try {
+        const bal = await deps.ledger.balance(marketMakerOrderHoldAccount(assetId, ref.orderId));
+        amount = bal.amount;
+      } catch {
+        continue;
+      }
+      if (amount <= 0n) continue;
+      try {
+        await deps.ledger.post(
+          recipes.marketMakerOrderHoldRelease({
+            orderId: ref.orderId,
+            assetId,
+            amount,
+            sequence: 0,
+          }),
+        );
+        released = { asset: assetId, amount: formatAmount(amount) };
+        break;
+      } catch {
+        releaseFailed = true;
+        break;
+      }
+    }
+
+    if (releaseFailed) {
+      anyReleaseFailed = true;
+      placements.push({
+        orderId: ref.orderId,
+        side: ref.side,
+        level: ref.level,
+        status: 'release_failed',
+        engineCancelled,
+      });
+      continue;
+    }
+
+    let status: CancelSeedPlacementStatus;
+    if (released) {
+      status = engineCancelled ? 'cancelled_and_released' : 'not_live_released';
+    } else {
+      status = engineCancelled ? 'cancelled_no_hold' : 'not_live_no_hold';
+    }
+
+    placements.push({
+      orderId: ref.orderId,
+      side: ref.side,
+      level: ref.level,
+      status,
+      engineCancelled,
+      releasedAsset: released?.asset,
+      releasedAmount: released?.amount,
+    });
+  }
+
+  if (anyIndeterminate) {
+    return { ok: false, reason: 'cancel_indeterminate', placements };
+  }
+  if (anyReleaseFailed) {
+    return { ok: false, reason: 'release_failed', placements };
+  }
+  return { ok: true, placements };
+}
+
+export function summarizeCancelSeed(result: CancelSeedResult): string {
+  if (!result.ok) {
+    return `cancel fail (${result.reason}) placements=${result.placements.length}`;
+  }
+  const released = result.placements.filter(
+    (p) => p.status === 'cancelled_and_released' || p.status === 'not_live_released',
+  ).length;
+  return `cancel ok released=${released}/${result.placements.length}`;
 }

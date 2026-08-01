@@ -7,8 +7,21 @@ import {
   parseAmount as amt,
   recipes,
 } from '@intafaced/ledger-client';
-import type { EngineSubmitRequest, EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
-import { isHouseMmAccount, MM_MATCHING_ACCOUNT_ID, seedMarket, summarizeSeedMarket } from './seed-market.js';
+import type {
+  EngineCancelResult,
+  EngineSubmitRequest,
+  EngineSubmitResult,
+  MatchingClient,
+} from '../spot/matching-client.js';
+import {
+  cancelSeedMarket,
+  isHouseMmAccount,
+  MM_MATCHING_ACCOUNT_ID,
+  seedMarket,
+  seedOrderIdsForRun,
+  summarizeCancelSeed,
+  summarizeSeedMarket,
+} from './seed-market.js';
 import { mmSeedOrderIdFor } from '../spot/ids.js';
 
 async function fundMm(ledger: MemoryLedger, asset: string, amount: string, seedId: string) {
@@ -16,10 +29,14 @@ async function fundMm(ledger: MemoryLedger, asset: string, amount: string, seedI
 }
 
 /** Minimal matching double — avoids pulling contracts via spot/testing. */
-class SeedStubMatching implements Pick<MatchingClient, 'submit'> {
+class SeedStubMatching implements Pick<MatchingClient, 'submit' | 'cancel'> {
   readonly submitted: Array<{ marketId: string; request: EngineSubmitRequest }> = [];
+  readonly cancelled: Array<{ marketId: string; orderId: string }> = [];
+  /** Live order ids after successful submit (cleared on cancel). */
+  readonly live = new Set<string>();
   private seq = 0;
   private readonly scripts: Array<(req: EngineSubmitRequest) => EngineSubmitResult> = [];
+  cancelThrows = false;
 
   script(fn: (req: EngineSubmitRequest) => EngineSubmitResult): this {
     this.scripts.push(fn);
@@ -31,6 +48,7 @@ class SeedStubMatching implements Pick<MatchingClient, 'submit'> {
     const scripted = this.scripts.shift();
     if (scripted) return scripted(request);
     const sequence = ++this.seq;
+    this.live.add(request.orderId);
     return {
       accepted: true,
       sequence,
@@ -47,6 +65,28 @@ class SeedStubMatching implements Pick<MatchingClient, 'submit'> {
       rejected: null,
       cancellations: [],
       triggered: [],
+    };
+  }
+
+  async cancel(marketId: string, orderId: string): Promise<EngineCancelResult> {
+    this.cancelled.push({ marketId, orderId });
+    if (this.cancelThrows) throw new Error('matching down');
+    if (!this.live.has(orderId)) {
+      return { cancelled: false, orderId, sequence: null, cancellation: null };
+    }
+    this.live.delete(orderId);
+    const sequence = ++this.seq;
+    return {
+      cancelled: true,
+      orderId,
+      sequence,
+      cancellation: {
+        orderId,
+        accountId: MM_MATCHING_ACCOUNT_ID,
+        remainingQty: '1',
+        sequence,
+        reason: 'requested',
+      },
     };
   }
 }
@@ -234,5 +274,205 @@ describe('seedMarket', () => {
     expect(buyPlacement?.status).toBe('hold_failed');
     expect(sellPlacement?.status).toBe('resting');
     expect(matching.submitted.every((s) => s.request.side === 'sell')).toBe(true);
+  });
+});
+
+describe('cancelSeedMarket', () => {
+  it('seedOrderIdsForRun is buy+sell × levels deterministic', () => {
+    const ids = seedOrderIdsForRun('run-c', 'btc-usdt', 2);
+    expect(ids).toHaveLength(4);
+    expect(ids.map((r) => r.orderId)).toEqual([
+      mmSeedOrderIdFor('run-c', 'btc-usdt', 'buy', 1),
+      mmSeedOrderIdFor('run-c', 'btc-usdt', 'sell', 1),
+      mmSeedOrderIdFor('run-c', 'btc-usdt', 'buy', 2),
+      mmSeedOrderIdFor('run-c', 'btc-usdt', 'sell', 2),
+    ]);
+  });
+
+  it('cancels live seed orders and releases MM holds back to pot', async () => {
+    const ledger = new MemoryLedger();
+    await fundMm(ledger, 'USDT', '10000', 'fund-c');
+    await fundMm(ledger, 'BTC', '100', 'fund-c-b');
+    const matching = new SeedStubMatching();
+
+    const seeded = await seedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-cancel',
+      },
+      { ledger, matching },
+    );
+    expect(seeded.ok).toBe(true);
+    expect(matching.live.size).toBe(2);
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('9901');
+    expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe('99');
+
+    const cancelled = await cancelSeedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        levels: 1,
+        runId: 'run-cancel',
+      },
+      { ledger, matching },
+    );
+
+    expect(cancelled.ok).toBe(true);
+    expect(matching.live.size).toBe(0);
+    expect(matching.cancelled).toHaveLength(2);
+    expect(cancelled.placements.every((p) => p.status === 'cancelled_and_released')).toBe(true);
+    // inventory fully returned
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('10000');
+    expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe('100');
+    expect(summarizeCancelSeed(cancelled)).toContain('released=2/2');
+  });
+
+  it('not-live cancel still releases leftover hold (levels already cancelled)', async () => {
+    const ledger = new MemoryLedger();
+    await fundMm(ledger, 'USDT', '1000', 'fund-nl');
+    await fundMm(ledger, 'BTC', '10', 'fund-nl-b');
+    const matching = new SeedStubMatching();
+
+    const seeded = await seedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-nl',
+      },
+      { ledger, matching },
+    );
+    expect(seeded.ok).toBe(true);
+    // Simulate engine already empty (fills or external cancel) while holds remain.
+    matching.live.clear();
+
+    const cancelled = await cancelSeedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        levels: 1,
+        runId: 'run-nl',
+      },
+      { ledger, matching },
+    );
+
+    expect(cancelled.ok).toBe(true);
+    expect(cancelled.placements.every((p) => p.status === 'not_live_released')).toBe(true);
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('1000');
+    expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe('10');
+  });
+
+  it('cancel_indeterminate does not release hold (order may still be live)', async () => {
+    const ledger = new MemoryLedger();
+    await fundMm(ledger, 'USDT', '1000', 'fund-ind');
+    await fundMm(ledger, 'BTC', '10', 'fund-ind-b');
+    const matching = new SeedStubMatching();
+
+    await seedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-ind',
+      },
+      { ledger, matching },
+    );
+
+    matching.cancelThrows = true;
+    const cancelled = await cancelSeedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        levels: 1,
+        runId: 'run-ind',
+      },
+      { ledger, matching },
+    );
+
+    expect(cancelled.ok).toBe(false);
+    if (cancelled.ok) return;
+    expect(cancelled.reason).toBe('cancel_indeterminate');
+    expect(cancelled.placements.every((p) => p.status === 'cancel_indeterminate')).toBe(true);
+    // holds still locked
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('901');
+    expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe('9');
+  });
+
+  it('reseed after cancel with new runId redraws holds (same runId would not)', async () => {
+    const ledger = new MemoryLedger();
+    await fundMm(ledger, 'USDT', '10000', 'fund-rs');
+    await fundMm(ledger, 'BTC', '100', 'fund-rs-b');
+    const matching = new SeedStubMatching();
+
+    const first = await seedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-1',
+      },
+      { ledger, matching },
+    );
+    expect(first.ok).toBe(true);
+
+    const cancelled = await cancelSeedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        levels: 1,
+        runId: 'run-1',
+      },
+      { ledger, matching },
+    );
+    expect(cancelled.ok).toBe(true);
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('10000');
+
+    const second = await seedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-2',
+      },
+      { ledger, matching },
+    );
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.placements.every((p) => p.status === 'resting')).toBe(true);
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('9901');
+    expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe('99');
+    // new order ids
+    expect(second.placements[0]!.orderId).not.toBe(first.ok ? first.placements[0]!.orderId : '');
   });
 });
