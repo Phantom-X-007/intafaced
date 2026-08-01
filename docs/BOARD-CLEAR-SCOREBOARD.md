@@ -7,7 +7,7 @@
 **Tip check:** `git log origin/main -1 --oneline`
 
 **Campaign status:** `RUNNING`  
-**Last scoreboard edit:** 2026-08-01 #289+#336+#337 on main; #338 CI; wave count 3  
+**Last scoreboard edit:** 2026-08-01 wave1 audit after #289+#336+#337+#338 · prior: 2026-08-01 #289+#336+#337 on main; #338 CI; wave count 3  
 **Known dirty:** #338 mm recovery in CI; human M1–M7 open  
 **Standards:** ENGINEERING-STANDARD + SUBAGENT-PROTOCOL binding  
 **Human hard owner:** **`@shehzad002`** — big mountains `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md` (M1–M7)
@@ -25,7 +25,7 @@
 | protocol.amm (+ lending/escrow…) | **OPEN** | **HUMAN M2 shehzad002**  | Compile unblocked; suite after SA                            | M2 Protocol OS      | —     |
 | trade.spot                       | **OPEN** | **AGENT P-TRADE-LIGHT**  | REST solid; OHLCV empty-honest                               | A-TRADE-SPOT-1      | —     |
 | trade.futures                    | **OPEN** | **HUMAN M3 shehzad002**  | Jobs OFF residual; **risk engine**                           | M3 Derivatives risk | —     |
-| trade.mm-bot                     | **OPEN** | **AGENT P-TRADE-LIGHT**  | Seed+hold+fill on main; recovery residual                    | A-TRADE-MM-1..3     | —     |
+| trade.mm-bot                     | **WIP**  | **AGENT P-TRADE-LIGHT**  | Recovery A-TRADE-MM-1 on main (#338); reseed #340 in CI      | A-TRADE-MM-2/3      | #338  |
 | trade.otc                        | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                | M4 Desk engines     | —     |
 | trade.copy                       | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                | M4 Desk engines     | —     |
 | trade.algo                       | **OPEN** | **HUMAN M4 shehzad002**  | Not product — **real engine**                                | M4 Desk engines     | —     |
