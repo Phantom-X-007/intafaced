@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**43 of 108 shipped (40%)** · 4 in progress · 34 ready to claim · 27 blocked · 19 deliberate §13 sockets
+**44 of 108 shipped (41%)** · 3 in progress · 39 ready to claim · 22 blocked · 19 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -33,8 +33,13 @@ pnpm wt feat/<the-thing>
 | CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
 | Internal market-maker seeding books at launch | `trade` | 2 | `trade.mm-bot` |
 | External venue adapters via CCXT (cross-venue) | `trade` | 2 | `venue.aggregation` |
+| PSP mode — own the merchant, digital KYB, custom pricing | `pay` | 3 | `pay.psp` |
 | Smart routing — geo, method, risk, approval rate | `pay` | 3 | `pay.routing` |
 | Dual settlement — bank or crypto | `pay` | 3 | `pay.settlement` |
+| Risk scoring, chargebacks, decline recovery | `pay` | 3 | `pay.fraud` |
+| Recurring — card and crypto | `pay` | 3 | `pay.subscriptions` |
+| Woo / Magento / OpenCart plugins | `pay` | 3 | `pay.plugins` |
+| Public REST + webhooks + sandbox (§9) | `pay` | 3 | `pay.public-api` |
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | Share card render (1080×1350, 1200×630) | `blueprint` | 4 | `blueprint.card` |
@@ -68,12 +73,12 @@ What each unshipped feature would unblock, transitively. **This is what should d
 |---:|---|---|---|
 | **24** | Passkey smart accounts, session keys (§17.4) | 🟢 ready | `protocol.smart-accounts` |
 | **9** | AMM pools from audited templates | ⛔ blocked | `protocol.amm` |
-| **6** | Branded gateway, hosted checkout, payment links | 🔨 wip | `pay.gateway` |
 | **5** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **4** | ERC-20 deploy from audited templates | 🟢 ready | `launch.token-factory` |
 | **3** | Chain → Postgres read models | ⛔ blocked | `indexer.readmodels` |
 | **3** | Event-driven fan-out: in-app, push, email, SMS | 🟢 ready | `ops.notifications` |
 | **2** | CardIssuerAdapter + card-sim, <2s auth decision | 🟢 ready | `bank.cards` |
+| **1** | Perps: cross/isolated margin, funding, liquidation ladder | 🔨 wip | `trade.futures` |
 
 ## 🔨 In progress
 
@@ -82,7 +87,6 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Perps: cross/isolated margin, funding, liquidation ladder | **Nitro** | `trade` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
-| Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
 
 ---
 
@@ -145,21 +149,21 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Live order book — snapshot + sequenced deltas to the browser <br/>_services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; apps/web applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them._ | F |  | `ws.depth` |
 | 🔨 | WebSocket fan-out: depth, trades, orders, positions <br/>_Updated 2026-07-31: positions channel receives positionUpdated from trade.futures open/close (#281). Still wip product gateway._ | F |  | `ws.gateway` |
 
-### Phase 3 — Pay + P2P (6/16)
+### Phase 3 — Pay + P2P (7/16)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| 🔨 | Branded gateway, hosted checkout, payment links <br/>_Updated 2026-07-31 residual: hosted checkout + links; live crypto rail; Postgres broadcast + refundId durability; merchant.create mounted under pay:write (principal userId only, feeBps required). Still wip / not go-live: card acquiring (commercial socket), crash-after-send-before-put residual, prod RPC/custody owner-supplied, full KYB product is pay.psp. Not done._ | F |  | `pay.gateway` |
-| ⛔ | PSP mode — own the merchant, digital KYB, custom pricing | F | `pay.gateway` | `pay.psp` |
+| ✅ | Branded gateway, hosted checkout, payment links <br/>_Updated 2026-08-01 (M1): Board Clear bar met on sandbox. Card acquiring E2E via merchant integration + card-sandbox (auth→capture→settle→refund; scripts/card-sandbox-e2e.mjs + payment-service suite). Hosted PUBLIC checkout remains crypto-only under live-only — card-sandbox must never take anonymous public money (posture law). Merchant path: create (principal-bound) + KYB stub submit/decideKybStub (decide refused under live-only → pay.kyb_operator_required; digital KYB is pay.psp). Durable status: payment_events + payment.list/get/history; PostgresBroadcastStore for crypto outbound (#266). Crypto rail #226 stays green (live-rail-e2e). Residuals not waved: prod card acquirer keys (§13 commercial), send→put crash window P1, production RPC/custody owner-supplied. Adjacent pay.* verticals (psp/payfac/fraud/subscriptions/routing/settlement/public-api) are separate rows — expand next in M1._ | F |  | `pay.gateway` |
+| 🟢 | PSP mode — own the merchant, digital KYB, custom pricing | F |  | `pay.psp` |
 | ⛔ | PayFac mode — sub-merchant trees, 14 permission areas | F | `pay.psp` | `pay.payfac` |
 | ✅ | RailAdapter interface + crypto-native + card-sandbox <br/>_Updated 2026-07-31: LIVE-capable crypto rail exists — NOT "go-live complete". `EvmLiveChain` implements CryptoChainPort with posture:live (viem Public+Wallet client, HD acceptance addresses from PAY_CRYPTO_DEPOSIT_MNEMONIC, hot-wallet outbound via PAY_CRYPTO_HOT_WALLET_KEY, asset map PAY_CRYPTO_ASSETS). BroadcastStore claim→send→put-before-receipt ordering (single-process MemoryBroadcastStore wired today). defaultChainFor builds it when PAY_CRYPTO_RPC_URL(+keys) are set; otherwise UnconfiguredChain in staging/prod and MemoryChain in dev/test. In-process CryptoChainWatcher POSTs signed webhooks. staging/prod omit card-sandbox by default so boot posture can pass with only live crypto. Proven: unit + broadcast claim suite + optional anvil. Residuals that BLOCK production go-live (named, not waved): durable multi-replica BroadcastStore still required; address book + watcher are in-process; production RPC/custody are owner-supplied (anvil ≠ chain decision); card acquiring remains a §13 commercial socket. `done` means the adapter + live path exist under env — not that ops may turn on mainnet without those residuals._ | F |  | `pay.rails` |
 | ✅ | User deposit + withdrawal — the two paths off the merchant path <br/>_Updated 2026-07-31: unblocked by live crypto-native. deposit.credit + withdrawal.* remain mounted; under live-only a crypto-native withdrawal can now pass assertRailMayMoveValue when EvmLiveChain is configured (sandbox still refused). Concurrent double-submit + conservation suites unchanged. Residual: operator hand-credit still defaults to card-sandbox (skipped when that adapter is not registered); on-chain user deposits for the retail path are the watcher→webhook→capture loop, not deposit.credit._ | F |  | `pay.user-money` |
 | 🟢 | Smart routing — geo, method, risk, approval rate | F |  | `pay.routing` |
 | 🟢 | Dual settlement — bank or crypto | F |  | `pay.settlement` |
-| ⛔ | Risk scoring, chargebacks, decline recovery | F | `pay.gateway` | `pay.fraud` |
-| ⛔ | Recurring — card and crypto | F | `pay.gateway` | `pay.subscriptions` |
-| ⛔ | Woo / Magento / OpenCart plugins | F | `pay.gateway` | `pay.plugins` |
-| ⛔ | Public REST + webhooks + sandbox (§9) | B | `pay.gateway` | `pay.public-api` |
+| 🟢 | Risk scoring, chargebacks, decline recovery | F |  | `pay.fraud` |
+| 🟢 | Recurring — card and crypto | F |  | `pay.subscriptions` |
+| 🟢 | Woo / Magento / OpenCart plugins | F |  | `pay.plugins` |
+| 🟢 | Public REST + webhooks + sandbox (§9) | B |  | `pay.public-api` |
 | ✅ | Offers, maker/taker, 100+ fiat currencies <br/>_svc-p2p on main; self-mounts /trpc with an edge-verified principal_ | F |  | `p2p.offers` |
 | ✅ | Ledger escrow — lock, release, refund <br/>_Escrow flows in svc-p2p; not a separate service_ | F |  | `p2p.escrow` |
 | ✅ | Moderated dispute resolution <br/>_Dispute paths in svc-p2p core_ | F |  | `p2p.disputes` |

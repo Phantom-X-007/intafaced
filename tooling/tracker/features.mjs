@@ -336,11 +336,10 @@ export const FEATURES = [
   f('pay.gateway', 'Branded gateway, hosted checkout, payment links', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'done',
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
-    note: 'Updated 2026-07-31 residual: hosted checkout + links; live crypto rail; Postgres broadcast + refundId durability; merchant.create mounted under pay:write (principal userId only, feeBps required). Still wip / not go-live: card acquiring (commercial socket), crash-after-send-before-put residual, prod RPC/custody owner-supplied, full KYB product is pay.psp. Not done.',
+    note: 'Updated 2026-08-01 (M1): Board Clear bar met on sandbox. Card acquiring E2E via merchant integration + card-sandbox (auth→capture→settle→refund; scripts/card-sandbox-e2e.mjs + payment-service suite). Hosted PUBLIC checkout remains crypto-only under live-only — card-sandbox must never take anonymous public money (posture law). Merchant path: create (principal-bound) + KYB stub submit/decideKybStub (decide refused under live-only → pay.kyb_operator_required; digital KYB is pay.psp). Durable status: payment_events + payment.list/get/history; PostgresBroadcastStore for crypto outbound (#266). Crypto rail #226 stays green (live-rail-e2e). Residuals not waved: prod card acquirer keys (§13 commercial), send→put crash window P1, production RPC/custody owner-supplied. Adjacent pay.* verticals (psp/payfac/fraud/subscriptions/routing/settlement/public-api) are separate rows — expand next in M1.',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', { module: 'pay', phase: '3', dependsOn: ['pay.gateway'] }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', { module: 'pay', phase: '3', dependsOn: ['pay.psp'] }),
