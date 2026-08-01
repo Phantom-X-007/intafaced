@@ -1,6 +1,6 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
-import { TIMEFRAME_MS, type Timeframe } from '@intafaced/exchange-contract';
+import type { Timeframe } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
 import { requireScope, type Principal } from '@intafaced/auth';
 import {
@@ -15,6 +15,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { withMoneySpan } from '../tracing.js';
+import { queryCandlesFromFills } from './candles.js';
 import { ratesForFill } from './fees.js';
 import { fillIdFor, fillLegIdFor, orderIdFor } from './ids.js';
 import {
@@ -1530,77 +1531,12 @@ export class TradeService {
   /**
    * Candles for a market (CCXT `fetchOHLCV`), aggregated from real taker fills.
    *
-   * SOURCE OF TRUTH: `trade.fills` where `liquidity = 'taker'` — one row per
-   * match, the same rows `publicTape` publishes. Every price in every candle is
-   * a price something actually traded at. Nothing is modelled, interpolated, or
-   * carried forward from a previous bucket.
-   *
-   * Bucketing is done in SQL, on `ts`, floored to a multiple of the timeframe
-   * span from the unix epoch. Doing it in Postgres rather than in the service
-   * matters for correctness, not just speed: bucketing a `LIMIT`ed page in
-   * memory silently truncates the oldest bucket, and a half-summed candle
-   * reported as a whole one is a fabricated volume.
-   *
-   * `date_bin` is not used because it is Postgres 14+ and this must run on the
-   * declared floor; epoch arithmetic is equivalent and version-independent.
-   *
-   * Open/close are resolved by `sequence`, the engine's own total order, rather
-   * than by `ts`. Two fills inside the same millisecond are ordinary at engine
-   * speed and ordering them by timestamp makes open/close non-deterministic —
-   * the same query would return different candles on different runs.
-   *
-   * A bucket with no fills produces NO ROW. It is not zero-filled: a candle at
-   * price 0 with volume 0 is a print that never happened, and a client running
-   * an indicator across it gets a number we invented.
+   * SOURCE OF TRUTH: live SQL over `trade.fills` (see `queryCandlesFromFills`).
+   * Never invents empty buckets; SD-3 excludes seeded volume. Optional durable
+   * materialization is a separate job (`startCandleJobs`, default OFF).
    */
   async candles(marketId: string, timeframe: Timeframe, limit = 500, sinceMs?: number): Promise<Candle[]> {
-    const capped = Math.min(Math.max(Math.floor(limit), 1), 1000);
-    const spanMs = TIMEFRAME_MS[timeframe];
-    const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
-
-    type CandleRow = { bucket_ms: string; open: string; high: string; low: string; close: string; volume: string };
-
-    // `bucket_ms` is computed as bigint milliseconds and returned as a string
-    // by postgres.js — parsed with Number below, where it is a timestamp and
-    // not money, so a double carries it exactly for the next ~285,000 years.
-    const bucketExpr = this.sql`(floor(extract(epoch from ts) * 1000 / ${spanMs}::bigint)::bigint * ${spanMs}::bigint)`;
-
-    // SD-3: candles/volume exclude fills involving seeded orders.
-    const rows = await this.sql<CandleRow[]>`
-      SELECT bucket_ms::text                                              AS bucket_ms,
-             (array_agg(price ORDER BY sequence ASC))[1]                  AS open,
-             max(price)                                                   AS high,
-             min(price)                                                   AS low,
-             (array_agg(price ORDER BY sequence DESC))[1]                 AS close,
-             sum(qty)                                                     AS volume
-        FROM (
-          SELECT ${bucketExpr} AS bucket_ms, f.price, f.qty, f.sequence
-            FROM trade.fills f
-            INNER JOIN trade.orders o ON o.id = f.order_id
-            INNER JOIN trade.orders c ON c.id = f.counter_order_id
-           WHERE f.market_id = ${marketId}
-             AND f.liquidity = 'taker'
-             AND o.seeded = false
-             AND c.seeded = false
-             ${sinceDate ? this.sql`AND f.ts >= ${sinceDate}` : this.sql``}
-        ) AS binned
-       GROUP BY bucket_ms
-       -- Newest buckets are the ones a chart opens on, so LIMIT must keep the
-       -- most recent; the ascending order CCXT expects is restored below.
-       ORDER BY bucket_ms DESC
-       LIMIT ${capped}
-    `;
-
-    return rows
-      .map((row) => ({
-        openTimeMs: Number(row.bucket_ms),
-        open: parseAmount(row.open),
-        high: parseAmount(row.high),
-        low: parseAmount(row.low),
-        close: parseAmount(row.close),
-        volume: parseAmount(row.volume),
-      }))
-      .reverse(); // CCXT fetchOHLCV returns oldest → newest.
+    return queryCandlesFromFills(this.sql, { marketId, timeframe, limit, sinceMs });
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────

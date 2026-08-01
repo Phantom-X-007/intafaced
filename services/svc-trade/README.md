@@ -116,6 +116,13 @@ whose caller chose not to supply a client id — and that order is the only one 
 | **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)         |
 | **F8**            | seed↔seed prints never inflate public tape                                     |
 
+### OHLCV / candles (A-TRADE-SPOT-1)
+
+| Path                                 | Behavior                                                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **REST** `GET /api/v1/ohlcv/:symbol` | Live SQL aggregation from non-seeded taker fills (`queryCandlesFromFills`). Empty market → `[]`. Gaps stay gaps — never zero-filled.             |
+| **Job** `TRADE_CANDLE_JOBS_*`        | Default **OFF**. When enabled + market ids set, materializes _closed_ buckets into `trade.spot_candles`. Never invents markets or empty candles. |
+
 Seeder process resume (SD-1/SD-6, branch `feat/spine-market-seeder`) is a separate eng residual.
 
 ### Reconcile open ↔ hold ↔ engine (Spec CX-9)

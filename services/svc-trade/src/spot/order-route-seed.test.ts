@@ -255,6 +255,13 @@ if (!available) {
       expect(tape).toHaveLength(1);
       expect(formatAmount(tape[0]!.qty)).toBe('1');
       expect(formatAmount(tape[0]!.price)).toBe('101');
+
+      // SD-3 on OHLCV: same exclusion — seed volume must not become a candle.
+      const candles = await trade.candles(btcusdt.id, '1m', 50);
+      expect(candles).toHaveLength(1);
+      expect(formatAmount(candles[0]!.volume)).toBe('1');
+      expect(formatAmount(candles[0]!.open)).toBe('101');
+      expect(formatAmount(candles[0]!.close)).toBe('101');
     });
   });
 }
