@@ -10,11 +10,16 @@
  * Checks, per service:
  *   1. README with API contract, event subjects, and ledger recipes used
  *   2. Zero TODOs referencing "later" without a §13 socket entry
- *   3. Migrations reversible (delegates to migration-check)
- *   4. Tests exist for every money path (a file touching ledger recipes has a
- *      sibling test)
- *   5. Observability wired — the service registers a tracer
- *   6. Admin controls — the module has a kill-switch the operator can reach
+ *   3. Tests exist for every money path (a file that posts to the ledger or
+ *      builds a recipe is reachable from some test in the service)
+ *   4. Observability wired — the service registers a tracer
+ *   5. Admin controls — the module has a kill-switch the operator can reach
+ *
+ * REPO-WIDE doctrine scans (brand, custody, secrets, dual-book, migrations,
+ * kill-switch reachability, …) are NOT here. They live in one list —
+ * `tooling/ci/gates.mjs` — which `pnpm verify` and CI's `gates` job both run.
+ * Run them with `pnpm gates`. See the note in the run section below for why
+ * they moved.
  *
  * Checks 1–6 are mechanical. The DoD items that cannot be automated (SLO
  * dashboard panel, e2e failure paths) are printed as a manual checklist so the
@@ -22,7 +27,6 @@
  */
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, basename, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
 
 const ROOT = process.cwd();
 const SERVICES = join(ROOT, 'services');
@@ -188,35 +192,24 @@ if (target && services.length === 0) {
 
 console.log('\n══ DEFINITION OF DONE GATE (§14) ══\n');
 
-// Repo-wide gates first.
-let repoFailed = false;
-// `killswitch-reachability.mjs` turns §14.6 from a manual sign-off item into a
-// machine check. Kept as its own script rather than inlined here so two agents
-// editing this file collide on one line instead of a hundred.
+// The repo-wide doctrine scans used to run here, from a list this file kept:
+// brand, custody, vendor-shell, vendor-java-money, dual-book-door, secret,
+// migration-check, killswitch-reachability.
 //
-// `secret-scan.mjs` is here for the same reason brand-scan and custody-scan are:
-// a committed credential is invisible in review — it reads as a config line — so
-// the check has to be mechanical rather than something a reviewer must remember.
-for (const script of [
-  'brand-scan.mjs',
-  'custody-scan.mjs',
-  'vendor-shell-scan.mjs',
-  'vendor-java-money-scan.mjs',
-  'dual-book-door-scan.mjs',
-  'secret-scan.mjs',
-  'migration-check.mjs',
-  'killswitch-reachability.mjs',
-]) {
-  try {
-    const out = execFileSync(process.execPath, [join(ROOT, 'tooling', 'ci', script)], { encoding: 'utf8' });
-    process.stdout.write('  ' + out.trim() + '\n');
-  } catch (err) {
-    repoFailed = true;
-    process.stdout.write((err.stdout ?? '') + (err.stderr ?? ''));
-  }
-}
-
-console.log('');
+// They have moved to `tooling/ci/gates.mjs`, the ONE list that `pnpm verify`
+// and the `gates` job in ci.yml both consume. Nothing was dropped — all eight
+// are in that list, which now also carries the two gates CI ran and verify
+// never did (`dual-book-door-paths`, `test-db`).
+//
+// Two reasons for the move. They were running twice per CI run, once in the
+// `gates` job and again here in the `dod` job. And, worse, they ran LAST in
+// `pnpm verify` — behind build, typecheck and the entire test suite — so an
+// engineer with one failing test never saw a doctrine result at all. Two
+// seconds of structural checks belong in front of a two-minute build.
+//
+// This file is now what its name says: the per-service §14 Definition of Done.
+console.log('  Repo-wide doctrine gates run separately — `pnpm gates` (tooling/ci/gates.mjs).');
+console.log('  `pnpm verify` runs those FIRST; this gate is the per-service §14 DoD.\n');
 
 let serviceFailed = false;
 for (const dir of services) {
@@ -241,7 +234,7 @@ console.log('  □ At least one SLO dashboard panel exists in Grafana');
 console.log('  □ Kill-switch verified reachable from apps/admin');
 console.log('');
 
-if (repoFailed || serviceFailed) {
+if (serviceFailed) {
   console.error('✖ DoD GATE FAILED — the module does not ship (Doctrine §0.1: never half done)\n');
   process.exit(1);
 }
