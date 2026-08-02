@@ -2,41 +2,40 @@
   <div class="nav-rights">
     <div class="nav-right col-xs-12 col-md-10 padding-right-clear">
       <div class="bill_box rightarea padding-right-clear">
-        <div class="shaow">
-          <div class="money_table">
-            <div style="width: 100%;height: 50px;">
-            <div style="float:left;letter-spacing:1px;padding-top: 5px;">
-                <span style="font-size:12px;color:#8a8a8a;">{{$t('uc.finance.money.totalassets')}}</span>
-                <!-- Design bar: empty ≠ zero. Only show $ totals when wallet answered. -->
-                <span v-if="loading" class="ix-empty-loading" style="font-size: 14px;margin-left:6px;">Loading…</span>
-                <template v-else-if="walletReachable">
-                  <span class="ix-num" style="font-size: 18px;color:#D8E1EB;">${{totalUSDT}}</span>
-                  <span class="ix-num" style="font-size:10px;color:#8a8a8a;margin-left: 5px;"> ≈ ¥{{totalCny}}</span>
-                </template>
-                <span v-else class="ix-dim" style="font-size: 14px;margin-left:6px;">— unknown</span>
+        <!-- B3 craft: desk-aligned shell (P21 tokens) — honesty copy preserved. -->
+        <div class="ix-money">
+          <header class="ix-money-head">
+            <div class="ix-money-totals">
+              <span class="ix-money-label">{{$t('uc.finance.money.totalassets')}}</span>
+              <!-- Design bar: empty ≠ zero. Only show $ totals when wallet answered. -->
+              <span v-if="loading" class="ix-empty-loading">Loading…</span>
+              <template v-else-if="walletReachable">
+                <span class="ix-num ix-money-total">${{totalUSDT}}</span>
+                <span class="ix-num ix-money-fiat">≈ ¥{{totalCny}}</span>
+              </template>
+              <span v-else class="ix-dim">— unknown</span>
             </div>
-            <Input style="float:right;" class="search" search :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
-            </div>
-            <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0; clear: both;">
-              Two books. Venue exchange wallet only — not the platform ledger books.
-            </p>
-            <p
-              v-if="walletError"
-              class="ix-empty ix-empty-error"
-              role="alert"
-              tabindex="-1"
-              ref="walletError"
-            >{{ walletError }}</p>
-            <p v-else-if="!loading && walletReachable && tableMoneyShow.length === 0" class="ix-empty">No balances yet</p>
-            <Table
-              v-if="!walletError"
-              class="ix-money-table"
-              :columns="tableColumnsMoney"
-              :data="tableMoneyShow"
-              :loading="loading"
-              :disabled-hover="true"
-            ></Table>
-          </div>
+            <Input class="search ix-money-search" search :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
+          </header>
+          <p class="ix-dualbook" role="note">
+            <strong>Two books.</strong> Venue exchange wallet only — not the platform ledger books.
+          </p>
+          <p
+            v-if="walletError"
+            class="ix-empty ix-empty-error"
+            role="alert"
+            tabindex="-1"
+            ref="walletError"
+          >{{ walletError }}</p>
+          <p v-else-if="!loading && walletReachable && tableMoneyShow.length === 0" class="ix-empty">No balances yet</p>
+          <Table
+            v-if="!walletError"
+            class="ix-money-table"
+            :columns="tableColumnsMoney"
+            :data="tableMoneyShow"
+            :loading="loading"
+            :disabled-hover="true"
+          ></Table>
         </div>
       </div>
     </div>
@@ -496,11 +495,76 @@ export default {
 }
 
 
+.ix-money {
+  padding: 12px 14px 18px;
+  border: 1px solid var(--ix-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: var(--ix-surface, rgba(255, 255, 255, 0.03));
+}
+.ix-money-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.ix-money-totals {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 32px;
+}
+.ix-money-label {
+  font-size: 12px;
+  color: var(--ix-text-muted, #8b919a);
+  letter-spacing: 0.02em;
+}
+.ix-money-total {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ix-text, #d8e1eb);
+  font-variant-numeric: tabular-nums;
+}
+.ix-money-fiat {
+  font-size: 11px;
+  color: var(--ix-text-muted, #8b919a);
+  font-variant-numeric: tabular-nums;
+}
+.ix-money-search {
+  max-width: 220px;
+  flex: 0 1 220px;
+}
+/* Same dual-book recipe as Exchange.vue — plane honesty. */
+.ix-dualbook {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 194, 168, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 194, 168, 0.06);
+  color: #c8cdd4;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ix-dualbook strong {
+  color: #00c2a8;
+  font-weight: 600;
+}
 .ix-money-table {
   font-variant-numeric: tabular-nums;
 }
 .ix-empty-error:focus {
   outline: 1px solid var(--ix-orange, #00c2a8);
   outline-offset: 2px;
+}
+.ix-empty-loading {
+  font-style: italic;
+  color: var(--ix-text-muted, #8b919a);
+  font-size: 14px;
+}
+.ix-dim {
+  color: var(--ix-text-muted, #8b919a);
+  font-size: 14px;
 }
 </style>

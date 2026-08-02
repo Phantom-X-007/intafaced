@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "Re-stamp tip_sha via: pnpm frontend:preflight (prints git rev-parse origin/main)",
-  "tip_sha_at_write": "5f2f8fe",
+  "tip_note": "After #363 PROOF-1+B13 chart + #368 B2 density. Next: B-CMDK then B3/ui:proof. Cold agents: frontend:preflight + residual-print only.",
+  "tip_sha_at_write": "d519b87+wave-continue",
   "waves": {
     "A": "honesty / locks / withdraw-first",
     "B": "craft + page-data pro power",
@@ -39,11 +39,11 @@
       "wave": "P0",
       "title": "Orca screenshots + baseline scorecard",
       "status": "partial",
-      "evidence": "PROOF-1 LIVE row + Orca pack docs/styleboard/shots/scorecard-2026-08-02 + docs/refs/proof-1",
-      "proof_missing": "Auth’d money/withdraw Orca still open; chart overlay re-shot after B13",
-      "next_action": "B13 chart empty overlay + density; then auth Orca when session available",
+      "evidence": "PROOF-1 LIVE row + Orca scorecard-2026-08-02 + B13/B2 re-shots; #363 #368",
+      "proof_missing": "Auth money/withdraw Orca when session available (never seed money)",
+      "next_action": "Auth Orca when fleet session exists",
       "blocker": "",
-      "priority": 3
+      "priority": 18
     },
     {
       "id": "P0.4",
@@ -52,9 +52,9 @@
       "status": "partial",
       "evidence": "tooling/uiproof exists; historical proofs",
       "proof_missing": "Not re-run as hard gate on late B PRs",
-      "next_action": "pnpm ui:proof on tip after scorecard",
+      "next_action": "pnpm ui:proof after B-CMDK merge",
       "blocker": "",
-      "priority": 2
+      "priority": 6
     },
     {
       "id": "A0.5",
@@ -149,22 +149,22 @@
       "wave": "B",
       "title": "Terminal density hierarchy",
       "status": "partial",
-      "evidence": "viewport desk height + hide marketing footer on /exchange|/dex; docs/refs/b2-density + Orca shot",
-      "proof_missing": "Re-score Dim6 on LIVE after merge; glass residual B1",
-      "next_action": "Optional panel-gap tighten; then B-CMDK or B3",
+      "evidence": "#368 viewport desk + no marketing footer on terminal routes",
+      "proof_missing": "Glass residual B1; optional tighter gaps",
+      "next_action": "Optional B1 glass scan; not blocking B-CMDK",
       "blocker": "",
-      "priority": 22
+      "priority": 25
     },
     {
       "id": "B3",
       "wave": "B",
       "title": "uc craft = terminal shared components",
       "status": "partial",
-      "evidence": "IxHonestState; MoneyIndex tabular; alerts",
-      "proof_missing": "Shared component depth; OS consistency dim 10",
-      "next_action": "Deep B3 money screens match desk tokens",
+      "evidence": "MoneyIndex ix-money shell + dual-book recipe (this branch)",
+      "proof_missing": "Withdraw/Safe craft depth; auth Orca",
+      "next_action": "Withdraw surface match; then B4/B9",
       "blocker": "",
-      "priority": 15
+      "priority": 14
     },
     {
       "id": "B4",
@@ -270,11 +270,11 @@
       "wave": "B",
       "title": "Anti-slop certify non-implementer",
       "status": "partial",
-      "evidence": "docs/refs/b13-chart-empty + chart overlay z-index/contrast; Orca shot b13-chart-empty-2026-08-02",
-      "proof_missing": "Full multi-surface anti-slop cert (login/money density) still open",
-      "next_action": "Density P0 shipped in B2; remaining multi-surface anti-slop",
+      "evidence": "chart empty #363 + density #368 + critique packs",
+      "proof_missing": "Multi-surface anti-slop (login marketing DNA, money auth)",
+      "next_action": "Continue on money/login craft later",
       "blocker": "",
-      "priority": 12
+      "priority": 20
     },
     {
       "id": "B14",
@@ -302,56 +302,56 @@
       "id": "B-CMDK",
       "wave": "B",
       "title": "Global search / ⌘K",
-      "status": "open",
-      "evidence": "Plan §7 IA",
-      "proof_missing": "Not shipped",
-      "next_action": "Implement route+market palette or written waiver",
+      "status": "done",
+      "evidence": "CommandPalette + cmd-palette.js golden + Orca shot b-cmdk-2026-08-02; residual GO-READY queue stamp",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 12
+      "priority": 99
     },
     {
       "id": "META-SCORECARD",
       "wave": "META",
       "title": "Live scorecard after B batch",
       "status": "partial",
-      "evidence": "docs/FRONTEND-SCORECARD-LIVE.md PROOF-1 row 2026-08-02 tip 5f2f8fe",
-      "proof_missing": "Certifier (non-implementer) second eyes optional; auth money surfaces",
-      "next_action": "Re-score after B13 P0 fixes",
+      "evidence": "docs/FRONTEND-SCORECARD-LIVE.md PROOF-1 + B13 + B2 notes",
+      "proof_missing": "Full Dim6=3 claim deferred; re-row after B-CMDK",
+      "next_action": "Append LIVE row after each craft PR",
       "blocker": "",
-      "priority": 3
+      "priority": 18
     },
     {
       "id": "META-STEAL",
       "wave": "META",
       "title": "Steal lines + refs layout",
       "status": "partial",
-      "evidence": "docs/refs/proof-1/steal-lines.md + AOS templates",
+      "evidence": "refs packs on craft PRs",
       "proof_missing": "Enforce on every CRAFT PR via preflight",
-      "next_action": "Require steal-lines on next CRAFT (B13)",
+      "next_action": "Keep enforcing via CRAFT preflight",
       "blocker": "",
-      "priority": 4
+      "priority": 10
     },
     {
       "id": "META-CRITIQUE",
       "wave": "META",
       "title": "impeccable/design-taste on craft",
       "status": "partial",
-      "evidence": "docs/refs/b13-chart-empty/critique.md (impeccable empty-state)",
+      "evidence": "docs/refs/proof-1, b13-chart-empty, b2-density, b-cmdk",
       "proof_missing": "Desk density + money auth surfaces",
-      "next_action": "Next craft slice densify or B-CMDK",
+      "next_action": "Critique every craft slice",
       "blocker": "",
-      "priority": 12
+      "priority": 10
     },
     {
       "id": "META-ORCA",
       "wave": "META",
       "title": "Orca primary every HONESTY/CRAFT",
       "status": "partial",
-      "evidence": "P21 shot; sparse later",
+      "evidence": "Orca used on PROOF-1 B13 B2",
       "proof_missing": "Per-slice proof",
-      "next_action": "ORCA_REQUIRED=1 default craft",
+      "next_action": "ORCA_REQUIRED craft continues",
       "blocker": "",
-      "priority": 2
+      "priority": 8
     },
     {
       "id": "ADMIN-0",
