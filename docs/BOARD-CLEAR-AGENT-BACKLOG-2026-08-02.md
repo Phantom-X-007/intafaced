@@ -5,7 +5,7 @@
 **Rule:** On every GO/CONTINUE, **re-derive** from this file + scoreboard + `gh pr list`. Do not re-ship completed IDs.
 
 **Shipped on main (do not reopen as primary):**  
-A-OR-1 #289 · A-WS-1 #336 · A-UI-1 #337 · A-UI-HONESTY #349 · A-TRADE-MM-1 #338 · A-TRADE-MM-2 #340 · A-TRADE-SPOT-1 #345 · A-TRADE-VENUE-1 #344 · A-P5-CURRICULUM #341
+A-OR-1 #289 · A-OR-CX8 #370 · A-WS-1 #336 · A-WS-MOCK-E2E #357 · A-UI-1 #337 · A-UI-HONESTY #349 · A-UI-SUB #358 · A-UI-A11Y #367 · A-UI-PRO craft wave #368/#371/#374/#377 · A-TRADE-MM-1 #338 · A-TRADE-MM-2 #340 · A-TRADE-MM-3 #356 · A-TRADE-SPOT-1 #345 · A-TRADE-SPOT-OPS #373 · A-TRADE-VENUE-1 #344 · A-TRADE-VENUE-OPS #376 · A-P5-CURRICULUM #341 · A-P5-OPS #360 · A-P5-AGENTS #375
 
 ---
 
@@ -38,48 +38,50 @@ Never: A-PAY / A-PROT / futures risk / OTC / copy / algo / bank money / identity
 
 ---
 
+> **2026-08-02 residual:** Agent program ships largely SHIPPED. Scoreboard agent WIP left: **ws.gateway** live futures E2E (M3). See BOARD-CLEAR-NEXT.
+
 ## 2 · Remaining agent ships (Wave A2)
 
 ### P-UI — web.terminal
 
-| Ship ID       | Status      | Deliverable                                | Done slice                                                                                                                                | Proof                        |
-| ------------- | ----------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| A-UI-1        | **SHIPPED** | Hotkeys                                    | —                                                                                                                                         | #337                         |
-| A-UI-HONESTY  | **SHIPPED** | Empty book / error honesty                 | —                                                                                                                                         | #349                         |
-| **A-UI-SUB**  | OPEN        | Sub-accounts **selector** in shell         | Wire to existing identity list/create APIs **if present**; if money routing incomplete → UI list + disabled trade path honesty **or** §13 | PR + screenshot/golden       |
-| **A-UI-A11Y** | OPEN        | Keyboard/focus/alerts baseline on desk     | Design bar a11y                                                                                                                           | tests or axe notes           |
-| **A-UI-PRO**  | OPEN        | Density/calm polish vs STREAM-A-DESIGN-BAR | No second design system; no fake numbers                                                                                                  | PR scored against design bar |
-| **A-UI-DONE** | gate        | Constitution §3.1 all true                 | Scoreboard web.terminal → DONE                                                                                                            | evidence bundle              |
+| Ship ID       | Status                                                               | Deliverable                                | Done slice                                                                                                                                | Proof                        |
+| ------------- | -------------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| A-UI-1        | **SHIPPED**                                                          | Hotkeys                                    | —                                                                                                                                         | #337                         |
+| A-UI-HONESTY  | **SHIPPED**                                                          | Empty book / error honesty                 | —                                                                                                                                         | #349                         |
+| **A-UI-SUB**  | **SHIPPED** #358                                                     | Sub-accounts **selector** in shell         | Wire to existing identity list/create APIs **if present**; if money routing incomplete → UI list + disabled trade path honesty **or** §13 | PR + screenshot/golden       |
+| **A-UI-A11Y** | **SHIPPED** #367                                                     | Keyboard/focus/alerts baseline on desk     | Design bar a11y                                                                                                                           | tests or axe notes           |
+| **A-UI-PRO**  | **SHIPPED** craft #368/#371/#374/#377 (register residual continuous) | Density/calm polish vs STREAM-A-DESIGN-BAR | No second design system; no fake numbers                                                                                                  | PR scored against design bar |
+| **A-UI-DONE** | gate                                                                 | Constitution §3.1 all true                 | Scoreboard web.terminal → DONE                                                                                                            | evidence bundle              |
 
 ### P-WS — ws.gateway
 
 | Ship ID           | Status                     | Deliverable                                                  | Done slice                                      | Proof      |
 | ----------------- | -------------------------- | ------------------------------------------------------------ | ----------------------------------------------- | ---------- |
 | A-WS-1            | **SHIPPED**                | Private auth fail-closed + channel harden                    | —                                               | #336       |
-| **A-WS-MOCK-E2E** | OPEN                       | Integration test with **fixture** order/fill/position events | No invent live futures                          | tests      |
+| **A-WS-MOCK-E2E** | **SHIPPED** #357           | Integration test with **fixture** order/fill/position events | No invent live futures                          | tests      |
 | **B-WS-2**        | BLOCKED on human M3 events | Live futures position stream E2E                             | Wait for correct events **or** leave WIP honest | —          |
 | **A-WS-DONE**     | gate                       | §3.2 without lying about futures                             | DONE only if E2E real or §13 residual named     | scoreboard |
 
 ### P-TRADE-LIGHT
 
-| Ship ID               | Status      | Deliverable                                                                | Done slice             | Proof          |
-| --------------------- | ----------- | -------------------------------------------------------------------------- | ---------------------- | -------------- |
-| A-TRADE-MM-1/2        | **SHIPPED** | Recovery + cancel/reseed                                                   | —                      | #338 #340      |
-| **A-TRADE-MM-3**      | OPEN        | Mid **port**: config + optional venue/oracle adapter; **never invent mid** | Empty mid → skip seed  | tests          |
-| **A-TRADE-MM-DONE**   | gate        | mm-bot constitution bar                                                    | DONE or residual named | scoreboard     |
-| A-TRADE-SPOT-1        | **SHIPPED** | Candle job + honest OHLCV                                                  | —                      | #345           |
-| **A-TRADE-SPOT-OPS**  | OPEN        | Ops doc + tracker honesty; enable path documented default OFF              | —                      | docs + tracker |
-| A-TRADE-VENUE-1       | **SHIPPED** | Venue mark mount default OFF                                               | —                      | #344           |
-| **A-TRADE-VENUE-OPS** | OPEN        | Ops enable runbook; second venue only if fabric exists                     | No invent mid          | docs/tests     |
+| Ship ID               | Status           | Deliverable                                                                | Done slice             | Proof          |
+| --------------------- | ---------------- | -------------------------------------------------------------------------- | ---------------------- | -------------- |
+| A-TRADE-MM-1/2        | **SHIPPED**      | Recovery + cancel/reseed                                                   | —                      | #338 #340      |
+| **A-TRADE-MM-3**      | **SHIPPED** #356 | Mid **port**: config + optional venue/oracle adapter; **never invent mid** | Empty mid → skip seed  | tests          |
+| **A-TRADE-MM-DONE**   | gate             | mm-bot constitution bar                                                    | DONE or residual named | scoreboard     |
+| A-TRADE-SPOT-1        | **SHIPPED**      | Candle job + honest OHLCV                                                  | —                      | #345           |
+| **A-TRADE-SPOT-OPS**  | **SHIPPED** #373 | Ops doc + tracker honesty; enable path documented default OFF              | —                      | docs + tracker |
+| A-TRADE-VENUE-1       | **SHIPPED**      | Venue mark mount default OFF                                               | —                      | #344           |
+| **A-TRADE-VENUE-OPS** | **SHIPPED** #376 | Ops enable runbook; second venue only if fabric exists                     | No invent mid          | docs/tests     |
 
 ### P-P5-LIGHT
 
-| Ship ID             | Status      | Deliverable                                       | Done slice     | Proof      |
-| ------------------- | ----------- | ------------------------------------------------- | -------------- | ---------- |
-| A-P5-CURRICULUM     | **SHIPPED** | Thin curriculum                                   | —              | #341       |
-| **A-P5-OPS**        | OPEN        | One real ops/admin surface improvement **or** §13 | —              | PR         |
-| **A-P5-AGENTS**     | OPEN        | svc-agents useful path or honest ready            | —              | PR         |
-| **A-P5-LIGHT-DONE** | gate        | Academy/ops/agents rows honest Done/Cut           | not bank money | scoreboard |
+| Ship ID             | Status           | Deliverable                                       | Done slice     | Proof      |
+| ------------------- | ---------------- | ------------------------------------------------- | -------------- | ---------- |
+| A-P5-CURRICULUM     | **SHIPPED**      | Thin curriculum                                   | —              | #341       |
+| **A-P5-OPS**        | **SHIPPED** #360 | One real ops/admin surface improvement **or** §13 | —              | PR         |
+| **A-P5-AGENTS**     | **SHIPPED** #375 | svc-agents useful path or honest ready            | —              | PR         |
+| **A-P5-LIGHT-DONE** | gate             | Academy/ops/agents rows honest Done/Cut           | not bank money | scoreboard |
 
 ### P-OR
 
