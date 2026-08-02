@@ -33,6 +33,7 @@ PARALLEL (BOARD-CLEAR-PARALLEL-SESSIONS — binding):
 - Every cycle: fetch tip + gh pr list + path-intersect EXACT NEXT with open PRs
 - Dual-build same paths = defect → skip ship or babysit existing PR
 - LIVE-LANES first claimer wins; other chats must not dual-claim
+- Product free/owner/done = features.mjs (docs/COORDINATION-TRUTH-LAYERS.md) — NEXT does not erase human locks
 - Expect foreign traffic: order-route PRs, frontend/app density, shehzad, Denon
 - After any main move: rewrite NEXT tip line + open-PR table before next ship
 
@@ -40,10 +41,10 @@ AFK / COMPACT (agent alone):
 - Compact → open NEXT only → fetch → pr list → collision ritual → EXACT NEXT
 - Rewrite NEXT before every pause. Never ask Nitro to re-open anything.
 
-READ FIRST: docs/BOARD-CLEAR-NEXT.md
-Then: AFK-CONTRACT · PARALLEL-SESSIONS
+READ FIRST: docs/BOARD-CLEAR-NEXT.md (campaign sequence only)
+Then: AFK-CONTRACT · PARALLEL-SESSIONS · COORDINATION-TRUTH-LAYERS
 Then: git fetch && git log origin/main -1 --oneline && gh pr list --state open
-Then: SCOREBOARD · AGENT-BACKLOG · LIVE-LANES · DECISION-AUTHORITY · CONSTITUTION · LOOPS · ENGINEERING-STANDARD
+Then: SCOREBOARD · AGENT-BACKLOG · LIVE-LANES · tracker ready · DECISION-AUTHORITY · CONSTITUTION · LOOPS · ENGINEERING-STANDARD
 
 PHASES:
 A) Agent residual path-clear ships (AGENT-BACKLOG) elite R→S→P→B→V→RV→M→U

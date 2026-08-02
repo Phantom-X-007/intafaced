@@ -1,9 +1,9 @@
 # Tracker coordination — proper framing, diagnosis, plan
 
-**Status:** E1–E4 **EXECUTED** 2026-08-02 (docs law: COORDINATION-TRUTH-LAYERS + pointer fixes). No CI force. No honesty sweep yet (E5 optional).  
+**Status:** **PROGRAM FINISHED** 2026-08-02 — E1–E4 + entry-chain seal. Finish audit: [`COORDINATION-FINISH-AUDIT-2026-08-02.md`](COORDINATION-FINISH-AUDIT-2026-08-02.md).  
 **Date:** 2026-08-02  
-**Trigger:** Denon call — keep project tracker as multi-dev truth DB; unregistered main work → agent conflict.  
-**Correction:** Prior reply jumped to “options 1/2/3”. This doc is the phase-correct home. Evidence: [`DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md`](DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md). **Landed contract:** [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md).
+**Trigger:** Denon call — multi-dev truth DB; unregistered main → agent conflict.  
+**Landed:** [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md) (#385) + seal. E5 note-sweep optional; E6 ops; E7 rejected by default.
 
 **Operator constraints (locked from Nitro this turn):**
 
