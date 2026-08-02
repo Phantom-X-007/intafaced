@@ -133,6 +133,18 @@ describe('a killed market still lets users out through the REST contract', () =>
     expect(state().decide('/api/v1/orders', 'DELETE')).toMatchObject({ refused: false, reason: 'lets-the-user-out' });
   });
 
+  it('allows DELETE /api/v1/positions/:id — close futures so kill does not trap margin', () => {
+    expect(state().decide('/api/v1/positions/8f3c1d2e-0000-4000-8000-000000000099', 'DELETE')).toMatchObject({
+      module: 'trade',
+      refused: false,
+      reason: 'lets-the-user-out',
+    });
+  });
+
+  it('refuses POST /api/v1/positions — new risk under kill', () => {
+    expect(state().decide('/api/v1/positions', 'POST')).toMatchObject({ module: 'trade', refused: true, reason: 'module-killed' });
+  });
+
   it('allows cancel-all with a symbol filter — a query string must not decide whether you can leave', () => {
     expect(state().decide('/api/v1/orders?symbol=BTC/USDT', 'DELETE').refused).toBe(false);
   });

@@ -65,6 +65,7 @@ const mustBlock = [
   '/exchange/order/add',
   '/admin/finance/withdraw-record/audit-pass',
   '/uc/redenvelope/receive',
+  '/admin/system/dividend/start',
 ];
 
 const mustAllow = ['/uc/member/login', '/market/symbol-thumb', '/health', '/actuator/health', '/uc/asset/wallet'];

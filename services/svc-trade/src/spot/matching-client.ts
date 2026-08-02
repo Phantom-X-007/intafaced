@@ -1,4 +1,4 @@
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 
 /**
  * THE ENGINE, AS SEEN FROM HERE (§5.1 / §5.2).
@@ -150,7 +150,8 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
    * unfunded order — and that holds only while svc-trade is the only thing able
    * to submit one. Those routes accepted anyone at all until this change.
    */
-  const authHeaders = () => serviceAuthHeaders('svc-trade', internalSecret);
+  // Body-bound S2S (L2-6). Empty body for GET/DELETE; serialize once on POST.
+  const authHeaders = (payload = '') => serviceAuthHeadersForBody('svc-trade', internalSecret, payload);
 
   async function call<T>(path: string, init: RequestInit): Promise<T> {
     let response: Response;
@@ -170,10 +171,11 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
 
   return {
     async submit(marketId, request) {
+      const payload = JSON.stringify(request);
       return call<EngineSubmitResult>(`/markets/${encodeURIComponent(marketId)}/orders`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(request),
+        headers: { 'content-type': 'application/json', ...authHeaders(payload) },
+        body: payload,
       });
     },
 
@@ -181,7 +183,7 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
       const path = `/markets/${encodeURIComponent(marketId)}/orders/${encodeURIComponent(orderId)}`;
       let response: Response;
       try {
-        response = await fetch(`${url}${path}`, { method: 'DELETE', headers: authHeaders() });
+        response = await fetch(`${url}${path}`, { method: 'DELETE', headers: authHeaders('') });
       } catch (err) {
         throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
       }
@@ -219,7 +221,7 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
       const path = `/markets/${encodeURIComponent(marketId)}/depth?limit=${limit}`;
       let response: Response;
       try {
-        response = await fetch(`${url}${path}`, { method: 'GET', headers: authHeaders() });
+        response = await fetch(`${url}${path}`, { method: 'GET', headers: authHeaders('') });
       } catch (err) {
         throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
       }

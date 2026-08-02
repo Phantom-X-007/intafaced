@@ -8,7 +8,7 @@ import {
   type PostRequest,
   rehydrateLedgerHttpError,
 } from '@intafaced/ledger-client';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 
 /**
  * HTTP client for svc-ledger.
@@ -20,28 +20,21 @@ import { serviceAuthHeaders } from '@intafaced/contracts';
  * It implements the same `LedgerClient` interface the in-memory reference and
  * the Postgres engine implement, so the money paths in `spot/trade-service.ts`
  * are written once and tested against the reference without a network.
+ *
+ * Auth is body-bound (L2-6): serialize once, sign those bytes, send the same
+ * string. v1 service-only signatures were replayable against any post body.
  */
 export function createLedgerClient(baseUrl: string, internalSecret: string): LedgerClient {
-  /**
-   * Service credentials, per call (§2).
-   *
-   * svc-ledger's `post` is a `serviceProcedure` now, so this client must prove
-   * which service it is. It previously sent `content-type` and nothing else —
-   * there was no credential to check even before `post` began checking.
-   *
-   * Signed per request rather than once at construction, because the signature
-   * covers a timestamp: a captured header stops working after the skew window
-   * instead of being a permanent bearer token.
-   */
-  const authHeaders = () => serviceAuthHeaders('svc-trade', internalSecret);
+  const authHeaders = (payload: string) => serviceAuthHeadersForBody('svc-trade', internalSecret, payload);
 
   const url = baseUrl.replace(/\/$/, '');
 
   async function call<T>(path: string, body: unknown): Promise<T> {
+    const payload = JSON.stringify(body);
     const response = await fetch(`${url}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...authHeaders() },
-      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json', ...authHeaders(payload) },
+      body: payload,
     });
 
     if (!response.ok) {
