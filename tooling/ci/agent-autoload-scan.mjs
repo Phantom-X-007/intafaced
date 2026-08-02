@@ -36,48 +36,20 @@ function mustInclude(rel, needle, why) {
 }
 
 // Primary auto-load for Grok / multi-agent tools
-mustInclude(
-  'AGENTS.md',
-  'COORDINATION-TRUTH-LAYERS',
-  'cold agents must inherit multi-dev layers without a paste prompt',
-);
-mustInclude(
-  'AGENTS.md',
-  'mountain events',
-  'must not regress to every-PR registry tax or drop claim law',
-);
+mustInclude('AGENTS.md', 'COORDINATION-TRUTH-LAYERS', 'cold agents must inherit multi-dev layers without a paste prompt');
+mustInclude('AGENTS.md', 'mountain events', 'must not regress to every-PR registry tax or drop claim law');
 
 // Claude Code auto-loads CLAUDE.md first
 mustInclude('CLAUDE.md', 'AGENTS.md', 'Claude sessions must chain into AGENTS.md');
-mustInclude(
-  'CLAUDE.md',
-  'COORDINATION-TRUTH-LAYERS',
-  'Claude cold start must see coordination without Nitro paste',
-);
+mustInclude('CLAUDE.md', 'COORDINATION-TRUTH-LAYERS', 'Claude cold start must see coordination without Nitro paste');
 
 // Hard-ban file every agent is told to read
-mustInclude(
-  'tooling/agent-protocol/AGENT_PROTOCOL.md',
-  'COORDINATION-TRUTH-LAYERS',
-  'protocol hard path must name the layers home',
-);
-mustInclude(
-  'tooling/agent-protocol/AGENT_PROTOCOL.md',
-  'HUMAN-CLAIMED',
-  'must hard-ban implementing shehzad/human mountains',
-);
+mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'COORDINATION-TRUTH-LAYERS', 'protocol hard path must name the layers home');
+mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'HUMAN-CLAIMED', 'must hard-ban implementing shehzad/human mountains');
 
 // Law home itself
-mustInclude(
-  'docs/COORDINATION-TRUTH-LAYERS.md',
-  'No PR cap',
-  'anti-limit guarantees must stay in the law home',
-);
-mustInclude(
-  'docs/COORDINATION-TRUTH-LAYERS.md',
-  'mountain events',
-  'mountain-events-only rule must stay',
-);
+mustInclude('docs/COORDINATION-TRUTH-LAYERS.md', 'No PR cap', 'anti-limit guarantees must stay in the law home');
+mustInclude('docs/COORDINATION-TRUTH-LAYERS.md', 'mountain events', 'mountain-events-only rule must stay');
 
 if (problems.length) {
   console.error('\n✖ agent-autoload-scan failed — cold agents would lose multi-dev law:\n');
