@@ -8,33 +8,44 @@
     <div class="header">
       <div class="invite-title">
         <div class="my-link-text">{{$t('invite.myinvitelink')}}: </div>
-        <div class="my-link-content">{{myInfo.inviteLink}}</div>
-        <a class="copy-button" v-clipboard:copy="myInfo.inviteLink" v-clipboard:success="onCopy" v-clipboard:error="onError" href="javascript:;">{{$t('invite.copy')}}</a>
+        <div class="my-link-content">{{ myInfo.inviteLink || '—' }}</div>
+        <a
+          class="copy-button"
+          v-if="myInfo.inviteLink"
+          v-clipboard:copy="myInfo.inviteLink"
+          v-clipboard:success="onCopy"
+          v-clipboard:error="onError"
+          href="javascript:;"
+          >{{ $t('invite.copy') }}</a
+        >
       </div>
       <div class="invite-detail">
         <div class="item">
-          <p class="i-v">{{myInfo.levelone}}</p>
-          <p class="i-t">{{$t('invite.mylevelone')}}</p>
+          <p class="i-v">{{ affStat(myInfo.levelone) }}</p>
+          <p class="i-t">{{ $t('invite.mylevelone') }}</p>
         </div>
         <div class="item">
-          <p class="i-v">{{myInfo.leveltwo}}</p>
-          <p class="i-t">{{$t('invite.myleveltwo')}}</p>
+          <p class="i-v">{{ affStat(myInfo.leveltwo) }}</p>
+          <p class="i-t">{{ $t('invite.myleveltwo') }}</p>
         </div>
         <div class="item">
-          <p class="i-v">{{myInfo.commission}}</p>
-          <p class="i-t">{{$t('invite.mycommission')}}</p>
+          <p class="i-v">{{ affStat(myInfo.commission) }}</p>
+          <p class="i-t">{{ $t('invite.mycommission') }}</p>
         </div>
         <div class="item">
-          <p class="i-v">{{myInfo.extrareward}}</p>
-          <p class="i-t">{{$t('invite.extrareward')}}</p>
+          <p class="i-v">{{ affStat(myInfo.extrareward) }}</p>
+          <p class="i-t">{{ $t('invite.extrareward') }}</p>
         </div>
         <div class="item">
-          <p class="i-v">{{myInfo.partnerlevel}}</p>
-          <p class="i-t">{{$t('invite.partnerlevel')}}</p>
+          <p class="i-v">{{ myInfo.partnerlevel || '—' }}</p>
+          <p class="i-t">{{ $t('invite.partnerlevel') }}</p>
         </div>
       </div>
-      <div class="qr-code" style="background:#FFF;padding: 5px 5px;">
+      <div class="qr-code" style="background: #fff; padding: 5px 5px" v-if="myInfo.inviteLink">
         <qriously :value="myInfo.inviteLink" :size="140" foreground="#000" />
+      </div>
+      <div class="qr-code ix-unknown" style="padding: 12px; color: #8a8a8a; font-size: 12px" v-else>
+        Invite link unknown until signed in — not inventing a code.
       </div>
 
       <div class="mask" v-if="!isLogin">
@@ -143,8 +154,16 @@
         <img class="card-img" src="/static/2019/promotioncard.png"></img>
         <div class="desc">
           <p class="title">{{$t('invite.pt_title')}}</p>
-          <p class="amount">{{$t('invite.pt_card_amount')}}: 0.001 BTC</p>
-          <p class="deadline">{{$t('invite.pt_card_deadline')}}: 60{{$t('invite.pt_card_day')}}</p>
+          <p class="amount">
+            {{$t('invite.pt_card_amount')}}:
+            <span v-if="promoCardAmount">{{ promoCardAmount }}</span>
+            <span v-else class="ix-unknown">Not published — not inventing a free amount</span>
+          </p>
+          <p class="deadline">
+            {{$t('invite.pt_card_deadline')}}:
+            <span v-if="promoCardDays != null">{{ promoCardDays }}{{$t('invite.pt_card_day')}}</span>
+            <span v-else class="ix-unknown">Not published</span>
+          </p>
 
           <Button v-if="isLogin &&!hasCard" type="error" size="large" @click="getFreeCard">{{$t('invite.pt_card_btn')}}</Button>
           <Button v-if="isLogin && hasCard" type="error" size="large" @click="usePromotionImage">{{$t('invite.usepromotion')}}</Button>
@@ -154,7 +173,10 @@
       <Divider style="margin-top: 40px;" orientation="left">{{$t('invite.pt_card_rule')}}</Divider>
       <div class="ptcard-info">
         <p class="title">{{$t('invite.pt_card_summary')}}</p>
-        <p class="detail">{{$t('invite.pt_card_rule1')}}: promotion@intafaced.com. </p>
+        <p class="detail ix-dualbook" role="note">
+          {{$t('invite.pt_card_rule1')}}:
+          contact not published — no invent inbox.
+        </p>
         <p class="detail">{{$t('invite.pt_card_rule2')}}</p>
         <p class="detail">{{$t('invite.pt_card_rule3')}}</p>
         <p class="detail">{{$t('invite.pt_card_rule4')}}</p>
@@ -207,13 +229,16 @@ export default {
       promotionTitle: "",
       inviteCode: "", // Invite code
       promotionCode: "", // Redemption code
+      /* AFK-INVITE — never invent free promo amount/days; only API/config when present. */
+      promoCardAmount: null,
+      promoCardDays: null,
       myInfo: {
-        levelone: 0,
-        leveltwo: 0,
-        commission: 0,
-        extrareward: 0,
+        levelone: null,
+        leveltwo: null,
+        commission: null,
+        extrareward: null,
         partnerlevel: "-",
-        inviteLink: "https://www.intafaced.com/register?code=000000"
+        inviteLink: ""
       },
       promotionRecordPage: {
         pageNo: 1,
@@ -317,6 +342,11 @@ export default {
     }
   },
   methods: {
+    /** Unknown affiliate stats stay em-dash — never paint invent zeros as a full book. */
+    affStat(v) {
+      if (v === null || v === undefined || v === '') return '—';
+      return v;
+    },
     init() {
       this.$store.commit("navigate", "nav-invite");
       if(this.isLogin){
