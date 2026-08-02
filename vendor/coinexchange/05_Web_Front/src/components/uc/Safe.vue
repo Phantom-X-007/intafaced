@@ -2,8 +2,10 @@
     <div class="nav-rights safe">
       <div class="nav-right padding-right-clear">
         <div class="padding-right-clear padding-left-clear rightarea user account-box">
+            <!-- B3 craft: desk-aligned shell (P21) — honesty paths unchanged. -->
+            <div class="ix-money ix-safe">
             <div class="rightarea-con">
-                <div style="padding: 12px 20px;"><IxHonestState v-if="profileLoading" kind="loading" message="Loading security settings…" /><IxHonestState v-else-if="profileError" kind="error" :message="profileError" /></div>
+                <div class="ix-safe-state"><IxHonestState v-if="profileLoading" kind="loading" message="Loading security settings…" /><IxHonestState v-else-if="profileError" kind="error" :message="profileError" /></div>
                 <div class="user-top-icon" v-if="profileReachable">
                     <div class="user-icons">
                         <div class="user-face user-avatar-public">
@@ -23,8 +25,8 @@
                     </Row>
                 </div>
                 <section class="accountContent" v-if="profileReachable">
-                    <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0 20px;">
-                      Security settings from the venue account service — failed load is not “unverified.”
+                    <p class="ix-dualbook" role="note">
+                      <strong>Venue security.</strong> Settings from the venue account service — failed load is not “unverified.”
                     </p>
                     <div class="account-in">
                         <!-- 1 -->
@@ -356,6 +358,7 @@
                     </div>
                 </section>
             </div>
+            </div><!-- /.ix-money.ix-safe -->
         </div>
     </div>
     </div>
@@ -1531,5 +1534,33 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .safe.user-icons.user-name span{
         width: 100px!important;
     }
+}
+</style>
+
+<style scoped lang="scss">
+/* B3 — Security page shares money/desk shell recipe. */
+.ix-money.ix-safe {
+  margin: 0 0 16px;
+  padding: 12px 14px 18px;
+  border: 1px solid var(--ix-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: var(--ix-surface, rgba(255, 255, 255, 0.03));
+}
+.ix-safe-state {
+  padding: 4px 0 10px;
+}
+.ix-dualbook {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 194, 168, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 194, 168, 0.06);
+  color: #c8cdd4;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ix-dualbook strong {
+  color: #00c2a8;
+  font-weight: 600;
 }
 </style>

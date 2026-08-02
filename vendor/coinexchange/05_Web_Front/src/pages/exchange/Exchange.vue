@@ -770,9 +770,34 @@
               <dt>Order value</dt>
               <dd>{{ fmt(orderValue, baseCoinScale) }} <em>{{ currentCoin.base }}</em></dd>
             </div>
-            <div>
-              <dt>Fee (est.)</dt>
+            <div class="ix-fee-row">
+              <dt>
+                Fee (est.)
+                <button
+                  type="button"
+                  class="ix-fee-help"
+                  :aria-expanded="feeHelpOpen ? 'true' : 'false'"
+                  aria-controls="ix-fee-help"
+                  @click="feeHelpOpen = !feeHelpOpen"
+                >?</button>
+              </dt>
               <dd>{{ feeLabel }}</dd>
+              <p
+                v-if="feeHelpOpen"
+                id="ix-fee-help"
+                class="ix-fee-disclosure"
+                role="note"
+              >
+                <template v-if="feeKnown">
+                  Pair fee from venue symbol-info for
+                  <strong>{{ currentCoin.coin }}/{{ currentCoin.base }}</strong>
+                  — {{ (num(symbolFee) * 100).toFixed(4) }}% schedule rate. Not a free tier.
+                </template>
+                <template v-else>
+                  Market did not return a fee field for this pair. Estimate is
+                  <strong>unknown</strong>, never treated as free. Place only when you accept that risk.
+                </template>
+              </p>
             </div>
             <div v-if="orderType === 'MARKET_PRICE' && marketImpactLabel">
               <dt>Book impact <em class="ix-dim">(est.)</em></dt>
@@ -791,7 +816,7 @@
             {{ submitting ? 'Placing…' : submitLabel }}
           </button>
           <p class="ix-order-note ix-dim ix-kbd-hint" title="Keyboard trade shortcuts (desk)">
-            <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>Enter</kbd> submit · <kbd>X</kbd> cancel last
+            <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>Enter</kbd> submit · <kbd>X</kbd> cancel last · <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd> go
           </p>
           <!-- Inline echo kept in sync with summary (GOV.UK: same wording); focus is on summary -->
           <p
@@ -929,6 +954,8 @@ export default {
       feedLive: false,
       /* True only after market symbol-info returns a fee field. Default is not free. */
       feeKnown: false,
+      /** B9 fee schedule disclosure open (ticket). */
+      feeHelpOpen: false,
 
       marketsLoading: false,
       marketsReachable: false,
@@ -3432,6 +3459,11 @@ $radius-sm: var(--ix-radius-sm, 8px);
     align-items: baseline;
     padding: 3px 0;
   }
+  /* B9: disclosure sits under the fee row full-width. */
+  > div.ix-fee-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
   dt {
     font-size: 11px;
     color: $faint;
@@ -3444,6 +3476,41 @@ $radius-sm: var(--ix-radius-sm, 8px);
       font-style: normal;
       color: $faint;
     }
+  }
+}
+.ix-fee-help {
+  appearance: none;
+  margin-left: 6px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: $faint;
+  font-size: 10px;
+  line-height: 14px;
+  cursor: pointer;
+  vertical-align: middle;
+  &:hover,
+  &[aria-expanded='true'] {
+    color: $orange;
+    border-color: rgba(0, 194, 168, 0.55);
+  }
+}
+.ix-fee-disclosure {
+  flex: 1 1 100%;
+  margin: 6px 0 2px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+  font-size: 11px;
+  line-height: 1.4;
+  color: $dim;
+  strong {
+    color: $text;
+    font-weight: 600;
   }
 }
 
