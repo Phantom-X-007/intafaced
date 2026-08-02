@@ -116,14 +116,35 @@ whose caller chose not to supply a client id — and that order is the only one 
 | **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)         |
 | **F8**            | seed↔seed prints never inflate public tape                                     |
 
-### OHLCV / candles (A-TRADE-SPOT-1)
+### OHLCV / candles (A-TRADE-SPOT-1 + A-TRADE-SPOT-OPS)
 
 | Path                                 | Behavior                                                                                                                                         |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **REST** `GET /api/v1/ohlcv/:symbol` | Live SQL aggregation from non-seeded taker fills (`queryCandlesFromFills`). Empty market → `[]`. Gaps stay gaps — never zero-filled.             |
 | **Job** `TRADE_CANDLE_JOBS_*`        | Default **OFF**. When enabled + market ids set, materializes _closed_ buckets into `trade.spot_candles`. Never invents markets or empty candles. |
 
-Seeder process resume (SD-1/SD-6, branch `feat/spine-market-seeder`) is a separate eng residual.
+#### Ops enable path (default safe)
+
+Job stays **OFF** until an operator deliberately enables it. Missing market list or empty mids → job host not scheduled (never invent a market list).
+
+| Env                             | Default | Meaning                                                           |
+| ------------------------------- | ------- | ----------------------------------------------------------------- |
+| `TRADE_CANDLE_JOBS_ENABLED`     | `false` | Master kill. Only `1` / `true` / `on` / `yes` turns on.           |
+| `TRADE_CANDLE_JOBS_INTERVAL_MS` | `60000` | Tick interval when enabled (5s–1h).                               |
+| `TRADE_CANDLE_JOBS_MARKET_IDS`  | `""`    | Comma-separated **market UUIDs**. Empty → no job even if enabled. |
+| `TRADE_CANDLE_JOBS_TIMEFRAMES`  | `1m`    | e.g. `1m,5m,1h`. Invalid tokens dropped.                          |
+
+**Enable checklist (ops):**
+
+1. Confirm REST ohlcv already honest for a traded symbol (`[]` if never filled — not fake zeros).
+2. Set `TRADE_CANDLE_JOBS_MARKET_IDS` to real `trade.markets.id` values only.
+3. Set `TRADE_CANDLE_JOBS_ENABLED=true` on the svc-trade process you intend to materialize (not every replica blindly).
+4. Watch logs for `candle materialize ok` with `written > 0` only when closed buckets have real fill volume.
+5. Kill: set enabled false or clear market ids — REST path keeps working from fills.
+
+**Honesty bans:** invent candles, invent markets, zero-fill gaps, include seed volume in public ohlcv (seeded fills excluded — SD-3).
+
+Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
 ### Reconcile open ↔ hold ↔ engine (Spec CX-9)
 
