@@ -7,6 +7,9 @@
         <div style="margin-left:5px;letter-spacing: 2px;margin-top: 10px;color: rgb(226, 226, 227);font-size:13px;padding: 5px 10px;">Secure ● Honest ● Fair ● Committed ● Open</div>
       </div>
       <Form v-if="allowRegister" ref="formInline" :model="formInline" :rules="ruleInline" inline>
+        <p class="ix-login-honest" role="note">
+          Custodial account open. Failed registration is an error — never a silent funded session.
+        </p>
         <FormItem prop="username" style="display:none;">
           <Input type="text" v-model="formInline.username" :placeholder="$t('uc.regist.username')">
           </Input>
@@ -97,6 +100,16 @@
   </div>
 </template>
 <style scoped lang="scss">
+.ix-login-honest {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ix-text-dim, #8a909c);
+  border-left: 2px solid var(--ix-orange, #00c2a8);
+  background: rgba(0, 194, 168, 0.06);
+  text-align: left;
+}
 #page4 {
   background: transparent;
   padding: 80px 0 80px 0;

@@ -8,6 +8,9 @@
             <div class="tel-title">{{$t('uc.login.getlostpwd')}}</div>
           </ButtonGroup>
         </FormItem>
+        <p class="ix-login-honest" role="note">
+          Password reset requires a verified code. Failures stay errors — never a silent unlocked session.
+        </p>
         <FormItem prop="user">
           <Input type="text" v-model="formInline.user" :placeholder="$t('uc.login.usertip')">
           </Input>
@@ -46,6 +49,16 @@
   </div>
 </template>
 <style scoped lang="scss">
+.ix-login-honest {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ix-text-dim, #8a909c);
+  border-left: 2px solid var(--ix-orange, #00c2a8);
+  background: rgba(0, 194, 168, 0.06);
+  text-align: left;
+}
 .login_form {
   background: var(--ix-bg, #0a0c10) url(../../assets/images/login_bg.png) no-repeat center center;
   height: 760px;
