@@ -7,7 +7,7 @@
 
 **Campaign status:** `RUNNING`  
 **AFK:** `docs/BOARD-CLEAR-AFK-CONTRACT.md`  
-**Tip when last acted:** `0a8113f` docs(trade): spot candle ops (#373) — re-check every turn
+**Tip when last acted:** `20cbd29` feat(agents): useful path (#375) — re-check every turn
 
 ---
 
