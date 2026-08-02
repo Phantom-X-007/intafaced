@@ -1,41 +1,33 @@
-# Dual-book residual — classified setBalance (after #289)
+# Dual-book residual — classified setBalance (post #359 + LIVE close)
 
-**Generated:** 2026-08-02 · `pnpm dual-book:classify` (or `node tooling/scripts/dual-book-setbalance-classify.mjs`)  
+**Generated:** 2026-08-02 · `node tooling/scripts/dual-book-setbalance-classify.mjs`  
 **Brand-safe paths** use `vendor/<exchange>/…` in prose.
 
-## Summary
+## Summary (re-derived this turn)
 
-| Kind                       | Count        | Meaning                                                             |
-| -------------------------- | ------------ | ------------------------------------------------------------------- |
-| **LIVE**                   | **10**       | Real H-OR-JAVA candidates (non-HTTP, not behind dual-book throw)    |
-| **HTTP_DOOR**              | **14**       | Controllers — must stay listed in DualBookMoneyDoorInterceptor      |
-| **DEAD_NULL / DEAD_THROW** | (classifier) | Already short-circuited by #289 dual-book work — **not** open holes |
+| Kind                 | Count | Meaning                                                                 |
+| -------------------- | ----: | ----------------------------------------------------------------------- |
+| **LIVE**             | **0** | Non-HTTP money mints — **closed** (promotion early-return + null short) |
+| **WALLET_INIT_ZERO** |     6 | Wallet row create zeros on register/coin add — **not value mint**       |
+| **DEAD_NULL**        |     8 | Behind dual-book null / early-return                                    |
+| **HTTP_DOOR**        |    14 | Controllers — DualBookMoneyDoorInterceptor + path unit                  |
 
-Earlier “23 live” inventory mixed dead service bodies with true residual. **Do not re-open dead sites.**
+Earlier “10 LIVE mints” mixed **dead promotion bodies**, **null-short-circuited events**, and **wallet zero inits**. After this ship: **LIVE money-mint count = 0**.
 
-## LIVE (H-OR-JAVA / M7 — HUMAN-CLAIMED @shehzad002)
+## What closed this turn
 
-Agents **must not** implement these under Board Clear (`LIVE-LANES` H-OR-JAVA). Owner: shehzad.
+- `MemberApplicationService.promotion` / `promotionLevelTwo` — **early return** (tree counters only; no wallet mint)
+- Classifier honesty — DEAD_NULL / WALLET_INIT_ZERO / LIVE separation (80-line lookback)
 
-| File (brand-safe)                        |         Line | Snippet                                      |
-| ---------------------------------------- | -----------: | -------------------------------------------- |
-| `…/admin/…/ForkJoin/ForkJoinWork.java`   |        86–87 | wallet zero init setBalance/setFrozenBalance |
-| `…/core/…/MemberApplicationService.java` |     194, 243 | promotion path setBalance                    |
-| `…/otc-api/…/event/OrderEvent.java`      |           71 | promotion setBalance                         |
-| `…/wallet/…/CoinConsumer.java`           |        89–90 | wallet create zeros                          |
-| `…/wallet/…/MemberConsumer.java`         | 108–109, 149 | wallet create zeros + reward credit          |
+## Remaining (honest, not fear)
 
-**Recommended M7 approach:** entry-point throws / job disable (same PEACE pattern as MemberWalletService), then re-run classify until LIVE=0; keep HTTP_DOOR under interceptor inventory.
-
-## HTTP_DOOR (agent-maintained path list)
-
-Covered by `DualBookMoneyDoorInterceptor` + `pnpm scan:dual-book-door` + `pnpm scan:dual-book-door-paths`.  
-If a controller mutator is added without a fragment, path unit / inventory must fail closed.
-
-## Already sealed (do not list as open)
-
-Service entry throws on: LegalWallet\* · MemberWalletService mutators · MemberService.signIn · MemberTransactionService.matchWallet · WithdrawRecordService audit/success/fail · promotion null short-circuits · MiningsJob disabled.
+| Item                                                 | Owner                                      | Why                                                                   |
+| ---------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------- |
+| HTTP_DOOR controller bodies still contain setBalance | Defense in depth: **door 410** + path unit | Optional M7 polish: throw at method entry if door ever mis-registered |
+| WALLET_INIT_ZERO on member/coin register             | Shell scaffolding                          | Not a second **money** book; ledger remains SoT for value             |
+| JVM live 410 smoke                                   | Ops / compose                              | Agent host often has no Docker                                        |
+| Human X                                              | Nitro                                      | Secrets / go-live                                                     |
 
 ## Not go-live
 
-Classify + door scans ≠ production Java boot proof. Full JVM 410 smoke remains ops residual.
+Classify LIVE=0 + door scans ≠ production Java boot proof. **Not stable for real money.**
