@@ -54,15 +54,27 @@ These are not style preferences. A PR that does any of them is rejected without 
 ## 3 · Every PR must pass
 
 ```bash
-pnpm typecheck        # no `any` escapes, no implicit widening
-pnpm test             # unit + invariant suites
-pnpm db:check         # migrations reversible, journal consistent
-pnpm scan:brand       # Doctrine §0.7
-pnpm scan:custody     # Doctrine §16.10
-pnpm gate <service>   # the full §14 Definition of Done
+pnpm verify           # everything below, in this order — run this one
 ```
 
-CI runs all six. A red gate is not a discussion.
+`pnpm verify` is:
+
+```bash
+pnpm gates            # 14 doctrine gates, ~2s — brand §0.7 · custody §16.10 ·
+                      # secrets · vendor-shell · vendor-java-money ·
+                      # dual-book door + door-paths · test-db isolation ·
+                      # killswitch §14.6 · migrations §14 · workspace · tracker ·
+                      # agent-autoload · i18n (advisory)
+pnpm format:check     # prettier
+pnpm build            # turbo
+pnpm typecheck        # no `any` escapes, no implicit widening
+pnpm test             # unit + invariant suites
+pnpm gate             # the full §14 Definition of Done, per service
+```
+
+**CI runs the same gate list from the same file** — `tooling/ci/gates.mjs`. That is deliberate: verify and CI used to keep separate lists and drifted, so two gates ran in CI and nowhere local. The file fails if `.github/workflows/ci.yml` stops calling `pnpm gates`, and fails if a scan lands in `tooling/ci/` that neither the list nor its documented exclusions claim.
+
+A red gate is not a discussion.
 
 **Actions thrift (private repo — metered):** run the local equivalents green **before** the push that opens/updates a code PR. Do not use remote CI as the first debugger. Parallel PRs remain fine. Never weaken these gates or open the repo to “save money.” Full law: `docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md` · thrift section in `AGENTS.md`.
 
