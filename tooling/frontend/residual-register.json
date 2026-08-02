@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "B5 panel width resize+persist; P0.4 still agent Chromium SEGV",
-  "tip_sha_at_write": "feat-app-b5-panel-prefs",
+  "tip_note": "B12 AboutUs honest contacts + Register/FindPwd honesty; P0.4 still SEGV",
+  "tip_sha_at_write": "feat-app-b12-about-register",
   "waves": {
     "A": "honesty / locks / withdraw-first",
     "B": "craft + page-data pro power",
@@ -259,20 +259,20 @@
       "wave": "B",
       "title": "Marketing/OS/OTC/CMS craft last",
       "status": "partial",
-      "evidence": "OTC/Invite/Help #390; Partner dual-book + honest empty contacts",
-      "proof_missing": "Lab deep craft if any Lab surface; full marketing restyle deferred",
-      "next_action": "Optional Lab only; desk first",
+      "evidence": "OTC/Invite/Help #390; Partner #393; AboutUs + Register/FindPwd honesty this PR",
+      "proof_missing": "Optional Lab deep restyle only",
+      "next_action": "Lab optional; desk first",
       "blocker": "desk scorecard first",
-      "priority": 60
+      "priority": 65
     },
     {
       "id": "B13",
       "wave": "B",
       "title": "Anti-slop certify non-implementer",
       "status": "partial",
-      "evidence": "chart empty #363 + density #368 + critique packs",
+      "evidence": "chart empty #363 + density #368 + critique packs; Register/FindPwd honesty notes",
       "proof_missing": "Multi-surface anti-slop (login marketing DNA, money auth)",
-      "next_action": "Continue on money/login craft later",
+      "next_action": "Auth money Orca + non-implementer cert when session exists",
       "blocker": "",
       "priority": 20
     },

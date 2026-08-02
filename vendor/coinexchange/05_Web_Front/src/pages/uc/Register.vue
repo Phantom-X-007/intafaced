@@ -7,6 +7,9 @@
             <div class="tel-title">{{$t('uc.regist.regist')}}</div>
           </ButtonGroup>
         </FormItem>
+        <p class="ix-login-honest" role="note">
+          Custodial account open. Failed registration is an error — never a silent funded session.
+        </p>
         <FormItem prop="username" style="display:none;">
           <Input type="text" v-model="formInline.username" :placeholder="$t('uc.regist.username')">
           </Input>
@@ -63,15 +66,25 @@
         </FormItem>
       </Form>
       <Alert v-else type="warning">
-        Coming soon!
+        Registration closed
         <template slot="desc">
-          INTAFACED.COM will open register soon
+          New accounts are not open on this venue yet — closed is not the same as a full book of users.
         </template>
       </Alert>
     </div>
   </div>
 </template>
 <style scoped lang="scss">
+.ix-login-honest {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ix-text-dim, #8a909c);
+  border-left: 2px solid var(--ix-orange, #00c2a8);
+  background: rgba(0, 194, 168, 0.06);
+  text-align: left;
+}
 .login_form {
   background: var(--ix-bg, #0a0c10) url(../../assets/images/login_bg.png) no-repeat center center;
   height: 760px;
