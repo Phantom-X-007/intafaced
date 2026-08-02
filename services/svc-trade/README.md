@@ -144,6 +144,36 @@ Job stays **OFF** until an operator deliberately enables it. Missing market list
 
 **Honesty bans:** invent candles, invent markets, zero-fill gaps, include seed volume in public ohlcv (seeded fills excluded — SD-3).
 
+### Venue fabric mark (A-TRADE-VENUE-1 + A-TRADE-VENUE-OPS)
+
+Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matching depth for futures mark ticks when configured. **Default OFF** — empty venue id means depth-only marks (or null when book empty). Never invents a mid.
+
+| Path                                      | Behavior                                                                                                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from public book snapshot; futures jobs prefer it, then depth. |
+| **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null.           |
+
+#### Ops enable path (default safe)
+
+| Env                            | Default | Meaning                                                                                                                                     |
+| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapter today: **`binance-spot`** (no keys). Unknown id → warn once, stay off (never invent). |
+| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                       |
+| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                |
+
+**Enable checklist (ops):**
+
+1. Confirm `packages/venue-adapter` Binance spot public path is acceptable for this environment (egress, rate limits).
+2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols).
+3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls).
+4. Health: process log / ready payload includes `venueMark: { venueId, symbols }` when configured; absent when off.
+5. Optional MM: after env mids map is trusted or deliberately empty, set `TRADE_MM_SEED_MID_FROM_VENUE=true` — still skips any market with no mid.
+6. Kill: clear `TRADE_VENUE_MARK_VENUE` or symbols — marks fall back to matching depth mid only; never invent.
+
+**Honesty bans:** invent mid, invent second venue adapter without fabric support, treat empty/one-sided book as a price, treat account observations as ledger truth, enable trading half of venue (credentials / Vault) as if public mark worked.
+
+**Second venue:** only when a real `MarketDataAdapter` exists in fabric and `createVenueMarketDataAdapter` knows the id — do not stub a name.
+
 Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
 ### Reconcile open ↔ hold ↔ engine (Spec CX-9)
