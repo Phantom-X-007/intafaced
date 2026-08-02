@@ -483,36 +483,55 @@
             <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'history' && !ordersReachable">
               Order service did not respond — order history is unknown, not empty.
             </p>
-            <table class="ix-table" v-else-if="accountTab === 'history'">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Market</th>
-                  <th>Type</th>
-                  <th>Side</th>
-                  <th class="ix-num">Price</th>
-                  <th class="ix-num">Amount</th>
-                  <th class="ix-num">Filled</th>
-                  <th class="ix-num">Value</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, i) in historyOrders" :key="row.orderId || 'h' + i">
-                  <td class="ix-dim">{{ date(row.time) }}</td>
-                  <td>{{ row.symbol }}</td>
-                  <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? 'Market' : 'Limit' }}</td>
-                  <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                    {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
-                  </td>
-                  <td class="ix-num">{{ priceLabel(row) }}</td>
-                  <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
-                  <td class="ix-num">{{ fmt(row.tradedAmount, coinScale) }}</td>
-                  <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
-                  <td :class="statusClass(row.status)">{{ statusLabel(row.status) }}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div v-else-if="accountTab === 'history'">
+              <div class="ix-blotter-tools" v-if="ordersReachable && historyOrders.length">
+                <button
+                  type="button"
+                  class="ix-linkish"
+                  @click="exportHistoryOrdersCsv"
+                >Export CSV</button>
+              </div>
+              <p class="ix-empty" v-if="!historyOrders.length">No order history</p>
+              <table class="ix-table" v-else>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Market</th>
+                    <th>Type</th>
+                    <th>Side</th>
+                    <th class="ix-num">Price</th>
+                    <th class="ix-num">Amount</th>
+                    <th class="ix-num">Filled</th>
+                    <th class="ix-num">Value</th>
+                    <th>Status</th>
+                    <th class="ix-num"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, i) in historyOrders" :key="row.orderId || 'h' + i">
+                    <td class="ix-dim">{{ date(row.time) }}</td>
+                    <td>{{ row.symbol }}</td>
+                    <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? 'Market' : 'Limit' }}</td>
+                    <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
+                      {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
+                    </td>
+                    <td class="ix-num">{{ priceLabel(row) }}</td>
+                    <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
+                    <td class="ix-num" :title="fillTitle(row)">{{ fillLabel(row) }}</td>
+                    <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
+                    <td :class="statusClass(row)">{{ statusLabel(row) }}</td>
+                    <td class="ix-num ix-actions">
+                      <button
+                        type="button"
+                        class="ix-linkish"
+                        :title="'Copy order id ' + (row.orderId || '')"
+                        @click="copyOrderId(row)"
+                      >ID</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
             <p class="ix-empty" v-if="isLogin && !accountLoading && !accountError && accountTabEmpty">Nothing here yet</p>
           </div>
@@ -2496,8 +2515,10 @@ export default {
         this.$Notice.warning({ title: 'No order id', desc: 'This row has no id to copy.' });
         return;
       }
-      const done = () =>
+      const done = () => {
         this.$Notice.success({ title: 'Copied', desc: 'Order id on clipboard.' });
+        this.liveAnnounce = 'Order id copied';
+      };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(id).then(done).catch(() => {
           this.fallbackCopy(id) && done();
@@ -2557,17 +2578,68 @@ export default {
       URL.revokeObjectURL(url);
     },
 
-    statusLabel(status) {
+    statusLabel(rowOrStatus) {
+      const row = rowOrStatus && typeof rowOrStatus === 'object' ? rowOrStatus : null;
+      const status = row ? row.status : rowOrStatus;
       if (status === 'COMPLETED') return 'Filled';
       if (status === 'CANCELED') return 'Cancelled';
+      /* Partial: venue said TRADING/open history with fills < size — never invent %. */
+      if (row && this.isPartialFill(row)) return 'Partial';
       if (status === 'TRADING') return 'Open';
       return status || '—';
     },
 
-    statusClass(status) {
+    statusClass(rowOrStatus) {
+      const row = rowOrStatus && typeof rowOrStatus === 'object' ? rowOrStatus : null;
+      const status = row ? row.status : rowOrStatus;
       if (status === 'COMPLETED') return 'ix-accent';
       if (status === 'CANCELED') return 'ix-dim';
+      if (row && this.isPartialFill(row)) return 'ix-partial';
       return '';
+    },
+
+    isPartialFill(row) {
+      if (!row) return false;
+      const filled = this.num(row.tradedAmount);
+      const total = this.num(row.amount);
+      return total > 0 && filled > 0 && filled < total;
+    },
+
+    exportHistoryOrdersCsv() {
+      if (!this.historyOrders.length) return;
+      const esc = v => {
+        const s = v == null ? '' : String(v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      const lines = [
+        ['time', 'symbol', 'type', 'side', 'price', 'amount', 'filled', 'turnover', 'status', 'orderId'].join(',')
+      ];
+      this.historyOrders.forEach(row => {
+        lines.push(
+          [
+            esc(this.date(row.time)),
+            esc(row.symbol),
+            esc(row.type === 'MARKET_PRICE' ? 'Market' : 'Limit'),
+            esc(row.direction),
+            esc(row.type === 'MARKET_PRICE' ? 'Market' : row.price),
+            esc(row.amount),
+            esc(row.tradedAmount),
+            esc(row.turnover),
+            esc(this.statusLabel(row)),
+            esc(row.orderId)
+          ].join(',')
+        );
+      });
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'order-history.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.liveAnnounce = 'Order history CSV downloaded';
     },
 
     time(tick) {
@@ -3585,6 +3657,10 @@ $radius-sm: var(--ix-radius-sm, 8px);
 }
 .ix-dim {
   color: $faint;
+}
+.ix-partial {
+  color: var(--ix-orange-light, #1ad4bc);
+  font-weight: 600;
 }
 .ix-accent {
   color: $orange;

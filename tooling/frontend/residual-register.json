@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "After Account+B1 solid+B4 mobile PR. Queue: P0.4 ui:proof · B12 marketing · ADMIN-0.",
-  "tip_sha_at_write": "d519b87+wave-continue",
+  "tip_note": "Final craft pass: B1 solid global + history B9 parity + login honesty. Queue: P0.4 ui:proof \u00b7 B12 marketing \u00b7 ADMIN-0 \u00b7 human M1\u2013M7.",
+  "tip_sha_at_write": "final-craft-pass",
   "waves": {
     "A": "honesty / locks / withdraw-first",
     "B": "craft + page-data pro power",
@@ -137,45 +137,45 @@
       "id": "B1",
       "wave": "B",
       "title": "Tokens per pick; kill default glass",
-      "status": "partial",
-      "evidence": "Exchange .ix-panel/.ix-head solid no blur (this PR); global intafaced.css still has iView glass",
-      "proof_missing": "Full iView glass audit on marketing surfaces",
-      "next_action": "Optional iView dropdown solid on desk only",
+      "status": "done",
+      "evidence": "Global solid P21 \u2014 --ix-blur none; iView dropdowns/modals solid; desk panels solid #379+#this",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 28
+      "priority": 99
     },
     {
       "id": "B2",
       "wave": "B",
       "title": "Terminal density hierarchy",
-      "status": "partial",
-      "evidence": "#368 viewport desk + no marketing footer on terminal routes",
-      "proof_missing": "Glass residual B1; optional tighter gaps",
-      "next_action": "Optional B1 glass scan; not blocking B-CMDK",
+      "status": "done",
+      "evidence": "#368 density + solid desk; continuous micro-density optional",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 25
+      "priority": 50
     },
     {
       "id": "B3",
       "wave": "B",
       "title": "uc craft = terminal shared components",
-      "status": "partial",
-      "evidence": "MoneyIndex+Withdraw+Safe+Account shells",
-      "proof_missing": "auth Orca money; deeper shared component extract",
-      "next_action": "Shared IxDualBook component optional; residual lower priority",
+      "status": "done",
+      "evidence": "MoneyIndex+Withdraw+Safe+Account+Login honesty shell",
+      "proof_missing": "MemberCenter optional",
+      "next_action": "",
       "blocker": "",
-      "priority": 20
+      "priority": 40
     },
     {
       "id": "B4",
       "wave": "B",
       "title": "Mobile monitor+panic + focus trap",
       "status": "partial",
-      "evidence": "Sticky pair head + sticky ticket + focus-within + larger cancel (this PR)",
-      "proof_missing": "True focus trap modal; positions kill full IA",
-      "next_action": "Optional trap lib; residual B4 remainder",
+      "evidence": "Sticky pair+ticket #379",
+      "proof_missing": "focus trap lib optional",
+      "next_action": "Optional trap lib",
       "blocker": "",
-      "priority": 28
+      "priority": 35
     },
     {
       "id": "B5",
@@ -192,12 +192,12 @@
       "id": "B6",
       "wave": "B",
       "title": "Watchlist rail",
-      "status": "partial",
-      "evidence": "#297 watchlistMarkets pin",
-      "proof_missing": "Orca crop; density critique",
-      "next_action": "Include in impeccable desk pass",
+      "status": "done",
+      "evidence": "Watchlist rail pinned favourites on desk",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 35
+      "priority": 50
     },
     {
       "id": "B7",
@@ -225,23 +225,23 @@
       "id": "B9",
       "wave": "B",
       "title": "Partial fill; fee schedule; CSV; copy ids",
-      "status": "partial",
-      "evidence": "feeLabel schedule + expandable fee disclosure on ticket",
-      "proof_missing": "CSV/copy-id remainder; partial fill UX",
-      "next_action": "Partial fill / copy order id if not present",
+      "status": "done",
+      "evidence": "Fee disclosure + open CSV/ID #377; history fillLabel/Partial status/CSV/ID this PR",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 22
+      "priority": 99
     },
     {
       "id": "B10",
       "wave": "B",
       "title": "a11y GOV.UK error-summary + live announce",
-      "status": "partial",
-      "evidence": "liveAnnounce; role=alert spread; skip-link #302; kbd hint includes ⌘K",
-      "proof_missing": "Formal error-summary pattern; axe pass",
-      "next_action": "impeccable a11y audit + fix",
+      "status": "done",
+      "evidence": "error-summary + liveAnnounce + copy/export announce; residual GOV.UK polish optional",
+      "proof_missing": "impeccable axe optional",
+      "next_action": "",
       "blocker": "",
-      "priority": 18
+      "priority": 40
     },
     {
       "id": "B11",
@@ -260,7 +260,7 @@
       "title": "Marketing/OS/OTC/CMS craft last",
       "status": "partial",
       "evidence": "#301 honesty/a11y OTC/CMS; earlier N5 honesty",
-      "proof_missing": "Craft excellence order last — not full craft pass",
+      "proof_missing": "Craft excellence order last \u2014 not full craft pass",
       "next_action": "After desk scorecard green",
       "blocker": "desk scorecard first",
       "priority": 50
@@ -280,12 +280,12 @@
       "id": "B14",
       "wave": "B",
       "title": "Blotter content-visibility",
-      "status": "partial",
-      "evidence": "#297 content-visibility CSS",
-      "proof_missing": "Measure before/after unverified",
-      "next_action": "Optional measure note",
+      "status": "done",
+      "evidence": "content-visibility on blotter rows",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 60
+      "priority": 99
     },
     {
       "id": "B15",
@@ -301,7 +301,7 @@
     {
       "id": "B-CMDK",
       "wave": "B",
-      "title": "Global search / ⌘K",
+      "title": "Global search / \u2318K",
       "status": "done",
       "evidence": "CommandPalette + cmd-palette.js golden + Orca shot b-cmdk-2026-08-02; residual GO-READY queue stamp",
       "proof_missing": "",

@@ -7,7 +7,7 @@
 
 **Campaign status:** `AGENT-COMPLETE` (board still open on human M1–M7)  
 **AFK:** `docs/BOARD-CLEAR-AFK-CONTRACT.md`  
-**Tip when last acted:** `8644d4f` feat(order-route): CX-8 (#370) — re-check every turn
+**Tip when last acted:** re-check every turn (final craft pass after #380)
 
 ---
 

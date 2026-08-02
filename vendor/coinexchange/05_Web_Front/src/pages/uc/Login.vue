@@ -3,6 +3,9 @@
     <div class="login_right">
       <Form ref="formInline" :model="formInline" :rules="ruleInline" inline aria-label="Sign in">
         <div class="login_title">{{$t('uc.login.login')}}</div>
+        <p class="ix-login-honest" role="note">
+          Custodial sign-in. Failed auth is an error — never a silent empty session.
+        </p>
         <FormItem prop="user">
           <Input name="user" type="text" v-model="formInline.user" :placeholder="$t('uc.login.usertip')" class="user" autocomplete="username">
             <Select v-model="country" slot="prepend" style="width: 65px" aria-label="Country code">
@@ -130,6 +133,24 @@
   box-shadow: none;
 }
 /* */
+
+.login_right {
+  background: var(--ix-surface-solid, #0d0d0d) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--ix-hairline, rgba(255,255,255,0.09));
+  border-radius: var(--ix-radius, 14px);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+}
+.ix-login-honest {
+  margin: -8px 0 14px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ix-text-dim, #8a909c);
+  border-left: 2px solid var(--ix-orange, #00c2a8);
+  background: rgba(0, 194, 168, 0.06);
+}
 </style>
 <script>
 import gtInit from "../../assets/js/gt.js";
