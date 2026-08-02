@@ -334,12 +334,19 @@ export default {
         });
     },
     getSymbol() {
-      this.$http.post(this.host + this.api.market.thumb, {}).then(response => {
-        var resp = response.body;
-        if (resp && resp.length > 0) {
-          this.symbol = resp;
-        }
-      }).catch(() => {});
+      this.$http
+        .post(this.host + this.api.market.thumb, {})
+        .then(response => {
+          var resp = response.body;
+          if (resp && resp.length > 0) {
+            this.symbol = resp;
+          }
+        })
+        .catch(() => {
+          if (!this.symbol || !this.symbol.length) {
+            this.$Message.error("Market list unavailable — symbols unknown, not empty.");
+          }
+        });
     },
     updateLangData(){
       this.columns[1].title = this.$t("exchange.time");

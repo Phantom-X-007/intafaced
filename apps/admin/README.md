@@ -64,6 +64,14 @@ on its face; no invented money number.
 There is no auth in front of this app yet. Tokens stay server-side; the console itself must sit behind
 operator SSO before it is deployed anywhere reachable (§13).
 
+**Optional BFF gate (until SSO):** set `ADMIN_BFF_SHARED_SECRET` and inject header
+`x-intafaced-admin-bff: <secret>` from the reverse proxy after SSO. When unset, only network ACL
+protects `/api/kill-switch` and `/api/ledger-freeze`. See `docs/OPS-KILL-SWITCH-RUNBOOK.md`.
+
+**Edge kill restart durability (not multi-replica):** svc-edge may set `EDGE_KILL_STATE_PATH`
+(default `.data/edge-kill-state.json`) so a single-host bounce keeps incident kills. Multi-edge
+shared state remains §13.
+
 Strings are not i18n-keyed. §14.4 asks for that on user-facing copy; this console has one audience — the
 operator — and keying it before the catalogue exists would add indirection without adding a reader. It is a
 deliberate deviation, not an oversight, and it is listed on the DoD gate's manual sign-off block.
