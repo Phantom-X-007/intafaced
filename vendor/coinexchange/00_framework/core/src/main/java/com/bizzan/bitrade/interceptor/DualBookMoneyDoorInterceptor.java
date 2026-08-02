@@ -48,6 +48,8 @@ public class DualBookMoneyDoorInterceptor implements HandlerInterceptor {
             "/ctc/order/confirm-order",
             // admin activity distribute
             "/activity/activity/distribute",
+            // admin dividend — entity setBalance + save (was uncovered HTTP mint)
+            "/system/dividend",
             // admin OTC appeal release / cancel
             "/otc/appeal/release-coin",
             "/otc/appeal/cancel-order",

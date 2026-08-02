@@ -37,11 +37,13 @@ function dec(s) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function isFilledOrder(json) {
+function isFilledOrder(json, expectedQty) {
   const status = json.status ?? json.state ?? '';
-  const filled = json.filled;
+  // Full terminal fill only — partial filled>0 is not L3 success under STRICT.
   if (status === 'closed' || status === 'filled') return true;
-  if (filled != null && filled !== '' && filled !== '0' && filled !== '0.0' && dec(filled) > 0) return true;
+  if (expectedQty != null && json.filled != null && String(json.filled) === String(expectedQty) && dec(json.filled) > 0) {
+    return true;
+  }
   return false;
 }
 
@@ -214,7 +216,7 @@ async function getOrder(headers, orderId) {
   return { res, json, text };
 }
 
-async function waitFilled(headers, orderId, label) {
+async function waitFilled(headers, orderId, label, expectedQty) {
   const deadline = Date.now() + FILL_WAIT_MS;
   let lastStatus = '';
   let lastJson = {};
@@ -222,7 +224,7 @@ async function waitFilled(headers, orderId, label) {
     const got = await getOrder(headers, orderId);
     lastJson = got.json;
     lastStatus = got.json.status ?? got.json.state ?? JSON.stringify(got.json).slice(0, 80);
-    if (isFilledOrder(got.json)) {
+    if (isFilledOrder(got.json, expectedQty)) {
       log(`L3_FILL_OK ${label} orderId=${orderId} status=${lastStatus} filled=${got.json.filled}`);
       return { ok: true, json: got.json };
     }
@@ -339,13 +341,13 @@ async function twoUserFill(contracts) {
   const takerOrderId = takerPlace.json.id ?? takerPlace.json.orderId;
   log(`L3_TAKER_OK orderId=${takerOrderId}`);
 
-  const takerFill = await waitFilled(takerPlace.headers, takerOrderId, 'taker');
+  const takerFill = await waitFilled(takerPlace.headers, takerOrderId, 'taker', QTY);
   if (!takerFill.ok) {
     if (STRICT) process.exit(1);
     return 'fail';
   }
 
-  const makerFill = await waitFilled(makerPlace.headers, makerOrderId, 'maker');
+  const makerFill = await waitFilled(makerPlace.headers, makerOrderId, 'maker', QTY);
   if (!makerFill.ok) {
     if (STRICT) process.exit(1);
     return 'fail';

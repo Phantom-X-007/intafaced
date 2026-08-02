@@ -281,16 +281,14 @@ export default {
           var resp = response.body;
           if (resp.code == 0) {
             if (resp.data.realName == null || resp.data.realName == "") {
-              // , ;
-              this.$Message.success(this.$t("otc.publishad.submittip1"));
+              // Gate fail — not success. Green toasts on KYC blocks were false peace.
+              this.$Message.error(this.$t("otc.publishad.submittip1"));
               self.$router.push("/uc/safe");
             } else if (resp.data.phoneVerified == 0) {
-              // phone0, 1, ;
-              this.$Message.success(this.$t("otc.publishad.submittip2"));
+              this.$Message.error(this.$t("otc.publishad.submittip2"));
               self.$router.push("/uc/safe");
             } else if (resp.data.fundsVerified == 0) {
-              // Set, ;
-              this.$Message.success(this.$t("otc.publishad.submittip3"));
+              this.$Message.error(this.$t("otc.publishad.submittip3"));
               self.$router.push("/uc/safe");
             }
           } else {

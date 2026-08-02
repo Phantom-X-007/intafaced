@@ -32,7 +32,9 @@ const schema = baseEnvSchema
        */
       JWT_ACCESS_SECRET: z.string().min(32),
       JWT_ISSUER: z.string().default('intafaced'),
-      JWT_AUDIENCE: z.string().default('intafaced'),
+      // Must match identity / platform default (`intafaced.api`) or all bearer
+      // auth (including operator kill) fails closed with opaque 401s.
+      JWT_AUDIENCE: z.string().default('intafaced.api'),
       JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
 
       /**

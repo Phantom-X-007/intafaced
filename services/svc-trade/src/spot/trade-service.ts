@@ -784,7 +784,11 @@ export class TradeService {
     }
 
     // ── House MM maker path (trade.mm-bot) ──────────────────────────────────
-    if (makerIsHouseMm && !maker) {
+    // Route by identity, not "order row missing". A prior partial fill inserts a
+    // stub trade.orders row; the next match must still use marketMakerMakerFill
+    // (MM pot holds), never user tradeFill against HOUSE_MM_USER_UUID.
+    const makerIsHouseMmRow = maker != null && maker.userId === HOUSE_MM_USER_UUID;
+    if (makerIsHouseMm || makerIsHouseMmRow) {
       const rates = ratesForFill(market, 0, taker.feeDiscountBps);
       const takerBuys = fill.takerSide === 'buy';
       const takerFee = mulBps(takerBuys ? qty : quoteAmount, rates.takerFeeBps);
@@ -795,16 +799,17 @@ export class TradeService {
       // fills.order_id FK → trade.orders. Seed path never wrote a row; insert a
       // bookkeeping stub. Hold value lives on MM ledger pots; row hold_amount
       // is the fill notional (orders_hold_positive_ck) for this match only.
+      // seeded=true so public tape / candles exclude house MM prints (SD-3).
       const makerHoldAsset = takerBuys ? market.baseAsset : market.quoteAsset;
       const makerHoldAmount = takerBuys ? qty : quoteAmount;
       await this.sql`
         INSERT INTO trade.orders (
           id, user_id, market_id, side, type, price, qty, status, tif,
-          hold_asset, hold_amount, fee_discount_bps
+          hold_asset, hold_amount, fee_discount_bps, seeded
         ) VALUES (
           ${fill.makerOrderId}, ${HOUSE_MM_USER_UUID}, ${market.id}, ${makerSide}, ${'limit'},
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${'open'}, ${'PO'},
-          ${makerHoldAsset}, ${formatAmount(makerHoldAmount)}::numeric, ${0}
+          ${makerHoldAsset}, ${formatAmount(makerHoldAmount)}::numeric, ${0}, ${true}
         )
         ON CONFLICT (id) DO NOTHING
       `;

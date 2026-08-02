@@ -316,6 +316,31 @@ if (!available) {
       expect(legs).toHaveLength(2);
       expect(legs.find((l) => l.liquidity === 'taker')?.user_id).toBe(ALICE);
     });
+
+    it('second partial take against house MM still uses marketMakerMakerFill (not user tradeFill)', async () => {
+      // Regression: first fill inserts a stub trade.orders row; second match must
+      // not route classic tradeFill against HOUSE_MM_USER_UUID (unfunded hold).
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'mm-partial-1' }));
+      const mmOrderId = mmSeedOrderIdFor('partial-run', btcusdt.id, 'sell', 1);
+      await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrderId, assetId: 'BTC', amount: amt('1') }));
+      await fund(ALICE, 'USDT', '5000');
+      await fund(BOB, 'USDT', '5000');
+
+      matching.scriptFills([{ makerOrderId: mmOrderId, makerAccountId: MM_MATCHING_ACCOUNT_ID, price: '100', qty: '0.4' }]);
+      await rest(ALICE, btcusdt, 'buy', '0.4', '100', 'alice-mm-p1');
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(1);
+
+      matching.scriptFills([{ makerOrderId: mmOrderId, makerAccountId: MM_MATCHING_ACCOUNT_ID, price: '100', qty: '0.6' }]);
+      await rest(BOB, btcusdt, 'buy', '0.6', '100', 'bob-mm-p2');
+
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(2);
+      expect(postsWithReason('trade.fill')).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe('0');
+      const stub = await sql<Array<{ seeded: boolean }>>`
+        SELECT seeded FROM trade.orders WHERE id = ${mmOrderId}
+      `;
+      expect(stub[0]?.seeded).toBe(true);
+    });
   });
 
   // ── Failure: the hold is refused ──────────────────────────────────────────

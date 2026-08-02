@@ -2007,19 +2007,27 @@ export default {
     },
 
     getWallet() {
+      // Per-asset truth: never invent 0 from a missing leg, and never mark the
+      // ticket "wallet reachable" until BOTH base and coin balances are known.
+      // One successful leg + one dead leg previously painted false available 0.
+      let baseOk = false;
+      let coinOk = false;
+      this.walletReachable = false;
       const baseP = this.request(this.api.uc.wallet + this.currentCoin.base).then(body => {
-        if (body && body.data) {
-          this.wallet.base = body.data.balance || 0;
-          this.walletReachable = true;
+        if (body && body.data && body.data.balance != null && body.data.balance !== '') {
+          this.wallet.base = body.data.balance;
+          baseOk = true;
         }
       });
       const coinP = this.request(this.api.uc.wallet + this.currentCoin.coin).then(body => {
-        if (body && body.data) {
-          this.wallet.coin = body.data.balance || 0;
-          this.walletReachable = true;
+        if (body && body.data && body.data.balance != null && body.data.balance !== '') {
+          this.wallet.coin = body.data.balance;
+          coinOk = true;
         }
       });
-      return Promise.all([baseP, coinP]);
+      return Promise.all([baseP, coinP]).then(() => {
+        this.walletReachable = baseOk && coinOk;
+      });
     },
 
     getOpenOrders() {

@@ -125,10 +125,12 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
   const alive = new WeakSet<WebSocket>();
 
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
-    if (!enabled()) return reject(socket, 503, 'Service Unavailable');
-
+    // Co-mounted with private gateway: ignore foreign paths so /private/stream
+    // is not 404'd before private auth can run (Node fires every upgrade listener).
     const url = new URL(request.url ?? '/', 'http://gateway.invalid');
-    if (url.pathname !== STREAM_PATH) return reject(socket, 404, 'Not Found');
+    if (url.pathname !== STREAM_PATH) return;
+
+    if (!enabled()) return reject(socket, 503, 'Service Unavailable');
 
     const marketId = url.searchParams.get('market');
     if (!marketId || !MARKET_ID.test(marketId)) return reject(socket, 400, 'Bad Request');
