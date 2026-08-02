@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "AFK-ACTIVE \u00b7 Activity+Ctc residual; Envelope on tip",
+  "tip_note": "AFK-ACTIVE \u00b7 Invite honesty restacked",
   "tip_sha_at_write": "feat-app-afk-autonomous-campaign",
   "waves": {
     "A": "honesty / locks / withdraw-first",
@@ -425,12 +425,12 @@
       "id": "AFK-INVITE",
       "wave": "AFK",
       "title": "Invite invent amount/email honesty",
-      "status": "open",
-      "evidence": "",
-      "proof_missing": "Remove 0.001 BTC hardcode + invent promotion@",
-      "next_action": "HONESTY PR Invite.vue",
+      "status": "done",
+      "evidence": "Invite.vue no invent BTC/email/fake code; affStat",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 12,
+      "priority": 99,
       "afk_safe": true
     },
     {
