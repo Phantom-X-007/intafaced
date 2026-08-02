@@ -13,8 +13,16 @@ import java.math.BigDecimal;
 
 @Component
 public class EctApi {
+    /**
+     * Injected from {@code coin.rpc}. No field initialiser: it used to default to
+     * a hard-coded third-party IP over plain HTTP, and this is the host that the
+     * withdrawal secret is POSTed to in {@link #sendFrom}. A wrong-but-plausible
+     * default for that destination is worse than no default — if {@code coin.rpc}
+     * is ever unset, the right outcome is a failure, not a silent send to
+     * whatever address was in the source.
+     */
     @Value("${coin.rpc}")
-    private String host = "http://52.80.243.177:5990/v1";
+    private String host;
 
     /**
      * 获取当前最新高度
@@ -147,10 +155,23 @@ public class EctApi {
         return null;
     }
 
-    public static void main(String[] args){
-        EctApi api = new EctApi();
-        String txid = api.sendFrom("snDPJkVBdJW733t2BY1LnsjfHxSad","eneiBsnNar7kw4MFYYfTTRAoucaaTPdmxQ",
-                "esV75BQfiEiKdgaivjEYCt7EXk3BwJiscX",new BigDecimal("10"),"12");
-        System.out.println(txid);
-    }
+    /*
+     * REMOVED: a `main` method that called sendFrom with a hard-coded wallet
+     * secret ("sn..."), signing a real 10-ECT transfer against the default host
+     * below. It was a developer scratch harness that shipped. Two separate
+     * problems, both of which this deletion closes:
+     *
+     *   1. It was a second committed withdrawal secret, distinct from
+     *      coin.withdraw-wallet, and the only thing standing between it and a
+     *      live transfer was that nobody ran the class.
+     *   2. It is the only caller that could ever have used the hard-coded `host`
+     *      default, so removing it lets that default go too.
+     *
+     * That secret is in git history and must be treated as disclosed. Rotation
+     * is an owner action: docs/OWNER-ACTIONS-WALLET-RPC-SECRETS.md.
+     *
+     * If a manual probe is needed again, write it as a test that reads the
+     * secret from the environment and points at a testnet host. Do not put a
+     * key back in a main method.
+     */
 }
