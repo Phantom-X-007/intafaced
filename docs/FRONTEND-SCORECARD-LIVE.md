@@ -110,3 +110,15 @@ Refs: `docs/refs/proof-1/` (gap-audit · steal-lines · critique).
 **Change:** G11 chart empty status readable (`No market feed — chart has no live history to show`). Dim6 still **1**.  
 **Shot:** `docs/styleboard/shots/b13-chart-empty-2026-08-02/02-exchange.png`  
 **Refs:** `docs/refs/b13-chart-empty/`
+
+---
+
+## Row note: B2 density (2026-08-02)
+
+| Field | Value                                                            |
+| ----- | ---------------------------------------------------------------- |
+| Tip   | feat/app-b2-density                                              |
+| Eyes  | Orca                                                             |
+| Dim6  | **1 → ~2** (footer gone; columns fill viewport) — not claiming 3 |
+
+**Orca:** `docs/styleboard/shots/b2-density-2026-08-02/02-exchange.png` · exchange a11y no marketing Copyright; home still has footer.

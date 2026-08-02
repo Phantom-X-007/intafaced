@@ -2461,6 +2461,14 @@ $radius-sm: var(--ix-radius-sm, 8px);
 
 .ix-terminal {
   --row: 22px;
+  /* B2 density: fill the viewport under the global nav; columns share one height. */
+  --nav-chrome: 56px;
+  --desk-pad: 16px;
+  --head-h: 64px;
+  --desk-h: calc(100vh - var(--nav-chrome) - var(--desk-pad));
+  --col-h: calc(var(--desk-h) - var(--head-h) - 8px);
+  min-height: var(--desk-h);
+  box-sizing: border-box;
   padding: 8px;
   color: $text;
   font-size: 12px;
@@ -2627,6 +2635,8 @@ $radius-sm: var(--ix-radius-sm, 8px);
   grid-template-columns: 208px minmax(0, 1fr) 252px 296px;
   gap: var(--space-2, 8px);
   align-items: stretch;
+  height: var(--col-h);
+  min-height: 520px;
 }
 
 .ix-centre {
@@ -2634,6 +2644,8 @@ $radius-sm: var(--ix-radius-sm, 8px);
   flex-direction: column;
   gap: var(--space-2, 8px);
   min-width: 0;
+  height: 100%;
+  min-height: 0;
 }
 
 /* ── tabs ─────────────────────────────────────────────────────────────── */
@@ -2710,7 +2722,8 @@ $radius-sm: var(--ix-radius-sm, 8px);
 
 /* ── markets ──────────────────────────────────────────────────────────── */
 .ix-markets {
-  height: 726px;
+  height: 100%;
+  min-height: 0;
 }
 .ix-markets-search {
   padding: 8px;
@@ -2860,7 +2873,9 @@ $radius-sm: var(--ix-radius-sm, 8px);
 
 /* ── chart ────────────────────────────────────────────────────────────── */
 .ix-chart-panel {
-  height: 452px;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 280px;
 }
 .ix-chart-body {
   position: relative;
@@ -2935,7 +2950,8 @@ $radius-sm: var(--ix-radius-sm, 8px);
 
 /* ── order book ───────────────────────────────────────────────────────── */
 .ix-rail {
-  height: 726px;
+  height: 100%;
+  min-height: 0;
 }
 .ix-rail-body {
   display: flex;
@@ -3083,7 +3099,9 @@ $radius-sm: var(--ix-radius-sm, 8px);
 
 /* ── account panel ────────────────────────────────────────────────────── */
 .ix-account {
-  height: 266px;
+  flex: 0 0 200px;
+  height: 200px;
+  min-height: 160px;
 }
 .ix-account-body {
   flex: 1 1 auto;
@@ -3151,7 +3169,8 @@ $radius-sm: var(--ix-radius-sm, 8px);
 
 /* ── order entry ──────────────────────────────────────────────────────── */
 .ix-order {
-  height: 726px;
+  height: 100%;
+  min-height: 0;
 }
 .ix-side-toggle {
   display: grid;
