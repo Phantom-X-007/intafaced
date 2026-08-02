@@ -71,6 +71,7 @@ COPY packages/ledger-client/package.json     packages/ledger-client/
 COPY packages/market-data/package.json       packages/market-data/
 COPY packages/ui/package.json                packages/ui/
 COPY packages/venue-adapter/package.json     packages/venue-adapter/
+COPY packages/venue-contracts/package.json   packages/venue-contracts/
 
 COPY services/svc-academy/package.json       services/svc-academy/
 COPY services/svc-agents/package.json        services/svc-agents/

@@ -49,6 +49,19 @@ function servicesInRepo() {
     .sort();
 }
 
+/** Every workspace directory under `dir` that carries a package.json. */
+function workspacesUnder(dir) {
+  const root = join(ROOT, dir);
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(root, d.name, 'package.json')))
+    .map((d) => d.name)
+    .sort();
+}
+
+const packagesInRepo = () => workspacesUnder('packages');
+const appsInRepo = () => workspacesUnder('apps');
+
 function read(file) {
   const path = join(ROOT, file);
   return existsSync(path) ? readFileSync(path, 'utf8') : null;
@@ -65,15 +78,36 @@ const services = servicesInRepo();
 const failures = [];
 
 // ── 1 · the image can install every workspace ───────────────────────────────
+//
+// This checked `services/` only, and on 2026-08-02 that gap broke the image
+// build on `main`: `packages/venue-contracts` was added without its COPY line,
+// so pnpm installed it as a workspace with no dependencies, `ledger-client`
+// never linked, and the build died with
+//
+//   Cannot find module '@intafaced/ledger-client/money'
+//
+// plus a nonsense `number`/`bigint` comparison error downstream, because the
+// missing module made `Amount` resolve to something else. Neither error names
+// the Dockerfile. The gate that exists to catch exactly this was looking at the
+// wrong half of the workspace.
+//
+// A package is no less required than a service — arguably more, since every
+// service imports several. So both are checked.
 const dockerfile = read('Dockerfile');
 if (dockerfile === null) {
   failures.push({ file: 'Dockerfile', reason: 'missing entirely' });
 } else {
-  for (const svc of services) {
-    if (!dockerfile.includes(`services/${svc}/package.json`)) {
+  const workspaces = [
+    ...services.map((name) => `services/${name}`),
+    ...packagesInRepo().map((name) => `packages/${name}`),
+    ...appsInRepo().map((name) => `apps/${name}`),
+  ];
+
+  for (const ws of workspaces) {
+    if (!dockerfile.includes(`${ws}/package.json`)) {
       failures.push({
         file: 'Dockerfile',
-        reason: `no COPY for services/${svc}/package.json — pnpm will install it as if it had no dependencies, and the build fails later with a misleading "cannot find module"`,
+        reason: `no COPY for ${ws}/package.json — pnpm will install it as if it had no dependencies, and the build fails later with a misleading "cannot find module" that never names this file`,
       });
     }
   }
