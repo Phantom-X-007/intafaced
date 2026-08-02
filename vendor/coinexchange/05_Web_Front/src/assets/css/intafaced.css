@@ -51,7 +51,8 @@
   --ix-radius-lg: 20px;
   --ix-radius-pill: 999px;
 
-  --ix-blur: saturate(180%) blur(20px);
+  /* B1 final: solid desk default — blur off (anti-slop glass). Opt-in via .ix-glass-blur if needed. */
+  --ix-blur: none;
   --ix-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
   --ix-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
 
@@ -151,6 +152,7 @@ body::before {
    GLASS — the shared surface treatment
    ========================================================================== */
 
+/* B1 — solid P21 surfaces (no frosted glass on desk chrome). */
 .ix-glass,
 .ivu-card,
 .ivu-modal-content,
@@ -160,27 +162,33 @@ body::before {
 .ivu-tooltip-inner,
 .ivu-message-notice-content,
 .ivu-notice-notice-content {
-  background: var(--ix-surface) !important;
-  backdrop-filter: var(--ix-blur);
-  -webkit-backdrop-filter: var(--ix-blur);
+  background: var(--ix-surface-solid, #0d0d0d) !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid var(--ix-hairline) !important;
   border-radius: var(--ix-radius) !important;
   box-shadow: var(--ix-shadow);
   color: var(--ix-text);
 }
 
-/* Dropdowns and tooltips sit over content and need to stay legible, so they
-   get a darker base under the same blur. */
 .ivu-select-dropdown,
 .ivu-dropdown-menu,
 .ivu-tooltip-inner,
 .ivu-poptip-inner {
-  background: var(--ix-surface-raised) !important;
+  background: var(--ix-panel, #12151c) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
 .ivu-modal-content {
   background: var(--ix-surface-solid) !important;
   box-shadow: var(--ix-shadow-lg);
+}
+
+/* Rare opt-in if a surface truly needs blur */
+.ix-glass-blur {
+  backdrop-filter: saturate(180%) blur(20px) !important;
+  -webkit-backdrop-filter: saturate(180%) blur(20px) !important;
+  background: var(--ix-surface) !important;
 }
 .ivu-modal-header,
 .ivu-modal-footer {
