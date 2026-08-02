@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "After #363 PROOF-1+B13 chart + #368 B2 density. Next: B-CMDK then B3/ui:proof. Cold agents: frontend:preflight + residual-print only.",
+  "tip_note": "After #371. Next: B3 withdraw (this) · P0.4 ui:proof · B4/B9/B10.",
   "tip_sha_at_write": "d519b87+wave-continue",
   "waves": {
     "A": "honesty / locks / withdraw-first",
@@ -52,9 +52,9 @@
       "status": "partial",
       "evidence": "tooling/uiproof exists; historical proofs",
       "proof_missing": "Not re-run as hard gate on late B PRs",
-      "next_action": "pnpm ui:proof after B-CMDK merge",
+      "next_action": "Run ui:proof on tip with Node18 worktree",
       "blocker": "",
-      "priority": 6
+      "priority": 4
     },
     {
       "id": "A0.5",
@@ -160,9 +160,9 @@
       "wave": "B",
       "title": "uc craft = terminal shared components",
       "status": "partial",
-      "evidence": "MoneyIndex ix-money shell + dual-book recipe (this branch)",
-      "proof_missing": "Withdraw/Safe craft depth; auth Orca",
-      "next_action": "Withdraw surface match; then B4/B9",
+      "evidence": "#371 MoneyIndex + this PR Withdraw dual-book shell",
+      "proof_missing": "Safe.vue craft; auth Orca",
+      "next_action": "Safe craft or B9 fee discoverability",
       "blocker": "",
       "priority": 14
     },

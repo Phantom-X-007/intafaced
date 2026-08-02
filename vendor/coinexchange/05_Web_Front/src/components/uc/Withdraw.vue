@@ -2,7 +2,9 @@
   <div class="nav-rights withdraw">
     <div class="nav-right">
       <div class="rightarea">
-        <section class="trade-groups merchant-tops">
+        <!-- B3 craft: same shell recipe as MoneyIndex / desk dual-book. -->
+        <div class="ix-money ix-withdraw">
+        <section class="trade-groups merchant-tops ix-withdraw-nav">
           <!-- <i class="merchant-icon tips"></i>
           <span class="tips-word">{{$t('uc.finance.withdraw.pickup')}}</span> -->
           <router-link to="/uc/withdraw/address">{{$t('uc.finance.withdraw.addressmanager')}}</router-link>
@@ -43,8 +45,8 @@
                     </span>
                   </p>
                 </label>
-                <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
-                  Venue exchange wallet only — not the platform ledger books.
+                <p class="ix-dualbook" role="note">
+                  <strong>Two books.</strong> Venue exchange wallet only — not the platform ledger books.
                 </p>
                 <p v-if="walletError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ walletError }}</p>
                 <div class="input-group">
@@ -122,6 +124,7 @@
             </div>
           </div>
         </section>
+        </div><!-- /.ix-money.ix-withdraw -->
       </div>
     </div>
     <Modal v-model="modal" width="480" :mask-closable="!submitting" :closable="!submitting">
@@ -1173,6 +1176,33 @@ table.table.table-inner.action-box {
       }
     }
   }
+}
+</style>
+
+<style scoped lang="scss">
+/* B3 — desk-aligned money shell on withdraw (parity with MoneyIndex). */
+.ix-money.ix-withdraw {
+  padding: 12px 14px 18px;
+  border: 1px solid var(--ix-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: var(--ix-surface, rgba(255, 255, 255, 0.03));
+}
+.ix-withdraw-nav {
+  margin-bottom: 10px;
+}
+.ix-dualbook {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 194, 168, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 194, 168, 0.06);
+  color: #c8cdd4;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ix-dualbook strong {
+  color: #00c2a8;
+  font-weight: 600;
 }
 </style>
 
