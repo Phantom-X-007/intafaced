@@ -18,21 +18,20 @@
 
 ## EXACT NEXT SHIP (do this now — single primary)
 
-| Field             | Value                                                                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Ship ID**       | **A-TRADE-MM-3**                                                                                                            |
-| **Program**       | P-TRADE-LIGHT                                                                                                               |
-| **Objective**     | Mid **port** for mm seed: config + optional venue/oracle adapter; **never invent mid**; empty mid → skip seed               |
-| **PATHS_ONLY**    | `services/svc-trade/src/mm/**` (+ env/index wire only if required for mid port)                                             |
-| **Never touch**   | `futures/` risk math; otc/copy/algo; pay; protocol; vendor Java M7                                                          |
-| **Branch prefix** | `feat/trade-mm-mid-`                                                                                                        |
-| **Worktree**      | Create fresh from `origin/main` via `pnpm wt` / `git worktree add` — no sticky path                                         |
-| **Proof**         | Unit tests: missing mid skips; configured mid seeds; no invent                                                              |
-| **After merge**   | Flip scoreboard mm-bot next ship; set this file’s EXACT NEXT to **A-UI-SUB** (or first OPEN agent ship in backlog priority) |
+| Field | Value |
+| --- | --- |
+| **Ship ID** | **A-UI-SUB** |
+| **Program** | P-UI |
+| **Objective** | Sub-accounts selector on vendor shell; honest block if money routing incomplete (H-ID-SUB shehzad) |
+| **PATHS_ONLY** | `vendor/**/05_Web_Front/**` |
+| **Never touch** | invent balances/routing; apps/web; M1–M7 implement |
+| **Branch / open PR** | prefer babysit **#358** if still open — else `feat/ui-sub-accounts-selector` |
+| **Worktree** | Fresh from origin/main or existing board-clear-ui-sub |
+| **Proof** | golden/tests + PR evidence |
+| **After merge** | EXACT NEXT → **A-WS-MOCK-E2E** (#357) then **A-P5-OPS** (#360) |
 
-**Secondary queue only after A-TRADE-MM-3 is PR-open or merged:** A-UI-SUB · A-P5-OPS · A-WS-MOCK-E2E · A-UI-A11Y · A-TRADE-SPOT-OPS · A-TRADE-VENUE-OPS (see backlog).
+**Secondary queue:** finish #357 A-WS-MOCK-E2E · #360 A-P5-OPS · A-UI-A11Y · A-TRADE-SPOT-OPS · A-TRADE-VENUE-OPS
 
----
 
 ## Session bootstrap (every compact / GO — **agent only**, never Nitro)
 
@@ -59,23 +58,23 @@
 
 ---
 
-## Open PRs (re-derived live when this file was last written)
+## Open PRs (re-derive with `gh pr list`)
 
-| PR                                                          | Owner      | Note                                                       |
-| ----------------------------------------------------------- | ---------- | ---------------------------------------------------------- |
-| [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | shehzad002 | M1 pay — babysit Class M; merge only if self-audit + green |
-| [#350](https://github.com/Phantom-X-007/intafaced/pull/350) | Denon      | Copy-spec docs — do not dual-edit without claim            |
+| PR | Owner | Note |
+| --- | --- | --- |
+| #358 | agent | A-UI-SUB — merge when green |
+| #357 | agent | A-WS-MOCK-E2E — merge when green |
+| #360 | agent | A-P5-OPS — merge when green |
+| #346 | shehzad002 | M1 pay — CONFLICTING; babysit only |
+| #350 | Denon | copy-spec docs |
 
-_Re-run `gh pr list` every session; replace this table if tip moved._
-
----
 
 ## Shipped (do not primary-reopen)
 
-#289 A-OR-1 · #336 A-WS-1 · #337 A-UI-1 · #338 MM-1 · #340 MM-2 · #341 curriculum · #344 venue · #345 candles · #349 UI honesty · #352 methodology v3 · #353 shehzad GitHub ownership lock
+#289 A-OR-1 · #336 A-WS-1 · #337 A-UI-1 · #338 MM-1 · #340 MM-2 · #341 curriculum · #344 venue · #345 candles · #349 UI honesty · #356 MM-3 mid port · #352 methodology v3 · #353 shehzad GitHub ownership lock
 
 ---
 
 ## Last updated
 
-2026-08-02 compaction-proof hygiene — EXACT NEXT = A-TRADE-MM-3; TRACKER/wave-audit demoted.
+2026-08-02 GO: #356 A-TRADE-MM-3 MERGED; EXACT NEXT = A-UI-SUB (#358).

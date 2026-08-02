@@ -5,7 +5,7 @@
 **Spine:** methodology **v3.1**  
 **Code:** none until **go implement**
 
-**Nitro free-hands (binding):** Prior frontend work is **not a constraint**. Inventory tip so we don’t _accidentally_ ignore useful machinery; then choose rebuild, replace, or keep **only** if it serves world-class quality. Claude’s “already shipped → gap-fill only” is **advice on cost**, not a ban on redesign.
+**Nitro free-hands (binding):** Prior frontend work is **not a constraint**. Inventory tip so we don’t _accidentally_ ignore useful machinery; then choose rebuild, replace, or keep **only** if it serves world-class quality. the agent pack's “already shipped → gap-fill only” is **advice on cost**, not a ban on redesign.
 
 **Still true:** withdraw “you will receive” math + bare Confirm span are **live defects** worth fixing early either way.
 
@@ -90,7 +90,7 @@ Proof pack. **A0.5** fold: chart **tradingview.com** attribution link (one-hour 
 1. Canonical vocabulary on styleboard artifact 3 (can draft words in Wave A docs if board not built).
 2. Keep IxState on intafaced.
 3. Shared uc component for `ix-empty*` speaking REASON words.
-4. **Zero-coverage first:** Account.vue, Safe.vue, myorder.vue, then WithdrawAddress, EntrustHistory, growth screens as listed in Claude §D.3.
+4. **Zero-coverage first:** Account.vue, Safe.vue, myorder.vue, then WithdrawAddress, EntrustHistory, growth screens as listed in agent §D.3.
 5. **Do not** rewrite MoneyIndex/Record that already have dialect 2 for “IxState purity.”
 
 ### A-x1 — Cross-surface number agreement
@@ -134,7 +134,7 @@ Gap-audit on every PR · gates pass on touched money · Orca · non-implementer 
 | N3 Ledger dual-tone | **Nitro K3** — default include |
 | N4 Terminal Zero    | Yes (pole)                     |
 
-Deliverable: Claude §C ten artifacts. Pick instrument: trust · cool · would use daily + graft slot.
+Deliverable: agent §C ten artifacts. Pick instrument: trust · cool · would use daily + graft slot.
 
 **Wave A** without pick OK. **Wave B retheme** after pick or written waiver.
 
@@ -290,7 +290,7 @@ Mass retheme waits for styleboard pick unless waiver. No Stream B. No fake numbe
 
 | Source                  | Status                                                      |
 | ----------------------- | ----------------------------------------------------------- |
-| Claude return pack      | **Merged** into v3                                          |
+| agent return pack       | **Merged** into v3                                          |
 | Grok rigorous audit     | **Merged** (design bar free hands, paths, excellence order) |
 | Tip re-verify `94c0a3f` | **Done**                                                    |
 
