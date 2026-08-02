@@ -13,7 +13,13 @@ export default new Vuex.Store({
         exchangeSkin:'night',
         loginTimes: null,
         /** svc-identity session — memory only, see setIxSession. */
-        ixSession: null
+        ixSession: null,
+        /**
+         * Selected identity sub-account id for the desk selector (A-UI-SUB).
+         * null = parent. Memory only — never localStorage; not a balance owner
+         * claim. Trade routing under a sub is NOT wired (TRADE_ROUTING_READY).
+         */
+        ixSubAccountId: null
     },
     mutations: {
         navigate(state, nav) {
@@ -66,9 +72,16 @@ export default new Vuex.Store({
          */
         setIxSession(state, session) {
             state.ixSession = session;
+            // Always reset selection on session change — never inherit another principal's pick.
+            state.ixSubAccountId = null;
         },
         clearIxSession(state) {
             state.ixSession = null;
+            state.ixSubAccountId = null;
+        },
+        /** @param {string|null} id identity sub-account uuid, or null for parent */
+        setIxSubAccountId(state, id) {
+            state.ixSubAccountId = id == null || id === '' ? null : String(id);
         }
     },
     getters: {
@@ -89,6 +102,9 @@ export default new Vuex.Store({
         },
         ixToken(state) {
             return state.ixSession ? state.ixSession.accessToken : null;
+        },
+        ixSubAccountId(state) {
+            return state.ixSubAccountId;
         }
     }
 });
