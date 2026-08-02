@@ -428,6 +428,8 @@
     <template>
       <BackTop :bottom="50"></BackTop>
     </template>
+    <!-- B-CMDK: global route/market palette (⌘K / Ctrl+K). iView-free panel; tokens only. -->
+    <CommandPalette />
   </div>
 </template>
 <script>
@@ -437,8 +439,10 @@ import { mapGetters, mapActions } from "vuex";
 // the hub all read it, so a module cannot appear in one navigation and not the
 // others.
 import { MODULES as IX_MODULES } from "./config/intafaced.js";
+import CommandPalette from "./components/intafaced/CommandPalette.vue";
 export default {
   name: "app",
+  components: { CommandPalette },
   provide () {
     return {
       reload: this.reload
