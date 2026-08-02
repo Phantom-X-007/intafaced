@@ -13,9 +13,9 @@
 | `services/svc-trade`         |         11 | **yes**      | yes             | no          | 0001+#176 0002 | L1/L3/L10       | convert, private REST, honesty routes                |
 | `services/svc-pay`           |          9 | **yes**      | merchant+public | no          | 0002 links     | L3/L6           | links + hosted checkout                              |
 | `tooling/**`                 |          9 | no           | no              | tooling     | postgres-init  | L8/StreamA      | tracker, uiproof                                     |
-| `services/svc-identity`      |          8 | no           | **yes**         | no          | 0002 revoke    | L2              | ifc_ exchange, subAccounts                           |
+| `services/svc-identity`      |          8 | no           | **yes**         | no          | 0002 revoke    | L2              | ifc\_ exchange, subAccounts                          |
 | `services/svc-ws`            |          7 | no           | JWT private     | yes JWT env | no             | L2/L5/L7        | private stream + public tape                         |
-| `services/svc-edge`          |          6 | no           | ifc_+JWT        | yes         | no             | L2/L5           | /api/v1 preservePath                                 |
+| `services/svc-edge`          |          6 | no           | ifc\_+JWT       | yes         | no             | L2/L5           | /api/v1 preservePath                                 |
 | `apps/web`                   |         6+ | no           | UI              | no          | no             | L6/L7           | tape + terminal honesty (**L7-EQUITY fix this run**) |
 | `docs/**`                    |         37 | n/a          | n/a             | n/a         | n/a            | L9              | archive + PEACE                                      |
 | `vendor/**`                  |          4 | dual-book UI | no              | no          | no             | L4/L9           | UI only not books                                    |

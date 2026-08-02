@@ -24,7 +24,7 @@
 | -------------------------------- | -------- | ------------------------ | --------------------------------------------------------------------------------------------- | ------------------- | ---------------------- |
 | web.terminal                     | **DONE** | **AGENT P-UI**           | Hotkeys #337 · honesty #349 · sub #358 · a11y #367 · density/CMDK/MoneyIndex/Withdraw/Safe/B9 | craft residual reg. | #337–#377 wave         |
 | ws.gateway                       | **DONE** | **AGENT P-WS**           | Private harden #336 + mock-E2E #357; live futures positions stream **§13 → M3** (no invent)   | babysit M3 events   | #336 #357 · §13 B-WS-2 |
-| pay.gateway (+ pay.* expand)     | **OPEN** | **HUMAN M1 shehzad002**  | Crypto rail done; card + Pay OS                                                               | #346 babysit        | —                      |
+| pay.gateway (+ pay.\* expand)    | **OPEN** | **HUMAN M1 shehzad002**  | Crypto rail done; card + Pay OS                                                               | #346 babysit        | —                      |
 | protocol.smart-accounts          | **OPEN** | **HUMAN M2 shehzad002**  | Deploy + audit package                                                                        | M2                  | —                      |
 | protocol.amm (+ lending/escrow…) | **OPEN** | **HUMAN M2 shehzad002**  | After SA                                                                                      | M2                  | —                      |
 | trade.spot                       | **DONE** | **AGENT P-TRADE-LIGHT**  | OHLCV fill agg #345 + candle job ops default OFF #373                                         | deepen only         | #345 #373              |

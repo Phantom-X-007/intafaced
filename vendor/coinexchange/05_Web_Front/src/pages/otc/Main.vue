@@ -9,9 +9,10 @@
           <!-- <router-link to="/identbusiness">Become a merchant</router-link> -->
         </div>
       </div>
-      <div class="content">
-        <p class="ix-empty" role="note" style="padding:8px 0;margin:0;clear:both;">
-          Two books. OTC balances here are venue P2P books — not the TypeScript platform ledgers.
+      <!-- B12 craft: desk dual-book shell around OTC market list. -->
+      <div class="content ix-money ix-otc">
+        <p class="ix-dualbook" role="note">
+          <strong>Two books.</strong> OTC balances here are venue P2P books — not the TypeScript platform ledgers.
         </p>
         <!-- Stream A: empty coin list ≠ coin API down. -->
         <p v-if="coinsError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ coinsError }}</p>
@@ -36,18 +37,19 @@
           </li>
           <li>
             <div class="image"><img src="../../assets/images/poundage.png" alt=""></div>
-            <div class="title">No platform fee</div>
-            <div class="content1">What you see is what you pay — no fee beyond the quoted price</div>
-            <li>
-              <div class="image"><img src="../../assets/images/instant.png" alt=""></div>
-              <div class="title">Instant settlement</div>
-              <div class="content1">Verified merchants are matched automatically — no waiting in a queue</div>
-            </li>
-            <li>
-              <div class="image"><img src="../../assets/images/platedanbao.png" alt=""></div>
-              <div class="title">Platform escrow</div>
-              <div class="content1">Verified merchants, escrowed funds and 24/7 support on every trade</div>
-            </li>
+            <div class="title">Quoted price only</div>
+            <div class="content1">Merchant quote is the deal price — no hidden platform fee line (not a free-money claim)</div>
+          </li>
+          <li>
+            <div class="image"><img src="../../assets/images/instant.png" alt=""></div>
+            <div class="title">Instant settlement</div>
+            <div class="content1">Verified merchants are matched automatically — no waiting in a queue</div>
+          </li>
+          <li>
+            <div class="image"><img src="../../assets/images/platedanbao.png" alt=""></div>
+            <div class="title">Platform escrow</div>
+            <div class="content1">Verified merchants, escrowed funds and 24/7 support on every trade</div>
+          </li>
         </ul>
       </div>
     </div>
@@ -101,6 +103,27 @@
       background-color: #000000;
       border-radius: 4px;
     }
+/* B12 — dual-book callout parity with desk money shell */
+.ix-money.ix-otc {
+  padding: 12px 14px 18px;
+  border: 1px solid var(--ix-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: var(--ix-panel, #12151c);
+}
+.ix-dualbook {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 194, 168, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 194, 168, 0.06);
+  color: #c8cdd4;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ix-dualbook strong {
+  color: #00c2a8;
+  font-weight: 600;
+}
 .advantage {
       background-color: #000000;
       border-radius: 4px;

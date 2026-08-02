@@ -12,7 +12,7 @@
 | app-admin0-docs | parallel Nitro | ADMIN-0 inventory + frontend scorecard stamp       | **OPEN PR #382**          | #382                               | dual-edit scorecard/register                             |
 | shehzad-m1-pay  | shehzad002     | Pay OS card sandbox M1                             | **OPEN #346 CONFLICTING** | #346                               | agents implement                                         |
 | denon-copy-spec | Phantom-X-007  | Sovereign copy-spec docs                           | **OPEN #350**             | #350                               | dual-edit                                                |
-| denon-spine     | Phantom-X-007  | feat/spine-* mountains                             | idle / hold               | —                                  | Nitro force-push                                         |
+| denon-spine     | Phantom-X-007  | feat/spine-\* mountains                            | idle / hold               | —                                  | Nitro force-push                                         |
 | stream-a-ui     | free / claim   | Vendor shell :8090 craft residual                  | idle after craft wave     | issue #83                          | services money spine                                     |
 | order-route-b   | closed         | CX-8 L3+L4 agent-max                               | **closed on main #380**   | CX-8 green                         | re-open as primary invent                                |
 

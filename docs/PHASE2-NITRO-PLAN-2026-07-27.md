@@ -95,7 +95,7 @@ All by `@Phantom-X-007`, **CI green**, **0 reviews**, mergeable.
 
 ### Ready but **not** Phase-2-first (don’t start unless you want side work)
 
-`identity.webauthn` · `token.governance` · `pay.gateway` · `p2p.offers` · bank/agents/academy/market/ops.*
+`identity.webauthn` · `token.governance` · `pay.gateway` · `p2p.offers` · bank/agents/academy/market/ops.\*
 
 These are real and unblocked, but they **do not** advance the broker heart. Pay/P2P are Phase 3 product lines.
 

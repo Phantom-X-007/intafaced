@@ -23,7 +23,7 @@
 
 ## Out of scope
 
-- vendor/** Stream A, apps shell polish, dual-book ADR product policy write
+- vendor/\*\* Stream A, apps shell polish, dual-book ADR product policy write
 - Inventing durable multi-replica BroadcastStore (M226-01 Denon)
 - Futures/OTC/algo product invent
 

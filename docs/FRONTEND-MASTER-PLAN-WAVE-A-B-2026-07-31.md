@@ -68,7 +68,7 @@
 | Dual-book         | `ix-dualbook` banners on exchange                                                                 |
 | Favourites        | toggle + filter                                                                                   |
 | Focus             | `:focus-visible` block                                                                            |
-| Honesty dialect 2 | `ix-empty*` on MoneyIndex, Record, Withdraw, Recharge, Entrust*, Exchange, OTC, CMS…              |
+| Honesty dialect 2 | `ix-empty*` on MoneyIndex, Record, Withdraw, Recharge, Entrust\*, Exchange, OTC, CMS…             |
 | Auth fixture      | `auth-fixture.mjs`, `run-pass3.sh`                                                                |
 
 ### A0 — Boot + Orca + baseline scorecard
@@ -121,7 +121,7 @@ Much shipped #240. Delta only.
 
 ### Wave A DoD
 
-Gap-audit on every PR · gates pass on touched money · Orca · non-implementer on A2′/A1′/A-x* · no fixture-seeded balances · no rebuild of shipped ticket/book controls
+Gap-audit on every PR · gates pass on touched money · Orca · non-implementer on A2′/A1′/A-x\* · no fixture-seeded balances · no rebuild of shipped ticket/book controls
 
 ---
 

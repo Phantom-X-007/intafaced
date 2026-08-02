@@ -34,7 +34,7 @@
 | L2-WA-CHALLENGE-STORE | In-process WebAuthn challenges                             | HA only                                          |
 | L7-WS-INGEST-MEM      | TradeHub ingest no market allowlist                        | DoS if bus compromised                           |
 | F-L9-1                | MiningsJob still credits shell wallet                      | Dual-book residual                               |
-| F-L9-2                | Live DAO increaseBalance* remain                           | Dual-book residual                               |
+| F-L9-2                | Live DAO increaseBalance\* remain                          | Dual-book residual                               |
 | PR101-P1              | Screening empty outside staging/prod; edge-only boot guard | Ops / counsel                                    |
 
 ## P3
@@ -51,7 +51,7 @@ M-07 mintEpoch txn holds across ledger · M-08 (addressed by self-only) · L2-WA
 - Protocol AMM: no ledger-client; unsigned calldata only
 - WS trade tape: public prints; order IDs stripped
 - Mounts: pay/protocol/token/trade/identity registered + edge routes
-- #96: unfreezeMore/TRUNCATE/CORS* claims **hold** (not theater)
+- #96: unfreezeMore/TRUNCATE/CORS\* claims **hold** (not theater)
 - #101: dex.quote fail-closed, no ccxt, screening provenance holds → **safe to merge** (not sanctions content done)
 
 ---
@@ -69,7 +69,7 @@ M-07 mintEpoch txn holds across ledger · M-08 (addressed by self-only) · L2-WA
 
 | Residual #               | Item                                                  | After this wave           |
 | ------------------------ | ----------------------------------------------------- | ------------------------- |
-| 2 CORS *+credentials     | **CLOSED on main** (#96)                              | remove from open residual |
+| 2 CORS \*+credentials    | **CLOSED on main** (#96)                              | remove from open residual |
 | 3 unfreezeMore           | **CLOSED** (throw + no-op)                            | remove                    |
 | 4 dropWeekTable TRUNCATE | **CLOSED**                                            | remove                    |
 | 1 dual-book              | **OPEN** — MiningsJob + DAO mutators remain           | keep                      |

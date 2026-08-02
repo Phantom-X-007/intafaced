@@ -67,7 +67,7 @@ Do **not** replace these with fashionable alternatives.
 | **Subagent-driven-development**    | Fresh agent per task                          | Build                                       | **Adopt for Build lanes**                                                                |
 | **Verification-before-completion** | Evidence gate                                 | Ship claims                                 | **Adopt always**                                                                         |
 
-**Insane difference:** Spec Kit _ritual_ does not beat a **REQ-ID → test → PR** chain enforced by agents. Constitution ≈ our doctrine + DIRECTION + Spec GC-*.
+**Insane difference:** Spec Kit _ritual_ does not beat a **REQ-ID → test → PR** chain enforced by agents. Constitution ≈ our doctrine + DIRECTION + Spec GC-\*.
 
 ### 2.2 Unit & property testing (correctness)
 
@@ -177,11 +177,11 @@ Before large dual-book refactors _or_ in parallel with scan work:
 
 ### W4 — Chaos as experiments, not vibes
 
-For each fault F*:
+For each fault F\*:
 
 1. Define steady state S (Spec)
 2. Hypothesis: S holds
-3. Inject F* in harness
+3. Inject F\* in harness
 4. Measure conservation / open-order consistency
 5. Disproof = bugfix PR
 
@@ -261,12 +261,12 @@ Professionals schedule **harness before mountain**.
 
 | Spec area | Primary tools/workflows                       |
 | --------- | --------------------------------------------- |
-| DB-*      | Scan extend, inventory script, Class M review |
+| DB-\*     | Scan extend, inventory script, Class M review |
 | CX-1–6    | Existing vitest (guard)                       |
 | CX-7–9    | Chaos harness, platform:up, reconcile tests   |
-| DX-*      | Vitest quote suite, optional Playwright DX-9  |
-| SD-*      | Seeder resume + volume tests                  |
-| RS-*      | Scoreboard doc + WAVE-AUDIT                   |
+| DX-\*     | Vitest quote suite, optional Playwright DX-9  |
+| SD-\*     | Seeder resume + volume tests                  |
+| RS-\*     | Scoreboard doc + WAVE-AUDIT                   |
 | GC / LW   | Docs, #272, LIVE-LANES                        |
 
 ---

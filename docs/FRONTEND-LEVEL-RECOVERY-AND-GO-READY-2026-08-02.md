@@ -73,7 +73,7 @@ Research closed → L1 refs + catalog → Intent → Scorecard baseline
 | **Scorecard abandoned after A0**              | Baseline row exists; **no re-score after #267/#295/#297…**              | Methodology: no baseline → no “improved” claims. We claimed craft without falsifying |
 | **Impeccable / design-taste unused on craft** | Design Bar §8 + leverage pack mandate; autonomous run did not load them | Post-render critique is how anti-slop is enforced                                    |
 | **Steal lines / catalog jobs skipped**        | Leverage pack §5 required 5 steal lines + refs per craft slice          | Without this, craft drifts to generic “AI polish”                                    |
-| **Non-implementer review missing**            | Wave A DoD: second eye on A2′/A1′/A-x*; B13 anti-slop                   | CI ≠ craft quality; money-adjacent UI needs second agent                             |
+| **Non-implementer review missing**            | Wave A DoD: second eye on A2′/A1′/A-x\*; B13 anti-slop                  | CI ≠ craft quality; money-adjacent UI needs second agent                             |
 | **Orca used sparsely**                        | One P21 desk shot; not per-slice before/after                           | OPS-NOW: Orca primary; many PRs merged on CI alone                                   |
 | **`ui:proof` unused in later B**              | Plan P0.4; auth fixture law                                             | Regression net for honesty empty states                                              |
 | **`pnpm verify` not local-routine**           | Relied on remote CI matrix                                              | AGENTS: verify before done claims                                                    |

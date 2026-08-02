@@ -7,7 +7,7 @@
 | M1      | 1       | `0002_display_name_backfill.sql` + down        | db:check=0 (24 mig) |           |
 | R5      | 1       | fail-closed `trade.sub_account_ungated`        | trade tests 122p/1s |           |
 | R6      | 1       | cost from price ?? protectionPrice + unit test | trade tests         |           |
-| WS-JWT  | 1       | compose JWT_* + env audience default           | ws tests 64p        |           |
+| WS-JWT  | 1       | compose JWT\_\* + env audience default         | ws tests 64p        |           |
 | R7      | 1       | fossil-label free-mountains scoreboards        | n/a docs            |           |
 
 ## Local proof (pre-merge)

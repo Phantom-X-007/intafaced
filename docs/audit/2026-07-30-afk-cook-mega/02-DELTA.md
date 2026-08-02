@@ -12,7 +12,7 @@
 | `services/svc-pay`           | 9     | #120,#124,#139                    | **yes**      | merchant + public token | no      | **yes** 0002      | L3/L6                 |
 | `services/svc-identity`      | 8     | #113,#116,#158                    | no           | **yes**                 | no      | **yes** 0002      | L2/R4/R5              |
 | `services/svc-ws`            | 7     | #119,#122                         | no           | **yes** JWT private     | yes     | no                | L5/L7                 |
-| `services/svc-edge`          | 6     | #114                              | no           | **yes** ifc_            | yes     | no                | L2/L5                 |
+| `services/svc-edge`          | 6     | #114                              | no           | **yes** ifc\_           | yes     | no                | L2/L5                 |
 | `apps/web`                   | 6     | #162                              | no           | no                      | no      | no                | L7                    |
 | `vendor/**`                  | 4     | brand/i18n scrub                  | dual-book UI | no                      | no      | no                | L4/L9                 |
 | `tooling/**`                 | 9     | tracker, migrate-all, **uiproof** | no           | no                      | tooling | schema init       | L8/L11/A              |

@@ -13,8 +13,7 @@
 > reconcile.**
 >
 > **Option C is rejected on evidence, not preference.** Its entire premise is that
-> the vendored side holds a book worth preserving. The audit counted it: `member`
-> **0 rows**, `member_wallet` **0 rows**, `exchange_order` **0 rows**. Nobody has
+> the vendored side holds a book worth preserving. The audit counted it: `member` > **0 rows**, `member_wallet` **0 rows**, `exchange_order` **0 rows**. Nobody has
 > ever registered on it. There is no book there to preserve — "two reconciled
 > books" would have meant permanently reconciling a live ledger against an empty
 > table.

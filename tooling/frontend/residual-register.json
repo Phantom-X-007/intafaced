@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "ADMIN-0 inventory done. Open: P0.4 ui:proof · B12 marketing polish · B15 waived.",
+  "tip_note": "B12 OTC/Invite/Help craft; P0.4 blocked by agent chromium SEGV after browsers install.",
   "tip_sha_at_write": "final-craft-pass",
   "waves": {
     "A": "honesty / locks / withdraw-first",
@@ -50,11 +50,11 @@
       "wave": "P0",
       "title": "ui:proof matrix green",
       "status": "partial",
-      "evidence": "tooling/uiproof exists; historical proofs",
-      "proof_missing": "Monorepo needs @playwright/test on tip worktree (pnpm i); matrix exists",
-      "next_action": "pnpm install on tip then pnpm ui:proof; or Class N CI path",
+      "evidence": "@playwright/test installable; browsers in .tools/ms-playwright; run fails agent SEGV on chromium_headless_shell",
+      "proof_missing": "Green proof matrix on host without sandbox kill; Orca remains primary",
+      "next_action": "Re-run ui:proof on unrestricted host or CI job with browsers",
       "blocker": "",
-      "priority": 5
+      "priority": 6
     },
     {
       "id": "A0.5",
@@ -259,11 +259,11 @@
       "wave": "B",
       "title": "Marketing/OS/OTC/CMS craft last",
       "status": "partial",
-      "evidence": "#301 honesty/a11y OTC/CMS; earlier N5 honesty",
-      "proof_missing": "Craft excellence order last — not full craft pass",
-      "next_action": "After desk scorecard green",
+      "evidence": "OTC Main dual-book shell + HTML fix + Invite/Help honesty notes (this PR)",
+      "proof_missing": "Lab/Partner deep craft; full marketing restyle",
+      "next_action": "Optional Lab/Partner; residual lower",
       "blocker": "desk scorecard first",
-      "priority": 50
+      "priority": 55
     },
     {
       "id": "B13",
