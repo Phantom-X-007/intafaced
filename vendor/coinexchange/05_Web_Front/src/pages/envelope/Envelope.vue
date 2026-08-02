@@ -1,7 +1,12 @@
 <template>
   <div class="envelope">
     <!-- Stream A: never paint invented gift name/amount while loading or on failure. -->
+    <p class="ix-dualbook ix-envelope-note" role="note">
+      <strong>Gifts are not ledger balances.</strong>
+      Name, amount, and claim counts only appear after the gift API answers — loading and failures never invent a full gift book.
+    </p>
     <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="padding-top:120px;text-align:center;">{{ loadError }}</p>
+    <p v-else-if="!envelopeReady" class="ix-empty ix-empty-loading" style="padding-top:80px;text-align:center;">{{ $t("common.loading") }}</p>
     <template v-else-if="envelopeReady">
     <div v-if="hasInviteUser" style="width:80%;height: 35px;padding: 5px 0 5px 0px;border-radius: 35px;background-color:rgb(157, 0, 0);margin-left:10%;text-align:center;display: flex;flex-direction:row;justify-content:center;margin-bottom:10px;">
       <img style="width: 25px; height: 25px;margin-right: 10px;border-radius: 25px;" :src="inviteUserAvatar"></img>
@@ -80,7 +85,7 @@ export default {
     return {
       spinShow: false,
       hasReceived: false,
-      inviteLink: "https://www.intafaced.com/envelope/",
+      inviteLink: "",
       envelopeNo: "",
       country: "",
       sendcodeValue: this.$t("uc.regist.sendcode"),
@@ -486,5 +491,21 @@ export default {
   content: " ";
   clear: both;
   height: 0;
+}
+
+.ix-dualbook.ix-envelope-note {
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 194, 168, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 194, 168, 0.06);
+  color: #c8cdd4;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+}
+.ix-dualbook.ix-envelope-note strong {
+  color: #00c2a8;
+  font-weight: 600;
 }
 </style>
