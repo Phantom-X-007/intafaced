@@ -71,14 +71,14 @@ Historical Denon↔Nitro board (file territory era): `docs/DENON-NITRO-PARALLEL-
 
 ## Why this prompt is shaped this way
 
-| Piece                   | Unspoken need it covers                                     |
-| ----------------------- | ----------------------------------------------------------- |
-| Operator mode           | You never become the git bottleneck                         |
-| Ownership law in paste  | Cold chats don’t fall back to “only Stream A polish”        |
-| Live re-verify          | Stale “already true” / session memory won’t poison a chat   |
-| Denon = direction       | He plans engines; agents ship without inventing product law |
-| Class M/X explicit      | Money merge + human-only surfaces stay honest               |
-| LIVE-LANES + agent map  | Parallel agents don’t double-build or steal Shehzad M1–M7   |
-| GITHUB-OWNERSHIP-SHEHZAD| Tip GitHub is the collision wall, not chat memory             |
-| Hard bans in the prompt | Cold agents still hit the money bar                         |
-| CI thrift line          | Cut waste without capping parallel ship speed               |
+| Piece                    | Unspoken need it covers                                     |
+| ------------------------ | ----------------------------------------------------------- |
+| Operator mode            | You never become the git bottleneck                         |
+| Ownership law in paste   | Cold chats don’t fall back to “only Stream A polish”        |
+| Live re-verify           | Stale “already true” / session memory won’t poison a chat   |
+| Denon = direction        | He plans engines; agents ship without inventing product law |
+| Class M/X explicit       | Money merge + human-only surfaces stay honest               |
+| LIVE-LANES + agent map   | Parallel agents don’t double-build or steal Shehzad M1–M7   |
+| GITHUB-OWNERSHIP-SHEHZAD | Tip GitHub is the collision wall, not chat memory           |
+| Hard bans in the prompt  | Cold agents still hit the money bar                         |
+| CI thrift line           | Cut waste without capping parallel ship speed               |
