@@ -1855,10 +1855,14 @@ export default {
           return;
         }
         this.market = market;
-        const tick = market.precision ? market.precision.price : null;
-        const lot = market.precision ? market.precision.amount : null;
-        if (tick) this.baseCoinScale = this.placesOf(tick);
-        if (lot) this.coinScale = this.placesOf(lot);
+        /* Handles BOTH published precision shapes — the tick/lot strings on
+           main and the decimal-place integers the deployed service still
+           sends. Reading one as the other formats every price on the desk to
+           the wrong number of digits, silently. See ix-trade.js. */
+        const pricePlaces = market.precision ? ixTrade.placesFromPrecision(market.precision.price) : null;
+        const amountPlaces = market.precision ? ixTrade.placesFromPrecision(market.precision.amount) : null;
+        if (pricePlaces !== null) this.baseCoinScale = pricePlaces;
+        if (amountPlaces !== null) this.coinScale = amountPlaces;
         /* Taker rate as a decimal string ("0.001"). Known only because the
            venue published it — feeKnown stays false otherwise and the ticket
            says the fee is unknown rather than implying it is free. */
@@ -1876,13 +1880,6 @@ export default {
       });
     },
 
-    /** Decimal places implied by a tick/lot string. Display only — see above. */
-    placesOf(value) {
-      const text = String(value);
-      const dot = text.indexOf('.');
-      if (dot < 0) return 0;
-      return text.slice(dot + 1).replace(/0+$/, '').length;
-    },
 
     /**
      * The market list — `/markets` for the listing, `/tickers` for prices.

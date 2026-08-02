@@ -132,7 +132,32 @@ var CCXT_REASON = {
     OrderNotFound: REASON.ERROR,
     OrderNotFillable: REASON.ERROR,
     BadRequest: REASON.ERROR,
-    ExchangeError: REASON.ERROR
+    ExchangeError: REASON.ERROR,
+
+    // ── The taxonomy the CURRENTLY DEPLOYED svc-trade still uses ────────────
+    //
+    // The service in the fleet predates the CCXT error mapping that is on main
+    // and answers with its own internal codes: `Unauthorized` rather than
+    // `AuthenticationError`, `MarketNotFound` rather than `BadSymbol`,
+    // `MatchingUnavailable` rather than `ExchangeNotAvailable`.
+    //
+    // Both are listed because a screen has to be honest against the service
+    // that is actually running, not the one in the source tree. Without these
+    // rows every refusal from the live venue would fall through to the generic
+    // arm and print "Request failed" instead of the sentence the service
+    // actually wrote — which is precisely the collapse this taxonomy exists to
+    // prevent. These rows become dead weight the day the fleet catches up, and
+    // they are harmless then.
+    Unauthorized: REASON.UNAUTHORIZED,
+    Forbidden: REASON.FORBIDDEN,
+    MarketNotFound: REASON.BAD_SYMBOL,
+    MarketNotTradable: REASON.BAD_SYMBOL,
+    MatchingUnavailable: REASON.UNREACHABLE,
+    MarketClosed: REASON.UNREACHABLE,
+    SpotDisabled: REASON.UNREACHABLE,
+    InvalidTimeframe: REASON.ERROR,
+    InvalidSince: REASON.ERROR,
+    NotOwner: REASON.FORBIDDEN
 };
 
 function classify(status, body) {
@@ -166,6 +191,13 @@ function classify(status, body) {
         if (data.intafacedCode === 'scope.denied') return { reason: REASON.SCOPE_DENIED, message: message };
         if (/verification tier/i.test(message)) return { reason: REASON.TIER_REQUIRED, message: message };
         return { reason: REASON.FORBIDDEN, message: message };
+    }
+    // Last resort. Prefer whatever sentence the service actually wrote —
+    // top-level `message` is where both the CCXT shape and Fastify's own 404
+    // put it — over the placeholder, so a screen quotes the venue rather than
+    // saying "Request failed" about a service that explained itself.
+    if (message === 'Request failed' && body && typeof body.message === 'string' && body.message) {
+        message = body.message;
     }
     return { reason: REASON.ERROR, message: message };
 }

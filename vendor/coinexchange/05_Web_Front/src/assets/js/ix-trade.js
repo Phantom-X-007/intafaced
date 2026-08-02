@@ -281,17 +281,70 @@ function toMarketRow(market, ticker) {
     chg: pct,
     /* Null, not "+0.00%". There is no 24h window to compute a move over. */
     rose: pct === null || pct === undefined ? null : formatPercent(pct),
-    /* Tick size and lot size as the engine enforces them (TICK_SIZE mode), not
-       a decimal-place count — seven of our listings have a non-power-of-ten lot
-       and a places count collapses those to 0. */
-    tickSize: market.precision ? market.precision.price : null,
-    lotSize: market.precision ? market.precision.amount : null,
+    /* The tick and lot the ENGINE enforces, when the venue published them.
+       Null against an older service that only sent a decimal-place count — see
+       sizeFromPrecision. Never reconstructed from that count, because a place
+       count cannot express the lot of 1000 that seven of our listings use. */
+    tickSize: market.precision ? sizeFromPrecision(market.precision.price) : null,
+    lotSize: market.precision ? sizeFromPrecision(market.precision.amount) : null,
+    /* Display-only digit counts, correct under either precision shape. */
+    pricePlaces: market.precision ? placesFromPrecision(market.precision.price) : null,
+    amountPlaces: market.precision ? placesFromPrecision(market.precision.amount) : null,
     minNotional: market.limits && market.limits.cost ? market.limits.cost.min : null,
     minQty: market.limits && market.limits.amount ? market.limits.amount.min : null,
     maker: market.maker === undefined ? null : market.maker,
     taker: market.taker === undefined ? null : market.taker,
     isFavor: false
   };
+}
+
+/**
+ * Decimal places for display, from whichever `precision` shape the venue sent.
+ *
+ * TWO SHAPES ARE LIVE AT ONCE, AND GETTING THIS WRONG IS SILENT.
+ *
+ *   new (main, `precisionMode: 'TICK_SIZE'`)  precision.price = "0.00001"
+ *   old (currently deployed)                  precision.price = 5
+ *
+ * The new form is the tick size itself, because that is what the engine
+ * actually enforces; the old form is a decimal-place count. They are both
+ * "5 decimal places" here but they are different values, and reading one as the
+ * other does not throw — it just formats every price on the desk to the wrong
+ * number of digits. A tick of "0.00001" read as a place count gives 0 places,
+ * so a five-decimal FX pair renders as whole numbers.
+ *
+ * DETECTION IS ON THE JSON TYPE, NOT ON THE TEXT. The old shape sends numbers
+ * and the new one sends decimal strings, which is unambiguous. Sniffing for a
+ * decimal point is not: a whole-number lot of `"1000"` (AUD/USD, and six other
+ * listings) and a place count both lack one, and reading that lot as a place
+ * count of 1000 is nonsense that would silently fall back to a default scale.
+ *
+ * THIS IS FOR DISPLAY ONLY. It is never used to build an order quantity. The
+ * lot for AUD/USD is 1000, whose place count is 0, and rounding an amount to 0
+ * places produces sizes the engine rejects for a reason the trader cannot see.
+ */
+function placesFromPrecision(value) {
+  if (value === null || value === undefined || value === '') return null;
+  // Old shape: an integer count of decimal places.
+  if (typeof value === 'number') {
+    return isFinite(value) && value >= 0 && value <= 18 ? Math.floor(value) : null;
+  }
+  // New shape: the tick or lot itself, as a decimal string.
+  var text = String(value);
+  var dot = text.indexOf('.');
+  if (dot < 0) return 0; // a whole-number tick/lot ("1", "1000") → no decimals
+  return text.slice(dot + 1).replace(/0+$/, '').length;
+}
+
+/**
+ * The tick/lot size itself, or null when the venue only sent a place count.
+ * Null is honest: an older service genuinely did not tell us the tick, and
+ * reconstructing one from a place count would invent the venue's own rule.
+ */
+function sizeFromPrecision(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return null;
+  return String(value);
 }
 
 /** A decimal-string rate ("0.0123") → a signed percent label. Null in, null out. */
@@ -467,6 +520,8 @@ module.exports = {
   freeBalanceOf: freeBalanceOf,
   toMarketRow: toMarketRow,
   toMarketRows: toMarketRows,
+  placesFromPrecision: placesFromPrecision,
+  sizeFromPrecision: sizeFromPrecision,
   formatPercent: formatPercent,
   toCandles: toCandles,
   toTimeframe: toTimeframe,

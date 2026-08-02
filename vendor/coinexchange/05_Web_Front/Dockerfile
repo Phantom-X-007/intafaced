@@ -21,12 +21,14 @@
 # `ERR_OSSL_EVP_UNSUPPORTED` — an error that names neither webpack nor md4 and
 # reads like a broken install.
 #
-# Node 16 ships OpenSSL 1.1.1, which still HAS md4. So on this image the build
-# needs no workaround at all — and `--openssl-legacy-provider` is not merely
-# unnecessary, it is REJECTED: `node: --openssl-legacy-provider is not allowed
-# in NODE_OPTIONS`, exit 9. The flag only exists on the Node versions this pin
-# is here to avoid. Setting it alongside the pin was belt-and-braces that
-# strangled the build.
+# Node 16 ships OpenSSL 1.1.1, which still HAS md4, so the build works with no
+# flag at all. THE `--openssl-legacy-provider` FLAG MUST NOT BE SET HERE: it
+# does not exist before Node 17, and Node 16 does not ignore it — it refuses to
+# start at all with `--openssl-legacy-provider is not allowed in NODE_OPTIONS`
+# and exits 9. Pinning Node 16 and setting the flag are alternative fixes for
+# the same problem and are mutually exclusive; doing both is a build that cannot
+# run. (If this image ever moves to Node 17+, drop the pin and add the flag
+# back — one or the other, never both.)
 #
 # Upgrading webpack is the real fix and it is a project, not a line: webpack 3
 # to 5 across 74 Vue 2.5 SFCs with vue-loader 13. Pinning Node here is the
@@ -42,10 +44,14 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --no-audit --no-fund --legacy-peer-deps
 
+# `.dockerignore` keeps the host's `node_modules` and `dist` out of this. Without
+# it, this line copies a 330 MB host tree over the install above — so the image
+# shipped whatever was on the builder's machine instead of what the lockfile
+# pins, and a stale local `dist` could be served as if it were this commit.
 COPY . .
 
-# No NODE_OPTIONS. See the header: on Node 16 md4 is present, so nothing is
-# needed — and the legacy-provider flag is refused outright by this runtime.
+# No NODE_OPTIONS. See the header: on Node 16 md4 is already available, and the
+# legacy-provider flag is rejected outright rather than ignored.
 RUN npm run build
 
 # ── serve ───────────────────────────────────────────────────────────────────

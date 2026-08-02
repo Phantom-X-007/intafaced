@@ -1100,18 +1100,6 @@ export default {
       }
       this.indexBtn = tabs;
     },
-    // getFavor() {
-    // //list favourites
-    // this.$http
-    //.post(this.host + this.api.exchange.favorFind, {})
-    //.then(response => {
-    // var resp = response.body;
-    // for (var i = 0; i < resp.length; i++) {
-    // var coin = this.getCoin(resp[i].symbol);
-    // this.coins.favor.push(coin);
-    // }
-    // });
-    // },
     /**
      * FAVOURITES ARE LOCAL TO THIS BROWSER, AND THE SCREEN SAYS SO.
      *
