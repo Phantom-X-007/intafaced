@@ -35,7 +35,7 @@
  * Exit 0 = the workspace, the image and the fleet agree.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 const ROOT = process.cwd();
 
@@ -411,6 +411,55 @@ if (compose !== null) {
           reason: `${envVar}'s dev fallback is ${devUrl} but compose points it at ${deployed[1]}:${deployed[2]} — one of the two is wrong, and running the edge outside compose would reach whatever else holds port ${devPort}`,
         });
       }
+    }
+  }
+}
+
+// ── 7 · a user-facing app that cannot be run ────────────────────────────────
+//
+// The failure this exists for, in full, because it cost four days:
+//
+// The vendored trading shell is the stated product — 74 screens, and the
+// direction has always been that our features go on top of it. It had no
+// `dist`, no Dockerfile and no compose entry. The only way to see it was
+// `npm run dev` by hand. Documents sent readers to `:8090`; nothing ever served
+// that port.
+//
+// So one developer put 48 commits into it WITHOUT EVER SEEING IT RENDER, while
+// a different app — added two days before the shell was vendored — stayed on
+// :3000 as the de-facto product purely because it was the only one that
+// started. Nobody chose that. It is what happens when the intended thing cannot
+// be run and the unintended thing can.
+//
+// No gate caught it, because every gate here asked "does this service reach the
+// fleet?" and a front-end is not a service.
+//
+// So: a directory with a build script and an index.html or a Next config is a
+// user-facing app, and it either appears in compose or carries a written
+// `# no-deploy:` reason. Silence is the thing being forbidden.
+{
+  const composeApps = read('docker-compose.apps.yml') ?? '';
+  const frontends = [
+    ...workspacesUnder('apps').map((n) => ({ name: n, dir: join('apps', n) })),
+    { name: '05_Web_Front', dir: join('vendor', 'coinexchange', '05_Web_Front') },
+  ];
+
+  for (const fe of frontends) {
+    if (!existsSync(join(ROOT, fe.dir, 'package.json'))) continue;
+    const pkg = JSON.parse(readFileSync(join(ROOT, fe.dir, 'package.json'), 'utf8'));
+    if (!pkg.scripts?.build) continue;
+
+    // `\s` inside a template literal is just the letter s — the first version
+    // of this line matched nothing and flagged apps/admin, which is plainly in
+    // the file. A gate that cries wolf gets switched off, and then the real
+    // failure it was written for goes through it unnoticed.
+    const named =
+      composeApps.includes(fe.dir.split(sep).join('/')) || new RegExp(`^\\s{2}${fe.name}:`, 'm').test(composeApps);
+    if (!named && !composeApps.includes(`# no-deploy: ${fe.name}`)) {
+      failures.push({
+        file: 'docker-compose.apps.yml',
+        reason: `${fe.dir} builds a user-facing app but nothing in the fleet serves it — so it can be worked on for weeks without anyone seeing it, while whichever app DOES start becomes the product by default. If that is deliberate, add "# no-deploy: ${fe.name}" saying why`,
+      });
     }
   }
 }
