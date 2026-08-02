@@ -60,10 +60,10 @@ Palette re-pick · taste “ours” · go-live money · Class X
 
 ## Queue truth (re-stamp when residual changes — cold agents)
 
-| Done on tip                                                                          | Still open (do next, no ask)                                |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| PROOF-1 · B13 · B2 · ⌘K trap · B3 · B9 · B1 · B4 sticky+trap · B12 Partner · ADMIN-0 | **P0.4** ui:proof (agent Chromium SEGV; Orca primary)       |
-| Residual JSON + AOS preflight                                                        | **B12** marketing/OTC/CMS last                              |
-| Scorecard LIVE rows                                                                  | Auth money Orca (never seed) · B15 multi-monitor **waived** |
+| Done on tip                                                                | Still open AFK-safe (do next, no ask)                                                                                          | Parked (do not stall)                                |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| Wave A/B desk craft · B4/B5 · B12 Partner/About · CMDK trap · residual AOS | **AFK-INVITE** → Envelope → Ctc → Activity → uc-comp → Lab pass → Index → CMDK routes → HelpDetail → WhitePaper · see residual | Auth money Orca · B11 · C-LWC · P0.4 SEGV (optional) |
+| AFK campaign doc on tip                                                    | Drain `afk_safe` until empty                                                                                                   | B15 waived                                           |
 
+**AFK:** `docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md` + prompt AFK block.  
 **Do not re-plan from zero.** `pnpm frontend:residual` is the queue. Nitro only for palette/taste/Class X.
