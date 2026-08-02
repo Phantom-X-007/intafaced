@@ -21,6 +21,7 @@ WHAT THIS IS
 - **ACTIVE CAMPAIGN — BOARD CLEAR (finish product table; full autonomy):** docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-ENGINEERING-STANDARD.md · docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md · docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-GO-READINESS.md · docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md · docs/BOARD-CLEAR-PROCESS-LOOPS.md · docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md · docs/BOARD-CLEAR-SCOREBOARD.md · docs/BOARD-CLEAR-NEXT.md · docs/BOARD-CLEAR-DECISION-LOG.md · **paste GO:** docs/BOARD-CLEAR-AUTONOMOUS-RUN.md. Anti-slop + evidence-before-claims. UI = vendor :8090. #289 rebase. Locked B. Done/Cut only; no continue; no residual theater.
 - Plain map: docs/START-HERE.md · Ownership: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Older residual mode: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md (superseded when Board Clear docs present) · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
 - Stream A / UI: docs/NITRO-STREAM-A-CLAIM.md · #83 · docs/FRONTEND-STATE-OF-TRUTH-2026-07-31.md under Board Clear web.terminal Done bar.
+- **Stream A AFK drain (vendor :8090 honesty/craft):** docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md · AOS · residual-register.json (`afk_safe`) · GO-READY · paste AFK block below when leaving laptop.
 - History boards (not live law): docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md · docs/POST-MERGE-RESIDUAL-AFTER-86.md.
 
 PARTNER + OWNERSHIP (durable — see NITRO-OWNERSHIP doc)
@@ -46,7 +47,7 @@ MANDATORY WORKFLOW
 3. Claim LIVE-LANES + tracker mountain if free (features.mjs owner/wip on first mountain PR); one concern per PR. Craft under already-wip does not require registry edit. **If LIVE-LANES or tracker owner is shehzad002 / HUMAN-CLAIMED M1–M7 → stop implement; babysit only.**
 4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no invent mid/depth/rates; no force-push of spine branches; **no agent implement on Shehzad M1–M7 paths**. Board Clear agent Done bars only on agent-owned rows.
 5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand) + Class M path.
-6. No commits/PRs unless I asked to ship (or residual campaign / I said go all-out ship). No random new architecture.
+6. No commits/PRs unless I asked to ship (or residual/Board Clear/AFK campaign / I said go all-out). AFK-ACTIVE + residual tip_note AFK-ACTIVE = Class N Stream A ship authorized without per-PR ask. No random new architecture.
 7. GitHub Actions thrift (mandatory, does NOT slow parallel/autonomy): local pnpm verify green before the push that opens/updates a code PR; batch fixes — no push storms using remote CI as debugger; pure docs PRs when work is docs; never public-repo / skip-tests / fake-green to save $. Parallel PRs allowed. Full law: docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md + AGENTS.md thrift section.
 
 RIGHT WAY (quality bar)
@@ -59,6 +60,32 @@ SESSION DEFAULT
 - If I only want status: plain map + what agents can ship now + what waits on Denon direction + one recommended move. No code.
 - If Denon drops plans/specs: land them as durable links (do not leave chat-only), then execute under LIVE-LANES.
 - Never install/run Strix or live exploit frameworks unless I explicitly say go and name a non-prod target.
+```
+
+---
+
+## Stream A AFK block (paste when leaving laptop — no “continue”)
+
+```
+AFK-ACTIVE — Stream A vendor shell (:8090) full autonomous drain.
+
+READ THEN EXECUTE (no re-plan from chat):
+1. docs/FRONTEND-AUTONOMOUS-OPERATING-SYSTEM-2026-08-02.md
+2. docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md
+3. pnpm frontend:preflight · pnpm frontend:residual
+4. docs/FRONTEND-GO-READY-BRIEF-2026-08-02.md queue truth
+
+STANDING ORDER
+- Do NOT stop for “continue.” Do NOT ask Nitro for git/CI/merge/Orca.
+- Pick lowest-priority residual item with afk_safe=true and status open|partial; skip blocked/human_or_fleet.
+- Loop: tip worktree → one id → implement → docs/refs/<id>/ → push → PR → green CI → Class N squash-merge → residual stamp → next.
+- Never invent money/balances/books. Never touch order-route/futures/Stream B/Shehzad M1–M7.
+- Auth money Orca / B11 / C-LWC = park blocked, do not stall.
+- Compaction: recover from residual + AFK campaign only.
+- Subagents for invent-scan/review; orchestrator merges.
+- Kill only on campaign kill conditions; write residual note.
+
+START: fetch origin/main · worktree · residual · first AFK id now.
 ```
 
 ---
@@ -83,3 +110,4 @@ Historical Denon↔Nitro board (file territory era): `docs/DENON-NITRO-PARALLEL-
 | GITHUB-OWNERSHIP-SHEHZAD | Tip GitHub is the collision wall, not chat memory           |
 | Hard bans in the prompt  | Cold agents still hit the money bar                         |
 | CI thrift line           | Cut waste without capping parallel ship speed               |
+| AFK-ACTIVE + afk_safe    | Leave laptop without continue-loops or auth-stalls          |
