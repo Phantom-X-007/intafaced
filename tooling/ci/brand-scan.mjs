@@ -160,19 +160,6 @@ const ALLOWLIST = [
   { path: '.claude', reason: 'internal tooling config' },
   {
     path: join('tooling', 'ci', 'agent-autoload-scan.mjs'),
-<<<<<<< HEAD
-    reason: 'CI gate that verifies agent entry files exist; must name CLAUDE.md path literally',
-  },
-  {
-    path: join('docs', 'COORDINATION-TRUTH-LAYERS.md'),
-    reason: 'internal coordination law for agents; names entry files not product brands',
-  },
-  {
-    path: join('docs', 'COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md'),
-    reason: 'internal coordination audit; not shipped to users',
-  },
-
-=======
     reason:
       'internal CI guard that must name auto-load entry files including CLAUDE.md (itself allowlisted). Not user-facing product copy.',
   },
@@ -196,7 +183,6 @@ const ALLOWLIST = [
     path: join('docs', 'DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md'),
     reason: 'internal audit of tracker multi-dev intent. Not shipped to users.',
   },
->>>>>>> origin/main
   // Stream A agent law / handoffs — name planner vs implementer roles and on-disk
   // shell paths so territory is enforceable. Not user-facing product copy.
   {
