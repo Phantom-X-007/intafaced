@@ -3,6 +3,7 @@
 **Status:** BINDING · **program FINISHED** (law on main #385 + seal) · agents enforce · Nitro never updates by hand  
 **Home for this fact:** this file. Pointers only elsewhere.  
 **Finish audit:** [`COORDINATION-FINISH-AUDIT-2026-08-02.md`](COORDINATION-FINISH-AUDIT-2026-08-02.md) (F1–F10).  
+**User-claim stress test:** [`COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md`](COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md) — law for agents, **not** auto-backend.  
 **Intent:** Denon multi-dev context + zero agent conflict **without** slowing parallel autonomous ship.  
 **Not:** a new project board, a CI tax, or a human Approve gate.
 
