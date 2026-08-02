@@ -27,7 +27,7 @@ If any layer lags, **LIVE-LANES HUMAN-CLAIMED + this file win** for “who may c
 
 | ID     | Mountain                | Primary paths / tracker                                                                                   |
 | ------ | ----------------------- | --------------------------------------------------------------------------------------------------------- |
-| **M1** | Pay OS                  | `services/svc-pay/**` · `pay.gateway` + pay.* expand                                                      |
+| **M1** | Pay OS                  | `services/svc-pay/**` · `pay.gateway` + pay.\* expand                                                     |
 | **M2** | Protocol OS             | `services/svc-protocol/**` · smart-accounts, amm, lending, escrow, router, merchant                       |
 | **M3** | Futures risk            | `trade.futures` risk/margin/liq (not shell charts)                                                        |
 | **M4** | OTC / copy / algo       | `trade.otc` · `trade.copy` · `trade.algo`                                                                 |

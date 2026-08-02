@@ -158,6 +158,57 @@ const ALLOWLIST = [
   },
   { path: 'CLAUDE.md', reason: 'internal agent instructions' },
   { path: '.claude', reason: 'internal tooling config' },
+  // Stream A agent law / handoffs — name planner vs implementer roles and on-disk
+  // shell paths so territory is enforceable. Not user-facing product copy.
+  {
+    path: join('docs', 'FRONTEND-MASTER-METHODOLOGY-2026-07-31.md'),
+    reason: 'internal Stream A methodology law; must name agent roles and tooling for operators. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-MASTER-PLAN-WAVE-A-B-2026-07-31.md'),
+    reason: 'internal Stream A wave plan; agent/tooling names are process, not product. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-OPS-NOW-2026-07-30.md'),
+    reason: 'internal Stream A ops runbook; names agent runtimes and sandbox limits. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-AUTONOMOUS-OPERATING-SYSTEM-2026-08-02.md'),
+    reason: 'internal AOS architecture for agents. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-LEVEL-RECOVERY-AND-GO-READY-2026-08-02.md'),
+    reason: 'internal go-ready hole-poke for agents. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-GO-READY-BRIEF-2026-08-02.md'),
+    reason: 'internal paste brief for go sessions. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-STATE-OF-TRUTH-2026-07-31.md'),
+    reason: 'internal SoT for Stream A sessions. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-CLAUDE-ENHANCE-RETURN-2026-07-31.md'),
+    reason: 'internal agent return pack filename is historical evidence; content is process not product. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'NITRO-SESSION-PROMPT.md'),
+    reason: 'internal session paste for Nitro/agents. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'NITRO-FRONTEND-NEW-CHAT-HANDOFF-2026-07-31.md'),
+    reason: 'internal chat handoff. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'NITRO-STREAM-A-CLAIM.md'),
+    reason: 'internal claim/territory brief. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md'),
+    reason:
+      'internal board backlog; must name exact shell paths an agent may touch or territory is unenforceable. Not shipped to users. Remove once vendor dir is renamed.',
+  },
 ];
 
 /** Only these extensions can carry shipped copy. */
