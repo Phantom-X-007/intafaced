@@ -9,6 +9,7 @@
 1. Read `INTAFACED_DEFINITIVE_BUILD.md`. It is the law, not context.
 2. Read the target service's `README.md`.
 3. Read this file.
+4. Multi-dev: read `docs/COORDINATION-TRUTH-LAYERS.md` (or the coordination section in `AGENTS.md`). **Nitro does not paste this** — it is binding on cold start.
 
 If the task is ambiguous, **the doctrine (§0) decides**. If the doctrine does not decide, **stop and ask D.** Do not guess on money, custody, or jurisdiction.
 
@@ -43,6 +44,10 @@ These are not style preferences. A PR that does any of them is rejected without 
 | Import `ledger-client` write recipes from a Protocol Plane service | Doctrine §16.10 — provably non-custodial                                                                              | `ReadOnlyLedgerClient`, or reconsider the design                  |
 | Add a fourth shared system                                         | Doctrine §0.3 — Identity, Balance, Token. That is all                                                                 | Redesign. The need for a fourth means the design is wrong         |
 | Leave a "temporary" anything                                       | Doctrine §0.1 — never half done                                                                                       | Finish it, or add a §13 socket entry and reference it in the TODO |
+| Implement on **HUMAN-CLAIMED** / shehzad M1–M7 / tracker `owner` human mountain as if free | Multi-dev conflict; Denon/shehzad ownership                                             | Babysit only; see `docs/COORDINATION-TRUTH-LAYERS.md` + LIVE-LANES |
+| Code without LIVE-LANES (or equivalent) claim when other agents may run | Dual-build same paths                                                                   | Claim session row + path-intersect open PRs first                 |
+| Mark tracker `done` without path evidence / DoD                     | False product map                                                                       | Mountain event: `requires` + real proof; `pnpm tracker:check`     |
+| Require every craft PR to edit `features.mjs`                       | Speed tax — **not** the law                                                             | mountain events only (claim / handoff / done / optional wave note) |
 
 ---
 
