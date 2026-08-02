@@ -1272,6 +1272,12 @@ export default {
     },
     baseFilter() {
       this.saveDeskPrefs();
+    },
+    accountTab() {
+      this.saveDeskPrefs();
+    },
+    side() {
+      this.saveDeskPrefs();
     }
   },
 
@@ -1476,6 +1482,10 @@ export default {
         if (typeof p.pair === 'string' && /^[a-z0-9]+_[a-z0-9]+$/i.test(p.pair)) {
           this.defaultPair = p.pair.toLowerCase();
         }
+        /* B5 — blotter tab + ticket side are non-money chrome. */
+        const accts = { balances: 1, positions: 1, open: 1, fills: 1, history: 1 };
+        if (accts[p.accountTab]) this.accountTab = p.accountTab;
+        if (p.side === 'BUY' || p.side === 'SELL') this.side = p.side;
       } catch (e) {
         /* private mode / bad JSON — leave defaults */
       }
@@ -1494,7 +1504,9 @@ export default {
             interval: this.interval,
             mainTab: this.mainTab,
             railTab: this.railTab,
-            baseFilter: this.baseFilter
+            baseFilter: this.baseFilter,
+            accountTab: this.accountTab,
+            side: this.side
           })
         );
       } catch (e) {
@@ -2601,11 +2613,12 @@ $radius-sm: var(--ix-radius-sm, 8px);
   font-feature-settings: 'tnum' 1;
 }
 
-/* ── shared surface ───────────────────────────────────────────────────── */
+/* ── shared surface ─────────────────────────────────────────────────────
+   B1: solid P21 panels on the desk — no default glass blur (anti-slop). */
 .ix-panel {
-  background: $surface;
-  backdrop-filter: var(--ix-blur, saturate(180%) blur(20px));
-  -webkit-backdrop-filter: var(--ix-blur, saturate(180%) blur(20px));
+  background: var(--ix-panel, #12151c);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid $hair;
   border-radius: $radius;
   overflow: hidden;
@@ -2621,9 +2634,9 @@ $radius-sm: var(--ix-radius-sm, 8px);
   gap: 26px;
   padding: 10px 18px;
   margin-bottom: 8px;
-  background: $surface;
-  backdrop-filter: var(--ix-blur, saturate(180%) blur(20px));
-  -webkit-backdrop-filter: var(--ix-blur, saturate(180%) blur(20px));
+  background: var(--ix-panel, #12151c);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid $hair;
   border-radius: $radius;
   overflow-x: auto;
@@ -3608,7 +3621,16 @@ $radius-sm: var(--ix-radius-sm, 8px);
     height: auto;
     max-height: 420px;
   }
-  /* B4 light — order form stays fully usable; sticky submit for panic/place. */
+  /* B4 — sticky ticket + pair header; solid panels; panic controls reachable. */
+  .ix-head {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 6px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  }
   .ix-order {
     height: auto;
     max-height: none;
@@ -3616,37 +3638,44 @@ $radius-sm: var(--ix-radius-sm, 8px);
     bottom: 0;
     z-index: 20;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
-    background: var(--ix-surface, #12151c);
+    background: var(--ix-panel, #12151c);
+    /* Focus ring when ticket is active (mobile focus-trap affordance). */
+    &:focus-within {
+      outline: 1px solid rgba(0, 194, 168, 0.55);
+      outline-offset: 0;
+    }
   }
   .ix-order-body {
     overflow: visible;
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
   }
   .ix-submit {
-    min-height: 44px;
+    min-height: 48px;
     font-size: 15px;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
   }
   .ix-chart-panel {
     height: 280px;
   }
   .ix-account {
-    max-height: 420px;
+    max-height: 360px;
   }
   /* Panic cancel stays reachable on open-orders blotter */
   .ix-actions {
     position: sticky;
     right: 0;
-    background: var(--ix-surface, #12151c);
+    background: var(--ix-panel, #12151c);
   }
   .ix-cancel {
-    min-height: 36px;
+    min-height: 40px;
+    min-width: 72px;
     padding: 0 12px;
   }
   .ix-kbd-hint {
     display: none;
-  }
-  .ix-head {
-    flex-wrap: wrap;
-    gap: 10px;
   }
   .ix-stat {
     min-width: 72px;

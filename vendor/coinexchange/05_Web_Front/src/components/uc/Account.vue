@@ -2,7 +2,9 @@
     <div class="nav-rights uc_account">
         <div class="nav-right col-xs-12 col-md-10 padding-right-clear">
             <div class="bill_box rightarea padding-right-clear record account-box">
-                <section class="trade-group merchant-top">
+                <!-- B3 craft: desk-aligned shell — honesty paths unchanged. -->
+                <div class="ix-money ix-account">
+                <section class="trade-group merchant-top ix-account-head">
                     <i class="merchant-icon tips"></i>
                     <span class="tips-word">{{$t('uc.account.pagetitle')}}</span>
                     <span class="tips-g">{{$t('uc.account.pagetip')}}</span>
@@ -10,8 +12,8 @@
                 <section class="accountContent">
                     <IxHonestState v-if="profileLoading" kind="loading" message="Loading payment methods…" />
                     <IxHonestState v-else-if="profileError" kind="error" :message="profileError" />
-                    <p v-else-if="profileReachable" class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
-                      OTC payment methods on this account — unknown is not “unbound.”
+                    <p v-else-if="profileReachable" class="ix-dualbook" role="note">
+                      <strong>OTC methods.</strong> Payment methods on this account — unknown is not “unbound.”
                     </p>
                     <div class="account-in" v-if="profileReachable">
                         <div class="account-item">
@@ -172,6 +174,7 @@
                         </div>
                     </div>
                 </section>
+                </div><!-- /.ix-money.ix-account -->
             </div>
         </div>
     </div>
@@ -974,4 +977,31 @@ p.describe {
     }
 }
 
+</style>
+
+<style scoped lang="scss">
+/* B3 — Account OTC methods share money/desk shell. */
+.ix-money.ix-account {
+  padding: 12px 14px 18px;
+  border: 1px solid var(--ix-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: var(--ix-surface, rgba(255, 255, 255, 0.03));
+}
+.ix-account-head {
+  margin-bottom: 10px;
+}
+.ix-dualbook {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 194, 168, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 194, 168, 0.06);
+  color: #c8cdd4;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ix-dualbook strong {
+  color: #00c2a8;
+  font-weight: 600;
+}
 </style>

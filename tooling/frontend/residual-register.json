@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "After Safe+B9 fee disclosure PR. Queue: P0.4 ui:proof · B4 · Account shell.",
+  "tip_note": "After Account+B1 solid+B4 mobile PR. Queue: P0.4 ui:proof · B12 marketing · ADMIN-0.",
   "tip_sha_at_write": "d519b87+wave-continue",
   "waves": {
     "A": "honesty / locks / withdraw-first",
@@ -138,11 +138,11 @@
       "wave": "B",
       "title": "Tokens per pick; kill default glass",
       "status": "partial",
-      "evidence": "P21 solid panels; glass reduced",
-      "proof_missing": "Full surface audit vs glass residue",
-      "next_action": "CRAFT-CRIT glass residue scan",
+      "evidence": "Exchange .ix-panel/.ix-head solid no blur (this PR); global intafaced.css still has iView glass",
+      "proof_missing": "Full iView glass audit on marketing surfaces",
+      "next_action": "Optional iView dropdown solid on desk only",
       "blocker": "",
-      "priority": 25
+      "priority": 28
     },
     {
       "id": "B2",
@@ -160,33 +160,33 @@
       "wave": "B",
       "title": "uc craft = terminal shared components",
       "status": "partial",
-      "evidence": "MoneyIndex+Withdraw+#this Safe shell; dual-book recipe on uc",
-      "proof_missing": "Account.vue parity; auth Orca",
-      "next_action": "Account shell or B4 mobile",
+      "evidence": "MoneyIndex+Withdraw+Safe+Account shells",
+      "proof_missing": "auth Orca money; deeper shared component extract",
+      "next_action": "Shared IxDualBook component optional; residual lower priority",
       "blocker": "",
-      "priority": 16
+      "priority": 20
     },
     {
       "id": "B4",
       "wave": "B",
       "title": "Mobile monitor+panic + focus trap",
       "status": "partial",
-      "evidence": "#301 sticky ticket light mobile",
-      "proof_missing": "Full focus-trap; positions/kill/fill confirm mobile IA",
-      "next_action": "B4 full after PROOF-1",
+      "evidence": "Sticky pair head + sticky ticket + focus-within + larger cancel (this PR)",
+      "proof_missing": "True focus trap modal; positions kill full IA",
+      "next_action": "Optional trap lib; residual B4 remainder",
       "blocker": "",
-      "priority": 30
+      "priority": 28
     },
     {
       "id": "B5",
       "wave": "B",
       "title": "Persist pair/TF/book/panels",
       "status": "partial",
-      "evidence": "loadDeskPrefs TF/book/tabs/pair default",
-      "proof_missing": "Panel sizes not persisted",
-      "next_action": "Complete panel size localStorage",
+      "evidence": "prefs include accountTab+side; pair/TF/book already",
+      "proof_missing": "Panel pixel sizes still not persisted",
+      "next_action": "Panel resize handles if product wants",
       "blocker": "",
-      "priority": 35
+      "priority": 40
     },
     {
       "id": "B6",
