@@ -20,7 +20,7 @@ const EDGE = process.env.EDGE_PRINCIPAL_SECRET?.trim() || '';
 const INTERNAL = process.env.INTERNAL_SERVICE_SECRET?.trim() || '';
 const USER = process.env.TRADE_SMOKE_USER_ID ?? '11111111-1111-4111-8111-111111111111';
 const SYMBOL = process.env.TRADE_SMOKE_SYMBOL ?? 'BTC/USDT';
-const QTY = process.env.TRADE_SMOKE_QTY ?? '0.01';
+const QTY = process.env.TRADE_SMOKE_QTY ?? '0.1';
 const PRICE = process.env.TRADE_SMOKE_PRICE ?? '100';
 const SEED = process.env.TRADE_SMOKE_SEED_SQL === '1';
 const TRADE_DB = process.env.TRADE_DATABASE_URL ?? process.env.TEST_DATABASE_URL_TRADE ?? '';

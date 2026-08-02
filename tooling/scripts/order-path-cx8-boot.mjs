@@ -192,7 +192,7 @@ async function main() {
       TRADE_SMOKE_SEED_SQL: '1',
       TRADE_DATABASE_URL: tradeUrl,
       TRADE_SMOKE_SYMBOL: 'BTC/USDT',
-      TRADE_SMOKE_QTY: '0.01',
+      TRADE_SMOKE_QTY: '0.1',
       TRADE_SMOKE_PRICE: '100',
       TRADE_SMOKE_REGION: 'DE',
     },
