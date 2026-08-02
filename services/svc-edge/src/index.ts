@@ -51,7 +51,7 @@ const tokenConfig = {
 };
 
 /** §14.6 — the operator kill-switch, and the first one in the platform anything can reach. */
-const killSwitches = new KillSwitchState();
+const killSwitches = new KillSwitchState({ statePath: env.EDGE_KILL_STATE_PATH });
 
 const admin = createAdminApi(killSwitches, {
   tokens: tokenConfig,
