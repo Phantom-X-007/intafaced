@@ -1,16 +1,52 @@
 import Link from 'next/link';
-import { LobbyCard, Panel, RankBadge, StatBlock, Ticker } from '@intafaced/ui';
+import { MarketPulse } from '@/components/landing/market-pulse';
+import { SocketPanel } from '@/components/terminal/socket-panel';
 import styles from './page.module.css';
 
 /**
- * Landing shell.
+ * LANDING SHELL — the default page on :3000, and the first thing anyone sees.
  *
- * Every value below is mock — there is no market data service yet (§5.2 is
- * unbuilt). What is real is the structure and the token usage: when the feeds
- * land, only the constants at the top of this file change.
+ * ── What was here ───────────────────────────────────────────────────────────
  *
- * Money is written as a pre-formatted string, exactly as it will arrive from
- * the ledger. Nothing here is a float, and nothing here is rounded.
+ * Invented money, under a live badge. Five prices (`BTC/USDT 68,412.50` and
+ * four more), four ledger figures (`$1,284,930,551.00` of 24h volume,
+ * `$92,441,006.18` settled today, `$418,772,340.00` of open interest, a
+ * `0.84 ms` match latency), four lobbies with hosts and occupancy counts, and a
+ * rank-7 "elite Operator" badge shown to every anonymous visitor. The panel
+ * header said "Streaming" and the section carried `data-live="true"`.
+ *
+ * The file said so, at the top: "Every value below is mock." That sentence is a
+ * comment. It is stripped by the compiler. The words `mock`, `placeholder`,
+ * `illustrative` and `not real` appeared zero times in the served HTML — the
+ * honesty was addressed to the next engineer and never to the reader, which is
+ * the only audience a landing page has.
+ *
+ * It was not a stale cache of something once true. `/api/v1/tickers` answers
+ * for those exact symbols today and returns `last: null` for all sixteen listed
+ * markets: nothing on this platform has ever traded. The repo's own rule —
+ * `docs/FRONTEND-STATE-OF-TRUTH`, "Fake money / fixture seed: Forbidden" — was
+ * being broken on the surface with the widest audience and the least code.
+ *
+ * ── What is here now ────────────────────────────────────────────────────────
+ *
+ * Three shapes, and no number chosen by this file:
+ *
+ *   · Market pulse — a real read of `/api/v1/tickers`. Today that renders
+ *     sixteen symbols and "Not traded" against each. When a fill lands, a price
+ *     appears here without anyone editing this file.
+ *   · Ledger snapshot — a §13 socket. There is no aggregate-volume service to
+ *     read, so the panel says that and names what would fill it.
+ *   · Rooms — a §13 socket. svc-edge publishes no `/api/academy` prefix, so a
+ *     browser cannot ask who is hosting or how full a lobby is.
+ *
+ * Nothing on this page claims to be live, because nothing on it is: the tickers
+ * read is one request on mount and its header says "Snapshot".
+ *
+ * The structure survived the change intact, which was the original defence of
+ * the mock and is now simply true: what landed was the feed, not a redesign.
+ *
+ * `page.test.tsx` renders this file and fails on any money-shaped literal in
+ * the output. That test is the part that keeps this fixed.
  */
 
 /**
@@ -24,22 +60,26 @@ const copy = {
   lede: 'Markets, money and identity on one ledger. One account, one verification, one rank — the key that opens every room.',
   primaryCta: 'Enter the terminal',
   secondaryCta: 'View the rooms',
-  rankTitle: 'Operator',
   panels: {
-    markets: 'Market pulse',
     treasury: 'Ledger snapshot',
     rooms: 'Live rooms',
   },
-  actions: {
-    live: 'Streaming',
-    allMarkets: 'All markets',
-    allRooms: 'All rooms',
-  },
-  stats: {
-    volume: 'Volume · 24h',
-    settled: 'Settled today',
-    openInterest: 'Open interest',
-    latency: 'Match latency',
+  /**
+   * Socket copy (§13). Each one names the missing service rather than the
+   * missing number, because "no data" invites a reader to assume zero and
+   * "svc-ledger publishes no aggregate" does not.
+   */
+  sockets: {
+    treasury: {
+      reason:
+        'Traded volume, value settled and open interest are platform-wide aggregates. No service publishes them: the ledger answers per account, and nothing rolls those answers up. Until one does, this panel shows no figure rather than a figure nobody computed.',
+      blockedBy: 'svc-ledger aggregate projection · market data',
+    },
+    rooms: {
+      reason:
+        'The lobby directory is not reachable from a browser. svc-edge publishes no academy prefix in its route table, so this page cannot ask which rooms exist, who is hosting one, or how many people are in it.',
+      blockedBy: 'svc-edge route table · svc-academy',
+    },
   },
   modules: {
     heading: 'Modules',
@@ -54,75 +94,6 @@ const copy = {
   },
 } as const;
 
-/** Mock tape — the shape `trades.<market>` will stream into (§5.3). */
-const markets = [
-  { symbol: 'BTC/USDT', price: '68,412.50', change: '+2.41' },
-  { symbol: 'ETH/USDT', price: '3,284.10', change: '+1.08' },
-  { symbol: 'SOL/USDT', price: '184.62', change: '-0.87' },
-  { symbol: 'IFC/USDT', price: '4.1820', change: '+11.36' },
-  { symbol: 'XAU/USDT', price: '2,391.44', change: '+0.12' },
-] as const;
-
-/**
- * Mock ledger figures. Money is a pre-formatted string here and will still be a
- * pre-formatted string when svc-ledger supplies it — the display layer never
- * sees a float, so it never gets the chance to round one.
- */
-interface TreasuryStat {
-  label: string;
-  value: string;
-  /** Signed percentage, display-only — it drives the up/down tone, not a total. */
-  delta?: string;
-  deltaLabel: string;
-}
-
-const treasury: TreasuryStat[] = [
-  { label: copy.stats.volume, value: '$1,284,930,551.00', delta: '+6.20', deltaLabel: '+6.20% vs prior' },
-  { label: copy.stats.settled, value: '$92,441,006.18', delta: '+1.94', deltaLabel: '+1.94% vs prior' },
-  { label: copy.stats.openInterest, value: '$418,772,340.00', delta: '-0.63', deltaLabel: '-0.63% vs prior' },
-  { label: copy.stats.latency, value: '0.84 ms', deltaLabel: 'p99 across venues' },
-];
-
-/** Mock lobbies — §8.3 capacity tiers, rendered by the shared primitive. */
-const rooms = [
-  {
-    id: 'r1',
-    title: 'Order Flow · Reading the Book',
-    host: 'Operator 014',
-    occupancy: 128,
-    capacity: 200,
-    live: true,
-    access: 'free' as const,
-  },
-  {
-    id: 'r2',
-    title: 'Futures Risk · Liquidation Ladders',
-    host: 'Operator 003',
-    occupancy: 42,
-    capacity: 50,
-    live: true,
-    access: 'staked' as const,
-  },
-  {
-    id: 'r3',
-    title: 'Sovereign Rails · Merchant Onboarding',
-    host: 'Core Ops',
-    occupancy: 17,
-    capacity: null,
-    live: false,
-    access: 'invite' as const,
-  },
-  {
-    id: 'r4',
-    title: 'Identity Blueprint · Cohort 9',
-    host: 'Neural Engine',
-    occupancy: 88,
-    capacity: 120,
-    live: false,
-    access: 'free' as const,
-  },
-] as const;
-
 export default function LandingPage() {
   return (
     <div className={styles.page}>
@@ -131,6 +102,12 @@ export default function LandingPage() {
         <h1 className={styles.wordmark}>{copy.wordmark}</h1>
         <p className={styles.lede}>{copy.lede}</p>
 
+        {/*
+         * No rank badge. It read "7 · Operator · elite" for everyone, including
+         * an anonymous visitor who has no account — an invented user state, in
+         * the same family as an invented price. A real rank needs a session,
+         * and this page does not have one.
+         */}
         <div className={styles.heroActions}>
           <Link href="/trade" className={styles.primary}>
             {copy.primaryCta}
@@ -138,46 +115,17 @@ export default function LandingPage() {
           <a href="#rooms" className={styles.secondary}>
             {copy.secondaryCta}
           </a>
-          <RankBadge rank={7} title={copy.rankTitle} tier="elite" />
         </div>
       </section>
 
       <div className={styles.split}>
-        <Panel title={copy.panels.markets} live actions={<span className={styles.action}>{copy.actions.live}</span>}>
-          <ul className={styles.tape}>
-            {markets.map((market) => (
-              <li key={market.symbol} className={styles.tapeRow}>
-                <Ticker symbol={market.symbol} price={market.price} change={market.change} />
-              </li>
-            ))}
-          </ul>
-        </Panel>
+        <MarketPulse />
 
-        <Panel title={copy.panels.treasury}>
-          <div className={styles.statGrid}>
-            {treasury.map((stat) => (
-              <StatBlock key={stat.label} label={stat.label} value={stat.value} delta={stat.delta} deltaLabel={stat.deltaLabel} />
-            ))}
-          </div>
-        </Panel>
+        <SocketPanel title={copy.panels.treasury} reason={copy.sockets.treasury.reason} blockedBy={copy.sockets.treasury.blockedBy} />
       </div>
 
       <section id="rooms" className={styles.rooms}>
-        <Panel title={copy.panels.rooms} actions={<span className={styles.action}>{copy.actions.allRooms}</span>}>
-          <div className={styles.roomGrid}>
-            {rooms.map((room) => (
-              <LobbyCard
-                key={room.id}
-                title={room.title}
-                host={room.host}
-                occupancy={room.occupancy}
-                capacity={room.capacity}
-                live={room.live}
-                access={room.access}
-              />
-            ))}
-          </div>
-        </Panel>
+        <SocketPanel title={copy.panels.rooms} reason={copy.sockets.rooms.reason} blockedBy={copy.sockets.rooms.blockedBy} />
       </section>
 
       <section className={styles.modules}>
