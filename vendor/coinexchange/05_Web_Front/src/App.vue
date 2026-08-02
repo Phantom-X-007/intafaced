@@ -1,6 +1,6 @@
 <template>
-  <div :class="pageView">
-    <div class="page-content">
+  <div :class="[pageView, { 'is-terminal-route': isTerminalRoute }]">
+    <div class="page-content" :class="{ 'is-terminal': isTerminalRoute }">
       <div class="time_download" style="display: none;">
         <div class="leftwrapper">
           <!-- <img src="../src/assets/images/clock.png" alt="" class="clock"> -->
@@ -245,7 +245,9 @@
             </router-link>
         </Menu>
     </Drawer>
-    <div class="footer">
+    <!-- B2 density: marketing footer stays on marketing pages only — on the
+         trading desk it steals a full viewport of dead black (Design Bar §3.2). -->
+    <div class="footer" v-if="showMarketingFooter">
       <div class="footer_content">
         <div class="footer_left">
           <img src="./assets/images/logo-bottom.svg" style="margin:0" ></img>
@@ -540,6 +542,17 @@ export default {
     planeIsDex() {
       var p = (this.$route && this.$route.path) || "";
       return p === "/dex" || p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0;
+    },
+    /** Desk / protocol paths — no marketing footer, no page-content footer pad. */
+    isTerminalRoute() {
+      var p = (this.$route && this.$route.path) || "";
+      if (p === "/exchange" || p.indexOf("/exchange/") === 0) return true;
+      if (p === "/dex" || p.indexOf("/dex/") === 0) return true;
+      if (p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0) return true;
+      return false;
+    },
+    showMarketingFooter() {
+      return !this.isTerminalRoute;
     }
   },
   created: function() {
@@ -1797,6 +1810,11 @@ body {
 .page-content {
   min-height: 100%;
   padding-bottom: 200px;
+}
+/* B2: terminal routes reclaim the footer reserve so the desk can fill the viewport. */
+.page-content.is-terminal {
+  padding-bottom: 0;
+  min-height: calc(100vh - 56px);
 }
 
 .footer {

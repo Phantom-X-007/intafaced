@@ -149,11 +149,11 @@
       "wave": "B",
       "title": "Terminal density hierarchy",
       "status": "partial",
-      "evidence": "#297 density CSS",
-      "proof_missing": "Scorecard dim 6 re-measure; before/after 1440",
-      "next_action": "Density hierarchy after chart empty fixed",
+      "evidence": "viewport desk height + hide marketing footer on /exchange|/dex; docs/refs/b2-density + Orca shot",
+      "proof_missing": "Re-score Dim6 on LIVE after merge; glass residual B1",
+      "next_action": "Optional panel-gap tighten; then B-CMDK or B3",
       "blocker": "",
-      "priority": 20
+      "priority": 22
     },
     {
       "id": "B3",
@@ -272,7 +272,7 @@
       "status": "partial",
       "evidence": "docs/refs/b13-chart-empty + chart overlay z-index/contrast; Orca shot b13-chart-empty-2026-08-02",
       "proof_missing": "Full multi-surface anti-slop cert (login/money density) still open",
-      "next_action": "Continue B13 on density/footer + glass residue (B1/B2)",
+      "next_action": "Density P0 shipped in B2; remaining multi-surface anti-slop",
       "blocker": "",
       "priority": 12
     },
