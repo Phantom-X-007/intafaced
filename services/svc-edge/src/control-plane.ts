@@ -122,6 +122,31 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
     }
   };
 
+  /**
+   * One-shot control-plane summary for operators and status probes (A-P5-OPS).
+   *
+   * Deliberately `admin:write` only: this does not move freeze state and must not
+   * require treasury just to see whether the door is armed. `ledgerConfigured`
+   * is a boolean, not a freeze read — freeze status still needs treasury.
+   */
+  app.get('/admin/status', async (req, reply) => {
+    if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
+    const snap = admin.read();
+    return {
+      ok: true,
+      service: 'svc-edge',
+      controlPlane: 'operator-kill-switch',
+      disabledModules: snap.disabledModules,
+      disabledCount: snap.disabledModules.length,
+      reasons: snap.reasons,
+      auditCount: snap.audit.length,
+      lastChange: snap.audit[0] ?? null,
+      ledgerConfigured: admin.ledgerConfigured(),
+      // Reminder for operators reading JSON at 3am — full path list is in the runbook.
+      releaseRule: 'reads and cancels pass under a kill; new commitments refuse (503 edge.module_killed)',
+    };
+  });
+
   app.get('/admin/kill-switches', async (req, reply) => {
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
     return admin.read();

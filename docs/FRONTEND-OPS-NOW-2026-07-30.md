@@ -5,13 +5,13 @@
 
 ---
 
-## What changed (the agent pack was right)
+## What changed (prior audit was right)
 
-| Old Day-0 story                                        | New truth                                                                                                  |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Nitro must launch Chrome + install chrome-devtools-mcp | **Not required for normal Stream A proof**                                                                 |
-| Browser blocked by macOS / Playwright                  | agent shell shell sandbox blocks loopback; **Orca embedded browser bypasses that** (app does the browsing) |
-| Orca browser written off as dead                       | Was **stale_bootstrap** earlier; when `orca status` → app running + runtime ready, browser works           |
+| Old Day-0 story                                        | New truth                                                                                                      |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Nitro must launch Chrome + install chrome-devtools-mcp | **Not required for normal Stream A proof**                                                                     |
+| Browser blocked by macOS / Playwright                  | the agent shell shell sandbox blocks loopback; **Orca embedded browser bypasses that** (app does the browsing) |
+| Orca browser written off as dead                       | Was **stale_bootstrap** earlier; when `orca status` → app running + runtime ready, browser works               |
 
 **Verified this turn [disk]:**
 
@@ -80,12 +80,12 @@ orca screenshot --json      # visual proof
 
 ### Agent orchestra
 
-| Role                                      | Tool                  |
-| ----------------------------------------- | --------------------- |
-| Plan / audit / money certify              | strong research model |
-| Implement / bulk / PR                     | Grok                  |
-| Worktrees + **browser proof** + terminals | **Orca first**        |
-| Personal Chrome MCP                       | Fallback only         |
+| Role                                      | Tool              |
+| ----------------------------------------- | ----------------- |
+| Plan / audit / money certify              | strong agent tier |
+| Implement / bulk / PR                     | Grok              |
+| Worktrees + **browser proof** + terminals | **Orca first**    |
+| Personal Chrome MCP                       | Fallback only     |
 
 One agent per worktree. LIVE-LANES claim. Tip of `origin/main` only.
 

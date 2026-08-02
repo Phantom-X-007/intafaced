@@ -41,19 +41,28 @@ pnpm --filter @intafaced/admin typecheck
 - `ledger.posting` off — same reasoning on the kill-switch board: the switch is locked until the operator
   acknowledges the platform-wide blast radius in the panel above it.
 
-## Not wired
+## Wired (live)
 
-`src/lib/operator-commands.ts` holds stubs for the three `admin:treasury` procedures that already exist on
-`services/svc-ledger/src/router.ts`. They record intent and return simulated results, because svc-ledger is not
-deployed and this console holds no service credential. The stub signatures are already the router's
-input/output shapes, so live wiring is a body-only change: swap each body for a tRPC call against
-`LedgerRouter`. Every screen that renders a simulated result says so on its face, and no invented number is
-ever shown on a money screen.
+**Module kill-switches** reach svc-edge through this console (#186 + A-P5-OPS):
 
-Flag overrides staged on `/` are held in the browser session only; applying them lands with the flag store.
+| Console route                 | Edge                              | Env                                                       |
+| ----------------------------- | --------------------------------- | --------------------------------------------------------- |
+| `GET/POST /api/kill-switch`   | `/admin/kill-switches`            | `EDGE_URL` + `ADMIN_OPERATOR_TOKEN` (`admin:write` + MFA) |
+| `GET/POST /api/ledger-freeze` | `/admin/ledger/freeze` · unfreeze | `EDGE_URL` + `ADMIN_TREASURY_TOKEN` (`admin:treasury`)    |
 
-There is no auth in front of this app yet. Every command surface is gated behind `admin:treasury` on the
-service side, but the console itself must sit behind the operator SSO before it is deployed anywhere reachable.
+The `/` board **loads live disabled modules** and **posts module kill/enable** with a required reason when the
+control plane status is `reachable`. Per-flag rows remain session-staged (flag store §13).
+
+Operator runbook: [`docs/OPS-KILL-SWITCH-RUNBOOK.md`](../../docs/OPS-KILL-SWITCH-RUNBOOK.md).
+
+## Still not wired (honest residual)
+
+`src/lib/operator-commands.ts` still stubs **ledger reconcile** (and the Ledger ops page still uses those stubs
+for freeze/unfreeze UI — prefer `/api/ledger-freeze` when wiring that screen). Every simulated result says so
+on its face; no invented money number.
+
+There is no auth in front of this app yet. Tokens stay server-side; the console itself must sit behind
+operator SSO before it is deployed anywhere reachable (§13).
 
 Strings are not i18n-keyed. §14.4 asks for that on user-facing copy; this console has one audience — the
 operator — and keying it before the catalogue exists would add indirection without adding a reader. It is a

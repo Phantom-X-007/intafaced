@@ -53,7 +53,9 @@
     "ui:proof:pass3": "bash tooling/uiproof/run-pass3.sh",
     "frontend:preflight": "node tooling/frontend/preflight.mjs",
     "frontend:residual": "node tooling/frontend/residual-print.mjs",
-    "frontend:preflight:craft": "SLICE_TYPE=CRAFT ORCA_REQUIRED=1 node tooling/frontend/preflight.mjs"
+    "frontend:preflight:craft": "SLICE_TYPE=CRAFT ORCA_REQUIRED=1 node tooling/frontend/preflight.mjs",
+    "scan:dual-book-door-paths": "node tooling/ci/dual-book-door-path-unit.mjs",
+    "dual-book:classify": "node tooling/scripts/dual-book-setbalance-classify.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

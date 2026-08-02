@@ -5,7 +5,7 @@
 **Spine:** methodology **v3.1**  
 **Code:** none until **go implement**
 
-**Nitro free-hands (binding):** Prior frontend work is **not a constraint**. Inventory tip so we don’t _accidentally_ ignore useful machinery; then choose rebuild, replace, or keep **only** if it serves world-class quality. the agent pack's “already shipped → gap-fill only” is **advice on cost**, not a ban on redesign.
+**Nitro free-hands (binding):** Prior frontend work is **not a constraint**. Inventory tip so we don’t _accidentally_ ignore useful machinery; then choose rebuild, replace, or keep **only** if it serves world-class quality. agent’s “already shipped → gap-fill only” is **advice on cost**, not a ban on redesign.
 
 **Still true:** withdraw “you will receive” math + bare Confirm span are **live defects** worth fixing early either way.
 

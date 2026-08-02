@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { Panel, StatBlock } from '@intafaced/ui';
 import type { Drop, ModuleId } from '@intafaced/config';
 import { Chip } from '@/components/chip';
 import { dropLabel } from '@/lib/drops';
+import { type ControlPlaneState, type KillSwitchSnapshot, postKillSwitch } from '@/lib/control-plane-browser';
 import {
   CRITICAL_FLAG_KEY,
   PROVENANCE_LABEL,
@@ -19,23 +20,29 @@ import {
 /**
  * KILL-SWITCH BOARD — §14.6 "Admin controls: kill-switch + config surface".
  *
- * Every row comes from `FLAG_REGISTRY` and every on/off answer comes from
- * `resolveAll()` / `isEnabled()` in `@intafaced/config`. The board cannot drift
- * from what the services enforce because it holds no list of its own.
- *
- * Overrides staged here live in this browser session only. Applying them is a
- * stub until the flag store is deployed — see `stageNotice` below.
+ * Flag rows: session-staged preview of what an override would do (flag store §13).
+ * Module kill rows: LIVE against svc-edge when the control plane is reachable
+ * (A-P5-OPS). A board that only flipped React state after #186 was a lie.
  */
 
 export interface KillSwitchBoardProps {
   drop: Drop;
   flagEnv: Record<string, string>;
+  /** Server-loaded snapshot so first paint matches the edge. */
+  initialControlPlane: ControlPlaneState;
 }
 
-export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
+export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwitchBoardProps) {
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  const [disabledModules, setDisabledModules] = useState<ModuleId[]>([]);
+  const [plane, setPlane] = useState(initialControlPlane);
+  const [pendingModule, setPendingModule] = useState<ModuleId | null>(null);
+  const [reason, setReason] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
   const [criticalArmed, setCriticalArmed] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const disabledModules = plane.snapshot.disabledModules as ModuleId[];
+  const liveModules = plane.status === 'reachable';
 
   const baseline = useMemo(() => flagStates({ drop, env: flagEnv }), [drop, flagEnv]);
   const staged = useMemo(() => flagStates({ drop, env: flagEnv, overrides, disabledModules }), [drop, flagEnv, overrides, disabledModules]);
@@ -60,14 +67,41 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
     });
   }
 
-  function toggleModule(module: ModuleId) {
-    setDisabledModules((prev) => (prev.includes(module) ? prev.filter((m) => m !== module) : [...prev, module]));
+  function requestModuleToggle(module: ModuleId) {
+    if (!liveModules) return;
+    setPendingModule(module);
+    setReason('');
+    setActionError(null);
+  }
+
+  function applyModuleToggle() {
+    if (!pendingModule) return;
+    const trimmed = reason.trim();
+    if (trimmed.length < 12) {
+      setActionError('Reason must be at least 12 characters — an outage nobody can explain is worse.');
+      return;
+    }
+
+    const nextDisabled = !disabledModules.includes(pendingModule);
+    startTransition(async () => {
+      const result = await postKillSwitch({ module: pendingModule, disabled: nextDisabled, reason: trimmed });
+      if (!result.ok) {
+        setActionError(result.detail ?? `kill-switch refused (${result.status})`);
+        return;
+      }
+      setPlane({ status: 'reachable', snapshot: result.snapshot, detail: null });
+      setPendingModule(null);
+      setReason('');
+      setActionError(null);
+    });
   }
 
   function reset() {
     setOverrides({});
-    setDisabledModules([]);
     setCriticalArmed(false);
+    setPendingModule(null);
+    setReason('');
+    setActionError(null);
   }
 
   return (
@@ -77,26 +111,75 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
           <h1>Kill-switches</h1>
           <p>
             {FLAG_COUNT_COPY} Resolution runs through the same <code>resolveAll()</code> the services call, at the drop reported in the
-            header — {dropLabel(drop)}. A module kill-switch beats every other input, including an env override: operator safety is not
-            overridable.
+            header — {dropLabel(drop)}. A <strong>module</strong> kill is live on svc-edge when the control plane is reachable; per-flag
+            overrides stay session-staged until the flag store lands.
           </p>
         </div>
         <div className="adm-inline">
-          <button type="button" className="adm-btn" onClick={reset} disabled={changes.length === 0 && disabledModules.length === 0}>
-            Reset staged
+          <button type="button" className="adm-btn" onClick={reset} disabled={changes.length === 0 && !pendingModule}>
+            Reset staged flags
           </button>
         </div>
       </div>
+
+      <ControlPlanePanel plane={plane} />
 
       <Panel title="Platform state" live>
         <div className="adm-statrow">
           <StatBlock label="Flags live" value={`${liveCount} / ${staged.length}`} />
           <StatBlock label="Off the drop clock" value={offClockCount} deltaLabel="never on by default" />
-          <StatBlock label="Modules killed" value={disabledModules.length} />
-          <StatBlock label="Staged changes" value={changes.length} />
+          <StatBlock label="Modules killed (live)" value={disabledModules.length} />
+          <StatBlock label="Staged flag changes" value={changes.length} />
           <StatBlock label="Env overrides" value={Object.keys(flagEnv).length} deltaLabel="INTAFACED_FLAG_*" />
         </div>
       </Panel>
+
+      {pendingModule && (
+        <Panel
+          title={`Confirm module ${disabledModules.includes(pendingModule) ? 're-enable' : 'kill'}: ${pendingModule}`}
+          className="adm-panel--warn"
+        >
+          <div className="adm-stack">
+            <p className="adm-footnote">
+              This hits <code>POST /api/kill-switch</code> → svc-edge. Cancels and reads still pass; new commitments on this module refuse
+              with 503. Reason is required on the edge (≥ 12 characters).
+            </p>
+            <label className="adm-stack">
+              <span className="adm-meta">Reason</span>
+              <textarea
+                className="adm-textarea"
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. incident: halt new trade risk while investigating fill anomaly"
+                disabled={isPending}
+              />
+            </label>
+            {actionError && (
+              <div className="adm-callout" data-tone="danger">
+                <strong>Not applied</strong>
+                {actionError}
+              </div>
+            )}
+            <div className="adm-inline">
+              <button type="button" className="adm-btn" data-tone="danger" onClick={applyModuleToggle} disabled={isPending}>
+                {isPending ? 'Sending…' : disabledModules.includes(pendingModule) ? 'Re-enable module' : 'Kill module now'}
+              </button>
+              <button
+                type="button"
+                className="adm-btn"
+                onClick={() => {
+                  setPendingModule(null);
+                  setActionError(null);
+                }}
+                disabled={isPending}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Panel>
+      )}
 
       {critical && <CriticalSwitch state={critical} armed={criticalArmed} onArm={setCriticalArmed} onSet={setFlag} onClear={clearFlag} />}
 
@@ -132,6 +215,38 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
         </Panel>
       )}
 
+      {plane.snapshot.audit.length > 0 && (
+        <Panel title="Live kill-switch audit (newest first)">
+          <div className="adm-scroll">
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Module</th>
+                  <th>Actor</th>
+                  <th>Change</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plane.snapshot.audit.slice(0, 12).map((entry, i) => (
+                  <tr key={`${entry.at}-${entry.module}-${i}`}>
+                    <td className="adm-meta">{entry.at}</td>
+                    <td className="adm-key">{entry.module}</td>
+                    <td className="adm-meta">{entry.actor}</td>
+                    <td>
+                      {entry.previous ? 'killed' : 'live'} → {entry.next ? 'killed' : 'live'}
+                      {!entry.changed && <span className="adm-meta"> (no-op)</span>}
+                    </td>
+                    <td className="adm-desc">{entry.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+
       <Panel title="Flags by module" className="adm-flush">
         <div className="adm-scroll">
           <table className="adm-table">
@@ -160,7 +275,13 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
                       </Chip>
                       <span className="adm-topbar__spacer" />
                       {group.killed && <Chip tone="danger">Module killed</Chip>}
-                      <Switch on={!group.killed} onLabel="Enabled" offLabel="Killed" onToggle={() => toggleModule(group.module)} />
+                      <Switch
+                        on={!group.killed}
+                        onLabel="Enabled"
+                        offLabel="Killed"
+                        disabled={!liveModules || isPending}
+                        onToggle={() => requestModuleToggle(group.module)}
+                      />
                     </span>
                   </td>
                 </tr>
@@ -206,11 +327,53 @@ export function KillSwitchBoard({ drop, flagEnv }: KillSwitchBoardProps) {
   );
 }
 
+function ControlPlanePanel({ plane }: { plane: ControlPlaneState }) {
+  const tone = plane.status === 'reachable' ? 'info' : plane.status === 'unconfigured' ? 'warn' : 'danger';
+  const title =
+    plane.status === 'reachable'
+      ? 'Control plane: reachable'
+      : plane.status === 'unconfigured'
+        ? 'Control plane: not configured'
+        : 'Control plane: unreachable';
+
+  return (
+    <Panel title={title} className={plane.status === 'reachable' ? undefined : 'adm-panel--warn'}>
+      <div className="adm-stack">
+        <div className="adm-callout" data-tone={tone}>
+          <strong>{plane.status}</strong>
+          {plane.status === 'reachable' && (
+            <>
+              Module kills on this board hit svc-edge. Live killed modules:{' '}
+              <b>{(plane.snapshot as KillSwitchSnapshot).disabledModules.length}</b>. Per-flag staging is still local only.
+            </>
+          )}
+          {plane.status === 'unconfigured' && (
+            <>
+              Set <code>EDGE_URL</code> and <code>ADMIN_OPERATOR_TOKEN</code> on this app. Module switches stay disabled until the console
+              can reach the edge — a local flip that looks like a halt is worse than no switch.
+            </>
+          )}
+          {plane.status === 'unreachable' && (
+            <>
+              {plane.detail ?? 'svc-edge did not answer or refused the operator token.'} Module switches stay disabled until the plane is
+              reachable again.
+            </>
+          )}
+        </div>
+        {plane.detail && plane.status === 'reachable' && <p className="adm-footnote">{plane.detail}</p>}
+        <p className="adm-footnote">
+          Operator runbook: <code>docs/OPS-KILL-SWITCH-RUNBOOK.md</code>
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
 const FLAG_COUNT_COPY = 'Every flag declared in the registry, grouped by the module that owns it.';
 
 const stageNotice =
-  'Staged changes are held in this browser session and have not been sent anywhere. Live wiring lands when the flag store is deployed; ' +
-  'until then this board is a faithful preview of what the same override would do inside a service.';
+  'Per-flag staged changes are held in this browser session only. Module kills above are live when the control plane is reachable. ' +
+  'A durable flag store is the §13 socket for pushing per-flag overrides into services.';
 
 // ── Rows ────────────────────────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@
 **Tip check:** `git log origin/main -1 --oneline`
 
 **Campaign status:** `RUNNING`  
-**Last scoreboard edit:** 2026-08-02 GO #356 MM-3 merged; next A-UI-SUB
+**Last scoreboard edit:** 2026-08-02 GO #356–#360 on main; next A-UI-A11Y
 
 **Authority:** For Board Clear status, **this file + NEXT beat** `docs/TRACKER.md` until tracker is resynced.  
 **Known dirty:** human M1–M7 open; agent residual A-TRADE-MM-3 (exact next) then UI/P5/WS  
@@ -36,7 +36,7 @@
 | venue.aggregation                | **WIP**  | **AGENT P-TRADE-LIGHT**  | Mark fabric #344 default OFF; ops residual                      | A-TRADE-VENUE-OPS | #344      |
 | order-route #289                 | **DONE** | **AGENT P-OR** → M7 open | Merged A-OR-1                                                   | —                 | #289      |
 | Phase 5 bank money               | **OPEN** | **HUMAN M6 shehzad002**  | earn/cards/ramps                                                | M6                | —         |
-| Phase 5 academy/ops/agents       | **WIP**  | **AGENT P-P5-LIGHT**     | Curriculum #341; ops/agents residual                            | A-P5-OPS/AGENTS   | #341      |
+| Phase 5 academy/ops/agents       | **WIP**  | **AGENT P-P5-LIGHT**     | Curriculum #341; ops PR open (A-P5-OPS); agents residual        | A-P5-AGENTS       | #341      |
 | identity sub-account money       | **OPEN** | **HUMAN M5 shehzad002**  | money graph                                                     | M5                | —         |
 
 Status vocabulary: `OPEN` | `WIP` | `DONE` | `CUT` (§13)

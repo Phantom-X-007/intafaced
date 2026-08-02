@@ -196,6 +196,28 @@ export class StubMatching implements MatchingClient {
   async depth(): Promise<EngineDepth> {
     return { bids: this.bids, asks: this.asks, sequence: this.sequence };
   }
+
+  /**
+   * CX-7 F6 — simulate matching **process** death + cold start before journal replay.
+   *
+   * Real matching restarts clear in-process book/script state but keep a
+   * monotonic sequence floor and then re-emit journal events. Tests call this
+   * *before* redelivering fill/cancel events so redelivery is not just "same
+   * live process, loop again" — the stub no longer holds pre-restart book
+   * scripts either.
+   */
+  simulateProcessRestart(): this {
+    this.submitted.length = 0;
+    this.cancelledOrders.length = 0;
+    this.script.length = 0;
+    this.cancelScript.clear();
+    this.onSubmit = null;
+    // Sequence must not go backwards after restart (journal floor).
+    this.sequence = Math.max(this.sequence, 1);
+    this.asks = [];
+    this.bids = [];
+    return this;
+  }
 }
 
 /** An engine that cannot be reached. Used to test the indeterminate-submit branch. */

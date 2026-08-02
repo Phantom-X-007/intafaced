@@ -124,6 +124,13 @@ describe('applying a toggle', () => {
     expect(again.changed).toBe(false);
     expect(again.disabledModules).toEqual(['trade']);
   });
+
+  it('reports whether the edge was given a ledger URL without pretending freeze was read', () => {
+    expect(api(null).admin.ledgerConfigured()).toBe(false);
+    const call = vi.fn<LedgerOperatorCall>();
+    expect(api(call).admin.ledgerConfigured()).toBe(true);
+    expect(call).not.toHaveBeenCalled();
+  });
 });
 
 /**

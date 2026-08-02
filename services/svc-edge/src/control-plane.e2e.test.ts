@@ -100,6 +100,49 @@ async function flip(h: Harness, module: string, disabled: boolean, reason: strin
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// A-P5-OPS — operator status surface (summary without treasury)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('/admin/status — control-plane summary', () => {
+  it('refuses an ordinary user session', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asUser() },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('returns disabled count and ledgerConfigured without requiring treasury', async () => {
+    const h = await edge();
+    const WHY = 'status probe after manual halt of trade for book review';
+    expect((await flip(h, 'trade', true, WHY)).statusCode).toBe(200);
+
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      ok: boolean;
+      disabledModules: string[];
+      disabledCount: number;
+      ledgerConfigured: boolean;
+      auditCount: number;
+      lastChange: { module: string } | null;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.disabledModules).toEqual(['trade']);
+    expect(body.disabledCount).toBe(1);
+    expect(body.ledgerConfigured).toBe(false);
+    expect(body.auditCount).toBeGreaterThanOrEqual(1);
+    expect(body.lastChange?.module).toBe('trade');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // trade.spot — §14's own worked example, and the asymmetry that is the point
 // ─────────────────────────────────────────────────────────────────────────────
 
