@@ -67,7 +67,7 @@ Do **not** replace these with fashionable alternatives.
 | **Subagent-driven-development**    | Fresh agent per task                          | Build                                       | **Adopt for Build lanes**                                                                |
 | **Verification-before-completion** | Evidence gate                                 | Ship claims                                 | **Adopt always**                                                                         |
 
-**Insane difference:** Spec Kit _ritual_ does not beat a **REQ-ID → test → PR** chain enforced by agents. Constitution ≈ our doctrine + DIRECTION + Spec GC-*.
+**Insane difference:** Spec Kit _ritual_ does not beat a **REQ-ID → test → PR** chain enforced by agents. Constitution ≈ our doctrine + DIRECTION + Spec GC-\*.
 
 ### 2.2 Unit & property testing (correctness)
 
@@ -93,13 +93,13 @@ Do **not** replace these with fashionable alternatives.
 
 ### 2.4 Fault injection / chaos (stability under real money)
 
-| Tool                                            | Use                                                     | Decision                                                       |
-| ----------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------- |
-| **Spec fault catalog F1–F8 as automated tests** | Steady state S; hypothesis; disprove                    | **Adopt first** (no SaaS needed)                               |
+| Tool                                            | Use                                                      | Decision                                                       |
+| ----------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
+| **Spec fault catalog F1–F8 as automated tests** | Steady state S; hypothesis; disprove                     | **Adopt first** (no SaaS needed)                               |
 | **Toxiproxy**                                   | Latency, timeout, connection cut between trade↔matching | **Adopt when** HTTP transport faults need realism beyond mocks |
-| **Chaos Toolkit / Litmus / Gremlin**            | Infra/K8s chaos                                         | **Reject for now** — overkill pre-go-live; no K8s prod story   |
-| **Process kill / abort mid-handler** in tests   | Crash windows                                           | **Adopt** in harness (Node kill, thrown errors at seams)       |
-| **JetStream redelivery simulation**             | At-least-once                                           | **Adopt** using existing bus test patterns                     |
+| **Chaos Toolkit / Litmus / Gremlin**            | Infra/K8s chaos                                          | **Reject for now** — overkill pre-go-live; no K8s prod story   |
+| **Process kill / abort mid-handler** in tests   | Crash windows                                            | **Adopt** in harness (Node kill, thrown errors at seams)       |
+| **JetStream redelivery simulation**             | At-least-once                                            | **Adopt** using existing bus test patterns                     |
 
 **Insane difference:** Catalog-as-code beats “we ran Gremlin once.” Principles of Chaos: steady state → inject → look for drift.
 
@@ -177,11 +177,11 @@ Before large dual-book refactors _or_ in parallel with scan work:
 
 ### W4 — Chaos as experiments, not vibes
 
-For each fault F*:
+For each fault F\*:
 
 1. Define steady state S (Spec)
 2. Hypothesis: S holds
-3. Inject F* in harness
+3. Inject F\* in harness
 4. Measure conservation / open-order consistency
 5. Disproof = bugfix PR
 
@@ -222,13 +222,13 @@ Axes green/red/residual with proof links. Language “ready for real money” ne
 
 ### Tier B — when Tier A hits a wall
 
-| Item                             | Trigger                        |
-| -------------------------------- | ------------------------------ |
+| Item                              | Trigger                        |
+| --------------------------------- | ------------------------------ |
 | Toxiproxy between trade↔matching | Mocks lie about timeouts       |
-| Testcontainers PG/NATS           | CI can’t rely on shared docker |
-| OpenSpec/Spec Kit install        | Agents ignore Spec docs        |
-| Semgrep money rules              | Custom scans hard to maintain  |
-| k6 smoke                         | After conservation green       |
+| Testcontainers PG/NATS            | CI can’t rely on shared docker |
+| OpenSpec/Spec Kit install         | Agents ignore Spec docs        |
+| Semgrep money rules               | Custom scans hard to maintain  |
+| k6 smoke                          | After conservation green       |
 
 ### Tier C — reject for this program
 
@@ -261,12 +261,12 @@ Professionals schedule **harness before mountain**.
 
 | Spec area | Primary tools/workflows                       |
 | --------- | --------------------------------------------- |
-| DB-*      | Scan extend, inventory script, Class M review |
+| DB-\*     | Scan extend, inventory script, Class M review |
 | CX-1–6    | Existing vitest (guard)                       |
 | CX-7–9    | Chaos harness, platform:up, reconcile tests   |
-| DX-*      | Vitest quote suite, optional Playwright DX-9  |
-| SD-*      | Seeder resume + volume tests                  |
-| RS-*      | Scoreboard doc + WAVE-AUDIT                   |
+| DX-\*     | Vitest quote suite, optional Playwright DX-9  |
+| SD-\*     | Seeder resume + volume tests                  |
+| RS-\*     | Scoreboard doc + WAVE-AUDIT                   |
 | GC / LW   | Docs, #272, LIVE-LANES                        |
 
 ---

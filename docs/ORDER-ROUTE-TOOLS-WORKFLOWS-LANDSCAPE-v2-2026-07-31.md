@@ -17,7 +17,7 @@
 | Did we miss the dominant 2026 professional agent stack? | **No longer.** Spec Kit (~125k★) · OpenSpec (~63k★) · BMAD (~51k★) are the live SDD triad; community actively rejects pure vibe coding for serious work. |
 | Do we need to install all three?                        | **No.** Steal **patterns**; our Spec+Frame+doctrine already maps. Optional thin install only if agents thrash.                                           |
 | Highest _missed_ correctness leverage?                  | **Jepsen-class thinking** + TigerBeetle **DST** (deterministic simulation) + property+fault combos — not another matching engine.                        |
-| Highest _missed_ network-fault leverage?                | **Toxiproxy** (12k★) for trade↔matching timeouts (Tier B).                                                                                               |
+| Highest _missed_ network-fault leverage?                | **Toxiproxy** (12k★) for trade↔matching timeouts (Tier B).                                                                                              |
 | Replace our ledger with TigerBeetle/Formance?           | **No** — doctrine owns ledger-client. **Study** their testing bar and transfer patterns.                                                                 |
 | Still vibe-coder risk?                                  | Only if we ship without REQ→test→fresh verify and without assembled+chaos tiers.                                                                         |
 
@@ -41,14 +41,14 @@
 
 ### 2.1 Spec / agent workflow (how we _build_)
 
-| Repo                                                                      | ~★          | Role                                                       | Decision for this program                                                                       |
-| ------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [github/spec-kit](https://github.com/github/spec-kit)                     | **124,694** | SDD toolkit: constitution, specify, plan, tasks, implement | **Steal workflow.** Optional install later. Our constitution = doctrine + DIRECTION + Spec GC-* |
-| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)             | **63,245**  | Delta specs; proposal→apply→archive; brownfield            | **Steal delta model** for residual REQs. Best fit to _our_ brownfield money harden              |
-| [bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) | **51,317**  | 21+ role agents, enterprise ceremony                       | **Reject full install.** Steal **role separation** (BA/Arch/Dev/QA) as subagents                |
-| [Priivacy-ai/spec-kitty](https://github.com/Priivacy-ai/spec-kitty)       | **1,454**   | Spec-kit fork + **git worktree** orchestration             | **Study** — we already have `pnpm wt`; align Plan to worktree-per-task                          |
-| [cameronsjo/spec-compare](https://github.com/cameronsjo/spec-compare)     | research    | 6-tool SDD comparison                                      | **Read** for decision frameworks                                                                |
-| [rihebty/flow-kit](https://github.com/rihebty/flow-kit)                   | fusion      | Combines BMAD/spec-kit/OpenSpec/superpowers                | **Optional skim** — don’t adopt mashup blindly                                                  |
+| Repo                                                                      | ~★          | Role                                                       | Decision for this program                                                                        |
+| ------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [github/spec-kit](https://github.com/github/spec-kit)                     | **124,694** | SDD toolkit: constitution, specify, plan, tasks, implement | **Steal workflow.** Optional install later. Our constitution = doctrine + DIRECTION + Spec GC-\* |
+| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)             | **63,245**  | Delta specs; proposal→apply→archive; brownfield            | **Steal delta model** for residual REQs. Best fit to _our_ brownfield money harden               |
+| [bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) | **51,317**  | 21+ role agents, enterprise ceremony                       | **Reject full install.** Steal **role separation** (BA/Arch/Dev/QA) as subagents                 |
+| [Priivacy-ai/spec-kitty](https://github.com/Priivacy-ai/spec-kitty)       | **1,454**   | Spec-kit fork + **git worktree** orchestration             | **Study** — we already have `pnpm wt`; align Plan to worktree-per-task                           |
+| [cameronsjo/spec-compare](https://github.com/cameronsjo/spec-compare)     | research    | 6-tool SDD comparison                                      | **Read** for decision frameworks                                                                 |
+| [rihebty/flow-kit](https://github.com/rihebty/flow-kit)                   | fusion      | Combines BMAD/spec-kit/OpenSpec/superpowers                | **Optional skim** — don’t adopt mashup blindly                                                   |
 
 ### 2.2 Financial correctness & ledgers (how we _prove money_)
 
@@ -64,26 +64,26 @@
 
 ### 2.3 Matching / exchange / market sim (domain terrain)
 
-| Repo                                                                                    | ~★         | Role                                        | Decision                                                                                       |
-| --------------------------------------------------------------------------------------- | ---------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [exchange-core/exchange-core](https://github.com/exchange-core/exchange-core)           | **2,585**  | LMAX-style Java matching + journal/snapshot | **Study** journal/snapshot — we already implement doctrine split                               |
-| [enewhuis/liquibook](https://github.com/enewhuis/liquibook)                             | **1,489**  | C++ matching                                | Study only                                                                                     |
-| [chronoxor/CppTrader](https://github.com/chronoxor/CppTrader)                           | **1,059**  | Trading platform components                 | Study only                                                                                     |
-| [nkaz001/hftbacktest](https://github.com/nkaz001/hftbacktest)                           | **4,300+** | HFT/MM backtest with latency realism        | **Optional** seed/mm research — not CEX path core                                              |
-| [ccxt/ccxt](https://github.com/ccxt/ccxt)                                               | **43,451** | Unified exchange API                        | **Hard ban on money path** (JS numbers / doctrine §27) — venue-adapter pattern already correct |
-| [jammy928/CoinExchange_…](https://github.com/jammy928/CoinExchange_CryptoExchange_Java) | **1,717**  | Vendored Java exchange                      | **Dual-book target** — enforce Option B, don’t rebuild                                         |
+| Repo                                                                                     | ~★         | Role                                        | Decision                                                                                       |
+| ---------------------------------------------------------------------------------------- | ---------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [exchange-core/exchange-core](https://github.com/exchange-core/exchange-core)            | **2,585**  | LMAX-style Java matching + journal/snapshot | **Study** journal/snapshot — we already implement doctrine split                               |
+| [enewhuis/liquibook](https://github.com/enewhuis/liquibook)                              | **1,489**  | C++ matching                                | Study only                                                                                     |
+| [chronoxor/CppTrader](https://github.com/chronoxor/CppTrader)                            | **1,059**  | Trading platform components                 | Study only                                                                                     |
+| [nkaz001/hftbacktest](https://github.com/nkaz001/hftbacktest)                            | **4,300+** | HFT/MM backtest with latency realism        | **Optional** seed/mm research — not CEX path core                                              |
+| [ccxt/ccxt](https://github.com/ccxt/ccxt)                                                | **43,451** | Unified exchange API                        | **Hard ban on money path** (JS numbers / doctrine §27) — venue-adapter pattern already correct |
+| [jammy928/CoinExchange\_…](https://github.com/jammy928/CoinExchange_CryptoExchange_Java) | **1,717**  | Vendored Java exchange                      | **Dual-book target** — enforce Option B, don’t rebuild                                         |
 
 ### 2.4 Chaos / fault injection / network
 
-| Repo                                                                                          | ~★         | Role                             | Decision                                            |
-| --------------------------------------------------------------------------------------------- | ---------- | -------------------------------- | --------------------------------------------------- |
+| Repo                                                                                          | ~★         | Role                             | Decision                                             |
+| --------------------------------------------------------------------------------------------- | ---------- | -------------------------------- | ---------------------------------------------------- |
 | [Shopify/toxiproxy](https://github.com/Shopify/toxiproxy)                                     | **12,205** | TCP proxy: latency, timeout, cut | **Tier B — adopt when mocks lie** on trade↔matching |
-| [chaos-mesh/chaos-mesh](https://github.com/chaos-mesh/chaos-mesh)                             | **7,820**  | K8s chaos platform               | **Reject now** (no K8s prod story)                  |
-| [chaosblade-io/chaosblade](https://github.com/chaosblade-io/chaosblade)                       | **6,454**  | Chaos experiment toolkit         | Defer                                               |
-| [dastergon/awesome-chaos-engineering](https://github.com/dastergon/awesome-chaos-engineering) | **6,628**  | Curated chaos list               | **Bookmark**                                        |
-| [litmuschaos/litmus](https://github.com/litmuschaos/litmus)                                   | **5,563**  | Cloud-native chaos               | Defer                                               |
-| [chaostoolkit/chaostoolkit](https://github.com/chaostoolkit/chaostoolkit)                     | **2,015**  | Scriptable chaos experiments     | **Optional** experiment YAML later                  |
-| [Polly-Contrib/Simmy](https://github.com/Polly-Contrib/Simmy)                                 | **589**    | App-level fault injection        | Pattern only (JS ecosystem different)               |
+| [chaos-mesh/chaos-mesh](https://github.com/chaos-mesh/chaos-mesh)                             | **7,820**  | K8s chaos platform               | **Reject now** (no K8s prod story)                   |
+| [chaosblade-io/chaosblade](https://github.com/chaosblade-io/chaosblade)                       | **6,454**  | Chaos experiment toolkit         | Defer                                                |
+| [dastergon/awesome-chaos-engineering](https://github.com/dastergon/awesome-chaos-engineering) | **6,628**  | Curated chaos list               | **Bookmark**                                         |
+| [litmuschaos/litmus](https://github.com/litmuschaos/litmus)                                   | **5,563**  | Cloud-native chaos               | Defer                                                |
+| [chaostoolkit/chaostoolkit](https://github.com/chaostoolkit/chaostoolkit)                     | **2,015**  | Scriptable chaos experiments     | **Optional** experiment YAML later                   |
+| [Polly-Contrib/Simmy](https://github.com/Polly-Contrib/Simmy)                                 | **589**    | App-level fault injection        | Pattern only (JS ecosystem different)                |
 
 ### 2.5 Property tests, containers, messaging, static analysis
 
@@ -114,7 +114,7 @@
 | W4  | **Property tests for invariants**        | fast-check, TigerBeetle DST culture     | Conservation, idempotency, concurrent place |
 | W5  | **Fault injection against steady state** | Chaos principles, Jepsen bank tests     | Spec F1–F8 as automated experiments         |
 | W6  | **Assembled path, not unit-only**        | Walking skeleton, SRE PRR mindset       | `platform:up` / slim compose CX-8           |
-| W7  | **Network realism when needed**          | Toxiproxy                               | Timeout between trade↔matching              |
+| W7  | **Network realism when needed**          | Toxiproxy                               | Timeout between trade↔matching             |
 | W8  | **Static bans on second book**           | Our scans + Semgrep pattern             | Java custody + DAO mutator bans             |
 | W9  | **Worktree isolation**                   | Spec Kitty / our `pnpm wt`              | Mandatory Build lanes                       |
 | W10 | **Evidence or not done**                 | verification-before-completion          | Fresh verify agent                          |
@@ -136,15 +136,15 @@
 
 ### Tier B — when Tier A hits a wall
 
-| Tool                                 | Trigger                                        |
-| ------------------------------------ | ---------------------------------------------- |
+| Tool                                 | Trigger                                         |
+| ------------------------------------ | ----------------------------------------------- |
 | **Toxiproxy**                        | Need real TCP timeout/partition trade↔matching |
-| **testcontainers-node**              | CI cannot depend on shared docker compose      |
-| **Spec Kit or OpenSpec CLI install** | Agents ignore Spec docs repeatedly             |
-| **Semgrep money rules**              | Scan scripts unmaintainable                    |
-| **Stryker mutation**                 | Want proof suite quality                       |
-| **Chaos Toolkit YAML**               | Want reusable experiment defs                  |
-| **hftbacktest**                      | Seed/mm research only                          |
+| **testcontainers-node**              | CI cannot depend on shared docker compose       |
+| **Spec Kit or OpenSpec CLI install** | Agents ignore Spec docs repeatedly              |
+| **Semgrep money rules**              | Scan scripts unmaintainable                     |
+| **Stryker mutation**                 | Want proof suite quality                        |
+| **Chaos Toolkit YAML**               | Want reusable experiment defs                   |
+| **hftbacktest**                      | Seed/mm research only                           |
 
 ### Tier C — reject for this program
 
@@ -196,12 +196,12 @@
 
 | Spec cluster                    | Primary leverage                                                 |
 | ------------------------------- | ---------------------------------------------------------------- |
-| DB-* dual-book                  | Scan extend, Semgrep later, inventory scripts                    |
+| DB-\* dual-book                 | Scan extend, Semgrep later, inventory scripts                    |
 | CX-1–6                          | Existing vitest (guard regressions)                              |
 | CX-7–9 chaos/assemble/reconcile | Custom harness + Jepsen-inspired ops · platform:up · Toxiproxy B |
-| DX-*                            | Vitest quote · Playwright only honesty                           |
-| SD-*                            | Seeder resume · volume tests · optional hftbacktest study        |
-| RS-* scoreboard                 | Doc + WAVE-AUDIT                                                 |
+| DX-\*                           | Vitest quote · Playwright only honesty                           |
+| SD-\*                           | Seeder resume · volume tests · optional hftbacktest study        |
+| RS-\* scoreboard                | Doc + WAVE-AUDIT                                                 |
 | Process                         | Spec Kit/OpenSpec _patterns_ · BMAD _roles_ · doubt-driven       |
 
 ---

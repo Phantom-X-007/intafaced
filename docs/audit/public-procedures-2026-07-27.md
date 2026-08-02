@@ -130,7 +130,7 @@ Also relevant throughout: `HTTP_HOST` defaults to `0.0.0.0` (`packages/config/sr
 
 # Findings
 
-Worst first. Only NEEDS-* entries appear here.
+Worst first. Only NEEDS-\* entries appear here.
 
 ---
 

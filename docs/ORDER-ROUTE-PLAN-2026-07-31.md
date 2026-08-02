@@ -61,7 +61,7 @@ Every Spec REQ → ≥1 task. Plan fails if any REQ unmapped.
 | FT-1…FT-4       | P7-1 (bounds check)          |
 | SC-1…SC-5       | P2 scans, P8-2               |
 | RS-1, RS-2      | P8-1                         |
-| GC-*            | all tasks                    |
+| GC-\*           | all tasks                    |
 
 ---
 
@@ -132,7 +132,7 @@ Every Spec REQ → ≥1 task. Plan fails if any REQ unmapped.
 - **F6** matching restart / journal replay no double settle
 - **F7** kill-switch place refuse + cancel ok
 - **F8** seed+user volume honesty (may wait P4 flag)
-- **Check:** all F* green or F8 blocked-on SD
+- **Check:** all F\* green or F8 blocked-on SD
 - **Class:** M
 
 #### P1-5 · Reconcile open/hold/engine (CX-9)
@@ -293,9 +293,9 @@ Every Spec REQ → ≥1 task. Plan fails if any REQ unmapped.
 
 | Lane           | Tasks                                                             | Avoid                   |
 | -------------- | ----------------------------------------------------------------- | ----------------------- |
-| **L-chaos**    | P1-*                                                              | dual-book Java          |
-| **L-dualbook** | P2-*                                                              | trade money path invent |
-| **L-seed**     | P4-* after P1-1 optional                                          | futures engine          |
+| **L-chaos**    | P1-\*                                                             | dual-book Java          |
+| **L-dualbook** | P2-\*                                                             | trade money path invent |
+| **L-seed**     | P4-\* after P1-1 optional                                         | futures engine          |
 | Serial         | P0 → start P1 → then parallel P2∥P1 rest → P3 → P4 → P5 → P6 → P8 |                         |
 
 ---

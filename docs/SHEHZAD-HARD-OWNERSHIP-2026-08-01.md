@@ -95,7 +95,7 @@ These are **product mountains**, not chores. Each can occupy a strong senior for
 - **pay.public-api** REST + webhooks + sandbox discipline
 - **Crypto rail regression:** #226 path must stay green
 
-**Done when:** Board Clear `pay.gateway` bar met (card required, sandbox OK) **and** you have either shipped or honestly §13-scoped the adjacent pay.* rows you touched.  
+**Done when:** Board Clear `pay.gateway` bar met (card required, sandbox OK) **and** you have either shipped or honestly §13-scoped the adjacent pay.\* rows you touched.  
 **Not yours:** prod PSP keys, go-live yes, shell retheme.
 
 ---

@@ -104,7 +104,7 @@ INTAFACED’s spot CEX order path and DEX quote plane exist and are partially st
 | **CX-6**  | Engine transport failure after hold: order stays open with hold; recovery path is cancel (404 → full release if never live).                         | Unit test for indeterminate + **documented/automated reconcile** path.                                      | M     |
 | **CX-7**  | **Chaos suite (new):** inject at least the fault catalog in §5; steady state conserved.                                                              | Dedicated test module green in CI (or nightly with explicit gate).                                          | M     |
 | **CX-8**  | **Assembled path:** trade + matching + ledger (+ bus if events used) under one integration harness or platform:up script — not unit-only.            | Integration proof command documented; green evidence in Verify.                                             | M     |
-| **CX-9**  | Open-order ↔ ledger hold ↔ engine live **reconcile** is defined (job or operator procedure with tests for happy/orphan cases).                       | Spec’d states + tests for at least: orphan pending, open+hold no engine, open+engine no hold (fail closed). | M     |
+| **CX-9**  | Open-order ↔ ledger hold ↔ engine live **reconcile** is defined (job or operator procedure with tests for happy/orphan cases).                     | Spec’d states + tests for at least: orphan pending, open+hold no engine, open+engine no hold (fail closed). | M     |
 | **CX-10** | Matching recovery: journal-first; process restart rebuilds book without emitting duplicate economic effects on bus consumers (idempotent consumers). | Existing determinism tests + consumer idempotency remain green.                                             | M     |
 | **CX-11** | clientOrderId policy: uniqueness rules documented (recommend day-scope or global unique constraint); retries without id documented as unsafe.        | Doc + optional DB uniqueness if already partial.                                                            | P     |
 | **CX-12** | No stop-order funding without solved design (current refuse remains or Spec amend).                                                                  | Existing refuse stays unless Spec v2.                                                                       | —     |
@@ -222,14 +222,14 @@ Hypothesis: **S holds under F1–F8** in CI/dev. Disproof = failing test.
 
 Must inform Plan; do not skip:
 
-1. **LW-*** law on tip + lanes
-2. **DB-*** dual-book enforce (silent money risk)
+1. **LW-\*** law on tip + lanes
+2. **DB-\*** dual-book enforce (silent money risk)
 3. **CX-7/8/9** chaos + assemble + reconcile (prove path)
-4. **DX-*** residual DEX honesty
-5. **SD-*** seed honesty (Denon #1)
-6. **MA-*** multi-asset resume
-7. **PY-*** durable broadcast if still open
-8. **RS-*** scoreboard + WAVE-AUDIT
+4. **DX-\*** residual DEX honesty
+5. **SD-\*** seed honesty (Denon #1)
+6. **MA-\*** multi-asset resume
+7. **PY-\*** durable broadcast if still open
+8. **RS-\*** scoreboard + WAVE-AUDIT
 
 Walking skeleton for Build: **CX assemble + F1–F4 minimum** early so later dual-book/seed hang on a proven path.
 

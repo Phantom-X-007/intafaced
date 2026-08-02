@@ -217,7 +217,7 @@ Anti-ref for **terminal default** density. Steal empty/error calm only.
 
 ### In-repo first (never reinvent) **[tip]**
 
-IxState · module-mixin · REASON · DepthGraph · kline.js LWC 3.8 · ix-* classes · focus-visible · shipped ix-empty* · Exchange useBookPrice, symbolFee, confirm modal, submitting, dualbook, favourites · uiproof + **auth-fixture** · brand-scan · stompjs
+IxState · module-mixin · REASON · DepthGraph · kline.js LWC 3.8 · ix-_ classes · focus-visible · shipped ix-empty_ · Exchange useBookPrice, symbolFee, confirm modal, submitting, dualbook, favourites · uiproof + **auth-fixture** · brand-scan · stompjs
 
 ### Package rule (resolves contradiction)
 
@@ -307,7 +307,7 @@ Free hands + scorecard beat skill defaults; name conflicts in PR.
 
 ## 13 · Parallelization
 
-LIVE-LANES · one worktree · exclusive App.vue/Exchange.vue · append-only en.js/intafaced.css · feat/app-* · styleboard docs parallel Wave A (not same CSS war)
+LIVE-LANES · one worktree · exclusive App.vue/Exchange.vue · append-only en.js/intafaced.css · feat/app-\* · styleboard docs parallel Wave A (not same CSS war)
 
 ---
 

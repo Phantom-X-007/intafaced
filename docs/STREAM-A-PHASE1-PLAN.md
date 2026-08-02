@@ -159,7 +159,7 @@ Open `[cross-stream] <file> — need` when blocked. Live re-check `gh pr list`.
 | Chart datafeed   | vendored TV + vendor datafeed module                                                                                                  | Empty history until seed/feed                                     |
 | Account panes    | Balances / Positions note / Open / Fills / History wired to vendor APIs in code                                                       | Live proof; empty vs error distinction when login fails mid-fetch |
 | Platform modules | `/platform` hub, bank/pay/p2p/token/… + **IxState**                                                                                   | Not Stream A demo path priority                                   |
-| DEX page         | `/dex` descriptive module page                                                                                                        | Not a CEX↔DEX toggle on terminal                                  |
+| DEX page         | `/dex` descriptive module page                                                                                                        | Not a CEX↔DEX toggle on terminal                                 |
 | Mobile drawer    | `App.vue` Drawer + platform submenu                                                                                                   | Post-retheme visual pass                                          |
 | Rebrand          | #86 English black/orange                                                                                                              | Nitro sign-off once demo-ready                                    |
 

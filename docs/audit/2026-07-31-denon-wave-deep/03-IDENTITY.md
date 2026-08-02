@@ -81,7 +81,7 @@ DB CHECK omits `pay:payout` (in `INTERACTIVE_ONLY` in code) — defense-in-depth
 | Origin + rpIdHash               | Enforced                                                                | `webauthn.ts:249-250`, `363-366`, `416-418` |
 | Counter clone                   | Decrease refused (0→0 allowed)                                          | `webauthn.ts:423-428`                       |
 | Challenge single-use / TTL      | `ChallengeStore.take`                                                   | `webauthn.ts:136-144`                       |
-| Challenge ↔ user bind           | Registration + authentication                                           | `auth-service.ts:445-447`, `528-530`        |
+| Challenge ↔ user bind          | Registration + authentication                                           | `auth-service.ts:445-447`, `528-530`        |
 | Passwordless → `mfa: true`      | Yes                                                                     | `auth-service.ts:558`                       |
 | Kill-switch                     | `WEBAUTHN_ENABLED`                                                      | `env.ts:30-31`; router gates                |
 | Challenge store                 | **In-process only** — multi-pod breaks ceremony (fail closed, not open) | `webauthn.ts:114-120`; README:103           |
@@ -93,7 +93,7 @@ Step-up remains **TOTP-only** (`auth.stepUp`). WebAuthn-only users cannot elevat
 **YES — soft-disable, self-only, no money movement, S2S-visible.**
 
 | Claim                          | Evidence                                                             |
-| ------------------------------ | -------------------------------------------------------------------- |
+| ------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------- |
 | Soft `revoked=true` only       | `auth-service.ts:981-989`; migration `0002_sub_accounts_revoke.sql`  |
 | Parent gate (no cross-user)    | `WHERE parent_user_id = ${userId}`; tests `identity.test.ts:553-560` |
 | Row survives (ledger owner id) | schema comment `schema.ts:198-206`; list still returns revoked       |

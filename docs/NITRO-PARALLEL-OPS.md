@@ -149,10 +149,10 @@ Agents: create if missing; keep short; delete completed rows after merge.
 **Rule:** No code edits until your lane is on this board.  
 **If conflict:** first claimer keeps lane; others pick a non-overlapping mountain.
 
-| Lane id     | Owner session (rename) | Scope (paths / feature) | Status | PR / proof | Do not touch |
-| ----------- | ---------------------- | ----------------------- | ------ | ---------- | ------------ |
-| stream-a-ui | session-…              | vendor shell UI         | wip    | #…         | services/**  |
-| audit-delta | session-…              | post-Denon money delta  | done   | docs/…     | feat/app-*   |
+| Lane id     | Owner session (rename) | Scope (paths / feature) | Status | PR / proof | Do not touch  |
+| ----------- | ---------------------- | ----------------------- | ------ | ---------- | ------------- |
+| stream-a-ui | session-…              | vendor shell UI         | wip    | #…         | services/\*\* |
+| audit-delta | session-…              | post-Denon money delta  | done   | docs/…     | feat/app-\*   |
 
 ## Free mountains (ideas only — claim before build)
 

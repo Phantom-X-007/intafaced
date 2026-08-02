@@ -27,12 +27,12 @@ Archives: `docs/audit/2026-07-31-money-class-mega/` · `docs/audit/2026-07-31-de
 
 ## Live collision map (compatible with sibling Grok chats)
 
-| Who                   | Surface                                               | Rule                                      |
-| --------------------- | ----------------------------------------------------- | ----------------------------------------- |
-| **Frontend Grok**     | #261 · vendor shell · Wave A                          | **Do not touch** vendor/** or withdraw UI |
-| **Residual campaign** | `NITRO-RESIDUAL-CAMPAIGN` · LIVE-LANES residual-coord | Claim lane before code; ≤3 lanes          |
-| **Denon**             | feat/spine-*                                          | Never force-push                          |
-| **This chat**         | residual-ws honesty · backend money residuals         | Free if not claimed                       |
+| Who                   | Surface                                               | Rule                                        |
+| --------------------- | ----------------------------------------------------- | ------------------------------------------- |
+| **Frontend Grok**     | #261 · vendor shell · Wave A                          | **Do not touch** vendor/\*\* or withdraw UI |
+| **Residual campaign** | `NITRO-RESIDUAL-CAMPAIGN` · LIVE-LANES residual-coord | Claim lane before code; ≤3 lanes            |
+| **Denon**             | feat/spine-\*                                         | Never force-push                            |
+| **This chat**         | residual-ws honesty · backend money residuals         | Free if not claimed                         |
 
 ## Residuals still open (backend)
 

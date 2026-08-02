@@ -85,14 +85,14 @@ No `parseFloat` on production money paths. Test-only `parseFloat` in one yield c
 
 **PARTIAL — pure maths always run and are strong; service Postgres suites can skip green.**
 
-| Area                                                     | Always runs?                                 | Quality                                                                | Gap                                                                |
-| -------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Emission / buyback split / yield pro-rata / fee schedule | Yes (`economics.test.ts`)                    | Property-style, seed vs migration lock                                 | Live path does not read `token_params` buyback/emission (see T-02) |
-| Interest pure (`dailyInterest` / `planAccrual`)          | Yes (inside bank suite file; pure describe)  | Flooring, dust, sort stability                                         | —                                                                  |
-| Token service money (stake, yield, burn, mint)           | **Only if Postgres reachable**               | Strong: multi-stake yield bug, snapshot multiplier, dust, resume       | `describe.skip` when DB down (`token-service.test.ts:57-60`)       |
+| Area                                                     | Always runs?                                 | Quality                                                                 | Gap                                                                |
+| -------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Emission / buyback split / yield pro-rata / fee schedule | Yes (`economics.test.ts`)                    | Property-style, seed vs migration lock                                  | Live path does not read `token_params` buyback/emission (see T-02) |
+| Interest pure (`dailyInterest` / `planAccrual`)          | Yes (inside bank suite file; pure describe)  | Flooring, dust, sort stability                                          | —                                                                  |
+| Token service money (stake, yield, burn, mint)           | **Only if Postgres reachable**               | Strong: multi-stake yield bug, snapshot multiplier, dust, resume        | `describe.skip` when DB down (`token-service.test.ts:57-60`)       |
 | Bank earn service                                        | Same pattern                                 | Deposit crash, underfunded pool, accrual idempotency, principal↔ledger | `describe.skip` (`bank-service.test.ts:74-77`)                     |
-| Token router yield/buyback auth                          | Yes (stub service)                           | MFA + scope                                                            | Stub returns fixed burn split — does not prove ledger              |
-| Bank earn router assertSelf on withdraw                  | **Not covered** in earn-specific mount cases | Transfer/space assertSelf tested                                       | Earn withdraw IDOR relies on pattern, not case                     |
+| Token router yield/buyback auth                          | Yes (stub service)                           | MFA + scope                                                             | Stub returns fixed burn split — does not prove ledger              |
+| Bank earn router assertSelf on withdraw                  | **Not covered** in earn-specific mount cases | Transfer/space assertSelf tested                                        | Earn withdraw IDOR relies on pattern, not case                     |
 
 ---
 

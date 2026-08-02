@@ -24,11 +24,11 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 | System                   | Risk now                                               | Status                                               |
 | ------------------------ | ------------------------------------------------------ | ---------------------------------------------------- |
 | Ledger                   | Low if perimeter holds                                 | OK to build · PG suites skipped locally              |
-| Identity                 | ifc_ exchange + soft revoke on tip                     | OK                                                   |
+| Identity                 | ifc\_ exchange + soft revoke on tip                    | OK                                                   |
 | Pay                      | Links + checkout; live EVM #226 + durable journal #266 | OK multi-replica journal · **send→put P1 residual**  |
 | Token / bank earn        | Yield/buyback gated; bank PG skip                      | OK · residual                                        |
 | P2P                      | Prior fixes; PG suite skip                             | OK · residual                                        |
-| Edge                     | ifc_ + region HMAC; preservePath                       | OK for dev                                           |
+| Edge                     | ifc\_ + region HMAC; preservePath                      | OK for dev                                           |
 | Trade                    | Private REST + convert; R5/R6 holds                    | OK · market-sell cost honest (#244)                  |
 | Protocol / DEX / indexer | Mounted shells; chain propped                          | Not product-complete                                 |
 | Deploy                   | Fleet + notify + WS JWT                                | Usable with care                                     |
