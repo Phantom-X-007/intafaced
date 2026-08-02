@@ -70,7 +70,7 @@ for (const file of javaFiles) {
       /level-two wallet mints disabled/i.test(back) ||
       /dead dual-book/i.test(back);
 
-    // Controllers are HTTP door territory — mark CONTROLLED
+    // Controllers: split by whether DualBookMoneyDoorInterceptor lists a path fragment.
     const rel = relative(ROOT, file).replace(/\\/g, '/');
     const isController = /\/controller\//i.test(rel);
     const isCommented = /^\s*\/\//.test(line) || line.trim().startsWith('*');
@@ -78,15 +78,67 @@ for (const file of javaFiles) {
       /set(?:Frozen)?Balance\s*\(\s*new BigDecimal\s*\(\s*0\s*\)\s*\)/.test(line) ||
       /set(?:Frozen)?Balance\s*\(\s*BigDecimal\.ZERO\s*\)/.test(line);
 
+    // HotTransferRecord.setBalance is a transfer *log* field, not MemberWallet mint.
+    const isRecordNotWallet =
+      /hotTransferRecord\.set(?:Frozen)?Balance/i.test(line) ||
+      (/HotTransferRecord/i.test(window) && /setBalance\s*\(\s*balance\.subtract/i.test(line));
+
     let kind = 'LIVE';
     if (isCommented) kind = 'COMMENT';
+    else if (isRecordNotWallet) kind = 'RECORD_NOT_WALLET';
     else if (hasDisableThrow) kind = 'DEAD_THROW';
     else if (dualBookDead) kind = 'DEAD_NULL';
-    else if (isController) kind = 'HTTP_DOOR';
+    else if (isController)
+      kind = 'HTTP_DOOR'; // refined below against door fragments
     else if (isWalletZeroInit) kind = 'WALLET_INIT_ZERO';
 
     rows.push({ kind, file: rel, line: i + 1, snippet: line.trim().slice(0, 120) });
   }
+}
+
+/** Load BLOCKED_URI_FRAGMENTS from the dual-book door interceptor (honest coverage). */
+function loadDoorFragments() {
+  const doorPath = join(
+    ROOT,
+    'vendor/coinexchange/00_framework/core/src/main/java/com/bizzan/bitrade/interceptor/DualBookMoneyDoorInterceptor.java',
+  );
+  try {
+    const text = readFileSync(doorPath, 'utf8');
+    const frags = [];
+    const reFrag = /"(\/[^"]+)"/g;
+    let m;
+    while ((m = reFrag.exec(text)) !== null) {
+      if (m[1].startsWith('/')) frags.push(m[1].toLowerCase());
+    }
+    return frags;
+  } catch {
+    return [];
+  }
+}
+
+const doorFrags = loadDoorFragments();
+function controllerLikelyCovered(relFile) {
+  // Map controller file path → coarse URI cues (best-effort; not Spring RequestMapping parse).
+  const lower = relFile.toLowerCase();
+  const cues = [];
+  if (lower.includes('/dividend')) cues.push('/system/dividend', '/dividend');
+  if (lower.includes('/withdrawrecord')) cues.push('/finance/withdraw-record', '/withdraw-record');
+  if (lower.includes('/memberwallet')) cues.push('/member/member-wallet', '/member-wallet');
+  if (lower.includes('/membercontroller')) cues.push('/member/', '/audit-business', '/cancel-business');
+  if (lower.includes('/businesscancel')) cues.push('/business/cancel-apply', '/cancel-apply');
+  if (lower.includes('/approvecontroller')) cues.push('/approve/', '/certified/business');
+  if (lower.includes('/redenvelope')) cues.push('/redenvelope');
+  if (lower.includes('/coincontroller')) cues.push('/system/coin', '/coin/');
+  if (cues.length === 0) {
+    // Generic: any fragment appearing as a path segment in the file path
+    return doorFrags.some((f) => lower.includes(f.replace(/\//g, '')) || lower.includes(f.slice(1)));
+  }
+  return cues.some((c) => doorFrags.some((f) => c.includes(f) || f.includes(c)));
+}
+
+for (const r of rows) {
+  if (r.kind !== 'HTTP_DOOR') continue;
+  r.kind = controllerLikelyCovered(r.file) ? 'HTTP_DOOR_COVERED' : 'HTTP_DOOR_UNCOVERED';
 }
 
 const counts = {};
@@ -100,8 +152,12 @@ for (const r of live) {
   console.log(`${r.file}:${r.line}: ${r.snippet}`);
 }
 console.log(`--- total live: ${live.length} ---`);
-console.log('--- HTTP_DOOR (covered by interceptor if path listed) ---');
-for (const r of rows.filter((r) => r.kind === 'HTTP_DOOR')) {
+console.log('--- HTTP_DOOR_UNCOVERED (door may not block — M7 / door list residual) ---');
+for (const r of rows.filter((r) => r.kind === 'HTTP_DOOR_UNCOVERED')) {
+  console.log(`${r.file}:${r.line}: ${r.snippet}`);
+}
+console.log('--- HTTP_DOOR_COVERED (fragment likely on interceptor) ---');
+for (const r of rows.filter((r) => r.kind === 'HTTP_DOOR_COVERED')) {
   console.log(`${r.file}:${r.line}: ${r.snippet}`);
 }
 

@@ -54,16 +54,18 @@
 | Human       | Human X go-live                                   | **Open** — Nitro                                                    |
 | Human       | M1–M7 mountains                                   | **Open** — shehzad                                                  |
 
-Continue archives: `DEEP-AUDIT-CONTINUE-2026-08-02.md` · `DEEP-AUDIT-CONTINUE-2-2026-08-02.md`
+**Program status:** **AGENT-COMPLETE** — see `AGENT-COMPLETE-SEAL-2026-08-02.md`  
+Continue archives: `DEEP-AUDIT-CONTINUE*.md`
 
 ---
 
-## 3 · Method (so cold agents continue depth)
+## 3 · Method (historical — program closed)
 
 1. Parallel adversarial reviewers on trade money · dual-book · edge/WS · vendor UI
 2. Confirm each P0 in source before code
 3. Fix + regression test where feasible
 4. Do **not** declare P0=0 after greps alone
+5. Finish: seal agent residual; leave Human X + shehzad only
 
 ---
 
