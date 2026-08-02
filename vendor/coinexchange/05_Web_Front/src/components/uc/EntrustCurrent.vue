@@ -334,12 +334,20 @@ export default {
         });
     },
     getSymbol() {
-      this.$http.post(this.host + this.api.market.thumb, {}).then(response => {
-        var resp = response.body;
-        if (resp && resp.length > 0) {
-          this.symbol = resp;
-        }
-      }).catch(() => {});
+      this.$http
+        .post(this.host + this.api.market.thumb, {})
+        .then(response => {
+          var resp = response.body;
+          if (resp && resp.length > 0) {
+            this.symbol = resp;
+          }
+        })
+        .catch(() => {
+          // Market list unknown — leave prior symbols; do not invent pairs.
+          if (!this.symbol || !this.symbol.length) {
+            this.$Message.error("Market list unavailable — symbols unknown, not empty.");
+          }
+        });
     },
     cancel(orderId) {
       if (this.cancellingId) return;
