@@ -158,6 +158,19 @@ const ALLOWLIST = [
   },
   { path: 'CLAUDE.md', reason: 'internal agent instructions' },
   { path: '.claude', reason: 'internal tooling config' },
+  {
+    path: join('tooling', 'ci', 'agent-autoload-scan.mjs'),
+    reason: 'CI gate that verifies agent entry files exist; must name CLAUDE.md path literally',
+  },
+  {
+    path: join('docs', 'COORDINATION-TRUTH-LAYERS.md'),
+    reason: 'internal coordination law for agents; names entry files not product brands',
+  },
+  {
+    path: join('docs', 'COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md'),
+    reason: 'internal coordination audit; not shipped to users',
+  },
+
   // Stream A agent law / handoffs — name planner vs implementer roles and on-disk
   // shell paths so territory is enforceable. Not user-facing product copy.
   {
