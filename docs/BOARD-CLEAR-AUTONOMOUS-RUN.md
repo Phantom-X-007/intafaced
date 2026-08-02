@@ -8,12 +8,13 @@
 
 ## Cold start / compact / continue read order
 
-**0. FIRST:** `docs/BOARD-CLEAR-NEXT.md`  
-**1.** `docs/BOARD-CLEAR-AFK-CONTRACT.md` · `docs/BOARD-CLEAR-PARALLEL-SESSIONS.md`  
-**Never** TRACKER / WAVE-AUDIT / chat summary as live SoT.  
+**0. FIRST:** `docs/BOARD-CLEAR-NEXT.md` (campaign *sequence* only)  
+**1.** `docs/BOARD-CLEAR-AFK-CONTRACT.md` · `docs/BOARD-CLEAR-PARALLEL-SESSIONS.md` · `docs/COORDINATION-TRUTH-LAYERS.md`  
+**Never** WAVE-AUDIT / chat summary as live campaign SoT.  
+**Never** skip tracker ownership for free/human-lock checks — layers contract.  
 **Never** ask Nitro mid-run. Agent re-fetches tip + open PRs every cycle.
 
-Then: SCOREBOARD · AGENT-BACKLOG · LIVE-LANES · SHEHZAD · DECISION-AUTHORITY · CONSTITUTION · LOOPS · ENGINEERING-STANDARD · HUMAN-BLOCKERS · STREAM-A-DESIGN-BAR · AGENTS.md
+Then: SCOREBOARD · AGENT-BACKLOG · LIVE-LANES · tracker ready · SHEHZAD · DECISION-AUTHORITY · CONSTITUTION · LOOPS · ENGINEERING-STANDARD · HUMAN-BLOCKERS · STREAM-A-DESIGN-BAR · AGENTS.md
 
 ---
 

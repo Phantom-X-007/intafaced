@@ -1,9 +1,10 @@
 # Board Clear — NEXT
 
-> **READ THIS FIRST AFTER COMPACT / continue.** Agent self-resumes.  
-> Never chat summary · TRACKER.md as live SoT.  
+> **READ THIS FIRST AFTER COMPACT / continue** for **campaign micro-sequence only.** Agent self-resumes.  
+> Never chat summary as live campaign SoT. WAVE-AUDIT is sealed snapshot only.  
+> **Product free / human-owned / done** → still `tooling/tracker/features.mjs` (see [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)). This file does **not** erase tracker ownership.  
 > **Parallel law:** `docs/BOARD-CLEAR-PARALLEL-SESSIONS.md`  
-> Authority: (1) this file → (2) fetch + `gh pr list` → (3) SCOREBOARD + AGENT-BACKLOG → (4) freezes.  
+> Authority for *what to ship next in Board Clear:* (1) this file → (2) fetch + `gh pr list` → (3) SCOREBOARD + AGENT-BACKLOG → (4) freezes.  
 > **Post-pile audit:** `docs/audit/2026-08-02-post-pile/` · `docs/BOARD-CLEAR-WAVE-AUDIT-LATEST.md`
 
 **Campaign status:** `AGENT-COMPLETE` (board still open on human M1–M7)  

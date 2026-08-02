@@ -107,7 +107,7 @@ Triggers: CI architecture conflict, Done bar impossible without invent, Denon ma
 2. git fetch; gh pr list; main tip → update Tip when last acted
 3. Run PARALLEL-SESSIONS §2 collision ritual
 4. If NEXT ship already merged or path-blocked → pick next OPEN non-overlapping agent ship; rewrite NEXT same turn
-5. SCOREBOARD for row status; never TRACKER.md / WAVE-AUDIT-LATEST as SoT if older than tip
+5. SCOREBOARD for campaign row status; WAVE-AUDIT-LATEST never live SoT. Product free/human-lock still = features.mjs (COORDINATION-TRUTH-LAYERS)
 6. Do not re-open locked B; do not re-ship SHIPPED backlog IDs
 7. Decision default: DECISION-AUTHORITY (agent acts; X1–X5 only after agent residual)
 ```

@@ -11,7 +11,7 @@
 **Campaign status:** `AGENT-COMPLETE` (human M1–M7 still OPEN)  
 **Last scoreboard edit:** 2026-08-02 tip ≥`76e60ff` — #380 CX-8 L3+L4 · #381 craft · post-pile WAVE-AUDIT sealed
 
-**Authority:** For Board Clear status, **this file + NEXT beat** `docs/TRACKER.md` until tracker is resynced.  
+**Authority:** For **campaign row progress / next ship**, **this file + NEXT** beat a lagging generated `docs/TRACKER.md`. For **product ownership / free-to-start / human lock**, `tooling/tracker/features.mjs` wins ([`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)). Mountain events keep them aligned — not every craft PR.  
 **Known dirty:** human M1–M7 open only; agent-owned rows **DONE** (ws live futures positions §13→M3). Frontend craft register continuous, not a Done-bar blocker.  
 **Standards:** ENGINEERING-STANDARD + SUBAGENT-PROTOCOL + DECISION-AUTHORITY  
 **Human hard owner:** **`@shehzad002`** — `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md` (M1–M7)
@@ -67,7 +67,7 @@ _Live re-derive required every session. Snapshot at last scoreboard edit:_
 
 ## Tracker demotion
 
-`docs/TRACKER.md` may lag Board Clear merges. **Do not use TRACKER as Board Clear SoT** until a dedicated tracker-sync ship updates rows to match this scoreboard. Scoreboard + NEXT + git tip win any conflict.
+Generated `docs/TRACKER.md` may lag campaign craft. **Scoreboard + NEXT** win for campaign sequencing; **features.mjs** wins for ownership / free / human lock. On Done/Cut/claim/handoff, update tracker the same ship (mountain events — see COORDINATION-TRUTH-LAYERS).
 
 ---
 
