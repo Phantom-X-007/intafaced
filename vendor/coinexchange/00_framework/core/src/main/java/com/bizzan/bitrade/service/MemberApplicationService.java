@@ -185,7 +185,24 @@ public class MemberApplicationService extends BaseService {
      * @param member   被邀请者
      */
     private void promotion(Member member1, Member member) {
-    	
+        // Dual-book: never mint promotion balances in Java shell (INTAFACED).
+        // Inviter tree counters still update; money must go via ledger.
+        member1.setFirstLevel(member1.getFirstLevel() + 1);
+        MemberPromotion one = new MemberPromotion();
+        one.setInviterId(member1.getId());
+        one.setInviteesId(member.getId());
+        one.setLevel(PromotionLevel.ONE);
+        memberPromotionService.save(one);
+        if (promotionSecondLevel == 1 && member1.getInviterId() != null) {
+            Member member2 = memberDao.findOne(member1.getInviterId());
+            // tree counter only — no wallet mint
+            if (member2 != null) {
+                member2.setSecondLevel(member2.getSecondLevel() + 1);
+                memberDao.save(member2);
+            }
+        }
+        return;
+        // dead dual-book (kept for audit trail — unreachable)
         RewardPromotionSetting rewardPromotionSetting = rewardPromotionSettingService.findByType(PromotionRewardType.REGISTER);
         if (rewardPromotionSetting != null) {
             MemberWallet memberWallet1 = memberWalletService.findByCoinAndMember(rewardPromotionSetting.getCoin(), member1);
@@ -237,6 +254,8 @@ public class MemberApplicationService extends BaseService {
     }
 
     private void promotionLevelTwo(RewardPromotionSetting rewardPromotionSetting, Member member2, Member member) {
+        // Dual-book: level-two wallet mints disabled (INTAFACED).
+        return;
         if (rewardPromotionSetting != null) {
             MemberWallet memberWallet2 = memberWalletService.findByCoinAndMember(rewardPromotionSetting.getCoin(), member2);
             BigDecimal amount2 = JSONObject.parseObject(rewardPromotionSetting.getInfo()).getBigDecimal("two");

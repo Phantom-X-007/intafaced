@@ -55,23 +55,35 @@ for (const file of javaFiles) {
       /throw new IllegalStateException\([\s\S]{0,200}(?:dual-book|Java shell must not)/i.test(window) &&
       // throw appears after last method-ish open brace before this line
       true;
-    // crude: if any throw dual-book in previous 25 lines of same indentation block
-    const back = lines.slice(Math.max(0, i - 25), i).join('\n');
+    // Look back far enough for dual-book early-return / null short-circuits.
+    const back = lines.slice(Math.max(0, i - 80), i).join('\n');
     const hasDisableThrow = /throw new IllegalStateException\([\s\S]*?(dual-book|Java shell must not)/i.test(back);
-    const nullShort =
+    const dualBookDead =
       /RewardPromotionSetting\s+\w+\s*=\s*null/.test(back) ||
-      (/if\s*\(\s*\w+\s*!=\s*null\s*\)/.test(lines[i - 2] ?? '') === false && /rewardPromotionSetting\s*=\s*null/.test(back));
+      /RewardActivitySetting\s+\w+\s*=\s*null/.test(back) ||
+      /rewardPromotionSetting\s*=\s*null/.test(back) ||
+      /rewardActivitySetting\s*=\s*null/.test(back) ||
+      /if\s*\(\s*false\s*&&/.test(back) ||
+      /Dual-book:[^\n]*disabled/i.test(back) ||
+      /never mint promotion balances/i.test(back) ||
+      /wallet mints disabled/i.test(back) ||
+      /level-two wallet mints disabled/i.test(back) ||
+      /dead dual-book/i.test(back);
 
     // Controllers are HTTP door territory — mark CONTROLLED
     const rel = relative(ROOT, file).replace(/\\/g, '/');
     const isController = /\/controller\//i.test(rel);
-    const isCommented = line.includes('//') && line.trim().startsWith('//');
+    const isCommented = /^\s*\/\//.test(line) || line.trim().startsWith('*');
+    const isWalletZeroInit =
+      /set(?:Frozen)?Balance\s*\(\s*new BigDecimal\s*\(\s*0\s*\)\s*\)/.test(line) ||
+      /set(?:Frozen)?Balance\s*\(\s*BigDecimal\.ZERO\s*\)/.test(line);
 
     let kind = 'LIVE';
     if (isCommented) kind = 'COMMENT';
     else if (hasDisableThrow) kind = 'DEAD_THROW';
-    else if (nullShort && /setBalance/.test(line)) kind = 'DEAD_NULL';
+    else if (dualBookDead) kind = 'DEAD_NULL';
     else if (isController) kind = 'HTTP_DOOR';
+    else if (isWalletZeroInit) kind = 'WALLET_INIT_ZERO';
 
     rows.push({ kind, file: rel, line: i + 1, snippet: line.trim().slice(0, 120) });
   }

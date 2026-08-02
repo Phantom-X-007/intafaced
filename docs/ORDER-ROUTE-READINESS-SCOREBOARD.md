@@ -16,7 +16,7 @@
 | CEX assembled            | **honest residual** | order-path-smoke L1 health + L2 auth env      | Docker host + tokens residual            |
 | CEX reconcile            | **landed**          | reconcileOrder                                | P1-5                                     |
 | Dual-book scans          | **green**           | java-money + door + **path unit**             | P2-2/3 · path unit 2026-08-02            |
-| Dual-book door + service | **landed**          | interceptor + throws; LIVE classify → **10**  | M7 shehzad H-OR-JAVA                     |
+| Dual-book door + service | **landed**          | interceptor + throws; LIVE mint → **0**       | wallet-init zeros + HTTP door residual   |
 | Dual-book ADR            | **Accepted**        | DIRECTION #272 era                            | P2-5                                     |
 | DEX honesty              | **green on tip**    | quote suite + routePreview test               | P3                                       |
 | Seed honesty             | **green (code)**    | flag + kill + tape + make-only; seeder on tip | ops compose boot residual                |
