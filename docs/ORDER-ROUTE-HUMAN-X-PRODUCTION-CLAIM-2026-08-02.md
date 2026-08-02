@@ -17,6 +17,8 @@
 
 Open: GitHub → Actions → **Order-path CX-8** → latest green on `main`.
 
+**Agent-side order-route + post-pile deep audit is finished** (see `docs/audit/2026-08-02-post-pile-deep/AGENT-COMPLETE-SEAL-2026-08-02.md`). Remaining product mountains (pay card, futures risk, etc.) are **shehzad M1–M7**, not more agent order-route invent.
+
 ---
 
 ## Your checklist (do in order when you mean live money)
