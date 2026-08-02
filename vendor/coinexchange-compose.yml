@@ -7,6 +7,30 @@
 # Ports are offset into the 55xx/56xx range so nothing here collides with the
 # services the platform already uses (Postgres 5433, Redis 6380, NATS 4222).
 #
+# ── Every published port is bound to 127.0.0.1, deliberately ─────────────────
+#
+# A bare `5506:3306` in compose binds 0.0.0.0 — every interface on the host, not
+# just loopback. An audit on 2026-08-02 found MySQL, MongoDB, Redis and Kafka
+# all listening on 0.0.0.0 on a running machine.
+#
+# That is worse here than it would be for our own stack, for three reasons:
+#
+#   1. NONE of this is referenced by any TypeScript or compose file in the
+#      platform. It is a second, unused stack that was left running.
+#   2. `custody-scan` walks only `.ts`/`.tsx`, so no doctrine gate has ever read
+#      a line of the Java that these datastores back.
+#   3. MySQL here has no password on the root account by the source's own
+#      configuration, and the Kafka listener does no authentication at all.
+#
+# So the exposure was: four unauthenticated datastores, on all interfaces,
+# belonging to a stack nobody is watching. Nothing in the platform needs them
+# reachable from off-box — the Java services talk to them over the compose
+# network, which is unaffected by this binding.
+#
+# If you genuinely need remote access, use an SSH tunnel rather than widening
+# this. Changing `127.0.0.1:` back to nothing re-opens all four at once, which
+# is exactly how this happened the first time.
+#
 # ── Versions, and why they are not the ones the source asks for ──────────────
 #
 # The README specifies MySQL 5.5.16 (2011), Redis 3.2 (EOL 2018), MongoDB 3.6
@@ -32,7 +56,7 @@ services:
     # utf8 throughout, so this is a deliberate widening.
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
     ports:
-      - '${COINEX_MYSQL_PORT:-5506}:3306'
+      - '127.0.0.1:${COINEX_MYSQL_PORT:-5506}:3306'
     volumes:
       - coinex-mysql:/var/lib/mysql
       # NOTHING is mounted at /docker-entrypoint-initdb.d, and that is a finding
@@ -61,7 +85,7 @@ services:
     image: mongo:6
     container_name: intafaced-coinex-mongo
     ports:
-      - '${COINEX_MONGO_PORT:-57017}:27017'
+      - '127.0.0.1:${COINEX_MONGO_PORT:-57017}:27017'
     volumes:
       - coinex-mongo:/data/db
     healthcheck:
@@ -74,7 +98,7 @@ services:
     image: redis:7-alpine
     container_name: intafaced-coinex-redis
     ports:
-      - '${COINEX_REDIS_PORT:-6381}:6379'
+      - '127.0.0.1:${COINEX_REDIS_PORT:-6381}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -99,7 +123,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
     ports:
-      - '${COINEX_KAFKA_PORT:-9094}:9092'
+      - '127.0.0.1:${COINEX_KAFKA_PORT:-9094}:9092'
     volumes:
       - coinex-kafka:/var/lib/kafka/data
 
@@ -127,7 +151,7 @@ services:
       - ./coinexchange/00_framework:/app:ro
     command: ['java', '-Xms256m', '-Xmx512m', '-jar', 'cloud/target/cloud.jar']
     ports:
-      - '${COINEX_EUREKA_PORT:-7000}:7000'
+      - '127.0.0.1:${COINEX_EUREKA_PORT:-7000}:7000'
     depends_on:
       coinex-mysql: { condition: service_healthy }
 
@@ -164,7 +188,7 @@ services:
       - ./coinexchange/00_framework:/app:ro
     command: ['java', '-Xms256m', '-Xmx512m', '-jar', 'ucenter-api/target/ucenter-api.jar']
     ports:
-      - '${COINEX_UCENTER_PORT:-6001}:6001'
+      - '127.0.0.1:${COINEX_UCENTER_PORT:-6001}:6001'
     depends_on:
       coinex-market: { condition: service_started }
       coinex-redis: { condition: service_healthy }
