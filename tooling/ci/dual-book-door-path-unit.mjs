@@ -48,9 +48,7 @@ if (!block) {
 
 const fragments = [...block[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
 if (fragments.length < 25) {
-  console.error(
-    `✖ dual-book-door-path-unit: fragment floor 25 not met (found ${fragments.length}) — Spec DB-2 inventory class`,
-  );
+  console.error(`✖ dual-book-door-path-unit: fragment floor 25 not met (found ${fragments.length}) — Spec DB-2 inventory class`);
   process.exit(1);
 }
 
@@ -69,13 +67,7 @@ const mustBlock = [
   '/uc/redenvelope/receive',
 ];
 
-const mustAllow = [
-  '/uc/member/login',
-  '/market/symbol-thumb',
-  '/health',
-  '/actuator/health',
-  '/uc/asset/wallet',
-];
+const mustAllow = ['/uc/member/login', '/market/symbol-thumb', '/health', '/actuator/health', '/uc/asset/wallet'];
 
 const fails = [];
 for (const u of mustBlock) {

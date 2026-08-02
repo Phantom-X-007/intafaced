@@ -57,13 +57,10 @@ for (const file of javaFiles) {
       true;
     // crude: if any throw dual-book in previous 25 lines of same indentation block
     const back = lines.slice(Math.max(0, i - 25), i).join('\n');
-    const hasDisableThrow = /throw new IllegalStateException\([\s\S]*?(dual-book|Java shell must not)/i.test(
-      back,
-    );
+    const hasDisableThrow = /throw new IllegalStateException\([\s\S]*?(dual-book|Java shell must not)/i.test(back);
     const nullShort =
       /RewardPromotionSetting\s+\w+\s*=\s*null/.test(back) ||
-      /if\s*\(\s*\w+\s*!=\s*null\s*\)/.test(lines[i - 2] ?? '') === false &&
-        /rewardPromotionSetting\s*=\s*null/.test(back);
+      (/if\s*\(\s*\w+\s*!=\s*null\s*\)/.test(lines[i - 2] ?? '') === false && /rewardPromotionSetting\s*=\s*null/.test(back));
 
     // Controllers are HTTP door territory — mark CONTROLLED
     const rel = relative(ROOT, file).replace(/\\/g, '/');

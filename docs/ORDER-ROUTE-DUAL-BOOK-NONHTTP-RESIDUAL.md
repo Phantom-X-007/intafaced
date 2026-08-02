@@ -5,10 +5,10 @@
 
 ## Summary
 
-| Kind | Count | Meaning |
-| --- | --- | --- |
-| **LIVE** | **10** | Real H-OR-JAVA candidates (non-HTTP, not behind dual-book throw) |
-| **HTTP_DOOR** | **14** | Controllers — must stay listed in DualBookMoneyDoorInterceptor |
+| Kind                       | Count        | Meaning                                                             |
+| -------------------------- | ------------ | ------------------------------------------------------------------- |
+| **LIVE**                   | **10**       | Real H-OR-JAVA candidates (non-HTTP, not behind dual-book throw)    |
+| **HTTP_DOOR**              | **14**       | Controllers — must stay listed in DualBookMoneyDoorInterceptor      |
 | **DEAD_NULL / DEAD_THROW** | (classifier) | Already short-circuited by #289 dual-book work — **not** open holes |
 
 Earlier “23 live” inventory mixed dead service bodies with true residual. **Do not re-open dead sites.**
@@ -17,13 +17,13 @@ Earlier “23 live” inventory mixed dead service bodies with true residual. **
 
 Agents **must not** implement these under Board Clear (`LIVE-LANES` H-OR-JAVA). Owner: shehzad.
 
-| File (brand-safe) | Line | Snippet |
-| --- | ---: | --- |
-| `…/admin/…/ForkJoin/ForkJoinWork.java` | 86–87 | wallet zero init setBalance/setFrozenBalance |
-| `…/core/…/MemberApplicationService.java` | 194, 243 | promotion path setBalance |
-| `…/otc-api/…/event/OrderEvent.java` | 71 | promotion setBalance |
-| `…/wallet/…/CoinConsumer.java` | 89–90 | wallet create zeros |
-| `…/wallet/…/MemberConsumer.java` | 108–109, 149 | wallet create zeros + reward credit |
+| File (brand-safe)                        |         Line | Snippet                                      |
+| ---------------------------------------- | -----------: | -------------------------------------------- |
+| `…/admin/…/ForkJoin/ForkJoinWork.java`   |        86–87 | wallet zero init setBalance/setFrozenBalance |
+| `…/core/…/MemberApplicationService.java` |     194, 243 | promotion path setBalance                    |
+| `…/otc-api/…/event/OrderEvent.java`      |           71 | promotion setBalance                         |
+| `…/wallet/…/CoinConsumer.java`           |        89–90 | wallet create zeros                          |
+| `…/wallet/…/MemberConsumer.java`         | 108–109, 149 | wallet create zeros + reward credit          |
 
 **Recommended M7 approach:** entry-point throws / job disable (same PEACE pattern as MemberWalletService), then re-run classify until LIVE=0; keep HTTP_DOOR under interceptor inventory.
 

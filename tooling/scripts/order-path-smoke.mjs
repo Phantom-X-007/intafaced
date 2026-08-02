@@ -75,18 +75,10 @@ async function main() {
   log('CX-8 assembled path probe — trade + matching + ledger');
   log(`TRADE=${TRADE} MATCHING=${MATCHING} LEDGER=${LEDGER}`);
 
-  const probes = await Promise.all([
-    probe('trade', TRADE),
-    probe('matching', MATCHING),
-    probe('ledger', LEDGER),
-  ]);
+  const probes = await Promise.all([probe('trade', TRADE), probe('matching', MATCHING), probe('ledger', LEDGER)]);
 
   for (const p of probes) {
-    log(
-      p.ok
-        ? `UP  ${p.name} ${p.url} status=${p.status}`
-        : `DOWN ${p.name} ${p.url} ${p.error ?? `status=${p.status}`}`,
-    );
+    log(p.ok ? `UP  ${p.name} ${p.url} status=${p.status}` : `DOWN ${p.name} ${p.url} ${p.error ?? `status=${p.status}`}`);
   }
 
   const allUp = probes.every((p) => p.ok);
@@ -133,9 +125,7 @@ async function main() {
       },
     });
     if (!place.res.ok) {
-      log(
-        `AUTH_PLACE_FAIL status=${place.res.status} body=${JSON.stringify(place.json).slice(0, 400)}`,
-      );
+      log(`AUTH_PLACE_FAIL status=${place.res.status} body=${JSON.stringify(place.json).slice(0, 400)}`);
       // Auth/market misconfig is residual, not invent — exit 1 only in STRICT
       if (STRICT) process.exit(1);
       log('HONEST_SKIP: fleet up but place refused (auth/market/funds residual)');
@@ -148,11 +138,7 @@ async function main() {
         method: 'DELETE',
         bearer: BEARER,
       });
-      log(
-        cancel.res.ok
-          ? `AUTH_CANCEL_OK orderId=${orderId}`
-          : `AUTH_CANCEL_FAIL status=${cancel.res.status}`,
-      );
+      log(cancel.res.ok ? `AUTH_CANCEL_OK orderId=${orderId}` : `AUTH_CANCEL_FAIL status=${cancel.res.status}`);
     }
     log('PROOF_OK assembled-auth-place-cancel');
   }
