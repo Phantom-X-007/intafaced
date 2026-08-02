@@ -11,7 +11,7 @@
 
 | Surface                             | Path                               | Stack                                            | Port (dev)           | Role                                                                                        |
 | ----------------------------------- | ---------------------------------- | ------------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------- |
-| **Vendored exchange staff console** | `vendor/coinexchange/04_Web_Admin` | Vue 2 · webpack · **iView 2** (iview-admin fork) | webpack-dev (legacy) | Venue-era ops: members, OTC, finance examine, CMS content, red envelopes, etc.              |
+| **Vendored exchange staff console** | `vendor/*/04_Web_Admin` | Vue 2 · webpack · **iView 2** (iview-admin fork) | webpack-dev (legacy) | Venue-era ops: members, OTC, finance examine, CMS content, red envelopes, etc.              |
 | **INTAFACED operator console**      | `apps/admin`                       | Next 15 · React 19 · monorepo tokens             | **3100**             | Doctrine §14.6: kill-switches, launch drops, jurisdiction, ledger freeze/reconcile friction |
 
 **Product rule:** `apps/admin` **must not** grow venue SQL or hold balances. Money moves only via ledger recipes / control-plane commands.
@@ -106,7 +106,7 @@
 ## 8 · How to re-derive
 
 ```bash
-find vendor/coinexchange/04_Web_Admin/src/views -name '*.vue' | wc -l
+find vendor/*/04_Web_Admin/src/views -name '*.vue' | wc -l
 find apps/admin/src -name '*.tsx'
 pnpm --filter @intafaced/admin typecheck
 ```
