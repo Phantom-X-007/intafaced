@@ -310,3 +310,5 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
     client.socket.close();
   });
 });
+
+// ci: retrigger
