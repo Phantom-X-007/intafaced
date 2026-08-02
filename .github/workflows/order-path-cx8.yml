@@ -1,0 +1,91 @@
+# CX-8 assembled order-path proof (B-layer).
+# Thrift: path-filtered + workflow_dispatch — not on pure docs PRs.
+name: Order-path CX-8
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tooling/scripts/order-path-smoke.mjs'
+      - 'tooling/scripts/order-path-cx8-boot.mjs'
+      - '.github/workflows/order-path-cx8.yml'
+      - 'services/svc-trade/**'
+      - 'services/svc-matching/**'
+      - 'services/svc-ledger/**'
+      - 'services/svc-identity/**'
+      - 'packages/contracts/**'
+      - 'packages/ledger-client/**'
+      - 'packages/events/**'
+      - 'packages/config/**'
+
+concurrency:
+  group: order-path-cx8-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  INTERNAL_SERVICE_SECRET: cx8-internal-service-secret-32chars!!
+  EDGE_PRINCIPAL_SECRET: cx8-edge-principal-secret-32chars!!!!
+  JWT_ACCESS_SECRET: cx8-jwt-access-secret-32-characters!!
+
+jobs:
+  assembled:
+    name: CX-8 assembled smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: intafaced
+          POSTGRES_PASSWORD: intafaced
+          POSTGRES_DB: intafaced
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U intafaced -d intafaced"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Start NATS JetStream
+        run: |
+          docker run -d --name cx8-nats -p 4222:4222 -p 8222:8222 \
+            nats:2.10-alpine --jetstream --http_port=8222 --store_dir=/data
+          for i in $(seq 1 30); do
+            wget -q -O- http://127.0.0.1:8222/healthz && break
+            sleep 1
+          done
+
+      - name: Bootstrap schemas (same as main CI Tests)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          PGPASSWORD=intafaced psql -h 127.0.0.1 -U intafaced -d intafaced \
+            -f tooling/infra/postgres-init/01-service-schemas.sql
+          bash tooling/infra/postgres-init/02-intafaced-test-db.sh
+        env:
+          PGPASSWORD: intafaced
+
+      - name: Build packages used by money path
+        run: pnpm exec turbo run build --filter=@intafaced/svc-ledger --filter=@intafaced/svc-matching --filter=@intafaced/svc-trade --filter=@intafaced/svc-identity --filter=@intafaced/contracts --filter=@intafaced/ledger-client --filter=@intafaced/events --filter=@intafaced/config --filter=@intafaced/auth --filter=@intafaced/db --filter=@intafaced/exchange-contract
+
+      - name: CX-8 boot + STRICT smoke
+        run: node tooling/scripts/order-path-cx8-boot.mjs
+        env:
+          NATS_URL: nats://127.0.0.1:4222
+          TEST_DATABASE_URL: postgres://svc_ledger:svc_ledger@127.0.0.1:5432/intafaced_test
+          TEST_DATABASE_URL_TRADE: postgres://svc_trade:svc_trade@127.0.0.1:5432/intafaced_test
+          TEST_DATABASE_URL_IDENTITY: postgres://svc_identity:svc_identity@127.0.0.1:5432/intafaced_test
+          LEDGER_DATABASE_URL: postgres://svc_ledger:svc_ledger@127.0.0.1:5432/intafaced_test
+          TRADE_DATABASE_URL: postgres://svc_trade:svc_trade@127.0.0.1:5432/intafaced_test
+          IDENTITY_DATABASE_URL: postgres://svc_identity:svc_identity@127.0.0.1:5432/intafaced_test

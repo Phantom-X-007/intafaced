@@ -1,0 +1,197 @@
+#!/usr/bin/env node
+/**
+ * CX-8 CI boot helper — start ledger + matching + trade + identity against
+ * CI postgres/nats, migrate, then run order-path-smoke STRICT.
+ *
+ * Env (set by workflow):
+ *   DATABASE_URL_ROOT or per-service URLs
+ *   NATS_URL, INTERNAL_SERVICE_SECRET, EDGE_PRINCIPAL_SECRET, JWT_ACCESS_SECRET
+ *   CX8_SKIP_IDENTITY=1 — L1 only (not default)
+ */
+import { spawn } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
+
+const ROOT = process.cwd();
+const SECRET = process.env.INTERNAL_SERVICE_SECRET ?? 'cx8-internal-service-secret-32chars!!';
+const EDGE = process.env.EDGE_PRINCIPAL_SECRET ?? 'cx8-edge-principal-secret-32chars!!!!';
+const JWT = process.env.JWT_ACCESS_SECRET ?? 'cx8-jwt-access-secret-32-characters!!';
+const NATS = process.env.NATS_URL ?? 'nats://127.0.0.1:4222';
+const PG = process.env.CX8_POSTGRES ?? 'postgres://intafaced:intafaced@127.0.0.1:5432/intafaced_test';
+
+const children = [];
+
+function log(msg) {
+  console.log(`[cx8-boot] ${msg}`);
+}
+
+function run(cmd, args, env = {}) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(cmd, args, {
+      cwd: ROOT,
+      env: { ...process.env, ...env },
+      stdio: 'inherit',
+    });
+    p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} ${args.join(' ')} → ${code}`))));
+  });
+}
+
+function start(name, cmd, args, env = {}) {
+  log(`start ${name}`);
+  const p = spawn(cmd, args, {
+    cwd: ROOT,
+    env: { ...process.env, ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  p.stdout.on('data', (d) => process.stdout.write(`[${name}] ${d}`));
+  p.stderr.on('data', (d) => process.stderr.write(`[${name}] ${d}`));
+  children.push({ name, p });
+  p.on('exit', (code, signal) => {
+    log(`${name} exited code=${code} signal=${signal}`);
+  });
+  return p;
+}
+
+async function waitHealth(url, label, attempts = 60) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(`${url}/health`);
+      if (res.ok || res.status < 500) {
+        log(`healthy ${label}`);
+        return;
+      }
+    } catch {
+      /* retry */
+    }
+    await sleep(1000);
+  }
+  throw new Error(`timeout waiting for ${label} at ${url}`);
+}
+
+function killAll() {
+  for (const { name, p } of children) {
+    try {
+      p.kill('SIGTERM');
+    } catch {
+      log(`kill ${name} failed`);
+    }
+  }
+}
+
+process.on('exit', killAll);
+process.on('SIGINT', () => {
+  killAll();
+  process.exit(130);
+});
+
+const common = {
+  APP_ENV: 'test',
+  LOG_LEVEL: 'warn',
+  NATS_URL: NATS,
+  NATS_STREAM_PREFIX: 'CX8',
+  INTERNAL_SERVICE_SECRET: SECRET,
+  EDGE_PRINCIPAL_SECRET: EDGE,
+  JWT_ACCESS_SECRET: JWT,
+  JWT_ISSUER: 'intafaced-cx8',
+  JWT_AUDIENCE: 'intafaced',
+  INTERNAL_SERVICE_BODY_BIND: 'accept-both',
+};
+
+async function main() {
+  log(`PG=${PG} NATS=${NATS}`);
+
+  const ledgerUrl = process.env.TEST_DATABASE_URL ?? process.env.LEDGER_DATABASE_URL ?? PG;
+  const tradeUrl = process.env.TEST_DATABASE_URL_TRADE ?? process.env.TRADE_DATABASE_URL ?? PG;
+  const identityUrl = process.env.TEST_DATABASE_URL_IDENTITY ?? process.env.IDENTITY_DATABASE_URL ?? PG;
+
+  await run('pnpm', ['--filter', '@intafaced/svc-ledger', 'db:migrate'], {
+    DATABASE_URL: ledgerUrl,
+    ...common,
+  });
+  await run('pnpm', ['--filter', '@intafaced/svc-trade', 'db:migrate'], {
+    DATABASE_URL: tradeUrl,
+    ...common,
+  });
+  await run('pnpm', ['--filter', '@intafaced/svc-identity', 'db:migrate'], {
+    DATABASE_URL: identityUrl,
+    ...common,
+  });
+
+  mkdirSync(join(ROOT, '.data/matching'), { recursive: true });
+  writeFileSync(join(ROOT, '.data/matching/engine_journal.ndjson'), '');
+
+  // Matching first (no DB)
+  start('matching', 'node', ['services/svc-matching/dist/index.js'], {
+    ...common,
+    SERVICE_NAME: 'svc-matching',
+    HTTP_HOST: '127.0.0.1',
+    HTTP_PORT: '4005',
+    MATCHING_JOURNAL_PATH: join(ROOT, '.data/matching/engine_journal.ndjson'),
+  });
+
+  start('ledger', 'node', ['services/svc-ledger/dist/index.js'], {
+    ...common,
+    SERVICE_NAME: 'svc-ledger',
+    HTTP_HOST: '127.0.0.1',
+    HTTP_PORT: '4001',
+    DATABASE_URL: ledgerUrl,
+    LEDGER_POSTING_ENABLED: 'true',
+  });
+
+  start('identity', 'node', ['services/svc-identity/dist/index.js'], {
+    ...common,
+    SERVICE_NAME: 'svc-identity',
+    HTTP_HOST: '127.0.0.1',
+    HTTP_PORT: '4002',
+    DATABASE_URL: identityUrl,
+    REGISTRATION_OPEN: 'true',
+    WEBAUTHN_ENABLED: 'false',
+    WEBAUTHN_RP_ID: 'localhost',
+    WEBAUTHN_RP_NAME: 'cx8',
+    WEBAUTHN_ORIGIN: 'http://localhost',
+  });
+
+  await waitHealth('http://127.0.0.1:4005', 'matching');
+  await waitHealth('http://127.0.0.1:4001', 'ledger');
+  await waitHealth('http://127.0.0.1:4002', 'identity');
+
+  start('trade', 'node', ['services/svc-trade/dist/index.js'], {
+    ...common,
+    SERVICE_NAME: 'svc-trade',
+    HTTP_HOST: '127.0.0.1',
+    HTTP_PORT: '4004',
+    DATABASE_URL: tradeUrl,
+    LEDGER_URL: 'http://127.0.0.1:4001',
+    MATCHING_URL: 'http://127.0.0.1:4005',
+    IDENTITY_URL: 'http://127.0.0.1:4002',
+    TRADE_SPOT_ENABLED: 'true',
+  });
+
+  await waitHealth('http://127.0.0.1:4004', 'trade');
+
+  await run('node', ['tooling/scripts/order-path-smoke.mjs'], {
+    TRADE_HTTP_URL: 'http://127.0.0.1:4004',
+    MATCHING_HTTP_URL: 'http://127.0.0.1:4005',
+    LEDGER_HTTP_URL: 'http://127.0.0.1:4001',
+    ORDER_PATH_SMOKE_STRICT: '1',
+    EDGE_PRINCIPAL_SECRET: EDGE,
+    INTERNAL_SERVICE_SECRET: SECRET,
+    TRADE_SMOKE_SEED_SQL: '1',
+    TRADE_DATABASE_URL: tradeUrl,
+    TRADE_SMOKE_SYMBOL: 'BTC/USDT',
+    TRADE_SMOKE_QTY: '0.01',
+    TRADE_SMOKE_PRICE: '100',
+    TRADE_SMOKE_REGION: 'DE',
+  });
+
+  log('CX-8 boot + smoke complete');
+  killAll();
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('[cx8-boot] fatal', err);
+  killAll();
+  process.exit(1);
+});
