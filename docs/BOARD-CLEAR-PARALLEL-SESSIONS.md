@@ -29,10 +29,12 @@
      - if intersection with non-Board-Clear owner → skip ship, pick next non-overlapping agent residual
      - if intersection with another Board Clear PR → babysit that PR first; no second PR on same paths
 5. LIVE-LANES: ensure program row is AGENT and not dual-claimed this session
-6. Only then worktree from origin/main tip
+6. Product ownership (COORDINATION-TRUTH-LAYERS): if mountain is human-owned / shehzad002 / not free → babysit only; never invent free
+7. Only then worktree from origin/main tip
 ```
 
-**Fail = dual-build** = two live PRs editing the same path without one closing.
+**Fail = dual-build** = two live PRs editing the same path without one closing.  
+**Fail = wrong-mountain** = implement on tracker/LIVE-LANES human lock.
 
 ---
 

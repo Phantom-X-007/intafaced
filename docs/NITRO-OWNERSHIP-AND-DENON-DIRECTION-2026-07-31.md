@@ -33,13 +33,15 @@ Strict order — **first hit wins** for “what is true right now”:
 | Priority | Surface                                                                    | Holds                                                              | Does **not** hold                    |
 | -------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
 | 1        | **Live git + GitHub**                                                      | Tip, open/merged PRs, CI                                           | Preferences                          |
-| 2        | **`docs/LIVE-LANES.md`** + **`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`** | Who is coding what _now_ (incl. `@shehzad002` H-\* hard mountains) | Product law                          |
-| 3        | **This file**                                                              | Who owns direction vs execution                                    | Live PR lists                        |
-| 4        | **`docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`**                           | Residual program, waves, merge gates for campaign                  | Session gossip                       |
-| 5        | **`docs/FRONTEND-STATE-OF-TRUTH-*.md`**                                    | Frontend look/plan lock                                            | Spine status                         |
-| 6        | **`docs/GRIND-LOOP-ACTIVE.md`**                                            | Compaction-safe cook/babysit loop                                  | Overrides ownership law              |
-| 7        | **`docs/START-HERE.md`**                                                   | Nitro plain map                                                    | Eternal tip SHA                      |
-| 8        | **Chat session or experimental memory**                                    | Soft prefs (“plain language”)                                      | Lanes, tip, merge rights, high water |
+| 2        | **`tooling/tracker/features.mjs`** (+ generated `docs/TRACKER.md`)         | Product free / wip / done / human owner (mountain events)          | Campaign micro-next; hour-scale lanes |
+| 3        | **`docs/LIVE-LANES.md`** + **`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`** | Who is coding what _now_ (incl. `@shehzad002` H-\* hard mountains) | Product Done bar alone               |
+| 4        | **This file**                                                              | Who owns direction vs execution                                    | Live PR lists                        |
+| 5        | **`docs/COORDINATION-TRUTH-LAYERS.md`**                                    | Which surface answers which question                               | Live tip SHAs                        |
+| 6        | **`docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`** / Board Clear campaign    | Campaign sequence when active                                      | Erase tracker ownership              |
+| 7        | **`docs/FRONTEND-STATE-OF-TRUTH-*.md`**                                    | Frontend look/plan lock                                            | Spine status                         |
+| 8        | **`docs/GRIND-LOOP-ACTIVE.md`**                                            | Compaction-safe cook/babysit loop                                  | Overrides ownership law              |
+| 9        | **`docs/START-HERE.md`**                                                   | Nitro plain map                                                    | Eternal tip SHA                      |
+| 10       | **Chat session or experimental memory**                                    | Soft prefs (“plain language”)                                      | Lanes, tip, merge rights, high water |
 
 **One home per fact.** Do not fork a second “ownership v2” doc. Update this file or the campaign home.
 

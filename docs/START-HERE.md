@@ -32,7 +32,8 @@ Two **planes** (lanes of risk):
 | `tooling/agent-protocol/AGENT_PROTOCOL.md` | **How agents change code** (hard bans).                                                |
 | `CONTRIBUTING.md`                          | **How we collab** (worktrees, PRs).                                                    |
 | `docs/TRACKER.md`                          | **Product feature map** — ready / blocked / done / owner (not campaign micro-next).    |
-| `docs/COORDINATION-TRUTH-LAYERS.md`        | **Which file answers which question** (tracker vs Board Clear vs LIVE-LANES).        |
+| `docs/COORDINATION-TRUTH-LAYERS.md`        | **Which file answers which question** (tracker vs Board Clear vs LIVE-LANES). **Finished law.** |
+| `docs/COORDINATION-FINISH-AUDIT-2026-08-02.md` | How to re-audit F1–F10; what “done” means for this program. |
 
 If two docs disagree on **product ownership / free work:** **law + tracker** win over memory, Telegram, or campaign boards. Campaign **NEXT** only wins for “what to ship next in Board Clear,” never to erase human locks.
 

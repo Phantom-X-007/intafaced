@@ -3,6 +3,7 @@
 **Rule:** No code edits until your lane is on this board. First claimer wins.  
 **How to use:** `docs/NITRO-PARALLEL-OPS.md` if present; else claim here + `gh pr list` collision check.  
 **Law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`  
+**Truth layers:** [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md) — this file = **session** who-codes-what; product free/owner/done = `tooling/tracker/features.mjs` (not this board alone).  
 **Re-derive tip every fire:** `git fetch && git log -1 --oneline origin/main`
 
 | Lane id         | Owner session  | Scope                                              | Status                    | PR / proof                         | Do not touch                                             |

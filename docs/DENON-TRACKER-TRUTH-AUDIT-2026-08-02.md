@@ -4,7 +4,7 @@
 **Source:** Nitro–Denon call (“intafaced tracker”) — Denon: update the project tracker on every push/merge (worktree or main) so other devs/agents share one truth of current context; main work not registered → agent conflict.  
 **Scope:** Analysis only. No code changes. No process ceremony executed this turn.  
 **Verdict status:** `[VERIFIED 2026-08-02]` against `origin/main` tip `26289f3` (#381) + live `features.mjs` + CI workflow + Board Clear docs.  
-**Supersession:** Solution/options in §9 here are **draft only**. Phase-correct framing, anti-list, and forward plan live in [`TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md`](TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md).
+**Supersession:** Solution executed — [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md) (#385) + finish seal. Plan: [`TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md`](TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md). Finish audit: [`COORDINATION-FINISH-AUDIT-2026-08-02.md`](COORDINATION-FINISH-AUDIT-2026-08-02.md).
 
 ---
 
@@ -166,7 +166,7 @@ Evidence on `origin/main` (2026-08-02):
    - (b) `tooling/tracker/features.mjs` / `pnpm tracker ready` for **product ownership & done/wip**  
    - (c) `docs/LIVE-LANES.md` for **session lane**  
    - (d) Board Clear NEXT only for **campaign sequencing** — never as exclusive SoT that erases tracker  
-4. **Reconcile the contradiction:** Board Clear’s “never TRACKER as live SoT” must be narrowed to “don’t use *stale generated* TRACKER.md alone for campaign micro-next” — **not** “ignore feature ownership.” Needs a doc fix when you next allow doc work.  
+4. **Reconcile the contradiction:** **DONE** (#385) — NEXT = campaign sequence only; product ownership remains `features.mjs`.  
 5. **When shipping under a coarse WIP row:** same PR (or same PR stack) updates `note` + keeps `owner`; don’t invent 40 new feature ids for craft.  
 6. **When a mountain actually meets Done bar:** flip `done` + `requires` with proof — P-TRACK style honesty pass.  
 7. **Order-route / other programs:** either register a feature id or an explicit socket/wip row so tracker-only readers see the mountain exists.
