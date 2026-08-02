@@ -4,6 +4,8 @@
 **You (Nitro):** this page + the recovery doc. Full plan only if curious.  
 **Next go:** paste `docs/FRONTEND-GO-READY-BRIEF-2026-08-02.md` then **go**.
 
+**Machine gates:** `pnpm frontend:preflight` · `pnpm frontend:residual`
+
 **Level law (read before ship):** [`FRONTEND-LEVEL-RECOVERY-AND-GO-READY-2026-08-02.md`](FRONTEND-LEVEL-RECOVERY-AND-GO-READY-2026-08-02.md)
 
 ---

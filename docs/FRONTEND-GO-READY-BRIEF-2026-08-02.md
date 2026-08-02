@@ -1,40 +1,59 @@
-# GO-READY brief — Stream A frontend (paste when Nitro says go)
+# GO-READY brief — Stream A (paste when Nitro says **go**)
 
-**Read first:** `docs/FRONTEND-LEVEL-RECOVERY-AND-GO-READY-2026-08-02.md`  
-**Law chain:** STATE-OF-TRUTH → methodology → plan → Design Bar → OPS-NOW → claim → COLOR-LOCK
+**Do not ship under-level.** Read first:
 
-You are **below bar** if you ship without Orca + scorecard awareness + (for craft) one critique skill.
+1. `docs/FRONTEND-AUTONOMOUS-OPERATING-SYSTEM-2026-08-02.md` (**architecture**)
+2. `docs/FRONTEND-LEVEL-RECOVERY-AND-GO-READY-2026-08-02.md` (hole-poke)
+3. methodology · plan · Design Bar · OPS-NOW · claim · COLOR-LOCK
+
+## Boot command
+
+```bash
+git fetch origin main
+# worktree from tip — never main checkout
+pnpm frontend:preflight          # must exit 0
+pnpm frontend:residual           # print next priorities
+```
+
+If preflight fails: **stop**. Fix law/tools before product code.
 
 ## Goal
 
-World-class **pro trader workbench** on `:8090` (vendored shell). Free hands. No fake money. No second UI kit. Nitro never runs git.
+World-class **pro trader workbench** on `:8090`. Free hands. No fake money. One kit (iView). Nitro never runs git.
 
-## Already on main (do not re-do)
+## Already on main (do not redo blindly)
 
-Wave A honesty (#261 #262 #267) · P21 modular color · Wave B desk core (B5–B10 partial, B12 partial, B14) · auth tokens (#320).
+Wave A honesty · P21 · B5–B10/B12/B14 partial · hotkeys #337 · book honesty #349 · see residual-register.json
 
-## First ship after go (mandatory order)
+## First work after go (fixed order — no asking Nitro)
 
-1. **Provenance PR** if methodology/plan/OPS-NOW still missing from `origin/main`
-2. **Scorecard re-score** + Orca crops (exchange, money, withdraw) — non-implementer if possible
-3. **Impeccable (or design-taste)** pass on desk → fix top holes only
-4. Next residual from recovery §6 (⌘K, deep B3, Admin-0…)
+| Order | ID                     | Work                                                        |
+| ----- | ---------------------- | ----------------------------------------------------------- |
+| 1     | META-SCORECARD         | PROOF-1 re-score + Orca pack → `FRONTEND-SCORECARD-LIVE.md` |
+| 2     | META-CRITIQUE / B13    | impeccable on desk+money+withdraw → fix P0 only             |
+| 3     | B-CMDK                 | ⌘K / global search **or** written waiver in residual        |
+| 4     | B3                     | Deep uc craft = desk tokens/components                      |
+| 5     | B4 / B5 / B9 remainder | per residual priority                                       |
+| 6     | ADMIN-0                | inventory only, separate worktree                           |
 
-## Every PR checklist (print in PR body)
+## Every product PR
 
-- [ ] Gap-audit vs tip
-- [ ] Stream A territory only
-- [ ] Collision check (`gh pr list`)
-- [ ] Steal lines if craft (5 lines)
-- [ ] Orca/ui:proof path
-- [ ] Critique skill note if craft
-- [ ] brand-scan · CI green · Class N self-audit
-- [ ] STATE-OF-TRUTH updated same turn
+```bash
+export SLICE_TYPE=CRAFT   # or HONESTY
+export SLICE_ID=my-slice
+mkdir -p docs/refs/$SLICE_ID && cp docs/refs/_template/* docs/refs/$SLICE_ID/
+# fill gap-audit, steal-lines (craft), critique (craft)
+pnpm frontend:preflight:craft    # or preflight with SLICE_TYPE
+# implement → brand-scan → Orca → CI → Class N merge
+# update residual-register.json status fields same turn
+```
 
-## Do not
+PR body: paste structure from `docs/FRONTEND-STREAM-A-PR-BODY.md`.
 
-role=alert spam · claim “improved” without scorecard · touch order-route/futures money · re-plan from zero · hand Nitro git homework
+## Forbidden busywork
+
+role=alert-only · token renames without Orca · “improved” without scorecard · touch order-route/futures · re-plan from zero · Nitro as runner
 
 ## Nitro only
 
-Palette re-pick · taste “looks like us” · go-live money · Class X
+Palette re-pick · taste “ours” · go-live money · Class X
