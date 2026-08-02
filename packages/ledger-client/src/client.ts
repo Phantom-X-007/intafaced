@@ -2,7 +2,9 @@ import { formatAmount, isNegative, isZero, sum, type Amount } from './money.js';
 import {
   UnbalancedTransactionError,
   InvalidEntryError,
+  OwnerIdentitySpaceError,
   accountPurpose,
+  isValidOwnerId,
   type AccountRef,
   type Balance,
   type EntryInput,
@@ -194,10 +196,45 @@ function assertPurposedLockKinds(entries: readonly EntryInput[], kinds: readonly
   }
 }
 
+/**
+ * INVARIANT 4 — every `ownerId` is drawn from the space its `ownerType` declares.
+ *
+ * `post()` is the only path that opens an account: `upsertAccount` runs inside
+ * it, and nothing else in the OS inserts into `ledger.accounts`. So refusing
+ * here refuses the *creation*, not merely the movement — an owner whose
+ * identifier space is undeclared never gets a row at all.
+ *
+ * The bug this exists to stop is silent by construction. Per the 2026-08-02
+ * ADR, the vendored product's money controllers keep their business logic and
+ * have only their balance writes redirected into this ledger through an
+ * adapter. Their member ids are `bigint`; ours are `uuid`; `owner_id` is `text`
+ * and took either. Hand `String(member.id)` to `userAvailable()` and the post
+ * succeeds: a second `user` account opens for a human who already has one, and
+ * because both rows are individually well-formed, sum-to-zero holds, the hash
+ * chain verifies, reconciliation replays clean and every gate goes green. There
+ * is no reading of the book from which you could tell. The user simply has two
+ * balances and can only see one.
+ *
+ * Checked here rather than in `accounts.ts` for the same reason
+ * `assertPurposedHolds` is: the named constructors are the sanctioned path, not
+ * the only physically possible one, and an adapter assembling an `AccountRef`
+ * inline must be bound by the same rule.
+ */
+export function assertOwnerIdentifierSpace(entries: readonly EntryInput[]): void {
+  for (const entry of entries) {
+    const { ownerType, ownerId } = entry.account;
+    if (!isValidOwnerId(ownerType, ownerId)) throw new OwnerIdentitySpaceError(ownerType, ownerId);
+  }
+}
+
 export function assertValidPost(request: PostRequest): void {
   if (!request.idempotencyKey || request.idempotencyKey.length < 8) {
     throw new InvalidEntryError('An idempotency key of at least 8 characters is required on every post');
   }
+  // FIRST. If the owner is the wrong one, everything below is a well-formed
+  // answer to the wrong question — the entries balance perfectly, into the
+  // wrong human's account.
+  assertOwnerIdentifierSpace(request.entries);
   assertBalanced(request.entries);
   assertPairedLocks(request.entries);
   assertPurposedLocks(request.entries);

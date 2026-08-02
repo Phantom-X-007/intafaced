@@ -68,6 +68,19 @@ const LOANS_DB_URL =
 const BORROWER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
 
+/**
+ * Funding stand-ins for the market maker and the insurance fund.
+ *
+ * They were `'mm-funder'`, `'mm'` and `'ins'`. A `user` owner_id is now
+ * required to be a UUID (§4.2 `accounts_owner_id_space_ck`) — an account is
+ * never opened for an owner whose identifier space is undeclared — so these
+ * carry real ones. The names are kept in the comment because that is all they
+ * ever were: a wallet to push value out of, not an assertion about handles.
+ */
+const MM_FUNDER = '33333333-3333-4333-8333-333333333333';
+const MM_SWEEP = '44444444-4444-4444-8444-444444444444';
+const INSURANCE_FUNDER = '55555555-5555-4555-8555-555555555555';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -701,7 +714,7 @@ describe('loan recipes', () => {
   it('seizes, sells and repays atomically across two assets', async () => {
     await fundReserve('USDT', '10000');
     await fund(BORROWER, 'BTC', '1');
-    await fund('mm-funder', 'USDT', '20000');
+    await fund(MM_FUNDER, 'USDT', '20000');
 
     // The market maker must actually hold cash to buy with.
     await ledger.post({
@@ -709,7 +722,7 @@ describe('loan recipes', () => {
       module: 'test',
       reason: 'seed',
       entries: [
-        { account: userAvailable('mm-funder', 'USDT'), direction: 'credit', amount: amt('20000') },
+        { account: userAvailable(MM_FUNDER, 'USDT'), direction: 'credit', amount: amt('20000') },
         { account: marketMaker('USDT'), direction: 'debit', amount: amt('20000') },
       ],
     });
@@ -821,13 +834,13 @@ describe('loan recipes', () => {
     );
 
     // Fund the insurance fund and it works, moving the loss where it belongs.
-    await fund('ins', 'USDT', '1000');
+    await fund(INSURANCE_FUNDER, 'USDT', '1000');
     await ledger.post({
       idempotencyKey: 'seed-insurance-fund',
       module: 'test',
       reason: 'seed',
       entries: [
-        { account: userAvailable('ins', 'USDT'), direction: 'credit', amount: amt('1000') },
+        { account: userAvailable(INSURANCE_FUNDER, 'USDT'), direction: 'credit', amount: amt('1000') },
         { account: insuranceFund('USDT'), direction: 'debit', amount: amt('1000') },
       ],
     });
@@ -1334,13 +1347,13 @@ if (client === null) {
         await fundReserve('USDT', '100000');
         await fund(BORROWER, 'BTC', '1');
         // Seed the market maker so a liquidation has a funded counterparty.
-        await fund('mm', 'USDT', '100000');
+        await fund(MM_SWEEP, 'USDT', '100000');
         await ledger.post({
           idempotencyKey: `seed-mm-${Math.random()}`,
           module: 'test',
           reason: 'seed',
           entries: [
-            { account: userAvailable('mm', 'USDT'), direction: 'credit', amount: amt('100000') },
+            { account: userAvailable(MM_SWEEP, 'USDT'), direction: 'credit', amount: amt('100000') },
             { account: marketMaker('USDT'), direction: 'debit', amount: amt('100000') },
           ],
         });

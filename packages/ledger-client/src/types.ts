@@ -11,6 +11,93 @@ import type { Amount, AmountString } from './money.js';
 export const OWNER_TYPES = ['user', 'subaccount', 'module', 'house', 'treasury'] as const;
 export type OwnerType = (typeof OWNER_TYPES)[number];
 
+/**
+ * THE IDENTIFIER SPACE OF `ownerId` (§4.2).
+ *
+ * `owner_type` has always said what *role* an owner plays. It has never said
+ * which *identifier space* `owner_id` is drawn from, and `owner_id` is `text`,
+ * so it accepted anything.
+ *
+ * That mattered the moment the 2026-08-02 ADR accepted keeping the vendored
+ * product's money controllers and redirecting their balance writes into this
+ * ledger through an adapter. `identity.users.id` is a `uuid`; the vendored
+ * `member.id` is a `bigint`. An adapter that hands over the wrong one does not
+ * fail — it opens a SECOND perfectly conformant account for the same human.
+ * Both accounts sum to zero, both hash-chain, both reconcile, both are
+ * non-negative. Every gate reports clean and the book is quietly dual. That is
+ * the exact failure the ADR was written to close, walking back in through the
+ * adapter.
+ *
+ * So the ledger declares the space rather than inferring it from the caller:
+ *
+ *   user, subaccount            → a lowercase canonical UUID
+ *   module, house, treasury     → a platform slug, e.g. `fees:trade`
+ *
+ * Deliberately NOT a separate `owner_ns` column. A namespace column is supplied
+ * by the same caller that supplies the id, so an adapter passing a bigint would
+ * pass `ns='member'` alongside it and the pair would be accepted. It relocates
+ * the hole. The space has to be a function of something the ledger already
+ * knows, and `owner_type` is that thing.
+ *
+ * Mirrored EXACTLY by `accounts_owner_id_space_ck`
+ * (svc-ledger/drizzle/0005_owner_identifier_space.sql). The database is the
+ * enforcement; this is the early, legible failure. Equivalence between the two
+ * is asserted case-for-case in svc-ledger/src/ledger/owner-identity.pg.test.ts.
+ */
+export type OwnerIdSpace = 'uuid' | 'platform';
+
+/** Owner types whose `ownerId` is a natural person's (or sub-identity's) UUID. */
+export const UUID_OWNER_TYPES: readonly OwnerType[] = ['user', 'subaccount'];
+
+/**
+ * Lowercase only, on purpose.
+ *
+ * `550E8400-…` and `550e8400-…` are the same human and two different rows under
+ * `accounts_identity_purpose_idx` — the same dual-book failure in different
+ * clothing. Postgres renders `uuid` lowercase, `crypto.randomUUID()` emits
+ * lowercase and Java's `UUID.toString()` emits lowercase, so the canonical form
+ * is the only form anything legitimately produces. Version and variant nibbles
+ * are not pinned: rows predating this constraint are not all v4, and refusing
+ * them would strand real balances for no safety gain.
+ */
+export const UUID_OWNER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * A platform account's namespaced slug: `fees:trade`, `rail:card-sandbox`,
+ * `bank:earn:<poolId>`, `pay:clearing:<merchantId>`, `insurance-fund`, `mint`.
+ *
+ * It must START with a lowercase letter, which is what makes a bare `1042` —
+ * a vendored `member.id` — impossible here too. Later segments stay permissive
+ * because they legitimately carry UUIDs and venue codes
+ * (`pay:clearing:550e8400-…`, `venue:BINANCE`).
+ */
+export const PLATFORM_OWNER_ID_PATTERN = /^[a-z][a-z0-9_-]*(:[A-Za-z0-9._-]+)*$/;
+
+/** Which identifier space this owner type's `ownerId` must be drawn from. */
+export function ownerIdSpace(ownerType: OwnerType): OwnerIdSpace {
+  return UUID_OWNER_TYPES.includes(ownerType) ? 'uuid' : 'platform';
+}
+
+/**
+ * Does `ownerId` belong to the space `ownerType` declares?
+ *
+ * The `platform` branch also refuses a bare UUID. A UUID matches the slug
+ * grammar whenever it happens to start with a hex letter (`a50e8400-…`), so
+ * without this a user id could still land in a `house` or `treasury` account —
+ * the same confusion running the other way.
+ */
+export function isValidOwnerId(ownerType: OwnerType, ownerId: string): boolean {
+  if (ownerIdSpace(ownerType) === 'uuid') return UUID_OWNER_ID_PATTERN.test(ownerId);
+  return PLATFORM_OWNER_ID_PATTERN.test(ownerId) && !UUID_OWNER_ID_PATTERN.test(ownerId);
+}
+
+/** Human-readable description of a space, for error messages. */
+export function describeOwnerIdSpace(ownerType: OwnerType): string {
+  return ownerIdSpace(ownerType) === 'uuid'
+    ? 'a lowercase canonical UUID (identity.users.id / identity.sub_accounts.id)'
+    : 'a namespaced platform slug starting with a lowercase letter, e.g. "fees:trade" or "rail:card-sandbox"';
+}
+
 export const ACCOUNT_KINDS = ['available', 'hold', 'escrow', 'stake', 'collateral'] as const;
 export type AccountKind = (typeof ACCOUNT_KINDS)[number];
 
@@ -158,16 +245,55 @@ export class InvalidEntryError extends LedgerError {
   }
 }
 
+/**
+ * An `ownerId` was not drawn from the space its `ownerType` declares.
+ *
+ * Its own error code rather than a generic `invalid_entry`, because the caller
+ * that trips it is almost always an adapter translating between two identifier
+ * spaces, and "you passed the other system's id" is a completely different fix
+ * from "your entries do not balance". `svc-ledger` maps it to a 400.
+ */
+export class OwnerIdentitySpaceError extends LedgerError {
+  constructor(
+    readonly ownerType: OwnerType,
+    readonly ownerId: string,
+  ) {
+    super(
+      `owner_type "${ownerType}" requires ${describeOwnerIdSpace(ownerType)}, but got "${ownerId}". ` +
+        `An account is never opened for an owner whose identifier space is undeclared: a bigint member id ` +
+        `where a user UUID belongs would open a SECOND conformant account for the same human, and every ` +
+        `invariant would still report clean (§4.2, ADR 2026-08-02).`,
+      'ledger.owner_identity_space',
+    );
+    this.name = 'OwnerIdentitySpaceError';
+  }
+}
+
 // ── Wire schemas (used by svc-ledger's tRPC surface) ─────────────────────────
 
-export const accountRefSchema = z.object({
-  ownerType: z.enum(OWNER_TYPES),
-  ownerId: z.string().min(1),
-  assetId: z.string().min(1).max(16),
-  kind: z.enum(ACCOUNT_KINDS),
-  /** Bounded because it is part of an index key, not free-form metadata. */
-  purpose: z.string().max(128).optional(),
-});
+export const accountRefSchema = z
+  .object({
+    ownerType: z.enum(OWNER_TYPES),
+    ownerId: z.string().min(1),
+    assetId: z.string().min(1).max(16),
+    kind: z.enum(ACCOUNT_KINDS),
+    /** Bounded because it is part of an index key, not free-form metadata. */
+    purpose: z.string().max(128).optional(),
+  })
+  /**
+   * The identifier space, checked at the wire edge as well as in `post()` and in
+   * Postgres. Three layers is not belt-and-braces theatre here: this one turns a
+   * cross-system id mix-up into a 400 naming the field, instead of a 500 from a
+   * CHECK violation that an adapter author has to reverse-engineer.
+   */
+  .superRefine((ref, ctx) => {
+    if (isValidOwnerId(ref.ownerType, ref.ownerId)) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ownerId'],
+      message: `owner_type "${ref.ownerType}" requires ${describeOwnerIdSpace(ref.ownerType)} — got "${ref.ownerId}"`,
+    });
+  });
 
 export const entryInputSchema = z.object({
   account: accountRefSchema,

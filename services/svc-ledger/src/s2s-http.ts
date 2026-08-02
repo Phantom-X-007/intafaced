@@ -46,6 +46,13 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
   if (err instanceof UnbalancedTransactionError || err instanceof InvalidEntryError) {
     return { status: 500, body: { message: err.message, code: err.code } };
   }
+  // 400, not 500: the caller handed us an identifier from the wrong space. That
+  // is a bad request with an actionable fix ("you passed the vendored member id
+  // where a user UUID belongs"), and an adapter must be able to tell it apart
+  // from our own bug — it is the one error where retrying is guaranteed useless.
+  if (err instanceof LedgerError && err.code === 'ledger.owner_identity_space') {
+    return { status: 400, body: { message: err.message, code: err.code } };
+  }
   // 401, not 403: the caller has not said who it is. "Known and not allowed" is
   // a different answer and must stay distinguishable to a calling service.
   if (err instanceof LedgerError && err.code === 'ledger.unauthenticated') {
