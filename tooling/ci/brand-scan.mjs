@@ -112,6 +112,11 @@ const ALLOWLIST = [
     reason: 'internal audit work product; may cite vendor paths when describing CI/brand failures',
   },
   {
+    path: 'docker-compose.apps.yml',
+    reason:
+      'ONE line: the Docker build context for the vendored shell. A build context must be a real directory on disk, so it cannot be aliased away. The alternative was leaving the shell with no way to run at all — which is precisely the drift that made this entry necessary. Infrastructure, never served to a user. Remove once the vendor directory is renamed.',
+  },
+  {
     path: join('docs', 'NITRO-AGENT-PACKAGES-2026-07-30.md'),
     reason:
       'agent work packages; must name the exact shell paths an agent may touch, or the territory boundary is unenforceable and someone edits the wrong stream. Not shipped to users. Remove this entry once the vendor directory is renamed.',
