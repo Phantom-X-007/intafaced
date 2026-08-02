@@ -1,0 +1,56 @@
+# Docs formatting — the cheap half of CI that docs-only changes still need.
+#
+# WHY THIS EXISTS. `ci.yml` carries `paths-ignore: ['docs/**', '**/*.md', ...]`
+# and that exclusion is correct and worth keeping: a Markdown edit cannot break
+# a typecheck, a test or a doctrine gate, and eight docs-only PRs once burned
+# roughly 90 billable minutes of a 2,000-minute pool running the full matrix to
+# format prose.
+#
+# But `format:check` is STEP ONE of `pnpm verify`, and it covers `**/*.md`. So
+# the exclusion had a hole in it: an unformatted Markdown file could land on
+# `main` without any CI running at all, and then EVERY developer's next local
+# `pnpm verify` failed at the first step, on a file they had never touched, with
+# every gate behind it unreachable.
+#
+# That happened three times in three days. Each time it was diagnosed as a
+# broken merge before someone noticed it was prose.
+#
+# So: run the one cheap check that docs actually can break, on the exact paths
+# `ci.yml` skips. One job, no matrix, no services, no database — a fraction of a
+# minute against the full run it deliberately avoids. This is thrift, not an
+# exception to it: the alternative is not "no CI", it is a red `main` and three
+# people debugging their own checkouts.
+name: Docs format
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
+  pull_request:
+    paths: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  format:
+    name: Prettier (docs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # Prettier only. No workspace build, no services, no Postgres — the whole
+      # point is that this stays cheap enough to be worth running every time.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: format:check
+        run: pnpm format:check
