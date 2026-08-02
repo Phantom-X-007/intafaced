@@ -1,31 +1,37 @@
 # Board Clear — NEXT
 
-**Campaign status:** `RUNNING`
+**Campaign status:** `RUNNING`  
+**Methodology:** v3 CONTINUE · `docs/BOARD-CLEAR-METHODOLOGY-AUDIT-2026-08-02.md`  
+**Agent backlog:** `docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`  
+**Decisions:** `docs/BOARD-CLEAR-DECISION-AUTHORITY.md`
 
-## On main (agent wave)
+## On GO / CONTINUE (ordered)
 
-| Ship            | PR   | Row                  |
-| --------------- | ---- | -------------------- |
-| A-OR-1          | #289 | order-route **DONE** |
-| A-WS-1          | #336 | ws **WIP**           |
-| A-UI-1          | #337 | terminal **WIP**     |
-| A-TRADE-MM-1    | #338 | mm recovery          |
-| A-TRADE-MM-2    | #340 | mm reseed            |
-| A-P5-2          | #341 | academy curriculum   |
-| A-TRADE-VENUE-1 | #344 | venue mark mount     |
-| prettier        | #347 | main format seal     |
+1. `git fetch` · tip check · `gh pr list` — refresh scoreboard open-PR table.
+2. Babysit: merge green agent PRs; babysit shehzad (#346 etc.) per decision authority.
+3. Fan-out **agent residual only** (do not re-ship #289 / #336–#341 / #344–#345 / #349):
+   - **A-TRADE-MM-3** mid port (no invent)
+   - **A-UI-SUB** selector or §13
+   - **A-UI-A11Y** / **A-UI-PRO** (design bar)
+   - **A-P5-OPS** + **A-P5-AGENTS**
+   - **A-WS-MOCK-E2E** (B-WS-2 waits M3 events — honest WIP)
+   - **A-TRADE-SPOT-OPS** / **A-TRADE-VENUE-OPS**
+4. Every PR: evidence + L8. Every 4 product merges: WAVE-AUDIT-LATEST.
+5. Human M1–M7 OPEN ≠ idle. Never implement his paths.
+6. L0 until full scoreboard Done/Cut.
 
-## Active
+## Shipped (do not primary-reopen)
 
-1. Merge **#345** A-TRADE-SPOT-1 after CI (rebased onto venue tip)
-2. Babysit **#343/#346** shehzad M1 pay — Class M, no steal
-3. Next agent ships: A-TRADE-MM-3 mid port · A-UI-2/3 · A-P5-3 ops/agents · A-WS residual B-WS-2 waits human futures events
-4. L0 until all DONE/CUT
+#289 A-OR-1 · #336 A-WS-1 · #337 A-UI-1 · #338 MM-1 · #340 MM-2 · #341 curriculum · #344 venue · #345 spot candles · #349 UI honesty
 
-## Human M1–M7
+## Do not
 
-Shehzad #343/#346 pay OS in flight. Protocol/futures/OTC/bank/id still open.
+- Wait for shehzad to cook agent lanes
+- Fan-out A-PAY / A-PROT / futures risk / desk engines / bank money
+- apps/web as product
+- Empty NEXT at turn end
+- Re-open locked B decisions
 
 ## Last updated
 
-2026-08-01 wave2 — #345 babysit; human pay PR open.
+2026-08-02 methodology v3 CONTINUE harden.

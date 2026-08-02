@@ -20,7 +20,7 @@
 | **H-TRADE-HARD / M3–M4** | **shehzad002**              | Futures risk + real OTC/copy/algo                              | **HUMAN-CLAIMED** | agent invent engines              |
 | **H-ID-SUB / M5**        | **shehzad002**              | Identity sub-account money graph                               | **HUMAN-CLAIMED** | agent invent money routing        |
 | **H-P5-MONEY / M6**      | **shehzad002**              | Bank earn/cards/ramps/sovereign-card                           | **HUMAN-CLAIMED** | agent bank money                  |
-| **H-OR-JAVA / M7**       | **shehzad002** (after #289) | Vendor Java dual-book residual                                 | **QUEUED**        | start before #289 closed          |
+| **H-OR-JAVA / M7**       | **shehzad002**              | Vendor Java dual-book residual (after #289)                    | **HUMAN-CLAIMED** | agents steal Java residual        |
 | denon-spine              | Phantom-X-007               | feat/spine-*                                                   | hold              | Nitro force-push                  |
 
 ## Hard bans
@@ -34,7 +34,6 @@
 
 ## Last board update
 
-- **2026-08-01 v2 hard mountains:** shehzad M1–M7 big blocks (not micro tickets). GO coord + P-OR RUNNING. Agents never A-PAY/A-PROT.
-- **2026-08-01 #333:** initial human/agent split.
-- **2026-08-01 Board Clear GO:** campaign cooking; must obey SHEHZAD-HARD-OWNERSHIP on tip.
-- **2026-08-01 A-OR-1 MERGED:** #289 squash-merged (`e29748f`). P-OR DONE. M7 free for shehzad002.
+- **2026-08-02 methodology v3:** CONTINUE GO + agent residual backlog + decision authority. P-OR DONE. M7 HUMAN-CLAIMED for shehzad. Agents never idle on M1–M7.
+- **2026-08-01 v2 hard mountains:** shehzad M1–M7 big blocks (not micro tickets).
+- **2026-08-01 A-OR-1 MERGED:** #289 on main. P-OR DONE.

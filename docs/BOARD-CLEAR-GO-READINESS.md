@@ -1,43 +1,46 @@
-# Board Clear — GO readiness (mega-hardened)
+# Board Clear — GO readiness (v3 CONTINUE)
 
 **Audits:**
 
 - [`BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`](BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md)
 - [`BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`](BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md)
+- [`BOARD-CLEAR-METHODOLOGY-AUDIT-2026-08-02.md`](BOARD-CLEAR-METHODOLOGY-AUDIT-2026-08-02.md)
 
 ---
 
-## GREEN LIGHT: **YES (mega-hardened)**
+## GREEN LIGHT: **YES (v3 CONTINUE-hardened)**
 
-| Layer                          | Status |
-| ------------------------------ | ------ |
-| Product decisions locked       | YES    |
-| Done bars                      | YES    |
-| Process loops L0–L9            | YES    |
-| Anti-slop engineering standard | YES    |
-| Subagent orchestrator protocol | YES    |
-| Decision log                   | YES    |
-| Preflight conflict fixes       | YES    |
-| Wave audit heartbeat           | YES    |
-| Evidence-before-claims         | YES    |
-| Compaction read order          | YES    |
+| Layer                                 | Status                   |
+| ------------------------------------- | ------------------------ |
+| Product decisions locked (B1–B5)      | YES                      |
+| Done bars                             | YES                      |
+| Shehzad M1–M7 collision wall          | YES                      |
+| Agent residual DAG                    | YES — backlog 2026-08-02 |
+| Decision authority (Nitro X1–X5 only) | YES                      |
+| Process loops L0–L9 + CONTINUE        | YES                      |
+| Anti-slop engineering standard        | YES                      |
+| Subagent protocol                     | YES                      |
+| Scoreboard/NEXT tip truth             | YES (this pack)          |
+| Never idle on human mountains         | YES                      |
+| Pro-trader posture in GO              | YES                      |
 
-**Peace of mind claim:** The **system** is ready to operate as a world-class autonomous engineering campaign without Nitro in the tech loop and without residual theater.
+**Peace of mind:** After this pack is on `main`, Nitro can say **GO** once. Agents re-derive work from backlog + scoreboard, ship agent residual at elite quality, babysit shehzad, never ask continue, never steal M1–M7.
 
-**Not claimed:** product already Done; zero agent mistakes; session never dies.
+**Not claimed:** full board already Done; shehzad velocity; infinite host session without re-paste.
 
 ---
 
 ## Your actions
 
-1. Confirm this mega PR is on `main`
+1. Confirm methodology v3 PR is on `main`
 2. New coding chat
 3. Paste **entire** GO block from `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`
 4. Say **GO**
-5. If session dies → same paste again
+5. If session dies → same paste
 
 ---
 
 ## Verdict
 
-**Final mega green light: YES. Say GO after this pack is on main.**
+**Final green light: YES — say GO after v3 pack lands on main.**  
+No further planning theater required for agent half. Spec/plan/decompose for agent residual is complete.
