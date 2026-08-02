@@ -2,7 +2,7 @@
   "name": "intafaced",
   "private": true,
   "version": "0.0.0",
-  "description": "INTAFACED Sovereign OS \u2014 monorepo root. Law: INTAFACED_DEFINITIVE_BUILD.md",
+  "description": "INTAFACED Sovereign OS — monorepo root. Law: INTAFACED_DEFINITIVE_BUILD.md",
   "packageManager": "pnpm@10.25.0",
   "engines": {
     "node": ">=20.0.0"
@@ -50,7 +50,10 @@
     "ui:boot": "node tooling/uiproof/boot.mjs",
     "ui:proof": "node tooling/uiproof/boot.mjs && playwright test -c tooling/uiproof/playwright.config.mjs tooling/uiproof/proof.spec.mjs && node tooling/uiproof/report.mjs",
     "ui:proof:auth": "node tooling/uiproof/boot.mjs && playwright test -c tooling/uiproof/playwright.config.mjs tooling/uiproof/auth.spec.mjs",
-    "ui:proof:pass3": "bash tooling/uiproof/run-pass3.sh"
+    "ui:proof:pass3": "bash tooling/uiproof/run-pass3.sh",
+    "frontend:preflight": "node tooling/frontend/preflight.mjs",
+    "frontend:residual": "node tooling/frontend/residual-print.mjs",
+    "frontend:preflight:craft": "SLICE_TYPE=CRAFT ORCA_REQUIRED=1 node tooling/frontend/preflight.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
