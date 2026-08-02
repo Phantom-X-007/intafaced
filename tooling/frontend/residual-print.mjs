@@ -17,12 +17,10 @@ console.log(
   `residual-register  updated=${reg.updated}  items=${items.length}` +
     (reg.tip_note ? `  tip_note=${reg.tip_note}` : '') +
     (reg.campaign ? `  campaign=${reg.campaign.id}` : '') +
-    '\n'
+    '\n',
 );
 console.log(
-  ['P', 'ID', 'AFK', 'ST', 'TITLE', 'NEXT']
-    .map((h) => h.padEnd(h === 'TITLE' ? 40 : h === 'NEXT' ? 36 : h === 'ID' ? 16 : 6))
-    .join(' ')
+  ['P', 'ID', 'AFK', 'ST', 'TITLE', 'NEXT'].map((h) => h.padEnd(h === 'TITLE' ? 40 : h === 'NEXT' ? 36 : h === 'ID' ? 16 : 6)).join(' '),
 );
 for (const i of items) {
   const afk = i.afk_safe === false ? 'no' : 'yes';
