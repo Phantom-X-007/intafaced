@@ -71,6 +71,12 @@ const schema = baseEnvSchema
        * the platform healthy.
        */
       LEDGER_URL: z.string().url().optional(),
+
+      /**
+       * Optional path for kill-switch restart durability (JSON). Empty = memory
+       * only. Multi-replica share still §13 residual — file is per process host.
+       */
+      EDGE_KILL_STATE_PATH: z.string().default('.data/edge-kill-state.json'),
     }),
   );
 

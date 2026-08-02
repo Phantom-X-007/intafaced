@@ -2384,16 +2384,20 @@ export default {
       const symbol = this.currentCoin.symbol;
       const path = this.currentCoinIsFavor ? this.api.exchange.favorDelete : this.api.exchange.favorAdd;
       const next = !this.currentCoinIsFavor;
-      this.request(path, { symbol }).then(body => {
-        if (body && body.code == 0) {
-          this.currentCoinIsFavor = next;
-          const row = this.marketMap[symbol];
-          if (row) {
-            row.isFavor = next;
-            this.markets = this.markets.slice();
+      this.request(path, { symbol })
+        .then(body => {
+          if (body && body.code == 0) {
+            this.currentCoinIsFavor = next;
+            const row = this.marketMap[symbol];
+            if (row) {
+              row.isFavor = next;
+              this.markets = this.markets.slice();
+            }
+          } else if (body) {
+            this.warn((body.message || body.msg) || 'Favorite update failed.');
           }
-        }
-      });
+        })
+        .catch(() => this.warn('Favorite update failed — network error.'));
     },
 
     toggleRowFavorite(row) {
@@ -2402,15 +2406,19 @@ export default {
       }
       const path = row.isFavor ? this.api.exchange.favorDelete : this.api.exchange.favorAdd;
       const next = !row.isFavor;
-      this.request(path, { symbol: row.symbol }).then(body => {
-        if (body && body.code == 0) {
-          row.isFavor = next;
-          if (row.symbol === this.currentCoin.symbol) {
-            this.currentCoinIsFavor = next;
+      this.request(path, { symbol: row.symbol })
+        .then(body => {
+          if (body && body.code == 0) {
+            row.isFavor = next;
+            if (row.symbol === this.currentCoin.symbol) {
+              this.currentCoinIsFavor = next;
+            }
+            this.markets = this.markets.slice();
+          } else if (body) {
+            this.warn((body.message || body.msg) || 'Favorite update failed.');
           }
-          this.markets = this.markets.slice();
-        }
-      });
+        })
+        .catch(() => this.warn('Favorite update failed — network error.'));
     },
 
     warn(message) {

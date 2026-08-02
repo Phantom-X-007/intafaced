@@ -1,4 +1,6 @@
-import { MODULE_IDS, type ModuleId } from '@intafaced/config';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { MODULE_IDS, isModuleId, type ModuleId } from '@intafaced/config';
 import { UPSTREAMS } from './routes.js';
 
 /**
@@ -196,16 +198,20 @@ export interface KillSwitchAuditEntry {
  * moves money has a durable timeline; this one has an attributed in-memory
  * timeline with the same shape, waiting on the same store.
  *
- * SOCKET §13: durable kill-switch state. When the flag store lands (the one
- * `apps/admin` has been waiting on), `KillSwitchState` becomes its client and
- * nothing else here changes: the decision function, the route map, the audit
- * entry shape and the admin surface are all independent of where the booleans
- * are kept.
+ * SOCKET §13: multi-replica shared store still residual. Optional
+ * `EDGE_KILL_STATE_PATH` file gives **single-process restart durability** so an
+ * incident kill is not wiped by a bounce. Multi-edge still needs a shared store.
  */
+export interface KillSwitchStateOptions {
+  /** Path to JSON map of killed modules. Empty/undefined = memory only. */
+  readonly statePath?: string;
+}
+
 export class KillSwitchState {
   private readonly killed = new Set<ModuleId>();
   private readonly reasons = new Map<ModuleId, string>();
   private readonly audit: KillSwitchAuditEntry[] = [];
+  private readonly statePath: string | undefined;
 
   /**
    * How many audit entries are retained in memory.
@@ -216,6 +222,44 @@ export class KillSwitchState {
    * WARN log line emitted per toggle is the unbounded record.
    */
   static readonly AUDIT_LIMIT = 500;
+
+  constructor(options: KillSwitchStateOptions = {}) {
+    this.statePath = options.statePath?.trim() || undefined;
+    this.hydrateFromDisk();
+  }
+
+  private hydrateFromDisk(): void {
+    if (!this.statePath) return;
+    try {
+      const raw = readFileSync(this.statePath, 'utf8');
+      const parsed = JSON.parse(raw) as { killed?: unknown };
+      if (!Array.isArray(parsed.killed)) return;
+      for (const row of parsed.killed) {
+        if (!row || typeof row !== 'object') continue;
+        const id = (row as { module?: unknown }).module;
+        const reason = (row as { reason?: unknown }).reason;
+        if (typeof id !== 'string' || !isModuleId(id)) continue;
+        this.killed.add(id);
+        if (typeof reason === 'string' && reason.trim()) this.reasons.set(id, reason.trim());
+      }
+    } catch {
+      /* missing/corrupt → start empty (all ON) — same as pre-persist boot */
+    }
+  }
+
+  private persistToDisk(): void {
+    if (!this.statePath) return;
+    try {
+      mkdirSync(dirname(this.statePath), { recursive: true });
+      const killed = this.disabledModules().map((module) => ({
+        module,
+        reason: this.reasons.get(module) ?? null,
+      }));
+      writeFileSync(this.statePath, `${JSON.stringify({ killed, updatedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
+    } catch {
+      /* best-effort — decision path must not throw on disk full */
+    }
+  }
 
   /** Modules currently switched off, in `MODULE_IDS` order so the output is stable. */
   disabledModules(): ModuleId[] {
@@ -265,6 +309,8 @@ export class KillSwitchState {
       this.killed.delete(module);
       this.reasons.delete(module);
     }
+
+    if (entry.changed) this.persistToDisk();
 
     return entry;
   }

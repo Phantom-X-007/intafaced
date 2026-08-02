@@ -25,7 +25,8 @@ This is the operator path to **halt a module without a deploy**, and the ledger 
 - Ledger **reconcile** from the console is still a stub (`operator-commands.ts`).
 - Console has **no operator SSO** of its own — tokens are deployment credentials; audit names the console principal until SSO.
   - **P0 residual:** anyone who can reach `apps/admin` BFF routes can use the shared operator token. **Do not expose admin without network ACL / SSO.** Ship gate for real money.
-- Kill-switch state is **in-process on the edge** — does not survive restart; multi-replica share is a §13 socket.
+  - Optional **BFF gate:** set `ADMIN_BFF_SHARED_SECRET` and inject header `x-intafaced-admin-bff` from reverse proxy after SSO. When unset, network ACL only.
+- Kill-switch state: optional **restart durability** via `EDGE_KILL_STATE_PATH` (default `.data/edge-kill-state.json`) so a bounce does not wipe an incident kill. **Multi-replica share is still a §13 socket** (file is per host).
 
 ---
 

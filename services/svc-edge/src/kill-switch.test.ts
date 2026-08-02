@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { isModuleId } from '@intafaced/config';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ALWAYS_ALLOWED_REST, KillSwitchState, MODULE_BY_PREFIX, procedureLeaf, procedureOf } from './kill-switch.js';
 import { UPSTREAMS } from './routes.js';
 
@@ -220,5 +223,20 @@ describe('failing closed', () => {
       expect(() => s.decide(bad as unknown as string, 'POST')).not.toThrow();
       expect(s.decide(bad as unknown as string, 'POST').refused).toBe(true);
     }
+  });
+});
+
+describe('optional restart durability (EDGE_KILL_STATE_PATH)', () => {
+  it('rehydrates killed modules from disk after a new process', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'edge-kill-'));
+    const path = join(dir, 'state.json');
+    const a = new KillSwitchState({ statePath: path });
+    a.set('trade', true, OPERATOR, WHY);
+    expect(a.isKilled('trade')).toBe(true);
+    expect(JSON.parse(readFileSync(path, 'utf8')).killed).toEqual(expect.arrayContaining([expect.objectContaining({ module: 'trade' })]));
+
+    const b = new KillSwitchState({ statePath: path });
+    expect(b.isKilled('trade')).toBe(true);
+    expect(b.decide('/api/v1/orders', 'POST')).toMatchObject({ refused: true, reason: 'module-killed' });
   });
 });

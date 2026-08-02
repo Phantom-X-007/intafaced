@@ -1689,7 +1689,7 @@ module.exports = {
     },
     plate: {
         title: "Platform income distribution scheme (BHB Holder's equity)",
-        content1: "As described in the white paper, INTAFACED will take up 80% of the platform (after deduct Taxes and fees)The income is allocated to BHB holders, and 20% of revenue is used to support R & D and operation of the platform.",
+        content1: "Platform fee allocation and token economics are defined by operator policy and the definitive build — this shell does not invent fixed 80/20 revenue splits.",
         content2: "The distribution of income takes days as a distribution cycle, and June 6, 2018 as the first distribution day. Every day after that, the total income to be distributed on the previous day will be allocated to BHB holders in proportion.",
         content3: " (notice: 1. the BHB here only refers to the BHB that has been released / circulated. See also[",
         content3_1: 'Note on the ratio of BHB circulation / participation in income distribution',

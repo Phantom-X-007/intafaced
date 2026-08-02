@@ -71,7 +71,7 @@
                   </div>
                 </div>
               </div>
-              <p class="msg">{{$t('otc.publishad.formual')}}: (Bitstamp+Bitfinex+Coinbase)/ 3 *{{gongshi.toFixed(4) }}</p>
+              <p class="msg">{{$t('otc.publishad.formual')}}: index mid × {{gongshi.toFixed(4) }} (no partner venue names)</p>
               <FormItem :label="wantstyle+$t('otc.publishad.num')" prop="number">
                 <Input v-model="form.number" :placeholder="$t('otc.publishad.num_text1')+wantstyle+$t('otc.publishad.num_text2')"></Input>
               </FormItem>
@@ -231,7 +231,7 @@ export default {
       isId: false,
       disAllowBtn: false,
       coinList: [],
-      balance: 100,
+      balance: 0,
       cankao: "",
       price: "",
       symbol: "",
