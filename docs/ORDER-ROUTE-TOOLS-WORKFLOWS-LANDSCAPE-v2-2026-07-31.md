@@ -71,7 +71,7 @@
 | [chronoxor/CppTrader](https://github.com/chronoxor/CppTrader)                            | **1,059**  | Trading platform components                 | Study only                                                                                     |
 | [nkaz001/hftbacktest](https://github.com/nkaz001/hftbacktest)                            | **4,300+** | HFT/MM backtest with latency realism        | **Optional** seed/mm research — not CEX path core                                              |
 | [ccxt/ccxt](https://github.com/ccxt/ccxt)                                                | **43,451** | Unified exchange API                        | **Hard ban on money path** (JS numbers / doctrine §27) — venue-adapter pattern already correct |
-| [jammy928/CoinExchange\_…](https://github.com/jammy928/CoinExchange_CryptoExchange_Java) | **1,717**  | Vendored Java exchange                      | **Dual-book target** — enforce Option B, don’t rebuild                                         |
+| [jammy928/VendorExchange\_…](https://github.com/jammy928/VendorExchange_CryptoExchange_Java) | **1,717**  | Vendored Java exchange                      | **Dual-book target** — enforce Option B, don’t rebuild                                         |
 
 ### 2.4 Chaos / fault injection / network
 
