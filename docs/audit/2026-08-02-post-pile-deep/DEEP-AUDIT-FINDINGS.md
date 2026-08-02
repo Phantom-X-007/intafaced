@@ -38,21 +38,23 @@
 
 ---
 
-## 2 · Named residual (not closed this ship)
+## 2 · Named residual
 
-| Sev         | Item                                              | Owner                                       |
-| ----------- | ------------------------------------------------- | ------------------------------------------- |
-| P0 residual | Admin BFF unauthenticated (shared token)          | Ops/SSO · Human X                           |
-| P1          | MM seed run only in process memory                | Agent later / ops                           |
-| P1          | Kill non-edge modules cosmetic (`ws`)             | Agent later honesty UX                      |
-| P1          | Kill state not durable multi-replica              | §13 / ops                                   |
-| P1          | Account bind / SMS silent fail                    | UI craft residual                           |
-| P1          | Marketing overclaims (Cayman, largest, 101 years) | Content / Stream A                          |
-| P1          | svc-pay still S2S v1                              | shehzad M1 path — **do not dual-edit #346** |
-| P2          | Entity wallet `save` still open                   | M7 shehzad                                  |
-| P2          | JVM 410 smoke                                     | Docker host                                 |
-| Human       | Human X go-live                                   | Nitro                                       |
-| Human       | M1–M7 mountains                                   | shehzad                                     |
+| Sev         | Item                                              | Status                                     |
+| ----------- | ------------------------------------------------- | ------------------------------------------ |
+| P0 residual | Admin BFF unauthenticated (shared token)          | **Named** in runbook/board — SSO still ops |
+| P1          | MM seed run only in process memory                | **Closed** — `TRADE_MM_SEED_STATE_PATH`    |
+| P1          | Kill non-edge modules cosmetic (`ws`)             | **Closed** — perimeter labels + runbook    |
+| P1          | Kill state not durable multi-replica              | **Open** — §13                             |
+| P1          | Account bind / SMS silent fail                    | **Closed** — catch + bind lock             |
+| P1          | Marketing overclaims (Cayman, largest, 101 years) | **Closed** — en.js honesty rewrite         |
+| P1          | svc-pay still S2S v1                              | **Open** — shehzad #346                    |
+| P2          | Entity wallet `save` still open                   | **Open** — M7 shehzad                      |
+| P2          | JVM 410 smoke                                     | **Open** — Docker host                     |
+| Human       | Human X go-live                                   | **Open** — Nitro                           |
+| Human       | M1–M7 mountains                                   | **Open** — shehzad                         |
+
+Continue archive: `DEEP-AUDIT-CONTINUE-2026-08-02.md`
 
 ---
 

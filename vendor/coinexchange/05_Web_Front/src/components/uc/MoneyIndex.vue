@@ -143,8 +143,8 @@ export default {
         let params = {};
         params["amount"] = this.matchAmount;
         this.$http
-.post(this.host + "/uc/asset/wallet/match", params)
-.then(response => {
+          .post(this.host + "/uc/asset/wallet/match", params)
+          .then(response => {
             var resp = response.body;
             if (resp.code == 0) {
               this.$Message.success(this.$t("uc.finance.money.matchsuccess"));
@@ -152,6 +152,9 @@ export default {
             } else {
               this.$Message.error(resp.message);
             }
+          })
+          .catch(() => {
+            this.$Message.error("Match request failed — network error. Funds not moved.");
           });
       }
     },
@@ -177,22 +180,24 @@ export default {
       let params = {};
       params["unit"] = unit;
       this.$http
-.post(this.host + "/uc/asset/wallet/reset-address", params)
-.then(response => {
+        .post(this.host + "/uc/asset/wallet/reset-address", params)
+        .then(response => {
           var resp = response.body;
           if (resp.code == 0) {
-            //this.$Message.success(this.$t("uc.finance.money.resetsuccess"));
-
             setTimeout(function() {
               self.$Spin.hide();
               self.$router.push(
                 "/uc/recharge?name=" + unit
-);
+              );
             }, 3000);
           } else {
             this.$Message.error(resp.message);
             this.$Spin.hide();
           }
+        })
+        .catch(() => {
+          this.$Message.error("Address reset failed — network error.");
+          this.$Spin.hide();
         });
     }
   },

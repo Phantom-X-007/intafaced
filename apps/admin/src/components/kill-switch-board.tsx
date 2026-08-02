@@ -13,6 +13,7 @@ import {
   flagStates,
   groupByModule,
   isCritical,
+  isEdgePerimeterModule,
   modulesWithoutKillSwitch,
   type FlagState,
 } from '@/lib/flag-state';
@@ -275,6 +276,11 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
                       </Chip>
                       <span className="adm-topbar__spacer" />
                       {group.killed && <Chip tone="danger">Module killed</Chip>}
+                      {isEdgePerimeterModule(group.module) ? (
+                        <Chip tone="live">Edge perimeter</Chip>
+                      ) : (
+                        <Chip tone="warn">Not edge-enforced</Chip>
+                      )}
                       <Switch
                         on={!group.killed}
                         onLabel="Enabled"
@@ -343,8 +349,10 @@ function ControlPlanePanel({ plane }: { plane: ControlPlaneState }) {
           <strong>{plane.status}</strong>
           {plane.status === 'reachable' && (
             <>
-              Module kills on this board hit svc-edge. Live killed modules:{' '}
-              <b>{(plane.snapshot as KillSwitchSnapshot).disabledModules.length}</b>. Per-flag staging is still local only.
+              Module kills hit svc-edge. Only <b>perimeter</b> modules (trade, pay, identity, …) stop new <code>/api/*</code> traffic.
+              Killing <code>ws</code>/<code>matching</code>/<code>ledger</code> is audited but not process-enforced. Live killed:{' '}
+              <b>{(plane.snapshot as KillSwitchSnapshot).disabledModules.length}</b>. No console SSO — deployment tokens only; do not expose
+              admin without ACL. Per-flag staging stays local.
             </>
           )}
           {plane.status === 'unconfigured' && (
