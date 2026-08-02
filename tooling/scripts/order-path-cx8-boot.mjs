@@ -179,20 +179,24 @@ async function main() {
 
   await waitHealth('http://127.0.0.1:4004', 'trade');
 
-  await run('node', ['tooling/scripts/order-path-smoke.mjs'], {
-    TRADE_HTTP_URL: 'http://127.0.0.1:4004',
-    MATCHING_HTTP_URL: 'http://127.0.0.1:4005',
-    LEDGER_HTTP_URL: 'http://127.0.0.1:4001',
-    ORDER_PATH_SMOKE_STRICT: '1',
-    EDGE_PRINCIPAL_SECRET: EDGE,
-    INTERNAL_SERVICE_SECRET: SECRET,
-    TRADE_SMOKE_SEED_SQL: '1',
-    TRADE_DATABASE_URL: tradeUrl,
-    TRADE_SMOKE_SYMBOL: 'BTC/USDT',
-    TRADE_SMOKE_QTY: '0.01',
-    TRADE_SMOKE_PRICE: '100',
-    TRADE_SMOKE_REGION: 'DE',
-  });
+  await run(
+    'pnpm',
+    ['--filter', '@intafaced/svc-trade', 'run', 'order-path-smoke'],
+    {
+      TRADE_HTTP_URL: 'http://127.0.0.1:4004',
+      MATCHING_HTTP_URL: 'http://127.0.0.1:4005',
+      LEDGER_HTTP_URL: 'http://127.0.0.1:4001',
+      ORDER_PATH_SMOKE_STRICT: '1',
+      EDGE_PRINCIPAL_SECRET: EDGE,
+      INTERNAL_SERVICE_SECRET: SECRET,
+      TRADE_SMOKE_SEED_SQL: '1',
+      TRADE_DATABASE_URL: tradeUrl,
+      TRADE_SMOKE_SYMBOL: 'BTC/USDT',
+      TRADE_SMOKE_QTY: '0.01',
+      TRADE_SMOKE_PRICE: '100',
+      TRADE_SMOKE_REGION: 'DE',
+    },
+  );
 
   log('CX-8 boot + smoke complete');
   killAll();
