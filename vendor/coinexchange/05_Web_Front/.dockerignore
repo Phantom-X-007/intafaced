@@ -1,0 +1,29 @@
+# Build-context exclusions for the vendored shell.
+#
+# THIS FILE MUST LIVE HERE, not at the repo root. Docker reads the
+# `.dockerignore` at the BUILD CONTEXT root, and this image's context is
+# `./vendor/coinexchange/05_Web_Front` (see docker-compose.apps.yml). The root
+# `.dockerignore` — which does exclude `node_modules` and `dist` — is never
+# consulted for this build, so its protection did not extend here.
+#
+# What that cost: `COPY . .` copied the HOST's `node_modules` straight over the
+# clean `npm install` the image had just done from the lockfile. That is the
+# exact "works on my machine, baked into an image" hazard the root file was
+# written to prevent, and it is worse here than usual because this tree is a
+# 2017 dependency graph installed with --legacy-peer-deps: whatever a developer
+# happens to have resolved locally would silently become the shipped bundle.
+#
+# It also masked a real build failure for a while, by making the container's own
+# install irrelevant.
+node_modules
+dist
+
+# Build output and local noise that must never reach the image.
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+*.local
+
+# The image builds from the lockfile; a host .env would leak into it.
+.env
+.env.*
