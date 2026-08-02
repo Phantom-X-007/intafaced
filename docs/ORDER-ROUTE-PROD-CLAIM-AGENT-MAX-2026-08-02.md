@@ -9,17 +9,17 @@
 
 ## 0 · What “a lot more” means (re-derived, not vibes)
 
-Denon’s bar: *order machine hardened and stable when real money flows — orders, retries, execution.*
+Denon’s bar: _order machine hardened and stable when real money flows — orders, retries, execution._
 
-| Layer | Meaning of “all-out” | Agent owns? |
-| ----- | -------------------- | ----------- |
-| **A code** | Chaos F1–F8 · properties · reconcile · dual-book door · LIVE mint 0 | **Yes — already main** (#289/#359/#365) |
-| **B assembled L1** | Fleet health under CI stack | **Yes — #370** |
-| **B assembled L2** | Edge-signed place + cancel | **Yes — #370** |
-| **B assembled L3** | Two **funded** principals · real match · **observed fill** · **ledger balance moved** | **Yes — this ship** |
-| **B assembled L4** | Stress: N place/cancel + **clientOrderId idempotent retry** under same stack | **Yes — this ship** |
-| **B honesty** | Never invent fills/balances; STRICT fail closed; scoreboard not go-live | **Yes** |
-| **C Human X** | Real secrets · prod fleet · kill drill · go-live **yes** · counsel | **Never agent** |
+| Layer              | Meaning of “all-out”                                                                  | Agent owns?                             |
+| ------------------ | ------------------------------------------------------------------------------------- | --------------------------------------- |
+| **A code**         | Chaos F1–F8 · properties · reconcile · dual-book door · LIVE mint 0                   | **Yes — already main** (#289/#359/#365) |
+| **B assembled L1** | Fleet health under CI stack                                                           | **Yes — #370**                          |
+| **B assembled L2** | Edge-signed place + cancel                                                            | **Yes — #370**                          |
+| **B assembled L3** | Two **funded** principals · real match · **observed fill** · **ledger balance moved** | **Yes — this ship**                     |
+| **B assembled L4** | Stress: N place/cancel + **clientOrderId idempotent retry** under same stack          | **Yes — this ship**                     |
+| **B honesty**      | Never invent fills/balances; STRICT fail closed; scoreboard not go-live               | **Yes**                                 |
+| **C Human X**      | Real secrets · prod fleet · kill drill · go-live **yes** · counsel                    | **Never agent**                         |
 
 **“A lot more” is not:** more UI · pay M1–M7 · shehzad Java M7 · futures invent · Docker install on laptop · go-live theater.
 
@@ -29,15 +29,15 @@ Denon’s bar: *order machine hardened and stable when real money flows — orde
 
 ## 1 · Implicit needs (inferred — compensate for no loop)
 
-| Surface phrase | Unspoken requirement |
-| -------------- | -------------------- |
-| “I pick C” | Max agent proof so Human X is the *only* gate, not a pile of half-residuals |
-| “won’t be in the loop” | Self-prompt + Spec REQs + ordered iterations + thrift + auto-merge on green Class M |
-| “figure out a lot more” | L3 = fill **and** ledger movement; L4 = cancel storm **and** idempotent place; docs plain |
-| “without compromising quality” | STRICT fail closed; no invent; brand/secret clean; self-audit; not claim go-live |
-| “prompt yourself” | Compaction-proof block §2; resume from this file not chat |
-| “automatic decisions” | Default safe: worktree · path thrift · edge principal · deposit recipes · CI stack not local Docker |
-| Peace of mind | One Human X checklist he can walk without git |
+| Surface phrase                 | Unspoken requirement                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- |
+| “I pick C”                     | Max agent proof so Human X is the _only_ gate, not a pile of half-residuals                         |
+| “won’t be in the loop”         | Self-prompt + Spec REQs + ordered iterations + thrift + auto-merge on green Class M                 |
+| “figure out a lot more”        | L3 = fill **and** ledger movement; L4 = cancel storm **and** idempotent place; docs plain           |
+| “without compromising quality” | STRICT fail closed; no invent; brand/secret clean; self-audit; not claim go-live                    |
+| “prompt yourself”              | Compaction-proof block §2; resume from this file not chat                                           |
+| “automatic decisions”          | Default safe: worktree · path thrift · edge principal · deposit recipes · CI stack not local Docker |
+| Peace of mind                  | One Human X checklist he can walk without git                                                       |
 
 ---
 
@@ -96,32 +96,32 @@ SELF-AUDIT (Class M)
 
 ## 3 · Spec REQs (this wave — complete set)
 
-| ID | Requirement | Acceptance |
-| -- | ----------- | ---------- |
-| **PC-L2-1** | Edge place+cancel still runs when L3 enabled | Log `AUTH_PLACE_OK` + `AUTH_CANCEL_OK` or stress proves cancel under L3 |
-| **PC-L3-1** | Two principals funded via `recipes.deposit` | SEED log USDT buyer + BTC maker |
-| **PC-L3-2** | Maker rest sell limit; taker buy same price | Both HTTP 2xx with order ids |
-| **PC-L3-3** | Fill observed (no invent) | Poll GET order until filled/closed or filled qty > 0; STRICT timeout fail |
-| **PC-L3-4** | Maker also terminalized filled/closed | Poll maker order same wait |
-| **PC-L3-5** | Ledger available moved | Buyer BTC available after > before; seller USDT after > before |
-| **PC-L4-1** | Stress N sequential place+cancel below book | All N succeed |
-| **PC-L4-2** | clientOrderId idempotent double place | Same order id; one resting order; cancel once |
-| **PC-HX-1** | Human X checklist durable plain language | Doc on main |
-| **PC-RS-1** | Scoreboard assembled = L3 proof only when CI path ships | Link workflow; Human X residual |
-| **PC-DOC-1** | This Spec + self-prompt compaction-proof | This file |
+| ID           | Requirement                                             | Acceptance                                                                |
+| ------------ | ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **PC-L2-1**  | Edge place+cancel still runs when L3 enabled            | Log `AUTH_PLACE_OK` + `AUTH_CANCEL_OK` or stress proves cancel under L3   |
+| **PC-L3-1**  | Two principals funded via `recipes.deposit`             | SEED log USDT buyer + BTC maker                                           |
+| **PC-L3-2**  | Maker rest sell limit; taker buy same price             | Both HTTP 2xx with order ids                                              |
+| **PC-L3-3**  | Fill observed (no invent)                               | Poll GET order until filled/closed or filled qty > 0; STRICT timeout fail |
+| **PC-L3-4**  | Maker also terminalized filled/closed                   | Poll maker order same wait                                                |
+| **PC-L3-5**  | Ledger available moved                                  | Buyer BTC available after > before; seller USDT after > before            |
+| **PC-L4-1**  | Stress N sequential place+cancel below book             | All N succeed                                                             |
+| **PC-L4-2**  | clientOrderId idempotent double place                   | Same order id; one resting order; cancel once                             |
+| **PC-HX-1**  | Human X checklist durable plain language                | Doc on main                                                               |
+| **PC-RS-1**  | Scoreboard assembled = L3 proof only when CI path ships | Link workflow; Human X residual                                           |
+| **PC-DOC-1** | This Spec + self-prompt compaction-proof                | This file                                                                 |
 
 ---
 
 ## 4 · Architect (seams)
 
-| Seam | Options | Pick |
-| ---- | ------- | ---- |
-| Stack | Local Docker · platform:up · **GH Actions + node processes** | **CI** (host has no Docker) |
-| Auth | Bearer · **edge principal** | **Edge** (prod boundary) |
-| Funding | Invent balance · **deposit recipe** | **Recipe** |
-| Fill proof | Trust 201 only · **poll order + ledger delta** | **Poll + ledger** |
-| Stress | Chaos unit only · **assembled sequential + idempotent** | **Assembled L4** |
-| M7 / UI / pay | Touch · **PATHS_ONLY** | **PATHS_ONLY** |
+| Seam          | Options                                                      | Pick                        |
+| ------------- | ------------------------------------------------------------ | --------------------------- |
+| Stack         | Local Docker · platform:up · **GH Actions + node processes** | **CI** (host has no Docker) |
+| Auth          | Bearer · **edge principal**                                  | **Edge** (prod boundary)    |
+| Funding       | Invent balance · **deposit recipe**                          | **Recipe**                  |
+| Fill proof    | Trust 201 only · **poll order + ledger delta**               | **Poll + ledger**           |
+| Stress        | Chaos unit only · **assembled sequential + idempotent**      | **Assembled L4**            |
+| M7 / UI / pay | Touch · **PATHS_ONLY**                                       | **PATHS_ONLY**              |
 
 Failure modes (honest): fill timeout if NATS/settle lag → increase FILL_WAIT_MS, never invent; deposit fail if ledger down → STRICT red; min_notional / market missing → seed SQL in smoke.
 
@@ -140,13 +140,13 @@ Failure modes (honest): fill timeout if NATS/settle lag → increase FILL_WAIT_M
 
 ## 6 · Not in scope (never soft-reopen)
 
-- Shehzad M7 Java LIVE mutators  
-- Futures engine invent / OTC / copy invent  
-- DEX execute invent (quotes already honest)  
-- Local Docker seeder / mongosh  
-- apps/web Stream A  
-- pay gateway M1–M7  
-- Go-live language without Human X  
+- Shehzad M7 Java LIVE mutators
+- Futures engine invent / OTC / copy invent
+- DEX execute invent (quotes already honest)
+- Local Docker seeder / mongosh
+- apps/web Stream A
+- pay gateway M1–M7
+- Go-live language without Human X
 
 ---
 
@@ -161,8 +161,8 @@ See [`ORDER-ROUTE-HUMAN-X-PRODUCTION-CLAIM-2026-08-02.md`](ORDER-ROUTE-HUMAN-X-P
 
 ## 8 · Resume after compact
 
-1. Open this file §2 self-prompt.  
-2. `git -C .worktrees/feat-order-route-prod-claim-agent-max status` (or recreate worktree from main).  
-3. If PR open: babysit CI; fix red; merge Class M.  
-4. If merged: only Human X remains for production claim.  
+1. Open this file §2 self-prompt.
+2. `git -C .worktrees/feat-order-route-prod-claim-agent-max status` (or recreate worktree from main).
+3. If PR open: babysit CI; fix red; merge Class M.
+4. If merged: only Human X remains for production claim.
 5. Do **not** re-open A-layer chaos unless tip regressed.

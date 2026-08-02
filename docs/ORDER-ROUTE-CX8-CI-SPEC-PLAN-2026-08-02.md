@@ -21,15 +21,15 @@
 
 ## 1 · Spec REQs
 
-| ID           | Requirement                                                       | Acceptance                                               |
-| ------------ | ----------------------------------------------------------------- | -------------------------------------------------------- |
-| **CX8-CI-1** | Health plane: trade + matching + ledger `/health` up              | CI job STRICT smoke L1 green                             |
-| **CX8-CI-2** | Auth place + cancel over HTTP with **edge-signed** test principal | L2 green when stack seeded (not Bearer theater)          |
-| **CX8-CI-3** | Deposit funding via ledger S2S recipes (not invent balances)      | Real `recipes.deposit` post                              |
-| **CX8-CI-4** | Market listed before place                                        | SQL/listMarket seed in boot script                       |
-| **CX8-CI-5** | Never invent fills; two-user fill + ledger delta when L3 on       | Path C agent-max: L3 STRICT in boot; see PROD-CLAIM doc  |
-| **CX8-CI-6** | Thrift: not every PR                                              | path filter + workflow_dispatch                          |
-| **CX8-CI-7** | Scoreboard honesty                                                | CEX assembled → **CI proof** or residual with why        |
+| ID           | Requirement                                                       | Acceptance                                              |
+| ------------ | ----------------------------------------------------------------- | ------------------------------------------------------- |
+| **CX8-CI-1** | Health plane: trade + matching + ledger `/health` up              | CI job STRICT smoke L1 green                            |
+| **CX8-CI-2** | Auth place + cancel over HTTP with **edge-signed** test principal | L2 green when stack seeded (not Bearer theater)         |
+| **CX8-CI-3** | Deposit funding via ledger S2S recipes (not invent balances)      | Real `recipes.deposit` post                             |
+| **CX8-CI-4** | Market listed before place                                        | SQL/listMarket seed in boot script                      |
+| **CX8-CI-5** | Never invent fills; two-user fill + ledger delta when L3 on       | Path C agent-max: L3 STRICT in boot; see PROD-CLAIM doc |
+| **CX8-CI-6** | Thrift: not every PR                                              | path filter + workflow_dispatch                         |
+| **CX8-CI-7** | Scoreboard honesty                                                | CEX assembled → **CI proof** or residual with why       |
 
 ---
 

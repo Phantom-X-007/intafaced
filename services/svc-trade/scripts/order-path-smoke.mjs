@@ -359,9 +359,7 @@ async function twoUserFill(contracts) {
     const btcUp = dec(buyerBtcAfter) > dec(buyerBtcBefore);
     const usdtUp = dec(sellerUsdtAfter) > dec(sellerUsdtBefore);
     if (!btcUp || !usdtUp) {
-      log(
-        `L3_LEDGER_FAIL expected buyer BTC↑ and seller USDT↑ — got btcUp=${btcUp} usdtUp=${usdtUp} — not inventing`,
-      );
+      log(`L3_LEDGER_FAIL expected buyer BTC↑ and seller USDT↑ — got btcUp=${btcUp} usdtUp=${usdtUp} — not inventing`);
       if (STRICT) process.exit(1);
       return 'fail';
     }

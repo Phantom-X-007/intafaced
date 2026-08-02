@@ -3,17 +3,17 @@
 **Status:** AGENT FINISH GATE · BUILD LIVE · spines F1–F7 + fast-check + door-kill wired · seed/F8 residual  
 **One screen for Nitro.** Full paste for new Build chats is at the bottom.
 
-| #   | Doc                                                                              | Role                                                |
-| --- | -------------------------------------------------------------------------------- | --------------------------------------------------- |
-| 1   | [Frame + method](ORDER-ROUTE-FRAME-AND-PLANNING-METHODOLOGY-2026-07-31.md)       | How we run (loop, adversarial, builder ≠ grader)    |
-| 2   | [Tools landscape **v2**](ORDER-ROUTE-TOOLS-WORKFLOWS-LANDSCAPE-v2-2026-07-31.md) | last30days + star-ranked repos · Tier A/B/C         |
-| 3   | [Spec v1](ORDER-ROUTE-SPEC-v1-2026-07-31.md)                                     | Checkable **REQ-IDs** (SoT for “what must be true”) |
-| 4   | [Architect](ORDER-ROUTE-ARCHITECT-2026-07-31.md)                                 | Dual-book door-kill · chaos harness · seed flag     |
-| 5   | [**Plan**](ORDER-ROUTE-PLAN-2026-07-31.md)                                       | Task graph P0–P8 — **execute from here**            |
-| 6   | [Scoreboard](ORDER-ROUTE-READINESS-SCOREBOARD.md)                                | Living green/red                                    |
-| 7   | [Domain inventory](ORDER-ROUTE-HARDEN-PROGRAM-2026-07-31.md)                     | Terrain only — **not** the plan                     |
-| 8   | [**Prod-claim agent-max (path C)**](ORDER-ROUTE-PROD-CLAIM-AGENT-MAX-2026-08-02.md) | Self-prompt · L3/L4 Spec · compact resume        |
-| 9   | [Human X production claim](ORDER-ROUTE-HUMAN-X-PRODUCTION-CLAIM-2026-08-02.md)   | Nitro-only go-live checklist                        |
+| #   | Doc                                                                                 | Role                                                |
+| --- | ----------------------------------------------------------------------------------- | --------------------------------------------------- |
+| 1   | [Frame + method](ORDER-ROUTE-FRAME-AND-PLANNING-METHODOLOGY-2026-07-31.md)          | How we run (loop, adversarial, builder ≠ grader)    |
+| 2   | [Tools landscape **v2**](ORDER-ROUTE-TOOLS-WORKFLOWS-LANDSCAPE-v2-2026-07-31.md)    | last30days + star-ranked repos · Tier A/B/C         |
+| 3   | [Spec v1](ORDER-ROUTE-SPEC-v1-2026-07-31.md)                                        | Checkable **REQ-IDs** (SoT for “what must be true”) |
+| 4   | [Architect](ORDER-ROUTE-ARCHITECT-2026-07-31.md)                                    | Dual-book door-kill · chaos harness · seed flag     |
+| 5   | [**Plan**](ORDER-ROUTE-PLAN-2026-07-31.md)                                          | Task graph P0–P8 — **execute from here**            |
+| 6   | [Scoreboard](ORDER-ROUTE-READINESS-SCOREBOARD.md)                                   | Living green/red                                    |
+| 7   | [Domain inventory](ORDER-ROUTE-HARDEN-PROGRAM-2026-07-31.md)                        | Terrain only — **not** the plan                     |
+| 8   | [**Prod-claim agent-max (path C)**](ORDER-ROUTE-PROD-CLAIM-AGENT-MAX-2026-08-02.md) | Self-prompt · L3/L4 Spec · compact resume           |
+| 9   | [Human X production claim](ORDER-ROUTE-HUMAN-X-PRODUCTION-CLAIM-2026-08-02.md)      | Nitro-only go-live checklist                        |
 
 **v1 landscape file** (historical): `ORDER-ROUTE-TOOLS-WORKFLOWS-LANDSCAPE-2026-07-31.md` — prefer **v2**.
 
