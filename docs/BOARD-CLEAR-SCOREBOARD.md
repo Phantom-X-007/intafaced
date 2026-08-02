@@ -9,7 +9,7 @@
 **Tip check:** `git log origin/main -1 --oneline`
 
 **Campaign status:** `RUNNING`  
-**Last scoreboard edit:** 2026-08-02 GO #356 MM-3 merged; next A-UI-SUB
+**Last scoreboard edit:** 2026-08-02 GO #356–#360 on main; next A-UI-A11Y
 
 **Authority:** For Board Clear status, **this file + NEXT beat** `docs/TRACKER.md` until tracker is resynced.  
 **Known dirty:** human M1–M7 open; agent residual A-TRADE-MM-3 (exact next) then UI/P5/WS  
