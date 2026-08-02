@@ -91,11 +91,12 @@ Triggers: CI architecture conflict, Done bar impossible without invent, Denon ma
 ## L5 — Compaction / cold-start / CONTINUE loop
 
 ```
-1. Read AUTONOMOUS-RUN order: SHEHZAD → DECISION-AUTHORITY → AGENT-BACKLOG → …
-2. git fetch; gh pr list; main tip; rewrite stale SCOREBOARD/NEXT if tip moved
-3. Resume NEXT; if NEXT names already-merged ships → re-derive from agent backlog OPEN only
-4. Do not re-open locked B decisions; do not re-ship SHIPPED backlog IDs
-5. Decision default: DECISION-AUTHORITY (agent acts; X1–X5 only to Nitro)
+1. Open docs/BOARD-CLEAR-NEXT.md FIRST (EXACT NEXT SHIP) — never chat summary
+2. git fetch; gh pr list; main tip
+3. If NEXT ship already merged on tip → pick next OPEN agent ship from AGENT-BACKLOG; rewrite NEXT same turn
+4. SCOREBOARD for row status; never TRACKER.md / WAVE-AUDIT-LATEST as SoT if older than tip
+5. Do not re-open locked B; do not re-ship SHIPPED backlog IDs
+6. Decision default: DECISION-AUTHORITY (agent acts; X1–X5 only to Nitro)
 ```
 
 ---

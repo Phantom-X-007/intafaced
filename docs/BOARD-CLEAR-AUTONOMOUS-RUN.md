@@ -2,68 +2,49 @@
 
 **Purpose:** One paste. World-class agentic engineering until the product board is Done/Cut.  
 **Nitro is not in the tech loop.** No continue prompts. No vibe-code slop.  
-**Version:** v3 · 2026-08-02 — CONTINUE-hardened (Wave A agent ships largely already on main).
+**Version:** v3.1 · 2026-08-02 — CONTINUE + compaction-proof resume (NEXT sole entry).
 
 ---
 
-## Cold start / compact read order (full files)
+## Cold start / compact read order
 
-1. `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md` — human vs agent path bans
-2. `docs/BOARD-CLEAR-DECISION-AUTHORITY.md` — who decides what
-3. `docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md` — remaining **agent** ships only
-4. `docs/BOARD-CLEAR-METHODOLOGY-AUDIT-2026-08-02.md` — why CONTINUE not re-spec
-5. `docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`
-6. `docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`
-7. `docs/BOARD-CLEAR-UNSPOKEN-NEEDS.md`
-8. `docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md`
-9. `docs/BOARD-CLEAR-ENGINEERING-STANDARD.md`
-10. `docs/BOARD-CLEAR-PROCESS-LOOPS.md`
-11. `docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md`
-12. `docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md`
-13. `docs/BOARD-CLEAR-SCOREBOARD.md`
-14. `docs/BOARD-CLEAR-NEXT.md`
-15. `docs/BOARD-CLEAR-DECISION-LOG.md`
-16. `docs/LIVE-LANES.md`
-17. `docs/STREAM-A-DESIGN-BAR.md` (any P-UI ship)
-18. `AGENTS.md`
-19. `git fetch` · `git log origin/main -3` · `gh pr list`
+**0. FIRST AND ONLY FIRST:** `docs/BOARD-CLEAR-NEXT.md` — EXACT NEXT SHIP + freezes + open PRs.  
+**Never** treat `docs/TRACKER.md` or `docs/BOARD-CLEAR-WAVE-AUDIT-LATEST.md` as live SoT (demoted; scoreboard/NEXT win).  
+**Never** continue from chat summary.
+
+Then:
+
+1. `git fetch` · `git log origin/main -3` · `gh pr list --state open`
+2. `docs/BOARD-CLEAR-SCOREBOARD.md`
+3. `docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`
+4. `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`
+5. `docs/BOARD-CLEAR-DECISION-AUTHORITY.md`
+6. `docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md`
+7. `docs/BOARD-CLEAR-PROCESS-LOOPS.md` · ENGINEERING-STANDARD · SUBAGENT-PROTOCOL
+8. `docs/LIVE-LANES.md` · DECISION-LOG · STREAM-A-DESIGN-BAR (P-UI) · `AGENTS.md`
+9. Optional depth: mega/preflight/methodology audits, execution plan
 
 ---
 
 ## Enhanced GO prompt (copy entire fenced block)
 
 ```text
-BOARD CLEAR — FULL AUTONOMY ON AGENT LANES (v3 CONTINUE).
+BOARD CLEAR — FULL AUTONOMY ON AGENT LANES (v3.1 COMPACTION-PROOF).
 World-class agentic engineering. Zero vibe-code slop. Nitro NOT in the loop.
 Pro-trader desk product (Stream A design bar). Never invent mid/depth/rates/balances/candles.
 
-READ (full files, in order):
-docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md
-docs/BOARD-CLEAR-DECISION-AUTHORITY.md
-docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md
-docs/BOARD-CLEAR-METHODOLOGY-AUDIT-2026-08-02.md
-docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md
-docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md
-docs/BOARD-CLEAR-UNSPOKEN-NEEDS.md
-docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md
-docs/BOARD-CLEAR-ENGINEERING-STANDARD.md
-docs/BOARD-CLEAR-PROCESS-LOOPS.md
-docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md
-docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md
-docs/BOARD-CLEAR-SCOREBOARD.md
-docs/BOARD-CLEAR-NEXT.md
-docs/BOARD-CLEAR-DECISION-LOG.md
-docs/LIVE-LANES.md
-docs/STREAM-A-DESIGN-BAR.md
-AGENTS.md
+READ FIRST: docs/BOARD-CLEAR-NEXT.md (sole resume — EXACT NEXT SHIP)
 Then: git fetch && git log origin/main -3 --oneline && gh pr list --state open
+Then as needed: SCOREBOARD · AGENT-BACKLOG · SHEHZAD-HARD-OWNERSHIP · DECISION-AUTHORITY · CONSTITUTION · PROCESS-LOOPS · ENGINEERING-STANDARD · SUBAGENT-PROTOCOL · LIVE-LANES · STREAM-A-DESIGN-BAR · AGENTS.md
+NEVER trust: chat summary, TRACKER.md, WAVE-AUDIT-LATEST as live SoT (demoted until resync)
 
-=== FIRST ACTIONS (every session — before any code) ===
-1) Refresh SCOREBOARD + NEXT from tip truth (never trust chat memory)
-2) Re-derive open agent ships from BOARD-CLEAR-AGENT-BACKLOG (skip SHIPPED IDs)
-3) Babysit open PRs (agent + shehzad): green+gates → merge per DECISION-AUTHORITY
-4) Fan-out 3–5 workers ONLY on unblocked agent ships (PATHS_ONLY)
-5) Never re-do A-OR-1 / shipped Wave A IDs as primary work
+=== FIRST ACTIONS (every session / every compact — before any code) ===
+1) Open BOARD-CLEAR-NEXT.md — execute EXACT NEXT SHIP (or fix its open PR)
+2) git fetch + gh pr list — refresh open-PR notes in NEXT if changed
+3) SCOREBOARD + AGENT-BACKLOG for Done/WIP truth (skip SHIPPED IDs)
+4) Babysit open PRs per DECISION-AUTHORITY
+5) Fan-out only after primary ship is moving; PATHS_ONLY; never re-ship done Wave A IDs
+6) Before stop/compact: rewrite EXACT NEXT SHIP in BOARD-CLEAR-NEXT.md
 
 HUMAN HARD OWNER @shehzad002 — BIG MOUNTAINS (do not steal; do not micro-implement):
 M1 Pay OS · M2 Protocol OS · M3 Futures RISK · M4 OTC/copy/algo · M5 Identity money · M6 Bank money · M7 Java residual (after #289)
@@ -99,7 +80,7 @@ DECISION AUTHORITY (binding):
 WHAT RIGHT MEANS:
 1) Doctrine-true money
 2) Constitution Done bar + PROOF
-3) Tracker + scoreboard honest same turn
+3) Scoreboard + NEXT honest same turn (TRACKER demoted until sync)
 4) Zero path collision with shehzad002
 5) Speed only after 1–4
 6) Fill AGENT board hard while human deep-works — never steal, never idle
