@@ -119,7 +119,12 @@ async function main() {
   });
 
 
-  await run('node', ['tooling/scripts/order-path-cx8-ensure-streams.mjs'], { ...common, NATS_URL: NATS });
+  // Resolve `nats` from workspace package deps (not hoisted to monorepo root).
+  await run(
+    'pnpm',
+    ['--filter', '@intafaced/events', 'exec', 'node', join(ROOT, 'tooling/scripts/order-path-cx8-ensure-streams.mjs')],
+    { ...common, NATS_URL: NATS },
+  );
 
   mkdirSync(join(ROOT, '.data/matching'), { recursive: true });
 
