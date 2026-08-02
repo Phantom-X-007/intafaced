@@ -193,6 +193,23 @@ legacy template path is, and bumping the driver alone will not move it.
 + image: mongo:4.4
 ```
 
+**And the trap that comes with it, which is easy to miss and costs a day.** The
+healthcheck on the same service is:
+
+```yaml
+test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand("ping")']
+```
+
+**`mongosh` does not exist before MongoDB 5.** On a 4.4 image that healthcheck can
+never pass, so the container sits `unhealthy` forever and `coinex-market` — which
+has `depends_on: coinex-mongo: {condition: service_healthy}` — never starts, behind
+a database that is perfectly fine. It must become `mongo` in the same edit:
+
+```yaml
+- test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand("ping")']
++ test: ['CMD', 'mongo',   '--quiet', '--eval', 'db.adminCommand("ping")']
+```
+
 then, because a 6.0 data directory will not mount on 4.4:
 
 ```bash
@@ -207,6 +224,13 @@ Losing that volume costs nothing: every table behind it is empty.
 
 **Do not** "fix" it by downgrading to the README's MongoDB 3.6 — EOL 2021, and the
 compose header at line 34-45 explains at length why that door is closed.
+
+> **Collision notice.** As this was written, an uncommitted edit in the **main
+> checkout** is making exactly this change — `mongo:4.4` plus the `mongosh` → `mongo`
+> healthcheck. Independent arrival at the same fix, and the healthcheck catch is
+> theirs. **Whoever lands it: that draft also drops the `127.0.0.1:` prefix from
+> the published port, which silently reverts #409** (`fix(vendor): bind the vendored
+datastores to loopback, not every interface`). Keep the binding.
 
 ### 2.2 `ucenter` — the client sends a Redis password the server has never been configured to want
 
