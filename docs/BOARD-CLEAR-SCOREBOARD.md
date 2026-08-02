@@ -36,7 +36,7 @@
 | venue.aggregation                | **WIP**  | **AGENT P-TRADE-LIGHT**  | Mark fabric #344 default OFF; ops residual                      | A-TRADE-VENUE-OPS | #344      |
 | order-route #289                 | **DONE** | **AGENT P-OR** → M7 open | Merged A-OR-1                                                   | —                 | #289      |
 | Phase 5 bank money               | **OPEN** | **HUMAN M6 shehzad002**  | earn/cards/ramps                                                | M6                | —         |
-| Phase 5 academy/ops/agents       | **WIP**  | **AGENT P-P5-LIGHT**     | Curriculum #341; ops/agents residual                            | A-P5-OPS/AGENTS   | #341      |
+| Phase 5 academy/ops/agents       | **WIP**  | **AGENT P-P5-LIGHT**     | Curriculum #341; ops PR open (A-P5-OPS); agents residual        | A-P5-AGENTS       | #341      |
 | identity sub-account money       | **OPEN** | **HUMAN M5 shehzad002**  | money graph                                                     | M5                | —         |
 
 Status vocabulary: `OPEN` | `WIP` | `DONE` | `CUT` (§13)
