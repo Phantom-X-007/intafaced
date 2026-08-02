@@ -22,5 +22,6 @@
 | 2026-08-02 | GitHub ownership lock: tracker owner shehzad002 + CODEOWNERS + session prompt ban  | Ownership on tip without chat           | Ownership lock PR  |
 | 2026-08-02 | NEXT sole post-compact entry; EXACT NEXT=A-TRADE-MM-3; TRACKER+wave-audit demoted  | Compaction-proof audit holes            | Compaction hygiene |
 | 2026-08-02 | Dual gates AGENT-COMPLETE vs BOARD-COMPLETE; blockers deferred to PHASE C          | Honest AFK scope; no fake full-board GO | AFK contract       |
+| 2026-08-02 | Parallel-session collision ritual + tip freshness every cycle                      | Multi-chat / multi-PR same-day risk     | Parallel harden    |
 
 <!-- APPEND BELOW — do not edit above -->

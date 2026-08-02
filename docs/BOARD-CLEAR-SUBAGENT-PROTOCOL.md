@@ -9,15 +9,16 @@
 
 Every cycle:
 
-1. Read SCOREBOARD + NEXT + AGENT-BACKLOG + open PRs + main tip
-2. Babysit red CI (own program PRs first); shehzad PRs per DECISION-AUTHORITY
-3. Pick unblocked **agent** ships from backlog (skip SHIPPED; never M1–M7 implement)
-4. Spawn ≤ N workers (default **3–5** concurrent code workers; thrift)
-5. On worker return: verify evidence block; merge if gates pass
-6. Update SCOREBOARD + NEXT + DECISION-LOG if plan changed
-7. Wave audit every 4 product merges
-8. **Never** stop with OPEN rows and empty NEXT
-9. **Never** idle because human rows are OPEN
+1. Read NEXT + tip + open PRs (PARALLEL-SESSIONS §2 collision ritual)
+2. Read SCOREBOARD + AGENT-BACKLOG + LIVE-LANES
+3. Babysit red CI; shehzad PRs per DECISION-AUTHORITY
+4. Pick **path-clear** agent ships (skip SHIPPED; never M1–M7; no dual-build)
+5. Spawn ≤ N workers with PATHS_ONLY exclusive (default **3–5**; thrift)
+6. On worker return: verify evidence; merge if gates pass
+7. Update SCOREBOARD + NEXT (tip + exact ship + open PRs) + DECISION-LOG if needed
+8. Wave audit every 4 product merges
+9. **Never** stop with OPEN rows and empty NEXT
+10. **Never** idle because human rows are OPEN
 
 Orchestrator may do **small** Class N fixes itself; large ships go to workers.
 
