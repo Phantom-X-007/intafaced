@@ -187,7 +187,7 @@ Open PRs for this campaign are merged or closed with reason.
 - `pnpm verify` / package tests + CI green before merge
 - Class M self-audit on money PRs (in PR body)
 - Prettier/docs CI clean
-- Update tracker + scoreboard **same turn** as merge
+- Update scoreboard same turn as merge that moves a campaign row; update tracker on **mountain events** (claim / handoff / done/cut / wave note) — not every craft PR ([`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md))
 - Re-index graphify corpus if docs graph exists and you changed docs there
 
 ---
@@ -210,6 +210,7 @@ Open PRs for this campaign are merged or closed with reason.
 | Mega audit                 | `docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`              |
 | Wave audit latest          | `docs/BOARD-CLEAR-WAVE-AUDIT-LATEST.md`                  |
 | Feature status             | `tooling/tracker/features.mjs` + `docs/TRACKER.md`       |
+| Which file answers what    | `docs/COORDINATION-TRUTH-LAYERS.md`                      |
 | Law                        | `INTAFACED_DEFINITIVE_BUILD.md`                          |
 | Agent rules                | `AGENTS.md` + `tooling/agent-protocol/AGENT_PROTOCOL.md` |
 
