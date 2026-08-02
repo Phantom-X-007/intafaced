@@ -187,6 +187,10 @@ async function main() {
     TRADE_SMOKE_QTY: '0.1',
     TRADE_SMOKE_PRICE: '100',
     TRADE_SMOKE_REGION: 'DE',
+    TRADE_SMOKE_L3: '1',
+    TRADE_SMOKE_STRESS_N: '3',
+    // Settle + ledger post lag under JetStream; STRICT fails closed if still empty.
+    TRADE_SMOKE_FILL_WAIT_MS: '25000',
   });
 
   log('CX-8 boot + smoke complete');

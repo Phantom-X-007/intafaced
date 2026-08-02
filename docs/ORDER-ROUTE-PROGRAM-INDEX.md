@@ -12,6 +12,8 @@
 | 5   | [**Plan**](ORDER-ROUTE-PLAN-2026-07-31.md)                                       | Task graph P0–P8 — **execute from here**            |
 | 6   | [Scoreboard](ORDER-ROUTE-READINESS-SCOREBOARD.md)                                | Living green/red                                    |
 | 7   | [Domain inventory](ORDER-ROUTE-HARDEN-PROGRAM-2026-07-31.md)                     | Terrain only — **not** the plan                     |
+| 8   | [**Prod-claim agent-max (path C)**](ORDER-ROUTE-PROD-CLAIM-AGENT-MAX-2026-08-02.md) | Self-prompt · L3/L4 Spec · compact resume        |
+| 9   | [Human X production claim](ORDER-ROUTE-HUMAN-X-PRODUCTION-CLAIM-2026-08-02.md)   | Nitro-only go-live checklist                        |
 
 **v1 landscape file** (historical): `ORDER-ROUTE-TOOLS-WORKFLOWS-LANDSCAPE-2026-07-31.md` — prefer **v2**.
 
