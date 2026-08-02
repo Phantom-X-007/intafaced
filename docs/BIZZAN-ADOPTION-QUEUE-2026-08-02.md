@@ -1,0 +1,1033 @@
+# Adopt the whole app, keep one book — the work queue
+
+**Type:** executable queue. **Status:** ready to assign. **No service, vendor or app source changed by this document.**
+**Written against:** `main` @ `a43b469`, live fleet on this machine, 2026-08-02.
+**Direction it implements:** the owner's, stated three times — _"We should have leveraged the whole Bizzan trading app. It is robustly built. All our additional features and screens should have been built ON TOP of it."_
+
+This document does not evaluate that direction. It makes it executable.
+
+---
+
+## 0 · The reconciliation, in one line
+
+**Adopt the whole app. Keep one book.**
+
+The balance-ownership ADR is `Status: Accepted` — Option B, `ledger.*` is the only book
+([`docs/adr/2026-07-28-vendored-exchange-integration.md:3`](adr/2026-07-28-vendored-exchange-integration.md)). That is settled and this
+queue does not reopen it. What the ADR forbids is a **second set of books**, not a
+second **codebase**. A vendored controller that keeps its validation, its state
+machine, its appeal flow and its screens, and calls `packages/ledger-client`
+where it used to call `MemberWalletDao`, is not a second book. It is our book,
+reached through their door.
+
+So the queue has four buckets and one rule each:
+
+| Bucket                | Rule                                                                  |
+| --------------------- | --------------------------------------------------------------------- |
+| **1 · ADOPT AS-IS**   | It runs, it writes no balance. Stop rebuilding it.                    |
+| **2 · ADOPT + ADAPT** | Keep the controller and its logic. Redirect the balance write.        |
+| **3 · REWIRE**        | Keep the screen. Point it at `svc-edge`.                              |
+| **4 · DELETE**        | Dead weight, or something we already do better. Justified one by one. |
+
+---
+
+## 1 · Five things changed under this plan while it was being written
+
+Read this section before anything else. The brief that commissioned this
+document, and the audit it rests on ([`docs/VENDORED-OVERLAP-AUDIT.md`](VENDORED-OVERLAP-AUDIT.md), probed 2026-07-30),
+are both partly overtaken by code that has since landed.
+
+### 1.1 The Java money doors are already shut. All of them.
+
+The audit's headline finding was that `MemberWalletDao` "still declares, live"
+the four balance mutators. **It does not, as of #234 and #289.** Every one is now
+a no-op:
+
+```java
+// vendor/coinexchange/00_framework/core/.../dao/MemberWalletDao.java:26-27
+@Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
+int increaseBalance(@Param("walletId") long walletId, @Param("amount") BigDecimal amount);
+```
+
+Same shape at `:33` (`decreaseBalance`), `:39` (`freezeBalance`), `:45`
+(`thawBalance`), `:53` (`decreaseFrozen`), and eight more mutating queries
+through `:173`.
+
+And the HTTP layer is shut too. `DualBookMoneyDoorInterceptor.java` refuses **50
+URI fragments** with `410 Gone`, registered on all four money-facing
+`ApplicationConfig`s. Verified:
+
+```
+✓ dual-book-door-scan clean — interceptor + registration on admin, ucenter-api, otc-api, exchange-api
+✓ vendor-java-money-scan clean — 882 Java file(s), 8 live-write pattern(s)
+```
+
+**What this means for bucket 2.** The work is not "find the balance writes and
+redirect them" — that job was done. The work is **"open each door back up, one at
+a time, behind an adapter that posts to our ledger, and delete its fragment from
+`BLOCKED_URI_FRAGMENTS` in the same PR."** The interceptor list _is_ the bucket-2
+backlog, and it is already written down. That is a much smaller job than the
+brief assumed, and it has a built-in definition of done: a controller is adopted
+when its fragment leaves that list and a ledger post replaces the no-op.
+
+### 1.2 `custody-scan` is not the gate anyone thinks it is — and the Java gate that does exist is not in `pnpm verify`
+
+The audit's F1 said `custody-scan` "walks `['.ts','.tsx']` only" and is therefore
+"blind to the module that holds its own balance". Half right, and the other half
+is worse.
+
+`custody-scan` walks `.ts`/`.tsx` **inside four named services only** —
+`['svc-chain','svc-dex','svc-indexer','svc-protocol']`
+(`tooling/ci/custody-scan.mjs:31`). It is not a "no module holds its own balance"
+gate at all. It is a **Protocol-Plane-does-not-import-ledger-writes** gate (§16.10).
+Its own output says so: `✓ custody-scan clean — 97 files across 3 Protocol Plane service(s)`.
+It has never read Java, and it has never read the other twelve TypeScript services either.
+**Extending it to Java would be extending the wrong gate.**
+
+The gate that _does_ read Java is `tooling/ci/vendor-java-money-scan.mjs` — 882
+files, 8 live-write patterns, added with #289. That is the right one.
+
+**The real hole, and it is a live one:**
+
+```
+"verify": "pnpm scan:agent-autoload && pnpm tracker:check && pnpm format:check
+           && turbo run build typecheck test && pnpm scan:workspace
+           && node tooling/ci/dod-gate.mjs"
+```
+
+— `package.json:34`. **`pnpm verify` runs none of the six scans.** Not
+`scan:custody`, not `scan:vendor-java-money`, not `scan:vendor-shell`, not
+`scan:dual-book-door`, not `scan:dual-book-door-paths`, not `scan:brand`. They run
+only in `.github/workflows/ci.yml:38-48`. So every agent who reports "verify
+green" has proved nothing about dual-book or custody, and the doctrine gate fires
+for the first time after the push we were told to avoid making.
+
+> **Action (tooling/CI — Denon):** add the five doctrine scans to `verify`. One
+> line. It is the cheapest item in this entire document and it is the one that
+> makes every other item enforceable locally.
+
+**What no scan can prove, and what bucket 2 must therefore prove by test:** the
+scans prove nothing writes `member_wallet`. They cannot prove an adapter posts to
+our ledger _correctly_ — that the freeze became an `escrowLock`, that the release
+became an `escrowRelease` with the right fee, that the reversal path exists.
+Every bucket-2 PR needs a failure test alongside the happy path. That is the
+enforcement gap to name, and it is a test-discipline gap, not a scanner gap.
+
+### 1.3 PR #412 is open, not merged. The shell is still not deployable on `main`.
+
+`gh pr list` → `412 feat(vendor): make the vendored trading shell deployable — OPEN`.
+`grep -rn "8090\|shell-web\|Web_Front" --include="*.yml" .` over the repo returns
+**nothing**. The audit's F7 still stands in full: the shell is hand-started,
+bind-mounted, in no compose file.
+
+Bucket 3 is blocked on #412 landing. **Merge #412 first.** It is the only thing
+standing between "the direction" and "a thing you can open in a browser".
+
+### 1.4 The Java stack is more down than the brief says
+
+Live, this machine, right now:
+
+| Container                                | State            | Consequence                             |
+| ---------------------------------------- | ---------------- | --------------------------------------- |
+| `intafaced-coinex-cloud`                 | Up 2 days        | Eureka only — 0 controllers             |
+| `intafaced-coinex-exchange`              | Up 2 days        | matching module — **1** controller      |
+| `intafaced-coinex-market`                | **Exited (1)**   | Mongo `OP_QUERY` — see §2.1             |
+| `intafaced-coinex-ucenter`               | **Exited (1)**   | Redis AUTH — see §2.2                   |
+| `intafaced-coinex-otc`                   | **Exited (255)** | hand-started, not in compose — see §2.3 |
+| `intafaced-coinex-exchange-api`          | **Exited (255)** | hand-started, not in compose — see §2.3 |
+| `intafaced-shell-web`                    | **Exited (255)** | hand-started, not in compose — #412     |
+| `admin`, `chat`, `wallet`, `bitrade-job` | never started    | not in compose at all                   |
+
+**1 of 94 controllers is reachable today** — `exchange/MonitorController`. Not 4
+modules as the audit found on 30 July; two of those four have since died.
+
+### 1.5 The mobile apps and the trading robot are empty. There is nothing to read.
+
+The audit listed `02_App_Android`, `03_APP_IOS` and `06_ExchangeRobot` as
+unexamined, and asked "who reads the mobile apps, and when?". `git ls-files`
+answers it: **two files each — a `.keep` and a `README.md`.** They were stripped
+at vendoring. Owner question #4 from the audit (`§7.4`) is closed by fact. Nobody
+needs to read them; there is nothing there.
+
+---
+
+## 2 · FIX FIRST — nothing in buckets 1–3 is testable until these land
+
+Three blockers, exact remediation. All three are **tooling/CI lane — Denon**.
+None of them touches money code.
+
+### 2.1 `market` — MongoDB removed the wire protocol Spring Boot 1.5 speaks
+
+**Verified cause**, from `docker logs intafaced-coinex-market`:
+
+```
+Caused by: com.mongodb.MongoQueryException: Query failed with error code 352 and error
+message 'Unsupported OP_QUERY command: find. The client driver may require an upgrade.
+For more details see https://dochub.mongodb.org/core/legacy-opcode-removal'
+on server coinex-mongo:27017
+    at com.mongodb.DBCursor.initializeCursor(DBCursor.java:870)
+    at org.springframework.data.mongodb.core.MongoTemplate.executeFindMultiInternal(MongoTemplate.java:1967)
+```
+
+**The brief's diagnosis is wrong and it matters.** There is no `mongo:4.4` pin
+anywhere in the repo — `grep -rn "mongo:4"` returns nothing.
+`vendor/coinexchange-compose.yml:85` pins **`mongo:6`**, and
+`docker exec intafaced-coinex-mongo mongosh --eval "db.version()"` returns
+**`6.0.28`**. Compose and container agree. Nothing needs recreating.
+
+The actual cause is a version skew that no `--force-recreate` fixes: Spring Boot
+`1.5.9.RELEASE` (`00_framework/pom.xml:32`) brings Spring Data MongoDB 1.x, whose
+`MongoTemplate` uses the legacy `com.mongodb.DBCursor` API. That API emits
+`OP_QUERY`, which **MongoDB 5.1 removed**. The driver version
+(`mongodb-driver.version = 3.12.14`, `pom.xml:46`) is not the problem — the
+legacy template path is, and bumping the driver alone will not move it.
+
+**Remediation — do the cheap one now, file the correct one:**
+
+```yaml
+# vendor/coinexchange-compose.yml — coinex-mongo
+- image: mongo:6
++ # 4.4 is the last server that speaks OP_QUERY, which Spring Data MongoDB 1.x
++ # (Boot 1.5.9) emits via the legacy DBCursor API. Not a preference — 5.1
++ # removed the opcode. Correct fix is Boot/Spring-Data upgrade; that is a project.
++ image: mongo:4.4
+```
+
+then, because a 6.0 data directory will not mount on 4.4:
+
+```bash
+docker compose -f vendor/coinexchange-compose.yml rm -sf coinex-mongo
+docker volume rm vendor_coinex-mongo          # 0 rows of value — see §3.3 of the audit
+docker compose -f vendor/coinexchange-compose.yml up -d coinex-mongo coinex-market
+```
+
+Losing that volume costs nothing: every table behind it is empty.
+**Size: S.** Note `docs/DIRECTION-2026-07-31.md` §6 already calls
+`feat/spine-market-seeder` **RESUME, priority** for exactly this.
+
+**Do not** "fix" it by downgrading to the README's MongoDB 3.6 — EOL 2021, and the
+compose header at line 34-45 explains at length why that door is closed.
+
+### 2.2 `ucenter` — the client sends a Redis password the server has never been configured to want
+
+**Verified cause**, from `docker logs intafaced-coinex-ucenter`:
+
+```
+Caused by: redis.clients.jedis.exceptions.JedisDataException:
+ERR AUTH <password> called without any password configured for the default user.
+Are you sure your configuration is correct?
+    at redis.clients.jedis.BinaryJedis.auth(BinaryJedis.java:2139)
+    ... RedisHttpSessionConfiguration$EnableRedisKeyspaceNotificationsInitializer
+```
+
+It fails at context refresh, so the process exits — this is not a degraded
+service, it is a service that cannot boot.
+
+**Both halves verified:**
+
+- Seven `application.properties` set `spring.redis.password=${COINEX_REDIS_PASSWORD}` —
+  `admin:32`, `bitrade-job:75`, `chat:29`, `exchange-api:24`, `market:91`,
+  `otc-api:41`, `ucenter-api:40`.
+- `vendor/coinexchange-compose.yml:97-99` declares `coinex-redis` with **no
+  `command:`**, so no `--requirepass`. `docker exec intafaced-coinex-redis redis-cli
+CONFIG GET requirepass` returns **empty**.
+
+**Remediation — set the password, do not delete it.** The tempting fix is to
+comment out the seven property lines. Do not: that leaves an unauthenticated
+Redis holding every user session, and `docs/A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md`
+already rates this perimeter P1–P4.
+
+```yaml
+# vendor/coinexchange-compose.yml — coinex-redis
+  coinex-redis:
+    image: redis:7-alpine
++   command: ['redis-server', '--requirepass', '${COINEX_REDIS_PASSWORD:-coinex_dev_only}']
+    ...
+    healthcheck:
+-     test: ['CMD', 'redis-cli', 'ping']
++     test: ['CMD', 'redis-cli', '-a', '${COINEX_REDIS_PASSWORD:-coinex_dev_only}', 'ping']
+```
+
+and every Java service gains:
+
+```yaml
+environment:
+  COINEX_REDIS_PASSWORD: ${COINEX_REDIS_PASSWORD:-coinex_dev_only}
+```
+
+The Java services currently have **no `environment:` block at all**, which is why
+`${COINEX_REDIS_PASSWORD}` resolves to nothing coherent inside the container.
+**Size: S.**
+
+### 2.3 `otc-api` and `exchange-api` are not in the compose file, so they cannot be started
+
+`vendor/coinexchange-compose.yml` defines exactly eight services: `coinex-mysql`,
+`coinex-mongo`, `coinex-redis`, `coinex-kafka`, `coinex-cloud`, `coinex-exchange`,
+`coinex-market`, `coinex-ucenter`.
+
+**Absent:** `otc-api` (6006), `exchange-api` (6003), `admin`, `chat`,
+`bitrade-job`, `wallet`, and the Vue shell. The `intafaced-coinex-otc` and
+`intafaced-coinex-exchange-api` containers on this machine were hand-started, are
+`Exited (255)`, and `docker compose up` will not bring them back because compose
+does not know they exist.
+
+**Remediation** — add four service blocks mirroring `coinex-ucenter`. Ports from
+each module's `dev/application.properties` (`exchange-api:1` → `6003`,
+`otc-api:1` → `6006`), context-paths `/exchange` and `/otc` (`:3` and `:2`):
+
+```yaml
+coinex-exchange-api:
+  image: eclipse-temurin:8-jre
+  container_name: intafaced-coinex-exchange-api
+  working_dir: /app
+  volumes: ['./coinexchange/00_framework:/app:ro']
+  command: ['java', '-Xms256m', '-Xmx512m', '-jar', 'exchange-api/target/exchange-api.jar']
+  environment: { COINEX_REDIS_PASSWORD: '${COINEX_REDIS_PASSWORD:-coinex_dev_only}' }
+  ports: ['127.0.0.1:${COINEX_EXCHANGE_API_PORT:-6003}:6003']
+  depends_on:
+    coinex-market: { condition: service_started }
+    coinex-redis: { condition: service_healthy }
+
+coinex-otc:
+  # …identical shape, otc-api/target/otc-api.jar, 6006
+coinex-admin:
+  # …admin/target/admin-api.jar — see the caution below
+coinex-chat:
+  # …chat/target/chat.jar — bucket 1, no money
+```
+
+**A caution that used to be a blocker and is now only a caution.** The audit's
+§7.5 said "what I would _not_ do: start the vendored `admin` module" — because
+twelve of its controllers wrote balances and `member_wallet` was pristine. **That
+reasoning is retired by §1.1**: the DAO mutators are no-ops and all twelve admin
+money paths are in `BLOCKED_URI_FRAGMENTS`. Starting `admin` now surfaces 45
+read-only controllers with the 12 money doors returning 410. The remaining
+caution is the perimeter, not the money: committed actuator basic-auth including
+`heapdump` (A1.4, P1). Bind it to loopback like everything else in that file and
+start it.
+
+**Size: M** (four services, plus the perimeter check on `admin`).
+
+### 2.4 The fourth blocker nobody has named: the jars are not in the repo, and nothing builds them
+
+`find vendor/coinexchange/00_framework -name "*.jar" -path "*/target/*"` in this
+worktree returns **nothing**. The same command against the main checkout returns
+**13 jars**. `target/` is gitignored; the compose `command:` lines are
+`java -jar …/target/….jar`.
+
+So the vendored stack starts on exactly one machine, from build output that
+exists only there, produced by a Maven run nobody has scripted. A fresh clone
+cannot start any of it, and neither can CI. Every "the vendored app is robustly
+built" claim currently rests on artefacts that are one `git clean -xdf` from
+gone.
+
+**Remediation:** a `maven:3.8-openjdk-8` build stage — either a builder service in
+the compose file or a `pnpm vendor:build` script. The ADR already establishes the
+container-build approach (§"No JDK or Maven on this machine"). **Size: M.**
+This is the item that turns "it runs here" into "it runs".
+
+---
+
+## 3 · Bucket 1 — ADOPT AS-IS
+
+**Placement rule:** it writes no balance, it needs no adapter, and the only thing
+between us and it is §2. **68 of the 94 controllers.**
+
+Counted, not asserted: `find vendor/coinexchange -name '*Controller.java'` → **108**.
+Minus 13 in `01_wallet_rpc` (12 per-chain `WalletController` + `RpcController`)
+→ **95**. Minus `wallet/…/TestController.java` → **94**. Of those, 25 touch
+`MemberWalletService` / `MemberTransaction` (§4), leaving **68**.
+
+### 3.1 The five with no tracker row — this is why they keep getting rebuilt
+
+An agent cannot avoid duplicating work that is not on the board.
+`tooling/tracker/features.mjs` has 130 rows; I extracted every id and checked.
+**These five vendored capabilities have no row of any kind:**
+
+| #   | Capability                             | Vendored implementation                                                                                                | Screens                       |
+| --- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| 1   | **CMS** — announcements, help, notices | `admin/cms/{Advertise,Help}Controller`, `admin/system/AnnouncementController`, `ucenter/{Announcement,Aide}Controller` | 7 finished `pages/cms/*.vue`  |
+| 2   | **Site content model / config**        | `admin/system/{DataDictionary,WebsiteInformation,AppRevision,MemberApplicationConfig}Controller`                       | —                             |
+| 3   | **Red envelope**                       | `ucenter/RedEnvelopeController`, `admin/redenvelope/RedEnvelopeController`, `admin/job/CheckRedEnvelopeJob`            | `pages/envelope/Envelope.vue` |
+| 4   | **Activity / sign-in / bonus**         | `admin/activity/{Activity,Sign}Controller`, `ucenter/{Activity,Bonus}Controller`                                       | 4 `pages/activity/*.vue`      |
+| 5   | **CTC — fiat acceptor desk**           | `ucenter/CtcController`, `admin/ctc/{AdminCtcOrder,AdminCtcAcceptor}Controller`                                        | `pages/ctc/Ctc.vue`           |
+
+**A sixth, and it is the worst one:** the vendored **Vue shell itself has no
+tracker row**. `web.shell` (`features.mjs:329`) is `requires: ['apps/web']` —
+`apps/web`, not the shell. The thing the owner has three times called "the app"
+is not on the board at all, while the thing he did not ask for is `done`. That
+single line is the mechanism by which the stated direction and the running system
+drifted apart, and it is a one-line fix.
+
+Three more that _do_ have rows but at 🟢 not-started, and are therefore also
+being rebuilt from nothing while a finished version sits on disk:
+`ops.support` (support chat), `ops.analytics` (statistics/finance reporting),
+`ops.admin` (`ready`, and its own note says "apps/admin has ZERO test files and
+makes no network call of any kind. Every kill-switch, freeze and reconcile is
+React `useState` in the browser").
+
+> **`apps/admin` is a console that appears to halt the ledger and does not.**
+> The vendored admin console is 57 controllers plus 92 `.vue` files that
+> genuinely talk to a backend. That comparison is the strongest single argument
+> in the owner's favour anywhere in this document.
+
+### 3.2 The 68, by group
+
+**`admin` — 45 of 57 (the other 12 are bucket 2)**
+
+| Group                     | Controllers                                                                                                                      | n   | Note                                             |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------ |
+| CMS                       | `cms/AdvertiseController`, `cms/HelpController`                                                                                  | 2   | site banners + help centre. No tracker row.      |
+| Content / site config     | `system/{Announcement,DataDictionary,WebsiteInformation,AppRevision,MemberApplicationConfig,TransferAddress,GoogleVerification}` | 7   | No tracker row.                                  |
+| **RBAC scaffolding**      | `system/{Role,Permission,Employee,Department,AccessLog}Controller`                                                               | 5   | a finished permission model. `ops.admin` 🟢      |
+| Reporting — system        | `system/StatisticsController`                                                                                                    | 1   | member/delegation/order/dashboard/order-rate     |
+| Reporting — finance       | `finance/{FinanceStatistics,ExchangeTransaction,MemberDepositRecord}Controller`                                                  | 3   | **reads only** — verified, no wallet writes      |
+| Rewards read/config       | `system/{MemberBonus,RewardActivityRecord}Controller`, `promotion/{MemberPromotion,RewardPromotion,RewardRecord}Controller`      | 5   | config + read; the credit path is bucket 2       |
+| Exchange config / read    | `exchange/{ExchangeCoin,ExchangeInitPlate,ExchangeOrder,ExchangeOrderDetail,ExchangeOrderMineDetail,HTLExchangeInitPlate}`       | 6   | listings + order **read**; the write is bucket 4 |
+| OTC config / read         | `otc/{AdminOtcCoin,AdminAdvertise,AdminOrder}Controller`                                                                         | 3   | **fixes audit F4** — `otc_coin` empty is config  |
+| Member non-money          | `member/{MemberApplication,MemberLevel,InviteManagement}Controller`                                                              | 3   | `identity.rank` ✅ overlaps `MemberLevel`        |
+| Merchant KYB (apply side) | `businessAuth/BusinessAuthController`                                                                                            | 1   | the bond move is bucket 2                        |
+| CTC acceptor config       | `ctc/AdminCtcAcceptorController`                                                                                                 | 1   | no tracker row                                   |
+| Sign-in campaign config   | `activity/SignController`                                                                                                        | 1   | no tracker row                                   |
+| Red envelope admin        | `redenvelope/RedEnvelopeController`                                                                                              | 1   | no tracker row                                   |
+| SMS provider config       | `code/SmsProviderController`                                                                                                     | 1   | `ops.notifications` 🟢 — ours refuses honestly   |
+| Console plumbing          | `common/{BaseAdmin,Global,Index,Upload}Controller`, `index/IndexController`                                                      | 5   | login, nav, file upload                          |
+
+**`ucenter-api` — 13 of 23**
+
+`AideController`, `AnnouncementController`, `BonusController`, `CoinController`,
+`FeedbackController`, `GeetestController`, `GoogleAuthenticationController`,
+`LegalWalletRechargeController`, `LoginController`, `MiningOrderController`,
+`RegisterController`, `SmsController`, `UploadController`.
+
+`LegalWalletRechargeController` earns its place here on evidence: it writes a
+request row at `state = APPLYING` and moves no value — the money is in the
+_admin_ counterpart (bucket 2). The audit found this and it is still true.
+
+**`chat` — 2 of 2.** `HistoryMessageController`, `WebSocketController`. The whole
+module, jar already built, zero money. `ops.support` is 🟢 not started. This is
+the cleanest adopt in the document — one compose block against a service we have
+not begun.
+
+**`market` — 2 of 2.** `MarketController` (13 routes), `ExchangeRateController`.
+Adopt with a hard caveat: the data is **seeded and synthetic**
+(`vendor/coinexchange/seed-market-data.mjs` header says so; `volume: 0.0000`).
+Audit F5 stands. Adopting the module is fine; **presenting its candles as market
+truth is not**, and that is the honesty line `docs/STREAM-A-PHASE1-PLAN.md`
+already draws.
+
+**`exchange-api` — 2 of 3.** `ExchangeCoinController` (listings),
+`FavorController` (watchlist). `OrderController` is bucket 4.
+
+**`otc-api` — 1 of 3.** `OtcCoinController`. `Advertise` and `Order` are bucket 2.
+
+**`core` — 2 of 2.** `BaseController`, `CaptchaController`.
+
+**`exchange` — 1 of 1.** `MonitorController` — the only controller reachable today.
+
+### 3.3 What bucket 1 costs and what it saves
+
+Cost: §2's compose work, plus one perimeter pass on `admin`'s actuator. **Size: M
+for the whole bucket**, because §2 is shared across all of it and each additional
+module after the first is a copy-pasted compose block.
+
+Saves: 68 finished controllers and roughly 20 finished screens across CMS,
+support chat, statistics, RBAC and site config — five of which are not on the
+board and so are being rebuilt by accident, and three of which are on the board
+at not-started.
+
+---
+
+## 4 · Bucket 2 — ADOPT + ADAPT · **the recipe map**
+
+**Placement rule:** it moves value. Keep the controller, its validation, its
+state machine, its screens. Replace the balance write with a `ledger.post()`.
+
+**25 controllers**, verified by
+`grep -rl "MemberWalletService\|MemberTransactionService\|MemberWalletDao\|MemberTransaction " --include='*Controller.java'`
+→ exactly 25 files. Of those, **7 call the four DAO mutators directly** (per
+`node tooling/scripts/vendor-money-inventory.mjs`, 14 call-site lines); the other
+18 mutate through `setBalance` / `setFrozenBalance` + `save`, or delegate to a
+service that does.
+
+### 4.1 The map
+
+Recipes are from `packages/ledger-client/src/recipes/` — `index.ts` (31 recipes),
+`bank.ts` (5), `loans.ts` (7). **`recipes` is the only export surface**;
+`ledger.post(recipes.x({…}))` is the whole calling convention, and an inline
+entry list is a review rejection (`recipes/index.ts:24-34`).
+
+Legend: **✅ exact** — the recipe already expresses this movement.
+**◑ near** — the shape fits, the metadata does not. **✖ gap** — no recipe exists.
+
+---
+
+#### ✅ EXACT — 11 controllers, no new recipe needed
+
+**1 · `otc-api/…/OrderController`** — the OTC trade lifecycle. The single
+cleanest mapping in the tree.
+
+| What it does             | Vendored call                                           | Recipe                                                      |
+| ------------------------ | ------------------------------------------------------- | ----------------------------------------------------------- |
+| buyer takes an advert    | `freezeBalance(wallet, amount)` — `:367`                | `escrowLock({tradeId, sellerId, buyerId, assetId, amount})` |
+| buyer cancels            | `thawBalance(memberWallet, order.getNumber())` — `:532` | `escrowRefund({resolution:'cancelled'})`                    |
+| system expires the order | `thawBalance(…, number + commission)` — `:544`          | `escrowRefund({resolution:'expired'})`                      |
+| seller confirms fiat     | `memberWalletService.transfer(order, ret)` — `:643`     | `escrowRelease({feeBps})`                                   |
+
+Our `svc-p2p` already does exactly this — `p2p-service.ts:592` posts
+`recipes.escrowLock`, and `p2p.escrow` is `done`. The adapter is thin because
+both sides already agree on the concept. Door fragments to lift:
+`/order/buy`, `/order/sell`, `/order/cancel`, `/order/pay`, `/order/release`.
+
+**2 · `admin/…/otc/AdminAppealController`** — dispute resolution.
+`thawBalance(memberWallet, amount)` at `:231` → `escrowRefund({resolution:'appeal-seller'})`;
+`memberWalletService.transferAdmin(order, ret)` at `:300` → `escrowRelease`.
+`p2p.disputes` is `done`. Fragments: `/otc/appeal/release-coin`, `/otc/appeal/cancel-order`.
+
+**3 · `ucenter-api/…/WithdrawController`** — crypto withdrawal request.
+`freezeBalance(memberWallet, amount)` at `:257` → **`withdrawHold({userId, assetId, amount, rail, withdrawalId})`**.
+Fragment: `/withdraw/apply`.
+
+**4 · `admin/…/finance/WithdrawRecordController`** — the approval half of the same
+flow, and it is where the money actually leaves.
+`setFrozenBalance(getFrozenBalance().subtract(totalAmount))` + `save` at
+`:226-227` (audit-pass) and `:272-273` (remittance)
+→ **`withdrawSettle`**; audit-no-pass → **`withdrawReverse`**.
+Fragments: `/finance/withdraw-record/{audit-pass,audit-no-pass,remittance,add-transaction-number}`.
+
+> `withdrawHold` → `withdrawSettle` / `withdrawReverse` is a purpose-keyed
+> three-step that already exists precisely because a rail can refuse
+> (`recipes/index.ts:104-149`). The vendored flow is the same three steps split
+> across two modules. Adopt both together or neither — half of it strands value
+> in a hold with no settle path.
+
+**5 · `ucenter-api/…/LegalWalletWithdrawController`** and
+**6 · `admin/…/member/LegalWalletWithdrawController`** — fiat withdrawal.
+`legalWalletWithdrawService.withdraw(wallet, …)` (`ucenter:82`) → `withdrawHold({rail:'fiat-<method>'})`;
+`pass`/`remit` (`admin:58`,`:90`) → `withdrawSettle`; `noPass` (`admin:73`) → `withdrawReverse`.
+Fragment: `/legal-wallet-withdraw`.
+
+**7 · `admin/…/member/LegalWalletRechargeController`** — fiat deposit approval.
+`legalWalletRechargeService.pass(wallet, legalWalletRecharge)` at `:63`
+→ **`deposit({rail:'fiat-<method>', railRef:<recharge id>})`**. `noPass` at `:73`
+posts nothing — no value moved. Fragment: `/legal-wallet-recharge`.
+
+**8 · `admin/…/member/MemberWalletController`** — operator manual credit.
+`setBalance(getBalance().add(amount))` + `memberTransactionService.save` at
+`:146-159` → **`deposit({rail:'admin-manual', railRef:<ticket id>})`**.
+
+> Exact, and **the most dangerous door in the tree** — an unbounded operator mint
+> reachable over HTTP. Adopt behind a scope + dual-control + a mandatory
+> `railRef` that names a real ticket, or leave the fragment in place. Also at
+> `:224`/`:235`: `lockWallet` / `unlockWallet`. Those are a per-user posting
+> freeze, and our equivalent is the ledger freeze / kill-switch — **a Denon §3
+> carve-out** ("anything that touches a posture gate, kill-switch, or custody
+> scan"). Do not build a second freeze.
+
+**9 · `ucenter-api/…/TransferController`** — internal transfer between members.
+`deductBalance(memberWallet, add(amount, fee))` at `:127`
+→ **`bankTransfer({from, to, amount, kind:'manual', occurrence:0})`**
+
+- **`feeCharge({mode:'asset'})`** as a separate post.
+  `bankTransfer` takes `AccountRef`s and refuses cross-asset and non-`available`
+  kinds (`bank.ts:76-88`), which is exactly the guard this controller lacks.
+
+**10 · `ucenter-api/…/AssetController`** — READ ONLY (`/asset/wallet`,
+`/asset/transaction`, `/asset/wallet/{symbol}`). No mutation in the controller.
+Re-point to `ledger.accounts` / `ledger_entries` via the edge.
+
+> **Do this one first.** It is what the shell shows a user as "my balance". Until
+> it reads our ledger, every screen in bucket 3 is displaying an empty
+> `member_wallet` while the user's real value sits in `ledger.accounts` — which
+> is the "two balance systems in one page" the audit named in §3.5. **Size: S.
+> Highest value-per-hour in this document.**
+
+**11 · `admin/…/finance/MemberTransactionController`** — READ ONLY (`/all`,
+`/detail`, export). Re-point to `ledger.ledger_tx` + `ledger_entries`. **Size: S.**
+
+---
+
+#### ◑ NEAR — 3 controllers, shape fits, journal metadata will read oddly
+
+**12 · `ucenter-api/…/CtcController`** and
+**13 · `admin/…/ctc/AdminCtcOrderController`** — the CTC fiat acceptor desk.
+
+| What it does          | Vendored call                                         | Recipe                               |
+| --------------------- | ----------------------------------------------------- | ------------------------------------ |
+| user places CTC order | `freezeBalance(memberWallet, amount)` — `ucenter:267` | `escrowLock`                         |
+| user cancels          | `thawBalance(…, order.getAmount())` — `ucenter:396`   | `escrowRefund`                       |
+| admin completes       | `increaseBalance(mw.getId(), amount)` — `admin:182`   | `escrowRelease`                      |
+| admin marks paid      | `decreaseFrozen(mw.getId(), amount)` — `admin:222`    | (leg of `escrowRelease`)             |
+| admin cancels         | `thawBalance(memberWallet, amount)` — `admin:327`     | `escrowRefund({resolution:'admin'})` |
+
+CTC is P2P with a designated acceptor, so the p2p escrow recipes fit the movement
+exactly. What does not fit is the journal: every entry will read `module: 'p2p'`,
+`reason: 'p2p.escrow.*'`. That is acceptable and should be recorded rather than
+papered over — CTC has no tracker row and no TypeScript analogue, so `p2p` is the
+honest home for it. Fragments: `/ctc/{new,cancel,pay}-ctc-order`,
+`/ctc/order/{complete,pay,cancel,confirm}-order`.
+
+**14 · `admin/…/system/CoinController`** — mostly listing config (bucket 1), but
+`:387` writes a hot-wallet transfer record and `:475` touches a wallet.
+The on-chain half belongs to `svc-protocol` / `svc-pay`, and `01_wallet_rpc` is
+deliberately shut (`c221cc8`). **Split it:** adopt the coin CRUD as-is, leave the
+hot-transfer path in bucket 4.
+
+---
+
+#### ✖ GAP — 8 controllers where no recipe exists
+
+Each of these needs a **new recipe**, and adding a recipe is explicitly
+**Denon's carve-out** (`docs/DIRECTION-2026-07-31.md` §3: _"anything that adds or
+changes a ledger recipe"_). Agents may not invent them. The right move is one
+recipes PR that adds all of them, reviewed once, ahead of the adapters — §15.2's
+normal ordering.
+
+**15 · `otc-api/…/AdvertiseController`** — advert-level inventory reservation.
+`freezeBalance(memberWallet, advertise.getNumber())` at `:225` on publish;
+`thawBalance(memberWallet, advertise.getRemainAmount())` at `:252` on
+delist/delete.
+
+**This is a genuine capability gap, not a naming one.** `svc-p2p` locks at _take_
+time (`p2p-service.ts:434` — "Taking an offer → escrowLock"); the vendored desk
+locks at _publish_ time, so a seller cannot advertise inventory they have already
+committed elsewhere. Ours can, and it is the better product that the vendored app
+has. `orderHold` / `orderHoldRelease` is the correct _shape_ — purpose-keyed by
+an id, released on cancel, `orderHoldAccount` — but its `module: 'trade'` /
+`reason: 'order.hold'` are wrong for a P2P advert.
+**Proposed: `p2pOfferHold` / `p2pOfferRelease`, modelled line-for-line on
+`orderHold` / `orderHoldRelease` with `module: 'p2p'`.**
+Fragments: `/advertise/{create,update,on/shelves,off/shelves,delete}`.
+
+**16 · `ucenter-api/…/ApproveController`**, **17 · `admin/…/member/MemberController`**,
+**18 · `admin/…/businessAuth/BusinessCancelApplyController`** — the merchant KYB bond.
+`ApproveController:607-608` moves `balance → frozenBalance` (posting the bond);
+`MemberController:148-171` releases or forfeits it on approve/reject;
+`BusinessCancelApplyController:161-164` returns it on cancellation.
+
+Structurally identical to `loanCollateralLock` / `loanCollateralRelease` —
+purpose-keyed, user-owned, `assertPairedLocks`-provable — but calling a merchant
+bond a loan collateral would put `reason: 'loan.collateral.locked'` in the journal
+for something that is not a loan.
+**Proposed: `merchantBondLock` / `merchantBondRelease` / `merchantBondForfeit`,
+`module: 'p2p'`** (`p2p.merchants` is the tracker row that exists and is not
+started). The forfeit leg has no analogue at all — it moves a user's own locked
+value to `houseFees`, which nothing currently does.
+Fragments: `/approve/certified/business/apply`, `/approve/cancel/business`,
+`/audit-business`, `/cancel-business`, `/business/cancel-apply/check`.
+
+**19 · `ucenter-api/…/PromotionController`** — promotion-card order.
+`increaseFrozen(memberWallet.getId(), newOrder.getAmount())` at `:480`.
+The payout side maps to `rewardPay` (out of `rewardsEngine`, funded by
+`sweepFeesToRewards`) — but the _lock_ side has nothing. `ops.affiliates` is 🟢.
+**Owner decision required before building a recipe for a product nobody has asked
+for.**
+
+**20 · `ucenter-api/…/RedEnvelopeController`** — `setBalance(add(redAmount))` at
+`:373` and `:562` credits a receiver. Payout maps to `rewardPay`; the sender-side
+lock (and `admin/job/CheckRedEnvelopeJob`'s expiry thaw, 2 hits) has no recipe.
+**See bucket 4 — this is a delete candidate, not a build candidate.**
+
+**21 · `admin/…/activity/ActivityController`** — IEO / activity distribution.
+`thawBalance` `:336`, `increaseBalance` `:347`/`:401`, `decreaseFrozen`
+`:382`/`:435`, plus five `memberTransactionService.save` calls. A token-sale
+settlement — closest existing shape is `tradeFill`, which does not fit a
+one-sided distribution. **See bucket 4.**
+
+**22 · `ucenter-api/…/ActivityController`** — `attend`, delegating to
+`ActivityOrderService.freezeBalance`. Same gap, user side. **See bucket 4.**
+
+---
+
+#### Not adapted — 3 of the 25 route elsewhere
+
+**23 · `exchange-api/…/OrderController`** — spot order add/cancel
+(`/order/add:74`, `/order/cancel/{orderId}:415`), delegating to
+`ExchangeOrderService` (8 mutator hits). This maps perfectly to `orderHold` /
+`orderHoldRelease` / `tradeFill` — **and that is exactly why it should not be
+adapted.** `matching.engine` ✅ and `trade.spot` ✅ already do it, tested, against
+our book. Adopting a second matching engine is the one place where "adopt the
+whole app" would cost us something we already have and is better. **→ bucket 4.**
+Keep the _screen_ (`pages/exchange/Exchange.vue`); replace the _engine_.
+
+**24 · `ucenter-api/…/MemberController`** — `signInIncident(member, memberWallet, sign)`
+at `:66`, a daily sign-in bonus credit → `rewardPay`. **→ bucket 4** pending the
+owner's answer on whether sign-in bonuses are a product.
+
+**25 · `admin/…/system/DividendController`** — `setBalance(add(x.getBalance(), va))`
+
+- `save` in a loop over `findAllByCoin` at `:148-170`. A mass credit to every
+  holder of a coin — structurally the shape `vendor-shell-scan` was written to ban.
+  `token.yield` is ✅ and `rewardPay` + `sweepFeesToRewards` already express real-yield
+  distribution from a funded pot. **→ bucket 4.** Fragment `/system/dividend` stays.
+
+### 4.2 Bucket 2 summary
+
+| Outcome                         | Controllers | Recipe work                       |
+| ------------------------------- | ----------: | --------------------------------- |
+| ✅ exact — adapter only         |          11 | none                              |
+| ◑ near — adapter + journal note |           3 | none                              |
+| ✖ gap — needs a recipe first    |           8 | ~6 new recipes, one PR, **Denon** |
+| → bucket 4                      |           3 | none                              |
+| **Total**                       |      **25** |                                   |
+
+**Two constraints that are not negotiable:**
+
+1. **`decimal(18,8)` vs `numeric(38,18)`.** Every amount crossing the adapter
+   truncates at the 8th decimal. The ADR flagged it on 28 July and it is still
+   true (`adr/…-integration.md:82-89`); the ledger's own conformance suite
+   round-trips `0.000000000000000001`. Widen `member_wallet.balance` and
+   `frozen_balance` to `decimal(38,18)` **before the first adapter ships**, not
+   after. It is arithmetic, not preference.
+2. **Money never becomes a `number` on the adapter path.** Decimal strings on the
+   wire, scaled `bigint` in memory. The vendored side is `BigDecimal` throughout,
+   so this is a serialisation discipline, not a rewrite.
+
+### 4.3 Ownership — and this one is a hard stop
+
+**Bucket 2 is `M7` and `M7` belongs to `shehzad002`.**
+`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md:39` — _"M7 Custody residual · Vendor
+Java money doors — only after #289 agent merge"_ — and `:190-195` — _"Own after
+#289 merged/absorbed: remaining entity/Spring live balance doors, scans,
+Denon-visible self-audit."_ #289 is merged (`e29748f`).
+
+`AGENTS.md:13`: **"Agents must not implement on HUMAN-CLAIMED M1–M7 / H-\* lanes
+(babysit only)."** Nitro agents may write the adapter _specs_, the recipe
+_proposals_, and the test _plans_. They may not open the doors.
+
+The recipe additions in §4.1's ✖ group are **Denon's** (§3 carve-out), and they
+must land **before** the adapters, per §15.2.
+
+---
+
+## 5 · Bucket 3 — REWIRE · the 74 screens
+
+**Verified count**: `find vendor/coinexchange/05_Web_Front/src -name '*.vue'` →
+**74** (43 under `pages/`, 30 under `components/`, plus `App.vue`).
+
+I classified all 74 by what they actually call — `/api/*` is `svc-edge`
+(`config/intafaced.js:28`: _"Everything our own services expose reaches the
+browser through ONE door"_); `/uc`, `/market`, `/exchange`, `/otc`, `/chat` are
+the Java services (`config/index.js:24-31`).
+
+| Class                                |   n | Meaning                                           |
+| ------------------------------------ | --: | ------------------------------------------------- |
+| **EDGE** — calls only `/api/*`       |  12 | already ours                                      |
+| **MIXED** — calls both               |   1 | `pages/intafaced/Dex.vue`                         |
+| **JAVA** — calls a dead Java service |  45 | 38 with literal paths, 7 via the `this.api.*` map |
+| **STATIC** — no backend call at all  |  16 | presentational; nothing to rewire                 |
+
+**13 edge-wired · 45 to rewire · 16 nothing to do.**
+
+> **This corrects PR #412's body**, which says "roughly 51 of 74 still reference
+> the dead Java backend; 23 are already rewired". The 23 appears to count our
+> authored files (13 `pages/intafaced/` + 3 `components/intafaced/` +
+> `components/uc/IxHonestState.vue` + honesty rewrites such as
+> `pages/cms/AboutUs.vue`) rather than files that make an edge call. Both numbers
+> are defensible descriptions of different things; **45 is the size of the actual
+> rewire queue**, because a file with no backend call needs no rewiring.
+
+### 5.1 Already on the edge — 13, do not touch
+
+`pages/intafaced/{Academy,Agents,Bank,Blueprint,Chain,Launch,P2P,Pay,Platform,Protocol,Token}.vue`,
+`pages/intafaced/Dex.vue` (mixed — one residual `/exchange/` reference), and
+`pages/otc/index.vue`.
+
+> **`pages/otc/index.vue` is a live bug, not a rewire.** Lines 174 and 186 post to
+> `this.host + '/api/advertise/excellent'`. `this.host` is `''`, so that leaves the
+> browser as `/api/advertise/excellent` and the dev-server proxy routes `/api` to
+> **svc-edge**, which has no such route — while the controller that serves it is
+> `otc-api`'s, behind `/otc`. The intended path is `/otc/api/advertise/excellent`.
+> It has been silently 404ing at the edge. **Size: S, fix it in the first P-UI PR.**
+
+### 5.2 Nothing to do — 16
+
+`components/exchange/{BZCountDown,DepthGraph,SvgLine,expand}.vue`,
+`components/intafaced/{CommandPalette,IxState,SubAccountSelector}.vue`,
+`components/otc/carousel.vue`, `components/uc/{IxHonestState,TradeExpand}.vue`,
+`pages/activity/{Bzb,Partner}.vue`, `pages/cms/{AboutUs,Notice,WhitePaper}.vue`,
+`pages/intafaced/NotBuilt.vue`.
+
+### 5.3 The 45 to rewire, grouped by what each needs
+
+**Group A — needs the ledger read (10 files).** Blocked on §4.1 item 10
+(`AssetController` → `ledger.accounts`). Every one of these renders a balance.
+
+| File                                | Java it calls                                   | Needs                                             |
+| ----------------------------------- | ----------------------------------------------- | ------------------------------------------------- |
+| `components/uc/MoneyIndex.vue`      | 7× `/uc/asset/*`                                | `/api/bank/trpc/…` or a ledger balances procedure |
+| `components/uc/Account.vue`         | 8× `/uc/*`                                      | balances + identity                               |
+| `components/uc/Recharge.vue`        | 6× `/uc/*`                                      | `pay.user-money` deposit (✅ done)                |
+| `components/uc/Withdraw.vue`        | 9× `/uc/*`                                      | `withdrawHold` path via svc-pay                   |
+| `components/uc/WithdrawAddress.vue` | 7× `/uc/*`                                      | address book — no ledger read                     |
+| `components/uc/Record.vue`          | 2× `/uc/*`                                      | `ledger_entries` history                          |
+| `components/uc/PayDividends.vue`    | 1× `/uc/*`                                      | `token.yield` (✅)                                |
+| `pages/uc/MemberCenter.vue`         | **58× `/uc/*`** — the largest file in the shell | split before rewiring; do not do it in one PR     |
+| `pages/ctc/Ctc.vue`                 | 12× `/uc/`, 2× `/market/`, 1× `/exchange/`      | blocked on §4.1 items 12–13                       |
+| `App.vue`                           | 12× `/uc/`, 2× `/exchange/`, 3× `/otc/`         | session + nav; do this **first**, it gates auth   |
+
+**Group B — needs OTC/P2P on the edge (8 files).** Blocked on §4.1 items 1, 2, 15.
+`pages/otc/{AdPublish,Chat,CheckUser,Main,Trade,TradeInfo}.vue`,
+`components/otc/{MyAd,Chatline}.vue`.
+`svc-p2p` is `done` across offers/escrow/disputes/reputation, so most of this is
+mapping tRPC shapes onto existing components rather than new backend work.
+`Chatline.vue:179` also opens a SockJS socket at `/chat/chat-webSocket` — that is
+the `chat` module (bucket 1), not svc-ws.
+
+**Group C — needs identity on the edge (6 files).**
+`pages/uc/{Login,Register,MobileRegister,FindPwd,IdentBusiness,AppDownload}.vue`.
+`identity.*` is ✅ across seven rows. **This is the group that closes the "two
+identity systems in one page" finding** (audit §3.5): today a user logs into the
+Java `member` table via `/uc` and reads our balances via `/api`. Until this
+group lands, "adopt the whole app" and "one book" are in visible conflict on
+screen. **Do this group second, right after `App.vue`.**
+
+**Group D — needs trade on the edge (7 files).**
+`pages/exchange/Exchange.vue` (6× `/market/`, 2× `/exchange/`, 1× `/uc/`),
+`pages/index/Index.vue`, `components/uc/{EntrustCurrent,EntrustHistory,myorder,MinTrade}.vue`,
+`components/uc/InnovationOrders.vue`.
+`trade.spot` ✅, `matching.engine` ✅, `ws.depth` ✅ — the backend is there. This
+is the group that makes bucket 4's "delete the second matching engine" safe.
+
+**Group E — content, and mostly it should NOT be rewired (6 files).**
+`pages/cms/{Help,HelpDetail,HelpList,NoticeItem}.vue`,
+`components/cms/Noticeindex.vue`, `pages/uc/AppDownload.vue`.
+These call `/uc/announcement/*` and `/uc/aide/*` — **bucket 1 controllers that
+work**. Adopt the backend (§3.2) and leave the screens alone. Rewiring them would
+be building a CMS we do not have to replace one we already own. **Size: 0.**
+
+**Group F — products with no decision (8 files).**
+`pages/activity/{Activity,ActivityDetail}.vue`, `pages/envelope/Envelope.vue`,
+`pages/invite/Invite.vue`, `components/uc/{InvitingMin,MyPromotion,PromotionMyCards,InnovationMinings}.vue`.
+Blocked on the owner's answer in §6.3. Do not rewire a screen for a product
+nobody has said we want.
+
+### 5.4 Ownership and order
+
+**P-UI = Nitro agents.** `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md:44` —
+_"P-UI · Vendor shell `:8090` craft/hotkeys/honesty"_, and
+`docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md:16` scopes the lane to
+`vendor/**/05_Web_Front/**` with `apps/web` and pay/protocol services explicitly
+out.
+
+Order: **`App.vue` → Group C (identity) → Group A (balances) → Group D (trade) →
+Group B (OTC) → Group E (delete the task) → Group F (owner).**
+`App.vue` first because it holds the session and the nav; every other group
+renders inside it.
+
+**Size: L** for the bucket. **S** per file for most of Groups B–D once the edge
+procedure exists; **`pages/uc/MemberCenter.vue` alone is M–L** and should be
+split before anyone starts.
+
+---
+
+## 6 · Bucket 4 — DELETE / DO NOT REVIVE
+
+Every entry justified. "Do not revive" is not the same as "delete the files" —
+where the second column says _quarantine_, the files stay and the door stays shut.
+
+### 6.1 Delete outright
+
+| What                                        |  Count | Why                                                                                                                                                                                                                                                   |
+| ------------------------------------------- | -----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vendor/**/*.jar` committed binaries        | **32** | `git ls-files "vendor/**/*.jar"` — `apns-http2-core`, `aqmd-netty-*`, `spark-core`, and 28 more. Unverifiable against any upstream or checksum, on the classpath of services that hold custody. ADR §4 says replace with Maven coordinates or remove. |
+| `vendor/coinexchange/02_App_Android`        |  **2** | `.keep` + `README.md`. Already stripped. Nothing to read, nothing to adopt.                                                                                                                                                                           |
+| `vendor/coinexchange/03_APP_IOS`            |  **2** | Same.                                                                                                                                                                                                                                                 |
+| `vendor/coinexchange/06_ExchangeRobot`      |  **2** | Same. And a trading robot is `trade.mm-bot`, which is ours and has non-negotiable seeded-liquidity rules (`DIRECTION-2026-07-31.md` §1).                                                                                                              |
+| `00_framework/wallet/…/TestController.java` |  **1** | A test controller on a custody service. The audit already excluded it from the 94.                                                                                                                                                                    |
+
+### 6.2 Quarantine — keep the files, keep the door shut
+
+| What                                                            |      Count | Why                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------- | ---------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `01_wallet_rpc` — 12 chain `WalletController` + `RpcController` |     **13** | Handles private keys for BTC/ETH/USDT/EOS. **Never read by anyone** (ADR "Not yet done"). Deliberately shut at `c221cc8`. `svc-protocol` + `svc-dex` + `svc-indexer` are ours and `custody-scan` covers them. Deleting loses the option; reviving without a read is the failure mode. |
+| `exchange-api/…/OrderController`                                |      **1** | A second matching engine. `matching.engine` ✅ + `trade.spot` ✅ already do this against our book, tested. Keep `/order/add` in `BLOCKED_URI_FRAGMENTS`. Keep the _screen_.                                                                                                           |
+| `admin/…/system/DividendController`                             |      **1** | Mass credit in a loop over every holder — the exact shape `vendor-shell-scan` bans. `token.yield` ✅ and `rewardPay` + `sweepFeesToRewards` express it correctly, from a funded pot rather than thin air.                                                                             |
+| `admin/…/system/CoinController` hot-transfer path               | **1 path** | `:387` writes a hot-wallet transfer record. On-chain treasury movement belongs to `svc-protocol`/`svc-pay`, and the RPC layer it would drive is shut. Adopt the coin CRUD; leave this path.                                                                                           |
+
+### 6.3 Owner decides — do not build, do not delete, ask
+
+Four products exist in the vendored tree, credit balances, have **no tracker row**,
+and nobody has said we want them. The audit asked this on 30 July (§7.4 Q3) and it
+is still unanswered. Building them costs recipe work in Denon's carve-out;
+deleting them is, in the audit's own words, "the cheapest outcome available in
+this whole document".
+
+| Product             | Vendored surface                                                                                   | Screens |
+| ------------------- | -------------------------------------------------------------------------------------------------- | ------- |
+| **Red envelope**    | `ucenter/RedEnvelopeController` (9 routes), `admin/redenvelope/*`, `admin/job/CheckRedEnvelopeJob` | 1       |
+| **Activity / IEO**  | `admin/activity/ActivityController`, `ucenter/ActivityController`, `core/ActivityOrderService`     | 2       |
+| **Sign-in bonus**   | `ucenter/MemberController.signInIncident:66`, `admin/activity/SignController`                      | —       |
+| **Promotion cards** | `ucenter/PromotionController` (12 routes, `increaseFrozen:480`), `admin/promotion/*`               | 4       |
+| **Mining orders**   | `ucenter/MiningOrderController`                                                                    | 2       |
+
+> **One question, and it closes eight screens and six recipe proposals:**
+> _do we want red envelopes, IEO activities, sign-in bonuses, promotion cards and
+> mining orders as products?_ If no, they are neither adopt nor rebuild — they are
+> delete, and Group F of §5.3 evaporates with them.
+
+---
+
+## 7 · Effort, order, ownership
+
+### 7.1 Sizing
+
+| Bucket                                       | Size  | Why                                                                             |
+| -------------------------------------------- | ----- | ------------------------------------------------------------------------------- |
+| **§2 FIX FIRST** — mongo, redis, compose     | **M** | Two S config fixes + four compose blocks + the Maven build story (§2.4).        |
+| **§2.4 reproducible jar build**              | **M** | Independent of the rest; unblocks CI ever touching Java.                        |
+| **§1.2 scans into `pnpm verify`**            | **S** | One line. Highest leverage in the document.                                     |
+| **Bucket 1 — adopt 68 controllers**          | **M** | Almost entirely §2. Each module after the first is a copy-pasted compose block. |
+| **Bucket 1 — tracker rows for the six gaps** | **S** | Data edit. Blocked today — see §7.4.                                            |
+| **Bucket 2 — 11 exact adapters**             | **L** | Each is S–M; there are eleven and every one is money.                           |
+| **Bucket 2 — ~6 new recipes**                | **M** | One reviewed PR, Denon, ahead of the adapters.                                  |
+| **Bucket 2 — 8 gap controllers**             | **L** | Blocked on the recipes and on §6.3.                                             |
+| **Bucket 2 — `decimal(38,18)` widening**     | **S** | One DDL change. **Must precede the first adapter.**                             |
+| **Bucket 3 — merge #412**                    | **S** | Already written, already validated. Just needs merging.                         |
+| **Bucket 3 — rewire 45 screens**             | **L** | `MemberCenter.vue` alone is M–L. Split it.                                      |
+| **Bucket 4 — deletes**                       | **S** | 39 files, no logic.                                                             |
+| **Bucket 4 — owner decision**                | **—** | Not engineering.                                                                |
+
+### 7.2 Suggested order
+
+The ordering rule: **make it runnable, make it honest, make it ours, then make it
+move money.**
+
+1. **Merge #412.** The shell has never been deployable. Every other item in
+   bucket 3 is invisible until it is. _(S · agents)_
+2. **§1.2 — five scans into `pnpm verify`.** Before anyone starts, make "verify
+   green" mean something. _(S · Denon)_
+3. **§2.1 + §2.2 — mongo pin, redis password.** Two config lines bring `market`
+   and `ucenter` back and take reachable controllers from 1 to ~15. _(S · Denon)_
+4. **§2.3 — `otc-api`, `exchange-api`, `chat`, `admin` into compose.** Takes
+   reachable controllers to ~68 and makes bucket 1 real. _(M · Denon)_
+5. **§2.4 — a reproducible Maven build.** Otherwise steps 3–4 are true on one
+   laptop. _(M · Denon)_
+6. **Tracker: six rows** — CMS, site-content, red-envelope, activity, CTC, and
+   **the shell itself**. Until these exist agents keep rebuilding them. _(S ·
+   P-TRACK, after #346 — see §7.4)_
+7. **§4.1 item 10 — `AssetController` reads `ledger.accounts`.** The single
+   highest-value change in the document: it ends "two balance systems in one
+   page". _(S · M7)_
+8. **Bucket 3 `App.vue` → Group C (identity).** Ends "two identity systems in one
+   page". _(M · P-UI)_
+9. **`decimal(18,8) → decimal(38,18)`.** Before any adapter. _(S · M7)_
+10. **Denon's recipes PR** — `p2pOfferHold/Release`, `merchantBondLock/Release/Forfeit`.
+    _(M · Denon)_
+11. **Bucket 2 exact adapters, in this order:** withdraw (items 3+4, the pair) →
+    OTC order + appeal (items 1+2) → fiat rails (5–7) → transfer (9) → CTC (12+13)
+    → operator credit (8, behind dual-control). _(L · M7)_
+12. **Bucket 3 Groups A, D, B** as their backends land. _(L · P-UI)_
+13. **Bucket 4 deletes.** _(S · agents)_
+14. **§6.3 owner decision**, then Group F lives or dies. _(— · owner)_
+
+Steps 1–6 are entirely non-money and can run fully parallel with steps 7+.
+
+### 7.3 Ownership — mapped to the lanes that exist
+
+| Bucket / item                                   | Lane                      | Who              | Authority                                                    |
+| ----------------------------------------------- | ------------------------- | ---------------- | ------------------------------------------------------------ |
+| §2 compose, mongo, redis, Maven build           | **tooling / CI**          | **Denon**        | `AGENTS.md` "Denon-only infra"                               |
+| §1.2 scans into `verify`                        | **tooling / CI**          | **Denon**        | same                                                         |
+| New ledger recipes (§4.1 ✖ group)               | **direction / spine law** | **Denon**        | `DIRECTION-2026-07-31.md` §3 Class M carve-out               |
+| Bucket 1 — start modules, adopt non-money       | **P-P5-LIGHT / ops thin** | **Nitro agents** | `SHEHZAD-HARD-OWNERSHIP:44`                                  |
+| Bucket 1 — tracker rows                         | **P-TRACK**               | **Nitro agents** | same                                                         |
+| **Bucket 2 — every money adapter**              | **M7**                    | **shehzad002**   | `SHEHZAD-HARD-OWNERSHIP:39,190` · `AGENTS.md:13`             |
+| Bucket 3 — all 45 screens + #412                | **P-UI**                  | **Nitro agents** | `BOARD-CLEAR-AGENT-BACKLOG:16` (`vendor/**/05_Web_Front/**`) |
+| Bucket 4 — deletes                              | **P-UI / P-TRACK**        | **Nitro agents** | non-money vendor tree                                        |
+| Bucket 4 — §6.3 product decision                | **owner**                 | **Nitro human**  | `DIRECTION-2026-07-31.md` §8                                 |
+| Kill-switch / posting-freeze semantics (item 8) | **Denon §3 carve-out**    | **Denon**        | "touches a posture gate, kill-switch, or custody scan"       |
+
+**The one thing agents must not do:** implement bucket 2. `AGENTS.md:13` is
+explicit and M7 is claimed. Agents write the specs, the tests and the adapter
+design; shehzad002 opens the doors.
+
+### 7.4 Tracker rows — warranted, but not by this PR
+
+`node tooling/ci/claim-check.mjs` against the three paths this work would touch:
+
+```
+claim-check — 3 path(s) from arguments, against 4 open PR(s)
+✖ 1 open PR(s) are already inside these paths:
+    #346 @shehzad002 — feat(pay): M1 pay.gateway Done bar
+        · tooling/tracker/features.mjs
+```
+
+`docs/BIZZAN-ADOPTION-QUEUE-2026-08-02.md` and `docs/LIVE-LANES.md` are free;
+**`tooling/tracker/features.mjs` is inside @shehzad002's open #346.** Editing it
+here creates a merge conflict on a human-claimed money PR — the exact thing
+claim-check exists to prevent, and `AGENTS.md`'s "tracker touch = mountain events
+only" says a docs PR is not the event that earns it.
+
+**So the six rows are specified here and filed after #346 lands**, as one P-TRACK
+edit:
+
+| Proposed id        | Title                                                  | Module     | Phase | Status          |
+| ------------------ | ------------------------------------------------------ | ---------- | ----- | --------------- |
+| `web.vendor-shell` | Vendored trading shell `:8090` — 74 screens, 78 routes | `core-ops` | 2     | `wip`           |
+| `ops.cms`          | Announcements, help centre, notices, whitepaper        | `core-ops` | 5     | `ready`         |
+| `ops.site-config`  | Data dictionary, site information, app revision        | `core-ops` | 5     | `ready`         |
+| `p2p.ctc`          | CTC fiat acceptor desk                                 | `p2p`      | 3     | `ready`         |
+| `ops.campaigns`    | Activity / sign-in / bonus / red envelope              | `core-ops` | 5     | `socket` — §6.3 |
+| `ops.promotions`   | Promotion cards, invite rewards                        | `core-ops` | 5     | `socket` — §6.3 |
+
+`socket` rather than `ready` on the last two is deliberate: §13 says a socket is
+"the interface exists; the impl does not", which is exactly true of a product
+nobody has decided to want.
+
+---
+
+## 8 · Method, and what is not verified
+
+Everything above was read or probed on 2026-08-02 against `main` @ `a43b469`,
+from the worktree `docs/bizzan-adoption-queue`:
+
+- `find … -name '*Controller.java'` → 108; module breakdown counted, not quoted.
+- `grep -rl "MemberWalletService\|MemberTransactionService\|MemberWalletDao\|MemberTransaction "
+--include='*Controller.java'` → exactly 25 files, listed in §4.
+- `node tooling/scripts/vendor-money-inventory.mjs` → 7 controllers, 14
+  call-sites, 23 non-controller call-sites, 5 DAO definitions, 882 Java files.
+- `find …/05_Web_Front/src -name '*.vue'` → 74; every file classified by grepping
+  for `/api/` versus `/(uc|market|exchange|otc)/` and for `$http`/`fetch`/`axios`.
+- `docker ps -a`, `docker logs intafaced-coinex-{market,ucenter}`,
+  `docker exec intafaced-coinex-{mongo,redis}` for the live state and the two
+  stack traces quoted verbatim in §2.
+- `node tooling/ci/{vendor-java-money,vendor-shell,dual-book-door,custody}-scan.mjs`
+  — all four clean; output quoted.
+- `node tooling/ci/claim-check.mjs` for §7.4.
+- `git ls-files` for the jar, mobile and robot counts.
+- `gh pr list --state open` → #412, #411, #410, #346.
+
+**Unverified, and named as such:**
+
+- **Whether the Java stack actually comes up after §2's fixes.** I did not apply
+  them — this document changes no service, vendor or app source. The two stack
+  traces prove the _causes_; they do not prove there is not a third failure
+  waiting behind them. Expect one.
+- **Whether the 45 non-money admin controllers are genuinely read-only.** I read
+  their names, packages and the money-grep; I did not read all 45 bodies. The
+  audit's bucket-3 entry ("read the 45 and confirm — a day of work, worth doing")
+  is still open, and it is the honest precondition for starting `admin`.
+- **The `04_Web_Admin` console — 92 `.vue` files.** Nobody has opened it. Its
+  backend is bucket 1 + bucket 2; its front end is unread. I make no claim about
+  it beyond the file count.
+- **Whether `escrowLock`'s `assertPairedLocks` accepts the CTC shape.** The
+  movement matches; I did not run it.
+- **What `memberWalletService.transfer(order, ret)` (`otc-api/OrderController:643`)
+  and `transferAdmin` (`AdminAppealController:300`) do internally.** I mapped them
+  to `escrowRelease` from the surrounding flow, not from reading the service.
+  Confirm before writing that adapter.
+
+---
+
+## Links
+
+- Direction, settled: [`docs/DIRECTION-2026-07-31.md`](DIRECTION-2026-07-31.md) §4
+- The ADR, Accepted: [`docs/adr/2026-07-28-vendored-exchange-integration.md`](adr/2026-07-28-vendored-exchange-integration.md)
+- The evidence this queue rests on: [`docs/VENDORED-OVERLAP-AUDIT.md`](VENDORED-OVERLAP-AUDIT.md) (#213)
+- The bucket-2 backlog, already written: `vendor/coinexchange/00_framework/core/…/interceptor/DualBookMoneyDoorInterceptor.java`
+- Money inventory, regenerable: `node tooling/scripts/vendor-money-inventory.mjs` → [`docs/ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md`](ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md)
+- Recipes: `packages/ledger-client/src/recipes/{index,bank,loans}.ts`
+- Lane law: [`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) · [`docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`](BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md)
+- Perimeter on the vendored ports: [`docs/A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md`](A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md)
+- Doctrine: §0.6, §4.2, §13 of [`INTAFACED_DEFINITIVE_BUILD.md`](../INTAFACED_DEFINITIVE_BUILD.md)
