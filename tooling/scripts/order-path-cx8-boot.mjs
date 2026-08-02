@@ -118,7 +118,11 @@ async function main() {
     ...common,
   });
 
+
+  await run('node', ['tooling/scripts/order-path-cx8-ensure-streams.mjs'], { ...common, NATS_URL: NATS });
+
   mkdirSync(join(ROOT, '.data/matching'), { recursive: true });
+
   writeFileSync(join(ROOT, '.data/matching/engine_journal.ndjson'), '');
 
   // Matching first (no DB)
