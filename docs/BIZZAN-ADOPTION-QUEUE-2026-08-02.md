@@ -96,11 +96,19 @@ preconditions of bucket 2 rather than follow-ups. See §7.
 
 ---
 
-## 1 · Five things changed under this plan while it was being written
+## 1 · Six things changed under this plan while it was being written
 
 Read this section before anything else. The brief that commissioned this
 document, and the audit it rests on ([`docs/VENDORED-OVERLAP-AUDIT.md`](VENDORED-OVERLAP-AUDIT.md), probed 2026-07-30),
 are both partly overtaken by code that has since landed.
+
+> **The sixth is in §8 and it is the one to read first if you read only one.**
+> Six of the fourteen `01_wallet_rpc` modules never load the auth interceptor —
+> `rpc-common` is not on their classpath, so the `rpc.auth-token` line in their
+> config is read by nothing and they start without it. Three of the six expose an
+> **unauthenticated endpoint that generates a private key**. A document we are
+> relying on records this perimeter as "real and enforced". It is enforced on
+> eight modules.
 
 ### 1.1 The Java money doors are already shut. All of them.
 
@@ -747,7 +755,9 @@ one-sided distribution. **See bucket 4.**
 `orderHoldRelease` / `tradeFill` — **and that is exactly why it should not be
 adapted.** `matching.engine` ✅ and `trade.spot` ✅ already do it, tested, against
 our book. Adopting a second matching engine is the one place where "adopt the
-whole app" would cost us something we already have and is better. **→ bucket 4.**
+whole app" would cost us something we already have and is better.
+**→ bucket 5 · REPLACE (§7.2)** — not bucket 4, because the vendored engine
+container is running right now and the two must never be live together.
 Keep the _screen_ (`pages/exchange/Exchange.vue`); replace the _engine_.
 
 **24 · `ucenter-api/…/MemberController`** — `signInIncident(member, memberWallet, sign)`
@@ -768,10 +778,21 @@ owner's answer on whether sign-in bonuses are a product.
 | ✅ exact — adapter only         |          11 | none                              |
 | ◑ near — adapter + journal note |           3 | none                              |
 | ✖ gap — needs a recipe first    |           8 | ~6 new recipes, one PR, **Denon** |
-| → bucket 4                      |           3 | none                              |
+| → bucket 4 (2) / bucket 5 (1)   |           3 | none                              |
 | **Total**                       |      **25** |                                   |
 
-**Two constraints that are not negotiable:**
+**This is the table that corrects "~21 adapted".** The count is 25, and it is not
+one pile: 11 can start as soon as §7.3 lands, 3 more need a journal-metadata
+decision recorded, and **8 cannot start at all until a recipes PR lands in
+Denon's carve-out**. Scheduling 25 as a single lane would stall two thirds of the
+way through waiting on a PR nobody had been asked to write.
+
+**Three constraints that are not negotiable:**
+
+0. **The identity id must resolve first (§7.3).** An adapter cannot post to
+   `userAvailable(userId, …)` without knowing which `userId` a vendored
+   `member.id` is. `ledger.accounts.owner_id` is `text` and will silently accept
+   the wrong one. **No adapter before this.**
 
 1. **`decimal(18,8)` vs `numeric(38,18)`.** Every amount crossing the adapter
    truncates at the 8th decimal. The ADR flagged it on 28 July and it is still
@@ -1126,6 +1147,352 @@ anyone's list, and §7.3 blocks the first bucket-2 adapter.
 
 ---
 
+## 8 · `01_wallet_rpc` — adopted, and the security review is a precondition
+
+The owner named this explicitly and the reasoning holds: **we have no chain
+custody of our own.** `svc-protocol` is smart accounts, `svc-dex` is quotes,
+`svc-indexer` is read models — none of them holds a key that signs a withdrawal.
+Building that is months. Adopting a working thirteen-chain wallet layer is the
+right call, and this section is not an argument against it.
+
+It is a statement of what must happen first — and a first read found enough that
+"first" is not negotiable here in the way it is nowhere else in this document.
+
+### 8.1 What it is, counted
+
+| Measure                              | Value                                                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Maven modules declared               | **15** in `01_wallet_rpc/pom.xml:13-28`                                                                        |
+| Maven module directories on disk     | **14** — **`<module>xrp</module>` (`pom.xml:21`) points at a directory that does not exist and is not in git** |
+| Controllers                          | **14** — 13 per-chain `WalletController` + `rpc-common/RpcController`                                          |
+| `.java` files                        | **215** (205 under `src/main`, 10 tests)                                                                       |
+| Lines of Java                        | **13,224**                                                                                                     |
+| Chains                               | BTC, BCH, BSV, LTC, XMR, ETH, ERC-20, USDT-ERC20, USDT-Omni, EOS, BTM, ACT, ECT — **XRP declared, absent**     |
+| Exchange-side counterpart            | `00_framework/wallet` — 8 `.java` files, jar built, never started                                              |
+| Committed `.jar`s in `01_wallet_rpc` | **18 files, 3 distinct artefacts** (32 jars across the whole vendored tree)                                    |
+
+**It does not touch the book.** `grep -rl "MemberWallet\|member_wallet" 01_wallet_rpc`
+returns **nothing** — a separate Maven tree under `com.bizzan.bc.wallet` that
+speaks only to chain nodes and Kafka. Adopting it creates **no** second set of
+books, and none of §4's adapter work applies. **The entire risk here is private
+keys, and none of it is dual-book.** The gates we built for §4 do not help here
+and were never meant to.
+
+> A reactor build from `01_wallet_rpc/pom.xml` fails on the missing `xrp/pom.xml`.
+> `c221cc8`'s "14/14 modules green" is consistent with building the fourteen that
+> exist, not the fifteen declared. §2.4's build story has to know this.
+
+### 8.2 It has been read once, and the ADR is stale — but not in the reassuring direction
+
+The ADR says `01_wallet_rpc` _"has not been read."_ **Someone read it on 29 July.**
+`c221cc8` — _"merge: shut the wallet RPC, remove the live trading backdoor"_ —
+touched 39 files, +468/−594, and its message is the most valuable security
+document in the repository:
+
+> _"All 13 wallet RPC services exposed `GET /rpc/withdraw?address=X&amount=Y`, and
+> there was no interceptor, no filter and no security config anywhere in
+> `01_wallet_rpc` — a grep of the whole tree for auth infrastructure returned zero
+> files. **Anyone who could open a socket to the port drained the hot wallet with
+> no credential.**"_
+
+Plus two more P0s: `987654321asdf` was a live auth bypass listed in
+`excludePathPatterns` (reaching place/cancel orders as uid 1, crediting an
+arbitrary member's wallet, rewriting a pair's price limits), and
+`GET /smstest/drop` ran `TRUNCATE TABLE member_wallet_*`.
+
+**What it added, verified on disk:** `rpc-common/…/config/RpcAuthInterceptor.java`
+(77 lines, `X-Rpc-Auth-Token`, constant-time compare at `:55-66`),
+`rpc-common/…/config/RpcSecurityConfig.java` (48 lines, `@Value("${rpc.auth-token}")`
+at `:27`, `@PostConstruct` refusing blank or `< 32` chars at `:31-41`,
+`addPathPatterns("/**")` at `:45`), and
+`eth-support/…/config/KeystorePasswordValidator.java` (48 lines).
+
+**"Deliberately shut" was never the right description.** A second read confirms:
+`git diff a19e337 HEAD -- vendor/coinexchange/01_wallet_rpc` is 36 files,
++447/−204, and **every change is additive hardening or a literal→placeholder
+swap. Nothing in this tree is no-op'd** the way `MemberWalletDao` was. Key
+generation, every block watcher and its thread, Kafka deposit publication, ETH
+and ERC-20 signing and broadcast, the BTC/USDT node send paths, and both
+`@Scheduled` sweep jobs are **live code**. Started with the env vars set, this
+generates keys and broadcasts real transactions.
+
+### 8.3 Six of the fourteen modules have no authentication at all
+
+**This is the finding to act on, and it is not recorded anywhere.**
+
+`RpcAuthInterceptor` and `RpcSecurityConfig` exist in exactly one place —
+`rpc-common`. A module only gets them if `rpc-common` is on its classpath.
+Checking every `pom.xml`:
+
+| Auth enforced (8)                              | How                            |
+| ---------------------------------------------- | ------------------------------ |
+| `act`, `bitcoin`, `ect`, `usdt`, `eth-support` | direct `rpc-common` dependency |
+| `eth`, `erc-token`, `erc-eusdt`                | transitive via `eth-support`   |
+
+| **No auth (6)**                          | Evidence                                               |
+| ---------------------------------------- | ------------------------------------------------------ |
+| `bch`, `bsv`, `btm`, `eos`, `ltc`, `xmr` | `grep -c rpc-common <module>/pom.xml` → **0** for each |
+
+Each of the six carries its own duplicated copies of `CoinConfig`,
+`KafkaConfiguration`, `MongodbConfig`, entities and services — but **no copy of
+`RpcSecurityConfig` or `RpcAuthInterceptor`** (`find -name RpcSecurityConfig.java`
+returns exactly one path, in `rpc-common`).
+
+So their `rpc.auth-token=${WALLET_RPC_AUTH_TOKEN}` line — `bch:41`, `bsv:41`,
+`btm:51`, `eos:46`, `ltc:42`, `xmr:42` — **is read by nothing.** No `@Value`
+binds it, so the placeholder never has to resolve, the `@PostConstruct` guard
+never runs, and **these six start happily with no token and serve `/rpc/**`
+unauthenticated.**
+
+**What that exposes.** No funds move — the withdraw handlers on `bch:146`,
+`bsv:146`, `ltc:142`, `btm:142` are upstream stubs returning
+`MessageResult.error(500, "暂未实现该功能")`, confirmed present in the original
+import. But `GET /rpc/address/{account}` on `bch`, `bsv` and `ltc`
+**generates a new EC private key and writes it into the wallet file** (§8.4b),
+unauthenticated. That is an unauthenticated mutation of key material and an
+unbounded-growth vector on the file that holds every key.
+
+**And it corrects a document we are relying on.**
+`docs/A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md:162-165` states:
+
+> _"The auth wall from #86 is real and enforced — `RpcSecurityConfig` registers
+> `RpcAuthInterceptor` on `/**` … and refuses to start if the token is unset or
+> shorter than 24 characters. **Confirmed by reading the code, not by running
+> it.**"_
+
+It is real and enforced **on eight modules and absent on six**, and the threshold
+is **32**, not 24 (`RpcSecurityConfig.java:25`). A1.4 read `rpc-common` and
+generalised. That is exactly the failure mode `c221cc8` itself named — _"a guard
+was written, then bypassed by a second door"_ — and it recurred inside the fix.
+
+**Remediation is small and must land before any of this starts:** add the
+`rpc-common` dependency to the six `pom.xml`s, and add a startup assertion that
+fails if the interceptor is not registered, so a future module cannot omit it
+silently. **Size: S. But it is not the review** — it is one hole found by one
+pass, which is the argument for §8.6, not a substitute for it.
+
+### 8.4 How keys are generated and stored — five different models, no BIP-anything
+
+`grep` for `Bip39|Bip44|DeterministicSeed|mnemonic|createEcKeyPair` across
+`01_wallet_rpc` returns **zero hits.** There is no HD derivation, no seed, no
+mnemonic. There are five unrelated custody models:
+
+**(a) ETH family — web3j scrypt keystore files on local disk** (`eth`, `erc-token`, `erc-eusdt`)
+
+```java
+// 01_wallet_rpc/eth-support/…/service/EthService.java:58-66
+String password = requireKeystorePassword();
+String fileName = WalletUtils.generateNewWalletFile(password, new File(coin.getKeystorePath()), true);
+Credentials credentials = WalletUtils.loadCredentials(password, coin.getKeystorePath() + "/" + fileName);
+```
+
+Written to `coin.keystore-path=/data/eth/data/keystore` (`eth:27`, `erc-token:24`,
+`erc-eusdt:24`); the **filename** is indexed in MongoDB
+(`rpc-common/…/service/AccountService.java:96-103`), not the key. Password is
+`${ETH_KEYSTORE_PASSWORD}` with no default, enforced twice (`EthService.java:87-93`
+and `KeystorePasswordValidator.java:32-47`). Hot withdrawal wallet is a separate
+`${ETH_WITHDRAW_WALLET_PASSWORD}` (`EthService.java:98-104`). **Before `c221cc8`
+the withdraw password was the committed literal `fdsafdsafdsafdsa` and three call
+sites passed `""` as the keystore password.**
+
+**(b) BCH / BSV / LTC — raw `ECKey` into an _unencrypted_ bitcoinj wallet file**
+
+```java
+// 01_wallet_rpc/bch/…/controller/WalletController.java:41-74  (identical bsv:41-74, ltc:41-73)
+Wallet wallet = Wallet.loadFromFile(walletFile);
+ECKey key = new ECKey();
+wallet.importKey(key);
+wallet.saveToFile(walletFile);
+```
+
+**No password anywhere on this path** — no `encrypt()`, no `KeyCrypter`. Paths are
+literals: `/data/bch/bch.wallet` (`bch:25`), `/data/bsv/bsv.wallet` (`bsv:25`),
+`/data/ltc/ltc.wallet` (`ltc:25`). Private keys sit in a plaintext protobuf file.
+Upstream code, unchanged by the fork — **and these are three of the six modules
+with no auth (§8.3)**.
+
+**(c) BTC / USDT — delegated to the node's own wallet.** `rpcClient.getNewAddress(account)`
+(`bitcoin:43`, `usdt:48`); keys live in `bitcoind`/`omnicored`, reached through an
+RPC URL that embeds `user:pass` (`${BTC_NODE_RPC_URL}`, `${USDT_NODE_RPC_URL}`).
+`rpc-common/…/util/WalletOperationUtil.java:18-29` wraps `walletpassphrase` /
+`walletlock` and **has zero callers**; correspondingly `coin.password=${USDT_WALLET_PASSWORD}`
+(`usdt:32`) is **dead config** — the `Coin` entity has no `password` field. So the
+node wallet is never explicitly locked by this code.
+
+**(d) ECT — the withdrawal secret key is a committed plaintext literal.** This is
+the worst thing in the tree and it is still live:
+
+```properties
+# 01_wallet_rpc/ect/src/main/resources/application.properties:14
+coin.withdraw-wallet=shxgAaZZGqaU9QdfedQvejadpGEqy
+```
+
+That is not a filename. It is the first argument to `EctApi.sendFrom(...)`, whose
+parameter is declared `String privatekey` (`EctApi.java:118-121`), and it is
+`POST`ed as `"secret"` to a **remote HTTP API** (`EctApi.java:134`), default host
+hardcoded at `EctApi.java:17`. A second XRP-family secret is hardcoded in a
+`main()` at `EctApi.java:152`. **`ect` was left out of the placeholder sweep
+entirely** — `:7` still carries a literal `mongodb://…` and `:9` a literal
+`coin.rpc`. The values look hand-mangled by the upstream vendor, so they may be
+inert; **structurally they are secrets in tracked files and must be treated as
+burned.**
+
+**(e) BTM / EOS / XMR / ACT — no local keys.** BTM is node-side behind
+`${BYTOM_CLIENT_ACCESS_TOKEN}` + `${BYTOM_WALLET_PASSWORD}` (`btm:30,36`); ACT
+derives `masterAddress + UUID` with no key at all (`act:44-45`); EOS/XMR are a
+single deposit address plus memo. The EOS controller has **no endpoints at all** —
+37 lines of fields.
+
+**Other credential literals still in tracked files:**
+
+| File:line                                                | What                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------ |
+| `01_wallet_rpc/act/src/test/…/ActClientTest.java:10`     | node RPC `user:pass` against a **real public IP**      |
+| `01_wallet_rpc/usdt/…/config/JsonrpcClient.java:163`     | `http://bitcoin:bitcoin@127.0.0.1:8888/` in a `main()` |
+| `00_framework/wallet/…/dev/application.properties:12-13` | literal MySQL **root** credential                      |
+| `00_framework/wallet/…/dev/application.properties:78-79` | commented-out Elasticsearch credential                 |
+
+### 8.5 The deposit pipeline runs to completion and then throws
+
+This is the operational trap, and it is worth stating precisely because it looks
+like a safety property and is not.
+
+**Deposit:** poller thread (`rpc-common/…/event/ApplicationEvent.java:34-58`) →
+per-chain scanner (`eth/…/EthWatcher.java:39-82`, `usdt/…/UsdtWatcher.java:27-58`)
+→ Mongo dedupe → `kafkaTemplate.send("deposit", …)`
+(`rpc-common/…/event/DepositEvent.java:24-30`) → exchange-side
+`@KafkaListener(topics={"deposit"})` → `walletService.recharge(...)`
+(`00_framework/wallet/…/consumer/FinanceConsumer.java:47-78`).
+
+**That last call now throws.** `00_framework/core/…/service/MemberWalletService.java`
+`:86-90`, `:101-104`, `:115-118` — all three `recharge` overloads:
+`throw new IllegalStateException("recharge is disabled: Java shell must not credit balances (INTAFACED dual-book)")`.
+
+So if this stack is started: **coins are swept into hot wallets, recorded in
+Mongo, published to Kafka — and then the credit step explodes.** On-chain funds
+with no book entry, and a Kafka topic accumulating deposits nobody is applying.
+The dual-book guard is doing its job at the book; it is not stopping the chain
+side, because the chain side is not the book.
+
+**Withdrawal is worse, in that it is not gated by the dual-book work at all.**
+`FinanceConsumer.handleWithdraw` (`:85-123`) builds
+`http://SERVICE-RPC-{UNIT}/rpc/withdraw?address={1}&amount={2}&fee={3}` (`:94-95`)
+and calls it over a Eureka-load-balanced `RestTemplate` (`:101`). Signing:
+`TransactionEncoder.signMessage` (`eth-support/…/PaymentHandler.java:123`, ERC-20
+at `:160`), `BitcoinUtil.sendTransaction` inside bitcoind (`bitcoin:62`),
+`rpcClient.omniSend` inside omnicored (`usdt:60`), and ECT's remote-secret POST
+(`ect:47`). **The only things standing between a Kafka `withdraw` message and a
+broadcast transaction are `WALLET_RPC_AUTH_TOKEN` and a database boolean**
+(`coin.getCanAutoWithdraw() == BooleanEnum.IS_TRUE`, `FinanceConsumer.java:99`).
+
+**Both facts belong in the adoption plan as ordering constraints:** the deposit
+callback must be re-pointed at our `deposit` recipe (§4.1's rail pattern) before
+any address is issued, and the withdraw path must not be reachable before §8.3
+and §8.6 are done.
+
+### 8.6 What the review must still establish
+
+Three P0s were found by one person reading with one question in mind. §8.3 found
+a fourth by asking a different one. Neither `c221cc8` nor this document claims
+the tree is clean — `c221cc8` fixed what it found, which is not the same thing.
+The review must establish, with evidence:
+
+1. **The six unauthenticated modules are closed** (§8.3), and a startup assertion
+   makes the omission impossible to repeat.
+2. **Every secret that was ever committed is rotated, not re-used.** `c221cc8`
+   says keystore passwords _"were previously committed in plaintext"_ and
+   `getNewAddress` _"took the password as a request parameter and logged it at
+   INFO"_. **Removing a secret from HEAD removes it from neither git history nor
+   logs.** ECT's `:14` literal is still at HEAD. `DIRECTION-2026-07-31.md` §8.2
+   already reserves the disclosed-secret-in-history problem to the owner.
+3. **The BCH/BSV/LTC unencrypted wallet files get a `KeyCrypter`**, or those
+   chains do not list. A plaintext key file is not a finding to note; it is a
+   decision to take.
+4. **ECT is either rewritten to hold its secret out of the tree, or dropped.**
+   Sending a raw private key to a third-party HTTP endpoint is not something a
+   config change fixes.
+5. **The 18 jars on this tree's classpath are traced to a provenance.** Only 3
+   distinct artefacts, and the exposure is ranked: `bitcoin-rpc-1.2.0.jar` in
+   `rpc-common/lib` is a compile dependency of `eth-support` and therefore in the
+   **same JVM as decrypted ETH `Credentials`**; `litecoinj-core-0.15.20190219.jar`
+   in `ltc/lib` is the code that _generates_ the `ECKey`; and
+   `bitcoinj-core-0.13-alice-SNAPSHOT.jar` (1.4 MB, in `ltc/lib` and `xmr/lib`) is
+   **referenced by no `pom.xml` at all** — orphaned unreviewed bytecode. None can
+   be verified against an upstream or a published checksum (ADR §4). **A binary of
+   unknown provenance on a signing service's classpath is not a code-quality
+   issue; it is the whole threat model.**
+6. **The node RPC perimeter.** `${BTC_NODE_RPC_URL}` and `${USDT_NODE_RPC_URL}`
+   embed credentials, and `WalletOperationUtil` is never called so the node wallet
+   is never re-locked. Whether that is acceptable depends on where the node sits.
+7. **Whether a shared bearer token is the right control at all.** It is right for
+   a service-to-service call on a private network and insufficient anywhere else.
+   §2.3's compose work must bind these to an internal network — and per §8.7 it
+   must not add them yet.
+
+### 8.7 The rule
+
+**A security review is a precondition of adoption, not a follow-up.**
+
+Not process theatre. This is the only bucket in the document where being wrong is
+**irreversible and external**. Everywhere else a mistake produces a wrong number
+we can reconstruct from the journal. Here it produces a drained hot wallet, and
+there is no posting that reverses an on-chain transfer. §6 of the audit made this
+argument about adopting a `member_wallet` writer; it applies with far more force
+to adopting a signer.
+
+The gates, concretely:
+
+- **No `01_wallet_rpc` module enters a compose file before the review reports.**
+  §2.3 adds `exchange-api`, `otc-api`, `chat` and `admin`. **It must not add
+  these**, and the six from §8.3 must not be started even on a private network.
+- **No agent touches this tree.** Signing-key custody is the owner's by
+  `DIRECTION-2026-07-31.md` §8.3.
+- **`WALLET_RPC_AUTH_TOKEN`, every keystore password, and every node RPC
+  credential are Class X** — §8.2, secrets are the owner's.
+- **`custody-scan` does not cover this and must not be stretched to.** It is a
+  Protocol-Plane-imports gate over four TypeScript services (§1.2). What is needed
+  here is different in kind: a scan that fails on a private key, mnemonic or
+  keystore password in any tracked file — **ECT `:14` would fail it today** — and
+  on any `excludePathPatterns` entry in the wallet tree, because that is exactly
+  the mechanism the `987654321asdf` bypass used. **Write the right gate; do not
+  widen the wrong one.**
+
+### 8.8 Sizing the review honestly
+
+**XL, and it is the longest pole in the programme.** 13,224 lines across 215
+files and 13 chain integrations, each with its own node protocol and — as §8.4
+shows — its own unrelated custody model. There is no shared abstraction to review
+once.
+
+The basis for calling it XL rather than a number pulled from nowhere: the two P0s
+found in our own TypeScript this week were each _"a guard was written, then
+bypassed by a second door"_ (ADR, "Not yet done"). `c221cc8` found that shape
+here twice, and §8.3 found it a third time **inside `c221cc8`'s own fix**. So
+this cannot be sampled. The per-chain modules must each be read, because the
+bypass lives in the one that was not.
+
+| Piece                                      | Size         | Note                                                                                                      |
+| ------------------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------- |
+| `rpc-common` + `eth-support` (1,933 lines) | **M**        | Read first — everything else inherits it                                                                  |
+| Per-chain read × 13                        | **S–M each** | Parallelisable. `btm`/`bch`/`bsv`/`ltc`/`xmr`/`eos` are ~1,400 lines each; `bitcoin`/`ect`/`act` ~250-310 |
+| Jar provenance — 3 artefacts, 18 copies    | **M**        | Honest outcome for at least one is "cannot be established" → removal                                      |
+| Git-history secret sweep + rotation plan   | **S–M**      | What was committed, when, what must rotate                                                                |
+| Adversarial second-door pass               | **L**        | By someone who did not do the first read                                                                  |
+
+**Start it now, in parallel with §2** — it is item 7 in §9.2 for that reason, not
+because it comes seventh.
+
+**The honest caveat on my own sizing.** This section rests on a targeted read —
+the hardening commit, the two config classes, every `pom.xml`, every
+`application.properties`, and the key-handling and withdrawal call sites. **It is
+not a security review and must not be cited as one.** 215 files were not read
+line by line. The number that matters is the one the reviewer gives after the
+`rpc-common` + `eth-support` read, which is the cheapest useful checkpoint. That
+§8.3 exists at all — a hole in the fix, found by reading `pom.xml` files rather
+than Java — is the strongest evidence available that the deeper read will find
+more.
+---
+
 ## 9 · Effort, order, ownership
 
 ### 9.1 Sizing
@@ -1280,8 +1647,32 @@ from the worktree `docs/bizzan-adoption-queue`:
 - `node tooling/ci/claim-check.mjs` for §9.4.
 - `git ls-files` for the jar, mobile and robot counts.
 - `gh pr list --state open` → #412, #411, #410, #346.
+- **§7.3:** `services/svc-identity/src/db/schema.ts:23` (uuid),
+  `…/core/…/entity/Member.java:27-29` (`Long`),
+  `services/svc-ledger/src/db/schema.ts:32` (`owner_id` is `text`).
+- **§8:** `git show c221cc8` and `git diff a19e337 HEAD -- vendor/coinexchange/01_wallet_rpc`;
+  every `pom.xml` and `application.properties` under `01_wallet_rpc`;
+  `grep -c rpc-common <module>/pom.xml` across all 14 modules for §8.3;
+  `find -name RpcSecurityConfig.java` → one path; the key-generation and
+  withdrawal call sites cited inline.
 
 **Unverified, and named as such:**
+
+- **§8 is a targeted read, not a security review, and must not be cited as one.**
+  215 files were not read line by line. §8.3 was found by reading `pom.xml`s, not
+  Java — which is precisely why §8.8 argues the deeper read will find more.
+- **Whether ECT's committed secret at `ect/…/application.properties:14` is live
+  or an upstream-mangled placeholder.** The value looks hand-altered. **Treat it
+  as burned regardless** — the cost of being wrong is asymmetric and the
+  remediation (rotate, move out of the tree) is the same either way.
+- **The 3 committed jar artefacts were not decompiled or hash-verified** against
+  any upstream release. Whether their bytecode matches the coordinates they claim
+  is exactly what §8.6 item 5 exists to establish.
+- **Whether the six unauthenticated modules would actually start** without
+  `WALLET_RPC_AUTH_TOKEN`. The classpath analysis says the property is bound by
+  nothing and the `@PostConstruct` guard cannot run; **that is a static argument
+  and it has not been executed.** It is also not a reason to test it on a machine
+  with a reachable port.
 
 - **Whether the Java stack actually comes up after §2's fixes.** I did not apply
   them — this document changes no service, vendor or app source. The two stack
@@ -1312,5 +1703,6 @@ from the worktree `docs/bizzan-adoption-queue`:
 - Money inventory, regenerable: `node tooling/scripts/vendor-money-inventory.mjs` → [`docs/ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md`](ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md)
 - Recipes: `packages/ledger-client/src/recipes/{index,bank,loans}.ts`
 - Lane law: [`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) · [`docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`](BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md)
-- Perimeter on the vendored ports: [`docs/A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md`](A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md)
+- Perimeter on the vendored ports: [`docs/A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md`](A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md) — **§8.3 corrects lines 162-165 of it**
+- The wallet-RPC hardening commit, and the best security writing in the repo: `git show c221cc8`
 - Doctrine: §0.6, §4.2, §13 of [`INTAFACED_DEFINITIVE_BUILD.md`](../INTAFACED_DEFINITIVE_BUILD.md)
