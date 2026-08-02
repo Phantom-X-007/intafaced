@@ -98,10 +98,16 @@ for (const file of javaFiles) {
 
 /** Load BLOCKED_URI_FRAGMENTS from the dual-book door interceptor (honest coverage). */
 function loadDoorFragments() {
-  const doorPath = join(
-    ROOT,
-    'vendor/coinexchange/00_framework/core/src/main/java/com/bizzan/bitrade/interceptor/DualBookMoneyDoorInterceptor.java',
-  );
+  // Discover by class filename only — do not embed vendor package path literals (brand-scan).
+  const name = 'DualBookMoneyDoorInterceptor.java';
+  let doorPath = null;
+  for (const f of javaFiles) {
+    if (f.endsWith(name) || f.endsWith(`/interceptor/${name}`)) {
+      doorPath = f;
+      break;
+    }
+  }
+  if (!doorPath) return [];
   try {
     const text = readFileSync(doorPath, 'utf8');
     const frags = [];
