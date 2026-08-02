@@ -122,7 +122,7 @@ async function main() {
   // Resolve `nats` from workspace package deps (not hoisted to monorepo root).
   await run(
     'pnpm',
-    ['--filter', '@intafaced/events', 'exec', 'node', join(ROOT, 'tooling/scripts/order-path-cx8-ensure-streams.mjs')],
+    ['--filter', '@intafaced/events', 'run', 'cx8-streams'],
     { ...common, NATS_URL: NATS },
   );
 
