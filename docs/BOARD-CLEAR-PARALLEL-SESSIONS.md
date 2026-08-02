@@ -1,6 +1,6 @@
 # Board Clear — Parallel sessions & collision wall
 
-**Binding.** Multiple Grok/Claude chats, Denon, and shehzad may push the same day.  
+**Binding.** Multiple agent chats, Denon, and shehzad may push the same day.  
 **Goal:** Board Clear still AFK-ships without dual-build, stale tip, or vibe thrash.
 
 ---
