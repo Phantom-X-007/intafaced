@@ -68,7 +68,7 @@ Agent Wave A parallel on AGENT programs only. Human runs H-\* on his schedule.
 | A-TRADE-VENUE-1  | P-TRADE-LIGHT | Mount venue fabric into mark or public path                             | **SHIPPED** #344    |
 | A-OR-1           | P-OR          | **#289 rebase onto main** then merge/absorb                             | **DONE** #289       |
 | A-P5-2           | P-P5-LIGHT    | Academy thin slice or §13                                               | **SHIPPED** #341    |
-| A-P5-3           | P-P5-LIGHT    | Ops surface + agents usefulness or §13                                  | **OPEN**            |
+| A-P5-3           | P-P5-LIGHT    | Ops surface (A-P5-OPS) + agents usefulness or §13                       | **OPS SHIPPING**    |
 | A-WS-1           | P-WS          | Harden private channels + tests (may mock until B)                      | **SHIPPED** #336    |
 | —                | **H-\***      | **All PAY / PROT / FUT risk / OTC / COPY / ALGO / BANK money / ID-SUB** | **shehzad002 only** |
 

@@ -108,6 +108,14 @@ export interface AdminApi {
   read(): KillSwitchSnapshot;
   /** Apply one module toggle. Returns the new state. */
   apply(body: unknown, operator: Principal): KillSwitchSnapshot & { changed: boolean };
+  /**
+   * Whether this edge process was started with a ledger URL.
+   *
+   * Boolean only — never pretends the freeze row was read. Used by `/admin/status`
+   * so an operator can see "money plane unreachable from this edge" without a
+   * treasury token.
+   */
+  ledgerConfigured(): boolean;
   /** Read the ledger's durable freeze row through svc-ledger. */
   readFreeze(header: string): Promise<{ status: number; body: unknown }>;
   /** Freeze or thaw the ledger. Attribution and durability are svc-ledger's. */
@@ -176,6 +184,8 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
 
       return { ...snapshot(), changed: before !== input.disabled };
     },
+
+    ledgerConfigured: () => deps.ledger !== null,
 
     async readFreeze(header) {
       if (!deps.ledger) return unreachable;
