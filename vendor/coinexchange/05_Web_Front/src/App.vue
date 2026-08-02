@@ -56,9 +56,13 @@
                   <router-link to="/announcement/0">
                     <MenuItem name="nav-service">{{$t("header.service")}}</MenuItem>
                   </router-link>
-                  <router-link to="/whitepaper">
-                    <MenuItem name="nav-whitepaper">{{$t("header.whitepaper")}}</MenuItem>
-                  </router-link>
+                  <!-- The White Paper item is gone with its route. It opened a
+                       screen whose entire content was an <embed> of
+                       /static/INTAFACEDWhitePaperVer 1.0.pdf — a file that 404s,
+                       because this tree has no static/ directory — above a link
+                       to a raw.githubusercontent URL for the same missing file.
+                       A permanent header slot pointing at a grey box is worse
+                       than no slot: it advertises a document we do not have. -->
                 </Submenu>
               </Menu>
             </div>
@@ -85,19 +89,21 @@
             <div class="header_nav_mobile_triggle" @click="toggleMemu()">
               <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/>
             </div>
-            <div class="header_nav" style="float:right;margin-left: 10px;">
-              <Menu mode="horizontal" width="auto" @on-select="changelanguage" style="height: 50px;line-height:50px;">
-                  <Submenu name="lang">
-                      <template slot="title" class="lang-title">
-                        <span style="display: none;">{{languageValue}}</span>
-                        <img class="lang-img" v-if="false" src="./assets/images/lang-zh.png"></img>
-                        <img class="lang-img" v-if="lang=='English'" src="./assets/images/lang-en.png"></img>
-                      </template>
-                      <MenuItem name="zh" class="lang-item"><img src="./assets/images/lang-zh.png"></img>Chinese</MenuItem>
-                      <MenuItem name="en" class="lang-item"><img src="./assets/images/lang-en.png"></img>ENGLISH</MenuItem>
-                  </Submenu>
-              </Menu>
-            </div>
+            <!-- The language switcher was here and is deliberately not replaced.
+                 main.js loads ONE locale — `messages: { en }` — and store.js
+                 hard-wires `setlang`/`initLang` to English so no stored
+                 preference can put the product back into Chinese. Choosing
+                 "Chinese" therefore set $i18n.locale to a catalogue that does
+                 not exist and the page redrew in English: a control that looks
+                 like a feature, does nothing, and cannot be told apart from one
+                 that is broken. When a second locale actually ships, the switch
+                 comes back with it.
+
+                 `changelanguage()`, `languageValue` and `lang` below are now
+                 unreachable and are left in place on purpose — the auth lane is
+                 rewriting the methods block around them in a parallel branch,
+                 and a merge conflict there is a worse trade than three dead
+                 members. They go when that lands. -->
             <div class="rightwrapper">
               <poptip placement="bottom" width="120" class="appdownload" trigger="hover">
                 <a href="javascript:;" style="font-size:14px;">{{$t("header.appdownlaod")}}
@@ -186,9 +192,8 @@
             <router-link to="/announcement/0">
               <MenuItem name="nav-service" style="text-align:left;color:#bdc2ca;">{{$t("header.service")}}</MenuItem>
             </router-link>
-            <router-link to="/whitepaper">
-              <MenuItem name="nav-whitepaper" style="text-align:left;">{{$t("header.whitepaper")}}</MenuItem>
-            </router-link>
+            <!-- White Paper removed here for the same reason as the header: the
+                 route served an <embed> of a PDF that does not exist. -->
             <!-- The same eleven modules on mobile, where a hover dropdown is
                  not usable. Expanded inline rather than hidden behind the hub,
                  so every module is one tap from the drawer. -->
@@ -233,13 +238,8 @@
                 </router-link>
             </Submenu>
             <div style="height: 1px;width:100%;background:rgb(59, 69, 85);margin-top:10px;margin-bottom:10px;"></div>
-            <Submenu name="lang">
-                <template slot="title" class="lang-title">
-                  <span style="color:#bdc2ca;">{{languageValue}}</span>
-                </template>
-                <MenuItem name="zh" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-zh.png"></img>Chinese</MenuItem>
-                <MenuItem name="en" class="lang-item" style="padding-left:20px!important;"><img src="./assets/images/lang-en.png"></img>ENGLISH</MenuItem>
-            </Submenu>
+            <!-- The drawer's language submenu is gone with the header's. One
+                 locale is loaded; a picker over a list of one is furniture. -->
             <router-link to="/app">
               <MenuItem name="nav-appdownload"style="text-align:left;color:#bdc2ca;">{{$t("header.appdownlaod")}}</MenuItem>
             </router-link>
@@ -309,25 +309,15 @@
             </ul>
           </div>
         </div>
-        <div class="footer_right" style="margin-left: 5%;border-left: 1px solid #222222;padding-left: 5%;">
-          <ul>
-            <li class="footer_title">
-              <span>{{$t("footer.yqlj")}}</span>
-            </li>
-            <li>
-              <a target="_blank" href="https://www.feixiaohao.com/">Feixiaohao</a>
-            </li>
-            <li>
-              <a target="_blank" href="https://www.8btc.com/">8BTC</a>
-            </li>
-            <li>
-              <a target="_blank" href="https://www.chainnode.com/">ChainNode</a>
-            </li>
-            <li>
-              <a target="_blank" href="https://www.jinse.com/">Jinse Finance</a>
-            </li>
-          </ul>
-        </div>
+        <!-- The "friendly links" column stood here: outbound links to
+             Feixiaohao, 8BTC, ChainNode and Jinse Finance. It is a Chinese
+             web convention the upstream project carried, and all four are
+             third-party crypto media sites with no relationship to this
+             product. Sending our own footer traffic to four sites we do not
+             control, from the most trusted block on the page, is not
+             navigation we want — so the column is removed rather than
+             re-pointed. -->
+
         <div class="footer_right">
           <ul>
             <li class="footer_title">
@@ -481,6 +471,12 @@ export default {
         case "nav-platform":
           window.document.title = "Platform" + " - INTAFACED | Sovereign Exchange";
           break;
+        // Set by pages/NotFound.vue. The tab title is the only part of a 404
+        // that survives into history and bookmarks, so it should not read as
+        // the front page.
+        case "nav-notfound":
+          window.document.title = "Not found" + " - INTAFACED | Sovereign Exchange";
+          break;
         default:
           window.document.title = "INTAFACED | INTAFACED - Global digital asset exchange | Global digital asset exchange";
           break;
@@ -591,12 +587,16 @@ export default {
     goModule(route) {
       if (route && this.$route.path !== route) this.$router.push(route);
     },
-    /** Mobile drawer: lang items still hit changelanguage; everything else routes. */
+    /**
+     * Mobile drawer: every item name maps to a route.
+     *
+     * The `zh`/`en` branch that used to sit at the top of this method went with
+     * the language submenu, and `nav-whitepaper` went with the /whitepaper
+     * route. Both entries are removed rather than left pointing at nothing: an
+     * unmatched name falls through to `if (map[name])` and the drawer just does
+     * not respond, which reads to a user as a broken tap.
+     */
     onMobileSelect(name) {
-      if (name === "zh" || name === "en") {
-        this.changelanguage(name);
-        return;
-      }
       var map = {
         "nav-index": "/",
         "nav-exchange": "/exchange",
@@ -606,7 +606,6 @@ export default {
         "nav-lab": "/lab",
         "nav-invite": "/invite",
         "nav-service": "/announcement/0",
-        "nav-whitepaper": "/whitepaper",
         "nav-platform": "/platform",
         "nav-appdownload": "/app",
         "nav_safe": "/uc/safe",
