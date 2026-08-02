@@ -9,14 +9,14 @@
 
 ### How this is enforced without you messaging a chat
 
-| Layer | What loads | What it does |
-| --- | --- | --- |
-| **Cold agent opens repo** | `AGENTS.md` + `CLAUDE.md` (tools auto-inject) | Coordination section + CLAUDE non-negotiable #5 — **no paste** |
-| **Hard bans** | `tooling/agent-protocol/AGENT_PROTOCOL.md` | Reject human-mountain implement / no-claim dual-build / fake done |
-| **Machine regression** | `pnpm scan:agent-autoload` in **CI + `pnpm verify`** | Fails if someone deletes the law from auto-load files |
-| **Tracker honesty** | `pnpm tracker:check` in CI + verify | Blocks false `done` / stale render — not every craft edit |
+| Layer                     | What loads                                           | What it does                                                      |
+| ------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| **Cold agent opens repo** | `AGENTS.md` + `CLAUDE.md` (tools auto-inject)        | Coordination section + CLAUDE non-negotiable #5 — **no paste**    |
+| **Hard bans**             | `tooling/agent-protocol/AGENT_PROTOCOL.md`           | Reject human-mountain implement / no-claim dual-build / fake done |
+| **Machine regression**    | `pnpm scan:agent-autoload` in **CI + `pnpm verify`** | Fails if someone deletes the law from auto-load files             |
+| **Tracker honesty**       | `pnpm tracker:check` in CI + verify                  | Blocks false `done` / stale render — not every craft edit         |
 
-**Honest limit:** no tool can force a model to *think*; we put the law where tools **always load** and **block regression**. We do **not** demand `features.mjs` on every code PR (that would limit you).
+**Honest limit:** no tool can force a model to _think_; we put the law where tools **always load** and **block regression**. We do **not** demand `features.mjs` on every code PR (that would limit you).
 
 ---
 
