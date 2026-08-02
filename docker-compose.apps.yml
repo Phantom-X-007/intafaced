@@ -704,6 +704,40 @@ services:
     ports: ['3000:3000']
     healthcheck: *healthcheck
 
+  # The vendored trading shell — the app the product direction has always said
+  # we ARE, and which until now could not be run at all.
+  #
+  # 74 Vue screens with no `dist`, no Dockerfile and no compose entry. Every
+  # document pointing readers at `:8090` was pointing at a port nothing served,
+  # while `web` above quietly became the de-facto product. That is how a stated
+  # direction and a running system drift apart without anyone deciding to.
+  #
+  # It does NOT use *app: this tree is Vue 2.5 / webpack 3 with its own npm
+  # lockfile, deliberately outside the pnpm workspace so a 2017 dependency graph
+  # cannot reach our services. Its own Dockerfile builds it and nginx serves it.
+  vendor-shell:
+    build:
+      context: ./vendor/coinexchange/05_Web_Front
+      dockerfile: Dockerfile
+      target: runtime
+    image: intafaced/vendor-shell:dev
+    container_name: intafaced-vendor-shell
+    restart: unless-stopped
+    # 8090 because that is the port every existing doc already claims. Making
+    # the docs true is cheaper than correcting all of them.
+    ports: ['8090:80']
+    # nginx proxies /api to the edge and /ws to the socket by SERVICE NAME, so
+    # both must be resolvable on this network — the browser stays same-origin
+    # and never learns a port.
+    depends_on:
+      svc-edge: { condition: service_healthy }
+      svc-ws: { condition: service_started }
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost/']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   admin:
     <<: *app
     container_name: intafaced-admin
