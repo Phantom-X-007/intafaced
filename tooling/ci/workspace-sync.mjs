@@ -453,8 +453,7 @@ if (compose !== null) {
     // of this line matched nothing and flagged apps/admin, which is plainly in
     // the file. A gate that cries wolf gets switched off, and then the real
     // failure it was written for goes through it unnoticed.
-    const named =
-      composeApps.includes(fe.dir.split(sep).join('/')) || new RegExp(`^\\s{2}${fe.name}:`, 'm').test(composeApps);
+    const named = composeApps.includes(fe.dir.split(sep).join('/')) || new RegExp(`^\\s{2}${fe.name}:`, 'm').test(composeApps);
     if (!named && !composeApps.includes(`# no-deploy: ${fe.name}`)) {
       failures.push({
         file: 'docker-compose.apps.yml',
