@@ -90,3 +90,5 @@ if (failed) {
   process.exit(1);
 }
 console.log('\nall sub-accounts golden tests passed');
+
+// ci: retrigger
