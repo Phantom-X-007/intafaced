@@ -1,6 +1,6 @@
 # Steal lines — `b13-chart-empty`
 
-**Refs:** Coinbase Advanced empty/error calm · Design Bar §3.1  
+**Refs:** Coinbase Advanced empty/error calm · Design Bar §3.1
 
 1. **From Coinbase Advanced we take:** Empty/error is a labeled state, never a silent void.
 2. **From Design Bar we take:** Loading / empty / error stay distinct; primary ticket still usable.

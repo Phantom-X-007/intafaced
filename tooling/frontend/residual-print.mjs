@@ -11,9 +11,7 @@ const items = [...(reg.items || [])].sort((a, b) => (a.priority ?? 99) - (b.prio
 const want = process.argv[2]; // optional filter: open|partial|blocked|done
 
 console.log(`residual-register  updated=${reg.updated}  items=${items.length}\n`);
-console.log(
-  ['P', 'ID', 'ST', 'TITLE', 'NEXT'].map((h) => h.padEnd(h === 'TITLE' ? 42 : h === 'NEXT' ? 40 : 8)).join(' ')
-);
+console.log(['P', 'ID', 'ST', 'TITLE', 'NEXT'].map((h) => h.padEnd(h === 'TITLE' ? 42 : h === 'NEXT' ? 40 : 8)).join(' '));
 for (const i of items) {
   if (want && i.status !== want) continue;
   if (!want && (i.status === 'done' || i.priority >= 90)) continue; // default: actionable

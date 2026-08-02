@@ -20,10 +20,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SLICE_TYPE = (process.env.SLICE_TYPE || 'HONESTY').toUpperCase();
 const SLICE_ID = process.env.SLICE_ID || '';
 const ORCA_REQUIRED =
-  process.env.ORCA_REQUIRED === '1' ||
-  process.env.ORCA_REQUIRED === 'true' ||
-  SLICE_TYPE === 'CRAFT' ||
-  SLICE_TYPE === 'HONESTY';
+  process.env.ORCA_REQUIRED === '1' || process.env.ORCA_REQUIRED === 'true' || SLICE_TYPE === 'CRAFT' || SLICE_TYPE === 'HONESTY';
 
 const errors = [];
 const warns = [];
@@ -120,15 +117,9 @@ for (const s of ['ui:boot', 'ui:proof', 'scan:brand']) {
 
 console.log('— collision hint (open PR titles) —');
 try {
-  const prs = execSync(
-    'gh pr list --state open --limit 30 --json number,title,headRefName 2>/dev/null',
-    { cwd: ROOT, encoding: 'utf8' }
-  );
+  const prs = execSync('gh pr list --state open --limit 30 --json number,title,headRefName 2>/dev/null', { cwd: ROOT, encoding: 'utf8' });
   const list = JSON.parse(prs || '[]');
-  const risky = list.filter(
-    (p) =>
-      /order-route|feat\/ui|feat\/app|frontend|shell/i.test(p.title + p.headRefName)
-  );
+  const risky = list.filter((p) => /order-route|feat\/ui|feat\/app|frontend|shell/i.test(p.title + p.headRefName));
   if (!risky.length) ok('no obvious open shell/order-route title collision');
   else {
     warn('open PRs to re-derive before editing shell:');
@@ -163,11 +154,7 @@ if (SLICE_ID) {
   } else {
     ok(`docs/refs/${SLICE_ID}/`);
     const need =
-      SLICE_TYPE === 'CRAFT'
-        ? ['steal-lines.md', 'critique.md', 'gap-audit.md']
-        : SLICE_TYPE === 'HONESTY'
-          ? ['gap-audit.md']
-          : [];
+      SLICE_TYPE === 'CRAFT' ? ['steal-lines.md', 'critique.md', 'gap-audit.md'] : SLICE_TYPE === 'HONESTY' ? ['gap-audit.md'] : [];
     for (const f of need) {
       const p = join(dir, f);
       if (!existsSync(p) || !readFileSync(p, 'utf8').trim()) err(`${SLICE_ID}/${f} empty or missing`);
@@ -179,10 +166,7 @@ if (SLICE_ID) {
 }
 
 console.log('— scorecard —');
-const scorecards = [
-  'docs/FRONTEND-BASELINE-SCORECARD-A0-2026-07-31.md',
-  'docs/FRONTEND-SCORECARD-LIVE.md',
-];
+const scorecards = ['docs/FRONTEND-BASELINE-SCORECARD-A0-2026-07-31.md', 'docs/FRONTEND-SCORECARD-LIVE.md'];
 let anyScore = false;
 for (const s of scorecards) {
   if (existsSync(join(ROOT, s))) {
