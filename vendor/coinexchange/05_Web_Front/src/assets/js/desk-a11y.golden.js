@@ -106,6 +106,19 @@ var ids = a11y.DESK_A11Y_BASELINE.map(function (x) {
 assert(ids.indexOf('error-summary') >= 0, 'baseline includes error-summary');
 assert(ids.indexOf('live-announce') >= 0, 'baseline includes live-announce');
 assert(ids.indexOf('focus-visible') >= 0, 'baseline includes focus-visible');
+assert(ids.indexOf('focus-trap') >= 0, 'baseline includes focus-trap');
+
+/* ── tabWrapIndex / shouldTrapTab (B4 focus trap) ─────────────────────── */
+assert(a11y.tabWrapIndex(0, 0, false) === -1, 'empty list → -1');
+assert(a11y.tabWrapIndex(0, 1, false) === 0, 'single Tab stays 0');
+assert(a11y.tabWrapIndex(0, 1, true) === 0, 'single Shift+Tab stays 0');
+assert(a11y.tabWrapIndex(0, 3, false) === 1, 'Tab 0→1');
+assert(a11y.tabWrapIndex(2, 3, false) === 0, 'Tab last wraps to 0');
+assert(a11y.tabWrapIndex(0, 3, true) === 2, 'Shift+Tab first wraps to last');
+assert(a11y.tabWrapIndex(2, 3, true) === 1, 'Shift+Tab 2→1');
+assert(a11y.shouldTrapTab(true, 2) === true, 'trap when open + focusables');
+assert(a11y.shouldTrapTab(false, 2) === false, 'no trap when closed');
+assert(a11y.shouldTrapTab(true, 0) === false, 'no trap with zero focusables');
 
 if (failed) {
   console.error('\n' + failed + ' desk-a11y golden assertion(s) failed');

@@ -108,6 +108,38 @@ function liveAnnounceUpdate(previous, next) {
 }
 
 /**
+ * B4 — pure Tab wrap for modal/dialog focus trap (no DOM).
+ * Returns the next focusable index, wrapping at ends. Empty list → -1.
+ *
+ * @param {number} activeIndex index of currently focused item in list
+ * @param {number} length focusable count
+ * @param {boolean} [shiftKey] true = reverse (Shift+Tab)
+ * @returns {number}
+ */
+function tabWrapIndex(activeIndex, length, shiftKey) {
+  var n = length | 0;
+  if (n < 1) return -1;
+  var i = activeIndex | 0;
+  if (i < 0) i = 0;
+  if (i >= n) i = n - 1;
+  if (shiftKey) {
+    return i <= 0 ? n - 1 : i - 1;
+  }
+  return i >= n - 1 ? 0 : i + 1;
+}
+
+/**
+ * Whether a dialog should intercept Tab for focus trap.
+ *
+ * @param {boolean} open
+ * @param {number} focusableCount
+ * @returns {boolean}
+ */
+function shouldTrapTab(open, focusableCount) {
+  return !!open && (focusableCount | 0) > 0;
+}
+
+/**
  * Documented baseline checklist (PR evidence / residual B10). Not runtime.
  */
 var DESK_A11Y_BASELINE = [
@@ -134,6 +166,10 @@ var DESK_A11Y_BASELINE = [
   {
     id: 'field-labels',
     note: 'Price/amount labelled; aria-invalid when field-scoped error'
+  },
+  {
+    id: 'focus-trap',
+    note: 'B4: Tab cycles inside open dialog (⌘K); restore focus on close'
   }
 ];
 
@@ -143,6 +179,8 @@ var api = {
   buildTicketErrorSummary: buildTicketErrorSummary,
   ticketFieldAria: ticketFieldAria,
   liveAnnounceUpdate: liveAnnounceUpdate,
+  tabWrapIndex: tabWrapIndex,
+  shouldTrapTab: shouldTrapTab,
   DESK_A11Y_BASELINE: DESK_A11Y_BASELINE
 };
 

@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "B12 OTC/Invite/Help craft; P0.4 blocked by agent chromium SEGV after browsers install.",
-  "tip_sha_at_write": "final-craft-pass",
+  "tip_note": "B4 focus-trap (⌘K Tab cycle) + B12 Partner honesty; P0.4 still agent Chromium SEGV",
+  "tip_sha_at_write": "feat-app-b4-trap",
   "waves": {
     "A": "honesty / locks / withdraw-first",
     "B": "craft + page-data pro power",
@@ -170,12 +170,12 @@
       "id": "B4",
       "wave": "B",
       "title": "Mobile monitor+panic + focus trap",
-      "status": "partial",
-      "evidence": "Sticky pair+ticket #379",
-      "proof_missing": "focus trap lib optional",
-      "next_action": "Optional trap lib",
+      "status": "done",
+      "evidence": "Sticky pair+ticket #379; focus trap via desk-a11y tabWrapIndex + CommandPalette",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 35
+      "priority": 99
     },
     {
       "id": "B5",
@@ -259,11 +259,11 @@
       "wave": "B",
       "title": "Marketing/OS/OTC/CMS craft last",
       "status": "partial",
-      "evidence": "OTC Main dual-book shell + HTML fix + Invite/Help honesty notes (this PR)",
-      "proof_missing": "Lab/Partner deep craft; full marketing restyle",
-      "next_action": "Optional Lab/Partner; residual lower",
+      "evidence": "OTC/Invite/Help #390; Partner dual-book + honest empty contacts",
+      "proof_missing": "Lab deep craft if any Lab surface; full marketing restyle deferred",
+      "next_action": "Optional Lab only; desk first",
       "blocker": "desk scorecard first",
-      "priority": 55
+      "priority": 60
     },
     {
       "id": "B13",
