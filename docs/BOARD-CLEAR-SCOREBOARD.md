@@ -72,6 +72,6 @@ _Live re-derive required every session. Snapshot at last scoreboard edit:_
 
 ## Finish gate
 
-- **AGENT-COMPLETE:** every **agent-owned** row `DONE`/`CUT` — blocked only by **ws.gateway** live futures E2E (M3) unless §13 cut
-- **BOARD-COMPLETE:** every row including human M1–M7  
-  Human OPEN ≠ agent idle on remaining agent work (ws residual + babysit + craft register optional).
+- **AGENT-COMPLETE:** every **agent-owned** row `DONE`/`CUT` — **met** (ws live futures positions §13 → M3)
+- **BOARD-COMPLETE:** every row including human M1–M7 — **not met**
+- Remaining work: babysit human PRs · optional craft register · never steal M1–M7
