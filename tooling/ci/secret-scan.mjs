@@ -104,9 +104,32 @@ const PLACEHOLDER_VALUES = [
   /^[&*][A-Za-z0-9_.-]+$/,
 ];
 
-/** Keys that look like credentials. */
+/**
+ * Keys that look like credentials.
+ *
+ * `withdraw-wallet` is in this list by incident, not by shape. In the vendored
+ * wallet RPC tree that key held the raw ECT withdrawal signing secret — the
+ * value POSTed as `secret` to the chain API, i.e. the one thing that can move
+ * every coin at the withdraw address — and it sat in a tracked file for as long
+ * as this scan has existed, because "wallet" does not read as "credential". It
+ * is the counter-example to the assumption the scan is built on: this key names
+ * the asset, not the secret.
+ */
 const SECRET_KEY =
-  /(?:^|[._-])(?:pass(?:word|wd|phrase)?|secret|token|api[._-]?key|access[._-]?key|secret[._-]?key|private[._-]?key|credential|auth[._-]?token)s?$/i;
+  /(?:^|[._-])(?:pass(?:word|wd|phrase)?|secret|token|api[._-]?key|access[._-]?key|secret[._-]?key|private[._-]?key|credential|auth[._-]?token|withdraw[._-]?wallet)s?$/i;
+
+/**
+ * A geth/web3 keystore filename — `UTC--<ISO timestamp>--<address>[.json]`.
+ *
+ * `coin.withdraw-wallet` means two different things in this tree: on ECT it is
+ * the signing secret itself; on eth/erc-token/erc-eusdt it names a keystore FILE
+ * whose password is the adjacent `coin.withdraw-wallet-password` (already
+ * `${...}`, already checked). A filename and an address are public, and treating
+ * them as secrets would make the gate lie in the other direction. The shape is
+ * narrow enough to recognise, so recognise it rather than exempting the key and
+ * losing the ECT case with it.
+ */
+const KEYSTORE_FILENAME = /^UTC--[0-9A-Za-z.:-]+Z--[0-9a-fA-F]{38,42}(?:\.json)?$/;
 
 /** URLs carrying inline credentials: scheme://user:password@host */
 const INLINE_URL_CREDENTIAL = /\b[a-z][a-z0-9+.-]*:\/\/([^\s:/@]+):([^\s@/]+)@/gi;
@@ -220,6 +243,8 @@ for (const rel of tracked()) {
         assignmentsChecked++;
         if (declaredUsernames.has(value.toLowerCase()) && value.trim() !== '') {
           // password === a username declared in this same file: the dev convention.
+        } else if (KEYSTORE_FILENAME.test(value)) {
+          // A keystore FILE name, not the key. See KEYSTORE_FILENAME.
         } else if (!isPlaceholder(value)) {
           violations.push({
             check: 'committed-credential',

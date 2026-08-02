@@ -37,6 +37,7 @@
     "scan:custody": "node tooling/ci/custody-scan.mjs",
     "scan:secrets": "node tooling/ci/secret-scan.mjs",
     "scan:vendor-shell": "node tooling/ci/vendor-shell-scan.mjs",
+    "scan:wallet-rpc-auth": "node tooling/ci/wallet-rpc-auth-scan.mjs",
     "scan:vendor-java-money": "node tooling/ci/vendor-java-money-scan.mjs",
     "scan:dual-book-door": "node tooling/ci/dual-book-door-scan.mjs",
     "scan:test-db": "node tooling/ci/test-db-scan.mjs",

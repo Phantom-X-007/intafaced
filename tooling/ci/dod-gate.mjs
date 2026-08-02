@@ -197,6 +197,13 @@ let repoFailed = false;
 // `secret-scan.mjs` is here for the same reason brand-scan and custody-scan are:
 // a committed credential is invisible in review — it reads as a config line — so
 // the check has to be mechanical rather than something a reviewer must remember.
+//
+// `wallet-rpc-auth-scan.mjs` is here because the same trap caught us one level
+// up: the wallet RPC auth wall was verified by reading the module that has it,
+// and six modules that never compiled against it served withdrawal endpoints
+// anonymously for as long as a doc said the perimeter was enforced. Reviewing
+// "is the guard written?" is not the same question as "is the guard on every
+// classpath that can boot?", and only the second one is checkable.
 for (const script of [
   'brand-scan.mjs',
   'custody-scan.mjs',
@@ -204,6 +211,7 @@ for (const script of [
   'vendor-java-money-scan.mjs',
   'dual-book-door-scan.mjs',
   'secret-scan.mjs',
+  'wallet-rpc-auth-scan.mjs',
   'migration-check.mjs',
   'killswitch-reachability.mjs',
 ]) {
