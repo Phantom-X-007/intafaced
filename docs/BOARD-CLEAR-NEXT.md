@@ -18,20 +18,19 @@
 
 ## EXACT NEXT SHIP (do this now — single primary)
 
-| Field | Value |
-| --- | --- |
-| **Ship ID** | **A-UI-SUB** |
-| **Program** | P-UI |
-| **Objective** | Sub-accounts selector on vendor shell; honest block if money routing incomplete (H-ID-SUB shehzad) |
-| **PATHS_ONLY** | `vendor/**/05_Web_Front/**` |
-| **Never touch** | invent balances/routing; apps/web; M1–M7 implement |
-| **Branch / open PR** | prefer babysit **#358** if still open — else `feat/ui-sub-accounts-selector` |
-| **Worktree** | Fresh from origin/main or existing board-clear-ui-sub |
-| **Proof** | golden/tests + PR evidence |
-| **After merge** | EXACT NEXT → **A-WS-MOCK-E2E** (#357) then **A-P5-OPS** (#360) |
+| Field                | Value                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| **Ship ID**          | **A-UI-SUB**                                                                                       |
+| **Program**          | P-UI                                                                                               |
+| **Objective**        | Sub-accounts selector on vendor shell; honest block if money routing incomplete (H-ID-SUB shehzad) |
+| **PATHS_ONLY**       | `vendor/**/05_Web_Front/**`                                                                        |
+| **Never touch**      | invent balances/routing; apps/web; M1–M7 implement                                                 |
+| **Branch / open PR** | prefer babysit **#358** if still open — else `feat/ui-sub-accounts-selector`                       |
+| **Worktree**         | Fresh from origin/main or existing board-clear-ui-sub                                              |
+| **Proof**            | golden/tests + PR evidence                                                                         |
+| **After merge**      | EXACT NEXT → **A-WS-MOCK-E2E** (#357) then **A-P5-OPS** (#360)                                     |
 
 **Secondary queue:** finish #357 A-WS-MOCK-E2E · #360 A-P5-OPS · A-UI-A11Y · A-TRADE-SPOT-OPS · A-TRADE-VENUE-OPS
-
 
 ## Session bootstrap (every compact / GO — **agent only**, never Nitro)
 
@@ -60,14 +59,13 @@
 
 ## Open PRs (re-derive with `gh pr list`)
 
-| PR | Owner | Note |
-| --- | --- | --- |
-| #358 | agent | A-UI-SUB — merge when green |
-| #357 | agent | A-WS-MOCK-E2E — merge when green |
-| #360 | agent | A-P5-OPS — merge when green |
+| PR   | Owner      | Note                               |
+| ---- | ---------- | ---------------------------------- |
+| #358 | agent      | A-UI-SUB — merge when green        |
+| #357 | agent      | A-WS-MOCK-E2E — merge when green   |
+| #360 | agent      | A-P5-OPS — merge when green        |
 | #346 | shehzad002 | M1 pay — CONFLICTING; babysit only |
-| #350 | Denon | copy-spec docs |
-
+| #350 | Denon      | copy-spec docs                     |
 
 ## Shipped (do not primary-reopen)
 
