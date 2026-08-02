@@ -46,17 +46,33 @@ HTTP: `GET /health` (liveness) · `GET /ready` — returns **503 when frozen**, 
 
 This service _is_ the ledger, so rather than recipes it invokes, here is what it enforces. Every recipe in `@intafaced/ledger-client` passes through `post()`.
 
-| Invariant                                           | Enforced where                                                |
-| --------------------------------------------------- | ------------------------------------------------------------- |
-| Σ debits = Σ credits, per asset                     | `assertValidPost` (shared with the reference impl)            |
-| `available` never negative (except `treasury`)      | service check on locked rows **+** `accounts_non_negative_ck` |
-| Locks funded from the owner's own available balance | `assertPairedLocks`                                           |
-| Entry amounts strictly positive                     | `assertBalanced` **+** `ledger_entries_positive_ck`           |
-| Idempotency — a retry returns the original          | `ledger_tx_idempotency_idx` unique index                      |
-| Hash chain unbroken                                 | `chain_tip` `FOR UPDATE` + `verifyChain`                      |
-| A frozen ledger accepts no new posts                | `posting_freeze` read under that same `FOR UPDATE`            |
+| Invariant                                           | Enforced where                                                  |
+| --------------------------------------------------- | --------------------------------------------------------------- |
+| Σ debits = Σ credits, per asset                     | `assertValidPost` (shared with the reference impl)              |
+| `available` never negative (except `treasury`)      | service check on locked rows **+** `accounts_non_negative_ck`   |
+| Locks funded from the owner's own available balance | `assertPairedLocks`                                             |
+| Entry amounts strictly positive                     | `assertBalanced` **+** `ledger_entries_positive_ck`             |
+| Idempotency — a retry returns the original          | `ledger_tx_idempotency_idx` unique index                        |
+| Hash chain unbroken                                 | `chain_tip` `FOR UPDATE` + `verifyChain`                        |
+| A frozen ledger accepts no new posts                | `posting_freeze` read under that same `FOR UPDATE`              |
+| `owner_id` is from the space `owner_type` declares  | `assertOwnerIdentifierSpace` **+** `accounts_owner_id_space_ck` |
 
 Enforced in three layers on purpose: shared pure validation, the transaction, and database CHECK constraints. **A bug in this service still cannot create money.** There is a test that proves it, by trying to write a negative balance with raw SQL.
+
+### Who an account belongs to
+
+`owner_type` says what role an owner plays. It now also fixes which **identifier space** `owner_id` is drawn from, because it was the only thing in the row that could:
+
+| `owner_type`                | `owner_id` must be                                                     |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `user`, `subaccount`        | a lowercase canonical UUID — `identity.users.id` / `sub_accounts.id`   |
+| `module`,`house`,`treasury` | a namespaced platform slug — `fees:trade`, `rail:card-sandbox`, `mint` |
+
+Before `0005_owner_identifier_space.sql`, `owner_id` was `text` and took either. That is only interesting because of what the 2026-08-02 ADR accepted: the vendored product's money controllers keep their business logic and have their balance writes redirected here through an adapter, and their member ids are `bigint`. An adapter that passes the wrong one **does not fail** — it opens a second, individually conformant account for the same human. Both sum to zero, both hash-chain, both reconcile, both are non-negative; every gate reports clean and no query over this book can tell. It is a dual book, arriving through the door the ADR was written to close.
+
+Not modelled as a separate namespace column, deliberately: a namespace supplied by the caller is supplied by the same caller that supplied the wrong id, so `ns='member'` would arrive alongside `1042` and the pair would be accepted. The space has to be something the ledger already knows.
+
+The constraint also refuses an uppercase UUID. `550E8400-…` and `550e8400-…` are one human and two rows under `accounts_identity_purpose_idx` — the same failure in different clothing.
 
 ### Account boundaries
 
@@ -149,6 +165,8 @@ Migrations run as the schema's **owner**, not an admin role — this role delibe
 `postgres-ledger.test.ts` runs `runLedgerConformance` from `@intafaced/ledger-client/testing` — **the same suite the in-memory reference runs.** If the two ever disagree, one is wrong and the suite decides which (§4.4).
 
 Beyond conformance it proves what only a real database can: CHECK constraints rejecting direct SQL, 18-decimal round trips, tamper detection, drift detection, and 50 concurrent posts leaving the chain intact. Skips cleanly when Postgres is unreachable.
+
+`owner-identity.test.ts` proves the other two things a client-side suite cannot. First, `accounts_owner_id_space_ck` refuses a vendored `bigint` member id against a **raw INSERT**, with `ledger-client` out of the picture — an adapter bridging a Java stack is the least likely caller in the OS to route through a TypeScript library, so application-only enforcement would be bypassable by exactly the thing it exists to stop. Second, it runs migration `0005` against a table that **already has rows**, in each of the four shapes it can meet: conformant (changes nothing), an uppercase UUID (canonicalised, 18dp balance preserved), a never-used wrong-space row (reclaimed), and one that holds value or appears in the journal (**refuses, naming the row**). A constraint added ahead of its backfill passes on an empty database and stops a deploy on a real one. It also asserts, case for case, that the CHECK and `isValidOwnerId` give the same answer — two copies of one rule in two languages, so the drift is caught here rather than as a 500 on a money path.
 
 `service.freeze.test.ts` builds **two `LedgerService` instances over separate connection pools** against one database and asserts that a freeze on one refuses a post on the other, survives a third instance starting cold, and is attributed to `reconciliation` when the reconciliation job sets it. A test that only asserted `freeze()` set a field would pass against the bug it exists to catch.
 

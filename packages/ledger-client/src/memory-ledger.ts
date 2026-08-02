@@ -107,8 +107,20 @@ export class MemoryLedger implements LedgerClient {
     return tx;
   }
 
+  /**
+   * Reading a balance creates nothing — the contract `LedgerClient.balance`
+   * states, and what `PostgresLedger.balance` has always done.
+   *
+   * The reference implementation called `ensureAccount` here, so a read minted
+   * the account. Harmless while an account was only ever a bucket; not harmless
+   * once "does this owner have an account?" is the question that decides
+   * whether an adapter is about to open a second book for one human. A
+   * divergence between the two engines is exactly what the conformance suite
+   * exists to forbid, and this one sat on the read path where nobody looked.
+   */
   async balance(ref: AccountRef): Promise<Balance> {
-    const account = this.ensureAccount(ref);
+    const account = this.accounts.get(accountKey(ref));
+    if (!account) return { account: ref, accountId: '', amount: 0n };
     return { account: ref, accountId: account.id, amount: this.balancesByAccountId.get(account.id) ?? 0n };
   }
 
