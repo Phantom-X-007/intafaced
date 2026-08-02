@@ -31,6 +31,7 @@
           :id="'ix-cmdk-opt-' + item.id"
           :key="item.id"
           role="option"
+          tabindex="-1"
           :aria-selected="i === active"
           class="ix-cmdk-item"
           :class="{ 'is-active': i === active }"
@@ -53,6 +54,7 @@
 
 <script>
 var cmdApi = require('../../assets/js/cmd-palette.js');
+var a11y = require('../../assets/js/desk-a11y.js');
 
 export default {
   name: 'CommandPalette',
@@ -89,6 +91,8 @@ export default {
     },
     open(v) {
       if (v) {
+        this._prevFocus =
+          typeof document !== 'undefined' ? document.activeElement : null;
         this.query = '';
         this.active = 0;
         this.pullMarkets();
@@ -96,6 +100,8 @@ export default {
           var el = this.$refs.input;
           if (el && el.focus) el.focus();
         });
+      } else {
+        this.restoreFocus();
       }
     }
   },
@@ -125,6 +131,11 @@ export default {
       if (k === 'Escape') {
         e.preventDefault();
         this.close();
+        return;
+      }
+      // B4 focus trap — keep Tab inside open dialog
+      if (k === 'Tab') {
+        this.trapTab(e);
       }
     },
     onKey(e) {
@@ -142,6 +153,47 @@ export default {
         e.preventDefault();
         var it = this.filtered[this.active];
         if (it) this.go(it);
+      }
+    },
+    /** Collect tabbable nodes inside the panel (input + option list items). */
+    focusables() {
+      var root = this.$el && this.$el.querySelector && this.$el.querySelector('.ix-cmdk-panel');
+      if (!root) return [];
+      var list = [];
+      var input = this.$refs.input;
+      if (input) list.push(input);
+      var opts = root.querySelectorAll('[role="option"]');
+      for (var i = 0; i < opts.length; i++) list.push(opts[i]);
+      return list;
+    },
+    trapTab(e) {
+      var nodes = this.focusables();
+      if (!a11y.shouldTrapTab(this.open, nodes.length)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var active =
+        typeof document !== 'undefined' ? document.activeElement : null;
+      var idx = nodes.indexOf(active);
+      if (idx < 0) idx = 0;
+      var next = a11y.tabWrapIndex(idx, nodes.length, !!e.shiftKey);
+      if (next >= 0 && nodes[next] && nodes[next].focus) {
+        nodes[next].focus();
+        // Keep list selection in sync when focusing an option
+        if (nodes[next].getAttribute && nodes[next].getAttribute('role') === 'option') {
+          var optIdx = next - (nodes[0] === this.$refs.input ? 1 : 0);
+          if (optIdx >= 0 && optIdx < this.filtered.length) this.active = optIdx;
+        }
+      }
+    },
+    restoreFocus() {
+      var prev = this._prevFocus;
+      this._prevFocus = null;
+      if (prev && prev.focus) {
+        try {
+          prev.focus();
+        } catch (err) {
+          /* ignore */
+        }
       }
     },
     onInput(e) {
