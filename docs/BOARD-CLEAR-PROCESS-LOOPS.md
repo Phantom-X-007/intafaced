@@ -10,18 +10,22 @@ Homes: Constitution · Execution Plan · Agent backlog · Decision authority · 
 ## L0 — Outer campaign loop (never exit until finished)
 
 ```
-while scoreboard has any OPEN or WIP row:
+while true:
   refresh: main tip, open PRs, scoreboard, NEXT, agent backlog SHIPPED ids
   babysit: red CI → fix → merge green (DECISION-AUTHORITY)
-  if agent_residual_open: fan-out from BOARD-CLEAR-AGENT-BACKLOG priority
-  if only_human_rows_open: babysit shehzad + pro-trader polish + tests/docs honesty
-      (NEVER idle, NEVER implement M1–M7, NEVER ask Nitro to wait for him)
-  if blocked_on_self: run replan loop P1
-  if no_merge_and_no_pr_in_this_session_chunk:
-      force: open next smallest *agent* ship PR or fix stuck PR
+  if agent_residual_open:
+      fan-out AGENT-BACKLOG priority; queue any X1–X5 to HUMAN-BLOCKERS (no Nitro ping)
+  elif agent rows not all Done/Cut:
+      polish / §13 agent rows / tests (PHASE B)
+  elif human rows OPEN or HUMAN-BLOCKERS non-empty:
+      PHASE C: finalize HUMAN-BLOCKERS; report Nitro once; stop agent implement
+  else:
+      BOARD-COMPLETE; stop
+  if blocked_on_self: replan P1
+  if no_merge_and_no_pr_in_this_session_chunk and agent residual:
+      force: next smallest agent ship PR
   write NEXT before any pause/compact/end-turn
-  NEVER ask Nitro to continue
-  NEVER exit with work remaining and NEXT empty
+  NEVER ask Nitro to continue or re-read after compact
   NEVER treat human OPEN as a stop for agent cooking
 ```
 

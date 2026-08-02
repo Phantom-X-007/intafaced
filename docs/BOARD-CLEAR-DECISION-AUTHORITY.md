@@ -66,7 +66,10 @@ Agents must **not** stop or ask for:
 ```
 uncertain → research (R1) → pick safest doctrine-aligned default → DECISION-LOG → ship
 if invent would be required → §13 Cut or thinner Done bar → never invent
-if only X1–X5 remain → surface ONE question to Nitro; keep cooking other ships
+if X1–X5 appears while agent residual remains:
+    append docs/BOARD-CLEAR-HUMAN-BLOCKERS.md — do NOT stop agent ships; do NOT ping Nitro yet
+if agent residual exhausted (AGENT-COMPLETE) and X1–X5 or human rows remain:
+    finalize HUMAN-BLOCKERS → report Nitro once (PHASE C)
 ```
 
 ---

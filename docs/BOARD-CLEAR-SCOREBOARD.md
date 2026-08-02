@@ -1,14 +1,16 @@
 # Board Clear Scoreboard
 
 **Campaign:** Board Clear 2026-08-01  
-**Resume after compact:** **`docs/BOARD-CLEAR-NEXT.md` first** (sole entry for “what next”)  
+**Resume after compact:** **`docs/BOARD-CLEAR-NEXT.md` first** (agent self-serve — not Nitro)  
+**AFK scope:** [`BOARD-CLEAR-AFK-CONTRACT.md`](BOARD-CLEAR-AFK-CONTRACT.md) — AGENT-COMPLETE vs BOARD-COMPLETE  
 **Law:** [`BOARD-CLEAR-CONSTITUTION-2026-08-01.md`](BOARD-CLEAR-CONSTITUTION-2026-08-01.md)  
 **Agent residual DAG:** [`BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`](BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md)  
 **Update rule:** same turn as every merge that moves a row.  
 **Tip check:** `git log origin/main -1 --oneline`
 
 **Campaign status:** `RUNNING`  
-**Last scoreboard edit:** 2026-08-02 compaction-proof hygiene  
+**Last scoreboard edit:** 2026-08-02 AFK contract v3.2
+
 **Authority:** For Board Clear status, **this file + NEXT beat** `docs/TRACKER.md` until tracker is resynced.  
 **Known dirty:** human M1–M7 open; agent residual A-TRADE-MM-3 (exact next) then UI/P5/WS  
 **Standards:** ENGINEERING-STANDARD + SUBAGENT-PROTOCOL + DECISION-AUTHORITY  
