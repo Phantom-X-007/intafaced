@@ -65,6 +65,7 @@ export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
 
 ## Coordination truth layers (mandatory — not a speed limit)
 
+**Auto-load (no Nitro paste):** This section + [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md) bind on every cold agent that reads `AGENTS.md` / `CLAUDE.md`. Session prompt is optional sugar, not the enforcement path.  
 **Home:** [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md).
 
 | Question                                | File                                          |
