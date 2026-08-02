@@ -59,7 +59,7 @@ Seeded liquidity is allowed. **Seeded liquidity that a user cannot distinguish f
 ### OTC / copy / algo — explicitly out for v1
 
 - **OTC desk v1** = advert, escrow, release, dispute. In scope.
-- **Copy trading — OUT.** It is discretionary portfolio management in most jurisdictions and needs a licence conversation before a line is written. Do not scaffold it.
+- **Copy trading — SUPERSEDED 2026-08-01. Build the sovereign shape only:** [`SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md). Non-custodial session keys on the follower's own account, capped on-chain, unilaterally revocable, and the leader is paid a **share of our trading fee — never a cut of follower P&L**. The original ban stands for everything outside that spec: **pooled funds, discretionary managers, performance fees, high-water marks and returns-ranked leaderboards remain OUT** and stay in §8.
 - **Algo v1 = TWAP only.** Icebergs are OUT: a hidden order that leaks through matching-engine timing is worse than no hidden order, and proving it doesn't leak is its own project.
 
 ---
@@ -196,7 +196,7 @@ Bring me the shape; do not invent it.
 7. **Sanctions blocklist content** — needs counsel, not engineering
 8. **Leverage, margin and liquidation parameters** beyond §1's stated defaults
 9. **Anything described to a user as audited, insured, or guaranteed**
-10. **Copy trading**, and any other surface that is discretionary management
+10. **`leader_share_bps` and every other fee-share rate**, plus any copy surface beyond the sovereign spec — pooling, discretion, P&L-linked fees, ranking. The sovereign shape itself is now specced and buildable; the **rates** and the **jurisdiction list** are not.
 
 ---
 
