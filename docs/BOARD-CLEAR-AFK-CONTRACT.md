@@ -20,12 +20,13 @@ Claiming BOARD-COMPLETE without his proof = **lie** = campaign defect.
 
 ## 2 · AFK / compaction (you do nothing)
 
-| Event                     | Agent must                                                                                     | Nitro                |
-| ------------------------- | ---------------------------------------------------------------------------------------------- | -------------------- |
-| Context compact mid-run   | Next tool turn: open `docs/BOARD-CLEAR-NEXT.md` only → re-derive tip/PRs → continue EXACT NEXT | **Nothing**          |
-| Between ships             | Update NEXT EXACT ship before any pause                                                        | Nothing              |
-| Session still alive       | L0 forever until AGENT-COMPLETE then human-blocker flush                                       | Nothing              |
-| Process/chat process dead | No agent running — host must re-launch (scheduler optional). Not “Nitro tech loop.”            | Only if no auto-host |
+| Event                     | Agent must                                                                                                        | Nitro                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Context compact mid-run   | Next tool turn: open `docs/BOARD-CLEAR-NEXT.md` only → re-derive tip/PRs → collision ritual → continue EXACT NEXT | **Nothing**          |
+| Between ships             | Update NEXT EXACT ship + tip SHA + open PR table before any pause                                                 | Nothing              |
+| Session still alive       | L0 forever until AGENT-COMPLETE then human-blocker flush                                                          | Nothing              |
+| Parallel other chats/PRs  | `docs/BOARD-CLEAR-PARALLEL-SESSIONS.md` — never dual-build                                                        | Nothing              |
+| Process/chat process dead | No agent running — host must re-launch (scheduler optional). Not “Nitro tech loop.”                               | Only if no auto-host |
 
 **Forbidden agent line to Nitro:** “please re-open NEXT” / “please continue after compact.”
 
