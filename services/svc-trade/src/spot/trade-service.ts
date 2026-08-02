@@ -824,7 +824,7 @@ export class TradeService {
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
           ${makerFeeAsset}, ${formatAmount(makerFee)}::numeric, ${rates.makerFeeBps}, ${fill.sequence}
         )
-        ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
+        ON CONFLICT (id) DO NOTHING
       `;
       await this.sql`
         INSERT INTO trade.fills (
@@ -836,7 +836,7 @@ export class TradeService {
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
           ${takerFeeAsset}, ${formatAmount(takerFee)}::numeric, ${rates.takerFeeBps}, ${fill.sequence}
         )
-        ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
+        ON CONFLICT (id) DO NOTHING
       `;
 
       await this.refreshFilledQty(taker.id);
@@ -921,6 +921,8 @@ export class TradeService {
       },
     ];
 
+    // Conflict on deterministic fill id (market+seq+role). Concurrent inline
+    // settle + NATS redelivery must not 500 on fills_pkey — that broke CX-8 L3.
     for (const leg of legs) {
       await this.sql`
         INSERT INTO trade.fills (
@@ -932,7 +934,7 @@ export class TradeService {
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
           ${leg.feeAsset}, ${formatAmount(leg.feeAmount)}::numeric, ${leg.feeBps}, ${fill.sequence}
         )
-        ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
+        ON CONFLICT (id) DO NOTHING
       `;
     }
 
