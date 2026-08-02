@@ -151,8 +151,8 @@
       "status": "partial",
       "evidence": "#297 density CSS",
       "proof_missing": "Scorecard dim 6 re-measure; before/after 1440",
-      "next_action": "PROOF-1 + impeccable density critique",
-      "blocker": "scorecard stale",
+      "next_action": "Density hierarchy after chart empty fixed",
+      "blocker": "",
       "priority": 20
     },
     {
@@ -269,12 +269,12 @@
       "id": "B13",
       "wave": "B",
       "title": "Anti-slop certify non-implementer",
-      "status": "open",
-      "evidence": "",
-      "proof_missing": "No formal B13 pass",
-      "next_action": "Spawn read-only certifier / impeccable critique.md",
+      "status": "partial",
+      "evidence": "docs/refs/b13-chart-empty + chart overlay z-index/contrast; Orca shot b13-chart-empty-2026-08-02",
+      "proof_missing": "Full multi-surface anti-slop cert (login/money density) still open",
+      "next_action": "Continue B13 on density/footer + glass residue (B1/B2)",
       "blocker": "",
-      "priority": 3
+      "priority": 12
     },
     {
       "id": "B14",
@@ -335,12 +335,12 @@
       "id": "META-CRITIQUE",
       "wave": "META",
       "title": "impeccable/design-taste on craft",
-      "status": "open",
-      "evidence": "Design Bar §8",
-      "proof_missing": "Unused in autonomous run",
-      "next_action": "CRAFT-CRIT after PROOF-1",
+      "status": "partial",
+      "evidence": "docs/refs/b13-chart-empty/critique.md (impeccable empty-state)",
+      "proof_missing": "Desk density + money auth surfaces",
+      "next_action": "Next craft slice densify or B-CMDK",
       "blocker": "",
-      "priority": 3
+      "priority": 12
     },
     {
       "id": "META-ORCA",

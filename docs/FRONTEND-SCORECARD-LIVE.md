@@ -95,3 +95,19 @@ Refs: `docs/refs/proof-1/` (gap-audit · steal-lines · critique).
 **Delta vs A0 (required if claiming better):**
 
 **Orca shots:**
+
+---
+
+## Row note: B13 chart empty (same day as PROOF-1)
+
+| Field | Value |
+| --- | --- |
+| Date | 2026-08-02 |
+| Tip | feat/app-proof-scorecard + chart overlay commit |
+| Role | implementer |
+| Eyes | Orca |
+
+**Change:** G11 chart empty status readable (`No market feed — chart has no live history to show`). Dim6 still **1**.  
+**Shot:** `docs/styleboard/shots/b13-chart-empty-2026-08-02/02-exchange.png`  
+**Refs:** `docs/refs/b13-chart-empty/`
+

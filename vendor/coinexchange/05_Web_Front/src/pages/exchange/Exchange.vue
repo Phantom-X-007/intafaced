@@ -188,11 +188,26 @@
           <div class="ix-chart-body">
             <!-- The chart host. Explicit height + overflow:hidden; the widget
                  fills it at 100% because `fullscreen` is off. -->
-            <div id="ix_kline" class="ix-kline" v-show="mainTab === 'chart'"></div>
-            <p class="ix-empty ix-empty-abs" v-if="mainTab === 'chart' && chartFailed">
-              Chart unavailable
+            <div
+              id="ix_kline"
+              class="ix-kline"
+              v-show="mainTab === 'chart'"
+              :class="{ 'is-empty': mainTab === 'chart' && (chartFailed || !feedLive) }"
+              :aria-hidden="chartFailed || !feedLive ? 'true' : 'false'"
+            ></div>
+            <!-- Empty copy must sit above the chart host (z-index) — silent black fails Gate 11 at a glance. -->
+            <p
+              class="ix-empty ix-empty-abs ix-empty-chart"
+              role="status"
+              v-if="mainTab === 'chart' && chartFailed"
+            >
+              Chart unavailable — not a blank market
             </p>
-            <p class="ix-empty ix-empty-abs" v-else-if="mainTab === 'chart' && !feedLive">
+            <p
+              class="ix-empty ix-empty-abs ix-empty-chart"
+              role="status"
+              v-else-if="mainTab === 'chart' && !feedLive"
+            >
               No market feed — chart has no live history to show
             </p>
             <p class="ix-chart-attr" v-show="mainTab === 'chart'" role="contentinfo">
@@ -2784,6 +2799,20 @@ $radius-sm: var(--ix-radius-sm, 8px);
   right: 0;
   transform: translateY(-50%);
   pointer-events: none;
+  z-index: 2;
+}
+/* Chart empty: high-contrast line over the kline host (not $faint on black). */
+.ix-empty-chart {
+  margin: 0 auto;
+  max-width: 28rem;
+  padding: 10px 14px;
+  border: 1px solid rgba(200, 205, 212, 0.28);
+  border-radius: 4px;
+  background: rgba(12, 14, 18, 0.92);
+  color: #c8cdd4;
+  font-size: var(--type-12, 12px);
+  line-height: 1.4;
+  text-align: center;
 }
 
 /* ── chart ────────────────────────────────────────────────────────────── */
@@ -2801,6 +2830,8 @@ $radius-sm: var(--ix-radius-sm, 8px);
    on it inherits 100% of this box, which is why the box must be definite. */
 
 .ix-chart-attr {
+  position: relative;
+  z-index: 2;
   margin: 0;
   padding: 4px 10px 6px;
   font-size: 11px;
@@ -2822,6 +2853,12 @@ $radius-sm: var(--ix-radius-sm, 8px);
   width: 100%;
   height: 100%;
   overflow: hidden;
+  z-index: 0;
+}
+/* Dim the host when honesty empty is showing so the status line wins. */
+.ix-kline.is-empty {
+  opacity: 0.22;
+  pointer-events: none;
 }
 
 .ix-book-full {
