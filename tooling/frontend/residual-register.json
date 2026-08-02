@@ -160,11 +160,11 @@
       "wave": "B",
       "title": "uc craft = terminal shared components",
       "status": "partial",
-      "evidence": "IxHonestState; MoneyIndex tabular; alerts",
-      "proof_missing": "Shared component depth; OS consistency dim 10",
-      "next_action": "Deep B3 money screens match desk tokens",
+      "evidence": "MoneyIndex ix-money shell + dual-book recipe (this branch)",
+      "proof_missing": "Withdraw/Safe craft depth; auth Orca",
+      "next_action": "Withdraw surface match; then B4/B9",
       "blocker": "",
-      "priority": 15
+      "priority": 14
     },
     {
       "id": "B4",
