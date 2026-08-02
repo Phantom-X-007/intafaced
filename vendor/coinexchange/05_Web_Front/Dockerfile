@@ -19,7 +19,14 @@
 # webpack 3 (2017) uses md4 for module hashing. Node 17+ ships OpenSSL 3, which
 # removed md4 from the default provider, so the build dies with
 # `ERR_OSSL_EVP_UNSUPPORTED` — an error that names neither webpack nor md4 and
-# reads like a broken install. `--openssl-legacy-provider` re-enables it.
+# reads like a broken install.
+#
+# Node 16 ships OpenSSL 1.1.1, which still HAS md4. So on this image the build
+# needs no workaround at all — and `--openssl-legacy-provider` is not merely
+# unnecessary, it is REJECTED: `node: --openssl-legacy-provider is not allowed
+# in NODE_OPTIONS`, exit 9. The flag only exists on the Node versions this pin
+# is here to avoid. Setting it alongside the pin was belt-and-braces that
+# strangled the build.
 #
 # Upgrading webpack is the real fix and it is a project, not a line: webpack 3
 # to 5 across 74 Vue 2.5 SFCs with vue-loader 13. Pinning Node here is the
@@ -37,8 +44,8 @@ RUN npm install --no-audit --no-fund --legacy-peer-deps
 
 COPY . .
 
-# See the header. Without this the build fails on a hash algorithm.
-ENV NODE_OPTIONS=--openssl-legacy-provider
+# No NODE_OPTIONS. See the header: on Node 16 md4 is present, so nothing is
+# needed — and the legacy-provider flag is refused outright by this runtime.
 RUN npm run build
 
 # ── serve ───────────────────────────────────────────────────────────────────

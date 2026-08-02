@@ -17,12 +17,12 @@
 //import account from '../components/uc/Account'
 //import withdrawAddr from '../components/uc/WithdrawAddress'
 
-//import Index from '../pages/index/index'
-//import Login from '../pages/uc/login'
-//import Register from '../pages/uc/register'
-//import FindPwd from '../pages/uc/findpwd'
-//import Exchange from '../pages/exchange/exchange'
-//import Help from '../pages/cms/help'
+//import Index from '../pages/index/Index'
+//import Login from '../pages/uc/Login'
+//import Register from '../pages/uc/Register'
+//import FindPwd from '../pages/uc/FindPwd'
+//import Exchange from '../pages/exchange/Exchange'
+//import Help from '../pages/cms/Help'
 // import HelpList from '../pages/cms/HelpList' //
 // import HelpDetail from '../pages/cms/HelpDetail' //
 //import OTCMain from '../pages/otc/Main'
@@ -38,17 +38,17 @@
 //import Bzb from '../pages/activity/Bzb'
 
 export default [
-    { path: '/', component: resolve=>(require(["../pages/index/index"],resolve)) },
-    { path: '/index', component: resolve=>(require(["../pages/index/index"],resolve)) },
-    { path: '/login', component: resolve=>(require(["../pages/uc/login"],resolve)) },
-    { path: '/login/returnUrl/:returnUrl', component: resolve=>(require(["../pages/uc/login"],resolve)) },
-    { path: '/register', component: resolve=>(require(["../pages/uc/register"],resolve)) },
+    { path: '/', component: resolve=>(require(["../pages/index/Index"],resolve)) },
+    { path: '/index', component: resolve=>(require(["../pages/index/Index"],resolve)) },
+    { path: '/login', component: resolve=>(require(["../pages/uc/Login"],resolve)) },
+    { path: '/login/returnUrl/:returnUrl', component: resolve=>(require(["../pages/uc/Login"],resolve)) },
+    { path: '/register', component: resolve=>(require(["../pages/uc/Register"],resolve)) },
     { path: '/reg', component: resolve=>(require(["../pages/uc/MobileRegister"],resolve)) },
     { path: '/app', component: resolve=>(require(["../pages/uc/AppDownload"],resolve)) },
-    { path: '/findPwd', component: resolve=>(require(["../pages/uc/findpwd"],resolve)) },
-    { path: '/exchange', component: resolve=>(require(["../pages/exchange/exchange"],resolve)) },
-    { path: '/exchange/:pair', component: resolve=>(require(["../pages/exchange/exchange"],resolve)), name: "ExchangePair"},
-    { path: '/help', component: resolve=>(require(["../pages/cms/help"],resolve)) },
+    { path: '/findPwd', component: resolve=>(require(["../pages/uc/FindPwd"],resolve)) },
+    { path: '/exchange', component: resolve=>(require(["../pages/exchange/Exchange"],resolve)) },
+    { path: '/exchange/:pair', component: resolve=>(require(["../pages/exchange/Exchange"],resolve)), name: "ExchangePair"},
+    { path: '/help', component: resolve=>(require(["../pages/cms/Help"],resolve)) },
     { path: '/helplist', component: resolve=>(require(["../pages/cms/HelpList"],resolve)) },
     { path: '/helpdetail', component: resolve=>(require(["../pages/cms/HelpDetail"],resolve)) },
     { path: '/notice', component: resolve=>(require(["../pages/cms/Notice"],resolve)) },
@@ -83,7 +83,7 @@ export default [
     { path: '/academy', component: resolve=>(require(["../pages/intafaced/Academy"],resolve)) },
     { path: '/launch', component: resolve=>(require(["../pages/intafaced/Launch"],resolve)) },
 
-    { path: '*', component: resolve=>(require(["../pages/index/index"],resolve)) },
+    { path: '*', component: resolve=>(require(["../pages/index/Index"],resolve)) },
     { path: '/envelope/:eno', component: resolve=>(require(["../pages/envelope/Envelope"],resolve)) },
     {
         path: '/otc',
