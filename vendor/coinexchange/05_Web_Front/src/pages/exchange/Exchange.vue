@@ -203,27 +203,36 @@
           <div class="ix-chart-body">
             <!-- The chart host. Explicit height + overflow:hidden; the widget
                  fills it at 100% because `fullscreen` is off. -->
+            <!--
+              THE CHART HAS THREE STATES AND USED TO HAVE TWO.
+
+              The overlay was gated on `!feedLive`, so with no live socket it
+              covered the chart permanently — including when real candles had
+              been drawn underneath it. And `chartFailed` was set from a loader
+              that returned the same value for "no candles" and "request
+              failed". Both are now distinct, and only 'ok' shows the canvas.
+            -->
             <div
               id="ix_kline"
               class="ix-kline"
               v-show="mainTab === 'chart'"
-              :class="{ 'is-empty': mainTab === 'chart' && (chartFailed || !feedLive) }"
-              :aria-hidden="chartFailed || !feedLive ? 'true' : 'false'"
+              :class="{ 'is-empty': mainTab === 'chart' && chartStatus !== 'ok' }"
+              :aria-hidden="chartStatus !== 'ok' ? 'true' : 'false'"
             ></div>
             <!-- Empty copy must sit above the chart host (z-index) — silent black fails Gate 11 at a glance. -->
             <p
-              class="ix-empty ix-empty-abs ix-empty-chart"
+              class="ix-empty ix-empty-abs ix-empty-chart ix-empty-error"
               role="status"
-              v-if="mainTab === 'chart' && chartFailed"
+              v-if="mainTab === 'chart' && chartStatus === 'failed'"
             >
-              Chart unavailable — not a blank market
+              Chart unavailable — the venue did not answer. This is not a blank market.
             </p>
             <p
               class="ix-empty ix-empty-abs ix-empty-chart"
               role="status"
-              v-else-if="mainTab === 'chart' && !feedLive"
+              v-else-if="mainTab === 'chart' && chartStatus === 'empty'"
             >
-              No market feed — chart has no live history to show
+              {{ $t('intafaced.trade.noCandles') }}
             </p>
             <p class="ix-chart-attr" v-show="mainTab === 'chart'" role="contentinfo">
               Charting by
@@ -339,7 +348,8 @@
 
           <div class="ix-account-body">
             <p class="ix-empty" v-if="!isLogin">
-              <router-link to="/login">Sign in</router-link> to see your balances and orders.
+              {{ $t('intafaced.trade.noSession') }}
+              <router-link to="/platform">{{ $t('intafaced.state.goSignIn') }}</router-link>
             </p>
 
             <p class="ix-empty ix-empty-loading" v-else-if="accountLoading">
@@ -350,35 +360,36 @@
               {{ accountError }}
             </p>
 
-            <!-- Balances — exchange venue wallet only; not the TypeScript ledger books -->
+            <!-- Balances — the INTAFACED ledger, the single book -->
             <div v-else-if="accountTab === 'balances'">
-              <p class="ix-dualbook" role="note">
-                <strong>Two books.</strong> Numbers below are this venue’s exchange wallet only.
-                Platform ledgers (bank / pay / p2p) are separate — never treat this table as the full OS balance.
-              </p>
               <p class="ix-empty ix-empty-note">
-                Exchange wallet on this venue · not the platform ledger books
+                {{ $t('intafaced.trade.ledgerNote') }} · <code>GET /api/v1/account/balance</code>
               </p>
               <p class="ix-empty ix-empty-error" v-if="!walletReachable">
-                Wallet service did not respond — available amounts are unknown, not zero.
+                The ledger did not answer — balances are unknown, not zero.
+              </p>
+              <!-- A ledger with no rows for this account is an ANSWER. It is not
+                   a table of every asset at 0.00, which would claim we hold
+                   assets we have never held a row for. -->
+              <p class="ix-empty" v-else-if="balanceRows.length === 0">
+                {{ $t('intafaced.trade.noBalances') }}
               </p>
               <table class="ix-table" v-else>
                 <thead>
                   <tr>
                     <th>Asset</th>
-                    <th class="ix-num">Available (venue)</th>
-                    <th class="ix-num">Value</th>
-                    <th></th>
+                    <th class="ix-num">Free</th>
+                    <th class="ix-num">Held</th>
+                    <th class="ix-num">Total</th>
                   </tr>
                 </thead>
                 <tbody>
+                  <!-- Decimal strings, printed as strings. -->
                   <tr v-for="row in balanceRows" :key="row.unit">
                     <td class="ix-strong">{{ row.unit }}</td>
-                    <td class="ix-num">{{ fmt(row.balance, row.scale) }}</td>
-                    <td class="ix-num ix-dim">{{ row.valueLabel }}</td>
-                    <td class="ix-num">
-                      <router-link class="ix-link" :to="'/uc/recharge?name=' + row.unit">Deposit</router-link>
-                    </td>
+                    <td class="ix-num">{{ row.free }}</td>
+                    <td class="ix-num ix-dim">{{ row.used }}</td>
+                    <td class="ix-num">{{ row.total }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -432,9 +443,9 @@
                         {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
                       </td>
                       <td class="ix-num">{{ priceLabel(row) }}</td>
-                      <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
+                      <td class="ix-num">{{ dec(row.amount) }}</td>
                       <td class="ix-num" :title="fillTitle(row)">{{ fillLabel(row) }}</td>
-                      <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
+                      <td class="ix-num">{{ dec(row.turnover) }}</td>
                       <td class="ix-num ix-actions">
                         <button
                           type="button"
@@ -457,8 +468,8 @@
             </div>
 
             <!-- Trade history (fills) -->
-            <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'fills' && !ordersReachable">
-              Order service did not respond — trade history is unknown, not empty.
+            <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'fills' && !fillsReachable">
+              The venue did not answer — your fills are unknown, not empty.
             </p>
             <table class="ix-table" v-else-if="accountTab === 'fills'">
               <thead>
@@ -466,6 +477,7 @@
                   <th>Time</th>
                   <th>Market</th>
                   <th>Side</th>
+                  <th>Role</th>
                   <th class="ix-num">Price</th>
                   <th class="ix-num">Amount</th>
                   <th class="ix-num">Value</th>
@@ -473,16 +485,18 @@
                 </tr>
               </thead>
               <tbody>
+                <!-- Decimal strings, printed as strings. -->
                 <tr v-for="(row, i) in fills" :key="'fill' + i">
                   <td class="ix-dim">{{ date(row.time) }}</td>
                   <td>{{ row.symbol }}</td>
                   <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
                     {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
                   </td>
-                  <td class="ix-num">{{ fmt(row.price, baseCoinScale) }}</td>
-                  <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
-                  <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
-                  <td class="ix-num ix-dim">{{ fmt(row.fee, 8) }}</td>
+                  <td class="ix-dim">{{ row.liquidity || '—' }}</td>
+                  <td class="ix-num">{{ dec(row.price) }}</td>
+                  <td class="ix-num">{{ dec(row.amount) }}</td>
+                  <td class="ix-num">{{ dec(row.turnover) }}</td>
+                  <td class="ix-num ix-dim">{{ dec(row.fee) }} {{ row.feeAsset || '' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -524,9 +538,9 @@
                       {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
                     </td>
                     <td class="ix-num">{{ priceLabel(row) }}</td>
-                    <td class="ix-num">{{ fmt(row.amount, coinScale) }}</td>
+                    <td class="ix-num">{{ dec(row.amount) }}</td>
                     <td class="ix-num" :title="fillTitle(row)">{{ fillLabel(row) }}</td>
-                    <td class="ix-num">{{ fmt(row.turnover, 2) }}</td>
+                    <td class="ix-num">{{ dec(row.turnover) }}</td>
                     <td :class="statusClass(row)">{{ statusLabel(row) }}</td>
                     <td class="ix-num ix-actions">
                       <button
@@ -800,12 +814,19 @@
 
           <dl class="ix-meta">
             <div>
-              <dt>Available <em class="ix-dim">(venue wallet)</em></dt>
-              <dd v-if="!isLogin || walletReachable">
-                {{ fmt(availableBalance, side === 'BUY' ? baseCoinScale : coinScale) }}
+              <dt>Available <em class="ix-dim">(ledger)</em></dt>
+              <!-- Three distinct states. `availableBalance` is null when the
+                   ledger holds no row for this asset, which is neither "unknown"
+                   nor "zero" — it is "you do not hold this". -->
+              <dd v-if="!isLogin" class="ix-dim">— <em>no platform session</em></dd>
+              <dd v-else-if="!walletReachable" class="ix-dim">— <em>unknown · the ledger did not answer</em></dd>
+              <dd v-else-if="availableBalance === null" class="ix-dim">
+                0 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }} · no ledger row</em>
+              </dd>
+              <dd v-else>
+                {{ availableBalance }}
                 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }}</em>
               </dd>
-              <dd v-else class="ix-dim">— <em>unknown · not ledger</em></dd>
             </div>
             <div v-if="orderType === 'LIMIT_PRICE'">
               <dt>Order value</dt>
@@ -929,18 +950,21 @@ import { KlineChart } from '@js/market-chart/kline.js';
 import DepthGraph from '@components/exchange/DepthGraph.vue';
 import SubAccountSelector from '@components/intafaced/SubAccountSelector.vue';
 
-var Stomp = require('stompjs');
-var SockJS = require('sockjs-client');
+import { rest, symbolPath, REST_BASE } from '@/config/intafaced.js';
+
 var moment = require('moment');
 var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
 var deskA11y = require('../../assets/js/desk-a11y.js');
 var deskPrefs = require('../../assets/js/desk-prefs.js');
 var bookHonesty = require('../../assets/js/book-honesty.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
+var ixTrade = require('../../assets/js/ix-trade.js');
 
 const BOOK_DEPTH = 14;
 const TRADE_LIMIT = 40;
 const DEPTH_REDRAW_MS = 1000;
+/** Levels pulled for the depth chart — deeper than the ladder; API caps at 500. */
+const DEPTH_LEVELS = 200;
 
 export default {
   components: { DepthGraph, SubAccountSelector },
@@ -1012,7 +1036,29 @@ export default {
       trades: [],
       openOrders: [],
       historyOrders: [],
-      wallet: { base: 0, coin: 0 },
+      /** Fills from /account/trades. A separate call — orders carry no nested fills. */
+      myFills: [],
+      fillsReachable: false,
+      /** Every ledger row for this user, from /account/balance. */
+      balances: [],
+      /**
+       * Free balance for the two assets of THIS pair, or null.
+       *
+       * NULL, NOT 0. No ledger row means the ledger has never held that asset
+       * for this user; a zero here would size an order against a balance we
+       * invented. Every reader of this guards on null.
+       */
+      wallet: { base: null, coin: null },
+      /** The venue's listing row for this pair (tick, lot, min notional, fees). */
+      market: null,
+      /** Watchlist symbols, local to this browser. Not account state. */
+      localFavorites: [],
+      /** Verbatim refusal text, kept so a panel can quote the venue. */
+      bookMessage: '',
+      tradesMessage: '',
+      accountRefusal: '',
+      /** 'ok' | 'empty' | 'failed' — see kline.js. */
+      chartStatus: 'ok',
       accountLoading: false,
       accountError: '',
       walletReachable: false,
@@ -1057,8 +1103,25 @@ export default {
           w.markets + 'px minmax(0, 1fr) ' + w.rail + 'px ' + w.order + 'px'
       };
     },
+    /** The platform session's access token, or null. In memory only. */
+    ixToken() {
+      return this.$store.getters.ixToken;
+    },
+    /**
+     * "SIGNED IN" ON THIS SCREEN MEANS THE PLATFORM SESSION, NOT THE SHELL ONE.
+     *
+     * This desk now talks only to svc-edge, and svc-edge only believes
+     * `ixToken`. It used to read `$store.getters.isLogin`, which is the
+     * vendored ucenter session — a completely separate login. Leaving it that
+     * way would have been the worst combination available: a reader signed in
+     * to the shell would get an enabled order ticket, a blotter that reads
+     * "no open orders", and a 401 the moment they pressed Buy.
+     *
+     * The shell session still exists and still governs the shell's own screens.
+     * It just cannot answer for anything on this page.
+     */
     isLogin() {
-      return this.$store.getters.isLogin;
+      return !!this.ixToken;
     },
     member() {
       return this.$store.getters.member;
@@ -1117,40 +1180,24 @@ export default {
       }
       return rows.slice(0, 8);
     },
+    /**
+     * The Balances tab — every asset the ledger holds for this user.
+     *
+     * NOT just the two assets of this pair. The vendor showed exactly two rows
+     * because it read a per-asset wallet endpoint twice; ours returns the whole
+     * book in one answer, and hiding the rest would misrepresent the account.
+     * `used` is shown beside `free` because a held balance is not spendable and
+     * a trader who cannot see the difference will size an order they cannot
+     * fill.
+     *
+     * No value column: converting a balance to fiat needs a price per asset and
+     * this platform publishes no rate source.
+     */
     balanceRows() {
-      return [
-        {
-          unit: this.currentCoin.base,
-          balance: this.wallet.base,
-          scale: this.baseCoinScale,
-          valueLabel: '—'
-        },
-        {
-          unit: this.currentCoin.coin,
-          balance: this.wallet.coin,
-          scale: this.coinScale,
-          valueLabel: this.lastPrice
-            ? this.fmt(this.num(this.wallet.coin) * this.lastPrice, 2) + ' ' + this.currentCoin.base
-            : '—'
-        }
-      ];
+      return this.balances;
     },
     fills() {
-      const out = [];
-      this.historyOrders.forEach(order => {
-        (order.detail || []).forEach(d => {
-          out.push({
-            time: d.time,
-            symbol: order.symbol,
-            direction: order.direction,
-            price: d.price,
-            amount: d.amount,
-            turnover: d.turnover,
-            fee: d.fee
-          });
-        });
-      });
-      return out;
+      return this.myFills;
     },
     accountTabs() {
       return [
@@ -1162,15 +1209,38 @@ export default {
       ];
     },
     accountTabEmpty() {
-      /* Only claim empty when the order service answered — unknown ≠ empty. */
+      /* Only claim empty when the service answered — unknown ≠ empty. */
+      if (this.accountTab === 'balances') return this.walletReachable && this.balances.length === 0;
+      if (this.accountTab === 'fills') return this.fillsReachable && this.fills.length === 0;
       if (!this.ordersReachable) return false;
       if (this.accountTab === 'open') return this.openOrders.length === 0;
-      if (this.accountTab === 'fills') return this.fills.length === 0;
       if (this.accountTab === 'history') return this.historyOrders.length === 0;
       return false;
     },
+    /**
+     * The free balance of the asset this side spends, as a decimal STRING, or
+     * null when the ledger has no row for it.
+     *
+     * Null propagates deliberately: `canSize` refuses to compute a percentage
+     * of an unknown balance, and `validateOrderFields` will not claim
+     * "insufficient balance" against a number it does not have.
+     */
     availableBalance() {
-      return this.side === 'BUY' ? this.num(this.wallet.base) : this.num(this.wallet.coin);
+      return this.side === 'BUY' ? this.wallet.base : this.wallet.coin;
+    },
+    /**
+     * The same figure as a number, for the percent slider ONLY.
+     *
+     * This is sizing arithmetic for a UI affordance, not a money movement — the
+     * value that reaches `POST /orders` is the string in the input box. Null
+     * (no ledger row) yields NaN rather than 0 so nothing sizes against a
+     * balance that does not exist.
+     */
+    availableBalanceNum() {
+      const raw = this.availableBalance;
+      if (raw === null || raw === undefined || raw === '') return NaN;
+      const n = parseFloat(raw);
+      return isFinite(n) ? n : NaN;
     },
     /* Market buys are sized in the quote asset, everything else in the base. */
     quoteSized() {
@@ -1236,8 +1306,11 @@ export default {
       }
       return slip == null ? `avg ${avgTxt}` : `avg ${avgTxt} · ~${slip.toFixed(2)}%`;
     },
+    /* A percent of an unknown balance is not a number. availableBalanceNum is
+       NaN when the ledger holds no row for the asset, and NaN > 0 is false, so
+       the percent buttons stay off rather than sizing against a fiction. */
     canSize() {
-      return this.isLogin && this.availableBalance > 0 &&
+      return this.isLogin && this.availableBalanceNum > 0 &&
         (this.orderType === 'MARKET_PRICE' || this.num(this.form.price) > 0);
     },
     marketAllowed() {
@@ -1272,10 +1345,12 @@ export default {
     },
     feeLabel() {
       if (!this.feeKnown) {
-        return 'unknown · market did not provide fee (not free)';
+        return 'unknown · the venue published no fee for this pair (not free)';
       }
-      /* B9′ — venue pair schedule already on the page; never invent a rate. */
-      return (this.num(this.symbolFee) * 100).toFixed(2) + '% · venue schedule for this pair';
+      /* symbolFee is the published TAKER rate as a decimal string ("0.001").
+         Parsed here only to render a percentage — a label, not a charge. The
+         fee actually taken is computed by the engine and reported per fill. */
+      return (this.num(this.symbolFee) * 100).toFixed(2) + '% taker · venue schedule for this pair';
     },
     tradesEmptyLabel() {
       return bookHonesty.tradesEmptyLabel({
@@ -1338,11 +1413,9 @@ export default {
 
   created() {
     /* Deliberately NOT in data(). Vue would deep-observe these, and
-       isPlainObject() is true for class instances — it would walk the STOMP
-       client into its SockJS transport and the chart library widget into its
-       iframe handles, defining accessors all the way down. None of them are
-       rendered, so none of them need to be reactive. */
-    this.stompClient = null;
+       isPlainObject() is true for class instances — it would walk the chart
+       library widget into its internal handles, defining accessors all the way
+       down. None of them are rendered, so none of them need to be reactive. */
     this.klineChart = null;
     this.depthTimer = 0;
     this.depthPending = false;
@@ -1509,14 +1582,12 @@ export default {
       this.cancelOrder(order);
     },
 
-    /* Never rejects. A dead backend produces null, and every caller treats
-       null as "leave the current state alone". */
-    request(path, params) {
-      return this.$http.post(this.host + path, params || {}).then(
-        response => (response && response.body) || null,
-        () => null
-      );
-    },
+    /* REMOVED: request(). It POSTed to the Java backend through `this.$http`
+       and flattened every outcome to `null`, which is why "the service refused"
+       and "there is nothing here" were indistinguishable everywhere it was
+       used. `rest()` from config/intafaced.js replaces it: it also never
+       rejects, but it resolves a classified `{ ok, reason, message, data }` so
+       each caller can tell a refusal from an empty answer. */
 
     /* Wave B5 — persist non-money desk chrome (pair lives in the URL). Local-only. */
     deskPrefsKey() {
@@ -1651,26 +1722,21 @@ export default {
       this.$store.commit('navigate', 'nav-exchange');
       this.$store.commit('setSkin', 'night');
 
-      this.getCNYRate();
-      this.getCoinInfo();
+      this.loadFavorites();
       this.getMarkets();
       this.getPlate();
       this.getTrades();
-      if (this.isLogin) {
-        this.loadAccount();
-      }
+      this.loadAccount();
 
-      /* The chart needs the price scale, so it waits for symbol-info — but
+      /* The chart needs the price scale, so it waits for the listing — but
          only once, and it starts even when that request fails. */
       this.getSymbolScale().then(() => {
-        this.startWebsock();
         this.$nextTick(() => this.mountChart());
       });
     },
 
     teardown() {
       this.destroyChart();
-      this.stopWebsock();
       clearTimeout(this.depthTimer);
       this.depthTimer = 0;
       this.depthPending = false;
@@ -1688,25 +1754,29 @@ export default {
 
       const chart = new KlineChart({
         hostEl: host,
-        baseUrl: this.host + '/market',
+        /* The CCXT REST base. The chart appends /ohlcv/<symbol>. */
+        baseUrl: REST_BASE,
         symbol: this.currentCoin.symbol,
         resolution: this.interval,
-        stompClient: this.stompClient,
+        stompClient: null,
         scale: this.baseCoinScale
       });
       this.klineChart = chart;
       chart
         .mount()
-        .then((ok) => {
+        .then((status) => {
           if (this._isDestroyed || this.klineChart !== chart) {
             return;
           }
-          if (!ok) {
-            this.chartFailed = true;
-          }
+          /* Three states, three sentences. 'empty' is a market that has never
+             traded and is NOT a failure; conflating the two is what made a
+             dead data source look identical to a quiet market. */
+          this.chartStatus = status;
+          this.chartFailed = status === 'failed';
         })
         .catch(() => {
           if (this.klineChart === chart) {
+            this.chartStatus = 'failed';
             this.chartFailed = true;
           }
         });
@@ -1731,8 +1801,12 @@ export default {
       if (!this.klineChart) {
         return;
       }
-      this.klineChart.setResolution(value).catch(() => {
-        /* empty history is fine; remount picks up next symbol change */
+      this.klineChart.setResolution(value).then((status) => {
+        this.chartStatus = status;
+        this.chartFailed = status === 'failed';
+      }, () => {
+        this.chartStatus = 'failed';
+        this.chartFailed = true;
       });
     },
 
@@ -1750,71 +1824,94 @@ export default {
 
     /* ── market data ───────────────────────────────────────────────────── */
 
-    getCNYRate() {
-      this.request('/market/exchange-rate/usd-cny').then(body => {
-        if (body && body.data) {
-          this.CNYRate = body.data;
-        }
-      });
-    },
+    /* REMOVED: getCNYRate(). It read `/market/exchange-rate/usd-cny` on the
+       retired Java market service. This platform publishes no FX rate source,
+       so `CNYRate` stays null and `fiatValue` (which already guards on it)
+       renders nothing. A fiat conversion from a rate we invented is a price. */
 
-    getCoinInfo() {
-      this.request(this.api.market.coinInfo, { unit: this.currentCoin.coin }).then(body => {
-        this.coinInfo = body || {};
-      });
-    },
+    /* REMOVED: getCoinInfo(). `/market/coin-info` returned vendor CMS copy about
+       an asset (description, links, block explorer). We publish no such
+       surface, and `coinInfo` stays `{}` — the panels reading it already guard. */
 
+    /**
+     * Market rules from `GET /api/v1/markets` — the venue's own listing table.
+     *
+     * TICK AND LOT, NOT DECIMAL PLACES. Our contract publishes
+     * `precisionMode: 'TICK_SIZE'` with the tick and lot themselves, because
+     * that is what the engine enforces. The desk needs a decimal-place count to
+     * format and clamp input, so it derives one FROM the tick — and that is a
+     * display convenience only. It is never used to build an order quantity:
+     * seven of our listings have a lot size of 1000 or 10, whose decimal-place
+     * count is 0, and rounding an amount to 0 places would produce sizes the
+     * engine rejects for a reason the trader cannot see.
+     */
     getSymbolScale() {
-      return this.request(this.api.market.symbolInfo, { symbol: this.currentCoin.symbol }).then(body => {
-        if (!body) {
+      return rest('/markets').then(res => {
+        if (!res.ok || !Array.isArray(res.data)) {
           return;
         }
-        this.baseCoinScale = body.baseCoinScale != null ? body.baseCoinScale : this.baseCoinScale;
-        this.coinScale = body.coinScale != null ? body.coinScale : this.coinScale;
-        if (body.fee != null) {
-          this.symbolFee = body.fee;
+        const market = res.data.filter(m => m.symbol === this.currentCoin.symbol)[0];
+        if (!market) {
+          return;
+        }
+        this.market = market;
+        const tick = market.precision ? market.precision.price : null;
+        const lot = market.precision ? market.precision.amount : null;
+        if (tick) this.baseCoinScale = this.placesOf(tick);
+        if (lot) this.coinScale = this.placesOf(lot);
+        /* Taker rate as a decimal string ("0.001"). Known only because the
+           venue published it — feeKnown stays false otherwise and the ticket
+           says the fee is unknown rather than implying it is free. */
+        if (market.taker != null) {
+          this.symbolFee = market.taker;
           this.feeKnown = true;
         }
-        /* Default to permitted when the field is absent. Reading a missing
-           key straight through gives undefined, and `undefined != 1` would
-           silently lock the order form with "This market is halted". */
-        this.enableMarketBuy = body.enableMarketBuy != null ? body.enableMarketBuy : 1;
-        this.enableMarketSell = body.enableMarketSell != null ? body.enableMarketSell : 1;
-        this.exchangeable = body.exchangeable != null ? body.exchangeable : 1;
+        /* `active: false` is an operator halt. Market orders are supported on
+           this venue for both sides; there is no per-side switch in the
+           contract, so nothing is invented here. */
+        const tradable = market.active !== false ? 1 : 0;
+        this.enableMarketBuy = tradable;
+        this.enableMarketSell = tradable;
+        this.exchangeable = tradable;
       });
     },
 
+    /** Decimal places implied by a tick/lot string. Display only — see above. */
+    placesOf(value) {
+      const text = String(value);
+      const dot = text.indexOf('.');
+      if (dot < 0) return 0;
+      return text.slice(dot + 1).replace(/0+$/, '').length;
+    },
+
+    /**
+     * The market list — `/markets` for the listing, `/tickers` for prices.
+     *
+     * Every 24h rollup our ticker publishes is null (no windowed aggregation
+     * job exists) and `last` is null until a market prints. Those stay null:
+     * `marketNum`/`marketStat` already render null as a dash, and a table of
+     * green +0.00% would claim sixteen flat markets.
+     */
     getMarkets() {
       this.marketsLoading = true;
       this.marketsReachable = false;
-      this.request(this.api.market.thumb).then(body => {
+      Promise.all([rest('/markets'), rest('/tickers')]).then(results => {
+        const marketsRes = results[0];
+        const tickersRes = results[1];
         this.marketsLoading = false;
-        if (!Array.isArray(body)) {
+        if (!marketsRes.ok || !Array.isArray(marketsRes.data)) {
           this.marketsReachable = false;
           return;
         }
         this.marketsReachable = true;
+        /* Tickers can fail on their own. The listing is still true, so markets
+           are shown priceless rather than hidden. */
+        const tickers = tickersRes.ok && tickersRes.data ? tickersRes.data : {};
+        const rows = ixTrade.toMarketRows(marketsRes.data, tickers);
         const map = {};
-        const rows = body.map(item => {
-          const coin = (item.symbol || '').split('/')[0];
-          const base = (item.symbol || '').split('/')[1];
-          const chg = this.num(item.chg);
-          /* Declare every key the thumb topic will later write, so the
-             websocket can mutate rows in place and stay reactive. */
-          const row = Object.assign(
-            { close: 0, high: 0, low: 0, volume: 0, usdRate: 0 },
-            item,
-            {
-              coin,
-              base,
-              chg,
-              rose: (chg > 0 ? '+' : '') + (chg * 100).toFixed(2) + '%',
-              href: (coin + '_' + base).toLowerCase(),
-              isFavor: false
-            }
-          );
+        rows.forEach(row => {
+          row.isFavor = this.localFavorites.indexOf(row.symbol) >= 0;
           map[row.symbol] = row;
-          return row;
         });
         this.markets = rows;
         this.marketMap = map;
@@ -1822,47 +1919,41 @@ export default {
         const current = map[this.currentCoin.symbol];
         if (current) {
           this.currentCoin = Object.assign({}, this.currentCoin, current);
-          if (!this.form.price) {
-            this.form.price = this.fmt(current.close, this.baseCoinScale);
+          /* Seed the limit price from the last print ONLY if there is one. An
+             empty book has no last price, and pre-filling 0 would put a real
+             order at zero one click away. */
+          if (!this.form.price && current.close) {
+            this.form.price = String(current.close);
           }
         }
-        if (this.isLogin) {
-          this.getFavorites();
-        }
+        this.currentCoinIsFavor = this.localFavorites.indexOf(this.currentCoin.symbol) >= 0;
       });
     },
 
-    getFavorites() {
-      this.request(this.api.exchange.favorFind).then(body => {
-        if (!Array.isArray(body)) {
-          return;
-        }
-        this.currentCoinIsFavor = false;
-        body.forEach(item => {
-          const row = this.marketMap[item.symbol];
-          if (row) {
-            row.isFavor = true;
-          }
-          if (item.symbol === this.currentCoin.symbol) {
-            this.currentCoinIsFavor = true;
-          }
-        });
-        this.markets = this.markets.slice();
-      });
-    },
-
+    /**
+     * The order book — `GET /api/v1/orderbook/:symbol`.
+     *
+     * A 200 with empty bids and asks is the venue answering "nothing is resting
+     * here", which is the true state of every book on this platform today. It
+     * sets `bookReachable = true` and the ladder renders its empty state. Only
+     * a refusal clears reachability, and then the ladder says the book is
+     * unknown instead of empty.
+     */
     getPlate() {
-      this.request(this.api.market.platemini, { symbol: this.currentCoin.symbol }).then(body => {
+      rest('/orderbook/' + symbolPath(this.currentCoin.symbol), { query: { limit: BOOK_DEPTH } }).then(res => {
         this.bookLoading = false;
-        if (!body) {
+        if (!res.ok) {
           /* Unreachable — clear any prior levels so we never paint a stale book. */
           this.bookReachable = false;
+          this.bookMessage = res.message || '';
           this.plate = { asks: [], bids: [], askTotal: 0, bidTotal: 0 };
           return;
         }
         this.bookReachable = true;
-        this.applyPlate('SELL', (body.ask && body.ask.items) || []);
-        this.applyPlate('BUY', (body.bid && body.bid.items) || []);
+        this.bookMessage = '';
+        const book = res.data || {};
+        this.applyPlate('SELL', ixTrade.toPlateItems(book.asks));
+        this.applyPlate('BUY', ixTrade.toPlateItems(book.bids));
       });
     },
 
@@ -1907,234 +1998,197 @@ export default {
         }
       }, DEPTH_REDRAW_MS);
 
-      this.request(this.api.market.platefull, { symbol: this.currentCoin.symbol }).then(body => {
-        if (this.$refs.depthGraph) {
-          this.$refs.depthGraph.draw(body || {});
+      rest('/orderbook/' + symbolPath(this.currentCoin.symbol), { query: { limit: DEPTH_LEVELS } }).then(res => {
+        if (!this.$refs.depthGraph) {
+          return;
         }
+        if (!res.ok) {
+          /* Do not redraw from stale state — an empty depth chart is honest,
+             a stale one is not. */
+          this.$refs.depthGraph.draw({});
+          return;
+        }
+        const book = res.data || {};
+        /* DepthGraph expects the vendor's { ask: { items }, bid: { items } }. */
+        this.$refs.depthGraph.draw({
+          ask: { items: ixTrade.toPlateItems(book.asks) },
+          bid: { items: ixTrade.toPlateItems(book.bids) }
+        });
       });
     },
 
+    /**
+     * The public tape — `GET /api/v1/trades/:symbol`.
+     *
+     * `[]` means this market has never printed. That is an answer, so
+     * `tradesReachable` is true and the tape renders "no trades yet" rather
+     * than "trades unavailable".
+     */
     getTrades() {
-      this.request(this.api.market.trade, { symbol: this.currentCoin.symbol, size: TRADE_LIMIT }).then(body => {
+      rest('/trades/' + symbolPath(this.currentCoin.symbol), { query: { limit: TRADE_LIMIT } }).then(res => {
         this.tradesLoading = false;
-        if (body == null) {
+        if (!res.ok) {
           this.tradesReachable = false;
+          this.tradesMessage = res.message || '';
           this.trades = [];
           return;
         }
         this.tradesReachable = true;
-        this.trades = Array.isArray(body) ? body.slice(0, TRADE_LIMIT) : [];
+        this.tradesMessage = '';
+        this.trades = ixTrade.toDeskTrades(res.data, TRADE_LIMIT);
       });
     },
 
-    /* ── websocket ─────────────────────────────────────────────────────── */
+    /* ── live feed ─────────────────────────────────────────────────────── */
 
-    startWebsock() {
-      this.stopWebsock();
-      const self = this;
-      let socket;
-      try {
-        socket = new SockJS(this.host + this.api.market.ws);
-      } catch (e) {
-        this.feedLive = false;
-        return;
-      }
+    /* REMOVED: startWebsock / stopWebsock / subscribeTopics.
 
-      const client = Stomp.over(socket);
-      client.debug = null;
-      /* No heartbeat and no auto-reconnect: against a dead host the vendor
-         default produced a reconnect loop and a wall of console noise. */
-      client.heartbeat.outgoing = 0;
-      client.heartbeat.incoming = 0;
-      this.stompClient = client;
+       They opened a SockJS/STOMP connection to `/market/market-ws` on the
+       retired Java market service and subscribed to five topics: thumb
+       tickers, the trade tape, the trade plate, and three per-user order
+       events that re-read the account on every fill.
 
-      client.connect(
-        {},
-        function () {
-          if (self.stompClient !== client) {
-            return;
-          }
-          self.feedLive = true;
-          if (self.klineChart) {
-            self.klineChart.attach(client);
-          }
-          self.subscribeTopics(client);
-        },
-        function () {
-          if (self.stompClient === client) {
-            self.feedLive = false;
-          }
-        }
-      );
-    },
+       NOT REPOINTED. Our live feed is svc-ws, a different protocol on a
+       different service, and wiring it is a piece of work in its own right
+       rather than a URL swap. Leaving the STOMP client in place would have
+       been worse than removing it: against a dead host it reconnects, and a
+       desk that looks connected while receiving nothing is a desk showing a
+       stale book with no indication that it is stale.
 
-    stopWebsock() {
-      this.feedLive = false;
-      const client = this.stompClient;
-      this.stompClient = null;
-      if (!client) {
-        return;
-      }
-      try {
-        if (client.connected) {
-          client.disconnect();
-        } else if (client.ws) {
-          client.ws.close();
-        }
-      } catch (e) {
-        /* the socket never opened */
-      }
-    },
-
-    subscribeTopics(client) {
-      const self = this;
-      const symbol = this.currentCoin.symbol;
-
-      const on = (topic, handler) => {
-        try {
-          client.subscribe(topic, function (msg) {
-            let payload;
-            try {
-              payload = JSON.parse(msg.body);
-            } catch (e) {
-              return;
-            }
-            handler(payload);
-          });
-        } catch (e) {
-          /* a topic the backend does not publish is not fatal */
-        }
-      };
-
-      on('/topic/market/thumb', resp => {
-        /* Every pair publishes here. Rows are mutated in place — the keys were
-           all present when getMarkets() built them, so they are reactive and
-           only the changed cells repaint. Re-assigning this.markets would
-           re-render the whole list dozens of times a second. */
-        const row = self.marketMap[resp.symbol];
-        if (row) {
-          Object.assign(row, {
-            close: resp.close,
-            high: resp.high,
-            low: resp.low,
-            volume: resp.volume,
-            usdRate: resp.usdRate,
-            chg: resp.chg,
-            rose: (resp.chg > 0 ? '+' : '') + (resp.chg * 100).toFixed(2) + '%'
-          });
-        }
-        if (resp.symbol === symbol) {
-          self.currentCoin = Object.assign({}, self.currentCoin, {
-            close: resp.close,
-            high: resp.high,
-            low: resp.low,
-            volume: resp.volume,
-            usdRate: resp.usdRate,
-            chg: resp.chg,
-            rose: (resp.chg > 0 ? '+' : '') + (resp.chg * 100).toFixed(2) + '%'
-          });
-        }
-      });
-
-      on('/topic/market/trade/' + symbol, resp => {
-        if (!resp || !resp.length) {
-          return;
-        }
-        /* Bounded list. The vendor pushed unbounded then trimmed; this keeps
-           the DOM row count fixed so the panel never grows the page. */
-        self.tradesLoading = false;
-        self.tradesReachable = true;
-        self.trades = resp.concat(self.trades).slice(0, TRADE_LIMIT);
-      });
-
-      on('/topic/market/trade-plate/' + symbol, resp => {
-        self.bookLoading = false;
-        self.bookReachable = true;
-        self.applyPlate(resp.direction, resp.items || []);
-        self.getPlateFull();
-      });
-
-      if (this.isLogin && this.member) {
-        const id = this.member.id;
-        ['order-canceled', 'order-completed', 'order-trade'].forEach(kind => {
-          on('/topic/market/' + kind + '/' + symbol + '/' + id, () => self.loadAccount());
-        });
-      }
-    },
+       WHAT THE ABSENCE COSTS, STATED PLAINLY. `feedLive` stays false, so
+       every headline figure renders through marketNum/marketStat and prints
+       a dash rather than a stale number. The book and tape are REST snapshots
+       taken when the pair loaded; they do not tick. The blotter refreshes
+       after your own order actions because those call loadAccount() directly.
+       Nothing on this screen claims to stream. */
 
     /* ── account ───────────────────────────────────────────────────────── */
 
+    /* ── account ───────────────────────────────────────────────────────── */
+
+    /**
+     * The account panel — balances, open orders, closed orders, fills.
+     *
+     * GATED ON THE PLATFORM SESSION, NOT THE SHELL LOGIN. `isLogin` is the
+     * vendored ucenter session; `ixToken` is the platform session svc-edge will
+     * accept. They are different, and a reader signed in to the first sees a
+     * named "no platform session" refusal rather than an empty blotter that
+     * reads as "you have no orders".
+     */
     loadAccount() {
-      if (!this.isLogin) {
+      if (!this.ixToken) {
+        this.accountLoading = false;
+        this.walletReachable = false;
+        this.ordersReachable = false;
+        this.accountError = this.$t('intafaced.trade.noSession');
         return;
       }
       this.accountLoading = true;
       this.accountError = '';
       this.walletReachable = false;
       this.ordersReachable = false;
-      Promise.all([this.getWallet(), this.getOpenOrders(), this.getHistoryOrders()]).then(() => {
+      Promise.all([
+        this.getWallet(),
+        this.getOpenOrders(),
+        this.getHistoryOrders(),
+        this.getMyFills()
+      ]).then(() => {
         this.accountLoading = false;
         if (!this.walletReachable && !this.ordersReachable) {
           this.accountError =
-            'Account services did not respond. Balances and orders are not shown as zero — they are unknown.';
+            (this.accountRefusal || 'The platform did not answer.') +
+            ' Balances and orders are not shown as zero — they are unknown.';
         }
       });
     },
 
+    /** Remember the first named refusal so the panel can quote a reason. */
+    noteRefusal(res) {
+      if (!res.ok && !this.accountRefusal) {
+        this.accountRefusal = res.message || '';
+      }
+    },
+
+    /**
+     * Balances — `GET /api/v1/account/balance`, the ledger projection.
+     *
+     * ONE CALL, NOT TWO. The vendor read a per-asset wallet endpoint twice
+     * (base and quote) and only trusted the pair when BOTH legs answered,
+     * because one dead leg had painted a false available 0. Our endpoint
+     * returns every asset in one answer, so that failure mode is gone: either
+     * we have the whole picture or we have none of it.
+     *
+     * An asset with no ledger row is NOT zero — it means the ledger has never
+     * held it for this user. `freeBalanceOf` returns null and the ticket says
+     * the balance is unknown rather than sizing an order against a fiction.
+     */
     getWallet() {
-      // Per-asset truth: never invent 0 from a missing leg, and never mark the
-      // ticket "wallet reachable" until BOTH base and coin balances are known.
-      // One successful leg + one dead leg previously painted false available 0.
-      let baseOk = false;
-      let coinOk = false;
       this.walletReachable = false;
-      const baseP = this.request(this.api.uc.wallet + this.currentCoin.base).then(body => {
-        if (body && body.data && body.data.balance != null && body.data.balance !== '') {
-          this.wallet.base = body.data.balance;
-          baseOk = true;
+      return rest('/account/balance', { token: this.ixToken }).then(res => {
+        this.noteRefusal(res);
+        if (!res.ok) {
+          return;
         }
-      });
-      const coinP = this.request(this.api.uc.wallet + this.currentCoin.coin).then(body => {
-        if (body && body.data && body.data.balance != null && body.data.balance !== '') {
-          this.wallet.coin = body.data.balance;
-          coinOk = true;
-        }
-      });
-      return Promise.all([baseP, coinP]).then(() => {
-        this.walletReachable = baseOk && coinOk;
+        const rows = ixTrade.toBalanceRows(res.data);
+        this.balances = rows;
+        this.wallet = {
+          base: ixTrade.freeBalanceOf(rows, this.currentCoin.base),
+          coin: ixTrade.freeBalanceOf(rows, this.currentCoin.coin)
+        };
+        this.walletReachable = true;
       });
     },
 
     getOpenOrders() {
-      return this.request(this.api.exchange.current, {
-        pageNo: 0,
-        pageSize: 100,
-        symbol: this.currentCoin.symbol
-      }).then(body => {
-        if (body && Array.isArray(body.content)) {
-          this.openOrders = body.content;
-          this.ordersReachable = true;
-        } else if (body && body.content == null && body.code != null) {
-          /* Answered but empty list shape — still reachable. */
-          this.openOrders = [];
-          this.ordersReachable = true;
+      return rest('/orders/open', {
+        token: this.ixToken,
+        query: { symbol: this.currentCoin.symbol }
+      }).then(res => {
+        this.noteRefusal(res);
+        if (!res.ok) {
+          return;
         }
+        // A 200 with [] is "you have none" — a real answer, so reachable.
+        this.openOrders = ixTrade.toDeskOrders(res.data);
+        this.ordersReachable = true;
       });
     },
 
     getHistoryOrders() {
-      return this.request(this.api.exchange.history, {
-        pageNo: 0,
-        pageSize: 30,
-        symbol: this.currentCoin.symbol
-      }).then(body => {
-        if (body && Array.isArray(body.content)) {
-          this.historyOrders = body.content;
-          this.ordersReachable = true;
-        } else if (body && body.content == null && body.code != null) {
-          this.historyOrders = [];
-          this.ordersReachable = true;
+      return rest('/orders/closed', {
+        token: this.ixToken,
+        query: { symbol: this.currentCoin.symbol, limit: 100 }
+      }).then(res => {
+        this.noteRefusal(res);
+        if (!res.ok) {
+          return;
         }
+        this.historyOrders = ixTrade.toDeskOrders(res.data);
+        this.ordersReachable = true;
+      });
+    },
+
+    /**
+     * My fills — `GET /api/v1/account/trades`.
+     *
+     * A SEPARATE CALL, WHICH IT DID NOT USED TO BE. The vendor's Trade History
+     * tab read `order.detail[]` embedded in each history order. Our order wire
+     * carries no nested fills, so deriving the tab from it would have shown an
+     * empty fill list for orders that genuinely traded — the exact "zero that
+     * reads as a real value" this work exists to remove.
+     */
+    getMyFills() {
+      return rest('/account/trades', {
+        token: this.ixToken,
+        query: { symbol: this.currentCoin.symbol, limit: 100 }
+      }).then(res => {
+        this.noteRefusal(res);
+        if (!res.ok) {
+          this.fillsReachable = false;
+          return;
+        }
+        this.myFills = ixTrade.toDeskFills(res.data);
+        this.fillsReachable = true;
       });
     },
 
@@ -2208,7 +2262,8 @@ export default {
         }
         return;
       }
-      const budget = (this.availableBalance * this.percent) / 100;
+      /* canSize already guarantees this is a real number, not NaN. */
+      const budget = (this.availableBalanceNum * this.percent) / 100;
       if (this.quoteSized) {
         this.form.amount = this.floor(budget, this.baseCoinScale);
         return;
@@ -2256,12 +2311,12 @@ export default {
         if (price > 1e12) return 'Price is too large.';
       }
       const cost = this.quoteSized ? amount : this.side === 'BUY' ? price * amount : amount;
-      if (this.isLogin && this.walletReachable && isFinite(cost) && cost > this.availableBalance) {
-        return 'Insufficient balance. Available ' + this.fmt(this.availableBalance, 8) + '.';
-      }
-      if (this.isLogin && !this.walletReachable) {
-        // Allow submit attempt — venue may still accept; do not invent a balance.
-        return '';
+      /* Only claim "insufficient" when we actually know the balance. A missing
+         ledger row gives NaN, and NaN comparisons are false, so an unknown
+         balance never blocks a submit the venue might well accept — and never
+         gets reported to the user as a zero. */
+      if (this.isLogin && this.walletReachable && isFinite(cost) && cost > this.availableBalanceNum) {
+        return 'Insufficient balance. Available ' + this.availableBalance + '.';
       }
       return '';
     },
@@ -2352,9 +2407,14 @@ export default {
         ' ' +
         (this.amountUnit || '');
       const feeLine = 'Fee (est.): ' + this.feeLabel;
-      const walletLine = this.walletReachable
-        ? 'Available (venue wallet): ' + this.fmt(this.availableBalance, 8)
-        : 'Available: unknown — venue wallet did not answer (not the platform ledger).';
+      /* Three states, again — an "Available: 0" on a confirmation dialog for a
+         balance we could not read is the last place a fabricated number should
+         appear, because it is the screen someone reads before committing. */
+      const walletLine = !this.walletReachable
+        ? 'Available: unknown — the ledger did not answer.'
+        : this.availableBalance === null
+          ? 'Available: the ledger holds no ' + (this.side === 'BUY' ? this.currentCoin.base : this.currentCoin.coin) + ' for this account.'
+          : 'Available (ledger): ' + this.availableBalance;
       const pair = (this.currentCoin.coin || '') + '/' + (this.currentCoin.base || '');
 
       this.$Modal.confirm({
@@ -2374,51 +2434,67 @@ export default {
           feeLine +
           '</p><p>' +
           walletLine +
-          '</p><p style="margin-top:8px;opacity:0.75;">Orders only succeed if the exchange accepts them. No response means not placed. Venue wallet balance is not the TypeScript ledger book.</p>',
+          '</p><p style="margin-top:8px;opacity:0.75;">Orders only succeed if the venue accepts them. No response means not placed. The book is empty today, so a limit order will rest rather than fill.</p>',
         okText: side,
         cancelText: 'Cancel',
-        onOk: () => this.placeOrder(amount, price)
+        /* No arguments: placeOrder reads the decimal STRINGS out of the form.
+           `amount` and `price` above are floats parsed for this dialog's copy
+           and must not reach the wire. */
+        onOk: () => this.placeOrder()
       });
     },
 
-    placeOrder(amount, price) {
-      if (!this.isLogin) {
-        const sessionMsg = 'Session ended — sign in again. No order was placed.';
+    /**
+     * PLACE AN ORDER — `POST /api/v1/orders`. The money path.
+     *
+     * AMOUNT AND PRICE GO OUT AS THE STRINGS THE USER TYPED. `submitOrder`
+     * hands this method parsed numbers for the confirmation copy; they are NOT
+     * what is sent. `this.form.amount` and `this.form.price` are the decimal
+     * strings from the input, the contract's schema takes decimal strings, and
+     * the ledger parses them to a scaled bigint. Routing an order size through
+     * a JS float would round it at the seventeenth significant digit — silently,
+     * and on exactly the values where it matters.
+     *
+     * A market order carries no price key at all. The schema rejects a price on
+     * a market order, and the old `price: 0` was in any case a price we made up.
+     */
+    placeOrder() {
+      if (!this.ixToken) {
+        const sessionMsg = this.$t('intafaced.trade.noSession');
         this.focusOrderError(sessionMsg);
         return this.warn(sessionMsg);
       }
-      /* Never send subAccountId to the venue order path — Java wallet has no
-         sub-account books, and inventing a field would look like routing. */
       var subBlock = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
       if (subBlock) {
         this.focusOrderError(subBlock);
         return this.warn(subBlock);
       }
       this.submitting = true;
-      return this.request(this.api.exchange.orderAdd, {
+      const body = ixTrade.toCreateOrderBody({
         symbol: this.currentCoin.symbol,
-        price: this.orderType === 'MARKET_PRICE' ? 0 : price,
-        amount,
-        direction: this.side,
         type: this.orderType,
-        useDiscount: '0'
-      }).then(body => {
+        side: this.side,
+        amount: String(this.form.amount).trim(),
+        price: String(this.form.price).trim()
+      });
+      return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
         this.submitting = false;
-        /* MessageResult envelope: code == 0 only. Anything else is reject copy
-           in the ticket (not toast-only) so the form never looks like success. */
-        const rejectMsg = bookHonesty.formatOrderRejectEnvelope(body);
-        if (!rejectMsg) {
+        if (res.ok) {
           this.orderValidationError = '';
           this.liveAnnounce = '';
-          this.$Notice.success({ title: 'Order placed', desc: this.submitLabel });
+          this.$Notice.success({ title: this.$t('intafaced.trade.placed'), desc: this.submitLabel });
           this.form.amount = '';
           this.percent = 0;
           this.accountTab = 'open';
           this.loadAccount();
           return;
         }
+        /* Reject copy goes in the ticket, not only a toast, so the form never
+           looks like it succeeded. Every message ends by saying no order was
+           placed — an ambiguous failure gets an order placed twice. */
+        const rejectMsg = ixTrade.orderFailureMessage(res, 'create');
         this.focusOrderError(rejectMsg);
-        this.$Notice.error({ title: 'Order rejected', desc: rejectMsg });
+        this.$Notice.error({ title: this.$t('intafaced.trade.rejected'), desc: rejectMsg });
       });
     },
 
@@ -2430,70 +2506,68 @@ export default {
         onOk: () => {
           if (this.cancellingId) return;
           this.cancellingId = order.orderId;
-          return this.request(this.api.exchange.orderCancel + '/' + order.orderId).then(body => {
+          return rest('/orders/' + encodeURIComponent(order.orderId), {
+            method: 'DELETE',
+            token: this.ixToken
+          }).then(res => {
             this.cancellingId = null;
-            if (body && body.code == 0) {
-              this.$Notice.success({ title: 'Order cancelled', desc: order.symbol });
+            if (res.ok) {
+              this.$Notice.success({ title: this.$t('intafaced.trade.cancelled'), desc: order.symbol });
               this.loadAccount();
-            } else {
-              this.$Notice.error({
-                title: 'Cancel failed',
-                desc: (body && body.message) || 'The exchange did not respond.'
-              });
+              return;
             }
-          }).catch(() => {
-            this.cancellingId = null;
             this.$Notice.error({
-              title: 'Cancel failed',
-              desc: 'The exchange did not respond — order not cancelled.'
+              title: this.$t('intafaced.trade.cancelFailed'),
+              desc: ixTrade.orderFailureMessage(res, 'cancel')
             });
           });
         }
       });
     },
 
-    toggleFavorite() {
-      if (!this.isLogin) {
-        return this.warn('Sign in first.');
-      }
-      const symbol = this.currentCoin.symbol;
-      const path = this.currentCoinIsFavor ? this.api.exchange.favorDelete : this.api.exchange.favorAdd;
-      const next = !this.currentCoinIsFavor;
-      this.request(path, { symbol })
-        .then(body => {
-          if (body && body.code == 0) {
-            this.currentCoinIsFavor = next;
-            const row = this.marketMap[symbol];
-            if (row) {
-              row.isFavor = next;
-              this.markets = this.markets.slice();
-            }
-          } else if (body) {
-            this.warn((body.message || body.msg) || 'Favorite update failed.');
-          }
-        })
-        .catch(() => this.warn('Favorite update failed — network error.'));
+    /**
+     * THE WATCHLIST IS LOCAL TO THIS BROWSER, and the rail says so.
+     *
+     * The vendor stored favourites server-side via `/exchange/favor/*`. Our
+     * surface is a CCXT contract and has no favourites endpoint. localStorage
+     * is honest here because a watchlist is a display preference, not money or
+     * account state — losing it on another device costs nothing and misleads
+     * nobody. A star that silently un-set itself on reload would.
+     */
+    favoritesKey() {
+      return 'ix.watchlist.v1';
     },
-
-    toggleRowFavorite(row) {
-      if (!this.isLogin) {
-        return this.warn('Sign in first.');
+    loadFavorites() {
+      try {
+        const raw = window.localStorage.getItem(this.favoritesKey());
+        const list = raw ? JSON.parse(raw) : [];
+        this.localFavorites = Array.isArray(list) ? list.filter(s => typeof s === 'string') : [];
+      } catch (e) {
+        this.localFavorites = [];
       }
-      const path = row.isFavor ? this.api.exchange.favorDelete : this.api.exchange.favorAdd;
-      const next = !row.isFavor;
-      this.request(path, { symbol: row.symbol })
-        .then(body => {
-          if (body && body.code == 0) {
-            row.isFavor = next;
-            if (row.symbol === this.currentCoin.symbol) {
-              this.currentCoinIsFavor = next;
-            }
-            this.markets = this.markets.slice();
-          } else if (body) {
-            this.warn((body.message || body.msg) || 'Favorite update failed.');
-          }
-        })
-        .catch(() => this.warn('Favorite update failed — network error.'));
+    },
+    saveFavorites() {
+      try {
+        window.localStorage.setItem(this.favoritesKey(), JSON.stringify(this.localFavorites));
+      } catch (e) {
+        /* private mode / quota — a watchlist is not worth an error toast */
+      }
+    },
+    setFavorite(symbol, next) {
+      const at = this.localFavorites.indexOf(symbol);
+      if (next && at < 0) this.localFavorites.push(symbol);
+      if (!next && at >= 0) this.localFavorites.splice(at, 1);
+      this.saveFavorites();
+      const row = this.marketMap[symbol];
+      if (row) row.isFavor = next;
+      if (symbol === this.currentCoin.symbol) this.currentCoinIsFavor = next;
+      this.markets = this.markets.slice();
+    },
+    toggleFavorite() {
+      this.setFavorite(this.currentCoin.symbol, !this.currentCoinIsFavor);
+    },
+    toggleRowFavorite(row) {
+      this.setFavorite(row.symbol, !row.isFavor);
     },
 
     warn(message) {
@@ -2505,6 +2579,20 @@ export default {
     num(value) {
       const n = parseFloat(value);
       return isFinite(n) ? n : 0;
+    },
+
+    /**
+     * A decimal string, printed verbatim.
+     *
+     * Use this for every money figure that came off the wire. `fmt()` below
+     * parses to a float and calls toFixed, which is fine for a derived display
+     * number but wrong for a value the ledger produced — it silently rounds at
+     * the seventeenth significant digit and it turns a null into a dash only by
+     * accident. Null here is explicit and means unknown.
+     */
+    dec(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      return String(value);
     },
 
     fmt(value, scale) {
@@ -2582,16 +2670,17 @@ export default {
       return parseFloat(rose) < 0 ? 'ix-down' : parseFloat(rose) > 0 ? 'ix-up' : '';
     },
 
+    /* A market order has no price. Its `price` is null on the wire, and
+       formatting null through fmt() would print a number. */
     priceLabel(row) {
-      return row.type === 'MARKET_PRICE' ? 'Market' : this.fmt(row.price, this.baseCoinScale);
+      return row.type === 'MARKET_PRICE' ? 'Market' : this.dec(row.price);
     },
 
-    /* Wave B9 — partial fill + id tools from data already on the blotter. */
+    /* Wave B9 — partial fill + id tools from data already on the blotter.
+       Both figures are printed as the decimal strings the venue sent. */
     fillLabel(row) {
-      const filled = this.num(row.tradedAmount);
-      const total = this.num(row.amount);
-      if (total <= 0) return this.fmt(row.tradedAmount, this.coinScale);
-      return this.fmt(filled, this.coinScale) + ' / ' + this.fmt(total, this.coinScale);
+      if (row.tradedAmount === null || row.tradedAmount === undefined) return '—';
+      return this.dec(row.tradedAmount) + ' / ' + this.dec(row.amount);
     },
     fillTitle(row) {
       const filled = this.num(row.tradedAmount);

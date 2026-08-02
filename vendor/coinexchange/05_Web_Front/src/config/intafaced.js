@@ -14,6 +14,13 @@
  *   success   { "result": { "data": ... } }
  *   failure   { "error": { "message", "data": { "code", "httpStatus", ... } } }
  *
+ * ONE EXCEPTION, AND IT IS A CONTRACT NOT A SHORTCUT. svc-trade also publishes
+ * a CCXT-shaped REST surface under `/api/v1/*` (svc-edge routes that prefix to
+ * the same service with `preservePath: true`). It is not tRPC: the body IS the
+ * answer, and a failure is `{ code: <CcxtErrorCode>, message, intafacedCode }`
+ * at the top level. `rest()` below speaks it, and `classify` reads both shapes,
+ * so the screens keep exactly one client and exactly one failure taxonomy.
+ *
  * WHY `fetch` AND NOT `this.$http`. main.js sets `Vue.http.options.emulateJSON`
  * globally, which form-encodes every POST body. tRPC needs a JSON body, and
  * main.js is owned elsewhere, so these calls use the platform's own transport
@@ -66,6 +73,19 @@ export const REASON = {
      * capability is missing and what would have to exist. See `noSurface()`.
      */
     NO_SURFACE: 'no_surface',
+    /**
+     * The venue mounts this route on purpose and will not serve it in this
+     * shape — CCXT `NotSupported`, HTTP 501. Distinct from NOT_MOUNTED, which
+     * is an engineering gap: this one is a deliberate answer and the client
+     * should STOP asking. Funding rate on a spot market is the live example.
+     */
+    NOT_SUPPORTED: 'not_supported',
+    /**
+     * CCXT `BadSymbol` — the venue lists no such market. Distinct from an empty
+     * answer: "BTC/USDT is not listed here" and "BTC/USDT has no orders" are
+     * different sentences and only one of them is the reader's problem.
+     */
+    BAD_SYMBOL: 'bad_symbol',
     /** Anything else the service said no to. */
     ERROR: 'error'
 };
@@ -85,6 +105,36 @@ function headers(token) {
     return h;
 }
 
+/**
+ * The CCXT error classes svc-trade puts on the wire (`ccxt-errors.ts`), mapped
+ * onto our reason taxonomy.
+ *
+ * A CCXT client branches on the class to decide whether to retry; a SCREEN
+ * branches on it to decide what sentence to print. The two questions have the
+ * same answer, so the mapping stays here rather than being re-guessed per page.
+ *
+ * `ExchangeNotAvailable` / `OnMaintenance` are UNREACHABLE on purpose: from a
+ * reader's seat "the matching engine is down" and "the edge is down" are the
+ * same fact — the venue cannot tell them anything right now — and both are
+ * temporary. What must never collapse into them is an EMPTY book, which is a
+ * successful answer and never reaches this function.
+ */
+var CCXT_REASON = {
+    AuthenticationError: REASON.UNAUTHORIZED,
+    PermissionDenied: REASON.FORBIDDEN,
+    BadSymbol: REASON.BAD_SYMBOL,
+    NotSupported: REASON.NOT_SUPPORTED,
+    ExchangeNotAvailable: REASON.UNREACHABLE,
+    OnMaintenance: REASON.UNREACHABLE,
+    RateLimitExceeded: REASON.ERROR,
+    InsufficientFunds: REASON.ERROR,
+    InvalidOrder: REASON.ERROR,
+    OrderNotFound: REASON.ERROR,
+    OrderNotFillable: REASON.ERROR,
+    BadRequest: REASON.ERROR,
+    ExchangeError: REASON.ERROR
+};
+
 function classify(status, body) {
     var data = (body && body.error && body.error.data) || {};
     var code = data.code || '';
@@ -92,6 +142,21 @@ function classify(status, body) {
 
     if (body && body.code === 'edge.no_route') return { reason: REASON.NOT_ROUTED, message: 'svc-edge has no route for this module' };
     if (body && body.code === 'edge.upstream_unavailable') return { reason: REASON.UNREACHABLE, message: 'The service behind the edge did not answer' };
+
+    // CCXT REST failure (`/api/v1/*`). The class is top-level, not nested in
+    // `error`, and `intafacedCode` carries our finer-grained reason — a
+    // PermissionDenied from the scope gate and one from the jurisdiction matrix
+    // are the same class on the wire and different sentences on the page.
+    if (body && typeof body.code === 'string' && CCXT_REASON[body.code]) {
+        var ccxtMessage = body.message || 'Request failed';
+        var reason = CCXT_REASON[body.code];
+        if (body.code === 'PermissionDenied') {
+            if (body.intafacedCode === 'scope.denied') reason = REASON.SCOPE_DENIED;
+            else if (body.intafacedCode === 'tier.insufficient' || body.requiredTier) reason = REASON.TIER_REQUIRED;
+        }
+        return { reason: reason, message: ccxtMessage };
+    }
+
     // Fastify's own 404 shape, not tRPC's — the service is up and the path is
     // simply not served, which for our routers means the tRPC plugin was never
     // registered.
@@ -147,6 +212,61 @@ export function mutate(module, procedure, input, token) {
 /** A plain (non-tRPC) route on a service, e.g. svc-protocol's `/health`. */
 export function plain(module, path, token) {
     return send(EDGE_BASE + '/' + module + path, { method: 'GET', headers: headers(token) }, true);
+}
+
+/** The CCXT REST base. svc-edge forwards this prefix to svc-trade unchanged. */
+export const REST_BASE = EDGE_BASE + '/v1';
+
+/**
+ * A call against svc-trade's CCXT REST contract (`/api/v1/...`).
+ *
+ * Same contract as `query`/`mutate`: it RESOLVES with `{ ok, reason, message,
+ * data }` and never rejects, so a screen branches on `reason` instead of
+ * wrapping every call in a try/catch that would flatten the taxonomy back into
+ * "something went wrong".
+ *
+ * `raw` is true because this surface answers with the value itself — an array
+ * of markets, an order book object — and not tRPC's `{ result: { data } }`.
+ *
+ * A SUCCESSFUL EMPTY ANSWER IS `ok: true` WITH AN EMPTY ARRAY. That is the
+ * distinction the whole trading half of this shell rests on: the books are
+ * empty and OHLCV returns `[]` today, and those are answers, not failures. A
+ * screen that renders them as a spinner or as a zero is lying about a system
+ * that is telling the truth.
+ *
+ * @param {string} path   e.g. '/markets' or '/orderbook/BTC%2FUSDT'
+ * @param {object} [opts] { method, body, token, query }
+ */
+export function rest(path, opts) {
+    var o = opts || {};
+    var url = REST_BASE + path;
+
+    if (o.query) {
+        var parts = [];
+        for (var key in o.query) {
+            if (!Object.prototype.hasOwnProperty.call(o.query, key)) continue;
+            var value = o.query[key];
+            if (value === undefined || value === null || value === '') continue;
+            parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+        }
+        if (parts.length) url += '?' + parts.join('&');
+    }
+
+    var init = { method: o.method || 'GET', headers: headers(o.token) };
+    if (o.body !== undefined) init.body = JSON.stringify(o.body);
+    return send(url, init, true);
+}
+
+/**
+ * Percent-encode a unified symbol for a path segment (`BTC/USDT` → `BTC%2FUSDT`).
+ *
+ * The slash is the whole reason this exists: unencoded it becomes a path
+ * separator and `/api/v1/orderbook/BTC/USDT` reaches a route that does not
+ * exist, which surfaces as a 404 that reads like a missing market rather than a
+ * malformed URL.
+ */
+export function symbolPath(symbol) {
+    return encodeURIComponent(String(symbol == null ? '' : symbol));
 }
 
 /**
@@ -253,4 +373,17 @@ export function moduleByKey(key) {
     return null;
 }
 
-export default { query: query, mutate: mutate, plain: plain, noSurface: noSurface, MODULES: MODULES, REASON: REASON, subjectOf: subjectOf, scopesOf: scopesOf, moduleByKey: moduleByKey };
+export default {
+    query: query,
+    mutate: mutate,
+    plain: plain,
+    noSurface: noSurface,
+    rest: rest,
+    symbolPath: symbolPath,
+    REST_BASE: REST_BASE,
+    MODULES: MODULES,
+    REASON: REASON,
+    subjectOf: subjectOf,
+    scopesOf: scopesOf,
+    moduleByKey: moduleByKey
+};

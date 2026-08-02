@@ -148,6 +148,14 @@ module.exports = {
                 title: "Refused",
                 body: "The service authenticated the caller and still declined."
             },
+            not_supported: {
+                title: "This venue does not serve that",
+                body: "The route exists and the venue answered it deliberately: what you asked for is not part of this market's shape. This is a settled answer, not a gap waiting to be filled — a funding rate on a spot market is the plain example."
+            },
+            bad_symbol: {
+                title: "This market is not listed here",
+                body: "The venue has no such market. That is different from a market with nothing in it: an unlisted symbol will never answer, whereas a listed one with an empty book answers honestly and will fill once someone trades."
+            },
             error: {
                 title: "The service returned an error",
                 body: "The call reached the service and it answered with a failure."
@@ -156,6 +164,45 @@ module.exports = {
                 title: "This is not built yet",
                 body: "The screen exists because it came with the shell. The platform has no service behind it, so there is nothing to read and nothing to show. It is not loading, it is not empty, and it is not broken — it was never built. What is missing is stated below."
             }
+        },
+        trade: {
+            source: "svc-trade · /api/v1 (CCXT contract) via svc-edge",
+            markets: "Markets",
+            noMarkets: "The venue lists no markets yet. This is the listing table answering empty, not a feed that failed.",
+            noDepth: "No depth yet — nothing is resting on this book. It will fill the moment someone places an order.",
+            noBids: "No bids yet",
+            noAsks: "No asks yet",
+            noTrades: "No trades yet — this market has never printed.",
+            noCandles: "No candles yet — candles are aggregated from real fills, and this market has not traded.",
+            noOpenOrders: "No open orders.",
+            noOrderHistory: "No closed orders.",
+            noMyTrades: "No fills yet — none of your orders have traded.",
+            noBalances: "The ledger holds no balance for this account yet. Nothing is hidden and nothing is rounded to zero — there are simply no rows.",
+            noPositions: "No open positions.",
+            ledgerNote: "Balances come from the INTAFACED ledger — the single book. This is not a venue wallet.",
+            noLastPrice: "No last price — nothing has traded",
+            totalColumn: "Total",
+            liquidityColumn: "Role",
+            watchlistTab: "Watchlist",
+            recordScopeTitle: "This is your trade record, and only your trade record",
+            recordScopeBody: "Fills are the one kind of balance movement this platform can report, because trading is the one that exists. Deposits, withdrawals, transfers between accounts, referral awards and dividends are not shown here — not because they are empty, but because none of those flows are built. An empty table below means you have not traded; it says nothing about the others.",
+            noTotalValue: "No total value — this platform publishes no price source to convert assets into one figure",
+            placed: "Order placed",
+            rejected: "Order rejected",
+            cancelled: "Order cancelled",
+            noSession: "No platform session. Sign in on the Platform screen and this reads your real orders and your real ledger balance.",
+            custodyTitle: "Deposits and withdrawals are not built",
+            custodyBody: "This platform has no chain custody. There is no service behind a deposit address, a withdrawal, or a saved withdrawal address, so this screen has nothing real to show you and will not pretend otherwise. Nothing here is disabled temporarily — it is simply not built yet.",
+            custodyLedgerNote: "Your ledger balance is real and is shown under Balances. Moving value on or off a chain is what does not exist.",
+            goBalances: "Go to Balances",
+            custodyWhatExistsTitle: "What does exist today",
+            custodyLedgerRow: "Your balance, from the ledger",
+            custodyTradingRow: "Placing and cancelling orders",
+            custodyChainRow: "Moving value on or off a chain",
+            custodyChainValue: "Not built. Chain custody is unadopted pending a security review.",
+            depositHeading: "Deposit",
+            withdrawHeading: "Withdraw",
+            withdrawAddressHeading: "Withdrawal addresses"
         },
         modules: {
             bank: {
