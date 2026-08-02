@@ -59,7 +59,14 @@ module.exports = {
         planeCex: "CEX · custodial",
         planeDex: "DEX · non-custodial",
         planeCexHint: "Custodial exchange — identity and verification rules apply",
-        planeDexHint: "Protocol plane — non-custodial; no KYC for the trade itself (region rules still apply)"
+        planeDexHint: "Protocol plane — non-custodial; no KYC for the trade itself (region rules still apply)",
+        // A-UI-SUB — catalogue switcher only; no balances; routing not wired
+        subAccounts: "Sub-accounts",
+        subAccountParent: "Parent account",
+        subAccountParentMeta: "Venue wallet · trade here today",
+        subAccountsNeedSession: "Sign in (Platform)",
+        subAccountsUnavailable: "List unavailable",
+        subAccountsEmpty: "No sub-accounts yet · parent only"
     },
     /**
      * The INTAFACED platform surfaces — every feature area of the Sovereign OS,

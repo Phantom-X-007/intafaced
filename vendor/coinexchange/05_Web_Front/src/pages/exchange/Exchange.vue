@@ -60,6 +60,11 @@
         <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || num(currentCoin.volume) > 0">{{ currentCoin.coin }}</em></dd>
       </dl>
 
+      <!-- A-UI-SUB: identity catalogue switcher. No balances. No order routing. -->
+      <div class="ix-head-sub">
+        <SubAccountSelector @change="onSubAccountChange" />
+      </div>
+
       <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="feedLive ? 'Market feed connected' : 'Market feed is down — numbers are not live'">
         <i class="ix-dot"></i>{{ feedLive ? 'Live' : 'No feed · not live prices' }}
       </div>
@@ -797,19 +802,21 @@
    ========================================================================== */
 import { KlineChart } from '@js/market-chart/kline.js';
 import DepthGraph from '@components/exchange/DepthGraph.vue';
+import SubAccountSelector from '@components/intafaced/SubAccountSelector.vue';
 
 var Stomp = require('stompjs');
 var SockJS = require('sockjs-client');
 var moment = require('moment');
 var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
 var bookHonesty = require('../../assets/js/book-honesty.js');
+var subAccounts = require('../../assets/js/sub-accounts.js');
 
 const BOOK_DEPTH = 14;
 const TRADE_LIMIT = 40;
 const DEPTH_REDRAW_MS = 1000;
 
 export default {
-  components: { DepthGraph },
+  components: { DepthGraph, SubAccountSelector },
   data() {
     return {
       defaultPair: 'btc_usdt',
@@ -1088,15 +1095,19 @@ export default {
       if (!this.isLogin || this.submitting) return false;
       if (this.exchangeable != 1) return false;
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) return false;
+      /* A-UI-SUB: sub selection blocks place until money routing is wired. */
+      if (!subAccounts.canPlaceOrder(this.$store.state.ixSubAccountId)) return false;
       return true;
     },
-    /** Structural block (halt/market type) — separate from field validation. */
+    /** Structural block (halt/market type / sub routing) — separate from field validation. */
     orderBlockReason() {
       if (!this.isLogin) return '';
       if (this.exchangeable != 1) return 'This market is halted.';
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) {
         return 'Market ' + (this.side === 'BUY' ? 'buy' : 'sell') + ' is disabled for this pair.';
       }
+      var subBlock = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
+      if (subBlock) return subBlock;
       return '';
     },
     submitLabel() {
@@ -1282,6 +1293,24 @@ export default {
           typeof document !== 'undefined' ? document.getElementById('ix-ticket') : null;
         if (panel && typeof panel.focus === 'function') panel.focus();
       });
+    },
+
+    /**
+     * A-UI-SUB — selection changed in the header switcher.
+     * Does not touch balances or order payload; tradeBlockReason handles gating.
+     */
+    onSubAccountChange() {
+      var reason = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
+      if (reason) {
+        this.orderValidationError = reason;
+        this.liveAnnounce = reason;
+      } else if (
+        this.orderValidationError &&
+        this.orderValidationError.indexOf('Sub-account selected') === 0
+      ) {
+        this.orderValidationError = '';
+        this.liveAnnounce = '';
+      }
     },
 
     /**
@@ -2105,6 +2134,13 @@ export default {
         this.focusOrderError(sessionMsg);
         return this.warn(sessionMsg);
       }
+      /* Never send subAccountId to the venue order path — Java wallet has no
+         sub-account books, and inventing a field would look like routing. */
+      var subBlock = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
+      if (subBlock) {
+        this.focusOrderError(subBlock);
+        return this.warn(subBlock);
+      }
       this.submitting = true;
       return this.request(this.api.exchange.orderAdd, {
         symbol: this.currentCoin.symbol,
@@ -2537,8 +2573,15 @@ $radius-sm: var(--ix-radius-sm, 8px);
   }
 }
 
-.ix-head-status {
+/* A-UI-SUB — sits before live status; margin-left:auto on status still pins right. */
+.ix-head-sub {
   margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.ix-head-status {
+  margin-left: 0;
   display: flex;
   align-items: center;
   gap: 6px;
