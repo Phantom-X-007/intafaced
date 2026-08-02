@@ -55,7 +55,8 @@
     "frontend:residual": "node tooling/frontend/residual-print.mjs",
     "frontend:preflight:craft": "SLICE_TYPE=CRAFT ORCA_REQUIRED=1 node tooling/frontend/preflight.mjs",
     "scan:dual-book-door-paths": "node tooling/ci/dual-book-door-path-unit.mjs",
-    "dual-book:classify": "node tooling/scripts/dual-book-setbalance-classify.mjs"
+    "dual-book:classify": "node tooling/scripts/dual-book-setbalance-classify.mjs",
+    "order-path-cx8": "node tooling/scripts/order-path-cx8-boot.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

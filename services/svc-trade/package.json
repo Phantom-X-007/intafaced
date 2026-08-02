@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/migrate.ts",
-    "clean": "rimraf dist .turbo"
+    "clean": "rimraf dist .turbo",
+    "order-path-smoke": "node ./scripts/order-path-smoke.mjs"
   },
   "dependencies": {
     "@intafaced/auth": "workspace:*",

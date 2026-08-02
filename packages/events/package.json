@@ -16,7 +16,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rimraf dist .turbo"
+    "clean": "rimraf dist .turbo",
+    "cx8-streams": "node ./scripts/cx8-ensure-streams.mjs"
   },
   "dependencies": {
     "@intafaced/config": "workspace:*",
