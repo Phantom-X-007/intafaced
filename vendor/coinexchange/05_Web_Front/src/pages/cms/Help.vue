@@ -4,9 +4,12 @@
     <div class="help_container">
       <h1>{{$t("header.helpcenter")}}</h1>
       <!-- Stream A: failed help API must not look like an empty catalog. -->
-      <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="margin-top:80px;">{{ loadError }}</p>
-      <p v-else-if="!loaded" class="ix-empty ix-empty-loading" style="margin-top:80px;">{{ $t("common.loading") }}</p>
-      <p v-else-if="helpData.length === 0" class="ix-empty" style="margin-top:80px;">{{ $t("cms.helpEmpty") }}</p>
+      <p class="ix-dualbook ix-cms-note" role="note">
+        <strong>Help content</strong> loads from the venue CMS when available — a failed load is unknown, not an empty library of articles.
+      </p>
+      <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="margin-top:24px;">{{ loadError }}</p>
+      <p v-else-if="!loaded" class="ix-empty ix-empty-loading" style="margin-top:24px;">{{ $t("common.loading") }}</p>
+      <p v-else-if="helpData.length === 0" class="ix-empty" style="margin-top:24px;">{{ $t("cms.helpEmpty") }}</p>
       <div class="main" v-else>
         <div class="section" v-for="section in helpData" :key="section.cate">
           <h3 v-if="langPram == 'CN'">{{section.titleCN}}</h3>
@@ -107,6 +110,22 @@
     }
   }
 }
+
+.ix-dualbook.ix-cms-note {
+  margin: 16px 12% 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 194, 168, 0.35);
+  border-radius: 6px;
+  background: rgba(0, 194, 168, 0.06);
+  color: #c8cdd4;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ix-dualbook.ix-cms-note strong {
+  color: #00c2a8;
+  font-weight: 600;
+}
+
 </style>
 
 <script>
