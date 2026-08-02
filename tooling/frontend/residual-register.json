@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "B4 focus-trap (⌘K Tab cycle) + B12 Partner honesty; P0.4 still agent Chromium SEGV",
-  "tip_sha_at_write": "feat-app-b4-trap",
+  "tip_note": "B5 panel width resize+persist; P0.4 still agent Chromium SEGV",
+  "tip_sha_at_write": "feat-app-b5-panel-prefs",
   "waves": {
     "A": "honesty / locks / withdraw-first",
     "B": "craft + page-data pro power",
@@ -181,12 +181,12 @@
       "id": "B5",
       "wave": "B",
       "title": "Persist pair/TF/book/panels",
-      "status": "partial",
-      "evidence": "prefs include accountTab+side; pair/TF/book already",
-      "proof_missing": "Panel pixel sizes still not persisted",
-      "next_action": "Panel resize handles if product wants",
+      "status": "done",
+      "evidence": "desk-prefs.js clamp/normalize + Exchange resizers + localStorage panels",
+      "proof_missing": "",
+      "next_action": "",
       "blocker": "",
-      "priority": 40
+      "priority": 99
     },
     {
       "id": "B6",

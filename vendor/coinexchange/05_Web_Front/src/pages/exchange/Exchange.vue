@@ -73,9 +73,17 @@
     </header>
 
     <!-- ══ body ═════════════════════════════════════════════════════════ -->
-    <div class="ix-body">
+    <div class="ix-body" :style="deskBodyStyle">
       <!-- ── markets ──────────────────────────────────────────────────── -->
       <aside class="ix-panel ix-markets">
+        <!-- B5 — column resize; widths persist in local desk prefs (not money). -->
+        <div
+          class="ix-resizer ix-resizer-e"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize markets column"
+          @mousedown.prevent="startPanelResize('markets', $event)"
+        ></div>
         <div class="ix-markets-search">
           <input
             ref="marketSearch"
@@ -540,6 +548,13 @@
 
       <!-- ── order book / trades rail ─────────────────────────────────── -->
       <aside class="ix-panel ix-rail">
+        <div
+          class="ix-resizer ix-resizer-w"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize book column"
+          @mousedown.prevent="startPanelResize('rail', $event)"
+        ></div>
         <nav class="ix-tabs ix-tabs-head">
           <button
             type="button"
@@ -659,6 +674,13 @@
 
       <!-- ── order entry ──────────────────────────────────────────────── -->
       <aside id="ix-ticket" class="ix-panel ix-order" tabindex="-1" aria-label="Order ticket">
+        <div
+          class="ix-resizer ix-resizer-w"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize order ticket column"
+          @mousedown.prevent="startPanelResize('order', $event)"
+        ></div>
         <div class="ix-side-toggle" role="group" aria-label="Order side">
           <button
             type="button"
@@ -912,6 +934,7 @@ var SockJS = require('sockjs-client');
 var moment = require('moment');
 var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
 var deskA11y = require('../../assets/js/desk-a11y.js');
+var deskPrefs = require('../../assets/js/desk-prefs.js');
 var bookHonesty = require('../../assets/js/book-honesty.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 
@@ -1006,7 +1029,11 @@ export default {
       /** Inline field validation message; empty when fields look usable. */
       orderValidationError: '',
       /** B10 — screen-reader announcements (order rejects, validation). */
-      liveAnnounce: ''
+      liveAnnounce: '',
+      /** B5 — fixed column widths (px); centre flexes. Not money. */
+      panelW: Object.assign({}, deskPrefs.PANEL_DEFAULTS),
+      /** Viewport wide enough for four-column desk + resize handles. */
+      panelResizeActive: true
     };
   },
 
@@ -1020,6 +1047,15 @@ export default {
     },
     ticketAmountAria() {
       return deskA11y.ticketFieldAria('amount', this.orderValidationError);
+    },
+    /** B5 — desktop grid only; narrow layouts keep CSS media queries. */
+    deskBodyStyle() {
+      if (!this.panelResizeActive) return {};
+      var w = deskPrefs.normalizePanelWidths(this.panelW);
+      return {
+        gridTemplateColumns:
+          w.markets + 'px minmax(0, 1fr) ' + w.rail + 'px ' + w.order + 'px'
+      };
     },
     isLogin() {
       return this.$store.getters.isLogin;
@@ -1313,17 +1349,25 @@ export default {
     this.lastTick = 0;
 
     this.loadDeskPrefs();
+    this.syncPanelResizeActive();
     this.init();
     /* B7 — capture when focus is not in a field (document-level). */
     this._onDeskKeyWindow = e => this.onDeskKeydown(e, true);
+    this._onWinResize = () => this.syncPanelResizeActive();
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', this._onDeskKeyWindow, true);
+      window.addEventListener('resize', this._onWinResize);
     }
   },
 
   beforeDestroy() {
-    if (typeof window !== 'undefined' && this._onDeskKeyWindow) {
-      window.removeEventListener('keydown', this._onDeskKeyWindow, true);
+    if (typeof window !== 'undefined') {
+      if (this._onDeskKeyWindow) {
+        window.removeEventListener('keydown', this._onDeskKeyWindow, true);
+      }
+      if (this._onWinResize) {
+        window.removeEventListener('resize', this._onWinResize);
+      }
     }
     this.teardown();
   },
@@ -1505,6 +1549,10 @@ export default {
         const accts = { balances: 1, positions: 1, open: 1, fills: 1, history: 1 };
         if (accts[p.accountTab]) this.accountTab = p.accountTab;
         if (p.side === 'BUY' || p.side === 'SELL') this.side = p.side;
+        /* B5 — panel pixel widths (clamped; never invent money). */
+        if (p.panels && typeof p.panels === 'object') {
+          this.panelW = deskPrefs.normalizePanelWidths(p.panels);
+        }
       } catch (e) {
         /* private mode / bad JSON — leave defaults */
       }
@@ -1525,12 +1573,39 @@ export default {
             railTab: this.railTab,
             baseFilter: this.baseFilter,
             accountTab: this.accountTab,
-            side: this.side
+            side: this.side,
+            panels: deskPrefs.normalizePanelWidths(this.panelW)
           })
         );
       } catch (e) {
         /* ignore quota / private mode */
       }
+    },
+    /** B5 — drag splitter; markets grow with +delta; rail/order use west edge (−delta). */
+    startPanelResize(key, e) {
+      if (!this.panelResizeActive || !e || typeof window === 'undefined') return;
+      var startX = e.clientX;
+      var startW = deskPrefs.clampPanelWidth(key, this.panelW[key]);
+      var sign = key === 'markets' ? 1 : -1;
+      var self = this;
+      function onMove(ev) {
+        if (!ev) return;
+        var next = deskPrefs.panelWidthAfterDrag(key, startW, sign * (ev.clientX - startX));
+        self.$set(self.panelW, key, next);
+      }
+      function onUp() {
+        window.removeEventListener('mousemove', onMove, true);
+        window.removeEventListener('mouseup', onUp, true);
+        document.body.classList.remove('ix-resizing-cols');
+        self.saveDeskPrefs();
+      }
+      document.body.classList.add('ix-resizing-cols');
+      window.addEventListener('mousemove', onMove, true);
+      window.addEventListener('mouseup', onUp, true);
+    },
+    syncPanelResizeActive() {
+      if (typeof window === 'undefined') return;
+      this.panelResizeActive = window.innerWidth >= 1500;
     },
 
     init() {
@@ -2696,6 +2771,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
 /* ── shared surface ─────────────────────────────────────────────────────
    B1: solid P21 panels on the desk — no default glass blur (anti-slop). */
 .ix-panel {
+  position: relative; /* B5 resizer anchors */
   background: var(--ix-panel, #12151c);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -2854,6 +2930,38 @@ $radius-sm: var(--ix-radius-sm, 8px);
   align-items: stretch;
   height: var(--col-h);
   min-height: 520px;
+}
+
+/* B5 — column splitters (desktop only; hidden under 1500px with markets). */
+.ix-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 6;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+.ix-resizer:hover,
+.ix-resizer:focus-visible {
+  background: rgba(0, 194, 168, 0.22);
+}
+.ix-resizer-e {
+  right: 0;
+}
+.ix-resizer-w {
+  left: 0;
+}
+@media (max-width: 1499px) {
+  .ix-resizer {
+    display: none;
+  }
+}
+/* Global during drag — avoid text selection while resizing. */
+body.ix-resizing-cols {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .ix-centre {
