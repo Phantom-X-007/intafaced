@@ -165,9 +165,10 @@ async function edgePlaceCancel(contracts) {
   log(`AUTH_PLACE_OK orderId=${orderId} clientOrderId=${clientOrderId}`);
 
   if (orderId) {
+    const { 'content-type': _ct, ...cancelHeaders } = headers;
     const cancelRes = await fetch(`${TRADE.replace(/\/$/, '')}/api/v1/orders/${orderId}`, {
       method: 'DELETE',
-      headers,
+      headers: cancelHeaders,
     });
     const cancelText = await cancelRes.text();
     if (!cancelRes.ok) {
