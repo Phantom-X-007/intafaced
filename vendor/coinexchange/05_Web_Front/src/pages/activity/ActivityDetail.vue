@@ -126,12 +126,13 @@
                             </div>
                         </div>
                         <p v-if="activityDetail.type == 3" class="hold-tips">*{{$t('activity.holdtips')}}</p>
+                        <p class="ix-dualbook ix-activity-honest" role="note" v-if="isLogin">Attend amount is what you enter — never a pre-filled invent balance.</p>
                         <div class="do-activity" v-if="isLogin && (activityDetail.type==3 || activityDetail.type==4 || activityDetail.type==5)">
                             <div class="do-left">
                                 <p class="p-title" v-if="activityDetail.type==3">{{$t('activity.inputholdamount')}}</p>
                                 <p class="p-title" v-if="activityDetail.type==4">{{$t('activity.inputamount')}}</p>
                                 <p class="p-title" v-if="activityDetail.type==5">{{$t('activity.inputminingamount')}}</p>
-                                <Input style="width: 90%;" placeholder="0.00000" v-model="attendAmount" type="number">
+                                <Input style="width: 90%;" placeholder="" v-model="attendAmount" type="number">
                                     <span slot="append" v-if="activityDetail.type==3">{{activityDetail.acceptUnit}}</span>
                                     <span slot="append" v-else>{{activityDetail.unit}}</span>
                                 </Input>
