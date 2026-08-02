@@ -102,6 +102,16 @@ const schema = serviceEnvSchema
        */
       TRADE_MM_SEED_MIDS: z.string().default(''),
 
+      /**
+       * When true, after env mid map miss, try public venue book mid
+       * (same venue id + symbol map as TRADE_VENUE_MARK_*). Default OFF.
+       * Never invents if venue down / unmapped / empty book.
+       */
+      TRADE_MM_SEED_MID_FROM_VENUE: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
       TRADE_MM_SEED_HALF_SPREAD_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
       TRADE_MM_SEED_STEP_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
       TRADE_MM_SEED_LEVELS: z.coerce.number().int().min(1).max(50).default(3),

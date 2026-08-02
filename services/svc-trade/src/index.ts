@@ -15,9 +15,10 @@ import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
-import { createConfiguredVenueMarkSource } from './futures/mark-from-venue.js';
+import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
-import { parseMmSeedMids, parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
+import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
+import { createMmMidSourceFromConfig } from './mm/mid-source.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
 import { startCandleJobs } from './spot/candle-jobs.js';
 import { parseAmount } from '@intafaced/ledger-client';
@@ -78,9 +79,12 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 // Venue fabric public mid → mark path (A-TRADE-VENUE-1). Empty venue = off.
 // Unknown venue id → null (refuse invent). Symbol map required per market.
+// Shared adapter also feeds MM mid port when TRADE_MM_SEED_MID_FROM_VENUE (A-TRADE-MM-3).
+const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);
 const venueMarkConfigured = createConfiguredVenueMarkSource({
   venueId: env.TRADE_VENUE_MARK_VENUE,
   symbols: env.TRADE_VENUE_MARK_SYMBOLS,
+  adapter: venuePublicAdapter,
 });
 if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
   // Typo / unsupported venue — say so once; do not invent a mid adapter.
@@ -127,11 +131,18 @@ const candleJobs = startCandleJobs({
 });
 
 // MM seed job — default OFF. Empty markets or missing mids → no invent.
-const mmSeedMids = parseMmSeedMids(env.TRADE_MM_SEED_MIDS);
+// Mid port (A-TRADE-MM-3): env map first; optional venue public mid when enabled.
+const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
+const mmMidSource = createMmMidSourceFromConfig({
+  midsEnv: env.TRADE_MM_SEED_MIDS,
+  midFromVenue: env.TRADE_MM_SEED_MID_FROM_VENUE,
+  venueAdapter: venuePublicAdapter,
+  resolveVenueSymbol: (marketId) => venueMarkSymbols.get(marketId) ?? null,
+});
 const mmSeedJobs = startMmSeedJobs({
   ledger,
   matching,
-  midSource: (marketId) => mmSeedMids.get(marketId) ?? null,
+  midSource: mmMidSource,
   config: {
     enabled: env.TRADE_MM_SEED_ENABLED,
     intervalMs: env.TRADE_MM_SEED_INTERVAL_MS,
