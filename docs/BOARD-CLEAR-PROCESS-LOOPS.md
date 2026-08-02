@@ -3,7 +3,7 @@
 **Without these loops, agents re-create residual theater.**  
 Every ship and every orchestrator turn runs the loops below. Skipping is a campaign defect.
 
-Homes: Constitution · Execution Plan · Scoreboard · Next · this file.
+Homes: Constitution · Execution Plan · Agent backlog · Decision authority · Scoreboard · Next · this file.
 
 ---
 
@@ -11,15 +11,18 @@ Homes: Constitution · Execution Plan · Scoreboard · Next · this file.
 
 ```
 while scoreboard has any OPEN or WIP row:
-  refresh: main tip, open PRs, scoreboard, NEXT
-  babysit: red CI → fix → merge green
-  if idle_ships: fan-out Wave A/B per ownership map
+  refresh: main tip, open PRs, scoreboard, NEXT, agent backlog SHIPPED ids
+  babysit: red CI → fix → merge green (DECISION-AUTHORITY)
+  if agent_residual_open: fan-out from BOARD-CLEAR-AGENT-BACKLOG priority
+  if only_human_rows_open: babysit shehzad + pro-trader polish + tests/docs honesty
+      (NEVER idle, NEVER implement M1–M7, NEVER ask Nitro to wait for him)
   if blocked_on_self: run replan loop P1
   if no_merge_and_no_pr_in_this_session_chunk:
-      force: open next smallest ship PR or fix stuck PR
+      force: open next smallest *agent* ship PR or fix stuck PR
   write NEXT before any pause/compact/end-turn
   NEVER ask Nitro to continue
   NEVER exit with work remaining and NEXT empty
+  NEVER treat human OPEN as a stop for agent cooking
 ```
 
 **Session end rule:** If context will compact or turn ends, last write is `BOARD-CLEAR-NEXT.md` with the exact next command/ship. Ending without NEXT = **failure**.
@@ -28,7 +31,7 @@ while scoreboard has any OPEN or WIP row:
 
 ## L1 — Per-ship loop (R-S-P-B-V-M-U)
 
-For **each** ship ID from the execution plan:
+For **each** ship ID from the **agent backlog** (preferred) or execution plan:
 
 | Step    | Name     | Must produce                                                                                                                 |
 | ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -85,13 +88,14 @@ Triggers: CI architecture conflict, Done bar impossible without invent, Denon ma
 
 ---
 
-## L5 — Compaction / cold-start loop
+## L5 — Compaction / cold-start / CONTINUE loop
 
 ```
-1. Read UNSPOKEN-NEEDS → CONSTITUTION → PROCESS-LOOPS → EXECUTION-PLAN → SCOREBOARD → NEXT
-2. git fetch; gh pr list; main tip
-3. Resume exact NEXT step; if NEXT stale (>1 day and main moved), re-derive from scoreboard OPEN rows
-4. Do not re-open locked B decisions
+1. Read AUTONOMOUS-RUN order: SHEHZAD → DECISION-AUTHORITY → AGENT-BACKLOG → …
+2. git fetch; gh pr list; main tip; rewrite stale SCOREBOARD/NEXT if tip moved
+3. Resume NEXT; if NEXT names already-merged ships → re-derive from agent backlog OPEN only
+4. Do not re-open locked B decisions; do not re-ship SHIPPED backlog IDs
+5. Decision default: DECISION-AUTHORITY (agent acts; X1–X5 only to Nitro)
 ```
 
 ---
@@ -102,11 +106,14 @@ You are **stalling** if any is true:
 
 - Explaining plan for >1 turn without opening worktree/PR
 - Waiting for Nitro
+- Waiting for shehzad before cooking **agent** residual
 - “Blocked” without §13 or alternate path
 - Research notes with no ship ID
+- Re-opening shipped Wave A IDs as primary work
 - Scoreboard unchanged after claimed work
 
-**Unstall:** pick smallest OPEN ship → R1 immediately.
+**Unstall:** pick smallest unblocked **agent** ship from backlog → R1 immediately.  
+If no agent residual: babysit human PRs + pro-trader polish under design bar.
 
 ---
 

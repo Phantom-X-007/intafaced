@@ -2,7 +2,7 @@
 
 **Binding inference for agents.** Nitro does not restate these. If you optimize against them, you fail even if CI is green.
 
-Last refined: 2026-08-01.
+Last refined: 2026-08-02 (v3 CONTINUE + decision authority).
 
 ---
 
@@ -57,12 +57,16 @@ If 2 conflicts with invent: **Cut+§13, never invent.**
 | Need                    | Implementation                                                |
 | ----------------------- | ------------------------------------------------------------- |
 | Always know next action | `BOARD-CLEAR-NEXT.md` updated every turn                      |
-| Survive compact         | Constitution + plan + scoreboard + next + process loops       |
+| Survive compact         | Constitution + plan + backlog + scoreboard + next + loops     |
 | Research before build   | Loop R1 mandatory per ship                                    |
 | Spec before code        | Loop S1 — Done-linked acceptance in PR body                   |
 | Review after ship       | Loop V1 — adversarial self-check before merge claim           |
 | Replan when stuck       | Loop P1 — update execution plan, don’t thrash                 |
 | Don’t stop              | Outer loop until scoreboard complete; “continue” is automatic |
+| Parallel with shehzad   | His OPEN mountains ≠ agent idle; never steal M1–M7            |
+| Agent decides tech      | `DECISION-AUTHORITY` — Nitro only X1–X5                       |
+| CONTINUE not day-one    | Re-derive residual from agent backlog; skip SHIPPED IDs       |
+| Pro-trader posture      | Stream A design bar on UI ships                               |
 | Parallel                | One program per worktree; coordinator owns merge order        |
 | Quality                 | Elite bar; Class M self-audit; CI green                       |
 | Visible progress        | Merge waves; scoreboard flips                                 |
