@@ -11,13 +11,13 @@
 
 GitHub does **not** have a single “this human owns the module” switch. On this repo, ownership is **enforced for agents and humans** by stacking:
 
-| Layer | What it does |
-| --- | --- |
-| **This file + SHEHZAD-HARD-OWNERSHIP + LIVE-LANES** | Law for agents: **do not implement** his mountains |
-| **`AGENTS.md` + session paste** | Every cold chat sees the ban in the entry chain |
-| **Tracker `owner: shehzad002`** | Scoreboard / `pnpm tracker` shows who owns the feature |
-| **`.github/CODEOWNERS`** | GitHub **auto-requests review** from him on his paths (review request, not a hard merge block unless branch protection requires owners) |
-| **Open PRs by him** | Live WIP (e.g. pay M1) — babysit only |
+| Layer                                               | What it does                                                                                                                            |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **This file + SHEHZAD-HARD-OWNERSHIP + LIVE-LANES** | Law for agents: **do not implement** his mountains                                                                                      |
+| **`AGENTS.md` + session paste**                     | Every cold chat sees the ban in the entry chain                                                                                         |
+| **Tracker `owner: shehzad002`**                     | Scoreboard / `pnpm tracker` shows who owns the feature                                                                                  |
+| **`.github/CODEOWNERS`**                            | GitHub **auto-requests review** from him on his paths (review request, not a hard merge block unless branch protection requires owners) |
+| **Open PRs by him**                                 | Live WIP (e.g. pay M1) — babysit only                                                                                                   |
 
 If any layer lags, **LIVE-LANES HUMAN-CLAIMED + this file win** for “who may code.”
 
@@ -25,15 +25,15 @@ If any layer lags, **LIVE-LANES HUMAN-CLAIMED + this file win** for “who may c
 
 ## His mountains (never agent-implement)
 
-| ID | Mountain | Primary paths / tracker |
-| --- | --- | --- |
-| **M1** | Pay OS | `services/svc-pay/**` · `pay.gateway` + pay.* expand |
-| **M2** | Protocol OS | `services/svc-protocol/**` · smart-accounts, amm, lending, escrow, router, merchant |
-| **M3** | Futures risk | `trade.futures` risk/margin/liq (not shell charts) |
-| **M4** | OTC / copy / algo | `trade.otc` · `trade.copy` · `trade.algo` |
-| **M5** | Identity money graph | sub-accounts / money routing · `identity.apikeys` (sub-accounts half) · related identity money gates |
-| **M6** | Bank money | `bank.earn` · `bank.cards` · `bank.ramps` · `bank.sovereign-card` · `services/svc-bank/**` money products |
-| **M7** | Java dual-book residual | vendor Java money doors (after #289) |
+| ID     | Mountain                | Primary paths / tracker                                                                                   |
+| ------ | ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| **M1** | Pay OS                  | `services/svc-pay/**` · `pay.gateway` + pay.* expand                                                      |
+| **M2** | Protocol OS             | `services/svc-protocol/**` · smart-accounts, amm, lending, escrow, router, merchant                       |
+| **M3** | Futures risk            | `trade.futures` risk/margin/liq (not shell charts)                                                        |
+| **M4** | OTC / copy / algo       | `trade.otc` · `trade.copy` · `trade.algo`                                                                 |
+| **M5** | Identity money graph    | sub-accounts / money routing · `identity.apikeys` (sub-accounts half) · related identity money gates      |
+| **M6** | Bank money              | `bank.earn` · `bank.cards` · `bank.ramps` · `bank.sovereign-card` · `services/svc-bank/**` money products |
+| **M7** | Java dual-book residual | vendor Java money doors (after #289)                                                                      |
 
 **Agents may:** comment on his PRs, CI babysit, **never** open competing implement PRs on those paths unless he comments `agents free on <path>`.
 
@@ -59,10 +59,10 @@ P-UI vendor shell `:8090` · P-TRADE-LIGHT (mm residual / spot OHLCV / venue) ·
 
 ## Nitro unspoken needs (hardened)
 
-1. You can keep building forever **without colliding** with Shehzad.  
-2. Chat memory is **not** ownership — **main tip is**.  
-3. “I checked GitHub” must show the same ban as this file.  
-4. Agents that only read tracker must see **owner shehzad002**, not stale Nitro.  
+1. You can keep building forever **without colliding** with Shehzad.
+2. Chat memory is **not** ownership — **main tip is**.
+3. “I checked GitHub” must show the same ban as this file.
+4. Agents that only read tracker must see **owner shehzad002**, not stale Nitro.
 5. Speed is fine on **agent** lanes; stealing his money mountains is not.
 
-*Update this file only with a PR that also updates LIVE-LANES if claims change.*
+_Update this file only with a PR that also updates LIVE-LANES if claims change._

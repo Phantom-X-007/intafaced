@@ -3,7 +3,7 @@
 **Status:** **LOCKED v3.1** · Nitro approved decisions 1–7 (2026-07-31) · agent may open Wave A on **go implement**  
 **Code:** none until **go implement** (still)  
 **Tip base at merge:** `origin/main` @ `94c0a3f` — re-derive at implement time  
-**Sources:** Claude enhance + Grok audit + **Nitro free-hands override (prior UI is not a cage)**
+**Sources:** agent enhance + Grok audit + **Nitro free-hands override (prior UI is not a cage)**
 
 ### Nitro free-hands override (binding — 2026-07-31)
 
@@ -11,7 +11,7 @@ Prior Stream A / tip UI work (honesty patches, orange shell, `ix-empty`, ticket 
 
 | Rule                                   | Meaning                                                                                                                                                                                                                               |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Not limited by what shipped**        | Agents must not shrink ambition because “#231 already did X.” Claude’s “do not rebuild” is a **cost hint**, not a ban.                                                                                                                |
+| **Not limited by what shipped**        | Agents must not shrink ambition because “#231 already did X.” the agent pack's “do not rebuild” is a **cost hint**, not a ban.                                                                                                        |
 | **Clean zero allowed**                 | Full rebuild of desk, money screens, tokens, honesty presentation is allowed if that is the path to world-class.                                                                                                                      |
 | **Reuse only if it does not misguide** | Keep a piece only when it clearly raises quality (e.g. real endpoint wiring, IxState REASON taxonomy, LWC chart host, DepthGraph thrash fix) **and** does not lock the product into half-measures or a third honesty dialect forever. |
 | **Quality > sunk cost**                | Prefer delete/replace over preserving mediocre “already honest” chrome.                                                                                                                                                               |
@@ -152,19 +152,19 @@ More neon · wallpaper indicators · more tabs · AI agent homepage · retail pr
 
 **Not three accents.** Four complete systems. Universal: green/red market only · accent ≠ PnL · no glass default · no pure `#000` if avoidable · tabular mono · multi-state honesty · reduced-motion
 
-| Code                               | Name              | Thesis                                        | Ownable                   | Risk                                |
-| ---------------------------------- | ----------------- | --------------------------------------------- | ------------------------- | ----------------------------------- |
-| **N1 Instrument**                  | Metrological desk | Hairlines, numeric spine, zero blur           | Via spine + honesty pills | Anonymous if weak hierarchy         |
-| **N2 Signal** _(Claude recommend)_ | Ink + one voice   | OKLCH ink, one accent in 4 places only        | Discipline as identity    | Adjacent to AI-SaaS if glass creeps |
-| **N3 Ledger**                      | Dual-tone         | Dark tape / warm books — doctrine visible     | **Highest**               | 2× craft; can read as two products  |
-| **N4 Terminal Zero**               | Density pole      | Chrome-minimal, watchlist rail, dockable grid | Pole for free hands       | a11y / TWS lineage                  |
+| Code                              | Name              | Thesis                                        | Ownable                   | Risk                                |
+| --------------------------------- | ----------------- | --------------------------------------------- | ------------------------- | ----------------------------------- |
+| **N1 Instrument**                 | Metrological desk | Hairlines, numeric spine, zero blur           | Via spine + honesty pills | Anonymous if weak hierarchy         |
+| **N2 Signal** _(agent recommend)_ | Ink + one voice   | OKLCH ink, one accent in 4 places only        | Discipline as identity    | Adjacent to AI-SaaS if glass creeps |
+| **N3 Ledger**                     | Dual-tone         | Dark tape / warm books — doctrine visible     | **Highest**               | 2× craft; can read as two products  |
+| **N4 Terminal Zero**              | Density pole      | Chrome-minimal, watchlist rail, dockable grid | Pole for free hands       | a11y / TWS lineage                  |
 
 **Lime:** accent **candidate inside N2**, not a separate “retheme the company” project.  
 **Orange #86:** not a direction — legacy residue.
 
 ### Styleboard deliverable (Nitro picks in ~60s)
 
-See Claude pack §C — 10 artifacts: direction board, component matrix, **honesty vocabulary matrix (canonical dialect)**, terminal 1440/1920/390, numeric spine, motion card, type specimen, anti-slop self-score, ours-vs-L1 crop, token plan documenting existing `ix-*` classes before inventing tokens.
+See agent pack §C — 10 artifacts: direction board, component matrix, **honesty vocabulary matrix (canonical dialect)**, terminal 1440/1920/390, numeric spine, motion card, type specimen, anti-slop self-score, ours-vs-L1 crop, token plan documenting existing `ix-*` classes before inventing tokens.
 
 Form: `docs/styleboard/` static HTML → Orca shots → later `/styleboard` route as proof row 1.
 
@@ -245,7 +245,7 @@ Wrong screenshot as ref · stale main · dual agents one tree · Stream B drive-
 
 - [x] Methodology v3 merged
 - [x] Plan v3 merged
-- [x] Claude + Grok tip re-verify
+- [x] agent + Grok tip re-verify
 - [ ] Nitro §K yes
 - [ ] go implement
 
@@ -294,9 +294,9 @@ Outcome demo (desk, fail, uc, withdraw receipt, ticket, open orders, L1 side-by-
 
 | Stage      | Model                         | May                                 | Must not                                             |
 | ---------- | ----------------------------- | ----------------------------------- | ---------------------------------------------------- |
-| Plan       | Claude+Grok                   | doc hygiene                         | ponytail shrink; dual taste                          |
-| Styleboard | Claude                        | one taste as **post** critique      | both taste leading; redesign-existing anchors to old |
-| Wave A     | Grok impl; Claude certify     | ponytail on **impl diff**; vet-repo | design fashion skills                                |
+| Plan       | agent+Grok                    | doc hygiene                         | ponytail shrink; dual taste                          |
+| Styleboard | agent                         | one taste as **post** critique      | both taste leading; redesign-existing anchors to old |
+| Wave A     | Grok impl; agent certify      | ponytail on **impl diff**; vet-repo | design fashion skills                                |
 | Wave B     | Grok; impeccable certify only | one taste certify                   | ponytail on craft scope (override named)             |
 | Wave C     | Strong                        | LWC docs                            | second chart vendor                                  |
 | Proof      | Orca                          | orca-cli                            | Nitro as runner                                      |
@@ -322,4 +322,4 @@ Gates: honesty, feed, irreversible, recovery, numeric. No fake fixture money. No
 
 ---
 
-_v3 supersedes v2 same day. Claude pack + Grok audit are evidence; this file is law after Nitro yes._
+_v3 supersedes v2 same day. agent pack + Grok audit are evidence; this file is law after Nitro yes._

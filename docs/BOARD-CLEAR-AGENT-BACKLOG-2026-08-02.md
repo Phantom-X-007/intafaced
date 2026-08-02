@@ -13,7 +13,7 @@ A-OR-1 #289 · A-WS-1 #336 · A-UI-1 #337 · A-UI-HONESTY #349 · A-TRADE-MM-1 #
 
 | Program           | PATHS_ONLY (agent)                                                                                              | Never touch                                                     |
 | ----------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| **P-UI**          | `vendor/coinexchange/05_Web_Front/**`                                                                           | `apps/web` as product; pay/protocol services                    |
+| **P-UI**          | `vendor/**/05_Web_Front/**`                                                                                     | `apps/web` as product; pay/protocol services                    |
 | **P-WS**          | `services/svc-ws/**`                                                                                            | Inventing futures payloads; H-TRADE-HARD risk math              |
 | **P-TRADE-LIGHT** | `services/svc-trade/src/mm/**`, `.../spot/*candle*`, venue-mark wiring under trade env/index **only as needed** | `futures/` risk/margin/liq truth; otc/copy/algo product engines |
 | **P-P5-LIGHT**    | `services/svc-academy/**`, `services/svc-agents/**`, ops docs/surfaces non-bank                                 | `services/svc-bank/**` money; pay recipes                       |
