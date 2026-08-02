@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "After #371. Next: B3 withdraw (this) · P0.4 ui:proof · B4/B9/B10.",
+  "tip_note": "After Safe+B9 fee disclosure PR. Queue: P0.4 ui:proof · B4 · Account shell.",
   "tip_sha_at_write": "d519b87+wave-continue",
   "waves": {
     "A": "honesty / locks / withdraw-first",
@@ -51,10 +51,10 @@
       "title": "ui:proof matrix green",
       "status": "partial",
       "evidence": "tooling/uiproof exists; historical proofs",
-      "proof_missing": "Not re-run as hard gate on late B PRs",
-      "next_action": "Run ui:proof on tip with Node18 worktree",
+      "proof_missing": "Monorepo needs @playwright/test on tip worktree (pnpm i); matrix exists",
+      "next_action": "pnpm install on tip then pnpm ui:proof; or Class N CI path",
       "blocker": "",
-      "priority": 4
+      "priority": 5
     },
     {
       "id": "A0.5",
@@ -160,11 +160,11 @@
       "wave": "B",
       "title": "uc craft = terminal shared components",
       "status": "partial",
-      "evidence": "#371 MoneyIndex + this PR Withdraw dual-book shell",
-      "proof_missing": "Safe.vue craft; auth Orca",
-      "next_action": "Safe craft or B9 fee discoverability",
+      "evidence": "MoneyIndex+Withdraw+#this Safe shell; dual-book recipe on uc",
+      "proof_missing": "Account.vue parity; auth Orca",
+      "next_action": "Account shell or B4 mobile",
       "blocker": "",
-      "priority": 14
+      "priority": 16
     },
     {
       "id": "B4",
@@ -226,9 +226,9 @@
       "wave": "B",
       "title": "Partial fill; fee schedule; CSV; copy ids",
       "status": "partial",
-      "evidence": "#295 blotter; fee schedule wording; withdraw copy #302",
-      "proof_missing": "Dedicated fee schedule surface / hop (dim 24)",
-      "next_action": "Fee schedule discoverability or waiver",
+      "evidence": "feeLabel schedule + expandable fee disclosure on ticket",
+      "proof_missing": "CSV/copy-id remainder; partial fill UX",
+      "next_action": "Partial fill / copy order id if not present",
       "blocker": "",
       "priority": 22
     },
@@ -237,7 +237,7 @@
       "wave": "B",
       "title": "a11y GOV.UK error-summary + live announce",
       "status": "partial",
-      "evidence": "liveAnnounce; role=alert spread; skip-link #302",
+      "evidence": "liveAnnounce; role=alert spread; skip-link #302; kbd hint includes ⌘K",
       "proof_missing": "Formal error-summary pattern; axe pass",
       "next_action": "impeccable a11y audit + fix",
       "blocker": "",
