@@ -2,6 +2,7 @@
 
 **Date:** 2026-08-02  
 **Tip when written:** `origin/main` @ `26289f3` (#381)  
+**Execution status:** **SEALED** 2026-08-02 — archive `docs/audit/2026-08-02-post-pile/` · P0=0 · CX-8 main green  
 **If git disagrees later: git + `gh` win — re-fetch before acting.**  
 **Audience:** Nitro (verdict) · cold agents (execute under §8 self-prompt)  
 **Not:** go-live · invent futures/pay/Java M7 · steal shehzad #346

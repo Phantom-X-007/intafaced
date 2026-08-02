@@ -26,7 +26,7 @@
 | WAVE-AUDIT               | **this wave**    | ORDER-ROUTE-PROGRAM-FINISH                      | SC-5                                     |
 | **Human X**              | **human**        | secrets / go-live / prod RPC / kill drill       | SC-4 · never agent-green                 |
 
-**Last update:** 2026-08-02 — path C agent-max: L3 fill+ledger + L4 stress/idempotent in CX-8 CI. Spec: `ORDER-ROUTE-PROD-CLAIM-AGENT-MAX-2026-08-02.md`. **Not go-live until Human X.**
+**Last update:** 2026-08-02 — path C agent-max on main; **CX-8 re-sealed on tip** (Actions run after #381). Post-pile WAVE-AUDIT P0=0. Spec: `ORDER-ROUTE-PROD-CLAIM-AGENT-MAX-2026-08-02.md`. **Not go-live until Human X.**
 
 ## Anti-compromise checklist
 
