@@ -14,9 +14,9 @@ import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const ROOT = process.cwd();
-const SECRET = process.env.INTERNAL_SERVICE_SECRET ?? 'cx8-internal-service-secret-32chars!!';
-const EDGE = process.env.EDGE_PRINCIPAL_SECRET ?? 'cx8-edge-principal-secret-32chars!!!!';
-const JWT = process.env.JWT_ACCESS_SECRET ?? 'cx8-jwt-access-secret-32-characters!!';
+const SECRET = process.env.INTERNAL_SERVICE_SECRET ?? 'dev-only-cx8-internal-service-secret-xx';
+const EDGE = process.env.EDGE_PRINCIPAL_SECRET ?? 'dev-only-cx8-edge-principal-secret-xxxx';
+const JWT = process.env.JWT_ACCESS_SECRET ?? 'dev-only-cx8-jwt-access-secret-xxxxxxxx';
 const NATS = process.env.NATS_URL ?? 'nats://127.0.0.1:4222';
 const PG = process.env.CX8_POSTGRES ?? 'postgres://intafaced:intafaced@127.0.0.1:5432/intafaced_test';
 

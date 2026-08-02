@@ -24,9 +24,10 @@ concurrency:
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
-  INTERNAL_SERVICE_SECRET: cx8-internal-service-secret-32chars!!
-  EDGE_PRINCIPAL_SECRET: cx8-edge-principal-secret-32chars!!!!
-  JWT_ACCESS_SECRET: cx8-jwt-access-secret-32-characters!!
+  # Self-declaring non-secrets (secret-scan PLACEHOLDER_VALUES: dev-only-*)
+  INTERNAL_SERVICE_SECRET: dev-only-cx8-internal-service-secret-xx
+  EDGE_PRINCIPAL_SECRET: dev-only-cx8-edge-principal-secret-xxxx
+  JWT_ACCESS_SECRET: dev-only-cx8-jwt-access-secret-xxxxxxxx
 
 jobs:
   assembled:
