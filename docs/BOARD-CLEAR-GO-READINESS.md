@@ -1,43 +1,39 @@
-# Board Clear — GO readiness (v3.2 AFK)
-
-**Audits:** preflight · mega · methodology · compaction hygiene · **AFK contract**
+# Board Clear — GO readiness (v3.3 parallel-hardened)
 
 ---
 
-## GREEN LIGHT: **YES — with honest scope**
+## GREEN LIGHT: **YES**
 
-| Layer                                            | Status                                       |
-| ------------------------------------------------ | -------------------------------------------- |
-| Compaction resume (NEXT first, agent self-serve) | YES                                          |
-| AFK: Nitro does nothing while session lives      | YES                                          |
-| Agent residual fully planned                     | YES — AGENT-BACKLOG                          |
-| Anti vibe-code                                   | YES — engineering standard + AFK contract §4 |
-| Human blockers deferred to end                   | YES — HUMAN-BLOCKERS + PHASE C               |
-| Full board without shehzad                       | **NO** (by ownership law — correct)          |
+| Layer                                     | Status                                   |
+| ----------------------------------------- | ---------------------------------------- |
+| AFK + compaction self-resume              | YES                                      |
+| Dual finish gates (honest)                | YES                                      |
+| Deferred human blockers                   | YES                                      |
+| Anti vibe-code                            | YES                                      |
+| **Parallel multi-session collision wall** | YES — `BOARD-CLEAR-PARALLEL-SESSIONS.md` |
+| Tip + open-PR refresh every cycle         | YES                                      |
+| LIVE-LANES multi-chat claim               | YES                                      |
 
-### What GO guarantees
+### Guarantees
 
-- Drives **AGENT-COMPLETE** (agent-owned rows Done/Cut, elite quality)
-- Babysits shehzad PRs without stealing
-- Survives **in-session** compact without Nitro
-- Surfaces true blockers **once**, after agent work exhausted
+- Agent residual can ship AFK with quality gates
+- Compacts: agent re-reads NEXT (you do nothing)
+- Parallel traffic: collision ritual before code
 
-### What GO does **not** guarantee
+### Limits (not bugs)
 
-- M1–M7 coded by this agent (forbidden steal)
-- BOARD-COMPLETE if shehzad has not shipped
-- Session restart after **process death** without a host
+- M1–M7 not agent-coded under ownership law
+- Process death needs host restart
+- Foreign open PRs may force skip/reorder of EXACT NEXT
 
 ---
 
 ## Your action
 
-1. Confirm AFK pack on `main`
-2. Say **GO** in the running agent chat
-3. Walk away
+Say **continue** / **GO**. Agent runs v3.3.
 
 ---
 
 ## Verdict
 
-**Say GO.** Spec/plan for agent half is complete. Full product table still needs shehzad for human mountains — that is intentional quality, not incomplete planning.
+**Hardened enough to keep moving.** Methodology matches AFK + parallel repo reality.
