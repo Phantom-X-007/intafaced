@@ -8,62 +8,41 @@
           </ButtonGroup>
         </FormItem>
         <p class="ix-login-honest" role="note">
-          Custodial account open. Failed registration is an error — never a silent funded session.
+          {{ $t('uc.regist.identityNote') }}
         </p>
-        <FormItem prop="username" style="display:none;">
-          <Input type="text" v-model="formInline.username" :placeholder="$t('uc.regist.username')">
+        <FormItem prop="handle">
+          <Input type="text" v-model="formInline.handle" :placeholder="$t('uc.regist.handle')" autocomplete="username">
           </Input>
         </FormItem>
-        <FormItem prop="user">
-          <Input type="text" v-model="formInline.user" :placeholder="key">
-            <Select v-model="country" slot="prepend" style="width: 65px;border-bottom: 1px solid #141414;">
-              <Option value="China" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">China</span></Option>
-              <Option value="Singapore" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">Singapore</span></Option>
-              <Option value="South Korea" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">South Korea</span></Option>
-              <Option value="Japan" label="+81"><span>+81</span><span style="margin-left:10px;color:#ccc">Japan</span></Option>
-              <Option value="Thailand" label="+66"><span>+66</span><span style="margin-left:10px;color:#ccc">Thailand</span></Option>
-              <Option value="Russia" label="+7"><span>+7</span><span style="margin-left:10px;color:#ccc">Russia</span></Option>
-              <Option value="United Kingdom" label="+44"><span>+44</span><span style="margin-left:10px;color:#ccc">United Kingdom</span></Option>
-              <Option value="Vietnam" label="+84"><span>+84</span><span style="margin-left:10px;color:#ccc">Vietnam</span></Option>
-              <Option value="India" label="+91"><span>+91</span><span style="margin-left:10px;color:#ccc">India</span></Option>
-              <Option value="Italy" label="+39"><span>+39</span><span style="margin-left:10px;color:#ccc">Italy</span></Option>
-              <Option value="Hong Kong" label="+852"><span>+852</span><span style="margin-left:10px;color:#ccc">Hong Kong</span></Option>
-              <Option value="Malaysia" label="+60"><span>+60</span><span style="margin-left:10px;color:#ccc">Malaysia</span></Option>
-              <Option value="Taiwan" label="+886"><span>+886</span><span style="margin-left:10px;color:#ccc">Taiwan</span></Option>
-              <Option value="Turkey" label="+90"><span>+90</span><span style="margin-left:10px;color:#ccc">Turkey</span></Option>
-            </Select>
+        <FormItem prop="email">
+          <Input type="text" v-model="formInline.email" :placeholder="$t('uc.regist.email')" autocomplete="email">
           </Input>
-        </FormItem>
-
-        <FormItem prop="code" v-show="showCode">
-          <Input type="text" v-model="formInline.code" :placeholder="$t('uc.regist.smscode')">
-          </Input>
-          <input id="sendCode" @click="sendCode();" type="Button" shape="circle" :value="sendcodeValue" :disabled='codedisabled'>
-          </input>
         </FormItem>
         <FormItem prop="password" class="password">
-          <Input type="password" v-model="formInline.password" :placeholder="$t('uc.regist.pwd')">
+          <Input type="password" v-model="formInline.password" :placeholder="$t('uc.regist.pwd')" autocomplete="new-password">
           </Input>
         </FormItem>
         <FormItem prop="repassword" class="password">
-          <Input type="password" v-model="formInline.repassword" :placeholder="$t('uc.regist.repwd')">
+          <Input type="password" v-model="formInline.repassword" :placeholder="$t('uc.regist.repwd')" autocomplete="new-password">
           </Input>
         </FormItem>
-        <FormItem prop="promotion">
-          <Input type="text" v-model="formInline.promotion">
-            <span slot="prepend">{{$t('uc.regist.promotion')}}:</span>
+        <FormItem prop="region">
+          <Input type="text" v-model="formInline.region" :placeholder="$t('uc.regist.region')" maxlength="2">
           </Input>
         </FormItem>
+        <p v-if="registerError" class="ix-login-error" role="alert" aria-live="polite">{{ registerError }}</p>
         <div class="check-agree" style="">
           <label>
             <Checkbox v-model="agree">{{$t('uc.regist.agreement')}}</Checkbox>
           </label>
-          <a v-if="false" href="/helpdetail?cate=1&id=5&cateTitle=FAQ" target="_blank" style="">{{$t('uc.regist.userprotocol')}}</a>
           <a v-if="lang=='English'" href="/helpdetail?cate=1&id=35&cateTitle=Privacy Policy" target="_blank" style="">{{$t('uc.regist.userprotocol')}}</a>
         </div>
         <FormItem>
-          <Button class="register_btn" @click="handleSubmit('formInline')" :disabled="registing">{{$t('uc.regist.regist')}}</Button>
+          <Button class="register_btn" @click="handleSubmit('formInline')" :loading="registing">{{$t('uc.regist.regist')}}</Button>
         </FormItem>
+        <p class="ix-login-socket" role="note">
+          {{ $t('uc.regist.referralSocket') }}
+        </p>
       </Form>
       <Alert v-else type="warning">
         Registration closed
@@ -85,6 +64,26 @@
   background: rgba(0, 194, 168, 0.06);
   text-align: left;
 }
+.ix-login-error {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #ffb4a2;
+  border-left: 2px solid #e5484d;
+  background: rgba(229, 72, 77, 0.08);
+  text-align: left;
+}
+/* A stated absence, not a warning. See IxState's .ix-note-socket. */
+.ix-login-socket {
+  margin: 14px 0 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ix-text-faint, #6b7280);
+  border-left: 2px solid var(--ix-orange, #ff8a1f);
+  text-align: left;
+}
 .login_form {
   background: var(--ix-bg, #0a0c10) url(../../assets/images/login_bg.png) no-repeat center center;
   height: 760px;
@@ -95,11 +94,13 @@
     position: absolute;
     background: var(--ix-surface, #12151c);
     width: 350px;
-    height: 485px;
+    /* Fixed height replaced for the same reason as Login.vue: the inline error
+       and the referral socket note both change how tall this card is. */
+    min-height: 485px;
     left: 50%;
     top: 50%;
     margin-left: -175px;
-    margin-top: -205px;
+    transform: translateY(-50%);
     border-top: 4px solid var(--ix-orange, #00c2a8);
     border-radius: 5px;
 .tel-title{
@@ -196,85 +197,87 @@
 }
 </style>
 <script>
-// import gtInit from '../../assets/js/gt.js';
-import $ from "jquery";
+/**
+ * REGISTER — against svc-identity's `auth.register`.
+ *
+ * The contract is `{ handle, email, password, region? }` and this form now asks
+ * for exactly that. What the vendor asked for instead, and why none of it
+ * survived:
+ *
+ * - **A mainland-China mobile number and an SMS code.** `/uc/register/phone`
+ *   and `/uc/mobile/code` on the dead Java backend, gated behind a
+ *   third-party captcha widget loaded from a CDN. svc-identity has no phone
+ *   registration and no SMS sender; there is nothing to point them at. Keeping
+ *   the fields and posting them nowhere would have been the hang this work
+ *   exists to remove.
+ * - **A referral / promotion code.** `auth.register` has no such field, and
+ *   svc-identity stores no referral graph. A field that silently discards what
+ *   the user typed is worse than no field, so it is stated as missing instead
+ *   (`uc.regist.referralSocket`) rather than collected and dropped.
+ * - **`superPartner`, `ticket`, `randStr`.** Java-side captcha and partner-tier
+ *   parameters with no counterpart here.
+ *
+ * PASSWORD LENGTH. The contract's floor is 12 characters, not the vendor's 6.
+ * Validating locally at 12 means the user is told before the round trip rather
+ * than being handed a zod error afterwards — but the server is still the one
+ * that decides.
+ *
+ * On success svc-identity returns a session, exactly as `auth.login` does.
+ * The user is signed in on the spot rather than bounced to /login to type the
+ * same credentials again.
+ */
+import { mutate, subjectOf } from "../../config/intafaced.js";
+
+/** Mirrors the contract's own handle rule, so the message can be specific. */
+const HANDLE_RE = /^[a-zA-Z0-9_]{3,32}$/;
+/** Deliberately permissive: svc-identity's zod `.email()` is the real check. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** The contract's minimum. Kept as a constant so the copy cannot drift from it. */
+const PASSWORD_MIN = 12;
+
 export default {
   data() {
-    const validateUser = (rule, value, callback) => {
-      if (this.changeActive == 0) {
-        var reg = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
-        if (value == "") {
-          callback(new Error(this.$t("uc.regist.teltip")));
-        } else if (!reg.test(this.formInline.user)) {
-          callback(new Error(this.$t("uc.regist.telerr")));
-        } else {
-          callback();
-        }
-      } else {
-        var reg = /^[a-z0-9]+([._\\-]*[a-z0-9])*@([a-z0-9]+[-a-z0-9]*[a-z0-9]+.){1,63}[a-z0-9]+$/;
-        reg = /^(\w)+(\.\w+)*@(\w)+((\.\w{2,3}){1,3})$/;
-        if (value == "") {
-          callback(new Error(this.$t("uc.regist.emailtip")));
-        } else if (!reg.test(this.formInline.user)) {
-          callback(new Error(this.$t("uc.regist.emailerr")));
-        } else {
-          callback();
-        }
-      }
+    const validateHandle = (rule, value, callback) => {
+      if (!value) return callback(new Error(this.$t("uc.regist.handletip")));
+      if (!HANDLE_RE.test(value)) return callback(new Error(this.$t("uc.regist.handleerr")));
+      callback();
+    };
+    const validateEmail = (rule, value, callback) => {
+      if (!value) return callback(new Error(this.$t("uc.regist.emailtip")));
+      if (!EMAIL_RE.test(value)) return callback(new Error(this.$t("uc.regist.emailerr")));
+      callback();
+    };
+    const validateRegion = (rule, value, callback) => {
+      // Optional in the contract. Empty is fine; two letters is fine; anything
+      // else would be rejected server-side, so say so here.
+      if (!value) return callback();
+      if (!/^[A-Za-z]{2}$/.test(value)) return callback(new Error(this.$t("uc.regist.regionerr")));
+      callback();
     };
     const validateRepassword = (rule, value, callback) => {
       if (value === "") {
         callback(new Error(this.$t("uc.regist.confirmpwdtip")));
-      } else if (value!== this.formInline.password) {
+      } else if (value !== this.formInline.password) {
         callback(new Error(this.$t("uc.regist.confirmpwderr")));
       } else {
         callback();
       }
     };
     return {
-      country: "China",
-      codedisabled:false,
-      sendcodeValue: this.$t("uc.regist.sendcode"),
-      isRegister: false,
-      ticket: "",
-      randStr: "",
       registing: false,
-      captchaObj: null,
-      modal1: false,
-      _captchaResult: null,
+      registerError: "",
       agree: true,
       allowRegister: true,
-      buttonLists: [
-        {
-          text: this.$t("uc.regist.telregist")
-        },
-        {
-          text: this.$t("uc.regist.emailregist")
-        }
-      ],
-      areas: [],
-      changeActive: 0,
-      showCode: true,
-      countdown: 60,
       formInline: {
-        username: "",
-        // country: "",
-        user: "",
-        code: "",
-        areaCode: "",
+        handle: "",
+        email: "",
         password: "",
         repassword: "",
-        promotion: ""
+        region: ""
       },
       ruleInline: {
-        user: [{ validator: validateUser, trigger: "blur" }],
-        code: [
-          {
-            required: true,
-            message: this.$t("uc.regist.smscodetip"),
-            trigger: "blur"
-          }
-        ],
+        handle: [{ validator: validateHandle, trigger: "blur" }],
+        email: [{ validator: validateEmail, trigger: "blur" }],
         password: [
           {
             required: true,
@@ -283,25 +286,15 @@ export default {
           },
           {
             type: "string",
-            min: 6,
+            min: PASSWORD_MIN,
             message: this.$t("uc.regist.pwdmsg"),
             trigger: "blur"
           }
         ],
-        repassword: [{ validator: validateRepassword, trigger: "blur" }]
-      },
-      key: "",
-      code: ""
+        repassword: [{ validator: validateRepassword, trigger: "blur" }],
+        region: [{ validator: validateRegion, trigger: "blur" }]
+      }
     };
-  },
-  watch: {
-    changeActive: function(val) {
-      this.$refs["formInline"].resetFields();
-      // if (val == 0) this.initGtCaptcha();
-    },
-    lang: function() {
-      this.updateLangData();
-    }
   },
   computed: {
     lang: function() {
@@ -313,194 +306,62 @@ export default {
   },
   created: function() {
     window.scrollTo(0, 0);
-    // var oDiv = document.getElementById("example-navbar-collapse");
-    // oDiv && (oDiv.className = "navbar-collapse collapse");
     this.init();
-    this.actives(this.changeActive);
-    if(this.$route.query.code!= undefined && this.$route.query.code!= "" && this.$route.query.code!= null){
-        this.formInline.promotion = this.$route.query.code;
-    }else{
-        this.formInline.promotion = "";
-    }
   },
   methods: {
-    updateLangData() {
-      this.buttonLists = [
-        {
-          text: this.$t("uc.regist.telregist")
-        },
-        {
-          text: this.$t("uc.regist.emailregist")
-        }
-      ];
-
-      if (this.changeActive == 0) {
-        this.key = this.$t("uc.regist.telno");
-      } else {
-        this.key = this.$t("uc.regist.email");
-      }
-    },
     init() {
       this.$store.commit("navigate", "nav-other");
       this.$store.state.HeaderActiveName = "0";
       if (this.isLogin) {
         this.$router.push("/");
       }
-      // this.getAreas();
-      // this.initGtCaptcha();
-    },
-    initGtCaptcha() {
-      var self = this;
-      var captcha1 = new TencentCaptcha("2031827463", function(res) {
-        res.ret == 0 &&
-          (self.isRegister = true) &&
-          (self.ticket = res.ticket) &&
-          (self.randStr = res.randstr) &&
-          self.success();
-      });
-      captcha1.show(); // Show captcha
-    },
-    onAreaChange(value) {
-      for (var i = 0; i < this.areas.length; i++) {
-        if (this.areas[i].zhName == value) {
-          this.formInline.areaCode = this.areas[i].areaCode;
-        }
-      }
-    },
-    getAreas() {
-      this.$http.post(this.host + this.api.common.area).then(response => {
-        var resp = response.body;
-        this.areas = resp.data;
-        this.formInline.country = this.areas[0].zhName;
-        this.formInline.areaCode = this.areas[0].areaCode;
-      });
-    },
-    actives: function(index) {
-      this.changeActive = index;
-      if (this.changeActive == 0) {
-        this.showCode = true;
-        this.key = this.$t("uc.regist.telno");
-        this.ruleInline.code = [
-          {
-            required: true,
-            message: this.$t("uc.regist.smscodetip"),
-            trigger: "blur"
-          }
-        ];
-      } else {
-        this.showCode = false;
-        this.key = this.$t("uc.regist.email");
-        this.ruleInline.code = [];
-      }
     },
     handleSubmit(name) {
-      this.$refs[name].validate(valid => {
-        if (valid) {
-          if (this.agree == true) {
-            if (this.changeActive == 1) {
-              this.openValidateModal();
-            } else {
-              if (this.isRegister) {
-                this.registing = true;
-                var params = {};
-                params["phone"] = this.formInline.user;
-                params["username"] = this.formInline.username + this.formInline.user;
-                params["password"] = this.formInline.password;
-                params["promotion"] = this.formInline.promotion; // Invite code
-                params["code"] = this.formInline.code;
-                params["country"] = this.country;//"China";
-                params["superPartner"] = "";//this.formInline.superType;
-                params["ticket"] = this.ticket;
-                params["randStr"] = this.randStr;
+      var self = this;
+      this.$refs[name].validate(function(valid) {
+        if (!valid) return;
+        if (!self.agree) {
+          self.registerError = self.$t("uc.regist.agreementtip");
+          return;
+        }
 
-                this.$http
-.post(this.host + "/uc/register/phone", params)
-.then(response => {
-                    this.registing = false;
-                    var resp = response.body;
-                    if (resp.code == 0) {
-                      if (
-                        this.formInline.superType == "1" ||
-                        this.formInline.superType == "2"
-) {
-                        this.$Notice.success({
-                          title: this.$t("common.tip"),
-                          desc: "Registration complete!"
-                        });
-                        var that = this;
-                        setTimeout(() => {
-                          that.$router.push("/");
-                        }, 3000);
-                      } else {
-                        this.$Notice.success({
-                          title: this.$t("common.tip"),
-                          desc: resp.message
-                        });
-                        var that = this;
-                        setTimeout(() => {
-                          that.$router.push("/login");
-                        }, 3000);
-                      }
-                    } else {
-                      this.$Notice.error({
-                        title: this.$t("common.tip"),
-                        desc: resp.message
-                      });
-                    }
-                  });
-              } else {
-                this.$Notice.error({
-                  title: this.$t("common.tip"),
-                  desc: "Enter a valid verification code"
-                });
-              }
-            }
-          } else {
-            this.$Notice.error({
-              title: this.$t("common.tip"),
-              desc: this.$t("uc.regist.agreementtip")
-            });
+        self.registing = true;
+        self.registerError = "";
+
+        var input = {
+          handle: self.formInline.handle,
+          email: self.formInline.email,
+          password: self.formInline.password
+        };
+        if (self.formInline.region) input.region = self.formInline.region.toUpperCase();
+
+        mutate("identity", "auth.register", input).then(function(res) {
+          self.registing = false;
+
+          if (!res.ok) {
+            // Includes the case where registration is closed on this deployment
+            // ("Registration is not open yet"), which is a real answer from the
+            // service and not something to translate into a generic failure.
+            self.registerError = res.message;
+            return;
           }
-        }
-      });
-    },
-    settime() {
-      this.sendcodeValue = this.$t("uc.regist.resendcode") + this.countdown + ")";
-      this.codedisabled = true;
-      var _this = this;
-      let timercode = setInterval(() => {
-        _this.countdown--;
-        _this.sendcodeValue = _this.$t("uc.regist.resendcode") + _this.countdown + ")";
-        if (this.countdown <= 0) {
-          clearInterval(timercode);
-          _this.codedisabled = false;
-          _this.sendcodeValue = _this.$t("uc.regist.sendcode");
-          _this.countdown = 60;
-        }
-      }, 1000);
-    },
-    sendCode() {
-      var mobilePhone = this.formInline.user;
-      let reg = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
-      if (mobilePhone == "" ||!reg.test(mobilePhone)) {
-        this.$Message.error(this.$t("uc.regist.teltip"));
-        return;
-      } else {
-        this.initGtCaptcha();
-      }
-    },
-    success() {
-      var params = {};
-      params["phone"] = this.formInline.user;
-      params["country"] = "China";
-      var reg = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
-      reg.test(params["phone"]) && this.$http.post(this.host + "/uc/mobile/code", params).then(response => {
-            var resp = response.body;
-            resp.code == 0 && this.$Notice.success({title: this.$t("common.tip"),desc: resp.message});
-            resp.code == 0 && this.settime();
-            resp.code!= 0 && this.$Notice.error({title: this.$t("common.tip"),desc: resp.message});
+
+          // `auth.register` returns a session. Use it — do not send the user to
+          // /login to retype what they just typed.
+          self.$store.commit("setIxSession", res.data);
+          self.$store.commit("setMember", {
+            id: res.data.userId || subjectOf(res.data.accessToken),
+            username: self.formInline.handle
           });
-!reg.test(params["phone"]) &&this.$Notice.error({title: this.$t("common.tip"),desc: this.$t("uc.finance.withdraw.telerr")});
+          self.formInline.password = "";
+          self.formInline.repassword = "";
+          self.$Notice.success({
+            title: self.$t("common.tip"),
+            desc: self.$t("uc.regist.success")
+          });
+          self.$router.push("/uc/safe");
+        });
+      });
     }
   }
 };

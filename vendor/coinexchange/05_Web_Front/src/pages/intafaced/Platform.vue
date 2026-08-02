@@ -176,6 +176,14 @@ export default {
           self.signingIn = false;
           if (res.ok) {
             self.$store.commit('setIxSession', res.data);
+            // The shell's chrome reads `member`, and this hub is a second door
+            // into the same sign-in as pages/uc/Login.vue. Committing the same
+            // projection here is what stops "signed in on /platform, signed out
+            // in the header" — one session, one answer, whichever door was used.
+            self.$store.commit('setMember', {
+              id: res.data.userId || subjectOf(res.data.accessToken),
+              username: self.identifier
+            });
             self.password = '';
             self.probe();
           } else {

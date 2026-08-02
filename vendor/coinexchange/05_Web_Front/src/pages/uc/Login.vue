@@ -4,40 +4,28 @@
       <Form ref="formInline" :model="formInline" :rules="ruleInline" inline aria-label="Sign in">
         <div class="login_title">{{$t('uc.login.login')}}</div>
         <p class="ix-login-honest" role="note">
-          Custodial sign-in. Failed auth is an error — never a silent empty session.
+          {{ $t('uc.login.identityNote') }}
         </p>
         <FormItem prop="user">
           <Input name="user" type="text" v-model="formInline.user" :placeholder="$t('uc.login.usertip')" class="user" autocomplete="username">
-            <Select v-model="country" slot="prepend" style="width: 65px" aria-label="Country code">
-              <Option value="+86" label="+86"><span>+86</span><span style="margin-left:10px;color:#ccc">China</span></Option>
-              <Option value="+65" label="+65"><span>+65</span><span style="margin-left:10px;color:#ccc">Singapore</span></Option>
-              <Option value="+82" label="+82"><span>+82</span><span style="margin-left:10px;color:#ccc">South Korea</span></Option>
-              <Option value="+81" label="+81"><span>+81</span><span style="margin-left:10px;color:#ccc">Japan</span></Option>
-              <Option value="+66" label="+66"><span>+66</span><span style="margin-left:10px;color:#ccc">Thailand</span></Option>
-              <Option value="+7" label="+7"><span>+7</span><span style="margin-left:10px;color:#ccc">Russia</span></Option>
-              <Option value="+44" label="+44"><span>+44</span><span style="margin-left:10px;color:#ccc">United Kingdom</span></Option>
-              <Option value="+84" label="+84"><span>+84</span><span style="margin-left:10px;color:#ccc">Vietnam</span></Option>
-              <Option value="+91" label="+91"><span>+91</span><span style="margin-left:10px;color:#ccc">India</span></Option>
-              <Option value="+39" label="+39"><span>+39</span><span style="margin-left:10px;color:#ccc">Italy</span></Option>
-              <Option value="+852" label="+852"><span>+852</span><span style="margin-left:10px;color:#ccc">Hong Kong</span></Option>
-              <Option value="+60" label="+60"><span>+60</span><span style="margin-left:10px;color:#ccc">Malaysia</span></Option>
-              <Option value="+886" label="+886"><span>+886</span><span style="margin-left:10px;color:#ccc">Taiwan</span></Option>
-              <Option value="+90" label="+90"><span>+90</span><span style="margin-left:10px;color:#ccc">Turkey</span></Option>
-            </Select>
           </Input>
         </FormItem>
         <FormItem prop="password" class="password">
           <Input type="password" v-model="formInline.password" :placeholder="$t('uc.login.pwdtip')" @on-keyup="onKeyup" autocomplete="current-password">
           </Input>
         </FormItem>
-        <p id="notice" class="hide" role="alert" aria-live="polite">{{$t('uc.login.validatemsg')}}</p>
+        <FormItem prop="totp" class="totp">
+          <Input type="text" v-model="formInline.totp" :placeholder="$t('uc.login.totptip')" autocomplete="one-time-code" @on-keyup="onKeyup">
+          </Input>
+        </FormItem>
+        <p v-if="signInError" class="ix-login-error" role="alert" aria-live="polite">{{ signInError }}</p>
         <p style="height:30px;">
           <router-link to="/findPwd" style="color:#979797;float:right;padding-right:10px;font-size:12px;">
             {{$t('uc.login.forget')}}
           </router-link>
         </p>
         <FormItem style="margin-bottom:15px;">
-          <Button class="login_btn">{{$t('uc.login.login')}}</Button>
+          <Button class="login_btn" :loading="signingIn" @click="handleSubmit('formInline')">{{$t('uc.login.login')}}</Button>
         </FormItem>
         <div class='to_register'>
           <span>{{$t('uc.login.noaccount')}}</span>
@@ -61,11 +49,15 @@
     position: absolute;
     background: var(--ix-surface, #12151c);
     width: 350px;
-    height: 330px;
+    /* Was a fixed 330px with a -165px top margin to centre it. The second-factor
+       field and the inline error both make this card taller, and a fixed height
+       would have clipped whichever rendered last. `transform` centres a box of
+       unknown height without needing to know it. */
+    min-height: 330px;
     left: 50%;
     top: 50%;
     margin-left: -175px;
-    margin-top: -165px;
+    transform: translateY(-50%);
     border-top: 4px solid var(--ix-orange, #00c2a8);
     border-radius: 5px;
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
@@ -105,27 +97,9 @@
     }
   }
 }
-#captcha {
-  width: 100%;
-  display: inline-block;
-}
-.show {
-  display: block;
-}
-.hide {
-  display: none;
-}
-#notice {
-  color: red;
-}
-#wait {
-  text-align: left;
-  color: #666;
-  margin: 0;
-}
-.geetest_wait_dot geetest_dot_1 {
-  color: red;
-}
+/* The captcha widget's styles (#captcha, #wait, #notice, .geetest_*) went with
+   the widget — it was loaded from a third-party CDN and gated on the dead
+   backend. Nothing renders those ids any more. */
 .user.ivu-btn,
 .ivu-btn:active,
 .ivu-btn:focus {
@@ -151,19 +125,57 @@
   border-left: 2px solid var(--ix-orange, #00c2a8);
   background: rgba(0, 194, 168, 0.06);
 }
+.ix-login-error {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #ffb4a2;
+  border-left: 2px solid #e5484d;
+  background: rgba(229, 72, 77, 0.08);
+}
 </style>
 <script>
-import gtInit from "../../assets/js/gt.js";
-import $ from "jquery";
+/**
+ * SIGN IN — against svc-identity, and against nothing else.
+ *
+ * WHAT THIS REPLACED, AND WHY IT HAD TO GO.
+ * This form used to POST `/uc/login` to the Java ucenter and store whatever
+ * came back as the signed-in user. That is the wrong book. svc-identity owns
+ * accounts, sessions, scopes and the KYC tier the jurisdiction matrix reads;
+ * the Java `member` table owns none of it and is not running. Authenticating
+ * there would have produced a session the rest of the platform does not
+ * recognise — every scoped procedure would answer UNAUTHORIZED to a user the
+ * shell was showing as signed in.
+ *
+ * Three vendor behaviours were removed rather than ported:
+ *
+ * 1. The Geetest captcha. It fetched `/uc/start/captcha` from the dead backend
+ *    and gated the submit button on the callback, so with nothing listening the
+ *    button did nothing at all — a hang, not an error. svc-identity applies its
+ *    own throttling; the browser is not where that is enforced.
+ * 2. The +86 country-code selector and the `/^1[3-9]\d{9}$/` guard, which
+ *    accepted mainland-China mobile numbers and refused every other identifier
+ *    on earth. `auth.login` takes an `identifier` — handle or email.
+ * 3. Writing the member to localStorage. The session lives in memory only
+ *    (config/store.js), and the member is now a projection of it.
+ *
+ * `totpCode` is optional in the contract: svc-identity answers UNAUTHORIZED
+ * with "Two-factor code required" when the account is enrolled and the field
+ * was blank, and that message is shown verbatim rather than being guessed at
+ * in advance.
+ */
+import { mutate, subjectOf } from "../../config/intafaced.js";
+
 export default {
   data() {
     return {
-      country: "+86",
-      captchaObj: null,
-      _captchaResult: null,
+      signingIn: false,
+      signInError: "",
       formInline: {
         user: "",
-        password: ""
+        password: "",
+        totp: ""
       },
       ruleInline: {
         user: [
@@ -177,12 +189,6 @@ export default {
           {
             required: true,
             message: this.$t("uc.login.pwdvalidate1"),
-            trigger: "blur"
-          },
-          {
-            type: "string",
-            min: 6,
-            message: this.$t("uc.login.pwdvalidate2"),
             trigger: "blur"
           }
         ]
@@ -204,95 +210,55 @@ export default {
 
       if (this.isLogin) {
         this.$router.push("/uc/safe");
-      } else {
-        this.initGtCaptcha();
       }
     },
     onKeyup(ev) {
       if (ev.keyCode == 13) {
-        $(".login_btn").click();
+        this.handleSubmit("formInline");
       }
-    },
-    initGtCaptcha() {
-      var that = this;
-      this.$http.get(this.host + this.api.uc.captcha).then(function(res) {
-        window.initGeetest(
-          {
-            // SDK
-            gt: res.body.gt,
-            challenge: res.body.challenge,
-            offline:!res.body.success, //whether the captcha service is detected as down
-            new_captcha: res.body.new_captcha, //marks a fallback captcha issued during an outage
-            product: "bind",
-            width: "100%"
-          },
-          this.handler
-);
-      });
-    },
-    handler(captchaObj) {
-      captchaObj.onReady(() => {
-          $("#wait").hide();
-        }).onSuccess(() => {
-          let result = (this._captchaResult = captchaObj.getValidate());
-          if (!result) {
-            this.$Message.error("Please complete the verification");
-          } else {
-            this.handleSubmit("formInline");
-          }
-        });
-      $(".login_btn").click(() => {
-        let reg = /^[1][3,4,5,6,7,8,9][0-9]{9}$/,
-          tel = this.formInline.user,
-          flagtel = reg.test(tel),
-          flagpass = this.formInline.password.length >= 6? true: false;
-        flagtel && flagpass && captchaObj.verify();
-        (!flagtel ||!flagpass) && this.$Message.error("Please complete every field");
-      });
-    },
-    logout() {
-      this.$http.post(this.host + "/uc/logout", {}).then(response => {
-        var resp = response.body;
-        if (resp.code == 0) {
-          localStorage.setItem("MEMBER", JSON.stringify(null));
-          localStorage.setItem("TOKEN", null);
-          localStorage.removeItem("USERKEY", null);
-        } else {
-          // this.$Message.error(resp.message);
-        }
-      });
     },
     handleSubmit(name) {
-      var result = this._captchaResult;
-      if (!result) {
-        $("#notice").show();
-        setTimeout(function() {
-          $("#notice").hide();
-        }, 2000);
-      } else {
-        this.$refs[name].validate(valid => {
-          if (valid) {
-            var params = {};
-            params["username"] = this.formInline.user;
-            params["password"] = this.formInline.password;
-            this.$http.post(this.host + this.api.uc.login, params).then(response => {
-                var resp = response.body;
-                if (resp.code == 0) {
-                  this.$Message.success(this.$t("uc.login.success"));
-                  this.$store.commit("setMember", response.body.data);
-                  if (this.$route.query.key!= null && this.$route.query.key!= "") {
-                    localStorage.setItem("USERKEY", this.$route.query.key);
-                  }
-                  this.$router.push("/uc/safe");
-                } else {
-                  this.$Message.error(resp.message);
-                }
-              });
-          } else {
+      var self = this;
+      this.$refs[name].validate(function(valid) {
+        if (!valid) return;
 
+        self.signingIn = true;
+        self.signInError = "";
+
+        var input = {
+          identifier: self.formInline.user,
+          password: self.formInline.password
+        };
+        // Send the field only when the user filled it. An empty string is not
+        // "no code" to the contract — it is a code that cannot be valid.
+        if (self.formInline.totp) input.totpCode = self.formInline.totp;
+
+        mutate("identity", "auth.login", input).then(function(res) {
+          self.signingIn = false;
+
+          if (!res.ok) {
+            // Verbatim. svc-identity deliberately returns the same wording for a
+            // wrong password and a wrong second factor, and softening either into
+            // a guess would undo that.
+            self.signInError = res.message;
+            return;
           }
+
+          self.$store.commit("setIxSession", res.data);
+          // The member is a projection of the session, not a second record.
+          // Only what the shell's chrome actually renders, and `username` is the
+          // identifier the user typed — svc-identity does not return a display
+          // name, and inventing one here would be inventing content.
+          self.$store.commit("setMember", {
+            id: res.data.userId || subjectOf(res.data.accessToken),
+            username: self.formInline.user
+          });
+          self.formInline.password = "";
+          self.formInline.totp = "";
+          self.$Message.success(self.$t("uc.login.success"));
+          self.$router.push("/uc/safe");
         });
-      }
+      });
     }
   }
 };

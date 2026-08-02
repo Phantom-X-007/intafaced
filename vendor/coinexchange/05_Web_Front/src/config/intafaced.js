@@ -52,6 +52,20 @@ export const REASON = {
     TIER_REQUIRED: 'tier_required',
     /** Signed in, scoped, and still refused. */
     FORBIDDEN: 'forbidden',
+    /**
+     * NO SERVICE EXISTS. Not "down", not "unrouted" — never built.
+     *
+     * This is the §13 socket reason, and it is deliberately not reached by
+     * making a request. The other failures are answers from a system that
+     * exists; this one is the absence of the system, and the screen knows it
+     * statically. Calling a URL we already know nothing serves, purely to
+     * render its 404, would cost a round trip and would misreport a missing
+     * capability as a routing fault.
+     *
+     * Screens that use it MUST pass `noSurfaceReason` so the page says WHICH
+     * capability is missing and what would have to exist. See `noSurface()`.
+     */
+    NO_SURFACE: 'no_surface',
     /** Anything else the service said no to. */
     ERROR: 'error'
 };
@@ -136,6 +150,30 @@ export function plain(module, path, token) {
 }
 
 /**
+ * A §13 SOCKET, in the same shape every other call resolves to.
+ *
+ * For a capability the vendored shell has a screen for and the platform has no
+ * service for. It resolves immediately with `NO_SURFACE` and the supplied
+ * reason, so the screen renders a stated absence rather than a spinner that
+ * never resolves, a fabricated list, or a request to the dead Java backend —
+ * which, with nothing listening, renders as a hang.
+ *
+ * `message` is shown verbatim under "the service said". Write it as the honest
+ * engineering fact: what is missing, and what would have to exist.
+ *
+ *   this.load('notices', noSurface('No announcements service is behind the edge…'));
+ */
+export function noSurface(message) {
+    return Promise.resolve({
+        ok: false,
+        reason: REASON.NO_SURFACE,
+        status: 0,
+        message: message,
+        data: null
+    });
+}
+
+/**
  * The `sub` claim, read from an access token.
  *
  * Two procedures (`token.stakeOf`, `token.accessOf`) take a userId as input
@@ -215,4 +253,4 @@ export function moduleByKey(key) {
     return null;
 }
 
-export default { query: query, mutate: mutate, plain: plain, MODULES: MODULES, REASON: REASON, subjectOf: subjectOf, scopesOf: scopesOf, moduleByKey: moduleByKey };
+export default { query: query, mutate: mutate, plain: plain, noSurface: noSurface, MODULES: MODULES, REASON: REASON, subjectOf: subjectOf, scopesOf: scopesOf, moduleByKey: moduleByKey };

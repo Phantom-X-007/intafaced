@@ -5,11 +5,12 @@
       {{ $t('intafaced.state.loading') }} <code>{{ endpoint }}</code>
     </div>
 
-    <div v-else-if="reason && reason !== 'ok'" class="ix-note">
+    <div v-else-if="reason && reason !== 'ok'" class="ix-note" :class="{ 'ix-note-socket': reason === 'no_surface' }">
       <strong>{{ headline }}</strong>
       <div style="margin-top:6px;">{{ explanation }}</div>
       <div v-if="message" style="margin-top:8px;color:var(--ix-text-faint);">
-        {{ $t('intafaced.state.serviceSaid') }} “{{ message }}”
+        <template v-if="reason === 'no_surface'">{{ $t('intafaced.state.whatIsMissing') }} {{ message }}</template>
+        <template v-else>{{ $t('intafaced.state.serviceSaid') }} “{{ message }}”</template>
       </div>
       <div v-if="endpoint" style="margin-top:8px;">
         <code>{{ endpoint }}</code>
@@ -24,6 +25,17 @@
     <slot v-else></slot>
   </div>
 </template>
+
+<style scoped>
+/**
+ * A §13 socket is not an error, and must not be dressed as one. Orange rule on
+ * the left says "stated absence"; the red error styling says "something went
+ * wrong", and the difference is the entire point of the reason vocabulary.
+ */
+.ix-note-socket {
+  border-left: 3px solid var(--ix-orange, #ff8a1f);
+}
+</style>
 
 <script>
 /**

@@ -1,419 +1,149 @@
 <template>
-    <div class="content-wrap">
-            <!-- Stream A: never paint a blank/fake offer when pre-order fails. -->
-            <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="padding-top: 100px; text-align: center;">{{ loadError }}</p>
-            <p v-else-if="loading" class="ix-empty ix-empty-loading" style="padding-top: 100px; text-align: center;">{{ $t('common.loading') }}</p>
-            <div class="container" id="List" v-else-if="offerReady">
-                <Row>
-                    <Col span="4">
-                    <div class="leftmenu left-box">
-                        <div class="user-info">
-                            <div class="avatar-box">
-                                <div class="user-face user-avatar-public">
-                                    <span class="user-avatar-in">{{usernameS}}</span>
-                                    <!-- <span class="online-status-box user-states ">
-                                                    <span class="circles"></span>
-                                                </span> -->
-                                </div>
-                                <div class="user-name">
-                                </div>
-                            </div>
-                            <!-- show nickname instead of legal name -->
-                            <span class="ml10" style="width: 105px;">{{strpro(user.username)}}</span>
-                        </div>
-                        <div class="deal-market-info">
-                            <p v-if="user.emailVerified==1">
-                                <i class="iconfont icon-youxiang111"></i>
-                                <span class="unmarket">{{$t('otc.tradeinfo.emaildone')}}</span>
-                            </p>
-                            <p v-else>
-                                <i class="iconfont icon-youxiang"></i>
-                                <span class="unmarket">{{$t('otc.tradeinfo.emailundo')}}</span>
-                            </p>
-                            <p v-if="user.phoneVerified==1">
-                                <i class="iconfont icon-dianhua111"></i>
-                                <span class="">{{$t('otc.tradeinfo.teldone')}}</span>
-                            </p>
-                            <p v-else>
-                                <i class="iconfont icon-dianhua"></i>
-                                <span class="">{{$t('otc.tradeinfo.telundo')}}</span>
-                            </p>
-                            <p v-if="user.idCardVerified==1">
-                                <i class="iconfont icon-renzheng111"></i>
-                                <span class="">{{$t('otc.tradeinfo.idcarddone')}}</span>
-                            </p>
-                            <p v-else>
-                                <i class="iconfont icon-renzheng"></i>
-                                <span class="unmarket">{{$t('otc.tradeinfo.idcardundo')}}</span>
-                            </p>
-                        </div>
-                        <div class="deal-user-trade-info">
-                            <p>{{$t('otc.tradeinfo.exchangetimes')}}: 
-                                <em class="trade-times">{{user.transactions}}</em>
-                            </p>
-                            <!-- <p>Average release:
-                                <em>0.21 min</em>
-                            </p> -->
-                        </div>
-                    </div>
-                    </Col>
-                    <Col span="20">
-                    <div class="right-safe">
-                        <div class="trade-right-box">
-                            <div class="trade-price">
-                                <p>
-                                    <label>{{$t('otc.tradeinfo.price')}}</label>
-                                    <span>{{user.price}} CNY / {{user.unit}}</span>
-                                    <!-- <span @click="update">
-                                                                                                                            <a href="javascript:;">Refresh</a>
-                                                                                                                        </span> -->
-                                </p>
-                                <p>
-                                    <label>{{$t('otc.tradeinfo.num')}}</label>
-                                    <span>{{user.number}}&nbsp;{{user.unit}}</span>
-                                </p>
-                                <p>
-                                    <label>{{$t('otc.tradeinfo.paymethod')}}</label>
-                                    <span>{{user.payMode}}</span>
-                                </p>
-                                <p>
-                                    <label>{{$t('otc.tradeinfo.exchangelimitamount')}}</label>
-                                    <span>{{user.minLimit}} - {{user.maxLimit}} CNY</span>
-                                </p>
-                                <p>
-                                    <label>{{$t('otc.tradeinfo.location')}}</label>
-                                    <span>{{$t('otc.tradeinfo.location_text')}}</span>
-                                </p>
-                                <p>
-                                    <label>{{$t('otc.tradeinfo.exchangeperiod')}}</label>
-                                    <span>{{user.timeLimit}}{{$t('otc.tradeinfo.minute')}}</span>
-                                </p>
-                            </div>
-                            <div class="trade-operation">
-                                <div class="trade-price-input">
-                                    <p class="price-input-list">
-                                        <Poptip trigger="focus" :content="text1" style="width: 100%;">
-                                            <Input @on-change="transform1" v-model="buyPrice" size="large" :placeholder="$t('otc.tradeinfo.amounttip')" style="width: 420px">
-                                            <span slot="prepend">CNY</span>
-                                            </Input>
-                                        </Poptip>
-                                    </p>
-                                    <span class="exchange1">
-                                        <Icon type="md-swap" />
-                                    </span>
-                                    <p class="price-input-list">
-                                        <Poptip trigger="focus" :content="text2" style="width: 100%;">
-                                            <Input @on-change="transform2" v-model="nuyNum" size="large" :placeholder="$t('otc.tradeinfo.numtip')" style="width: 420px">
-                                            <span slot="prepend">{{user.unit}}</span>
-                                            </Input>
-                                        </Poptip>
-                                    </p>
-                                </div>
-                                <div class="price-box">
-                                    <p class="show-price">
-                                        <em>{{type}}:</em>
-                                        <span>&nbsp;&nbsp;{{buyPrice}} CNY / {{nuyNum}} {{user.unit}}</span>
-                                    </p>
-                                    <button class="btn-trade-in" @click="submit" :disabled="btnDisabled">{{btnType}}</button>
-                                </div>
-                            </div>
-                            <div class="trade-remark">
-                                <h5 class="titles">
-                                    <span>{{$t('otc.tradeinfo.remarktitle')}}</span>
-                                </h5>
-                                <p class="content">
-                                    {{user.remark}}
-                                </p>
-                                <h5 class="titles">
-                                    <span>{{$t('otc.tradeinfo.exchangetitle')}}</span>
-                                </h5>
-                                <div class="content">
-                                    <p>{{$t('otc.tradeinfo.exchange_tip1')}}</p>
-                                    <p>{{$t('otc.tradeinfo.exchange_tip2')}}</p>
-                                    <p>{{$t('otc.tradeinfo.exchange_tip3')}}</p>
-                                    <p>{{$t('otc.tradeinfo.exchange_tip4')}}</p>
-                                    <p>{{$t('otc.tradeinfo.exchange_tip5')}}</p>
-                                </div>
-                            </div>
-                            <div class="modal">
-                                <!---->
-                            </div>
-                        </div>
-                    </div>
-                    </Col>
-                </Row>
+  <div class="content-wrap">
+    <div class="container" id="List">
+      <IxState
+        :loading="offer.loading"
+        :reason="offer.reason"
+        :message="offer.message"
+        endpoint="/api/p2p/trpc/offers.get"
+      >
+        <Row v-if="o">
+          <Col span="6">
+          <div class="leftmenu left-box">
+            <div class="user-info">
+              <div class="avatar-box">
+                <div class="user-face user-avatar-public">
+                  <span class="user-avatar-in">{{ initial }}</span>
+                </div>
+                <div class="user-name"></div>
+              </div>
+              <span class="ml10" style="width: 105px;">{{ maskMaker(o.makerId) }}</span>
             </div>
-    </div>
-</template>
-<script>
-export default {
-  components: {},
-  data() {
-    return {
-      usernameS: "",
-      text1: "",
-      text2: "",
-      btnDisabled: false,
-      submitBtn: false,
-      btnType: "",
-      type: "",
-      /* Never invent a merchant or price before pre-order answers. */
-      loading: true,
-      loadError: "",
-      offerReady: false,
-      user: {},
-      // price: '',
-      buyPrice: "",
-      nuyNum: "",
-      minLimit: 100,
-      maxLimit: 1000,
-      // number:0.6,
-      advertiseType: 1
-    };
-  },
-  methods: {
-    update() {
-      // this.price = '100';
-      // this.user.advertiseType=1
-    },
-    transform1() {
-      if (!Number.isNaN(Number(this.buyPrice))) {
-        this.nuyNum = this.round(this.div(this.buyPrice, this.priceNow), 8);
-        if (/^\d+(\.\d{1,2})?$/.test(this.buyPrice)) {
-          this.submitBtn = true;
-        } else {
-          this.submitBtn = false;
-          this.text1 = this.$t("otc.tradeinfo.warning1");
-        }
-      } else {
-        this.text1 =
-          this.$t("otc.tradeinfo.warning2") +
-          this.user.minLimit +
-          "~" +
-          this.user.maxLimit;
-        this.submitBtn = false;
-        return false;
-      }
-    },
-    transform2() {
-      if (!Number.isNaN(Number(this.nuyNum))) {
-        this.buyPrice = this.round(this.mul(this.nuyNum, this.priceNow), 8);
-        if (this.nuyNum <= this.user.number) {
-          if (/^\d+(\.\d{1,8})?$/.test(this.nuyNum)) {
-            this.submitBtn = true;
-          } else {
-            this.submitBtn = false;
-            this.text2 = this.$t("otc.tradeinfo.warning3");
-          }
-        } else {
-          this.submitBtn = false;
-          return false;
-        }
-      } else {
-        this.text2 =
-          this.$t("otc.tradeinfo.warning4") +
-          this.minNum +
-          "~" +
-          this.user.number;
-        this.submitBtn = false;
-        return false;
-      }
-    },
-    getIdAdv() {
-      // pre-order — fail must not paint a blank or fake offer
-      this.loading = true;
-      this.loadError = "";
-      this.offerReady = false;
-      this.user = {};
-      this.$http
-        .post(this.host + "/otc/order/pre", { id: this.$route.query.tradeId })
-        .then(response => {
-          var resp = response.body;
-          if (resp && resp.code == 0 && resp.data) {
-            this.user = resp.data;
-            this.text1 =
-              this.$t("otc.tradeinfo.warning2") +
-              this.user.minLimit +
-              "~" +
-              this.user.maxLimit;
-            // this.minNum = (this.user.minLimit/this.user.price).toFixed(8);
-            this.text2 =
-              this.$t("otc.tradeinfo.warning4") +
-              this.minNum +
-              "~" +
-              this.user.number;
-            // console.log(this.user)
-            if (this.user.advertiseType == 1) {
-              this.btnType = this.$t("otc.tradeinfo.confirmbuyin");
-              this.type = this.$t("otc.tradeinfo.buyin");
-            } else if (this.user.advertiseType == 0) {
-              this.btnType = this.$t("otc.tradeinfo.confirmsellout");
-              this.type = this.$t("otc.tradeinfo.sellout");
-            }
-            this.usernameS = (this.user.username + "")
-              .replace(/^\s+|\s+$/g, "")
-              .slice(0, 1);
-            this.offerReady = true;
-            this.loading = false;
-          } else {
-            this.loadError =
-              this.$t("otc.offerUnavailable") ||
-              "Offer did not load — details are unknown, not blank.";
-            this.loading = false;
-            if (resp && resp.message) this.$Message.error(resp.message);
-          }
-        })
-        .catch(() => {
-          this.loadError =
-            this.$t("otc.offerUnavailable") ||
-            "Offer service did not respond — details are unknown, not blank.";
-          this.loading = false;
-        });
-    },
-    submit() {
-      if (this.submitBtn) {
-        this.btnDisabled = true;
-        if (this.user.advertiseType == 1) {
-          let param = {};
-          param["id"] = this.$route.query.tradeId;
-          param["coinId"] = this.user.otcCoinId;
-          param["price"] = this.user.price;
-          param["money"] = this.buyPrice;
-          param["amount"] = this.nuyNum;
-          this.$http
-.post(this.host + "/otc/order/buy", param)
-.then(response => {
-              this.btnDisabled = false;
-              var resp = response.body;
-              if (resp.code == 0) {
-                this.$Message.success(resp.message);
 
-                let self = this;
-                setTimeout(() => {
-                  self.$router.push("/chat?tradeId=" + resp.data);
-                }, 2000);
-              } else {
-                this.$Message.error(resp.message);
-              }
-            });
-        } else if (this.user.advertiseType == 0) {
-          let param = {};
-          param["id"] = this.$route.query.tradeId;
-          param["coinId"] = this.user.otcCoinId;
-          param["price"] = this.user.price;
-          param["money"] = this.buyPrice;
-          param["amount"] = this.nuyNum;
-          this.$http
-.post(this.host + "/otc/order/sell", param)
-.then(response => {
-              this.btnDisabled = false;
-              var resp = response.body;
-              if (resp.code == 0) {
-                this.$Message.success(resp.message);
-                let self = this;
-                setTimeout(() => {
-                  self.$router.push("/chat?tradeId=" + resp.data);
-                }, 2000);
-              } else {
-                this.$Message.error(resp.message);
-              }
-            });
-        }
-      } else {
-        this.$Message.error(this.$t("otc.tradeinfo.warning5"));
-      }
-    },
-    sendMsg() {
-      // this.$http.post(this.host + '/otc/order/sell', param).then(response => {
-      // var resp = response.body;
-      // if (resp.code == 0) {
-      // this.$Message.success(resp.message);
-      // let self = this
-      // setTimeout(() => {
-      // self.$router.push('/chat?tradeId=' + resp.data);
-      // }, 2000)
-      // } else {
-      // this.$Message.error(resp.message);
-      // }
-      // })
-    },
-    mul(a, b) {
-      var c = 0,
-        d = a.toString(),
-        e = b.toString();
-      try {
-        c += d.split(".")[1].length;
-      } catch (f) {}
-      try {
-        c += e.split(".")[1].length;
-      } catch (f) {}
-      return (
-        Number(d.replace(".", "")) *
-        Number(e.replace(".", "")) /
-        Math.pow(10, c)
-);
-    },
-    div(a, b) {
-      var c,
-        d,
-        e = 0,
-        f = 0;
-      try {
-        e = a.toString().split(".")[1].length;
-      } catch (g) {}
-      try {
-        f = b.toString().split(".")[1].length;
-      } catch (g) {}
-      return (
-        (c = Number(a.toString().replace(".", ""))),
-        (d = Number(b.toString().replace(".", ""))),
-        this.mul(c / d, Math.pow(10, f - e))
-);
-    },
-    round(v, e) {
-      var t = 1;
-      for (; e > 0; t *= 10, e--);
-      for (; e < 0; t /= 10, e++);
-      return Math.round(v * t) / t;
-    },
-    strpro(str) {
-      if (!str) {
-        return "";
-      }
-      let newStr = str;
-      str = str.slice(1);
-      var re = /[\D\d]*/g;
-      var str2 = str.replace(re, function(str) {
-        var result = "";
-        for (var i = 0; i < str.length; i++) {
-          result += "*";
-        }
-        return result;
-      });
-      return newStr.slice(0, 1) + str2;
-    }
-  },
-  created() {
-    // console.log(this.$route.query)
-    // console.log(this.div(121.03, 121.03) + '--00--')
-    // this.update()
-    this.getIdAdv();
-  },
-  computed: {
-    priceNow: function() {
-      return (
-        (this.user.price + "").replace(/,/g, "").replace(/[^\d|.]/g, "") - 0
-);
-    },
-    minNum: function() {
-      return (this.user.minLimit / this.priceNow).toFixed(8);
-    },
-    maxNum: function() {
-      return this.user.maxLimit / this.priceNow;
-    }
-  }
-};
-</script>
+            <!--
+              The vendor showed three verification badges here — email, phone,
+              ID — read off its own member record. svc-p2p exposes no
+              verification state for a counterparty, and svc-identity's KYC
+              status procedure is self-only by design (§10: it will not tell you
+              about somebody else). Rendering three grey "unverified" icons for
+              every maker would have been asserting something we have not
+              checked, so the badges are gone and the reputation block below is
+              what replaces them — and unlike the badges, it is real.
+            -->
+            <div class="deal-user-trade-info">
+              <IxState
+                :loading="rep.loading"
+                :reason="rep.reason"
+                :message="rep.message"
+                endpoint="/api/p2p/trpc/reputation.get"
+              >
+                <div v-if="rep.data">
+                  <p>{{ $t('otc.tradeinfo.exchangetimes') }}:
+                    <em class="trade-times">{{ rep.data.tradesTotal }}</em>
+                  </p>
+                  <p>{{ $t('otc.rep.completed') }}: <em>{{ rep.data.completed }}</em></p>
+                  <p>{{ $t('otc.rep.cancelled') }}: <em>{{ rep.data.cancelled }}</em></p>
+                  <p>{{ $t('otc.rep.disputed') }}: <em>{{ rep.data.disputed }}</em></p>
+                  <p v-if="rep.data.avgReleaseSecs > 0">
+                    {{ $t('otc.rep.avgRelease') }}: <em>{{ rep.data.avgReleaseSecs }}s</em>
+                  </p>
+                </div>
+              </IxState>
+            </div>
+          </div>
+          </Col>
+          <Col span="18">
+          <div class="right-safe">
+            <div class="trade-right-box">
+              <div class="trade-price">
+                <p>
+                  <label>{{ $t('otc.tradeinfo.price') }}</label>
+                  <span class="ix-num">{{ o.price }} {{ o.fiatCurrency }} / {{ o.asset }}</span>
+                </p>
+                <p>
+                  <label>{{ $t('otc.priceType') }}</label>
+                  <span>{{ o.priceType }}</span>
+                </p>
+                <p>
+                  <label>{{ $t('otc.tradeinfo.num') }}</label>
+                  <span class="ix-num">{{ o.remainingAmount }} {{ o.asset }}</span>
+                </p>
+                <p>
+                  <label>{{ $t('otc.tradeinfo.paymethod') }}</label>
+                  <span>{{ methodsLabel }}</span>
+                </p>
+                <p>
+                  <label>{{ $t('otc.tradeinfo.exchangelimitamount') }}</label>
+                  <span class="ix-num">{{ o.minAmount }} – {{ o.maxAmount }} {{ o.asset }}</span>
+                </p>
+                <p>
+                  <label>{{ $t('otc.side') }}</label>
+                  <span>{{ readerAction }}</span>
+                </p>
+              </div>
+
+              <div class="trade-operation">
+                <div class="trade-price-input">
+                  <p class="price-input-list">
+                    <Input v-model="amount" size="large" :placeholder="$t('otc.tradeinfo.numtip')" style="width: 420px">
+                    <span slot="prepend">{{ o.asset }}</span>
+                    </Input>
+                  </p>
+                  <p v-if="methodChoices.length > 1" class="price-input-list" style="margin-top:10px;">
+                    <Select v-model="method" size="large" style="width: 420px">
+                      <Option v-for="m in methodChoices" :key="m" :value="m">{{ m }}</Option>
+                    </Select>
+                  </p>
+                </div>
+
+                <!--
+                  NO CONVERTED TOTAL, ON PURPOSE.
+
+                  The vendor had two linked inputs and multiplied between them
+                  with `mul`/`div`/`round` helpers built on JS numbers — the
+                  exact thing the money rules forbid, on the fiat leg, where a
+                  rounding error is a payment the counterparty can refuse.
+
+                  svc-p2p computes `fiatAmount` from `Amount` (scaled bigint)
+                  and returns it as a decimal string on the trade. So the amount
+                  is entered once, in the asset, and the fiat figure is read
+                  back from the service rather than guessed at here. The line
+                  below says that rather than leaving a reader wondering where
+                  the total went.
+                -->
+                <p class="ix-fiat-note">{{ $t('otc.tradeinfo.fiatComputed') }}</p>
+
+                <p v-if="takeError" class="ix-empty ix-empty-error" role="alert">{{ takeError }}</p>
+
+                <div class="price-box">
+                  <button class="btn-trade-in" @click="submit" :disabled="taking || !amount">
+                    {{ taking ? $t('common.loading') : readerAction }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="trade-remark">
+                <h5 class="titles">
+                  <span>{{ $t('otc.tradeinfo.remarktitle') }}</span>
+                </h5>
+                <p class="content">{{ o.terms || $t('otc.noTerms') }}</p>
+                <h5 class="titles">
+                  <span>{{ $t('otc.tradeinfo.exchangetitle') }}</span>
+                </h5>
+                <div class="content">
+                  <p>{{ $t('otc.tradeinfo.escrow_tip1') }}</p>
+                  <p>{{ $t('otc.tradeinfo.escrow_tip2') }}</p>
+                  <p>{{ $t('otc.tradeinfo.escrow_tip3') }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          </Col>
+        </Row>
+      </IxState>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 /* right */
@@ -740,4 +470,167 @@ export default {
 }
 </style>
 
+<style scoped>
+.ix-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ix-fiat-note {
+  margin: 12px 0;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ix-text-faint, #6b7280);
+  border-left: 2px solid var(--ix-orange, #ff8a1f);
+}
+</style>
 
+<script>
+/**
+ * TAKE AN OFFER — svc-p2p `offers.get` + `reputation.get`, then `trades.take`.
+ *
+ * `trades.take` is the first money path a reader can trigger from this half of
+ * the shell: it drives `escrowLock` on the ledger. Three things follow from
+ * that, and each is why this screen is shaped the way it is.
+ *
+ * 1. THE AMOUNT NEVER BECOMES A NUMBER. It is bound as a string, validated with
+ *    a regex against the contract's own `amountString` rule, and sent as a
+ *    string. The vendor converted between fiat and asset on every keystroke
+ *    using float helpers (`mul`, `div`, `round`); that code is gone rather than
+ *    corrected, because there is no correct version of it in a JS number. The
+ *    fiat leg comes back from the service on the trade.
+ *
+ * 2. THE OFFER ID COMES FROM THE OFFER. The vendor keyed everything on
+ *    `advertiseId` and additionally sent `price` and `coinId` back to the
+ *    server from the form — so a tampered form could ask to trade at a price of
+ *    its choosing. `trades.take` accepts `{ offerId, amount, method }` and
+ *    reads the price from the offer server-side. Nothing about price is sent
+ *    from here, and that is a property of the contract worth not undoing.
+ *
+ * 3. REPUTATION IS REAL AND THE BADGES WERE NOT. `reputation.get` returns
+ *    counts svc-p2p actually keeps. The vendor's email/phone/ID badges have no
+ *    counterpart for a counterparty in our services, so they are removed rather
+ *    than rendered permanently grey.
+ *
+ * ROUTE PARAM. The list now links `?offerId=`. `?tradeId=` is still accepted
+ * because that is what the vendor's own links said, and a bookmarked URL should
+ * not silently show an empty screen.
+ */
+import IxState from "../../components/intafaced/IxState.vue";
+import ixModule from "../../components/intafaced/module-mixin.js";
+import { query, mutate } from "../../config/intafaced.js";
+
+/** The contract's own rule for an amount on the wire. Kept identical on purpose. */
+var AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
+
+export default {
+  components: { IxState },
+  mixins: [ixModule],
+  data() {
+    return {
+      offer: this.emptySection(),
+      rep: this.emptySection(),
+      amount: "",
+      method: "",
+      taking: false,
+      takeError: ""
+    };
+  },
+  computed: {
+    o: function () {
+      return this.offer.data;
+    },
+    offerId: function () {
+      return this.$route.query.offerId || this.$route.query.tradeId || "";
+    },
+    /** Method strings the offer states. Empty when it states none. */
+    methodChoices: function () {
+      var o = this.o;
+      if (!o || !o.methods || !o.methods.length) return [];
+      var out = [];
+      for (var i = 0; i < o.methods.length; i++) {
+        var x = o.methods[i];
+        if (x == null) continue;
+        if (typeof x === "string") out.push(x);
+        else {
+          var n = x.name || x.method || x.type;
+          if (n) out.push(String(n));
+        }
+      }
+      return out;
+    },
+    methodsLabel: function () {
+      return this.methodChoices.length ? this.methodChoices.join(", ") : this.$t("otc.noMethods");
+    },
+    /** What the READER does, which is the opposite of the maker's side. */
+    readerAction: function () {
+      if (!this.o) return "";
+      return this.o.side === "sell" ? this.$t("otc.buyin") : this.$t("otc.sellout");
+    },
+    initial: function () {
+      var m = this.o && this.o.makerId;
+      return m ? String(m).slice(0, 1).toUpperCase() : "?";
+    }
+  },
+  methods: {
+    maskMaker(makerId) {
+      if (!makerId) return "—";
+      var s = String(makerId);
+      return s.length <= 8 ? s : s.slice(0, 8) + "…";
+    },
+    load1() {
+      var self = this;
+      if (!this.offerId) {
+        // No id in the URL is not a service failure, and must not be reported
+        // as one.
+        this.offer = { loading: false, reason: "error", message: this.$t("otc.tradeinfo.noOfferId"), data: null };
+        return;
+      }
+      this.load("offer", query("p2p", "offers.get", { offerId: this.offerId }, this.ixToken)).then(function (res) {
+        if (!res.ok || !res.data) return;
+        var choices = self.methodChoices;
+        if (choices.length) self.method = choices[0];
+        // The maker's record, once we know who the maker is.
+        self.load("rep", query("p2p", "reputation.get", { userId: res.data.makerId }, self.ixToken));
+      });
+    },
+    submit() {
+      var self = this;
+      this.takeError = "";
+
+      if (!AMOUNT_RE.test(this.amount)) {
+        this.takeError = this.$t("otc.tradeinfo.amountFormat");
+        return;
+      }
+      // The contract requires a method string. When the offer states none there
+      // is nothing legitimate to send, so say so rather than inventing one.
+      if (!this.method) {
+        this.takeError = this.$t("otc.tradeinfo.noMethodToSend");
+        return;
+      }
+
+      this.taking = true;
+      mutate(
+        "p2p",
+        "trades.take",
+        { offerId: this.offerId, amount: this.amount, method: this.method },
+        this.ixToken
+      ).then(function (res) {
+        self.taking = false;
+        if (!res.ok) {
+          // Verbatim. svc-p2p distinguishes "offer not active", "below the
+          // offer's minimum", "you cannot trade with yourself" and a
+          // jurisdiction refusal, and each needs a different reaction.
+          self.takeError = res.message;
+          return;
+        }
+        self.$router.push("/chat?tradeId=" + res.data.id);
+      });
+    }
+  },
+  created() {
+    this.$store.commit("navigate", "nav-otc");
+    this.load1();
+  }
+};
+</script>

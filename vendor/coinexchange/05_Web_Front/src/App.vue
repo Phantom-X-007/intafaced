@@ -428,7 +428,7 @@ import { mapGetters, mapActions } from "vuex";
 // The one list of INTAFACED modules. The header dropdown, the mobile drawer and
 // the hub all read it, so a module cannot appear in one navigation and not the
 // others.
-import { MODULES as IX_MODULES } from "./config/intafaced.js";
+import { MODULES as IX_MODULES, mutate } from "./config/intafaced.js";
 import CommandPalette from "./components/intafaced/CommandPalette.vue";
 export default {
   name: "app",
@@ -642,29 +642,34 @@ export default {
       this.$store.commit("initLang");
       this.$store.commit("initLoginTimes");
 
-      this.checkLogin();
+      // `checkLogin()` used to POST /uc/check/login to the Java ucenter here.
+      // There is nothing to ask any more: the session lives in memory, so on a
+      // fresh boot there is by definition no session, and `recoveryMember`
+      // above has already cleared the stale vendored keys. Asking a dead
+      // backend whether we are signed in could only ever hang.
     },
+    /**
+     * Sign out of svc-identity.
+     *
+     * `auth.logout` revokes the refresh token server-side; clearing the store
+     * drops the access token and the member projection with it. The local
+     * clear does NOT wait for the network call — a user who clicks sign out is
+     * entitled to be signed out on this device even if the service is
+     * unreachable, and leaving them holding a live bearer while a spinner
+     * turned would be the wrong failure.
+     */
     logout() {
-      this.$http.post(this.host + "/uc/loginout", {}).then(response => {
-        var resp = response.body;
-        if (resp.code == 0) {
-          this.$Message.success(resp.message);
-          this.$store.commit("setMember", null);
-          setTimeout(() => {
-            location.href = "/";
-          }, 1500);
-        } else {
-          this.$Message.error(resp.message);
-        }
-      });
-    },
-    checkLogin() {
-      this.$http.post(this.host + "/uc/check/login", {}).then(response => {
-        var result = response.body;
-        if (result.code == 0 && result.data == false) {
-          this.$store.commit("setMember", null);
-        }
-      });
+      var session = this.$store.getters.ixSession;
+      this.$store.commit("clearIxSession");
+
+      if (session && session.refreshToken) {
+        mutate("identity", "auth.logout", { refreshToken: session.refreshToken });
+      }
+
+      this.$Message.success(this.$t("uc.login.signedOut"));
+      setTimeout(() => {
+        location.href = "/";
+      }, 800);
     },
     changelanguage: function(name) {
       console.log("change language: " + name);

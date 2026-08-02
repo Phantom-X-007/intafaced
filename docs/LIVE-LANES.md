@@ -6,15 +6,16 @@
 **Truth layers:** [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md) — this file = **session** who-codes-what; product free/owner/done = `tooling/tracker/features.mjs` (not this board alone).  
 **Re-derive tip every fire:** `git fetch && git log -1 --oneline origin/main`
 
-| Lane id         | Owner session  | Scope                                              | Status                    | PR / proof                         | Do not touch                                             |
-| --------------- | -------------- | -------------------------------------------------- | ------------------------- | ---------------------------------- | -------------------------------------------------------- |
-| post-pile-audit | this wave      | WAVE-AUDIT #356–#383 · honesty docs · CX-8 re-seal | **shipping / closing**    | `docs/audit/2026-08-02-post-pile/` | M1–M7 · #346 pay · #350 Denon · residual-register (#382) |
-| app-admin0-docs | parallel Nitro | ADMIN-0 inventory + frontend scorecard stamp       | **OPEN PR #382**          | #382                               | dual-edit scorecard/register                             |
-| shehzad-m1-pay  | shehzad002     | Pay OS card sandbox M1                             | **OPEN #346 CONFLICTING** | #346                               | agents implement                                         |
-| denon-copy-spec | Phantom-X-007  | Sovereign copy-spec docs                           | **OPEN #350**             | #350                               | dual-edit                                                |
-| denon-spine     | Phantom-X-007  | feat/spine-\* mountains                            | idle / hold               | —                                  | Nitro force-push                                         |
-| stream-a-ui     | free / claim   | Vendor shell :8090 craft residual                  | idle after craft wave     | issue #83                          | services money spine                                     |
-| order-route-b   | closed         | CX-8 L3+L4 agent-max                               | **closed on main #380**   | CX-8 green                         | re-open as primary invent                                |
+| Lane id         | Owner session  | Scope                                                                              | Status                    | PR / proof                         | Do not touch                                                                |
+| --------------- | -------------- | ---------------------------------------------------------------------------------- | ------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| post-pile-audit | this wave      | WAVE-AUDIT #356–#383 · honesty docs · CX-8 re-seal                                 | **shipping / closing**    | `docs/audit/2026-08-02-post-pile/` | M1–M7 · #346 pay · #350 Denon · residual-register (#382)                    |
+| app-admin0-docs | parallel Nitro | ADMIN-0 inventory + frontend scorecard stamp                                       | **OPEN PR #382**          | #382                               | dual-edit scorecard/register                                                |
+| shehzad-m1-pay  | shehzad002     | Pay OS card sandbox M1                                                             | **OPEN #346 CONFLICTING** | #346                               | agents implement                                                            |
+| denon-copy-spec | Phantom-X-007  | Sovereign copy-spec docs                                                           | **OPEN #350**             | #350                               | dual-edit                                                                   |
+| denon-spine     | Phantom-X-007  | feat/spine-\* mountains                                                            | idle / hold               | —                                  | Nitro force-push                                                            |
+| stream-a-ui     | free / claim   | Vendor shell :8090 craft residual                                                  | idle after craft wave     | issue #83                          | services money spine                                                        |
+| order-route-b   | closed         | CX-8 L3+L4 agent-max                                                               | **closed on main #380**   | CX-8 green                         | re-open as primary invent                                                   |
+| vendor-otc-cms  | this session   | Vendor shell rewire — OTC/P2P · CMS/help · auth+identity, under `05_Web_Front/src` | **merged**                | #418                               | trading/markets/wallet half of the same shell (parallel agent) · `apps/web` |
 
 ## Free agent work (after post-pile)
 
@@ -26,3 +27,4 @@
 ## Last board update
 
 - **2026-08-02 post-pile:** re-derived tip `76e60ff`. Overnight 2026-07-30 lane rows **retired as stale**. Board Clear AGENT-COMPLETE; BOARD-COMPLETE blocked on shehzad M1–M7. Order-route agent B-layer closed (#380); Human X remains for real money.
+- **2026-08-02 vendor-otc-cms:** re-derived tip `90d8110` (ADR "adopt the vendored product, keep our ledger", Accepted). Claimed the OTC/P2P + CMS/help + auth half of the vendored shell. The shell's login now authenticates against **svc-identity, not the Java `member` table**, and `isLogin` derives from that session — which changes sign-in behaviour for the trading/markets/wallet half too. See the branch's commit message before editing `config/store.js`.

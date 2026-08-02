@@ -9,46 +9,63 @@
           <!-- <router-link to="/identbusiness">Become a merchant</router-link> -->
         </div>
       </div>
-      <!-- B12 craft: desk dual-book shell around OTC market list. -->
       <div class="content ix-money ix-otc">
         <p class="ix-dualbook" role="note">
-          <strong>Two books.</strong> OTC balances here are venue P2P books — not the TypeScript platform ledgers.
+          <strong>One book.</strong> OTC escrow is posted to the platform ledger — the same book as every other module. Amounts are decimal strings end to end.
         </p>
-        <!-- Stream A: empty coin list ≠ coin API down. -->
-        <p v-if="coinsError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ coinsError }}</p>
-        <p v-else-if="coinsLoading" class="ix-empty ix-empty-loading">{{ $t('common.loading') }}</p>
-        <p v-else-if="coinsReachable && coins.length === 0" class="ix-empty">{{ $t('otc.coinsEmpty') }}</p>
-        <Menu v-if="!coinsError && coins.length > 0" ref="navMenu" mode="horizontal" width="auto" :active-name="activeMenuName" @on-select="menuSelected" class='tradelist'>
-          <MenuGroup>
-            <template v-for="(coin,index) in coins">
-              <MenuItem :name="'coin-'+index"> {{coin.unit}}
-              </MenuItem>
-            </template>
-          </MenuGroup>
-        </Menu>
-        <router-view v-if="!coinsError"></router-view>
+        <IxState
+          :loading="assets.loading"
+          :reason="assets.reason"
+          :message="assets.message"
+          endpoint="/api/p2p/trpc/offers.list"
+        >
+          <p v-if="!units.length" class="ix-empty">{{ $t('otc.coinsEmpty') }}</p>
+          <Menu v-else ref="navMenu" mode="horizontal" width="auto" :active-name="activeMenuName" @on-select="menuSelected" class='tradelist'>
+            <MenuGroup>
+              <template v-for="(unit,index) in units">
+                <MenuItem :name="'coin-'+index"> {{unit}}
+                </MenuItem>
+              </template>
+            </MenuGroup>
+          </Menu>
+          <router-view></router-view>
+        </IxState>
       </div>
+      <!--
+        These four cards are claims about the product, so they are held to the
+        same standard as a number on a screen. Two of the vendor's originals
+        were not true of what runs here and were rewritten rather than kept:
+
+        - "Instant settlement — merchants are matched automatically, no waiting
+          in a queue." Nothing is matched automatically. A taker picks an offer
+          and the seller has to release; the deadline on the trade exists
+          precisely because that step takes human time.
+        - "…and 24/7 support on every trade." There is no support desk of any
+          kind behind the edge — see the support socket on /help. Advertising a
+          support channel that does not exist is the worst of these, because a
+          reader in a dispute relies on it.
+      -->
       <div class="advantage">
         <ul>
           <li>
             <div class="image"><img src="../../assets/images/price.png" alt=""></div>
-            <div class="title">One market price</div>
-            <div class="content1">Tracks the market in real time</div>
+            <div class="title">The maker sets the price</div>
+            <div class="content1">Fixed or floating, quoted per offer. Nothing here is a platform quote.</div>
           </li>
           <li>
             <div class="image"><img src="../../assets/images/poundage.png" alt=""></div>
             <div class="title">Quoted price only</div>
-            <div class="content1">Merchant quote is the deal price — no hidden platform fee line (not a free-money claim)</div>
+            <div class="content1">The merchant quote is the deal price — there is no hidden platform fee line.</div>
           </li>
           <li>
             <div class="image"><img src="../../assets/images/instant.png" alt=""></div>
-            <div class="title">Instant settlement</div>
-            <div class="content1">Verified merchants are matched automatically — no waiting in a queue</div>
+            <div class="title">Settles when the seller releases</div>
+            <div class="content1">Not automatic. Each trade carries a deadline, and either side can open a dispute.</div>
           </li>
           <li>
             <div class="image"><img src="../../assets/images/platedanbao.png" alt=""></div>
-            <div class="title">Platform escrow</div>
-            <div class="content1">Verified merchants, escrowed funds and 24/7 support on every trade</div>
+            <div class="title">Escrowed on the ledger</div>
+            <div class="content1">The asset is locked on the platform ledger when the trade opens, and released or refunded from there.</div>
           </li>
         </ul>
       </div>
@@ -202,103 +219,110 @@
 }
 </style>
 <script>
+/**
+ * THE OTC DESK SHELL — the asset tabs, and the frame the offer list sits in.
+ *
+ * WHERE THE TAB LIST COMES FROM NOW. The vendor read `/otc/coin/all`, a Java
+ * table of coins configured for OTC. svc-p2p has no equivalent: it does not
+ * keep a list of tradeable assets, because an asset is tradeable exactly when
+ * somebody has posted an offer in it. So the tabs are DERIVED from the distinct
+ * `asset` values on live offers, which is a stronger statement than the vendor's
+ * table ever made — a tab here means there is something behind it.
+ *
+ * The consequence is deliberate: when `offers.list` is refused, there are no
+ * tabs, and the refusal is shown instead. Rendering a plausible USDT/BTC/ETH
+ * strip while the call was refused would be inventing a market.
+ *
+ * WHY THE WHOLE DESK IS INSIDE IxState. The child route (Trade.vue) lists
+ * offers for the selected asset. If the offer read is refused there is nothing
+ * for the child to show either, so the refusal belongs at this level, once,
+ * rather than repeated in every pane.
+ *
+ * `offers.list` is `scopedProcedure('p2p:read', { module: 'p2p' })`. An
+ * interactive session does carry `p2p:read`, so the usual refusal here is the
+ * jurisdiction matrix (verification tier "basic"), not a missing scope — and
+ * IxState words those two differently on purpose.
+ */
+import IxState from "../../components/intafaced/IxState.vue";
+import ixModule from "../../components/intafaced/module-mixin.js";
+import { query } from "../../config/intafaced.js";
+
 export default {
+  components: { IxState },
+  mixins: [ixModule],
   data() {
     return {
-      coins: [],
-      coinsLoading: true,
-      coinsReachable: false,
-      coinsError: "",
-      activeMenuName: "coin-1"
+      assets: this.emptySection(),
+      activeMenuName: "coin-0"
     };
   },
   computed: {
     isLogin: function() {
       return this.$store.getters.isLogin;
+    },
+    /** Distinct assets across live offers, in first-seen order. */
+    units: function() {
+      var offers = this.assets.data;
+      if (!offers || !offers.length) return [];
+      var seen = {};
+      var out = [];
+      for (var i = 0; i < offers.length; i++) {
+        var a = offers[i].asset;
+        if (a && !seen[a]) {
+          seen[a] = true;
+          out.push(a);
+        }
+      }
+      return out;
     }
   },
-  watch:{
-    $route(to, from) {
+  watch: {
+    $route: function() {
       this.activeMenu();
     }
   },
   methods: {
     init() {
       this.$store.commit("navigate", "nav-otc");
-      this.coinsLoading = true;
-      this.coinsError = "";
-      this.coinsReachable = false;
-      this.$http
-        .post(this.host + this.api.otc.coin)
-        .then(response => {
-          var body = response.body;
-          if (body && body.code == 0) {
-            this.coins = body.data || [];
-            this.coinsReachable = true;
-            this.coinsLoading = false;
-            this.activeMenu();
-            this.$nextTick(function() {
-              if (this.$refs.navMenu) {
-                this.$refs.navMenu.updateActiveName();
-              }
-            });
-          } else {
-            this.coinsError =
-              this.$t("otc.coinsUnavailable") ||
-              "OTC markets did not answer — list is unknown, not empty.";
-            this.coinsLoading = false;
-          }
-        })
-        .catch(() => {
-          this.coinsError =
-            this.$t("otc.coinsUnavailable") ||
-            "OTC markets service did not respond — list is unknown, not empty.";
-          this.coinsLoading = false;
-        });
+      var self = this;
+      this.load("assets", query("p2p", "offers.list", undefined, this.ixToken)).then(function() {
+        self.activeMenu();
+      });
     },
     goBusiness() {
       if (this.isLogin) {
-        this.$router.push({
-          path: "/identbusiness"
-        });
+        this.$router.push({ path: "/identbusiness" });
       } else {
-        this.$Message.warning("Please sign in first");
+        this.$Message.warning(this.$t("otc.signInFirst"));
       }
     },
     menuSelected(menuName) {
-      if (menuName.startsWith("coin")) {
-        var coin = this.coins[menuName.split("-")[1]];
-        this.$router.push("/otc/trade/" + coin.unit);
+      if (menuName.indexOf("coin") === 0) {
+        var unit = this.units[menuName.split("-")[1]];
+        if (unit) this.$router.push("/otc/trade/" + unit);
       } else {
         this.$router.push("/otc/" + menuName);
       }
     },
     activeMenu() {
-      if (!this.coins.length) {
-        return;
+      var units = this.units;
+      if (!units.length) return;
+      // No default asset is assumed. The vendor fell back to "USDT" whether or
+      // not USDT was in the list; the first asset that actually has an offer is
+      // the only defensible default.
+      var wanted = (this.$route.params[0] || units[0]).toUpperCase();
+      var index = 0;
+      for (var i = 0; i < units.length; i++) {
+        if (units[i].toUpperCase() === wanted) index = i;
       }
-      let coin = this.$route.params[0] || "USDT";
-      coin = coin.toUpperCase();
-      let index=0;
-      this.coins.forEach((v,i)=>{
-        if(v.unit===coin){
-          index=i;
-        }
-      })
-      this.activeMenuName = `coin-${index}`;
+      this.activeMenuName = "coin-" + index;
       this.$nextTick(function() {
-        if (this.$refs.navMenu) {
-          this.$refs.navMenu.updateActiveName();
-        }
+        if (this.$refs.navMenu) this.$refs.navMenu.updateActiveName();
       });
     }
   },
   created: function() {
     this.init();
-    // this.activeMenuName = "coin-1";
-    // this.$nextTick(function() {
-    // this.$refs.navMenu.updateActiveName();
-    // });
   }
 };
 </script>

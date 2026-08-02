@@ -1,505 +1,194 @@
 <template>
-    <div class="content-wrap">
-        <div class="container chat-in-box" id="List">
-            <p style="padding: 10px 0 10px 20px;font-size: 16px;">
-              <router-link to="/uc/order" style="color:#00c2a8;">{{$t('otc.myorder')}}</router-link> ><span style="font-size:14px;">Order details</span>
-              </p>
-            <p class="ix-empty" role="note" style="padding:0 20px 8px;margin:0;">
-              Irreversible actions use a single-flight lock. A failed venue response never claims paid, cancelled, released, or appealed.
-            </p>
-            <Row class="chat-in">
-                <Col span="4">
-                <div class="leftmenu left-box chat-right">
-                    <div class="chat-right-in">
-                        <h6 class="h6-flex">
-                            <span v-if="tradeType==0">{{$t('otc.chat.seller')}}:</span>
-                            <span v-else>{{$t('otc.chat.buyer')}}:</span>
-                            <router-link :to="{ path: '/checkuser', query: { 'id': msg.otherSide }}">
-                            <!-- {{msg.otherSide && msg.otherSide.length>2 && strpro(msg.otherSide)}} -->
-                            {{msg.otherSide}}
-                            </router-link>
-                        </h6>
-                              <Poptip v-if="tradeType==0&&msg.memberMobile" class="pop-tel" :content="msg.memberMobile">
-                                <img src="../../assets/images/icon-tel.png" alt="">
-                              </Poptip>
-                        <h6>
-                            <span>{{$t('otc.chat.exchangeamount')}}:</span>
-                            <span>{{msg.money}}&nbsp;CNY</span>
-                        </h6>
-                        <div class="mt20" v-if="tradeType==0">
-                            <h5>{{$t('otc.chat.operatetip')}}:</h5>
-                            <div>
-                                <p>1, {{$t('otc.chat.operatetip_1')}}“
-                                    <em>{{$t('otc.chat.finishpayment')}}</em>”. {{$t('otc.chat.operatetip_1_1')}}. </p>
-                                <p>2, {{$t('otc.chat.operatetip_1_2')}}. </p>
-                            </div>
-                            <span>
-                                <b>{{$t('otc.chat.note')}}: </b>
-                            </span><br>
-                            <span>{{$t('otc.chat.notetip')}}</span><br>
-                        </div>
-                        <div class="mt20" v-else>
-                            <h5>{{$t('otc.chat.operatetip')}}:</h5>
-                            <div>
-                                <p>1, {{$t('otc.chat.operatetip_2_1')}}“
-                                    <em>{{$t('otc.chat.confirmrelease')}}</em>”{{$t('otc.chat.paydigital')}}!</p>
-                                <p>2, {{$t('otc.chat.operatetip_2_2')}}</p>
-                                <p>3, {{$t('otc.chat.operatetip_2_3')}}</p>
-                            </div>
-                            <span>
-                                <b>{{$t('otc.chat.note')}}: </b>
-                            </span><br>
-                            <span>{{$t('otc.chat.notetip')}}</span><br>
-                        </div>
-                        <div class="bottom-btn">
-                            <div style="padding-top:20px;">
-                                <h6 style="font-weight: 600">{{$t('otc.chat.orderstatus')}}:
-                                    <span>{{statusText}}</span>
-                                </h6>
-                                <div v-show="statusBtn==1&&tradeType==0">
-                                    <Button type="warning" @click="modal1 = true">{{$t('otc.chat.orderstatus_1')}}</Button>
-                                    <Button @click="modal3 = true" type="error">{{$t('otc.chat.orderstatus_4')}}</Button>
-                                </div>
-                                <div v-show="statusBtn==2&&tradeType==0">
-                                    <Button type="warning" @click="appearOrder">{{$t('otc.chat.orderstatus_2')}}</Button>
-                                    <Button @click="modal3 = true" type="error">{{$t('otc.chat.orderstatus_4')}}</Button>
-                                </div>
-                                <div v-show="statusBtn==2&&tradeType==1">
-                                    <Button type="warning" @click="modal5 = true">{{$t('otc.chat.orderstatus_3')}}</Button>
-                                    <Button @click="appearOrder" type="error">{{$t('otc.chat.orderstatus_5')}}</Button>
-                                </div>
-                                <!-- <Button type="primary" v-show="statusBtn==2" @click="modal4 = true" long></Button> -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                </Col>
-                <Col span="20">
-                <div class="rightbox">
-                    <Row class="chat-top" type="flex" justify="space-between">
-                        <Col span="3" class="order-time">
-                        <h5>{{statusText}}</h5>
-                        <div v-show="statusBtn==1" class="reserve-time">{{reserveTime}}</div>
-                        </Col>
-                        <Col span="8" class="order-info">
-                        <h5>
-                            <label class="order-name">{{$t('otc.chat.order')}}</label>
-                            <span>{{msg.orderSn}}</span>
-                        </h5>
-                        <p>
-                            {{$t('otc.chat.and')}}
-                            <router-link :to="{ path: '/checkuser', query: { 'id': msg.otherSide }}">
-                            <!-- {{msg.otherSide && msg.otherSide.length>2 && strpro(msg.otherSide)}} -->
-                            {{msg.otherSide}}
-                            </router-link>
-                            {{$t('otc.chat.transition')}}
-                        </p>
-                        </Col>
-                        <Col span="3" class="order-info">
-                        <h5>{{msg.price}}</h5>
-                        <span>{{$t('otc.chat.transprice')}}(CNY)</span>
-                        </Col>
-                        <Col span="3" class="order-info">
-                        <h5>{{msg.amount}}</h5>
-                        <span>{{$t('otc.chat.transnum')}}({{msg.unit}})</span>
-                        </Col>
-                        <Col span="3" class="order-info">
-                        <h5>{{msg.money}}</h5>
-                        <span>{{$t('otc.chat.transmoney')}}(CNY)</span>
-                        </Col>
-                    </Row>
-                    <Row class="chat-top" type="flex" justify="space-between" v-show="statusBtn!=0">
-                        <Col span="8" class="order-info" v-if="bankInfo&&bankInfo!=null">
-                        <i class="icons bankfor"></i>
-                        <span>{{payInfo!= null? payInfo.realName: ""}} </span>
-                        <p>{{bankInfo.branch}}</p>
-                        <p>{{bankInfo.cardNo}}</p>
-                        </Col>
-                        <Col span="8" class="order-info" v-else>
-                        <i class="icons bankfor"></i>
-                        <pre></pre>
-                        <p style="color:rgb(145, 143, 143)">{{$t('otc.chat.tip1')}}</p>
-                        </Col>
-                        <Col span="8" class="order-info" v-if="alipay&&alipay!=null">
-                        <i class="icons alipay"></i>
-                        <span>{{$t('otc.chat.zfb')}}</span>
-                        <pre></pre>
-                        <p>{{alipay.aliNo}}</p>
-                        <p v-if="alipay&&alipay!=null&&alipay.qrCodeUrl!=null&&alipay.qrCodeUrl!=''"><a @click="showQRCode(1)">{{$t('otc.chat.qrcode')}}</a></p>
-                        </Col>
-                        <Col span="8" class="order-info" v-else>
-                        <i class="icons alipay"></i>
-                        <pre></pre>
-                        <p style="color:rgb(145, 143, 143)">{{$t('otc.chat.tip2')}}</p>
-                        </Col>
-                        <Col span="8" class="order-info" v-if="wechatPay&&wechatPay!=null">
-                        <i class="icons wechat"></i>
-                        <span>{{$t('otc.chat.wx')}}</span>
-                        <pre></pre>
-                        <p>{{wechatPay.wechat}}</p>
-                        <p v-if="wechatPay&&wechatPay!=null&&wechatPay.qrWeCodeUrl!=null&&wechatPay.qrWeCodeUrl!=''"><a @click="showQRCode(2)">{{$t('otc.chat.qrcode')}}</a></p>
-                        </Col>
-                        <Col span="8" class="order-info" v-else>
-                        <i class="icons wechat"></i>
-                        <pre></pre>
-                        <p style="color:rgb(145, 143, 143)">{{$t('otc.chat.tip3')}}</p>
-                        </Col>
+  <div class="content-wrap">
+    <div class="container chat-in-box" id="List">
+      <p style="padding: 10px 0 10px 20px;font-size: 16px;">
+        <router-link to="/uc/order" style="color:#00c2a8;">{{ $t('otc.myorder') }}</router-link>
+        &gt;<span style="font-size:14px;">{{ $t('otc.chat.orderDetails') }}</span>
+      </p>
 
-                    </Row>
-                    <chatline :msg="msg"></chatline>
-                </div>
-                </Col>
-            </Row>
-        </div>
-        <Modal v-model="modal1" :title="$t('otc.chat.tip')" @on-ok="ok1">
-            <p style="color:red;font-weight: bold;">{{$t('otc.chat.msg1')}}</p>
-        </Modal>
-        <!-- <Modal v-model="modal2" :title="$t('otc.chat.tip')" @on-ok="ok2" :loading="isloading">
-            <p style="color:red;font-weight: bold;">{{$t('otc.chat.msg2')}}</p>
-        </Modal> -->
-        <Modal v-model="modal3" :title="$t('otc.chat.tip')" @on-ok="ok3">
-            <p style="color:red;font-weight: bold;">{{$t('otc.chat.msg3')}}</p>
-        </Modal>
-        <Modal v-model="modal4" :title="$t('otc.chat.tip')" @on-ok="ok4">
-            <Form :model="formItem" :label-width="80">
-                <FormItem :label="$t('otc.chat.comptype')">
-                    <Select v-model="formItem.select">
-                        <Option value="1">{{$t('otc.chat.msg4')}}</Option>
-                        <Option value="2">{{$t('otc.chat.msg5')}}</Option>
-                    </Select>
-                </FormItem>
-                <FormItem :label="$t('otc.chat.compremark')">
-                    <Input v-model="formItem.remark" type="textarea" :autosize="{minRows: 2,maxRows: 5}" :placeholder="$t('otc.chat.willcomp')"></Input>
-                </FormItem>
-            </Form>
-        </Modal>
-        <Modal v-model="modal5" :title="$t('otc.chat.tip')" @on-ok="ok5">
-            <P style="color:red;font-weight: bold;">
-              {{$t('otc.chat.msg6')}}<br/>
-              <Input type="password" v-model="fundpwd" :placeholder="$t('otc.chat.msg7')"></Input>
-            </p>
+      <IxState
+        :loading="trade.loading"
+        :reason="trade.reason"
+        :message="trade.message"
+        endpoint="/api/p2p/trpc/trades.get"
+      >
+        <Row class="chat-in" v-if="t">
+          <Col span="6">
+          <div class="leftmenu left-box chat-right">
+            <div class="chat-right-in">
+              <h6 class="h6-flex">
+                <span>{{ iAmBuyer ? $t('otc.chat.seller') : $t('otc.chat.buyer') }}:</span>
+                <router-link :to="{ path: '/checkuser', query: { id: counterpartyId }}">
+                  {{ maskUser(counterpartyId) }}
+                </router-link>
+              </h6>
+              <h6>
+                <span>{{ $t('otc.chat.exchangeamount') }}:</span>
+                <span class="ix-num">{{ t.fiatAmount }}&nbsp;{{ t.fiatCurrency }}</span>
+              </h6>
 
-        </Modal>
-        <Modal v-model="modal6">
-            <p slot="header">
-            </p>
-            <div style="text-align:center">
-              <img style="width: 200px;" :src="payCodeUrl">
+              <div class="mt20">
+                <h5>{{ $t('otc.chat.operatetip') }}:</h5>
+                <div v-if="iAmBuyer">
+                  <p>1, {{ $t('otc.chat.buyerStep1') }}</p>
+                  <p>2, {{ $t('otc.chat.buyerStep2') }}</p>
+                </div>
+                <div v-else>
+                  <p>1, {{ $t('otc.chat.sellerStep1') }}</p>
+                  <p>2, {{ $t('otc.chat.sellerStep2') }}</p>
+                </div>
+              </div>
+
+              <div class="bottom-btn">
+                <div style="padding-top:20px;">
+                  <h6 style="font-weight: 600">{{ $t('otc.chat.orderstatus') }}:
+                    <span>{{ statusText }}</span>
+                  </h6>
+
+                  <p v-if="actionError" class="ix-empty ix-empty-error" role="alert">{{ actionError }}</p>
+
+                  <!--
+                    BUTTONS FOLLOW THE STATE MACHINE, not a status integer.
+
+                    The vendor drove this off `statusBtn` (0/1/2) pushed down a
+                    WebSocket, and showed buttons for whichever number arrived
+                    last. svc-p2p's states are named — created, escrowed,
+                    fiat_sent, released, cancelled, disputed — and each edge has
+                    exactly one party who may take it. Deriving the buttons from
+                    the state and from which side of the trade the reader is on
+                    means an action that the service would refuse is not offered
+                    in the first place.
+                  -->
+                  <div v-if="iAmBuyer && canMarkPaid">
+                    <Button type="warning" :loading="acting" @click="confirmMarkPaid = true">
+                      {{ $t('otc.chat.orderstatus_1') }}
+                    </Button>
+                    <Button type="error" :loading="acting" @click="confirmCancel = true">
+                      {{ $t('otc.chat.orderstatus_4') }}
+                    </Button>
+                  </div>
+
+                  <div v-if="!iAmBuyer && canRelease">
+                    <Button type="warning" :loading="acting" @click="confirmRelease = true">
+                      {{ $t('otc.chat.orderstatus_3') }}
+                    </Button>
+                  </div>
+
+                  <div v-if="canCancelAsSeller">
+                    <Button type="error" :loading="acting" @click="confirmCancel = true">
+                      {{ $t('otc.chat.orderstatus_4') }}
+                    </Button>
+                  </div>
+
+                  <div v-if="canDispute" style="margin-top:8px;">
+                    <Button type="error" :loading="acting" @click="disputeOpen = true">
+                      {{ $t('otc.chat.orderstatus_5') }}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div slot="footer"></div>
-        </Modal>
+          </div>
+          </Col>
+
+          <Col span="18">
+          <div class="rightbox">
+            <Row class="chat-top" type="flex" justify="space-between">
+              <Col span="4" class="order-time">
+              <h5>{{ statusText }}</h5>
+              <div v-if="t.deadlineAt" class="reserve-time">{{ $t('otc.chat.deadline') }} {{ t.deadlineAt | dateFormat }}</div>
+              </Col>
+              <Col span="6" class="order-info">
+              <h5>
+                <label class="order-name">{{ $t('otc.chat.order') }}</label>
+                <span>{{ t.id }}</span>
+              </h5>
+              </Col>
+              <Col span="4" class="order-info">
+              <h5 class="ix-num">{{ t.price }}</h5>
+              <span>{{ $t('otc.chat.transprice') }} ({{ t.fiatCurrency }})</span>
+              </Col>
+              <Col span="4" class="order-info">
+              <h5 class="ix-num">{{ t.amount }}</h5>
+              <span>{{ $t('otc.chat.transnum') }} ({{ t.asset }})</span>
+              </Col>
+              <Col span="4" class="order-info">
+              <h5 class="ix-num">{{ t.fiatAmount }}</h5>
+              <span>{{ $t('otc.chat.transmoney') }} ({{ t.fiatCurrency }})</span>
+              </Col>
+            </Row>
+
+            <!--
+              HOW THE BUYER ACTUALLY PAYS — a §13 socket, and the one that most
+              needs saying out loud.
+
+              The vendor showed the seller's bank branch and card number, Alipay
+              id and WeChat id, with QR codes, read from its own member payment
+              records. svc-p2p stores no payment instruments: an offer carries
+              `methods` (an unconstrained array naming a rail) and a free-text
+              `terms`, and nothing anywhere holds a counterparty's account
+              details. So the buyer cannot be told where to send the money.
+
+              This is a functional hole in the flow, not a cosmetic one, and it
+              is stated rather than papered over with empty panels — which is
+              what the vendor's own `v-else` branches would have rendered, three
+              grey boxes reading "not provided", indistinguishable from a seller
+              who simply had not filled them in.
+            -->
+            <div class="pay-socket">
+              <IxState reason="no_surface" :message="$t('otc.chat.payDetailsMissing')" />
+              <div v-if="t.method" class="pay-method">
+                <strong>{{ $t('otc.chat.agreedMethod') }}:</strong> {{ t.method }}
+              </div>
+            </div>
+
+            <!--
+              THE CHAT ITSELF — also a §13 socket.
+
+              The vendor opened a SockJS/STOMP connection to `/chat/chat-webSocket`
+              on the Java backend and rendered a message thread. There is no chat
+              or messaging service behind our edge; svc-notify carries an in-app
+              inbox for notifications, which is a different thing and cannot host
+              a two-party conversation. A socket left pointed at a dead host
+              retries silently forever and shows an empty thread, which reads as
+              "your counterparty has not replied".
+            -->
+            <div class="chat-socket">
+              <IxState reason="no_surface" :message="$t('otc.chat.chatMissing')" />
+            </div>
+          </div>
+          </Col>
+        </Row>
+      </IxState>
     </div>
+
+    <Modal v-model="confirmMarkPaid" :title="$t('otc.chat.tip')" @on-ok="doMarkPaid">
+      <p style="color:red;font-weight: bold;">{{ $t('otc.chat.msg1') }}</p>
+    </Modal>
+
+    <Modal v-model="confirmCancel" :title="$t('otc.chat.tip')" @on-ok="doCancel">
+      <p style="color:red;font-weight: bold;">{{ $t('otc.chat.msg3') }}</p>
+      <Input v-model="cancelReason" :placeholder="$t('otc.chat.cancelReason')" style="margin-top:10px;" />
+    </Modal>
+
+    <Modal v-model="confirmRelease" :title="$t('otc.chat.tip')" @on-ok="doRelease">
+      <p style="color:red;font-weight: bold;">{{ $t('otc.chat.msg6') }}</p>
+    </Modal>
+
+    <Modal v-model="disputeOpen" :title="$t('otc.chat.tip')" @on-ok="doDispute">
+      <Form :label-width="80">
+        <FormItem :label="$t('otc.chat.compremark')">
+          <Input
+            v-model="disputeReason"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 5 }"
+            :placeholder="$t('otc.chat.disputeReasonTip')"
+          ></Input>
+        </FormItem>
+      </Form>
+    </Modal>
+  </div>
 </template>
-<script>
-var Stomp = require("stompjs");
-var SockJS = require("sockjs-client");
-import chatline from "../../components/otc/Chatline";
-export default {
-  components: {
-    chatline
-  },
-  data() {
-    return {
-      irreversibleSubmitting: false,
-      watching: false,
-      stompClient: null,
-      reserveTime: "60",
-      reserveInteval: null,
-      fundpwd: "",
-      statusBtn: 0,
-      tradeType: 0,
-      isloading: true,
-      payTime: "",
-      statusText: "",
-      modal1: false,
-      modal2: false,
-      modal3: false,
-      modal4: false,
-      modal5: false,
-      modal6: false,
-      formItem: {
-        select: "",
-        remark: ""
-      },
-      msg: {},
-      payInfo: {},
-      bankInfo: {},
-      alipay: {},
-      wechatPay: {},
-      payCodeUrl: ""
-    };
-  },
-  created() {
-    this.getDetail();
-    this.initScok();
-  },
-  computed: {},
-  methods: {
-    scrollToBottom: function() {
-      // window.scrollTo(0, 900000);
-    },
-    initScok: function() {
-      var socket = new SockJS(this.host + "/chat/chat-webSocket");
-      this.stompClient = Stomp.over(socket);
-      this.stompClient.debug = false;
-    },
-    watchOrderStutusNotice: function() {
-      var self = this;
-      this.stompClient.connect({}, function(frame) {
-        self.stompClient.subscribe(
-          "/user/" +
-            self.msg.myId +
-            "/order-notice/" +
-            self.$route.query.tradeId,
-          function(response) {
-            if (self.reserveInteval!= null) clearInterval(self.reserveInteval);
-            var confirmPayMsg = JSON.parse(response.body);
-            self.$Message.success(confirmPayMsg.content);
-            self.statusBtn = confirmPayMsg.status;
-            if (confirmPayMsg.status == 1) {
-              self.statusText = self.$t("otc.chat.result_1");
-              self.setReserveTime();
-            } else if (confirmPayMsg.status == 2) {
-              self.statusText = self.$t("otc.chat.result_2");
-            } else if (confirmPayMsg.status == 3) {
-              self.statusText = self.$t("otc.chat.result_3");
-            } else if (confirmPayMsg.status == 4) {
-              self.statusText = self.$t("otc.chat.result_4");
-            } else if (confirmPayMsg.status == 0) {
-              self.statusText = self.$t("otc.chat.result_5");
-            }
-          }
-);
-      });
-    },
-    sendOrderStatusNotice: function(type) {
-      if (this.reserveInteval!= null) clearInterval(this.reserveInteval);
-      var content = "";
-      if (type == 1) content = "The buyer has paid — verify receipt, then release!";
-      else if (type == 3) content = "The counterparty cancelled the order!";
-      else if (type == 4) content = "The counterparty raised a dispute!";
-      else if (type == 5) content = "Released — please check your balance!";
-      var jsonParam = {
-        uidTo: this.msg.hisId,
-        uidFrom: this.msg.myId,
-        orderId: this.$route.query.tradeId,
-        content: content,
-        messageType: 0
-      };
-      this.stompClient.send("/app/message/chat", {}, JSON.stringify(jsonParam));
-    },
-    showQRCode: function(type) {
-      if (type == 1) {
-        this.payCodeUrl = this.alipay.qrCodeUrl;
-      } else {
-        this.payCodeUrl = this.wechatPay.qrWeCodeUrl;
-      }
-      this.modal6 = true;
-    },
-    setReserveTime: function() {
-      this.getReserveTime();
-      this.reserveInteval = setInterval(() => {
-        this.getReserveTime();
-      }, 1000);
-    },
-    getReserveTime: function() {
-      var d1 = new Date().getTime();
-      var d2 = new Date(this.msg.createTime.replace(/-/g,"/")).getTime();
-      var throughSeconds = parseInt(parseInt(d1 - d2) / 1000);
-      var reserveSeconds = parseInt(this.msg.timeLimit) * 60 - throughSeconds;
-      this.reserveTime =
-        parseInt(reserveSeconds / 60) +
-        ":" +
-        (parseInt(reserveSeconds % 60) >= 10
-? parseInt(reserveSeconds % 60)
-: "0" + parseInt(reserveSeconds % 60));
-      if (reserveSeconds <= 0) {
-        this.resetStatus();
-      }
-    },
-    resetStatus: function() {
-      // ,
-      clearInterval(this.reserveInteval);
-      this.statusBtn = 5;
-      this.ok3();
-    },
-    appearOrder: function() {
-      var nowTime = new Date().getTime();
-      var payTime = new Date(this.msg.payTime).getTime();
-      if (parseInt((nowTime - payTime) / 1000) < 1800) {
-        // 30 min
-        this.$Message.info("A dispute can be raised 30 minutes after payment!");
-        return;
-      } else {
-        this.modal4 = true;
-      }
-    },
-    ok1() {
-      if (this.irreversibleSubmitting) return;
-      this.irreversibleSubmitting = true;
-      this.$http
-        .post(this.host + "/otc/order/pay", {
-          orderSn: this.$route.query.tradeId
-        })
-        .then(response => {
-          this.irreversibleSubmitting = false;
-          var resp = response.body;
-          if (resp && resp.code == 0) {
-            this.$Message.success(resp.message);
-            this.sendOrderStatusNotice(1);
-            this.getDetail();
-          } else {
-            this.$Message.error((resp && resp.message) || "Pay mark failed");
-          }
-        })
-        .catch(() => {
-          this.irreversibleSubmitting = false;
-          this.$Message.error("Venue did not respond — payment not marked.");
-        });
-    },
-    ok2() {
-      this.modal2 = false;
-        this.modal3 = true;
-        return;
-      setTimeout(() => {
-        this.isloading = false;
-        this.modal2 = false;
-        this.modal3 = true;
-      }, 10000);
-    },
-    ok3() {
-      if (this.irreversibleSubmitting) return;
-      this.irreversibleSubmitting = true;
-      this.$http
-        .post(this.host + "/otc/order/cancel", {
-          orderSn: this.$route.query.tradeId
-        })
-        .then(response => {
-          this.irreversibleSubmitting = false;
-          var resp = response.body;
-          if (resp && resp.code == 0) {
-            this.$Message.success(resp.message);
-            this.sendOrderStatusNotice(3);
-            this.getDetail();
-          } else {
-            this.$Message.error((resp && resp.message) || "Cancel failed");
-          }
-        })
-        .catch(() => {
-          this.irreversibleSubmitting = false;
-          this.$Message.error("Venue did not respond — order not cancelled.");
-        });
-    },
-    ok4() {
-      if (this.irreversibleSubmitting) return;
-      var params = {};
-      params["orderSn"] = this.$route.query.tradeId;
-      params["remark"] = this.formItem.remark;
-      this.irreversibleSubmitting = true;
-      this.$http
-        .post(this.host + "/otc/order/appeal", params)
-        .then(response => {
-          this.irreversibleSubmitting = false;
-          var resp = response.body;
-          if (resp && resp.code == 0) {
-            this.$Message.success(resp.message);
-            this.sendOrderStatusNotice(4);
-            this.getDetail();
-          } else {
-            this.$Message.error((resp && resp.message) || "Appeal failed");
-          }
-        })
-        .catch(() => {
-          this.irreversibleSubmitting = false;
-          this.$Message.error("Venue did not respond — appeal not filed.");
-        });
-    },
-    ok5() {
-      if (this.irreversibleSubmitting) return;
-      var params = {};
-      params["orderSn"] = this.$route.query.tradeId;
-      params["jyPassword"] = this.fundpwd;
-      if (this.fundpwd == "") {
-        this.$Message.error(this.$t("otc.chat.msg7tip"));
-        return;
-      }
-      this.irreversibleSubmitting = true;
-      this.$http
-        .post(this.host + "/otc/order/release", params)
-        .then(response => {
-          this.irreversibleSubmitting = false;
-          var resp = response.body;
-          if (resp && resp.code == 0) {
-            this.$Message.success(resp.message);
-            this.sendOrderStatusNotice(5);
-            this.getDetail();
-          } else {
-            this.$Message.error((resp && resp.message) || "Release failed");
-          }
-        })
-        .catch(() => {
-          this.irreversibleSubmitting = false;
-          this.$Message.error("Venue did not respond — coins not released.");
-        });
-    },
-    getDetail() {
-      this.$http
-.post(this.host + "/otc/order/detail", {
-          orderSn: this.$route.query.tradeId
-        })
-.then(response => {
-          var resp = response.body;
-          if (resp.code == 0) {
-            this.msg = resp.data;
-            this.payInfo = this.msg.payInfo;
-            if (this.payInfo == null) {
-              this.bankInfo = this.alipay = this.wechatPay == null;
-            } else {
-              this.bankInfo = this.msg.payInfo.bankInfo;
-              this.alipay = this.msg.payInfo.alipay;
-              this.wechatPay = this.msg.payInfo.wechatPay;
-            }
-
-            if (!this.watching) {
-              this.watchOrderStutusNotice();
-              this.watching = true;
-            }
-
-            this.statusBtn = resp.data.status;
-            this.tradeType = resp.data.type;
-            if (resp.data.status == 1) {
-              this.statusText = this.$t("otc.chat.result_1");
-              this.setReserveTime();
-            } else if (resp.data.status == 2) {
-              this.statusText = this.$t("otc.chat.result_2");
-            } else if (resp.data.status == 3) {
-              this.statusText = this.$t("otc.chat.result_3");
-            } else if (resp.data.status == 4) {
-              this.statusText = this.$t("otc.chat.result_4");
-            } else if (resp.data.status == 0) {
-              this.statusText = this.$t("otc.chat.result_5");
-            }
-          } else {
-            this.$Message.error(resp.message);
-          }
-        });
-    },
-    strpro(str){
-      let newStr = str;
-      str = str.slice(1);
-      var re = /[\D\d]*/g; 
-      var str2 = str.replace(re,function(str){
-            var result = '';
-            for(var i=0;i<str.length;i++){
-                result += '*';
-            } 
-            return result; 
-        });
-      return newStr.slice(0,1)+str2;
-    }
-  }
-};
-</script>
 
 <style>
 .chat-in.ivu-col.ivu-col-span-4.ivu-poptip-popper{
@@ -670,3 +359,183 @@ export default {
 }
 </style>
 
+<style scoped>
+.ix-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pay-socket,
+.chat-socket {
+  margin: 16px 20px;
+}
+.pay-method {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ix-text-dim, #8a909c);
+}
+.reserve-time {
+  font-size: 12px;
+  color: var(--ix-text-faint, #6b7280);
+}
+</style>
+
+<script>
+/**
+ * THE TRADE DETAIL SCREEN — svc-p2p `trades.get` and the four edges out of it.
+ *
+ * This is the escrow state machine as a screen. `services/svc-p2p/src/state.ts`
+ * is the authority; this renders it and offers only the edges the reader is
+ * actually allowed to take:
+ *
+ *   escrowed   → buyer  `trades.markFiatSent`      (I have paid)
+ *   escrowed   → either `trades.cancel`            (refund the seller)
+ *   fiat_sent  → seller `trades.confirmReceived`   (release to the buyer)
+ *   escrowed / fiat_sent → either `disputes.open`
+ *
+ * WHY THE BUTTONS ARE DERIVED AND NOT PUSHED. The vendor subscribed to a STOMP
+ * topic and set `statusBtn` to whatever integer arrived, then showed buttons for
+ * that number. Two failures came free with that design: a dropped socket froze
+ * the buttons on a stale state, and the mapping from integer to state lived in
+ * the message rather than in the code. Here the state is a name that came back
+ * from the service on this request, and every button is a computed property
+ * over that name plus which side of the trade the reader is on.
+ *
+ * NO POLLING, NO SOCKET. There is no live channel to our services from this
+ * shell, so after every action the trade is re-read and the screen shows the
+ * state the service just confirmed. A reader waiting on a counterparty has to
+ * refresh — which is stated, rather than implied by a spinner.
+ *
+ * MONEY. `amount`, `fiatAmount` and `price` are decimal strings and are printed
+ * as they arrive. Nothing is summed, converted or rounded on this screen.
+ *
+ * WHAT WAS REMOVED AND WHY:
+ * - The SockJS/STOMP client (`/chat/chat-webSocket`) and the whole message
+ *   thread — no chat service exists behind our edge. §13 socket in the template.
+ * - The counterparty's bank / Alipay / WeChat details and QR codes — svc-p2p
+ *   stores no payment instruments. §13 socket in the template.
+ * - The "fund password" prompt on release. Our release path is
+ *   `trades.confirmReceived`, authorised by `p2p:write` on the session; there is
+ *   no transaction-password concept in svc-identity, so a field asking for one
+ *   would have been theatre.
+ */
+import IxState from "../../components/intafaced/IxState.vue";
+import ixModule from "../../components/intafaced/module-mixin.js";
+import { query, mutate, subjectOf } from "../../config/intafaced.js";
+
+export default {
+  components: { IxState },
+  mixins: [ixModule],
+  data() {
+    return {
+      trade: this.emptySection(),
+      acting: false,
+      actionError: "",
+      confirmMarkPaid: false,
+      confirmCancel: false,
+      confirmRelease: false,
+      disputeOpen: false,
+      cancelReason: "",
+      disputeReason: ""
+    };
+  },
+  computed: {
+    t: function () {
+      return this.trade.data;
+    },
+    tradeId: function () {
+      return this.$route.query.tradeId || "";
+    },
+    /** Read from the token, not from the trade — the trade names both parties. */
+    myId: function () {
+      return subjectOf(this.ixToken);
+    },
+    iAmBuyer: function () {
+      return !!(this.t && this.myId && this.t.buyerId === this.myId);
+    },
+    counterpartyId: function () {
+      if (!this.t) return "";
+      return this.iAmBuyer ? this.t.sellerId : this.t.buyerId;
+    },
+    statusText: function () {
+      if (!this.t) return "";
+      // One key per state name. No integer mapping, so a new state added to the
+      // service surfaces as a missing translation rather than as the wrong word.
+      return this.$t("otc.chat.state." + this.t.status);
+    },
+    canMarkPaid: function () {
+      return !!(this.t && this.t.status === "escrowed");
+    },
+    canRelease: function () {
+      return !!(this.t && this.t.status === "fiat_sent");
+    },
+    /** The seller may cancel while escrow is held and the buyer has not paid. */
+    canCancelAsSeller: function () {
+      return !!(this.t && !this.iAmBuyer && this.t.status === "escrowed");
+    },
+    canDispute: function () {
+      if (!this.t) return false;
+      return this.t.status === "escrowed" || this.t.status === "fiat_sent";
+    }
+  },
+  methods: {
+    maskUser(id) {
+      if (!id) return "—";
+      var s = String(id);
+      return s.length <= 8 ? s : s.slice(0, 8) + "…";
+    },
+    getDetail() {
+      if (!this.tradeId) {
+        this.trade = { loading: false, reason: "error", message: this.$t("otc.chat.noTradeId"), data: null };
+        return;
+      }
+      this.load("trade", query("p2p", "trades.get", { tradeId: this.tradeId }, this.ixToken));
+    },
+    /**
+     * Every mutating action goes through here.
+     *
+     * Single-flight: `acting` gates re-entry, so a double click cannot send two
+     * releases. On success the trade is re-read rather than patched locally —
+     * the service decides what state the trade is in, and a screen that guessed
+     * would eventually guess wrong.
+     */
+    act(procedure, input) {
+      var self = this;
+      if (this.acting) return;
+      this.acting = true;
+      this.actionError = "";
+      mutate("p2p", procedure, input, this.ixToken).then(function (res) {
+        self.acting = false;
+        if (!res.ok) {
+          // CONFLICT here means the trade already moved — a second release, or a
+          // cancel after the deadline swept it. Shown as the service worded it.
+          self.actionError = res.message;
+          return;
+        }
+        self.getDetail();
+      });
+    },
+    doMarkPaid() {
+      this.act("trades.markFiatSent", { tradeId: this.tradeId });
+    },
+    doRelease() {
+      this.act("trades.confirmReceived", { tradeId: this.tradeId });
+    },
+    doCancel() {
+      var input = { tradeId: this.tradeId };
+      if (this.cancelReason) input.reason = this.cancelReason;
+      this.act("trades.cancel", input);
+    },
+    doDispute() {
+      if (!this.disputeReason) {
+        this.actionError = this.$t("otc.chat.disputeReasonRequired");
+        return;
+      }
+      this.act("disputes.open", { tradeId: this.tradeId, reason: this.disputeReason });
+    }
+  },
+  created() {
+    this.$store.commit("navigate", "nav-otc");
+    this.getDetail();
+  }
+};
+</script>

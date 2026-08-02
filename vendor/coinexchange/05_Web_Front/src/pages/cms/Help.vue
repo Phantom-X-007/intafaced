@@ -1,186 +1,63 @@
 <template>
-  <div class="help">
-    <img class="bannerimg" src="../../assets/images/help_banner.jpg">
-    <div class="help_container">
-      <h1>{{$t("header.helpcenter")}}</h1>
-      <!-- Stream A: failed help API must not look like an empty catalog. -->
-      <p class="ix-dualbook ix-cms-note" role="note">
-        <strong>Help content</strong> loads from the venue CMS when available — a failed load is unknown, not an empty library of articles.
-      </p>
-      <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" style="margin-top:24px;">{{ loadError }}</p>
-      <p v-else-if="!loaded" class="ix-empty ix-empty-loading" style="margin-top:24px;">{{ $t("common.loading") }}</p>
-      <p v-else-if="helpData.length === 0" class="ix-empty" style="margin-top:24px;">{{ $t("cms.helpEmpty") }}</p>
-      <div class="main" v-else>
-        <div class="section" v-for="section in helpData" :key="section.cate">
-          <h3 v-if="langPram == 'CN'">{{section.titleCN}}</h3>
-          <h3 v-if="langPram == 'EN'">{{section.titleEN}}</h3>
-          <div class="list-wrap">
-            <router-link v-if="langPram == 'CN'" class="item" :title="item.title" v-for="(item, index) in section.content" :to="{path:'helpdetail',query:{cate:section.cate,id:item.id,cateTitle:section.titleCN}}" :key="index">
-              <span class="text">{{item.title}}</span>
-            </router-link>
-            <router-link v-if="langPram == 'EN'" class="item" :title="item.title" v-for="(item, index) in section.content" :to="{path:'helpdetail',query:{cate:section.cate,id:item.id,cateTitle:section.titleEN}}" :key="index">
-              <span class="text">{{item.title}}</span>
-            </router-link>
-          </div>
-          <div class="route-wrap">
-            <router-link v-if="langPram == 'CN'" :to="{path:'helplist',query:{cate:section.cate, cateTitle:section.titleCN}}">{{$t("common.more")}}>></router-link>
-            <router-link v-if="langPram == 'EN'" :to="{path:'helplist',query:{cate:section.cate, cateTitle:section.titleEN}}">{{$t("common.more")}}>></router-link>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <IxSocketPage
+    class="help-page"
+    :title="$t('cms.help.title')"
+    :lead="$t('cms.help.lead')"
+    source="no service"
+    :missing="$t('cms.help.missing')"
+    :needs="needs"
+  />
 </template>
-<style lang="scss" scoped>
-.help {
-  background: #FFF;
-  height: 100%;
-  background-size: cover;
-  position: relative;
-  overflow: hidden;
-  padding-bottom: 50px;
-  padding-top: 60px;
-  color: #fff;
-}
-.help.bannerimg {
-  display: block;
-  width: 100%;
-}
-.help_container {
-  padding: 0 12%;
-  text-align: center;
-  height: 100%;
-  min-height: 800px;
-  > h1 {
-    margin-top: -170px;
-    font-size: 32px;
-    line-height: 1;
-    padding: 50px 0;
-  }
-}
-.help.main {
-  margin-top: 80px;
-  display: flex;
-  justify-content: space-between;
-  flex-direction: row;
-  flex-wrap: wrap;
-.section {
-    width: 40%;
-    font-size: 16px;
-    text-align: left;
-    margin: 0 20px;
-    position: relative;
-    padding-bottom: 30px;
-    margin-bottom: 50px;
-    > h3 {
-      font-size: 24px;
-      line-height: 1;
-      padding: 30px 0;
-      color:#000;
-    }
-.item {
-      display: block;
-      position: relative;
-      padding: 16px 0;
-      line-height: 1;
-      color: #464646;
-      border-bottom: 1px solid #ebebeb;
-.text {
-        display: inline-block;
-        max-width: calc(100% - 25px);
-        white-space: nowrap;
-        -o-text-overflow: ellipsis;
-        text-overflow: ellipsis;
-        overflow: hidden;
-      }
-    }
-.iconimg {
-      display: inline-block;
-      width: 14px;
-      margin-left: 6px;
-    }
-  }
-.route-wrap {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    font-size: 14px;
-    a {
-      color: #00c2a8;
-    }
-  }
-}
-
-.ix-dualbook.ix-cms-note {
-  margin: 16px 12% 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(0, 194, 168, 0.35);
-  border-radius: 6px;
-  background: rgba(0, 194, 168, 0.06);
-  color: #c8cdd4;
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-.ix-dualbook.ix-cms-note strong {
-  color: #00c2a8;
-  font-weight: 600;
-}
-
-</style>
 
 <script>
+/**
+ * HELP AND SUPPORT — a §13 socket covering both, because neither exists.
+ *
+ * Two separate capabilities sat behind this screen and its children, and both
+ * are absent behind our edge:
+ *
+ * 1. HELP ARTICLES. `/uc/ancillary/more/help`, `/help/page`, `/help/page/top`
+ *    and `/help/detail` served a Java-backed article tree with categories, a
+ *    "top" list and per-article detail. There is no CMS service, so there are no
+ *    articles, no categories and no search.
+ *
+ * 2. SUPPORT CONTACT. The shell's header links a support channel and the OTC
+ *    desk advertised "24/7 support on every trade" (removed — see Main.vue).
+ *    There is no support desk, no ticketing surface, and no messaging service
+ *    behind the edge. svc-notify sends one-way notifications to a user; it
+ *    cannot receive anything from one.
+ *
+ * The distinction matters for whoever reads this next: help content is a CMS
+ * gap, support contact is an inbound-channel gap, and building one gives you
+ * nothing towards the other. `needs` states both.
+ *
+ * NOT STUBBED. A hardcoded FAQ would be inventing platform policy — answers about
+ * fees, limits, verification and dispute handling are commitments, and writing
+ * plausible ones into a Vue file is how a product acquires terms nobody agreed.
+ */
+import IxSocketPage from '../../components/intafaced/IxSocketPage.vue';
+
 export default {
-  data() {
-    return {
-      helpData: [],
-      loaded: false,
-      loadError: ""
-    };
-  },
-  created: function() {
-    this.init();
-    this.getData();
-  },
+  name: 'CmsHelp',
+  components: { IxSocketPage },
   computed: {
-    lang() {
-      return this.$store.state.lang;
-    },
-    langPram() {
-      // English only — the backend must never be asked for CN content.
-      return "EN";
+    needs() {
+      return [
+        this.$t('cms.help.need1'),
+        this.$t('cms.help.need2'),
+        this.$t('cms.help.need3')
+      ];
     }
   },
-  methods: {
-    init() {
-      this.$store.commit("navigate", "nav-uc");
-    },
-    getData() {
-      let param = {};
-      param["lang"] = this.langPram;
-      this.loaded = false;
-      this.loadError = "";
-      this.$http
-        .post(this.host + "/uc/ancillary/more/help", param)
-        .then(res => {
-          if (res.status == 200 && res.body && res.body.code == 0) {
-            this.helpData = res.body.data || [];
-            this.loaded = true;
-            this.loadError = "";
-          } else {
-            this.helpData = [];
-            this.loaded = true;
-            this.loadError =
-              (res.body && res.body.message) ||
-              this.$t("cms.helpUnavailable");
-            if (res.body && res.body.message) this.$Message.error(res.body.message);
-          }
-        })
-        .catch(() => {
-          this.helpData = [];
-          this.loaded = true;
-          this.loadError = this.$t("cms.helpUnavailable");
-        });
-    }
+  created() {
+    this.$store.commit('navigate', 'nav-help');
+    this.$store.state.HeaderActiveName = '1-2';
   }
 };
 </script>
+
+<style scoped>
+.help-page {
+  padding-top: 80px;
+}
+</style>

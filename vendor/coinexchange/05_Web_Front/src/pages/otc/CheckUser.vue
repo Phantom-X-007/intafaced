@@ -1,369 +1,127 @@
 <template>
-<div class="content-wrap" id="List">
-    <div class="container">
-        <Row>
-            <Col span="4">
-            <div class="leftmenu left-box">
-                <div class="user-info">
-                    <div class="avatar-box">
-                        <div class="user-face user-avatar-public">
-                          <img v-if="user.avatar!= null && user.avatar!= ''" :src="user.avatar" width="60px" height="60px" style="border-radius: 50%">
-                          <span v-else class="user-avatar-in" >{{usernameS}}</span>
-                        </div>
-                        <div class="user-name">
-                        </div>
-                    </div>
-                    <span class="ml10">
-                      {{user.username}}
-                      <!-- {{user.username && user.username && strpro(user.username)}} -->
-                      </span>
-                </div>
-                <div class="deal-market-info">
-                    <p v-if="user.emailVerified==1">
-                        <i class="iconfont icon-youxiang111"></i>
-                        <span class="unmarket">{{$t('otc.checkuser.emaildone')}}</span>
-                    </p>
-                    <p v-else>
-                        <i class="iconfont icon-youxiang"></i>
-                        <span class="unmarket">{{$t('otc.checkuser.emailundo')}}</span>
-                    </p>
-                    <p v-if="user.phoneVerified==1">
-                        <i class="iconfont icon-dianhua111"></i>
-                        <span class="">{{$t('otc.checkuser.teldone')}}</span>
-                    </p>
-                    <p v-else>
-                        <i class="iconfont icon-dianhua"></i>
-                        <span class="">{{$t('otc.checkuser.telundo')}}</span>
-                    </p>
-                    <p v-if="user.realVerified==1">
-                        <i class="iconfont icon-renzheng111"></i>
-                        <span class="">{{$t('otc.checkuser.idcarddone')}}</span>
-                    </p>
-                    <p v-else>
-                        <i class="iconfont icon-renzheng"></i>
-                        <span class="unmarket">{{$t('otc.checkuser.idcardundo')}}</span>
-                    </p>
-                </div>
-                <!-- <div class="deal-user-trade-info">
-                                                    <p>Trades:
-                                                        <em class="trade-times">{{user.transactions}}</em>
-                                                    </p>
-                                                    <p>Average release:
-                                                        <em>666 min</em>
-                                                    </p>
-                                                </div> -->
+  <div class="content-wrap">
+    <div class="container" id="List">
+      <section class="merchant-top">
+        <span class="tips-word">{{ maskUser(userId) }}</span>
+      </section>
+
+      <div class="tabbox">
+        <h3 class="sec-title">{{ $t('otc.checkuser.reputation') }}</h3>
+        <IxState
+          :loading="rep.loading"
+          :reason="rep.reason"
+          :message="rep.message"
+          endpoint="/api/p2p/trpc/reputation.get"
+        >
+          <div v-if="rep.data" class="rep-grid">
+            <div class="rep-cell">
+              <span class="k">{{ $t('otc.tradeinfo.exchangetimes') }}</span>
+              <span class="v">{{ rep.data.tradesTotal }}</span>
             </div>
-            </Col>
-            <Col span="20">
-            <div class="right-safe">
-                <div class="trade-right-box">
-                    <div class="trade-price">
-                        <Row class="tit">
-                            <Col span="6">{{$t('otc.checkuser.language')}}: {{$t('otc.checkuser.languagetext')}}</Col>
-                            <Col span="6">{{$t('otc.checkuser.registtime')}}: {{user.createTime}}</Col>
-                            <Col span="6">{{$t('otc.checkuser.exchangetimes')}}: {{user.transactions}}</Col>
-                        </Row>
-                    </div>
-                </div>
-                <div class="trade-operation">
-                    <div class="trade-group merchant-top">
-                        <i class="merchant-icon tips"></i>
-                        <span class="tips-word">{{user.username && user.username && strpro(user.username)}}{{$t('otc.checkuser.exchangeinfo')}}</span>
-                    </div>
-                </div>
-                <div class="demo-tabs-style1 tabbox">
-                    <Tabs value="name1">
-                        <TabPane :label="$t('otc.checkuser.tablabel1')" name="name1" >
-                            <div class="order-table">
-                                <Table :columns="tableColumnsOrderSell" :data="tableOrderSell" :loading="loading" :disabled-hover="true"></Table>
-                                <!-- <div style="margin: 10px;overflow: hidden">
-                                                                            <div style="float: right;">
-                                                                                <Page :total="100" :current="1" @on-change="changePage"></Page>
-                                                                            </div>
-                                                                        </div> -->
-                            </div>
-                        </TabPane>
-                        <TabPane :label="$t('otc.checkuser.tablabel2')" name="name2">
-                            <div class="order-table">
-                                <Table :columns="tableColumnsOrderBuy" :data="tableOrderBuy" :loading="loading" :disabled-hover="true"></Table>
-                                <!-- <div style="margin: 10px;overflow: hidden">
-                                                                            <div style="float: right;">
-                                                                                <Page :total="100" :current="1" @on-change="changePage"></Page>
-                                                                            </div>
-                                                                        </div> -->
-                            </div>
-                        </TabPane>
-                    </Tabs>
-                </div>
+            <div class="rep-cell">
+              <span class="k">{{ $t('otc.rep.completed') }}</span>
+              <span class="v">{{ rep.data.completed }}</span>
             </div>
-            </Col>
-        </Row>
+            <div class="rep-cell">
+              <span class="k">{{ $t('otc.rep.cancelled') }}</span>
+              <span class="v">{{ rep.data.cancelled }}</span>
+            </div>
+            <div class="rep-cell">
+              <span class="k">{{ $t('otc.rep.disputed') }}</span>
+              <span class="v">{{ rep.data.disputed }}</span>
+            </div>
+            <div class="rep-cell">
+              <span class="k">{{ $t('otc.rep.disputesLost') }}</span>
+              <span class="v">{{ rep.data.disputesLost }}</span>
+            </div>
+            <div class="rep-cell">
+              <span class="k">{{ $t('otc.rep.completionRate') }}</span>
+              <span class="v">{{ completionPercent }}</span>
+            </div>
+            <div class="rep-cell" v-if="rep.data.avgReleaseSecs > 0">
+              <span class="k">{{ $t('otc.rep.avgRelease') }}</span>
+              <span class="v">{{ rep.data.avgReleaseSecs }}s</span>
+            </div>
+            <div class="rep-cell">
+              <span class="k">{{ $t('otc.rep.badges') }}</span>
+              <span class="v">{{ rep.data.badges.length ? rep.data.badges.join(', ') : $t('otc.rep.none') }}</span>
+            </div>
+          </div>
+        </IxState>
+
+        <!--
+          The vendor showed email / phone / ID verification badges for the
+          counterparty here, read off its own member record. Nothing behind our
+          edge exposes another user's verification state — svc-identity's
+          `kyc.status` is self-only by design — so rendering the badges would
+          mean asserting something unchecked about a stranger. The reputation
+          counts above replace them and are read from svc-p2p.
+        -->
+
+        <h3 class="sec-title">{{ $t('otc.checkuser.theirOffers') }}</h3>
+        <IxState
+          :loading="offers.loading"
+          :reason="offers.reason"
+          :message="offers.message"
+          endpoint="/api/p2p/trpc/offers.list"
+        >
+          <Tabs value="buy">
+            <TabPane :label="$t('otc.buyin')" name="buy">
+              <p v-if="!theirSells.length" class="ix-empty">{{ $t('otc.adsEmpty') }}</p>
+              <div v-else class="ix-scroll">
+                <table class="ix-table">
+                  <thead>
+                    <tr>
+                      <th>{{ $t('otc.asset') }}</th>
+                      <th>{{ $t('otc.price') }}</th>
+                      <th>{{ $t('otc.limits') }}</th>
+                      <th>{{ $t('otc.available') }}</th>
+                      <th>{{ $t('otc.operate') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="o in theirSells" :key="o.id">
+                      <td>{{ o.asset }}</td>
+                      <td class="ix-num">{{ o.price }} {{ o.fiatCurrency }}</td>
+                      <td class="ix-num">{{ o.minAmount }} – {{ o.maxAmount }}</td>
+                      <td class="ix-num">{{ o.remainingAmount }}</td>
+                      <td><router-link :to="'/otc/tradeInfo?offerId=' + o.id">{{ $t('otc.buyin') }}</router-link></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </TabPane>
+            <TabPane :label="$t('otc.sellout')" name="sell">
+              <p v-if="!theirBuys.length" class="ix-empty">{{ $t('otc.adsEmpty') }}</p>
+              <div v-else class="ix-scroll">
+                <table class="ix-table">
+                  <thead>
+                    <tr>
+                      <th>{{ $t('otc.asset') }}</th>
+                      <th>{{ $t('otc.price') }}</th>
+                      <th>{{ $t('otc.limits') }}</th>
+                      <th>{{ $t('otc.available') }}</th>
+                      <th>{{ $t('otc.operate') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="o in theirBuys" :key="o.id">
+                      <td>{{ o.asset }}</td>
+                      <td class="ix-num">{{ o.price }} {{ o.fiatCurrency }}</td>
+                      <td class="ix-num">{{ o.minAmount }} – {{ o.maxAmount }}</td>
+                      <td class="ix-num">{{ o.remainingAmount }}</td>
+                      <td><router-link :to="'/otc/tradeInfo?offerId=' + o.id">{{ $t('otc.sellout') }}</router-link></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </TabPane>
+          </Tabs>
+        </IxState>
+      </div>
     </div>
-</div>
+  </div>
 </template>
-<script>
-export default {
-  components: {},
-  data() {
-    return {
-      loading: true,
-      hasRealName: false,
-      usernameS: "",
-      user: {
-        username: "",
-        email: true,
-        mobileNo: false,
-        idCard: true
-      },
-      tableOrderSell: [],
-      tableOrderBuy: []
-    };
-  },
-  created() {
-    this.getAdv();
-  },
-  computed: {
-    isLogin: function() {
-      return this.$store.getters.isLogin;
-    },
-    member: function() {
-      return this.$store.getters.member;
-    },
-    tableColumnsOrderSell() {
-      let self = this;
-      let columns = [];
-      columns.push({
-        title: this.$t("otc.checkuser.col_symbol"),
-        key: "unit"
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_paymode"),
-        key: "payMode"
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_num"),
-        key: "remainAmount"
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_price") + "/BTC",
-        key: "price",
-        width: 170,
-        render: function(h, params) {
-          return h("div", [
-            h(
-              "p",
-              {
-                attrs: {
-                  class: "price"
-                }
-              },
-              params.row.price + "CNY"
-),
-            h(
-              "p",
-              {
-                attrs: {
-                  class: "price2"
-                }
-              },
-              params.row.minLimit + "-" + params.row.maxLimit + "CNY"
-)
-          ]);
-        }
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_created"),
-        key: "createTime",
-        width: 160
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_operate"),
-        key: "buyBtn",
-        render: function(h, params) {
-          return h("p", [
-            h(
-              "a",
-              {
-                on: {
-                  click: function() {
-                    if (!self.isLogin) {
-                      self.$router.push("/login");
-                    } else if (!self.member.realName) {
-                      self.$Message.error(self.$t("otc.checkuser.operatemsg"));
-                      setTimeout(() => {
-                        self.$router.push("/uc/safe");
-                      }, 2000);
-                    } else {
-                      self.$router.push(
-                        "/otc/tradeInfo?tradeId=" + params.row.advertiseId
-);
-                    }
-                  }
-                },
-                style: {
-                  color: "#fff"
-                }
-              },
-              [
-                h(
-                  "Button",
-                  {
-                    props: {
-                      type: "success",
-                      long: true
-                    },
-                    style: {
-                      marginRight: "8px",
-                      width: "80%"
-                    }
-                  },
-                  self.$t("otc.checkuser.buyin")
-)
-              ]
-)
-          ]);
-        }
-      });
-
-      return columns;
-    },
-    tableColumnsOrderBuy() {
-      let self = this;
-      let columns = [];
-      columns.push({
-        title: this.$t("otc.checkuser.col_symbol"),
-        key: "unit"
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_paymode"),
-        key: "payMode"
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_num"),
-        key: "remainAmount"
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_price") + "/BTC",
-        key: "price",
-        width: 170,
-        render: function(h, params) {
-          return h("div", [
-            h(
-              "p",
-              {
-                attrs: {
-                  class: "price"
-                }
-              },
-              params.row.price + "CNY"
-),
-            h(
-              "p",
-              {
-                attrs: {
-                  class: "price2"
-                }
-              },
-              params.row.minLimit + "-" + params.row.maxLimit + "CNY"
-)
-          ]);
-        }
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_created"),
-        key: "createTime",
-        width: 160
-      });
-      columns.push({
-        title: this.$t("otc.checkuser.col_operate"),
-        key: "buyBtn",
-        render: function(h, params) {
-          return h("p", [
-            h(
-              "a",
-              {
-                on: {
-                  click: function() {
-                    if (!self.isLogin) {
-                      self.$router.push("/login");
-                    } else if (!self.member.realName) {
-                      self.$Message.error(self.$t("otc.checkuser.operatemsg"));
-                      setTimeout(() => {
-                        self.$router.push("/uc/safe");
-                      }, 2000);
-                    } else {
-                      self.$router.push(
-                        "/otc/tradeInfo?tradeId=" + params.row.advertiseId
-);
-                    }
-                  }
-                },
-                style: {
-                  color: "#fff"
-                }
-              },
-              [
-                h(
-                  "Button",
-                  {
-                    props: {
-                      type: "error",
-                      long: true
-                    },
-                    style: {
-                      marginRight: "8px",
-                      width: "80%"
-                    }
-                  },
-                  self.$t("otc.checkuser.sellout")
-)
-              ]
-)
-          ]);
-        }
-      });
-
-      return columns;
-    }
-  },
-  methods: {
-    changePage() {},
-    getAdv() {
-      this.$http
-.post(this.host + "/otc/advertise/member", {
-          name: this.$route.query.id
-        })
-.then(response => {
-          var resp = response.body;
-          if (resp.code == 0) {
-            this.loading = false;
-            this.tableOrderBuy = resp.data.buy;
-            this.tableOrderSell = resp.data.sell;
-            this.user = resp.data;
-            this.usernameS = (this.user.username + "")
-.replace(/^\s+|\s+$/g, "")
-.slice(0, 1);
-          } else {
-            this.$Message.error(resp.message);
-          }
-        });
-    },
-    strpro(str) {
-      let newStr = str;
-      str = str.slice(1);
-      var re = /[\D\d]*/g;
-      var str2 = str.replace(re, function(str) {
-        var result = "";
-        for (var i = 0; i < str.length; i++) {
-          result += "*";
-        }
-        return result;
-      });
-      return newStr.slice(0, 1) + str2;
-    }
-  }
-};
-</script>
 
 <style scoped>
 .container {
@@ -786,5 +544,116 @@ export default {
     }
 </style>
 
+<style scoped>
+.sec-title {
+  color: var(--ix-text, #e8ebf0);
+  font-size: 16px;
+  margin: 24px 0 12px;
+}
+.rep-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.rep-cell {
+  min-width: 150px;
+  padding: 10px 12px;
+  border: 1px solid var(--ix-hairline, rgba(255, 255, 255, 0.09));
+  border-radius: 8px;
+}
+.rep-cell .k {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ix-text-faint, #6b7280);
+}
+.rep-cell .v {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  color: var(--ix-text, #e8ebf0);
+  font-variant-numeric: tabular-nums;
+}
+.ix-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+</style>
 
+<script>
+/**
+ * A COUNTERPARTY'S PROFILE — svc-p2p `reputation.get` and their live offers.
+ *
+ * `reputation.get` is the one procedure in svc-p2p that takes another user's id
+ * as input, and it is scoped `p2p:read`. What it returns is the §6.2 record:
+ * trade counts, dispute counts, completion rate, average release time, badges.
+ * These are the numbers a taker is entitled to see before trading with someone,
+ * and they are the only ones this screen shows.
+ *
+ * COMPLETION RATE IS THE ONE COMPUTED VALUE, and it is not money. `completionRate`
+ * arrives as a plain ratio (`z.number()` in the contract, not an amount string),
+ * so rendering it as a percentage is arithmetic on a statistic rather than on a
+ * balance. Nothing else on this screen is multiplied.
+ *
+ * THEIR OFFERS come from the public book, filtered to this maker for the same
+ * reason MyAd filters to the caller: `offers.list` has no `makerId` input. The
+ * same 200-row caveat applies.
+ */
+import IxState from "../../components/intafaced/IxState.vue";
+import ixModule from "../../components/intafaced/module-mixin.js";
+import { query } from "../../config/intafaced.js";
 
+var LIST_LIMIT = 200;
+
+export default {
+  components: { IxState },
+  mixins: [ixModule],
+  data() {
+    return {
+      rep: this.emptySection(),
+      offers: this.emptySection()
+    };
+  },
+  computed: {
+    userId: function () {
+      return this.$route.query.id || "";
+    },
+    theirs: function () {
+      var id = this.userId;
+      var rows = this.offers.data || [];
+      return rows.filter(function (o) {
+        return o.makerId === id && o.status === "active";
+      });
+    },
+    /** They sell, the reader buys. */
+    theirSells: function () {
+      return this.theirs.filter(function (o) { return o.side === "sell"; });
+    },
+    theirBuys: function () {
+      return this.theirs.filter(function (o) { return o.side === "buy"; });
+    },
+    completionPercent: function () {
+      var r = this.rep.data;
+      if (!r) return "—";
+      // A ratio, not an amount. Shown to one decimal place; with no trades at
+      // all it is not "0%" but unknown, and says so.
+      if (!r.tradesTotal) return "—";
+      return (r.completionRate * 100).toFixed(1) + "%";
+    }
+  },
+  methods: {
+    maskUser(id) {
+      if (!id) return "—";
+      var s = String(id);
+      return s.length <= 8 ? s : s.slice(0, 8) + "…";
+    }
+  },
+  created() {
+    this.$store.commit("navigate", "nav-otc");
+    if (!this.userId) return;
+    this.load("rep", query("p2p", "reputation.get", { userId: this.userId }, this.ixToken));
+    this.load("offers", query("p2p", "offers.list", { limit: LIST_LIMIT }, this.ixToken));
+  }
+};
+</script>
