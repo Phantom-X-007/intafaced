@@ -20,24 +20,24 @@
 
 ## Board (must all become Done or Cut)
 
-| Row                              | Status   | Owner                    | Reality                                                                                       | Next ship           | Proof          |
-| -------------------------------- | -------- | ------------------------ | --------------------------------------------------------------------------------------------- | ------------------- | -------------- |
-| web.terminal                     | **DONE** | **AGENT P-UI**           | Hotkeys #337 · honesty #349 · sub #358 · a11y #367 · density/CMDK/MoneyIndex/Withdraw/Safe/B9 | craft residual reg. | #337–#377 wave |
-| ws.gateway                       | **WIP**  | **AGENT P-WS**           | Private harden #336 + mock-E2E #357; **live futures positions E2E waits human M3**            | B-WS-2 (M3)         | #336 #357      |
-| pay.gateway (+ pay.* expand)     | **OPEN** | **HUMAN M1 shehzad002**  | Crypto rail done; card + Pay OS                                                               | #346 babysit        | —              |
-| protocol.smart-accounts          | **OPEN** | **HUMAN M2 shehzad002**  | Deploy + audit package                                                                        | M2                  | —              |
-| protocol.amm (+ lending/escrow…) | **OPEN** | **HUMAN M2 shehzad002**  | After SA                                                                                      | M2                  | —              |
-| trade.spot                       | **DONE** | **AGENT P-TRADE-LIGHT**  | OHLCV fill agg #345 + candle job ops default OFF #373                                         | deepen only         | #345 #373      |
-| trade.futures                    | **OPEN** | **HUMAN M3 shehzad002**  | Risk engine                                                                                   | M3                  | —              |
-| trade.mm-bot                     | **DONE** | **AGENT P-TRADE-LIGHT**  | Recovery #338 · reseed #340 · mid port #356 (env + optional venue; never invent)              | prod mid ops deepen | #338 #340 #356 |
-| trade.otc                        | **OPEN** | **HUMAN M4 shehzad002**  | Real engine                                                                                   | M4                  | —              |
-| trade.copy                       | **OPEN** | **HUMAN M4 shehzad002**  | Real engine                                                                                   | M4                  | —              |
-| trade.algo                       | **OPEN** | **HUMAN M4 shehzad002**  | Real engine                                                                                   | M4                  | —              |
-| venue.aggregation                | **DONE** | **AGENT P-TRADE-LIGHT**  | Mark fabric mounted #344 + ops enable #376; one public venue (`binance-spot`)                 | second venue later  | #344 #376      |
-| order-route #289                 | **DONE** | **AGENT P-OR** → M7 open | A-OR-1 #289 + CX-8 assembled smoke #370                                                       | M7 dual-book human  | #289 #370      |
-| Phase 5 bank money               | **OPEN** | **HUMAN M6 shehzad002**  | earn/cards/ramps                                                                              | M6                  | —              |
-| Phase 5 academy/ops/agents       | **DONE** | **AGENT P-P5-LIGHT**     | Curriculum #341 · ops kill-switch board #360 · agents useful/ready #375                       | deepen only         | #341 #360 #375 |
-| identity sub-account money       | **OPEN** | **HUMAN M5 shehzad002**  | money graph                                                                                   | M5                  | —              |
+| Row                              | Status   | Owner                    | Reality                                                                                       | Next ship           | Proof                  |
+| -------------------------------- | -------- | ------------------------ | --------------------------------------------------------------------------------------------- | ------------------- | ---------------------- |
+| web.terminal                     | **DONE** | **AGENT P-UI**           | Hotkeys #337 · honesty #349 · sub #358 · a11y #367 · density/CMDK/MoneyIndex/Withdraw/Safe/B9 | craft residual reg. | #337–#377 wave         |
+| ws.gateway                       | **DONE** | **AGENT P-WS**           | Private harden #336 + mock-E2E #357; live futures positions stream **§13 → M3** (no invent)   | babysit M3 events   | #336 #357 · §13 B-WS-2 |
+| pay.gateway (+ pay.* expand)     | **OPEN** | **HUMAN M1 shehzad002**  | Crypto rail done; card + Pay OS                                                               | #346 babysit        | —                      |
+| protocol.smart-accounts          | **OPEN** | **HUMAN M2 shehzad002**  | Deploy + audit package                                                                        | M2                  | —                      |
+| protocol.amm (+ lending/escrow…) | **OPEN** | **HUMAN M2 shehzad002**  | After SA                                                                                      | M2                  | —                      |
+| trade.spot                       | **DONE** | **AGENT P-TRADE-LIGHT**  | OHLCV fill agg #345 + candle job ops default OFF #373                                         | deepen only         | #345 #373              |
+| trade.futures                    | **OPEN** | **HUMAN M3 shehzad002**  | Risk engine                                                                                   | M3                  | —                      |
+| trade.mm-bot                     | **DONE** | **AGENT P-TRADE-LIGHT**  | Recovery #338 · reseed #340 · mid port #356 (env + optional venue; never invent)              | prod mid ops deepen | #338 #340 #356         |
+| trade.otc                        | **OPEN** | **HUMAN M4 shehzad002**  | Real engine                                                                                   | M4                  | —                      |
+| trade.copy                       | **OPEN** | **HUMAN M4 shehzad002**  | Real engine                                                                                   | M4                  | —                      |
+| trade.algo                       | **OPEN** | **HUMAN M4 shehzad002**  | Real engine                                                                                   | M4                  | —                      |
+| venue.aggregation                | **DONE** | **AGENT P-TRADE-LIGHT**  | Mark fabric mounted #344 + ops enable #376; one public venue (`binance-spot`)                 | second venue later  | #344 #376              |
+| order-route #289                 | **DONE** | **AGENT P-OR** → M7 open | A-OR-1 #289 + CX-8 assembled smoke #370                                                       | M7 dual-book human  | #289 #370              |
+| Phase 5 bank money               | **OPEN** | **HUMAN M6 shehzad002**  | earn/cards/ramps                                                                              | M6                  | —                      |
+| Phase 5 academy/ops/agents       | **DONE** | **AGENT P-P5-LIGHT**     | Curriculum #341 · ops kill-switch board #360 · agents useful/ready #375                       | deepen only         | #341 #360 #375         |
+| identity sub-account money       | **OPEN** | **HUMAN M5 shehzad002**  | money graph                                                                                   | M5                  | —                      |
 
 Status vocabulary: `OPEN` | `WIP` | `DONE` | `CUT` (§13)
 
