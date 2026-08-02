@@ -1,11 +1,22 @@
 # Coordination truth layers (binding)
 
-**Status:** BINDING · **program FINISHED** (law on main #385 + seal) · agents enforce · Nitro never updates by hand  
+**Status:** BINDING · **program FINISHED** · **auto-load enforced** (no Nitro paste)  
 **Home for this fact:** this file. Pointers only elsewhere.  
 **Finish audit:** [`COORDINATION-FINISH-AUDIT-2026-08-02.md`](COORDINATION-FINISH-AUDIT-2026-08-02.md) (F1–F10).  
-**User-claim stress test:** [`COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md`](COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md) — law for agents, **not** auto-backend.  
+**User-claim stress test:** [`COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md`](COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md).  
 **Intent:** Denon multi-dev context + zero agent conflict **without** slowing parallel autonomous ship.  
-**Not:** a new project board, a CI tax, or a human Approve gate.
+**Not:** a new project board, every-PR registry tax, or a human Approve gate.
+
+### How this is enforced without you messaging a chat
+
+| Layer | What loads | What it does |
+| --- | --- | --- |
+| **Cold agent opens repo** | `AGENTS.md` + `CLAUDE.md` (tools auto-inject) | Coordination section + CLAUDE non-negotiable #5 — **no paste** |
+| **Hard bans** | `tooling/agent-protocol/AGENT_PROTOCOL.md` | Reject human-mountain implement / no-claim dual-build / fake done |
+| **Machine regression** | `pnpm scan:agent-autoload` in **CI + `pnpm verify`** | Fails if someone deletes the law from auto-load files |
+| **Tracker honesty** | `pnpm tracker:check` in CI + verify | Blocks false `done` / stale render — not every craft edit |
+
+**Honest limit:** no tool can force a model to *think*; we put the law where tools **always load** and **block regression**. We do **not** demand `features.mjs` on every code PR (that would limit you).
 
 ---
 

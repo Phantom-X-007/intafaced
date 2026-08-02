@@ -60,6 +60,10 @@ jobs:
       # the service it lives in does not exist.
       - name: Tracker is honest
         run: pnpm tracker:check
+      # Multi-dev law must stay in auto-loaded agent entry files (AGENTS/CLAUDE/
+      # protocol). No Nitro paste required. Does not force features.mjs every PR.
+      - name: Agent auto-load chain
+        run: pnpm scan:agent-autoload
 
   build:
     name: Typecheck & build
