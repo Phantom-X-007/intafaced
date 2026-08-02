@@ -294,21 +294,30 @@ export default {
       }
     },
     sendCode() {
-      this.$http.post(this.host + "/uc/mobile/withdraw/code").then(response => {
-        var resp = response.body;
-        if (resp.code == 0) {
-          this.settime();
-          this.$Notice.success({
-            title: this.$t("common.tip"),
-            desc: resp.message
-          });
-        } else {
+      if (this.codeIsSending || this.submitting) return;
+      this.$http
+        .post(this.host + "/uc/mobile/withdraw/code")
+        .then(response => {
+          var resp = response.body;
+          if (resp.code == 0) {
+            this.settime();
+            this.$Notice.success({
+              title: this.$t("common.tip"),
+              desc: resp.message
+            });
+          } else {
+            this.$Notice.error({
+              title: this.$t("common.tip"),
+              desc: resp.message
+            });
+          }
+        })
+        .catch(() => {
           this.$Notice.error({
             title: this.$t("common.tip"),
-            desc: resp.message
+            desc: "SMS code was not sent — network error. Try again."
           });
-        }
-      });
+        });
     },
     settime() {
       this.sendcodeValue = this.countdown;

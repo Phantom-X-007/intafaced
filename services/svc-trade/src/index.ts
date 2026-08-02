@@ -152,6 +152,7 @@ const mmSeedJobs = startMmSeedJobs({
     qtyPerLevel: env.TRADE_MM_SEED_QTY,
     targets: parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS),
   },
+  statePath: env.TRADE_MM_SEED_STATE_PATH,
   onError: (name, err) => app.log.error({ err, job: name }, 'mm seed job tick failed'),
   onResult: (marketId, result) => {
     if ('skipped' in result) {

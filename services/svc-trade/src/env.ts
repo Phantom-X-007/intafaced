@@ -118,6 +118,12 @@ const schema = serviceEnvSchema
       TRADE_MM_SEED_QTY: z.string().default('1'),
 
       /**
+       * Durable last-run map for MM seed cancel/reseed across process restarts.
+       * Empty = in-memory only (legacy). Relative paths resolve from process cwd.
+       */
+      TRADE_MM_SEED_STATE_PATH: z.string().default('.data/mm-seed-last-run.json'),
+
+      /**
        * Venue fabric mark source (A-TRADE-VENUE-1 / venue.aggregation).
        * Empty (default) = off — marks fall back to matching depth mid only.
        * Known id today: `binance-spot` (public MarketDataAdapter, no keys).

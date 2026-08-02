@@ -224,6 +224,8 @@ export default {
             profileLoading: true,
             profileReachable: false,
             profileError: '',
+            /** Double-submit lock for bank/ali/wechat bind (money-adjacent). */
+            bindSubmitting: false,
             formValidate1: {
                 name: '',
                 password: '',
@@ -418,7 +420,35 @@ export default {
         handleReset(name) {
             this.$refs[name].resetFields();
         },
+        /**
+         * Money-adjacent bind/update — never silent-fail network death, never double-post.
+         */
+        postBind(url, param) {
+            if (this.bindSubmitting) return;
+            this.bindSubmitting = true;
+            const done = () => {
+              this.bindSubmitting = false;
+            };
+            this.$http
+              .post(this.host + url, param)
+              .then(response => {
+                var resp = response.body;
+                if (resp && resp.code == 0) {
+                  this.$Message.success(this.$t('uc.account.save_success'));
+                  this.getAccount();
+                  this.choseItem = 0;
+                } else {
+                  this.$Message.error((resp && resp.message) || this.$t('uc.account.save_failure'));
+                }
+                done();
+              })
+              .catch(() => {
+                this.$Message.error(this.$t('uc.account.save_failure'));
+                done();
+              });
+        },
         submit(name) {
+            if (this.bindSubmitting) return;
             //Bank card
             if (name == 'formValidate1') {
                 let param = {}
@@ -427,28 +457,10 @@ export default {
                 param['jyPassword'] = this.formValidate1.password
                 param['realName'] = this.formValidate1.name
                 param['cardNo'] = this.formValidate1.bankNo
-              if (this.user.bankVerified==1) { //Edit
-                this.$http.post(this.host + '/uc/approve/update/bank', param).then(response => {
-                  var resp = response.body;
-                  if (resp.code == 0) {
-                    this.$Message.success(this.$t('uc.account.save_success'));
-                    this.getAccount()
-                    this.choseItem = 0
-                  } else {
-                    this.$Message.error(resp.message);
-                  }
-                })
-              }else { //Set
-                this.$http.post(this.host + '/uc/approve/bind/bank', param).then(response => {
-                    var resp = response.body;
-                    if (resp.code == 0) {
-                        this.$Message.success(this.$t('uc.account.save_success'));
-                        this.getAccount()
-                        this.choseItem = 0
-                    } else {
-                        this.$Message.error(resp.message);
-                    }
-                })
+              if (this.user.bankVerified==1) {
+                this.postBind('/uc/approve/update/bank', param);
+              }else {
+                this.postBind('/uc/approve/bind/bank', param);
               }
             }
             //Alipay
@@ -460,27 +472,9 @@ export default {
                 param['qrCodeUrl'] = this.aliPreview;
 
                 if (this.user.aliVerified==1){
-                  this.$http.post(this.host + '/uc/approve/update/ali', param).then(response => {
-                    var resp = response.body;
-                    if (resp.code == 0) {
-                      this.$Message.success(this.$t('uc.account.save_success'));
-                      this.getAccount()
-                      this.choseItem = 0
-                    } else {
-                      this.$Message.error(resp.message);
-                    }
-                  })
+                  this.postBind('/uc/approve/update/ali', param);
                 }else {
-                  this.$http.post(this.host + '/uc/approve/bind/ali', param).then(response => {
-                      var resp = response.body;
-                      if (resp.code == 0) {
-                          this.$Message.success(this.$t('uc.account.save_success'));
-                          this.getAccount()
-                          this.choseItem = 0
-                      } else {
-                          this.$Message.error(resp.message);
-                      }
-                  })
+                  this.postBind('/uc/approve/bind/ali', param);
                 }
             }
             if (name == 'formValidate3') {
@@ -491,27 +485,9 @@ export default {
                 param['qrCodeUrl'] = this.wePreview;
 
               if(this.user.wechatVerified==1) {
-                this.$http.post(this.host + '/uc/approve/update/wechat', param).then(response => {
-                  var resp = response.body;
-                  if (resp.code == 0) {
-                    this.$Message.success(this.$t('uc.account.save_success'));
-                    this.getAccount()
-                    this.choseItem = 0
-                  } else {
-                    this.$Message.error(resp.message);
-                  }
-                })
+                this.postBind('/uc/approve/update/wechat', param);
               }else{
-                this.$http.post(this.host + '/uc/approve/bind/wechat', param).then(response => {
-                    var resp = response.body;
-                    if (resp.code == 0) {
-                        this.$Message.success(this.$t('uc.account.save_success'));
-                        this.getAccount()
-                        this.choseItem = 0
-                    } else {
-                        this.$Message.error(resp.message);
-                    }
-                })
+                this.postBind('/uc/approve/bind/wechat', param);
               }
             }
         },

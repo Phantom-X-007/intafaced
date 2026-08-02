@@ -24,6 +24,7 @@ This is the operator path to **halt a module without a deploy**, and the ledger 
 - Per-flag env / flag-store overrides staged on the console remain **browser-session preview** until a durable flag store lands (§13).
 - Ledger **reconcile** from the console is still a stub (`operator-commands.ts`).
 - Console has **no operator SSO** of its own — tokens are deployment credentials; audit names the console principal until SSO.
+  - **P0 residual:** anyone who can reach `apps/admin` BFF routes can use the shared operator token. **Do not expose admin without network ACL / SSO.** Ship gate for real money.
 - Kill-switch state is **in-process on the edge** — does not survive restart; multi-replica share is a §13 socket.
 
 ---
@@ -36,8 +37,10 @@ When a module is killed:
 2. **Users can still get out** — cancels and documented release REST paths still pass:
    - tRPC leaf `cancel` (any module)
    - `DELETE /api/v1/orders/:id` and `DELETE /api/v1/orders` (CCXT cancel)
+   - `DELETE /api/v1/positions/:id` (futures close — must not trap margin under a trade kill)
 3. **Reads still pass** — a kill is not a blackout of balances / open orders.
 4. **Control plane stays reachable** — `/admin/*`, `/health`, `/ready` are **outside** the kill guard so the operator can un-kill and the LB can still probe.
+5. **Perimeter-only enforcement** — edge kill only stops modules mapped in `UPSTREAMS` (`trade`, `pay`, `identity`, …). Killing `ws`, `matching`, `ledger`, `edge` is **audit-only** until a real control path exists; the board labels these “Not edge-enforced.”
 
 A control that traps open risk is not a safety control.
 

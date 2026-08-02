@@ -118,6 +118,34 @@ export function modulesWithoutKillSwitch(): ModuleId[] {
   return MODULE_IDS.filter((id) => !covered.has(id));
 }
 
+/**
+ * Modules whose kill is enforced on **svc-edge** `/api/*` (UPSTREAMS map).
+ * Killing any other module is still audited on the edge, but **does not** stop
+ * that process (e.g. `ws` uses process env; `matching`/`ledger` are not edge
+ * prefixes). Operators must not treat those flips as live halt.
+ *
+ * Keep in sync with `services/svc-edge/src/routes.ts` UPSTREAMS.module values.
+ */
+export const EDGE_PERIMETER_MODULES: ReadonlySet<ModuleId> = new Set([
+  'identity',
+  'trade',
+  'token',
+  'agents',
+  'bank',
+  'p2p',
+  'pay',
+  'blueprint',
+  'protocol',
+  'dex',
+  'indexer',
+  'notify',
+  'academy',
+]);
+
+export function isEdgePerimeterModule(id: ModuleId): boolean {
+  return EDGE_PERIMETER_MODULES.has(id);
+}
+
 export interface StateDiff {
   readonly key: string;
   readonly from: boolean;
