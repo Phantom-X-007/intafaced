@@ -2,11 +2,19 @@
 /**
  * INTAFACED - runner for the market history seeder.
  *
- * The seeding logic lives in `seed-market-data.js`, which is a mongosh script:
- * it needs mongosh's BSON constructors (Long, Int32) and the `db` global, so it
- * cannot be run by plain node. This wrapper copies it into the Mongo container
- * and executes it there, which also means the seeder works with no npm driver
- * installed and no port exposed.
+ * The seeding logic lives in `seed-market-data.js`, which is a Mongo SHELL
+ * script: it needs BSON constructors (NumberLong, NumberInt) and the `db`
+ * global, so it cannot be run by plain node. This wrapper copies it into the
+ * Mongo container and executes it there, which also means the seeder works with
+ * no npm driver installed and no port exposed.
+ *
+ * The shell runs in a SEPARATE throwaway container, not inside the server. The
+ * server is pinned to mongo:4.4 (the vendored Spring Boot 1.5.9 driver speaks
+ * OP_QUERY, removed in MongoDB 5.1) and that image ships only the legacy
+ * `mongo` shell, which has no BigInt — and this seeder is BigInt throughout so
+ * that no price is ever a JavaScript double. mongosh talks to 4.4 happily over
+ * OP_MSG, so the server keeps its pin and the seeder keeps its integers. See
+ * the block above the `docker run` below.
  *
  * Run:
  *   node vendor/coinexchange/seed-market-data.mjs
@@ -43,6 +51,9 @@ const MONGO = process.env.COINEX_MONGO_CONTAINER || 'intafaced-coinex-mongo';
 const DB = process.env.COINEX_MONGO_DB || 'bitrade';
 const MARKET = process.env.COINEX_MARKET_CONTAINER || 'intafaced-coinex-market';
 const RESTART = process.argv.includes('--restart-market');
+/* Any image carrying mongosh. It is a CLIENT only — it never stores anything,
+   and it is not the version of the server it talks to. */
+const SHELL_IMAGE = process.env.COINEX_MONGOSH_IMAGE || 'mongo:6';
 
 const PASS_THROUGH = ['MARKET_SEED', 'MARKET_SEED_DAYS', 'MARKET_SEED_MIN_DAYS', 'MARKET_SEED_SYMBOLS'];
 
@@ -54,7 +65,7 @@ function run(args, opts = {}) {
   }
 }
 
-/* Fail on a stopped container with the reason, not with a mongosh stack trace
+/* Fail on a stopped container with the reason, not with a shell stack trace
    about a connection that was never going to happen. */
 const probe = spawnSync('docker', ['inspect', '-f', '{{.State.Running}}', MONGO], { encoding: 'utf8' });
 if (probe.status !== 0 || probe.stdout.trim() !== 'true') {
@@ -63,13 +74,38 @@ if (probe.status !== 0 || probe.stdout.trim() !== 'true') {
   process.exit(1);
 }
 
-run(['cp', SCRIPT, MONGO + ':/tmp/seed-market-data.js']);
-
 const envArgs = [];
 for (const key of PASS_THROUGH) {
   if (process.env[key]) envArgs.push('-e', key + '=' + process.env[key]);
 }
-run(['exec', ...envArgs, MONGO, 'mongosh', DB, '--quiet', '--file', '/tmp/seed-market-data.js']);
+
+/* ── The shell is NOT the one inside the server container, and cannot be ───────
+ *
+ * The server is pinned to mongo:4.4 (see coinexchange-compose.yml: the vendored
+ * Spring Boot 1.5.9 driver speaks OP_QUERY, which MongoDB 5.1 removed). That
+ * image ships only the legacy `mongo` shell, whose SpiderMonkey predates
+ * BigInt — and this seeder is BigInt throughout, deliberately, because every
+ * price and amount is a scaled integer and never a JavaScript double. Running
+ * it there dies at the first BigInt literal:
+ *
+ *   SyntaxError: identifier starts immediately after numeric literal
+ *
+ * The two requirements are not actually in conflict: the SERVER has to be 4.4,
+ * the SHELL does not. mongosh speaks OP_MSG, which 4.4 answers perfectly well.
+ * So the seeder runs in a throwaway mongosh container pointed at the pinned
+ * server, and the money arithmetic keeps its integer guarantee.
+ *
+ * `--network container:<MONGO>` shares the server's network namespace, so
+ * 127.0.0.1:27017 reaches it without depending on the compose network's name
+ * or on any published port. Nothing is left behind (--rm) and nothing is
+ * copied into the server container. */
+run([
+  'run', '--rm', ...envArgs,
+  '--network', 'container:' + MONGO,
+  '-v', SCRIPT + ':/tmp/seed-market-data.js:ro',
+  SHELL_IMAGE,
+  'mongosh', 'mongodb://127.0.0.1:27017/' + DB, '--quiet', '--file', '/tmp/seed-market-data.js',
+]);
 
 if (RESTART) {
   console.log('');
