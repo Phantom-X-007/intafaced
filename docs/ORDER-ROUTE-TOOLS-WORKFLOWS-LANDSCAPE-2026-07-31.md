@@ -93,13 +93,13 @@ Do **not** replace these with fashionable alternatives.
 
 ### 2.4 Fault injection / chaos (stability under real money)
 
-| Tool                                            | Use                                                      | Decision                                                       |
-| ----------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
-| **Spec fault catalog F1–F8 as automated tests** | Steady state S; hypothesis; disprove                     | **Adopt first** (no SaaS needed)                               |
+| Tool                                            | Use                                                     | Decision                                                       |
+| ----------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------- |
+| **Spec fault catalog F1–F8 as automated tests** | Steady state S; hypothesis; disprove                    | **Adopt first** (no SaaS needed)                               |
 | **Toxiproxy**                                   | Latency, timeout, connection cut between trade↔matching | **Adopt when** HTTP transport faults need realism beyond mocks |
-| **Chaos Toolkit / Litmus / Gremlin**            | Infra/K8s chaos                                          | **Reject for now** — overkill pre-go-live; no K8s prod story   |
-| **Process kill / abort mid-handler** in tests   | Crash windows                                            | **Adopt** in harness (Node kill, thrown errors at seams)       |
-| **JetStream redelivery simulation**             | At-least-once                                            | **Adopt** using existing bus test patterns                     |
+| **Chaos Toolkit / Litmus / Gremlin**            | Infra/K8s chaos                                         | **Reject for now** — overkill pre-go-live; no K8s prod story   |
+| **Process kill / abort mid-handler** in tests   | Crash windows                                           | **Adopt** in harness (Node kill, thrown errors at seams)       |
+| **JetStream redelivery simulation**             | At-least-once                                           | **Adopt** using existing bus test patterns                     |
 
 **Insane difference:** Catalog-as-code beats “we ran Gremlin once.” Principles of Chaos: steady state → inject → look for drift.
 
@@ -222,13 +222,13 @@ Axes green/red/residual with proof links. Language “ready for real money” ne
 
 ### Tier B — when Tier A hits a wall
 
-| Item                              | Trigger                        |
-| --------------------------------- | ------------------------------ |
+| Item                             | Trigger                        |
+| -------------------------------- | ------------------------------ |
 | Toxiproxy between trade↔matching | Mocks lie about timeouts       |
-| Testcontainers PG/NATS            | CI can’t rely on shared docker |
-| OpenSpec/Spec Kit install         | Agents ignore Spec docs        |
-| Semgrep money rules               | Custom scans hard to maintain  |
-| k6 smoke                          | After conservation green       |
+| Testcontainers PG/NATS           | CI can’t rely on shared docker |
+| OpenSpec/Spec Kit install        | Agents ignore Spec docs        |
+| Semgrep money rules              | Custom scans hard to maintain  |
+| k6 smoke                         | After conservation green       |
 
 ### Tier C — reject for this program
 

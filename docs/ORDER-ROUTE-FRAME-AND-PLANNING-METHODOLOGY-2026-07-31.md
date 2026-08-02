@@ -147,14 +147,14 @@ It is **not**:
 
 Measurable proxies (Spec will pin numbers/tests):
 
-| Steady-state signal                      | Disturbed when…                        |
-| ---------------------------------------- | -------------------------------------- |
-| Ledger conservation on trade path        | Double fill/release or stranded hold   |
+| Steady-state signal                    | Disturbed when…                        |
+| -------------------------------------- | -------------------------------------- |
+| Ledger conservation on trade path      | Double fill/release or stranded hold   |
 | Open-order ↔ hold ↔ engine consistency | Indeterminate submit or lost events    |
-| Dual-book scan green                     | Java mutator or second-book write path |
-| Public volume integrity                  | Seeded volume counted as real          |
-| Quote integrity                          | Stale/synthetic price accepted as live |
-| Cancel under halt/kill                   | User funds trapped                     |
+| Dual-book scan green                   | Java mutator or second-book write path |
+| Public volume integrity                | Seeded volume counted as real          |
+| Quote integrity                        | Stale/synthetic price accepted as live |
+| Cancel under halt/kill                 | User funds trapped                     |
 
 ---
 
