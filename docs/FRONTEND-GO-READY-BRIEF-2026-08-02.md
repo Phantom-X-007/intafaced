@@ -60,11 +60,10 @@ Palette re-pick · taste “ours” · go-live money · Class X
 
 ## Queue truth (re-stamp when residual changes — cold agents)
 
-| Done on tip                       | Still open (do next, no ask)          |
-| --------------------------------- | ------------------------------------- |
-| PROOF-1 LIVE + Orca (#363)        | **B-CMDK** ⌘K palette                 |
-| B13 chart empty (#363)            | **P0.4** `pnpm ui:proof`              |
-| B2 density footer/viewport (#368) | **B3** deep uc craft                  |
-| Residual JSON + preflight         | B4/B5/B9/B10 remainder; ADMIN-0 later |
+| Done on tip                                                                                                | Still open (do next, no ask)                                |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| PROOF-1 · B13 chart · B2 density · ⌘K · B3 shells · B9 fee help · B1 solid · B4 sticky · ADMIN-0 inventory | **P0.4** ui:proof (needs monorepo Playwright install)       |
+| Residual JSON + AOS preflight                                                                              | **B12** marketing/OTC/CMS last                              |
+| Scorecard LIVE rows                                                                                        | Auth money Orca (never seed) · B15 multi-monitor **waived** |
 
 **Do not re-plan from zero.** `pnpm frontend:residual` is the queue. Nitro only for palette/taste/Class X.

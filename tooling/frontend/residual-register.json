@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "Final craft pass: B1 solid global + history B9 parity + login honesty. Queue: P0.4 ui:proof \u00b7 B12 marketing \u00b7 ADMIN-0 \u00b7 human M1\u2013M7.",
+  "tip_note": "ADMIN-0 inventory done. Open: P0.4 ui:proof · B12 marketing polish · B15 waived.",
   "tip_sha_at_write": "final-craft-pass",
   "waves": {
     "A": "honesty / locks / withdraw-first",
@@ -138,7 +138,7 @@
       "wave": "B",
       "title": "Tokens per pick; kill default glass",
       "status": "done",
-      "evidence": "Global solid P21 \u2014 --ix-blur none; iView dropdowns/modals solid; desk panels solid #379+#this",
+      "evidence": "Global solid P21 — --ix-blur none; iView dropdowns/modals solid; desk panels solid #379+#this",
       "proof_missing": "",
       "next_action": "",
       "blocker": "",
@@ -260,7 +260,7 @@
       "title": "Marketing/OS/OTC/CMS craft last",
       "status": "partial",
       "evidence": "#301 honesty/a11y OTC/CMS; earlier N5 honesty",
-      "proof_missing": "Craft excellence order last \u2014 not full craft pass",
+      "proof_missing": "Craft excellence order last — not full craft pass",
       "next_action": "After desk scorecard green",
       "blocker": "desk scorecard first",
       "priority": 50
@@ -291,17 +291,17 @@
       "id": "B15",
       "wave": "B",
       "title": "Multi-monitor pop-out",
-      "status": "open",
-      "evidence": "",
-      "proof_missing": "Not started",
-      "next_action": "After B DoD or waive",
+      "status": "waived",
+      "evidence": "Multi-monitor pop-out deferred; single-desk density prioritized",
+      "proof_missing": "",
+      "next_action": "Reopen only if Nitro asks multi-monitor",
       "blocker": "",
-      "priority": 75
+      "priority": 99
     },
     {
       "id": "B-CMDK",
       "wave": "B",
-      "title": "Global search / \u2318K",
+      "title": "Global search / ⌘K",
       "status": "done",
       "evidence": "CommandPalette + cmd-palette.js golden + Orca shot b-cmdk-2026-08-02; residual GO-READY queue stamp",
       "proof_missing": "",
@@ -314,11 +314,11 @@
       "wave": "META",
       "title": "Live scorecard after B batch",
       "status": "partial",
-      "evidence": "docs/FRONTEND-SCORECARD-LIVE.md PROOF-1 + B13 + B2 notes",
+      "evidence": "PROOF-1 + craft wave notes + LIVE row tip 26289f3",
       "proof_missing": "Full Dim6=3 claim deferred; re-row after B-CMDK",
-      "next_action": "Append LIVE row after each craft PR",
+      "next_action": "Auth money Orca when session exists",
       "blocker": "",
-      "priority": 18
+      "priority": 20
     },
     {
       "id": "META-STEAL",
@@ -357,12 +357,12 @@
       "id": "ADMIN-0",
       "wave": "Admin",
       "title": "Inventory 04_Web_Admin vs apps/admin",
-      "status": "open",
-      "evidence": "Plan 6b",
-      "proof_missing": "Not started",
-      "next_action": "After PROOF-1 / B13; separate worktree",
+      "status": "done",
+      "evidence": "docs/ADMIN-0-INVENTORY-VENDOR-VS-APPS-2026-08-02.md",
+      "proof_missing": "",
+      "next_action": "A1 apps/admin reconcile stub only (separate PR)",
       "blocker": "",
-      "priority": 45
+      "priority": 99
     },
     {
       "id": "C-LWC",
