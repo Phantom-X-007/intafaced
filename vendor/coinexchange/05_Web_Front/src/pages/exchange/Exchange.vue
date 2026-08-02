@@ -2,8 +2,8 @@
   <div class="ix-terminal" @keydown="onDeskKeydown">
     <!-- A-UI-1 / B7+: / markets · Esc clear · B/S buy-sell ticket · T ticket · Enter submit · X cancel last -->
     <a class="ix-skip-link" href="#ix-ticket">Skip to order ticket</a>
-    <!-- B10: polite live region for ticket validation (screen readers) -->
-    <div class="ix-sr-only" aria-live="polite" aria-atomic="true">{{ liveAnnounce }}</div>
+    <!-- A-UI-A11Y / B10: LiveAnnouncer-style region (assertive for ticket errors) -->
+    <div class="ix-sr-only" aria-live="assertive" aria-atomic="true">{{ liveAnnounce }}</div>
     <!-- ══ pair header ══════════════════════════════════════════════════ -->
     <header class="ix-head">
       <div class="ix-head-pair">
@@ -13,6 +13,8 @@
           :class="{ 'is-on': currentCoinIsFavor }"
           @click="toggleFavorite"
           :title="currentCoinIsFavor ? 'Remove from favourites' : 'Add to favourites'"
+          :aria-label="currentCoinIsFavor ? 'Remove from favourites' : 'Add to favourites'"
+          :aria-pressed="currentCoinIsFavor ? 'true' : 'false'"
         >
           <Icon :type="currentCoinIsFavor ? 'ios-star' : 'ios-star-outline'" size="18" />
         </button>
@@ -244,6 +246,7 @@
                       class="ix-book-row is-bid"
                       v-for="(row, i) in bids"
                       :key="'fb' + i"
+                      :aria-label="'Use bid price ' + fmt(row.price, baseCoinScale)"
                       @click="useBookPrice(row)"
                     >
                       <span class="ix-depth-bar" :style="{ width: barWidth(row, 'bid') }"></span>
@@ -272,6 +275,7 @@
                       class="ix-book-row is-ask"
                       v-for="(row, i) in asksAscending"
                       :key="'fa' + i"
+                      :aria-label="'Use ask price ' + fmt(row.price, baseCoinScale)"
                       @click="useBookPrice(row)"
                     >
                       <span class="ix-depth-bar" :style="{ width: barWidth(row, 'ask') }"></span>
@@ -430,7 +434,13 @@
                           :title="'Copy order id ' + (row.orderId || '')"
                           @click="copyOrderId(row)"
                         >ID</button>
-                        <button type="button" class="ix-cancel" :disabled="!!cancellingId" @click="cancelOrder(row)">{{ cancellingId === row.orderId ? 'Cancelling…' : 'Cancel' }}</button>
+                        <button
+                          type="button"
+                          class="ix-cancel"
+                          :disabled="!!cancellingId"
+                          :aria-label="'Cancel order ' + (row.orderId || '')"
+                          @click="cancelOrder(row)"
+                        >{{ cancellingId === row.orderId ? 'Cancelling…' : 'Cancel' }}</button>
                       </td>
                     </tr>
                   </tbody>
@@ -561,6 +571,7 @@
                 class="ix-book-row is-ask"
                 v-for="(row, i) in asks"
                 :key="'a' + i"
+                :aria-label="'Use ask price ' + zero(row.price, baseCoinScale)"
                 @click="useBookPrice(row)"
               >
                 <span class="ix-depth-bar" :style="{ width: barWidth(row, 'ask') }"></span>
@@ -590,6 +601,7 @@
                 class="ix-book-row is-bid"
                 v-for="(row, i) in bids"
                 :key="'b' + i"
+                :aria-label="'Use bid price ' + zero(row.price, baseCoinScale)"
                 @click="useBookPrice(row)"
               >
                 <span class="ix-depth-bar" :style="{ width: barWidth(row, 'bid') }"></span>
@@ -627,44 +639,74 @@
       </aside>
 
       <!-- ── order entry ──────────────────────────────────────────────── -->
-      <aside id="ix-ticket" class="ix-panel ix-order" tabindex="-1">
-        <div class="ix-side-toggle">
+      <aside id="ix-ticket" class="ix-panel ix-order" tabindex="-1" aria-label="Order ticket">
+        <div class="ix-side-toggle" role="group" aria-label="Order side">
           <button
             type="button"
             :class="{ 'is-active': side === 'BUY' }"
+            :aria-pressed="side === 'BUY' ? 'true' : 'false'"
             @click="setSide('BUY')"
           >Buy</button>
           <button
             type="button"
             :class="{ 'is-active': side === 'SELL' }"
+            :aria-pressed="side === 'SELL' ? 'true' : 'false'"
             @click="setSide('SELL')"
           >Sell</button>
         </div>
 
-        <nav class="ix-tabs ix-tabs-sm ix-type-tabs">
+        <nav class="ix-tabs ix-tabs-sm ix-type-tabs" aria-label="Order type">
           <button
             type="button"
             :class="{ 'is-active': orderType === 'LIMIT_PRICE' }"
+            :aria-pressed="orderType === 'LIMIT_PRICE' ? 'true' : 'false'"
             @click="setOrderType('LIMIT_PRICE')"
           >Limit</button>
           <button
             type="button"
             :class="{ 'is-active': orderType === 'MARKET_PRICE' }"
+            :aria-pressed="orderType === 'MARKET_PRICE' ? 'true' : 'false'"
             @click="setOrderType('MARKET_PRICE')"
           >Market</button>
         </nav>
 
         <div class="ix-order-body">
+          <!-- A-UI-A11Y / B10 GOV.UK error-summary: focus lands here; text matches field error -->
+          <div
+            v-if="orderErrorSummary"
+            :id="orderErrorSummary.id"
+            ref="orderErrorSummary"
+            class="ix-error-summary"
+            role="alert"
+            tabindex="-1"
+          >
+            <p class="ix-error-summary-title">{{ orderErrorSummary.title }}</p>
+            <ul class="ix-error-summary-list">
+              <li>
+                <a
+                  v-if="orderErrorSummary.href"
+                  class="ix-error-summary-link"
+                  :href="orderErrorSummary.href"
+                  @click.prevent="focusTicketErrorField"
+                >{{ orderErrorSummary.message }}</a>
+                <span v-else>{{ orderErrorSummary.message }}</span>
+              </li>
+            </ul>
+          </div>
+
           <div class="ix-field">
-            <label>Price</label>
+            <label for="ix-ticket-price">Price</label>
             <div class="ix-input" :class="{ 'is-disabled': orderType === 'MARKET_PRICE' }">
               <input
+                id="ix-ticket-price"
                 ref="ticketPrice"
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
                 :disabled="orderType === 'MARKET_PRICE'"
                 :placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : '0.00'"
+                :aria-invalid="ticketPriceAria['aria-invalid']"
+                :aria-describedby="ticketPriceAria['aria-describedby']"
                 v-model="form.price"
                 @input="onPriceInput"
                 @keydown.enter.prevent="submitOrder"
@@ -674,14 +716,17 @@
           </div>
 
           <div class="ix-field">
-            <label>{{ amountLabel }}</label>
+            <label for="ix-ticket-amount">{{ amountLabel }}</label>
             <div class="ix-input">
               <input
+                id="ix-ticket-amount"
                 ref="ticketAmount"
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
                 placeholder="0.00"
+                :aria-invalid="ticketAmountAria['aria-invalid']"
+                :aria-describedby="ticketAmountAria['aria-describedby']"
                 v-model="form.amount"
                 @input="onAmountInput"
                 @keydown.enter.prevent="submitOrder"
@@ -740,6 +785,7 @@
             class="ix-submit"
             :class="side === 'BUY' ? 'is-buy' : 'is-sell'"
             :disabled="!tradable || submitting || !!orderBlockReason"
+            :aria-busy="submitting ? 'true' : 'false'"
             @click="submitOrder"
           >
             {{ submitting ? 'Placing…' : submitLabel }}
@@ -747,12 +793,10 @@
           <p class="ix-order-note ix-dim ix-kbd-hint" title="Keyboard trade shortcuts (desk)">
             <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>Enter</kbd> submit · <kbd>X</kbd> cancel last
           </p>
-
+          <!-- Inline echo kept in sync with summary (GOV.UK: same wording); focus is on summary -->
           <p
-            ref="orderError"
             class="ix-order-note ix-order-error"
-            role="alert"
-            tabindex="-1"
+            aria-hidden="true"
             v-if="orderValidationError"
           >{{ orderValidationError }}</p>
           <p class="ix-order-note" v-if="!isLogin">
@@ -823,6 +867,7 @@ var Stomp = require('stompjs');
 var SockJS = require('sockjs-client');
 var moment = require('moment');
 var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
+var deskA11y = require('../../assets/js/desk-a11y.js');
 var bookHonesty = require('../../assets/js/book-honesty.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 
@@ -920,6 +965,16 @@ export default {
   },
 
   computed: {
+    /* A-UI-A11Y / B10 — GOV.UK error-summary model (verbatim ticket error). */
+    orderErrorSummary() {
+      return deskA11y.buildTicketErrorSummary(this.orderValidationError);
+    },
+    ticketPriceAria() {
+      return deskA11y.ticketFieldAria('price', this.orderValidationError);
+    },
+    ticketAmountAria() {
+      return deskA11y.ticketFieldAria('amount', this.orderValidationError);
+    },
     isLogin() {
       return this.$store.getters.isLogin;
     },
@@ -2070,16 +2125,58 @@ export default {
       return '';
     },
 
-    /** B10 — focus the first order error + announce for AT. */
+    /**
+     * A-UI-A11Y / B10 — GOV.UK: move keyboard focus to error summary;
+     * LiveAnnouncer-style clear-then-set when the same message re-fires.
+     */
     focusOrderError(msg) {
-      this.orderValidationError = msg || this.orderValidationError;
-      this.liveAnnounce = this.orderValidationError || '';
-      this.$nextTick(() => {
-        const el = this.$refs.orderError;
-        if (el && typeof el.focus === 'function') {
-          el.focus();
-        }
-      });
+      var next = msg || this.orderValidationError || '';
+      this.orderValidationError = next;
+      var plan = deskA11y.liveAnnounceUpdate(this.liveAnnounce, next);
+      var self = this;
+      var afterAnnounce = function () {
+        self.$nextTick(function () {
+          self.focusErrorSummary();
+        });
+      };
+      if (plan.needsClearFirst) {
+        this.liveAnnounce = '';
+        this.$nextTick(function () {
+          self.liveAnnounce = plan.text;
+          afterAnnounce();
+        });
+      } else {
+        this.liveAnnounce = plan.text;
+        afterAnnounce();
+      }
+    },
+
+    /** Focus the GOV.UK error summary (not a field) so AT and keyboard land first. */
+    focusErrorSummary() {
+      var el = this.$refs.orderErrorSummary;
+      if (el && typeof el.focus === 'function') {
+        el.focus();
+      }
+    },
+
+    /** Error-summary link → associated field (amount or price). */
+    focusTicketErrorField() {
+      var summary = this.orderErrorSummary;
+      if (!summary || !summary.fieldId) {
+        return this.focusErrorSummary();
+      }
+      var el =
+        summary.field === 'price'
+          ? this.$refs.ticketPrice
+          : summary.field === 'amount'
+            ? this.$refs.ticketAmount
+            : null;
+      if (el && !el.disabled && typeof el.focus === 'function') {
+        el.focus();
+        if (typeof el.select === 'function') el.select();
+        return;
+      }
+      this.focusErrorSummary();
     },
 
     submitOrder() {
@@ -3583,6 +3680,14 @@ $radius-sm: var(--ix-radius-sm, 8px);
 }
 .ix-order-note.ix-order-error:focus {
   outline: 1px solid var(--ix-orange, #00c2a8);
+  outline-offset: 2px;
+}
+/* A-UI-A11Y — local fallback if intafaced.css load order lags */
+.ix-terminal .ix-error-summary {
+  margin-bottom: 10px;
+}
+.ix-terminal .ix-error-summary:focus {
+  outline: 2px solid var(--ix-orange, #00c2a8);
   outline-offset: 2px;
 }
 </style>

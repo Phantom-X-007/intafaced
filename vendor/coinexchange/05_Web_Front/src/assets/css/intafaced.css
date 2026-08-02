@@ -989,7 +989,7 @@ a:hover {
   font-feature-settings: var(--font-feature-num);
 }
 
-/* Keyboard focus — visible ring for order form / nav (calm §3.4). B10 expand. */
+/* Keyboard focus — visible ring for order form / nav (calm §3.4). A-UI-A11Y / B10. */
 a:focus-visible,
 button:focus-visible,
 .ivu-btn:focus-visible,
@@ -1000,10 +1000,17 @@ button:focus-visible,
 .ivu-radio-input:focus-visible,
 .ix-plane-btn:focus-visible,
 .ix-market-row:focus-visible,
+.ix-book-row:focus-visible,
+.ix-star:focus-visible,
+.ix-side-toggle button:focus-visible,
+.ix-tabs button:focus-visible,
 .ix-cancel:focus-visible,
 .ix-submit:focus-visible,
 .ix-linkish:focus-visible,
+.ix-error-summary:focus-visible,
+.ix-error-summary-link:focus-visible,
 input:focus-visible,
+input[type='range']:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: 2px solid var(--accent);
@@ -1024,7 +1031,43 @@ textarea:focus-visible {
 }
 .ix-skip-link:focus {
   left: 0;
-  outline: none;
+  outline: 2px solid var(--text, #fff);
+  outline-offset: 2px;
+}
+
+/* GOV.UK-style error summary on order ticket (A-UI-A11Y / B10). Tokens only. */
+.ix-error-summary {
+  margin: 0 0 var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border: 2px solid var(--down, #e25555);
+  border-radius: 4px;
+  background: var(--panel, transparent);
+  color: var(--text, inherit);
+}
+.ix-error-summary:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ix-error-summary-title {
+  margin: 0 0 var(--space-2, 8px);
+  font-size: var(--type-13, 13px);
+  font-weight: 600;
+  color: var(--down, #e25555);
+}
+.ix-error-summary-list {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: var(--type-12, 12px);
+  line-height: 1.45;
+}
+.ix-error-summary-link {
+  color: var(--down, #e25555);
+  text-decoration: underline;
+  font-weight: 600;
+}
+.ix-error-summary-link:hover,
+.ix-error-summary-link:focus {
+  color: var(--text, inherit);
 }
 
 /* Shared empty / error / quiet note — three distinct honesty states. */
