@@ -9,10 +9,10 @@
 
 ## 1 · Two admin surfaces (do not conflate)
 
-| Surface                             | Path                               | Stack                                            | Port (dev)           | Role                                                                                        |
-| ----------------------------------- | ---------------------------------- | ------------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------- |
+| Surface                             | Path                    | Stack                                            | Port (dev)           | Role                                                                                        |
+| ----------------------------------- | ----------------------- | ------------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------- |
 | **Vendored exchange staff console** | `vendor/*/04_Web_Admin` | Vue 2 · webpack · **iView 2** (iview-admin fork) | webpack-dev (legacy) | Venue-era ops: members, OTC, finance examine, CMS content, red envelopes, etc.              |
-| **INTAFACED operator console**      | `apps/admin`                       | Next 15 · React 19 · monorepo tokens             | **3100**             | Doctrine §14.6: kill-switches, launch drops, jurisdiction, ledger freeze/reconcile friction |
+| **INTAFACED operator console**      | `apps/admin`            | Next 15 · React 19 · monorepo tokens             | **3100**             | Doctrine §14.6: kill-switches, launch drops, jurisdiction, ledger freeze/reconcile friction |
 
 **Product rule:** `apps/admin` **must not** grow venue SQL or hold balances. Money moves only via ledger recipes / control-plane commands.
 
