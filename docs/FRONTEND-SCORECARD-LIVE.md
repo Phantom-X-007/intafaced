@@ -122,3 +122,26 @@ Refs: `docs/refs/proof-1/` (gap-audit · steal-lines · critique).
 | Dim6  | **1 → ~2** (footer gone; columns fill viewport) — not claiming 3 |
 
 **Orca:** `docs/styleboard/shots/b2-density-2026-08-02/02-exchange.png` · exchange a11y no marketing Copyright; home still has footer.
+
+---
+
+## Row: post-craft tip (2026-08-02) — after B2–B5 / CMDK / shells
+
+| Field   | Value                                                   |
+| ------- | ------------------------------------------------------- |
+| Date    | 2026-08-02                                              |
+| Tip SHA | `26289f3` (re-derive; craft pass #381 and predecessors) |
+| Role    | implementer                                             |
+| Eyes    | Orca + residual (not full auth money re-score)          |
+
+| Surface                           | G4    | G11  | G12         | Dim6    | Notes                                                                 |
+| --------------------------------- | ----- | ---- | ----------- | ------- | --------------------------------------------------------------------- |
+| /exchange                         | pass  | pass | pass (code) | **~2**  | Density footer gone; solid panels; fee help; ⌘K; chart empty readable |
+| Money / Withdraw / Safe / Account | pass† | n/a  | code holds  | craft ↑ | Desk shells; unauth still login-gated                                 |
+| Login                             | pass  | n/a  | n/a         | 1–2     | Honesty pass; marketing DNA residual B12                              |
+
+† No fixture-seeded money. Auth Orca still open for LIVE money eyes.
+
+**Delta vs PROOF-1:** Dim6 improved (viewport + no footer); chart empty P0 fixed; CMDK shipped. **Not** claiming world-class density 3.
+
+**Orca packs (examples):** scorecard-2026-08-02 · b13-chart-empty · b2-density · b-cmdk · b3-safe-b9 · b4-account-glass
