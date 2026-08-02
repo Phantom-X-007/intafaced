@@ -2,7 +2,7 @@
   "schema": 1,
   "updated": "2026-08-02",
   "tip_note": "Re-stamp tip_sha via: pnpm frontend:preflight (prints git rev-parse origin/main)",
-  "tip_sha_at_write": "re-derive-at-run",
+  "tip_sha_at_write": "5f2f8fe",
   "waves": {
     "A": "honesty / locks / withdraw-first",
     "B": "craft + page-data pro power",
@@ -39,11 +39,11 @@
       "wave": "P0",
       "title": "Orca screenshots + baseline scorecard",
       "status": "partial",
-      "evidence": "docs/FRONTEND-BASELINE-SCORECARD-A0 on main; P21 Orca shot",
-      "proof_missing": "Re-score after B craft batch never done; auth’d money Orca fleet-dependent",
-      "next_action": "PROOF-1 full re-score exchange+money+withdraw",
+      "evidence": "PROOF-1 LIVE row + Orca pack docs/styleboard/shots/scorecard-2026-08-02 + docs/refs/proof-1",
+      "proof_missing": "Auth’d money/withdraw Orca still open; chart overlay re-shot after B13",
+      "next_action": "B13 chart empty overlay + density; then auth Orca when session available",
       "blocker": "",
-      "priority": 1
+      "priority": 3
     },
     {
       "id": "P0.4",
@@ -313,21 +313,21 @@
       "id": "META-SCORECARD",
       "wave": "META",
       "title": "Live scorecard after B batch",
-      "status": "open",
-      "evidence": "A0 baseline only",
-      "proof_missing": "Re-score never landed",
-      "next_action": "PROOF-1 first after go",
+      "status": "partial",
+      "evidence": "docs/FRONTEND-SCORECARD-LIVE.md PROOF-1 row 2026-08-02 tip 5f2f8fe",
+      "proof_missing": "Certifier (non-implementer) second eyes optional; auth money surfaces",
+      "next_action": "Re-score after B13 P0 fixes",
       "blocker": "",
-      "priority": 1
+      "priority": 3
     },
     {
       "id": "META-STEAL",
       "wave": "META",
       "title": "Steal lines + refs layout",
       "status": "partial",
-      "evidence": "AOS templates; leverage pack law",
-      "proof_missing": "Not used on late craft PRs",
-      "next_action": "Enforce via preflight on CRAFT",
+      "evidence": "docs/refs/proof-1/steal-lines.md + AOS templates",
+      "proof_missing": "Enforce on every CRAFT PR via preflight",
+      "next_action": "Require steal-lines on next CRAFT (B13)",
       "blocker": "",
       "priority": 4
     },
