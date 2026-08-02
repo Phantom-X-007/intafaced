@@ -1,121 +1,118 @@
-# Frontend state of truth — 2026-07-31 (final operating)
+# Frontend state of truth — operating (refreshed 2026-08-02)
 
-**Status:** **LOCKED** · plan v3.1 + Wave Admin · free-hands · Nitro yes 1–7  
-**You (Nitro):** this page is enough. Do not re-read methodology/plan unless curious.  
-**New chat:** paste from [`NITRO-FRONTEND-NEW-CHAT-HANDOFF-2026-07-31.md`](NITRO-FRONTEND-NEW-CHAT-HANDOFF-2026-07-31.md) then **go implement**.
+**Status:** Implement program mid-flight · Wave A + P21 + Wave B **desk core** on main · **level recovery required** before next go  
+**You (Nitro):** this page + the recovery doc. Full plan only if curious.  
+**Next go:** paste `docs/FRONTEND-GO-READY-BRIEF-2026-08-02.md` then **go**.
+
+**Level law (read before ship):** [`FRONTEND-LEVEL-RECOVERY-AND-GO-READY-2026-08-02.md`](FRONTEND-LEVEL-RECOVERY-AND-GO-READY-2026-08-02.md)
 
 ---
 
 ## Verdict
 
-Planning is finished and written to disk. A new chat that **reads these files** has zero need for this chat’s transcript. Next move is **implement**, not research. Agents autonomous; you keep Orca open.
+Planning was thorough. Autonomous shipping landed real honesty + modular P21 + useful desk craft. **Operating level drifted down** under compaction (scorecard/Orca/skills/steal-lines underused). Next go must restore level, not only volume.
 
-**Local durability:** these SoT files are in the Sovereign `docs/` folder. Many are not yet on GitHub until committed — **do not delete them**. Optional: ask next agent to PR the locked docs so they survive machine switch.
+Product UI = **vendored shell `:8090`**, not `apps/web`.
 
 ---
 
-## Source of truth (one chain — use only these)
+## Source of truth (one chain)
 
-| Order              | Doc                                                                 | Job                              |
-| ------------------ | ------------------------------------------------------------------- | -------------------------------- |
-| 1                  | **This file**                                                       | Live status + what you do        |
-| 2                  | `FRONTEND-MASTER-METHODOLOGY-2026-07-31.md`                         | How (v3.1 free-hands)            |
-| 3                  | `FRONTEND-MASTER-PLAN-WAVE-A-B-2026-07-31.md`                       | What/when (incl. **Wave Admin**) |
-| 4                  | `STREAM-A-DESIGN-BAR.md`                                            | Score polish PRs                 |
-| 5                  | `brand-l1-refs/AUDIT-PASS.md`                                       | Real visual refs only            |
-| 6                  | `NITRO-STREAM-A-CLAIM.md`                                           | Trader shell file territory      |
-| Evidence (not law) | enhance-return · adversarial audit · merge notes · older blueprints | Background only                  |
+| Order | Doc                                           | Job                               |
+| ----- | --------------------------------------------- | --------------------------------- |
+| 0     | **Level recovery + go-ready** (2026-08-02)    | Bar · mistakes · residual · tools |
+| 1     | **This file**                                 | Live status                       |
+| 2     | `FRONTEND-MASTER-METHODOLOGY-2026-07-31.md`   | How · scorecard · free-hands      |
+| 3     | `FRONTEND-MASTER-PLAN-WAVE-A-B-2026-07-31.md` | What/when (A/B/C + Admin)         |
+| 4     | `STREAM-A-DESIGN-BAR.md`                      | PR reject checklist               |
+| 5     | `FRONTEND-OPS-NOW-2026-07-30.md`              | Orca primary eyes                 |
+| 6     | `brand-l1-refs/AUDIT-PASS.md`                 | Real visual refs only             |
+| 7     | `NITRO-STREAM-A-CLAIM.md`                     | File territory                    |
+| 8     | `COLOR-LOCK-P21-PROVISIONAL-2026-07-31.md`    | Palette values                    |
 
-**Ignore for execution:** FRONTEND-WORLDCLASS ORIGINAL/ENHANCED · any chat memory that contradicts these.
+**Ignore for execution:** chat memory vs disk; WORLDCLASS ORIGINAL/ENHANCED as law; “CI green = world-class.”
 
 ---
 
 ## Locked decisions
 
-| Item                      | Lock                                                                                                   |
-| ------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Product ambition          | World-class pro trader workbench + same-system staff admin track                                       |
-| Prior UI                  | Inventory only — rebuild allowed                                                                       |
-| Wave A before final look  | Yes                                                                                                    |
-| Styleboard systems N1–N4  | Drafted; **not** final full-system pick                                                                |
-| **Color (provisional)**   | **P21** deep neutral + teal — modular, changeable (`COLOR-LOCK-P21-PROVISIONAL-2026-07-31.md` on #267) |
-| Logged-in home            | Trading desk                                                                                           |
-| apps/web                  | Spike, never linked                                                                                    |
-| RSI/MACD panes            | Wave C                                                                                                 |
-| Admin                     | **Wave Admin** after trader Wave A foundation (not vibe)                                               |
-| Fake money / fixture seed | Forbidden                                                                                              |
-| Orange brand              | **Not sacred** — free hands; P21 teal is current accent                                                |
+| Item                      | Lock                                                                   |
+| ------------------------- | ---------------------------------------------------------------------- |
+| Ambition                  | World-class pro trader workbench + Wave Admin track                    |
+| Prior UI                  | Inventory only — free hands rebuild allowed                            |
+| Wave A before final look  | Yes — **done on main**                                                 |
+| Full N1–N4 systems        | Drafted; **not** final — color-first path accepted                     |
+| Color                     | **P21 provisional** modular teal                                       |
+| Wave C (RSI/MACD panes)   | Later                                                                  |
+| Admin                     | After trader A foundation — **A foundation landed; Admin not started** |
+| Fake money / fixture seed | Forbidden                                                              |
+| Orange brand              | Not sacred                                                             |
 
 ---
 
-## What happens next (sequence)
+## Sequence (where we are)
 
 ```
-NOW     Docs locked (you are here)
-  ↓
-GO      You say: go implement
-  ↓
-P0      Agent: tip worktree · boot shell · Orca screenshots · baseline score
-  ↓
-Wave A  Trader honesty (mostly on #267 stack; A2′/A1′ merged #261/#262)
-  ↓
-Color   **P21 locked provisional** (you already picked) — full N1–N4 system can wait
-  ↓
-NOW     Restack #267 on tip main · Orca-prove P21 · CI · then Wave B craft
-  ↓
-Wave B  Craft + cheap pro power on trader shell (tokens already P21)
-  ↓
-Admin   Wave Admin inventory → money-ops honesty → same tokens
-  ↓
-Wave C  Power features (hotkeys full, LWC v5 panes, widgets…)
+✓ Planning locked
+✓ go implement
+✓ Wave A honesty (core)
+✓ P21 color provisional
+✓ Wave B desk core (partial vs full B list)
+→ NOW  Level recovery (scorecard · Orca · critique · provenance)
+→ THEN Residual B (⌘K, deep B3, full B4…) · Admin-0 · Wave C
 ```
 
 ---
 
-## What **you** do (minimal)
+## Implement progress (re-derived 2026-08-02)
 
-| When                     | You                                                                                                 |
-| ------------------------ | --------------------------------------------------------------------------------------------------- |
-| **Always**               | Keep **Orca app open** when agents are proving UI                                                   |
-| **Start coding**         | In this chat (or new implement chat): **go implement**                                              |
-| **Color already picked** | Only re-message if you want a **different** palette id (Pxx)                                        |
-| **Rare blocks**          | Answer product yes/no if agent escalates (real money go-live, admin which-app if Denon must choose) |
-| **Never required**       | Git, PRs, verify, reading methodology, Chrome install, being the test runner                        |
+| PR   | State      | Content                                   |
+| ---- | ---------- | ----------------------------------------- |
+| #261 | **merged** | Withdraw decimal + receipt + lock         |
+| #262 | **merged** | Account / Safe / myorder honesty          |
+| #267 | **merged** | Wave A stack + P21 + B5–B8                |
+| #295 | **merged** | B9 blotter tools                          |
+| #297 | **merged** | B2/B6/B10/B14 + B3 money                  |
+| #298 | **merged** | B10 withdraw/record + residual map        |
+| #301 | **merged** | B12 OTC/CMS + B4 light mobile             |
+| #302 | **merged** | Skip-link, focus, withdraw copy, activity |
+| #320 | **merged** | Auth shell P21 tokens + login a11y        |
 
-Agents: worktrees, LIVE-LANES, PRs, `pnpm verify`, Orca proof, Denon `[cross-stream]` when needed.
-
----
-
-## Autonomy rules (speed without quality loss)
-
-| Do autonomously                                      | Stop and ask you                                                             |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Wave A/B implementation, PRs, proof, palette retheme | Only if you want a **new** palette id or “does this look like us” after Orca |
-| Inventory tip, rebuild vs keep judgment              | Go-live with real customer money                                             |
-| Styleboard drafts / N-system later                   | Which admin is live **if** both live and Denon silent — then one escalate    |
-| Wave Admin **after** Wave A foundation proof         | Starting Admin-1 **before** Wave A if you didn’t waive                       |
-| Babysit CI / comment Denon PRs                       | Secrets, counsel, commercial TV grant                                        |
+**P21** lives in tip `intafaced.css` `:root`.
 
 ---
 
-## Peace checklist
+## Residual (named — not “later means never”)
 
-- [x] Methodology + plan locked with free-hands
-- [x] Admin is a **named wave**, not forgotten and not vibe
-- [x] Single SoT chain above
-- [x] **go implement** (your trigger)
-- [x] First Orca proof on :8090 — PR #261 Wave A2′
+See recovery doc §6. Headline:
+
+- Scorecard re-measure + Orca crop pack
+- Impeccable/design-taste craft pass
+- ⌘K or waiver
+- Nitro taste on P21
+- Admin-0 · Wave C later
 
 ---
 
-_Update this file when tip SHA moves materially or a wave completes._
+## What you do
 
-## Implement progress (2026-07-31 continuous)
+| When       | You                                     |
+| ---------- | --------------------------------------- |
+| Always     | Keep **Orca open** when agents prove UI |
+| Next phase | Say **go** (agents use GO-READY brief)  |
+| Optional   | Re-pick palette id if P21 wrong         |
+| Never      | Git / CI / being the test runner        |
 
-- #261 A2′ withdraw — **merged**
-- #262 A1′ Account/Safe/myorder — **merged**
-- #267 Wave A continue (growth honesty, locks, grouping, OTC, styleboards, **P21 apply**) — **open, CONFLICTING vs main** (must restack)
-- Color: **P21 provisional** on #267 (`intafaced.css` tokens + brand hex remap)
-- Compaction audit: `docs/COMPACTION-AUDIT-FRONTEND-2026-07-31.md`
-- **Unverified this turn:** live Orca of P21 on :8090 after teal apply
-- **Do not** re-open style marathon unless he asks
+---
+
+## Autonomy
+
+| Do                                       | Stop                                           |
+| ---------------------------------------- | ---------------------------------------------- |
+| Level-compliant Class N ship on Stream A | New palette / “looks like us” after proof pack |
+| Admin-0 inventory after you go           | Admin-1 money ops without foundation check     |
+| Collision re-derive every session        | Order-route / futures invent                   |
+
+---
+
+_Refreshed 2026-08-02 after adversarial level recovery. Progress table re-derived from `gh pr view` merge state._
