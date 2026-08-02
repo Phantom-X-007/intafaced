@@ -25,15 +25,15 @@ Two **planes** (lanes of risk):
 
 ## The “law” vs the “pitch”
 
-| Doc                                        | What it is                                                                             |
-| ------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `INTAFACED_DEFINITIVE_BUILD.md`            | **Engineering law** — what to build, doctrines, phases. Same file Denon shared (v2.2). |
-| `INTAFACED SOVEREIGN OS.pdf`               | **Product vision** (Vol. I) — story and features; not the build checklist.             |
-| `tooling/agent-protocol/AGENT_PROTOCOL.md` | **How agents change code** (hard bans).                                                |
-| `CONTRIBUTING.md`                          | **How we collab** (worktrees, PRs).                                                    |
-| `docs/TRACKER.md`                          | **Product feature map** — ready / blocked / done / owner (not campaign micro-next).    |
-| `docs/COORDINATION-TRUTH-LAYERS.md`        | **Which file answers which question** (tracker vs Board Clear vs LIVE-LANES). **Finished law.** |
-| `docs/COORDINATION-FINISH-AUDIT-2026-08-02.md` | How to re-audit F1–F10; what “done” means for this program. |
+| Doc                                            | What it is                                                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `INTAFACED_DEFINITIVE_BUILD.md`                | **Engineering law** — what to build, doctrines, phases. Same file Denon shared (v2.2).          |
+| `INTAFACED SOVEREIGN OS.pdf`                   | **Product vision** (Vol. I) — story and features; not the build checklist.                      |
+| `tooling/agent-protocol/AGENT_PROTOCOL.md`     | **How agents change code** (hard bans).                                                         |
+| `CONTRIBUTING.md`                              | **How we collab** (worktrees, PRs).                                                             |
+| `docs/TRACKER.md`                              | **Product feature map** — ready / blocked / done / owner (not campaign micro-next).             |
+| `docs/COORDINATION-TRUTH-LAYERS.md`            | **Which file answers which question** (tracker vs Board Clear vs LIVE-LANES). **Finished law.** |
+| `docs/COORDINATION-FINISH-AUDIT-2026-08-02.md` | How to re-audit F1–F10; what “done” means for this program.                                     |
 
 If two docs disagree on **product ownership / free work:** **law + tracker** win over memory, Telegram, or campaign boards. Campaign **NEXT** only wins for “what to ship next in Board Clear,” never to erase human locks.
 
@@ -63,7 +63,7 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Denon handover (2026-07-29):** [`HANDOVER-NITRO-BRANCHES.md`](HANDOVER-NITRO-BRANCHES.md) · owner decisions closed: [`OWNER-DECISIONS-OPEN.md`](OWNER-DECISIONS-OPEN.md)
 - - **Denon return board (2026-07-29):** [`DENON-RETURN-GITHUB-STATE-2026-07-29.md`](DENON-RETURN-GITHUB-STATE-2026-07-29.md) — what Nitro agents landed; do not rebuild
 - **Nitro’s product lane (Stream A):** trader shell — claim + checklist in [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md) · issue **#83**. Frontend lock: [`FRONTEND-STATE-OF-TRUTH-2026-07-31.md`](FRONTEND-STATE-OF-TRUTH-2026-07-31.md) when present on tip.
-- **BOARD CLEAR CAMPAIGN (active):** after compact open **[`BOARD-CLEAR-NEXT.md`](BOARD-CLEAR-NEXT.md) first** for *campaign sequence* · parallel [`BOARD-CLEAR-PARALLEL-SESSIONS.md`](BOARD-CLEAR-PARALLEL-SESSIONS.md) · AFK [`BOARD-CLEAR-AFK-CONTRACT.md`](BOARD-CLEAR-AFK-CONTRACT.md) · GO [`BOARD-CLEAR-AUTONOMOUS-RUN.md`](BOARD-CLEAR-AUTONOMOUS-RUN.md). **NEXT is not the product ownership map** — free/human-owned still = tracker + LIVE-LANES ([`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)).
+- **BOARD CLEAR CAMPAIGN (active):** after compact open **[`BOARD-CLEAR-NEXT.md`](BOARD-CLEAR-NEXT.md) first** for _campaign sequence_ · parallel [`BOARD-CLEAR-PARALLEL-SESSIONS.md`](BOARD-CLEAR-PARALLEL-SESSIONS.md) · AFK [`BOARD-CLEAR-AFK-CONTRACT.md`](BOARD-CLEAR-AFK-CONTRACT.md) · GO [`BOARD-CLEAR-AUTONOMOUS-RUN.md`](BOARD-CLEAR-AUTONOMOUS-RUN.md). **NEXT is not the product ownership map** — free/human-owned still = tracker + LIVE-LANES ([`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)).
 - **Shehzad hard ownership (human spine — collision wall):** one-screen [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) · detail [`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) · lanes [`LIVE-LANES.md`](LIVE-LANES.md) · GitHub **`@shehzad002`** M1–M7 · tracker owner + CODEOWNERS. Agents never implement his paths; keep shell + trade-light + WS + academy.
 - **Residual campaign (older partial-first mode):** [`NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`](NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md) · lanes [`LIVE-LANES.md`](LIVE-LANES.md) — use only if Board Clear docs missing.
 - **Order-route:** #289 merged under Board Clear A-OR-1; residual Java dual-book = shehzad M7.

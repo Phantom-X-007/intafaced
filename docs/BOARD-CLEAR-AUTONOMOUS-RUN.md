@@ -8,7 +8,7 @@
 
 ## Cold start / compact / continue read order
 
-**0. FIRST:** `docs/BOARD-CLEAR-NEXT.md` (campaign *sequence* only)  
+**0. FIRST:** `docs/BOARD-CLEAR-NEXT.md` (campaign _sequence_ only)  
 **1.** `docs/BOARD-CLEAR-AFK-CONTRACT.md` · `docs/BOARD-CLEAR-PARALLEL-SESSIONS.md` · `docs/COORDINATION-TRUTH-LAYERS.md`  
 **Never** WAVE-AUDIT / chat summary as live campaign SoT.  
 **Never** skip tracker ownership for free/human-lock checks — layers contract.  

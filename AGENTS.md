@@ -67,12 +67,12 @@ export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
 
 **Home:** [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md).
 
-| Question | File |
-| --- | --- |
-| Product free / wip / done / human-owned | `tooling/tracker/features.mjs` |
-| Campaign “ship next” | `docs/BOARD-CLEAR-NEXT.md` (sequence only) |
-| Session who-codes-what + dual-build | `docs/LIVE-LANES.md` + open PR path intersect |
-| Code on main | git |
+| Question                                | File                                          |
+| --------------------------------------- | --------------------------------------------- |
+| Product free / wip / done / human-owned | `tooling/tracker/features.mjs`                |
+| Campaign “ship next”                    | `docs/BOARD-CLEAR-NEXT.md` (sequence only)    |
+| Session who-codes-what + dual-build     | `docs/LIVE-LANES.md` + open PR path intersect |
+| Code on main                            | git                                           |
 
 **Tracker touch = mountain events only** (claim, owner handoff/human lock, done/cut, optional wave note) — **not** every craft PR under an already-`wip` row.  
 **Does not add:** PR caps, Denon Approves, CI “must edit features.mjs,” or Nitro manual steps. Thrift + parallel + Class merge matrix unchanged.
