@@ -68,13 +68,18 @@ jobs:
           done
 
       - name: Bootstrap schemas (same as main CI Tests)
+        env:
+          POSTGRES_USER: intafaced
+          POSTGRES_DB: intafaced
+          PGPASSWORD: intafaced
+          PGHOST: 127.0.0.1
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           PGPASSWORD=intafaced psql -h 127.0.0.1 -U intafaced -d intafaced \
             -f tooling/infra/postgres-init/01-service-schemas.sql
+          PGPASSWORD=intafaced psql -h 127.0.0.1 -U intafaced -d intafaced -c \
+            "GRANT CREATE ON DATABASE intafaced TO intafaced_ops; ALTER ROLE intafaced_ops WITH CREATEDB;" || true
           bash tooling/infra/postgres-init/02-intafaced-test-db.sh
-        env:
-          PGPASSWORD: intafaced
 
       - name: Build packages used by money path
         run: pnpm exec turbo run build --filter=@intafaced/svc-ledger --filter=@intafaced/svc-matching --filter=@intafaced/svc-trade --filter=@intafaced/svc-identity --filter=@intafaced/contracts --filter=@intafaced/ledger-client --filter=@intafaced/events --filter=@intafaced/config --filter=@intafaced/auth --filter=@intafaced/db --filter=@intafaced/exchange-contract
