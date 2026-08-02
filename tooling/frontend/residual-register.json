@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "updated": "2026-08-02",
-  "tip_note": "AFK-ACTIVE · campaign law + expanded afk_safe queue; P0.4 SEGV parked not stalling",
+  "tip_note": "AFK-ACTIVE · Envelope honesty; next Ctc",
   "tip_sha_at_write": "feat-app-afk-autonomous-campaign",
   "waves": {
     "A": "honesty / locks / withdraw-first",
@@ -437,12 +437,12 @@
       "id": "AFK-ENVELOPE",
       "wave": "AFK",
       "title": "Envelope fail/empty honesty",
-      "status": "open",
-      "evidence": "",
+      "status": "done",
+      "evidence": "Envelope dual-book note + loading state; no invent gift",
       "proof_missing": "Dual-book empty states",
-      "next_action": "Audit Envelope.vue honesty",
+      "next_action": "",
       "blocker": "",
-      "priority": 22,
+      "priority": 99,
       "afk_safe": true
     },
     {
