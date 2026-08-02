@@ -2,7 +2,12 @@
 
 **Type:** executable queue. **Status:** ready to assign. **No service, vendor or app source changed by this document.**
 **Written against:** `main` @ `a43b469`, live fleet on this machine, 2026-08-02.
-**Direction it implements:** the owner's, stated three times — _"We should have leveraged the whole Bizzan trading app. It is robustly built. All our additional features and screens should have been built ON TOP of it."_
+**Direction it implements — confirmed by the owner, settled:**
+
+> _"Yes for the product. No for the book. Take their shell, their screens, their OTC
+> and admin workflows, their business logic, and their wallet RPC as the starting
+> point. Keep our ledger as the single place balances live, and have their money
+> controllers call it through an adapter instead of writing `member_wallet`."_
 
 This document does not evaluate that direction. It makes it executable.
 
@@ -20,14 +25,74 @@ machine, its appeal flow and its screens, and calls `packages/ledger-client`
 where it used to call `MemberWalletDao`, is not a second book. It is our book,
 reached through their door.
 
-So the queue has four buckets and one rule each:
+So the queue has five buckets and one rule each:
 
 | Bucket                | Rule                                                                  |
 | --------------------- | --------------------------------------------------------------------- |
 | **1 · ADOPT AS-IS**   | It runs, it writes no balance. Stop rebuilding it.                    |
 | **2 · ADOPT + ADAPT** | Keep the controller and its logic. Redirect the balance write.        |
 | **3 · REWIRE**        | Keep the screen. Point it at `svc-edge`.                              |
-| **4 · DELETE**        | Dead weight, or something we already do better. Justified one by one. |
+| **4 · DELETE**        | Dead weight. Justified one by one.                                    |
+| **5 · REPLACE**       | Ours substitutes for theirs, and the two **cannot run side by side**. |
+
+Bucket 5 is narrow on purpose. "Delete" is for things nobody wants; **"replace" is
+for things that would still work if we ran them, and that is exactly the danger** —
+two implementations of one truth, both live, silently disagreeing. §7 names all
+four members and shows there is no fifth.
+
+### 0.1 The corrected controller split
+
+The estimate in circulation is _"roughly 75 of 96 controllers adopted as-is, ~21
+adapted, one subsystem replaced."_ **Counted properly, three of those four numbers
+are wrong**, and the arithmetic is worth showing because the denominator is the
+part people keep getting wrong.
+
+```
+find vendor/coinexchange -name '*Controller.java'          → 108
+  01_wallet_rpc                                            →  14   (13 per-chain WalletController + RpcController)
+  00_framework                                             →  94
+```
+
+**`01_wallet_rpc` has 14 controllers, not 13.** The audit said "12 per-chain
+`WalletController` + `RpcController`". There are **thirteen** chains on disk — `act`,
+`bch`, `bitcoin`, `bsv`, `btm`, `ect`, `eos`, `erc-eusdt`, `erc-token`, `eth`, `ltc`,
+`usdt`, `xmr` — plus `rpc-common/RpcController`. Every downstream count that
+subtracted 13 is off by one.
+
+Of the 94 in `00_framework`, the money set is
+`grep -rl "MemberWalletService\|MemberTransactionService\|MemberWalletDao\|MemberTransaction " --include='*Controller.java'`
+→ **exactly 25 files**, listed in full in §4.
+
+| Bucket                                         |   Count | Correction                                           |
+| ---------------------------------------------- | ------: | ---------------------------------------------------- |
+| **1 · ADOPT AS-IS** (`00_framework`)           |  **68** | estimate said 75 — **7 too high**                    |
+| **2 · ADOPT + ADAPT** (money controllers)      |  **25** | estimate said ~21 — **4 too low**                    |
+| **`01_wallet_rpc`** — adopt, review first (§8) |  **14** | not in the estimate at all                           |
+| **4 · DELETE** (`wallet/…/TestController`)     |   **1** | —                                                    |
+| **Total**                                      | **108** | estimate's denominator of 96 matches nothing on disk |
+
+**Where 96 came from and why it is not a real number.** It is 108 − 12, i.e.
+subtracting the per-chain wallet controllers but not `RpcController` and not
+`wallet/TestController`. With wallet RPC now explicitly in scope the honest
+denominator is **108**; if you want a framework-only figure it is **94**. 96 is
+neither.
+
+**The two corrections that change decisions, not just arithmetic:**
+
+- **68, not 75.** Seven fewer controllers are free. The gap is mostly `admin`'s
+  money set — twelve of its 57 controllers write balances, and an estimate that
+  puts them in "as-is" would have someone start the admin console expecting a
+  read-only surface and find a fiat approval path.
+- **25, not ~21.** Four more controllers need an adapter. And the number that
+  actually governs the schedule is smaller and sharper: **of the 25, only 11 map
+  onto recipes that already exist.** Eight need a new recipe written first (a
+  Denon carve-out), three route elsewhere, three are near-fits. §4.2 has the
+  breakdown. "~21 adapted" reads as one uniform pile of work; it is three piles
+  with a dependency between them.
+
+**"One subsystem replaced" is the fourth number, and it is the one that is too
+low in the way that matters.** There are **four**, and two of them are hard
+preconditions of bucket 2 rather than follow-ups. See §7.
 
 ---
 
@@ -151,10 +216,21 @@ needs to read them; there is nothing there.
 
 ---
 
-## 2 · FIX FIRST — nothing in buckets 1–3 is testable until these land
+## 2 · FIX FIRST — these are blocking, not untidy
 
-Three blockers, exact remediation. All three are **tooling/CI lane — Denon**.
-None of them touches money code.
+**The Java stack cannot be evaluated at all until it runs, and it is down for
+three separate reasons.** That sentence is the whole justification for this
+section's position in the document. Every adoption judgement below — is this
+controller really read-only, does this screen really need rewiring, does the
+admin console really work — rests on evidence we cannot gather from a stack where
+**1 of 108 controllers answers a request**.
+
+These are not housekeeping items to fit in around the real work. Until they land,
+every bucket below and the wallet-RPC review in §8 are reasoning from
+source-reading alone, and §10 says exactly where that reasoning stops being safe.
+
+Three blockers plus a fourth nobody has named, exact remediation. All four are
+**tooling/CI lane — Denon**. None of them touches money code.
 
 ### 2.1 `market` — MongoDB removed the wire protocol Spring Boot 1.5 speaks
 
@@ -862,12 +938,22 @@ where the second column says _quarantine_, the files stay and the door stays shu
 
 ### 6.2 Quarantine — keep the files, keep the door shut
 
-| What                                                            |      Count | Why                                                                                                                                                                                                                                                                                   |
-| --------------------------------------------------------------- | ---------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `01_wallet_rpc` — 12 chain `WalletController` + `RpcController` |     **13** | Handles private keys for BTC/ETH/USDT/EOS. **Never read by anyone** (ADR "Not yet done"). Deliberately shut at `c221cc8`. `svc-protocol` + `svc-dex` + `svc-indexer` are ours and `custody-scan` covers them. Deleting loses the option; reviving without a read is the failure mode. |
-| `exchange-api/…/OrderController`                                |      **1** | A second matching engine. `matching.engine` ✅ + `trade.spot` ✅ already do this against our book, tested. Keep `/order/add` in `BLOCKED_URI_FRAGMENTS`. Keep the _screen_.                                                                                                           |
-| `admin/…/system/DividendController`                             |      **1** | Mass credit in a loop over every holder — the exact shape `vendor-shell-scan` bans. `token.yield` ✅ and `rewardPay` + `sweepFeesToRewards` express it correctly, from a funded pot rather than thin air.                                                                             |
-| `admin/…/system/CoinController` hot-transfer path               | **1 path** | `:387` writes a hot-wallet transfer record. On-chain treasury movement belongs to `svc-protocol`/`svc-pay`, and the RPC layer it would drive is shut. Adopt the coin CRUD; leave this path.                                                                                           |
+| What                                              |      Count | Why                                                                                                                                                                                                       |
+| ------------------------------------------------- | ---------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin/…/system/DividendController`               |      **1** | Mass credit in a loop over every holder — the exact shape `vendor-shell-scan` bans. `token.yield` ✅ and `rewardPay` + `sweepFeesToRewards` express it correctly, from a funded pot rather than thin air. |
+| `admin/…/system/CoinController` hot-transfer path | **1 path** | `:387` writes a hot-wallet transfer record. Treasury movement on-chain is `svc-protocol` / `svc-pay`. Adopt the coin CRUD; leave this path until §8's review lands.                                       |
+
+> **Moved out of this table by the owner's confirmation.**
+> `01_wallet_rpc` (14 controllers) was quarantined here on the previous revision.
+> **It is now in scope and has its own section — §8.** The owner named it
+> explicitly, and the reasoning is sound: we have no chain custody of our own and
+> building it is months. It is not, however, a simple adopt, and §8 says why.
+>
+> `exchange-api/…/OrderController` also left this table. It is not dead weight to
+> quarantine — it is a working second implementation of something we already have,
+> which makes it **bucket 5 · REPLACE** (§7.2). The distinction matters: a
+> quarantined thing is one nobody should start, a replaced thing is one that
+> **must never run at the same time as ours**.
 
 ### 6.3 Owner decides — do not build, do not delete, ask
 
@@ -892,27 +978,180 @@ this whole document".
 
 ---
 
-## 7 · Effort, order, ownership
+## 7 · Bucket 5 — REPLACE
 
-### 7.1 Sizing
+**Placement rule:** ours substitutes for theirs, and **the two cannot both be
+live**. Not because the vendored one is broken — because it works. Two working
+implementations of one truth, both running, is the failure this bucket exists to
+prevent.
 
-| Bucket                                       | Size  | Why                                                                             |
-| -------------------------------------------- | ----- | ------------------------------------------------------------------------------- |
-| **§2 FIX FIRST** — mongo, redis, compose     | **M** | Two S config fixes + four compose blocks + the Maven build story (§2.4).        |
-| **§2.4 reproducible jar build**              | **M** | Independent of the rest; unblocks CI ever touching Java.                        |
-| **§1.2 scans into `pnpm verify`**            | **S** | One line. Highest leverage in the document.                                     |
-| **Bucket 1 — adopt 68 controllers**          | **M** | Almost entirely §2. Each module after the first is a copy-pasted compose block. |
-| **Bucket 1 — tracker rows for the six gaps** | **S** | Data edit. Blocked today — see §7.4.                                            |
-| **Bucket 2 — 11 exact adapters**             | **L** | Each is S–M; there are eleven and every one is money.                           |
-| **Bucket 2 — ~6 new recipes**                | **M** | One reviewed PR, Denon, ahead of the adapters.                                  |
-| **Bucket 2 — 8 gap controllers**             | **L** | Blocked on the recipes and on §6.3.                                             |
-| **Bucket 2 — `decimal(38,18)` widening**     | **S** | One DDL change. **Must precede the first adapter.**                             |
-| **Bucket 3 — merge #412**                    | **S** | Already written, already validated. Just needs merging.                         |
-| **Bucket 3 — rewire 45 screens**             | **L** | `MemberCenter.vue` alone is M–L. Split it.                                      |
-| **Bucket 4 — deletes**                       | **S** | 39 files, no logic.                                                             |
-| **Bucket 4 — owner decision**                | **—** | Not engineering.                                                                |
+I went looking for members of this bucket and expected to find one. **There are
+four.** Two of them are hard preconditions of bucket 2 rather than follow-ups, and
+neither has been named anywhere before.
 
-### 7.2 Suggested order
+### 7.1 Balances — the known one, and it is already done
+
+`MemberWallet` + `MemberWalletDao` + `MemberWalletService` + the
+`member_wallet_history` `AFTER UPDATE` trigger, replaced by `ledger.*`.
+
+Settled by the ADR (`Status: Accepted`, Option B) and **executed** by #234 and
+#289: DAO mutators no-op'd, 50 URI fragments behind a 410 interceptor,
+`vendor-java-money-scan` in CI over 882 Java files. Nothing further to decide.
+The remaining work is bucket 2 — reopening each door behind an adapter.
+
+**One residual, and it is a schema change with a deadline:** `member_wallet.balance`
+is `decimal(18,8)`; `ledger.accounts.balance` is `numeric(38,18)`. Widen to
+`decimal(38,18)` **before the first adapter ships**, not after (§4.2).
+
+### 7.2 The matching engine and the exchange order book
+
+`00_framework/exchange` (the matching module) + `exchange-core/ExchangeOrderService`
+(8 mutator call-sites) + `exchange-api/…/OrderController` (`/order/add:74`,
+`/order/cancel/{orderId}:415`).
+
+**Why replace rather than adapt.** This maps perfectly onto `orderHold` /
+`orderHoldRelease` / `tradeFill` — and that is precisely the argument against
+adapting it. `matching.engine` ✅ and `trade.spot` ✅ already do it, tested,
+deterministic, against our book. Adopting a second matcher would be the one place
+where "adopt everything" costs us something we already do better.
+
+**Why it is not merely quarantine.** `intafaced-coinex-exchange` is **Up 2 days
+right now** — it is the only vendored module still running. It is idle only
+because `exchange-api` cannot reach it and no order has ever been placed. Bring
+`exchange-api` back per §2.3 and there are two matching engines on one machine.
+`/order/add` must stay in `BLOCKED_URI_FRAGMENTS` **through and after** §2.3, and
+that is easy to forget precisely because §2.3 is framed as "make things run".
+
+Keep the screen (`pages/exchange/Exchange.vue`, §5.3 Group D). Replace the engine.
+
+### 7.3 User identity — and this one blocks bucket 2 outright
+
+**Nobody has decided this, and bucket 2 cannot start until somebody does.**
+
+Every ledger account is keyed on a user id:
+
+```ts
+// packages/ledger-client/src/accounts.ts:11
+export function userAvailable(userId: string, assetId: string): AccountRef {
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'available' };
+}
+```
+
+The two systems key users in **disjoint namespaces**:
+
+| System                     | Type                              | Evidence                                    |
+| -------------------------- | --------------------------------- | ------------------------------------------- |
+| `identity.users.id`        | `uuid`, `defaultRandom()`         | `services/svc-identity/src/db/schema.ts:23` |
+| `member.id`                | `Long`, `GenerationType.IDENTITY` | `…/core/…/entity/Member.java:27-29`         |
+| `ledger.accounts.owner_id` | **`text`** — accepts either       | `services/svc-ledger/src/db/schema.ts:32`   |
+
+**Read the third row carefully. `owner_id` is `text`, so a wrong adapter does not
+fail.** It creates a second, valid, non-negative, sum-to-zero-conformant account
+for the same human under the other namespace — and every gate we have reports
+clean, because nothing is unbalanced. That is the exact silent-and-unreconcilable
+shape the ADR was written to prevent, arriving through a door the ADR did not
+look at.
+
+The audit filed identity under "genuinely ambiguous" and asked the owner _"does a
+person's account live in `identity.users` or in `member`?"_ **The balance decision
+answered it and nobody noticed.** If `ledger.*` is the only book, and every ledger
+account is keyed on a user id, then the id that keys the book is the id of record.
+**`identity.users` is authoritative; `member` becomes a projection or a join
+table.** That is not a new decision — it is the one already taken, followed
+through.
+
+**What must exist before the first adapter posts anything:** a single resolution
+point that maps a vendored `member.id` to an `identity.users.id`, that **refuses**
+rather than inventing when there is no mapping. A `NOT NULL` join column on
+`member`, or a lookup in the adapter — either is fine; a fallback that mints an id
+is not. And `identity.users` currently holds ~7,192 rows of test pollution
+(audit §3.4), so the mapping must be built against a cleaned table or it will map
+real people onto test residue.
+
+**Size: M. Owner: M5 (`identity money graph`) = shehzad002.** It is his lane by
+`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md:37` — _"M5 Identity money graph ·
+sub-accounts / money-adjacent gates"_ — and this is the most money-adjacent gate
+in the tree.
+
+### 7.4 Schema management — `ddl-auto=update` is a replacement, not a config line
+
+The ADR's first finding, still unaddressed: **the repository contains no database
+schema.** Nine `CREATE TABLE` statements in the whole tree; `exchange_order`,
+`member` and `member_transaction` are defined nowhere. What creates the tables is:
+
+```
+admin/…/dev/application.properties:65        spring.jpa.hibernate.ddl-auto=update
+exchange/…/dev/application.properties:55     spring.jpa.hibernate.ddl-auto=update
+market/…/dev/application.properties:11       spring.jpa.hibernate.ddl-auto=update
+ucenter-api/…/dev/application.properties:136 spring.jpa.hibernate.ddl-auto=update
+```
+
+— live in four modules, across 63 `@Entity` classes.
+
+**Why this is bucket 5 and not a nit.** `ddl-auto=update` never drops and never
+narrows. It is the mechanism by which dev, staging and production end up with
+different schemas **and nothing reports it**. Today that is harmless: the tables
+hold zero rows. The moment bucket 2 lands and `member_wallet` becomes a
+projection of the ledger, a silently divergent column is a projection that
+disagrees with the book on one environment only — which is indistinguishable, from
+inside, from the ledger being wrong.
+
+We already have the replacement and it is enforced: `pnpm db:migrate` plus
+`tooling/ci/migration-check.mjs` (`db:check`). The vendored schema has to come
+under it — generate the DDL once from a booted instance, commit it as a migration,
+set `ddl-auto=validate`, and let a mismatch **refuse to boot** instead of
+silently patching itself.
+
+**Size: M. Owner: tooling/CI = Denon**, alongside §2.4's build story — same
+problem shape (the artefact that makes the system reproducible does not exist).
+
+### 7.5 And nothing else — which is the useful part
+
+I checked the remaining candidates and none of them belongs here:
+
+| Candidate                    | Verdict  | Why not REPLACE                                                                                                                                                                       |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Market data** (`market`)   | bucket 1 | Seeded and synthetic (`volume: 0.0000`), ours is honestly-empty. Both can run; only the labelling has to be honest. Adopt with the caveat, do not replace.                            |
+| **Kafka vs NATS**            | neither  | The vendored stack's Kafka is internal to it; the adapter boundary is HTTP + `ledger-client`, not the bus. Two buses is untidy, not dangerous. No truth is duplicated across them.    |
+| **Sessions** (Redis, `/uc`)  | bucket 3 | Resolved by rewiring §5.3 Group C onto `identity.*`, not by replacing a subsystem. The Java session store simply stops being used.                                                    |
+| **CMS / RBAC / statistics**  | bucket 1 | We have no implementation to substitute. Nothing to replace with.                                                                                                                     |
+| **P2P / OTC escrow**         | bucket 2 | Genuinely overlapping — but the vendored side has the better product (advert-level inventory locks, §4.1 item 15). Adapt theirs, extend ours. Replacing here would lose a capability. |
+| **KYC / identity documents** | bucket 1 | `identity.kyc` ✅ exists, but the vendored flow is a _screen_ flow over ours. Rewire, not replace.                                                                                    |
+| **`01_wallet_rpc`**          | §8       | We have **no** chain-custody implementation at all. There is nothing to substitute — which is exactly why the owner adopted it, and exactly why §8 is the riskiest page here.         |
+
+**So bucket 5 has four members: balances (done), the matching engine, user
+identity, and schema management.** Two are already decided and executing. The
+other two — §7.3 and §7.4 — are load-bearing preconditions that were not on
+anyone's list, and §7.3 blocks the first bucket-2 adapter.
+
+---
+
+## 9 · Effort, order, ownership
+
+### 9.1 Sizing
+
+| Bucket                                       | Size   | Why                                                                             |
+| -------------------------------------------- | ------ | ------------------------------------------------------------------------------- |
+| **§2 FIX FIRST** — mongo, redis, compose     | **M**  | Two S config fixes + four compose blocks + the Maven build story (§2.4).        |
+| **§2.4 reproducible jar build**              | **M**  | Independent of the rest; unblocks CI ever touching Java.                        |
+| **§1.2 scans into `pnpm verify`**            | **S**  | One line. Highest leverage in the document.                                     |
+| **Bucket 1 — adopt 68 controllers**          | **M**  | Almost entirely §2. Each module after the first is a copy-pasted compose block. |
+| **Bucket 1 — tracker rows for the six gaps** | **S**  | Data edit. Blocked today — see §9.4.                                            |
+| **Bucket 2 — 11 exact adapters**             | **L**  | Each is S–M; there are eleven and every one is money.                           |
+| **Bucket 2 — ~6 new recipes**                | **M**  | One reviewed PR, Denon, ahead of the adapters.                                  |
+| **Bucket 2 — 8 gap controllers**             | **L**  | Blocked on the recipes and on §6.3.                                             |
+| **Bucket 2 — `decimal(38,18)` widening**     | **S**  | One DDL change. **Must precede the first adapter.**                             |
+| **Bucket 3 — merge #412**                    | **S**  | Already written, already validated. Just needs merging.                         |
+| **Bucket 3 — rewire 45 screens**             | **L**  | `MemberCenter.vue` alone is M–L. Split it.                                      |
+| **Bucket 4 — deletes**                       | **S**  | 39 files, no logic.                                                             |
+| **Bucket 4 — owner decision**                | **—**  | Not engineering.                                                                |
+| **§7.2 — keep `/order/add` shut**            | **S**  | One line NOT deleted. The risk is forgetting it during §2.3.                    |
+| **§7.3 — identity id resolution**            | **M**  | **Blocks the first bucket-2 adapter.** M5 = shehzad002.                         |
+| **§7.4 — vendored schema under migrations**  | **M**  | Same shape as §2.4: `ddl-auto=validate` + a committed migration.                |
+| **§8 — `01_wallet_rpc` security review**     | **XL** | 215 Java files, 13 chains, private keys, 32 unverifiable jars.                  |
+| **§8 — wallet RPC adoption after review**    | **L**  | Cannot be sized honestly until the review says what survives it.                |
+
+### 9.2 Suggested order
 
 The ordering rule: **make it runnable, make it honest, make it ours, then make it
 move money.**
@@ -929,25 +1168,38 @@ move money.**
    laptop. _(M · Denon)_
 6. **Tracker: six rows** — CMS, site-content, red-envelope, activity, CTC, and
    **the shell itself**. Until these exist agents keep rebuilding them. _(S ·
-   P-TRACK, after #346 — see §7.4)_
-7. **§4.1 item 10 — `AssetController` reads `ledger.accounts`.** The single
+   P-TRACK, after #346 — see §9.4)_
+7. **§8 — commission the wallet RPC security review.** It is XL and it is the
+   longest pole in the whole programme, so it starts **now**, in parallel, not
+   when everything else is finished. Nothing downstream of it can begin until it
+   reports. _(XL · owner commissions; see §8)_
+8. **§7.3 — decide and build the identity id resolution.** `identity.users` is
+   authoritative; build the refusing mapping. **The first bucket-2 adapter cannot
+   be written before this.** _(M · M5 = shehzad002)_
+9. **§4.1 item 10 — `AssetController` reads `ledger.accounts`.** The single
    highest-value change in the document: it ends "two balance systems in one
    page". _(S · M7)_
-8. **Bucket 3 `App.vue` → Group C (identity).** Ends "two identity systems in one
-   page". _(M · P-UI)_
-9. **`decimal(18,8) → decimal(38,18)`.** Before any adapter. _(S · M7)_
-10. **Denon's recipes PR** — `p2pOfferHold/Release`, `merchantBondLock/Release/Forfeit`.
+10. **Bucket 3 `App.vue` → Group C (identity).** Ends "two identity systems in one
+    page". _(M · P-UI)_
+11. **`decimal(18,8) → decimal(38,18)`.** Before any adapter. _(S · M7)_
+12. **§7.4 — vendored schema under `db:migrate`, `ddl-auto=validate`.** Before
+    `member_wallet` becomes a projection anyone reads. _(M · Denon)_
+13. **Denon's recipes PR** — `p2pOfferHold/Release`, `merchantBondLock/Release/Forfeit`.
     _(M · Denon)_
-11. **Bucket 2 exact adapters, in this order:** withdraw (items 3+4, the pair) →
+14. **Bucket 2 exact adapters, in this order:** withdraw (items 3+4, the pair) →
     OTC order + appeal (items 1+2) → fiat rails (5–7) → transfer (9) → CTC (12+13)
     → operator credit (8, behind dual-control). _(L · M7)_
-12. **Bucket 3 Groups A, D, B** as their backends land. _(L · P-UI)_
-13. **Bucket 4 deletes.** _(S · agents)_
-14. **§6.3 owner decision**, then Group F lives or dies. _(— · owner)_
+15. **Bucket 3 Groups A, D, B** as their backends land. _(L · P-UI)_
+16. **Bucket 4 deletes.** _(S · agents)_
+17. **§6.3 owner decision**, then Group F lives or dies. _(— · owner)_
+18. **Wallet RPC adoption** — only if and as §8's review permits. _(L · owner + M2)_
 
 Steps 1–6 are entirely non-money and can run fully parallel with steps 7+.
+**Step 7 must not wait for steps 1–6.** It is the item most likely to determine
+whether the chain-custody half of the owner's direction is achievable at all, and
+it is the one with the longest lead time.
 
-### 7.3 Ownership — mapped to the lanes that exist
+### 9.3 Ownership — mapped to the lanes that exist
 
 | Bucket / item                                   | Lane                      | Who              | Authority                                                    |
 | ----------------------------------------------- | ------------------------- | ---------------- | ------------------------------------------------------------ |
@@ -961,12 +1213,19 @@ Steps 1–6 are entirely non-money and can run fully parallel with steps 7+.
 | Bucket 4 — deletes                              | **P-UI / P-TRACK**        | **Nitro agents** | non-money vendor tree                                        |
 | Bucket 4 — §6.3 product decision                | **owner**                 | **Nitro human**  | `DIRECTION-2026-07-31.md` §8                                 |
 | Kill-switch / posting-freeze semantics (item 8) | **Denon §3 carve-out**    | **Denon**        | "touches a posture gate, kill-switch, or custody scan"       |
+| **§7.2 — matching engine stays shut**           | **M7**                    | **shehzad002**   | vendor Java money doors                                      |
+| **§7.3 — identity id resolution**               | **M5**                    | **shehzad002**   | `SHEHZAD-HARD-OWNERSHIP:37` — "money-adjacent gates"         |
+| **§7.4 — schema under migrations**              | **tooling / CI**          | **Denon**        | same lane and same shape as §2.4                             |
+| **§8 — wallet RPC security review**             | **owner commissions**     | **Nitro human**  | signing-key custody is `DIRECTION-2026-07-31.md` §8.3        |
+| **§8 — wallet RPC adoption, post-review**       | **M2 Protocol OS**        | **shehzad002**   | `SHEHZAD-HARD-OWNERSHIP:34` — self-custody stack             |
 
-**The one thing agents must not do:** implement bucket 2. `AGENTS.md:13` is
-explicit and M7 is claimed. Agents write the specs, the tests and the adapter
-design; shehzad002 opens the doors.
+**The two things agents must not do:** implement bucket 2 (`AGENTS.md:13`, M7 is
+claimed), and touch `01_wallet_rpc` (§8 — private keys, and signing-key custody
+is reserved to the owner by `DIRECTION-2026-07-31.md` §8.3). Agents write the
+specs, the tests and the adapter design; shehzad002 opens the doors; the owner
+commissions the review.
 
-### 7.4 Tracker rows — warranted, but not by this PR
+### 9.4 Tracker rows — warranted, but not by this PR
 
 `node tooling/ci/claim-check.mjs` against the three paths this work would touch:
 
@@ -1001,7 +1260,7 @@ nobody has decided to want.
 
 ---
 
-## 8 · Method, and what is not verified
+## 10 · Method, and what is not verified
 
 Everything above was read or probed on 2026-08-02 against `main` @ `a43b469`,
 from the worktree `docs/bizzan-adoption-queue`:
@@ -1018,7 +1277,7 @@ from the worktree `docs/bizzan-adoption-queue`:
   stack traces quoted verbatim in §2.
 - `node tooling/ci/{vendor-java-money,vendor-shell,dual-book-door,custody}-scan.mjs`
   — all four clean; output quoted.
-- `node tooling/ci/claim-check.mjs` for §7.4.
+- `node tooling/ci/claim-check.mjs` for §9.4.
 - `git ls-files` for the jar, mobile and robot counts.
 - `gh pr list --state open` → #412, #411, #410, #346.
 
