@@ -2,7 +2,7 @@
 
 **Rule:** No code edits until your lane is on this board. First claimer wins.  
 **Active campaign:** **Board Clear** — law `docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md` · **GO:** `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`.  
-**Human hard mountains:** [`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) — **`@shehzad002`** M1–M7.  
+**Human hard mountains:** [`docs/GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) (one screen) · [`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) — **`@shehzad002`** M1–M7 · tracker owner + CODEOWNERS.  
 **Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`.  
 **Parallel:** agents on AGENT rows only; **never implement HUMAN-CLAIMED**.
 

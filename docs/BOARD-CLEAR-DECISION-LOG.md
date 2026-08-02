@@ -21,3 +21,5 @@
 | 2026-08-02 | Shehzad PR merge allowed if Class M body + green CI; else babysit comment only     | Parallel progress without steal         | Decision authority |
 
 <!-- APPEND BELOW — do not edit above -->
+
+| 2026-08-02 | GitHub ownership lock: tracker owner shehzad002 + CODEOWNERS svc-pay/protocol/bank + GITHUB-OWNERSHIP-SHEHZAD + session prompt ban | Agents must see ownership on tip without chat memory | Ownership lock PR |

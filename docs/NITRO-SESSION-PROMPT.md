@@ -29,7 +29,8 @@ PARTNER + OWNERSHIP (durable — see NITRO-OWNERSHIP doc)
 - Never force-push origin/feat/spine-* or feat/multi-asset-*. Orient before touching his crash WIP; prefer greenfield on tip after he specs abandon vs resume.
 - Board Clear (Nitro locked 2026-08-01): ship all trade mountains to Done bars in constitution — thin honest product or §13 cut; still **never invent** mid/rates/depth/balances. Do not wait for Denon chat mid-campaign.
 - Class X human-only if truly no sandbox path: prod-only secrets, real customer money go-live, licence purchase, sanctions content. Prefer sandbox Done + §13; never halt whole campaign.
-- LIVE-LANES claim before code. **Board Clear:** parallel by program map (P-UI…P-P5), not residual ≤3. Re-derive tip + open PRs every session (never trust chat memory for high water).
+- LIVE-LANES claim before code. **Board Clear:** parallel by program map (agent programs only), not residual ≤3. Re-derive tip + open PRs every session (never trust chat memory for high water).
+- **SHEHZAD HARD LOCK (never steal):** GitHub `@shehzad002` owns mountains **M1–M7** — Pay OS, Protocol OS, futures risk, OTC/copy/algo, identity money graph, bank money, Java dual-book residual. Law: docs/GITHUB-OWNERSHIP-SHEHZAD.md · docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md · LIVE-LANES HUMAN-CLAIMED · tracker owner shehzad002 · CODEOWNERS on svc-pay/protocol/bank. **Agents: babysit his PRs only; never implement those paths.** Safe agent cook: P-UI shell :8090, trade-light (mm/spot/venue residual), WS, academy/ops thin, tracker honesty.
 
 ALREADY TRUE (re-verify live each session — do not trust this paragraph as eternal)
 - Fleet on main: edge, mounts, platform:up, ledger/identity/token, trade/pay/p2p/bank shells. Do not rebuild services already on main.
@@ -41,8 +42,8 @@ ALREADY TRUE (re-verify live each session — do not trust this paragraph as ete
 MANDATORY WORKFLOW
 1. Read AGENTS.md + ownership law + agent protocol. App/UI: also NITRO-STREAM-A-CLAIM / FRONTEND-STATE-OF-TRUTH. If on main checkout: create worktree; never implement on main.
 2. GitHub for agents: export GH_TOKEN from ~/.grok/agent-auth/github_token (never print).
-3. Claim LIVE-LANES + one tracker/campaign item; one concern per PR; contracts/events PR before service if cross-boundary.
-4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no invent mid/depth/rates; no force-push of his spine branches. Board Clear Done bars for trade mountains = Nitro-authorized (thin/§13 OK).
+3. Claim LIVE-LANES + one tracker/campaign item; one concern per PR; contracts/events PR before service if cross-boundary. **If LIVE-LANES or tracker owner is shehzad002 / HUMAN-CLAIMED M1–M7 → stop implement; babysit only.**
+4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no invent mid/depth/rates; no force-push of spine branches; **no agent implement on Shehzad M1–M7 paths**. Board Clear agent Done bars only on agent-owned rows.
 5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand) + Class M path.
 6. No commits/PRs unless I asked to ship (or residual campaign / I said go all-out ship). No random new architecture.
 7. GitHub Actions thrift (mandatory, does NOT slow parallel/autonomy): local pnpm verify green before the push that opens/updates a code PR; batch fixes — no push storms using remote CI as debugger; pure docs PRs when work is docs; never public-repo / skip-tests / fake-green to save $. Parallel PRs allowed. Full law: docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md + AGENTS.md thrift section.
@@ -77,6 +78,7 @@ Historical Denon↔Nitro board (file territory era): `docs/DENON-NITRO-PARALLEL-
 | Live re-verify          | Stale “already true” / session memory won’t poison a chat   |
 | Denon = direction       | He plans engines; agents ship without inventing product law |
 | Class M/X explicit      | Money merge + human-only surfaces stay honest               |
-| LIVE-LANES + ≤3 lanes   | Parallel agents don’t double-build                          |
+| LIVE-LANES + agent map  | Parallel agents don’t double-build or steal Shehzad M1–M7   |
+| GITHUB-OWNERSHIP-SHEHZAD| Tip GitHub is the collision wall, not chat memory             |
 | Hard bans in the prompt | Cold agents still hit the money bar                         |
 | CI thrift line          | Cut waste without capping parallel ship speed               |
