@@ -1,45 +1,43 @@
-# Board Clear — GO readiness (v3 CONTINUE)
+# Board Clear — GO readiness (v3.2 AFK)
 
-**Audits:**
-
-- [`BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`](BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md)
-- [`BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`](BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md)
-- [`BOARD-CLEAR-METHODOLOGY-AUDIT-2026-08-02.md`](BOARD-CLEAR-METHODOLOGY-AUDIT-2026-08-02.md)
+**Audits:** preflight · mega · methodology · compaction hygiene · **AFK contract**
 
 ---
 
-## GREEN LIGHT: **YES (v3.1 compaction-proof hygiene)**
+## GREEN LIGHT: **YES — with honest scope**
 
-| Layer                                 | Status                       |
-| ------------------------------------- | ---------------------------- |
-| Product decisions locked (B1–B5)      | YES                          |
-| Done bars                             | YES                          |
-| Shehzad M1–M7 collision wall          | YES                          |
-| Agent residual DAG                    | YES                          |
-| Decision authority (Nitro X1–X5 only) | YES                          |
-| Process loops L0–L9 + CONTINUE        | YES                          |
-| **Sole resume = NEXT**                | YES — EXACT NEXT SHIP pinned |
-| TRACKER / wave-audit demoted          | YES — not live SoT           |
-| Open PR snapshot on NEXT/scoreboard   | YES — re-derive each session |
-| Never idle on human mountains         | YES                          |
-| Pro-trader posture in GO              | YES                          |
+| Layer                                            | Status                                       |
+| ------------------------------------------------ | -------------------------------------------- |
+| Compaction resume (NEXT first, agent self-serve) | YES                                          |
+| AFK: Nitro does nothing while session lives      | YES                                          |
+| Agent residual fully planned                     | YES — AGENT-BACKLOG                          |
+| Anti vibe-code                                   | YES — engineering standard + AFK contract §4 |
+| Human blockers deferred to end                   | YES — HUMAN-BLOCKERS + PHASE C               |
+| Full board without shehzad                       | **NO** (by ownership law — correct)          |
 
-**Peace of mind:** After this pack is on `main`, same chat or new chat: open NEXT first (or paste GO). Compacts do not require re-teaching if NEXT is rewritten each turn end.
+### What GO guarantees
 
-**Not claimed:** full board Done; tracker fully resynced; infinite host without re-open.
+- Drives **AGENT-COMPLETE** (agent-owned rows Done/Cut, elite quality)
+- Babysits shehzad PRs without stealing
+- Survives **in-session** compact without Nitro
+- Surfaces true blockers **once**, after agent work exhausted
+
+### What GO does **not** guarantee
+
+- M1–M7 coded by this agent (forbidden steal)
+- BOARD-COMPLETE if shehzad has not shipped
+- Session restart after **process death** without a host
 
 ---
 
-## Your actions
+## Your action
 
-1. Confirm this hygiene PR is on `main`
-2. Same chat or new: paste GO from `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md` **or** agent opens `docs/BOARD-CLEAR-NEXT.md` first
-3. Say **GO**
-4. If session dies → same paste / same NEXT first
+1. Confirm AFK pack on `main`
+2. Say **GO** in the running agent chat
+3. Walk away
 
 ---
 
 ## Verdict
 
-**Final green light: YES — say GO after compaction-proof hygiene is on main.**
-No further planning theater required for agent half. Spec/plan/decompose for agent residual is complete.
+**Say GO.** Spec/plan for agent half is complete. Full product table still needs shehzad for human mountains — that is intentional quality, not incomplete planning.

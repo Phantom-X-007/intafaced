@@ -7,7 +7,9 @@
 > Last tip when written: re-check `git log origin/main -1`.
 
 **Campaign status:** `RUNNING`  
-**Methodology:** v3 + compaction-proof hygiene · 2026-08-02  
+**AFK contract:** `docs/BOARD-CLEAR-AFK-CONTRACT.md` (AGENT-COMPLETE vs BOARD-COMPLETE)  
+**Human blockers queue:** `docs/BOARD-CLEAR-HUMAN-BLOCKERS.md` (flush only after agent residual done)  
+**Methodology:** v3.2 AFK · 2026-08-02  
 **Agent backlog:** `docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`  
 **Decisions:** `docs/BOARD-CLEAR-DECISION-AUTHORITY.md`  
 **Scoreboard:** `docs/BOARD-CLEAR-SCOREBOARD.md`
@@ -32,16 +34,17 @@
 
 ---
 
-## Session bootstrap (every compact / GO)
+## Session bootstrap (every compact / GO — **agent only**, never Nitro)
 
 ```
-1. Read THIS file only for “what next”
+1. Read THIS file only for “what next” (agent self-resume after compact — do not ask Nitro)
 2. git fetch origin main && git log origin/main -3 --oneline
 3. gh pr list --state open
 4. Skim SCOREBOARD + AGENT-BACKLOG (skip SHIPPED IDs)
 5. Babysit open PRs per DECISION-AUTHORITY (#346 shehzad pay; #350 Denon docs — no steal)
 6. Implement EXACT NEXT SHIP (or fix red CI on your open PR)
 7. Before stop/compact: rewrite EXACT NEXT SHIP + open-PR notes in this file
+8. If agent residual empty: PHASE C → HUMAN-BLOCKERS flush → report Nitro once
 ```
 
 ---
