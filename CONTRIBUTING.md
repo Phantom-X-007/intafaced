@@ -133,6 +133,8 @@ pnpm tracker 2        # everything in a phase
 
 **To ship something:** set `status: 'done'` and list the paths it created in `requires`.
 
+**Mountain events only (not every micro-PR):** touch `features.mjs` on claim, owner handoff / human lock, done/cut, or an optional wave note after real progress. Craft under an already-`wip` mountain does **not** require a registry edit. Session dual-build prevention is `docs/LIVE-LANES.md` + open PRs — full contract: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md).
+
 Two things keep this honest, because a tracker nobody trusts is worse than none:
 
 - **`blocked` is computed, never declared.** A feature is blocked when a dependency is not done. You cannot mark something ready by wishing.

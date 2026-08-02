@@ -17,6 +17,7 @@ WHAT THIS IS
 - Law (engineering SoT): INTAFACED_DEFINITIVE_BUILD.md — same as Denon’s “DEFINITIVE BUILD” v2.2.
 - Product vision: INTAFACED SOVEREIGN OS.pdf (Vol. I). Do not invent architecture outside the law.
 - Board: docs/TRACKER.md · README status band · `pnpm tracker ready`.
+- **Truth layers (FINISHED law — do not collapse):** docs/COORDINATION-TRUTH-LAYERS.md · finish audit docs/COORDINATION-FINISH-AUDIT-2026-08-02.md — product free/owner/done = features.mjs; campaign next = BOARD-CLEAR-NEXT; session dual-build = LIVE-LANES + open PRs; code = git. Tracker touch = mountain events only (not every craft PR). No new Approve gates / PR caps / CI tax. Agents re-audit via finish-audit checklist; Nitro never updates boards by hand.
 - **ACTIVE CAMPAIGN — BOARD CLEAR (finish product table; full autonomy):** docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-ENGINEERING-STANDARD.md · docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md · docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-GO-READINESS.md · docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md · docs/BOARD-CLEAR-PROCESS-LOOPS.md · docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md · docs/BOARD-CLEAR-SCOREBOARD.md · docs/BOARD-CLEAR-NEXT.md · docs/BOARD-CLEAR-DECISION-LOG.md · **paste GO:** docs/BOARD-CLEAR-AUTONOMOUS-RUN.md. Anti-slop + evidence-before-claims. UI = vendor :8090. #289 rebase. Locked B. Done/Cut only; no continue; no residual theater.
 - Plain map: docs/START-HERE.md · Ownership: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Older residual mode: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md (superseded when Board Clear docs present) · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
 - Stream A / UI: docs/NITRO-STREAM-A-CLAIM.md · #83 · docs/FRONTEND-STATE-OF-TRUTH-2026-07-31.md under Board Clear web.terminal Done bar.
@@ -42,7 +43,7 @@ ALREADY TRUE (re-verify live each session — do not trust this paragraph as ete
 MANDATORY WORKFLOW
 1. Read AGENTS.md + ownership law + agent protocol. App/UI: also NITRO-STREAM-A-CLAIM / FRONTEND-STATE-OF-TRUTH. If on main checkout: create worktree; never implement on main.
 2. GitHub for agents: export GH_TOKEN from ~/.grok/agent-auth/github_token (never print).
-3. Claim LIVE-LANES + one tracker/campaign item; one concern per PR; contracts/events PR before service if cross-boundary. **If LIVE-LANES or tracker owner is shehzad002 / HUMAN-CLAIMED M1–M7 → stop implement; babysit only.**
+3. Claim LIVE-LANES + tracker mountain if free (features.mjs owner/wip on first mountain PR); one concern per PR. Craft under already-wip does not require registry edit. **If LIVE-LANES or tracker owner is shehzad002 / HUMAN-CLAIMED M1–M7 → stop implement; babysit only.**
 4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no invent mid/depth/rates; no force-push of spine branches; **no agent implement on Shehzad M1–M7 paths**. Board Clear agent Done bars only on agent-owned rows.
 5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand) + Class M path.
 6. No commits/PRs unless I asked to ship (or residual campaign / I said go all-out ship). No random new architecture.
@@ -54,7 +55,7 @@ RIGHT WAY (quality bar)
 - When ambiguous on money/custody/jurisdiction: stop and ask me (product) or cite doctrine.
 
 SESSION DEFAULT
-- Orient: git tip + open PRs + START-HERE + ownership law + residual campaign + LIVE-LANES + tracker (60s). Chat memory is not high water.
+- Orient: git tip + open PRs + COORDINATION-TRUTH-LAYERS + START-HERE + ownership law + LIVE-LANES + tracker ready + Board Clear NEXT if campaign (60s). Chat memory is not high water.
 - If I only want status: plain map + what agents can ship now + what waits on Denon direction + one recommended move. No code.
 - If Denon drops plans/specs: land them as durable links (do not leave chat-only), then execute under LIVE-LANES.
 - Never install/run Strix or live exploit frameworks unless I explicitly say go and name a non-prod target.

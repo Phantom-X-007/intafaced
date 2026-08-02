@@ -59,6 +59,23 @@ export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
 5. [`CONTRIBUTING.md`](CONTRIBUTING.md) — branch, PR, worktree workflow.
 6. If orienting Nitro (status / plan / “where are we”): [`docs/START-HERE.md`](docs/START-HERE.md).
 7. Before multi-agent code: [`docs/LIVE-LANES.md`](docs/LIVE-LANES.md) + residual campaign on tip.
+8. Multi-dev / claim / “what’s free”: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md) — product tracker vs campaign NEXT vs session lanes (do not collapse).
+
+---
+
+## Coordination truth layers (mandatory — not a speed limit)
+
+**Home:** [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md).
+
+| Question | File |
+| --- | --- |
+| Product free / wip / done / human-owned | `tooling/tracker/features.mjs` |
+| Campaign “ship next” | `docs/BOARD-CLEAR-NEXT.md` (sequence only) |
+| Session who-codes-what + dual-build | `docs/LIVE-LANES.md` + open PR path intersect |
+| Code on main | git |
+
+**Tracker touch = mountain events only** (claim, owner handoff/human lock, done/cut, optional wave note) — **not** every craft PR under an already-`wip` row.  
+**Does not add:** PR caps, Denon Approves, CI “must edit features.mjs,” or Nitro manual steps. Thrift + parallel + Class merge matrix unchanged.
 
 ---
 
@@ -80,7 +97,7 @@ Nitro does not know GitHub workflow. **You run the whole loop.** Do not hand him
 
 ### Every task — do this without asking him to do it
 
-1. **Claim** — confirm the feature in tracker / his words; one service (or one app concern) only.
+1. **Claim** — LIVE-LANES session row + tracker mountain if free (owner/wip in `features.mjs` on first PR for that mountain). Human-owned / shehzad M1–M7 → babysit only. See COORDINATION-TRUTH-LAYERS.
 2. **Worktree** — ensure work is on `feat/|fix/|chore/|docs/…`, never on `main` checkout.
 3. **Implement** — surgical; match repo style; no drive-by refactors.
 4. **`pnpm verify`** — run it; paste real output. Not “should pass.”
