@@ -22,11 +22,11 @@ No REQ left silent. No “stable for real money” claim (RS-2).
 | GC-1…10      | enforced            | doctrine + scans + worktree + Class M notes                                                                         |
 | LW-1…3       | **green**           | #272 · LIVE-LANES · residual seed-first                                                                             |
 | CX-1…6,10,12 | **green**           | existing trade suite + CI                                                                                           |
-| CX-7 F1–F8   | **green**           | chaos + seed tests                                                                                                  |
-| CX-8         | **honest residual** | `pnpm order-path-smoke` HONEST_SKIP without fleet; full two-user auth residual                                      |
+| CX-7 F1–F8   | **green**           | chaos F1–F7 (F6 = process-restart sim) + seed F8                                                                    |
+| CX-8         | **honest residual** | smoke L1 health + L2 `TRADE_SMOKE_BEARER` place/cancel; Docker host + two-user residual                             |
 | CX-9         | **green**           | `reconcileOrder` + tests                                                                                            |
 | CX-11        | **green**           | svc-trade README policy                                                                                             |
-| DB-1…4       | **partial green**   | door-kill + DAO no-op + service throws + scans; dead-branch setBalance residual                                     |
+| DB-1…4       | **partial green**   | door + path unit + DAO no-op + throws + scans; **10 LIVE** setBalance = H-OR-JAVA M7 (not agent)                    |
 | DB-5         | **green**           | no reverse write recipe invent; ADR Accepted via #272 era                                                           |
 | DX-1…8       | **green on tip**    | svc-dex quote suite (429, degrade, audit fields, no invent)                                                         |
 | DX-9         | **green on tip**    | `routePreview` arithmetic test in svc-dex router.mount                                                              |

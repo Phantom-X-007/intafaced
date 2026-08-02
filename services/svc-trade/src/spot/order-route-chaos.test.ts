@@ -12,13 +12,15 @@ import { orderIdFor } from './ids.js';
 import { StubMatching, StubPerks, UnreachableMatching, principalFor } from './testing.js';
 
 /**
- * Order-route chaos spine (Spec CX-7 · Plan P1-1 · Architect Seam B1).
+ * Order-route chaos spine (Spec CX-7 · Plan P1-1 / P1-4 · Architect Seam B1).
  *
- * In-process: real TradeService + MemoryLedger + StubMatching. Named F1–F4 so
- * the readiness scoreboard can point at a single green suite. Steady state S:
+ * In-process: real TradeService + MemoryLedger + StubMatching. Steady state S:
  * ledger conserved, no double hold/fill/release, open orders reconcilable.
  *
- * F5–F8 land in a later task (P1-4).
+ * Catalog coverage:
+ *   F1 concurrent clientOrderId · F2 fill redelivery · F3 partial cancel
+ *   F4 matching transport fail · F5 trade die after accept · F6 matching restart
+ *   F7 kill-switch · F8 seed public volume (order-route-seed.test.ts)
  */
 
 const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced_test';
@@ -47,7 +49,7 @@ async function reachable(): Promise<boolean> {
 const available = await reachable();
 
 if (!available) {
-  describe.skip('order-route chaos F1–F4 (Postgres unavailable — start docker compose)', () => {
+  describe.skip('order-route chaos F1–F7 (Postgres unavailable — start docker compose / CI PG)', () => {
     it('skipped', () => undefined);
   });
 } else {
@@ -273,7 +275,7 @@ if (!available) {
   });
 
   describe('chaos F6 — matching restart / journal replay no double settle', () => {
-    it('journal-style redelivery of fill + cancel never double-settles or double-releases', async () => {
+    it('after matching process restart, journal redelivery never double-settles or double-releases', async () => {
       await fund(BOB, 'BTC', '10');
       await fund(ALICE, 'USDT', '2000');
       const maker = await rest(BOB, btcusdt, 'sell', '10', '100', 'bob-f6');
@@ -282,7 +284,11 @@ if (!available) {
 
       const sequence = (await sql<Array<{ sequence: number }>>`SELECT sequence FROM trade.fills LIMIT 1`)[0]!.sequence;
 
-      // Matching "restarted" and re-emitted the journal: fills + cancel.
+      // Process death: clear in-process book/scripts; sequence floor preserved.
+      // Then journal re-emits fill + cancel events (consumer idempotency).
+      matching.simulateProcessRestart();
+      expect(matching.submitted).toHaveLength(0);
+
       for (let i = 0; i < 3; i++) {
         await trade.settleFillEvent({
           marketId: btcusdt.id,
