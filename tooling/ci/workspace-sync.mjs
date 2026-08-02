@@ -439,10 +439,14 @@ if (compose !== null) {
 // `# no-deploy:` reason. Silence is the thing being forbidden.
 {
   const composeApps = read('docker-compose.apps.yml') ?? '';
-  const frontends = [
-    ...workspacesUnder('apps').map((n) => ({ name: n, dir: join('apps', n) })),
-    { name: '05_Web_Front', dir: join('vendor', 'coinexchange', '05_Web_Front') },
-  ];
+  // Vendored front-ends are DISCOVERED, not named. Spelling the directory here
+  // would put the upstream vendor's name in source and trip brand-scan (§0.7) —
+  // and it would also mean a second vendored tree silently escapes this check.
+  const vendored = workspacesUnder('vendor').flatMap((v) =>
+    workspacesUnder(join('vendor', v)).map((n) => ({ name: n, dir: join('vendor', v, n) })),
+  );
+
+  const frontends = [...workspacesUnder('apps').map((n) => ({ name: n, dir: join('apps', n) })), ...vendored];
 
   for (const fe of frontends) {
     if (!existsSync(join(ROOT, fe.dir, 'package.json'))) continue;
