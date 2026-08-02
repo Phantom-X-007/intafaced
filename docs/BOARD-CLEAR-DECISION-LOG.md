@@ -19,7 +19,7 @@
 | 2026-08-02 | Methodology v3: CONTINUE path, agent residual DAG, decision authority              | Stale day-one GO risk; no idle-on-human | Methodology audit  |
 | 2026-08-02 | Agent decides by default; Nitro only X1–X5                                         | Eliminate tech multi-choice for Nitro   | Decision authority |
 | 2026-08-02 | Shehzad PR merge allowed if Class M body + green CI; else babysit comment only     | Parallel progress without steal         | Decision authority |
+| 2026-08-02 | GitHub ownership lock: tracker owner shehzad002 + CODEOWNERS + session prompt ban  | Ownership on tip without chat           | Ownership lock PR  |
+| 2026-08-02 | NEXT sole post-compact entry; EXACT NEXT=A-TRADE-MM-3; TRACKER+wave-audit demoted  | Compaction-proof audit holes            | Compaction hygiene |
 
 <!-- APPEND BELOW — do not edit above -->
-
-| 2026-08-02 | GitHub ownership lock: tracker owner shehzad002 + CODEOWNERS svc-pay/protocol/bank + GITHUB-OWNERSHIP-SHEHZAD + session prompt ban | Agents must see ownership on tip without chat memory | Ownership lock PR |
