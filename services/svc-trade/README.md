@@ -148,18 +148,18 @@ Job stays **OFF** until an operator deliberately enables it. Missing market list
 
 Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matching depth for futures mark ticks when configured. **Default OFF** — empty venue id means depth-only marks (or null when book empty). Never invents a mid.
 
-| Path | Behavior |
-| ---- | -------- |
-| **Mark** `TRADE_VENUE_MARK_*` | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from public book snapshot; futures jobs prefer it, then depth. |
-| **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null. |
+| Path                                      | Behavior                                                                                                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from public book snapshot; futures jobs prefer it, then depth. |
+| **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null.           |
 
 #### Ops enable path (default safe)
 
-| Env | Default | Meaning |
-| --- | ------- | ------- |
-| `TRADE_VENUE_MARK_VENUE` | `""` | Venue id. Empty = mark port off. Known public adapter today: **`binance-spot`** (no keys). Unknown id → warn once, stay off (never invent). |
-| `TRADE_VENUE_MARK_SYMBOLS` | `""` | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id. |
-| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on. |
+| Env                            | Default | Meaning                                                                                                                                     |
+| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapter today: **`binance-spot`** (no keys). Unknown id → warn once, stay off (never invent). |
+| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                       |
+| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                |
 
 **Enable checklist (ops):**
 

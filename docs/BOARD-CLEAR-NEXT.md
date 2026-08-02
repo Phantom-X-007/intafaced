@@ -13,15 +13,15 @@
 
 ## EXACT NEXT SHIP (do this now — single primary)
 
-| Field               | Value                                                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Ship ID**         | **A-P5-AGENTS** (if #375 not yet merged) **else A-UI-PRO**                                                         |
-| **Program**         | P-P5-LIGHT → then P-UI                                                                                             |
-| **Objective**       | Merge green #375 agents useful path; then pro desk density/craft vs STREAM-A-DESIGN-BAR (no fake numbers)          |
-| **PATHS_ONLY**      | Agents: `services/svc-agents/**`. UI-PRO: vendor shell / design-bar gaps — **not** dual-edit open frontend PRs     |
+| Field               | Value                                                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Ship ID**         | **A-P5-AGENTS** (if #375 not yet merged) **else A-UI-PRO**                                                        |
+| **Program**         | P-P5-LIGHT → then P-UI                                                                                            |
+| **Objective**       | Merge green #375 agents useful path; then pro desk density/craft vs STREAM-A-DESIGN-BAR (no fake numbers)         |
+| **PATHS_ONLY**      | Agents: `services/svc-agents/**`. UI-PRO: vendor shell / design-bar gaps — **not** dual-edit open frontend PRs    |
 | **Collision check** | #370 order-route (trade scripts/workflows) · #374 B3 withdraw · #346 pay babysit-only · path-intersect every turn |
-| **Branch prefix**   | `feat/agents-` / `feat/ui-pro-`                                                                                    |
-| **After merge**     | Scoreboard honesty · A-P5-OPS if free · babysit #346 · AGENT-COMPLETE only when residual empty                     |
+| **Branch prefix**   | `feat/agents-` / `feat/ui-pro-`                                                                                   |
+| **After merge**     | Scoreboard honesty · A-P5-OPS if free · babysit #346 · AGENT-COMPLETE only when residual empty                    |
 
 **Secondary (if primary blocked):** A-UI-PRO · A-P5-OPS · babysit green agent PRs · wave audit after 4 product merges
 
@@ -41,13 +41,13 @@ worktree from tip → ship → green CI → merge → rewrite this file
 
 ## Open PRs (snapshot — re-derive)
 
-| PR   | Owner      | Note                                                              |
-| ---- | ---------- | ----------------------------------------------------------------- |
-| #375 | Board Clear| A-P5-AGENTS useful path — merge when CI green                     |
-| #370 | parallel   | order-route CX-8 — **do not dual-edit trade scripts/package**     |
-| #374 | parallel   | app B3 withdraw — avoid dual-edit same vendor withdraw paths      |
-| #346 | shehzad002 | M1 pay — babysit only                                             |
-| #350 | Denon      | copy-spec docs — no dual-edit                                     |
+| PR   | Owner       | Note                                                          |
+| ---- | ----------- | ------------------------------------------------------------- |
+| #375 | Board Clear | A-P5-AGENTS useful path — merge when CI green                 |
+| #370 | parallel    | order-route CX-8 — **do not dual-edit trade scripts/package** |
+| #374 | parallel    | app B3 withdraw — avoid dual-edit same vendor withdraw paths  |
+| #346 | shehzad002  | M1 pay — babysit only                                         |
+| #350 | Denon       | copy-spec docs — no dual-edit                                 |
 
 ---
 
