@@ -15,6 +15,41 @@
  *      hard failure so a human has to look).
  *
  * Exit 0 = provably non-custodial. Exit 1 = the boundary moved.
+ *
+ * ── WHAT THIS GATE ACTUALLY COVERS (read this before citing it) ────────────
+ *
+ * This is a narrow, targeted gate and it is routinely mistaken for a repo-wide
+ * custody check. It is not one. Measured 2026-08-02:
+ *
+ *   Check 1 — TypeScript, in FOUR NAMED SERVICES ONLY (the array below):
+ *   svc-chain, svc-dex, svc-indexer, svc-protocol. svc-chain does not exist
+ *   yet, so in practice it walks THREE: svc-dex (17 files), svc-indexer (27),
+ *   svc-protocol (44) = 88 .ts/.tsx files.
+ *
+ *   Check 2 — Solidity, under services/svc-protocol and a root contracts/.
+ *   There is no root contracts/, so in practice: svc-protocol's 9 .sol files.
+ *   Note that services/svc-indexer/contracts/dev/DevVenue.sol is therefore NOT
+ *   scanned for contract risk — check 1 reaches svc-indexer but only looks at
+ *   .ts/.tsx, and check 2 never looks outside svc-protocol.
+ *
+ * Totalling the 97 files the success line reports. It does NOT cover:
+ *
+ *   · The other 14 services under services/ — including every custodial one
+ *     (svc-ledger, svc-pay, svc-bank, svc-trade …). That is BY DESIGN: this
+ *     gate asserts non-custody where non-custody is promised, and those
+ *     services are custodial on purpose, as svc-bridge will be (§17.3).
+ *   · Any Java. All 882 files under vendor/ are outside it. The dual-book
+ *     question over there belongs to vendor-java-money-scan.mjs and
+ *     dual-book-door-scan.mjs — different gates, different rules. "Extend
+ *     custody-scan to Java" would be extending the wrong gate.
+ *   · packages/ and apps/ — 170 .ts/.tsx files, walked by neither check.
+ *
+ * The service list is HARDCODED. It mirrors packages/config/src/modules.ts —
+ * the modules whose `planes` is exactly ['protocol'] and `custodial` is false —
+ * and it is accurate to that registry today. But it does not DERIVE from it, so
+ * a new Protocol Plane module added to modules.ts would not arm this scan until
+ * somebody edits the array below. Deriving it is a real decision rather than a
+ * drive-by change; writing the gap down is the honest half of it.
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
