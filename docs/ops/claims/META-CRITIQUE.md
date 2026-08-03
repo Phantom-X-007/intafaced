@@ -6,6 +6,7 @@
 **title:** impeccable/design-taste on craft
 **track:** AFK
 **paths:**
+
 - docs/refs
 
 ## Residual note (2026-08-03)

@@ -6,11 +6,13 @@
 **title:** Every 5 merges re-scan invent patterns
 **track:** AFK
 **paths:**
+
 - vendor/coinexchange/05_Web_Front
 
 ## Residual note (2026-08-03)
 
 Quick invent-pattern scan complete → **`docs/ops/R-AFK-RESCAN.md`**.
+
 - No new hard invent residual beyond surfaces already owned by RP1/RP2/AFK-\* free claims.
 - Next rescan after ~5 shell merges.
 

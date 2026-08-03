@@ -6,6 +6,7 @@
 **title:** Steal lines + refs layout
 **track:** AFK
 **paths:**
+
 - docs/refs
 
 ## Residual note (2026-08-03)

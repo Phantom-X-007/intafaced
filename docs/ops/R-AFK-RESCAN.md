@@ -17,22 +17,22 @@ Most `invent` hits are **doctrine comments** (never invent prices, rates, FAQs, 
 
 ### Known residual surfaces (already owned by free claims — do not dual-edit)
 
-| surface | signal | owner claim |
-| --- | --- | --- |
-| `pages/index/Index.vue` | PriceTrend column titles; historical CNY 6.5 invent comments | **RP2** (sole Index) — AFK-INDEX blocked |
-| `pages/exchange/Exchange.vue` | money-on-wire / no invent fees comments | **RP1** |
-| `pages/uc/AppDownload.vue` | §13 invented-content case documented in header | **AFK-APPDOWNLOAD** |
-| `pages/uc/IdentBusiness.vue` | form placeholders (jurisdiction etc.) | **AFK-IDENT** |
-| `pages/cms/Help*.vue` / WhitePaper | honesty empty≠FAQ invent | **AFK-HELP-DETAIL** / **AFK-WHITEPAPER** |
-| `App.vue` footer | no invent social URLs | **AFK-FOOTER** |
-| `cmd-palette` golden | market not invented | **AFK-CMDK-ROUTES** |
-| `pages/intafaced/*` | dual-book / no fake deployed badges | **AFK-LAB-PASS** |
-| `components/uc/*` | empty≠zero sweeps | **AFK-UC-COMP** |
+| surface                            | signal                                                       | owner claim                              |
+| ---------------------------------- | ------------------------------------------------------------ | ---------------------------------------- |
+| `pages/index/Index.vue`            | PriceTrend column titles; historical CNY 6.5 invent comments | **RP2** (sole Index) — AFK-INDEX blocked |
+| `pages/exchange/Exchange.vue`      | money-on-wire / no invent fees comments                      | **RP1**                                  |
+| `pages/uc/AppDownload.vue`         | §13 invented-content case documented in header               | **AFK-APPDOWNLOAD**                      |
+| `pages/uc/IdentBusiness.vue`       | form placeholders (jurisdiction etc.)                        | **AFK-IDENT**                            |
+| `pages/cms/Help*.vue` / WhitePaper | honesty empty≠FAQ invent                                     | **AFK-HELP-DETAIL** / **AFK-WHITEPAPER** |
+| `App.vue` footer                   | no invent social URLs                                        | **AFK-FOOTER**                           |
+| `cmd-palette` golden               | market not invented                                          | **AFK-CMDK-ROUTES**                      |
+| `pages/intafaced/*`                | dual-book / no fake deployed badges                          | **AFK-LAB-PASS**                         |
+| `components/uc/*`                  | empty≠zero sweeps                                            | **AFK-UC-COMP**                          |
 
 ### Noise (not product invent)
 
-- `jquery` / `gt.js` Math.random — third-party / captcha id, not market invent  
-- Input `placeholder=` form UX — not money invent  
+- `jquery` / `gt.js` Math.random — third-party / captcha id, not market invent
+- Input `placeholder=` form UX — not money invent
 - en.js `PriceTrend` string + fraud-warning copy containing word “fake”
 
 ### Prior invent removals already documented in-file
@@ -41,8 +41,8 @@ Invite fake leaderboard, Activity invented completion %, AppDownload hardcoded s
 
 ## Action
 
-1. **Do not open a new invent-fix PR from OPS** — free AFK/RP workers own paths.  
-2. After ~5 shell merges, re-run this scan (`pnpm`/rg as above) and refresh this file.  
+1. **Do not open a new invent-fix PR from OPS** — free AFK/RP workers own paths.
+2. After ~5 shell merges, re-run this scan (`pnpm`/rg as above) and refresh this file.
 3. Stamp any visual check as `proof_missing: fleet-blocked` under NO-FLEET.
 
 ## Proof
