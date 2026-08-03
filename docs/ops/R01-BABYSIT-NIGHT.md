@@ -1,9 +1,10 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03 ~14:21Z (AFK refresh)  
-**Tip at run:** `bf214291` (`origin/main`) — docs(ops): R07 cycle9 freeProduct=0 + R01 babysit @ 02d8f19c (#510)  
+**When:** 2026-08-03 ~14:24Z (AFK R07 cycle10 tip stamp)  
+**Tip at run:** `7a02302d` (`origin/main`) — docs(ops): R01 partner babysit @ bf214291 — 4 ready for Denon self-merge (#511)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
-**Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day night babysit already on every open CONFLICTING partner PR)
+**Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day night babysit already on every open CONFLICTING partner PR)  
+**Open list delta:** **none** — same 11 partner PRs; ready list unchanged
 
 ## Policy
 
@@ -23,7 +24,7 @@
 
 **Ready count: 4** — agents do **not** merge these.
 
-## CONFLICTING — needs rebase to tip `bf214291`
+## CONFLICTING — needs rebase to tip `7a02302d`
 
 | PR                                                          | Author  | Mergeable         | Failing / notes          | Action                                        |
 | ----------------------------------------------------------- | ------- | ----------------- | ------------------------ | --------------------------------------------- |
@@ -53,14 +54,14 @@ None. Avoid spam — prior night-engine / AFK babysit comments already on every 
 | [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | commented 13:39Z                                          |
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 
-## Snapshot counts (14:21Z · tip `bf214291`)
+## Snapshot counts (14:24Z · tip `7a02302d`)
 
 - **Open partner:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
 - **Ready for Denon self-merge:** **4** (#445 #433 #430 #420)
 - **CONFLICTING (rebase):** 5 Denon + #346 Shehzad
 - **MERGEABLE red CI:** 1 (#428)
 
-**Merged since tip `02d8f19c` / #508:** #510 (R07 cycle9 + R01 babysit snapshot).
+**Merged since tip `bf214291` / #510:** #511 (R01 partner babysit refresh).
 
 ## P-WS (report only — no dual-edit)
 
@@ -74,7 +75,7 @@ Agents: docs/report only. No implement on matching or edge while those PRs stay 
 ## Rebase tip (for partners)
 
 ```
-origin/main @ bf214291  (at doc write; re-fetch before rebase)
+origin/main @ 7a02302d  (at doc write; re-fetch before rebase)
 ```
 
 ## Agent stance
