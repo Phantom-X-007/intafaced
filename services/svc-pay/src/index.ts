@@ -39,7 +39,7 @@ const sql = postgres(env.DATABASE_URL, {
   onnotice: () => undefined,
 });
 
-await sql`SELECT 1 FROM pay.merchants LIMIT 1`.catch(() => {
+await sql`SELECT 1 FROM merchants LIMIT 1`.catch(() => {
   throw new Error('pay schema is missing — run migrations before starting svc-pay');
 });
 

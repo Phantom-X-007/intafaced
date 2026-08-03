@@ -226,7 +226,7 @@ export class TradeService {
    */
   async listMarket(input: ListMarketInput): Promise<Market> {
     const rows = await this.sql<MarketRow[]>`
-      INSERT INTO trade.markets (
+      INSERT INTO markets (
         symbol, base_asset, quote_asset, kind, tick_size, lot_size,
         min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
         asset_class, schedule, display_name
@@ -258,7 +258,7 @@ export class TradeService {
    */
   async setMarketStatus(marketId: string, status: Market['status']): Promise<Market> {
     const rows = await this.sql<MarketRow[]>`
-      UPDATE trade.markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
+      UPDATE markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
                 min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
                 asset_class, schedule
@@ -273,7 +273,7 @@ export class TradeService {
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
                 asset_class, schedule
-        FROM trade.markets ORDER BY symbol ASC
+        FROM markets ORDER BY symbol ASC
     `;
     return rows.map(toMarket);
   }
@@ -529,7 +529,7 @@ export class TradeService {
     if (existing) return existing;
 
     const inserted = await this.sql<Array<{ id: string }>>`
-      INSERT INTO trade.orders (
+      INSERT INTO orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
         price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
       ) VALUES (
@@ -566,13 +566,13 @@ export class TradeService {
       //
       // Guarded on `status = 'pending'`: if a concurrent path has already
       // funded and opened this order, this delete must not touch it.
-      await this.sql`DELETE FROM trade.orders WHERE id = ${orderId} AND status = 'pending'`;
+      await this.sql`DELETE FROM orders WHERE id = ${orderId} AND status = 'pending'`;
       throw err;
     }
 
     // The order is now funded. From here on the hold exists, so every exit path
     // below must end in either a fill or a release — never in silence.
-    await this.sql`UPDATE trade.orders SET status = 'open', updated_at = now() WHERE id = ${orderId} AND status = 'pending'`;
+    await this.sql`UPDATE orders SET status = 'open', updated_at = now() WHERE id = ${orderId} AND status = 'pending'`;
 
     // ── 4 · THE ENGINE ──────────────────────────────────────────────────────
     let result: EngineSubmitResult;
@@ -657,14 +657,14 @@ export class TradeService {
       // release and the terminal status are done together by `finalize`, in
       // that order, for the reason spelled out there.
       await this.sql`
-        UPDATE trade.orders SET reject_code = ${result.rejected?.code ?? 'rejected'}, updated_at = now() WHERE id = ${orderId}
+        UPDATE orders SET reject_code = ${result.rejected?.code ?? 'rejected'}, updated_at = now() WHERE id = ${orderId}
       `;
       await this.finalize(orderId, 'rejected');
       return;
     }
 
     if (result.sequence !== null) {
-      await this.sql`UPDATE trade.orders SET engine_sequence = ${result.sequence}, updated_at = now() WHERE id = ${orderId}`;
+      await this.sql`UPDATE orders SET engine_sequence = ${result.sequence}, updated_at = now() WHERE id = ${orderId}`;
     }
 
     // A triggered stop cannot occur while this service refuses stop orders, but
@@ -798,7 +798,7 @@ export class TradeService {
       const makerHoldAsset = takerBuys ? market.baseAsset : market.quoteAsset;
       const makerHoldAmount = takerBuys ? qty : quoteAmount;
       await this.sql`
-        INSERT INTO trade.orders (
+        INSERT INTO orders (
           id, user_id, market_id, side, type, price, qty, status, tif,
           hold_asset, hold_amount, fee_discount_bps
         ) VALUES (
@@ -810,7 +810,7 @@ export class TradeService {
       `;
 
       await this.sql`
-        INSERT INTO trade.fills (
+        INSERT INTO fills (
           id, order_id, counter_order_id, market_id, user_id, side, liquidity,
           price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
         ) VALUES (
@@ -822,7 +822,7 @@ export class TradeService {
         ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
       `;
       await this.sql`
-        INSERT INTO trade.fills (
+        INSERT INTO fills (
           id, order_id, counter_order_id, market_id, user_id, side, liquidity,
           price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
         ) VALUES (
@@ -918,7 +918,7 @@ export class TradeService {
 
     for (const leg of legs) {
       await this.sql`
-        INSERT INTO trade.fills (
+        INSERT INTO fills (
           id, order_id, counter_order_id, market_id, user_id, side, liquidity,
           price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
         ) VALUES (
@@ -1004,7 +1004,7 @@ export class TradeService {
     // edit that forgets where `side` came from.
     const rows = await sql<Array<{ consumed: string }>>`
       SELECT COALESCE(SUM(CASE WHEN ${order.side === 'buy'} THEN quote_amount ELSE qty END), 0) AS consumed
-        FROM trade.fills WHERE order_id = ${order.id}
+        FROM fills WHERE order_id = ${order.id}
     `;
     const consumed = parseAmount(rows[0]?.consumed ?? '0');
     const remaining = sub(order.holdAmount, consumed);
@@ -1046,7 +1046,7 @@ export class TradeService {
     const outcome = await transaction(
       this.sql,
       async (tx): Promise<{ order: OrderRecord; status: OrderStatus } | null> => {
-        const rows = await tx<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId} FOR UPDATE`;
+        const rows = await tx<OrderRow[]>`SELECT * FROM orders WHERE id = ${orderId} FOR UPDATE`;
         const row = rows[0];
         if (!row) return null;
 
@@ -1068,7 +1068,7 @@ export class TradeService {
         }
 
         const finalStatus: OrderStatus = order.filledQty > 0n && order.filledQty >= order.qty ? 'filled' : status;
-        await tx`UPDATE trade.orders SET status = ${finalStatus}, updated_at = now() WHERE id = ${orderId}`;
+        await tx`UPDATE orders SET status = ${finalStatus}, updated_at = now() WHERE id = ${orderId}`;
 
         return { order, status: finalStatus };
       },
@@ -1236,12 +1236,12 @@ export class TradeService {
     requireScope(principal, 'trade:read');
     const rows = marketId
       ? await this.sql<OrderRow[]>`
-          SELECT * FROM trade.orders
+          SELECT * FROM orders
            WHERE user_id = ${principal.userId} AND status IN ('pending', 'open') AND market_id = ${marketId}
            ORDER BY created_at DESC
         `
       : await this.sql<OrderRow[]>`
-          SELECT * FROM trade.orders
+          SELECT * FROM orders
            WHERE user_id = ${principal.userId} AND status IN ('pending', 'open')
            ORDER BY created_at DESC
         `;
@@ -1261,7 +1261,7 @@ export class TradeService {
     const rows =
       input.marketId && sinceDate
         ? await this.sql<OrderRow[]>`
-            SELECT * FROM trade.orders
+            SELECT * FROM orders
              WHERE user_id = ${principal.userId}
                AND market_id = ${input.marketId}
                AND status IN ('filled', 'cancelled', 'rejected', 'expired')
@@ -1271,7 +1271,7 @@ export class TradeService {
           `
         : input.marketId
           ? await this.sql<OrderRow[]>`
-              SELECT * FROM trade.orders
+              SELECT * FROM orders
                WHERE user_id = ${principal.userId}
                  AND market_id = ${input.marketId}
                  AND status IN ('filled', 'cancelled', 'rejected', 'expired')
@@ -1280,7 +1280,7 @@ export class TradeService {
             `
           : sinceDate
             ? await this.sql<OrderRow[]>`
-                SELECT * FROM trade.orders
+                SELECT * FROM orders
                  WHERE user_id = ${principal.userId}
                    AND status IN ('filled', 'cancelled', 'rejected', 'expired')
                    AND created_at >= ${sinceDate}
@@ -1288,7 +1288,7 @@ export class TradeService {
                  LIMIT ${limit}
               `
             : await this.sql<OrderRow[]>`
-                SELECT * FROM trade.orders
+                SELECT * FROM orders
                  WHERE user_id = ${principal.userId}
                    AND status IN ('filled', 'cancelled', 'rejected', 'expired')
                  ORDER BY created_at DESC
@@ -1311,7 +1311,7 @@ export class TradeService {
     const rows =
       marketId && sinceDate
         ? await this.sql<FillRow[]>`
-            SELECT * FROM trade.fills
+            SELECT * FROM fills
              WHERE user_id = ${principal.userId}
                AND market_id = ${marketId}
                AND ts >= ${sinceDate}
@@ -1319,19 +1319,19 @@ export class TradeService {
           `
         : marketId
           ? await this.sql<FillRow[]>`
-              SELECT * FROM trade.fills
+              SELECT * FROM fills
                WHERE user_id = ${principal.userId} AND market_id = ${marketId}
                ORDER BY ts DESC LIMIT ${capped}
             `
           : sinceDate
             ? await this.sql<FillRow[]>`
-                SELECT * FROM trade.fills
+                SELECT * FROM fills
                  WHERE user_id = ${principal.userId}
                    AND ts >= ${sinceDate}
                  ORDER BY ts DESC LIMIT ${capped}
               `
             : await this.sql<FillRow[]>`
-                SELECT * FROM trade.fills
+                SELECT * FROM fills
                  WHERE user_id = ${principal.userId}
                  ORDER BY ts DESC LIMIT ${capped}
               `;
@@ -1345,13 +1345,13 @@ export class TradeService {
       throw new TradeError(`order ${orderId} not found`, 'trade.order_not_found');
     }
     const rows = await this.sql<FillRow[]>`
-      SELECT * FROM trade.fills WHERE order_id = ${orderId} AND user_id = ${principal.userId} ORDER BY ts ASC
+      SELECT * FROM fills WHERE order_id = ${orderId} AND user_id = ${principal.userId} ORDER BY ts ASC
     `;
     return rows.map(toFill);
   }
 
   async findOrder(orderId: string): Promise<OrderRecord | null> {
-    const rows = await this.sql<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId}`;
+    const rows = await this.sql<OrderRow[]>`SELECT * FROM orders WHERE id = ${orderId}`;
     const row = rows[0];
     return row ? toOrder(row) : null;
   }
@@ -1399,7 +1399,7 @@ export class TradeService {
 
       // ── orphan pending: intent row, never funded ───────────────────────────
       if (order.status === 'pending' && holdBal === 0n) {
-        await this.sql`DELETE FROM trade.orders WHERE id = ${orderId} AND status = 'pending'`;
+        await this.sql`DELETE FROM orders WHERE id = ${orderId} AND status = 'pending'`;
         return {
           orderId,
           case: 'orphan_pending',
@@ -1453,7 +1453,7 @@ export class TradeService {
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
                 asset_class, schedule
-        FROM trade.markets WHERE id = ${marketId}
+        FROM markets WHERE id = ${marketId}
     `;
     const row = rows[0];
     return row ? toMarket(row) : null;
@@ -1464,7 +1464,7 @@ export class TradeService {
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
                 asset_class, schedule
-        FROM trade.markets WHERE symbol = ${symbol}
+        FROM markets WHERE symbol = ${symbol}
     `;
     const row = rows[0];
     return row ? toMarket(row) : null;
@@ -1494,9 +1494,9 @@ export class TradeService {
     const rows = sinceDate
       ? await this.sql<TapeRow[]>`
           SELECT f.id, f.side, f.price, f.qty, f.quote_amount, f.sequence, f.ts
-            FROM trade.fills f
-            INNER JOIN trade.orders o ON o.id = f.order_id
-            INNER JOIN trade.orders c ON c.id = f.counter_order_id
+            FROM fills f
+            INNER JOIN orders o ON o.id = f.order_id
+            INNER JOIN orders c ON c.id = f.counter_order_id
            WHERE f.market_id = ${marketId}
              AND f.liquidity = 'taker'
              AND f.ts >= ${sinceDate}
@@ -1507,9 +1507,9 @@ export class TradeService {
         `
       : await this.sql<TapeRow[]>`
           SELECT f.id, f.side, f.price, f.qty, f.quote_amount, f.sequence, f.ts
-            FROM trade.fills f
-            INNER JOIN trade.orders o ON o.id = f.order_id
-            INNER JOIN trade.orders c ON c.id = f.counter_order_id
+            FROM fills f
+            INNER JOIN orders o ON o.id = f.order_id
+            INNER JOIN orders c ON c.id = f.counter_order_id
            WHERE f.market_id = ${marketId}
              AND f.liquidity = 'taker'
              AND o.seeded = false
@@ -1606,8 +1606,8 @@ export class TradeService {
 
   private async refreshFilledQty(orderId: string): Promise<void> {
     await this.sql`
-      UPDATE trade.orders o
-         SET filled_qty = COALESCE((SELECT SUM(f.qty) FROM trade.fills f WHERE f.order_id = o.id), 0),
+      UPDATE orders o
+         SET filled_qty = COALESCE((SELECT SUM(f.qty) FROM fills f WHERE f.order_id = o.id), 0),
              updated_at = now()
        WHERE o.id = ${orderId}
     `;

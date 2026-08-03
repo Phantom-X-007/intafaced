@@ -286,7 +286,7 @@ export class LoanService {
     }
 
     const rows = await this.sql<Array<Record<string, unknown>>>`
-      INSERT INTO bank.loan_products (
+      INSERT INTO loan_products (
         name, debt_asset_id, collateral_asset_id, quote_asset_id, apr_bps, max_ltv_bps,
         margin_call_ltv_bps, liquidation_ltv_bps, insolvency_ltv_bps, target_ltv_bps,
         penalty_bps, max_tranche_bps, grace_seconds, min_principal
@@ -305,16 +305,16 @@ export class LoanService {
   async listProducts(assetId?: string): Promise<LoanProductRecord[]> {
     const rows = assetId
       ? await this.sql<Array<Record<string, unknown>>>`
-          SELECT * FROM bank.loan_products
+          SELECT * FROM loan_products
            WHERE status = 'open' AND (debt_asset_id = ${assetId} OR collateral_asset_id = ${assetId})
            ORDER BY name ASC`
       : await this.sql<Array<Record<string, unknown>>>`
-          SELECT * FROM bank.loan_products WHERE status = 'open' ORDER BY name ASC`;
+          SELECT * FROM loan_products WHERE status = 'open' ORDER BY name ASC`;
     return rows.map(toProduct);
   }
 
   async product(id: string): Promise<LoanProductRecord> {
-    const rows = await this.sql<Array<Record<string, unknown>>>`SELECT * FROM bank.loan_products WHERE id = ${id}`;
+    const rows = await this.sql<Array<Record<string, unknown>>>`SELECT * FROM loan_products WHERE id = ${id}`;
     if (rows.length === 0) throw new BankError(`No loan product ${id}`, 'bank.loan_product_not_found');
     return toProduct(rows[0]!);
   }
@@ -322,14 +322,14 @@ export class LoanService {
   // ── Reading a loan ─────────────────────────────────────────────────────────
 
   async loan(id: string): Promise<LoanRecord> {
-    const rows = await this.sql<Array<Record<string, unknown>>>`SELECT * FROM bank.loans WHERE id = ${id}`;
+    const rows = await this.sql<Array<Record<string, unknown>>>`SELECT * FROM loans WHERE id = ${id}`;
     if (rows.length === 0) throw new BankError(`No loan ${id}`, 'bank.loan_not_found');
     return toLoan(rows[0]!);
   }
 
   async loansOf(userId: string): Promise<LoanRecord[]> {
     const rows = await this.sql<Array<Record<string, unknown>>>`
-      SELECT * FROM bank.loans WHERE user_id = ${userId} ORDER BY opened_at DESC
+      SELECT * FROM loans WHERE user_id = ${userId} ORDER BY opened_at DESC
     `;
     return rows.map(toLoan);
   }
@@ -351,15 +351,15 @@ export class LoanService {
   async outstanding(loanId: string, tx: Sql = this.sql): Promise<LoanDebt> {
     const rows = await tx<Array<{ principal: string; interest: string }>>`
       WITH drawn AS (
-        SELECT principal FROM bank.loans WHERE id = ${loanId}
+        SELECT principal FROM loans WHERE id = ${loanId}
       ),
       accrued AS (
         SELECT COALESCE(SUM(interest_amount), 0) AS v
-          FROM bank.loan_interest_accruals WHERE loan_id = ${loanId}
+          FROM loan_interest_accruals WHERE loan_id = ${loanId}
       ),
       repaid AS (
         SELECT COALESCE(SUM(principal_amount), 0) AS p, COALESCE(SUM(interest_amount), 0) AS i
-          FROM bank.loan_repayments WHERE loan_id = ${loanId} AND status = 'settled'
+          FROM loan_repayments WHERE loan_id = ${loanId} AND status = 'settled'
       ),
       seized AS (
         -- Shortfall only reduces outstanding after insurance actually posted
@@ -373,7 +373,7 @@ export class LoanService {
                    ELSE 0
                  END
                ), 0) AS s
-          FROM bank.loan_liquidations WHERE loan_id = ${loanId} AND status = 'settled'
+          FROM loan_liquidations WHERE loan_id = ${loanId} AND status = 'settled'
       )
       SELECT
         GREATEST((SELECT principal FROM drawn) - repaid.p - seized.p - seized.s, 0) AS principal,
@@ -460,7 +460,7 @@ export class LoanService {
     const loanId = input.loanId ?? randomUUID();
 
     const inserted = await this.sql<Array<Record<string, unknown>>>`
-      INSERT INTO bank.loans (
+      INSERT INTO loans (
         id, product_id, user_id, debt_asset_id, collateral_asset_id, quote_asset_id, apr_bps, principal, opened_at
       ) VALUES (
         ${loanId}, ${product.id}, ${input.userId}, ${product.debtAssetId}, ${product.collateralAssetId},
@@ -537,7 +537,7 @@ export class LoanService {
       // Status and tx id commit together, so there is no window in which the
       // principal has moved and the row does not know.
       const updated = await this.sql<Array<Record<string, unknown>>>`
-        UPDATE bank.loans
+        UPDATE loans
            SET status = 'active', draw_ledger_tx_id = ${drawTxId}, drawn_at = ${now},
                last_mark_price = ${null}, updated_at = now()
          WHERE id = ${loan.id} AND status = 'pending'
@@ -565,7 +565,7 @@ export class LoanService {
    */
   async resumePending(limit = 100): Promise<Array<{ loanId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
     const rows = await this.sql<Array<Record<string, unknown>>>`
-      SELECT * FROM bank.loans WHERE status = 'pending' ORDER BY opened_at ASC LIMIT ${limit}
+      SELECT * FROM loans WHERE status = 'pending' ORDER BY opened_at ASC LIMIT ${limit}
     `;
 
     const out: Array<{ loanId: string; outcome: 'completed' | 'failed'; reason?: string }> = [];
@@ -610,12 +610,12 @@ export class LoanService {
 
     const held = await this.collateralOf(loan);
     if (held <= 0n) {
-      await this.sql`UPDATE bank.loans SET status = 'repaid', closed_at = now(), updated_at = now() WHERE id = ${loanId}`;
+      await this.sql`UPDATE loans SET status = 'repaid', closed_at = now(), updated_at = now() WHERE id = ${loanId}`;
       return { released: 0n, ledgerTxId: null };
     }
 
     const txId = await this.releaseCollateral(loan, held);
-    await this.sql`UPDATE bank.loans SET status = 'repaid', closed_at = now(), updated_at = now() WHERE id = ${loanId}`;
+    await this.sql`UPDATE loans SET status = 'repaid', closed_at = now(), updated_at = now() WHERE id = ${loanId}`;
     return { released: held, ledgerTxId: txId };
   }
 
@@ -645,14 +645,14 @@ export class LoanService {
     return this.drivenPost({
       claim: async (tx) => {
         const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          INSERT INTO bank.loan_collateral_events (loan_id, sequence, direction, amount)
+          INSERT INTO loan_collateral_events (loan_id, sequence, direction, amount)
           VALUES (${loan.id}, ${sequence}, 'lock', ${formatAmount(amount)}::numeric)
           ON CONFLICT (loan_id, sequence) DO NOTHING
           RETURNING id, ledger_tx_id
         `;
         if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
         const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+          SELECT id, ledger_tx_id FROM loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
         `;
         return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
       },
@@ -675,14 +675,14 @@ export class LoanService {
     return this.drivenPost({
       claim: async (tx) => {
         const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          INSERT INTO bank.loan_collateral_events (loan_id, sequence, direction, amount)
+          INSERT INTO loan_collateral_events (loan_id, sequence, direction, amount)
           VALUES (${loan.id}, ${sequence}, 'release', ${formatAmount(amount)}::numeric)
           ON CONFLICT (loan_id, sequence) DO NOTHING
           RETURNING id, ledger_tx_id
         `;
         if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
         const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+          SELECT id, ledger_tx_id FROM loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
         `;
         return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
       },
@@ -741,7 +741,7 @@ export class LoanService {
     }
 
     const last = await this.sql<Array<{ d: string | null }>>`
-      SELECT MAX(accrual_date)::text AS d FROM bank.loan_interest_accruals WHERE loan_id = ${loan.id}
+      SELECT MAX(accrual_date)::text AS d FROM loan_interest_accruals WHERE loan_id = ${loan.id}
     `;
     const days = daysToAccrue(last[0]?.d ?? null, loan.openedAt, until);
     if (days.length === 0) return { loanId: loan.id, days: [], charged: 0n };
@@ -760,7 +760,7 @@ export class LoanService {
       // re-derived and re-charged forever by the next run, and on a dust loan
       // that means the day list grows without bound.
       const rows = await this.sql<Array<{ id: string }>>`
-        INSERT INTO bank.loan_interest_accruals (loan_id, accrual_date, rate_bps, principal_basis, interest_amount)
+        INSERT INTO loan_interest_accruals (loan_id, accrual_date, rate_bps, principal_basis, interest_amount)
         VALUES (${loan.id}, ${day}, ${loan.aprBps}, ${formatAmount(debt)}::numeric, ${formatAmount(interest)}::numeric)
         ON CONFLICT (loan_id, accrual_date) DO NOTHING
         RETURNING id
@@ -772,7 +772,7 @@ export class LoanService {
         // the day is charged once; we read what was actually charged so the
         // running debt stays true to the rows rather than to our arithmetic.
         const existing = await this.sql<Array<{ interest_amount: string }>>`
-          SELECT interest_amount FROM bank.loan_interest_accruals WHERE loan_id = ${loan.id} AND accrual_date = ${day}
+          SELECT interest_amount FROM loan_interest_accruals WHERE loan_id = ${loan.id} AND accrual_date = ${day}
         `;
         const actual = parseAmount(existing[0]!.interest_amount);
         debt += actual;
@@ -791,7 +791,7 @@ export class LoanService {
   /** Every open loan accrues. The job's entry point. */
   async accrueAll(until: Date = new Date(), limit = 1_000): Promise<Array<{ loanId: string; charged: Amount; days: number }>> {
     const rows = await this.sql<Array<{ id: string }>>`
-      SELECT id FROM bank.loans WHERE status IN ('active', 'margin_call', 'liquidating') ORDER BY opened_at ASC LIMIT ${limit}
+      SELECT id FROM loans WHERE status IN ('active', 'margin_call', 'liquidating') ORDER BY opened_at ASC LIMIT ${limit}
     `;
     const out: Array<{ loanId: string; charged: Amount; days: number }> = [];
     for (const row of rows) {
@@ -856,14 +856,14 @@ export class LoanService {
     const ledgerTxId = await this.drivenPost({
       claim: async (tx) => {
         const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          INSERT INTO bank.loan_repayments (loan_id, sequence, interest_amount, principal_amount)
+          INSERT INTO loan_repayments (loan_id, sequence, interest_amount, principal_amount)
           VALUES (${loan.id}, ${sequence}, ${formatAmount(interestPaid)}::numeric, ${formatAmount(principalPaid)}::numeric)
           ON CONFLICT (loan_id, sequence) DO NOTHING
           RETURNING id, ledger_tx_id
         `;
         if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
         const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.loan_repayments WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+          SELECT id, ledger_tx_id FROM loan_repayments WHERE loan_id = ${loan.id} AND sequence = ${sequence}
         `;
         return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
       },
@@ -892,7 +892,7 @@ export class LoanService {
       const held = await this.collateralOf(loan);
       if (held > 0n) await this.releaseCollateral(loan, held);
       await this.sql`
-        UPDATE bank.loans SET status = 'repaid', margin_called_at = NULL, closed_at = ${now}, updated_at = now()
+        UPDATE loans SET status = 'repaid', margin_called_at = NULL, closed_at = ${now}, updated_at = now()
          WHERE id = ${loan.id}
       `;
       await this.clearMarginCalls(loan.id, now);
@@ -925,7 +925,7 @@ export class LoanService {
 
     const txId = await this.releaseCollateral(loan, held);
     await this.sql`
-      UPDATE bank.loans SET status = 'repaid', closed_at = COALESCE(closed_at, now()), updated_at = now() WHERE id = ${loanId}
+      UPDATE loans SET status = 'repaid', closed_at = COALESCE(closed_at, now()), updated_at = now() WHERE id = ${loanId}
     `;
     return { released: held, ledgerTxId: txId };
   }
@@ -998,7 +998,7 @@ export class LoanService {
   }> {
     const now = input.now ?? new Date();
     const rows = await this.sql<Array<Record<string, unknown>>>`
-      SELECT * FROM bank.loans
+      SELECT * FROM loans
        WHERE status IN ('active', 'margin_call', 'liquidating')
        ORDER BY opened_at ASC LIMIT ${input.limit ?? 500}
     `;
@@ -1044,20 +1044,20 @@ export class LoanService {
       // Fully recovered — including after coverOpenShortfalls stamped insurance.
       // If any liquidate row settled, close as liquidated (not stuck `liquidating`).
       const liq = await this.sql<Array<{ n: string }>>`
-        SELECT COUNT(*)::text AS n FROM bank.loan_liquidations
+        SELECT COUNT(*)::text AS n FROM loan_liquidations
          WHERE loan_id = ${loan.id} AND status = 'settled'
       `;
       if (Number(liq[0]?.n ?? 0) > 0) {
         const held = await this.collateralOf(loan);
         if (held > 0n) await this.releaseCollateral(loan, held);
         await this.sql`
-          UPDATE bank.loans
+          UPDATE loans
              SET status = 'liquidated', closed_at = COALESCE(closed_at, ${now}),
                  margin_called_at = NULL, updated_at = now()
            WHERE id = ${loan.id}
         `;
       } else {
-        await this.sql`UPDATE bank.loans SET margin_called_at = NULL, updated_at = now() WHERE id = ${loan.id}`;
+        await this.sql`UPDATE loans SET margin_called_at = NULL, updated_at = now() WHERE id = ${loan.id}`;
       }
       await this.clearMarginCalls(loan.id, now);
       return 'cleared';
@@ -1077,7 +1077,7 @@ export class LoanService {
     // deviation breaker measures the NEXT mark against, so skipping it on a quiet
     // day would leave the breaker comparing against an ancient price.
     await this.sql`
-      UPDATE bank.loans
+      UPDATE loans
          SET last_mark_price = ${formatAmount(collateralMark.price)}::numeric, last_marked_at = ${now}, updated_at = now()
        WHERE id = ${loan.id}
     `;
@@ -1089,7 +1089,7 @@ export class LoanService {
         // borrower who cured is entitled to a fresh warning and a fresh hour
         // before anything of theirs is sold.
         await this.sql`
-          UPDATE bank.loans SET status = 'active', margin_called_at = NULL, updated_at = now() WHERE id = ${loan.id}
+          UPDATE loans SET status = 'active', margin_called_at = NULL, updated_at = now() WHERE id = ${loan.id}
         `;
         await this.clearMarginCalls(loan.id, now);
         return 'cleared';
@@ -1154,13 +1154,13 @@ export class LoanService {
     const sequence = await this.nextSequence('loan_margin_calls', loan.id);
 
     await this.sql`
-      INSERT INTO bank.loan_margin_calls (loan_id, sequence, ltv_bps, cure_collateral_amount, called_at, grace_expires_at)
+      INSERT INTO loan_margin_calls (loan_id, sequence, ltv_bps, cure_collateral_amount, called_at, grace_expires_at)
       VALUES (${loan.id}, ${sequence}, ${ltv}, ${formatAmount(cure)}::numeric, ${now}, ${graceExpiresAt})
       ON CONFLICT (loan_id, sequence) DO NOTHING
     `;
 
     await this.sql`
-      UPDATE bank.loans
+      UPDATE loans
          SET status = 'margin_call', margin_called_at = COALESCE(margin_called_at, ${now}), updated_at = now()
        WHERE id = ${loan.id}
     `;
@@ -1180,11 +1180,11 @@ export class LoanService {
         graceExpiresAt,
       });
       await this.sql`
-        UPDATE bank.loan_margin_calls SET notified_at = now() WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+        UPDATE loan_margin_calls SET notified_at = now() WHERE loan_id = ${loan.id} AND sequence = ${sequence}
       `;
     } catch (err) {
       await this.sql`
-        UPDATE bank.loan_margin_calls SET notify_error = ${err instanceof Error ? err.message : String(err)}
+        UPDATE loan_margin_calls SET notify_error = ${err instanceof Error ? err.message : String(err)}
          WHERE loan_id = ${loan.id} AND sequence = ${sequence}
       `;
     }
@@ -1192,7 +1192,7 @@ export class LoanService {
 
   private async clearMarginCalls(loanId: string, now: Date): Promise<void> {
     await this.sql`
-      UPDATE bank.loan_margin_calls SET cleared_at = ${now} WHERE loan_id = ${loanId} AND cleared_at IS NULL
+      UPDATE loan_margin_calls SET cleared_at = ${now} WHERE loan_id = ${loanId} AND cleared_at IS NULL
     `;
   }
 
@@ -1244,13 +1244,13 @@ export class LoanService {
       span.setAttribute('intafaced.grace_waived', input.graceWaived);
 
       await this.sql`
-          UPDATE bank.loans SET status = 'liquidating', updated_at = now() WHERE id = ${loan.id}
+          UPDATE loans SET status = 'liquidating', updated_at = now() WHERE id = ${loan.id}
         `;
 
       const ledgerTxId = await this.drivenPost({
         claim: async (tx) => {
           const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-              INSERT INTO bank.loan_liquidations (
+              INSERT INTO loan_liquidations (
                 loan_id, tranche, ltv_bps, mark_price, grace_waived, collateral_sold, proceeds,
                 principal_repaid, interest_repaid, penalty, surplus_returned, shortfall
               ) VALUES (
@@ -1265,7 +1265,7 @@ export class LoanService {
             `;
           if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
           const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-              SELECT id, ledger_tx_id FROM bank.loan_liquidations WHERE loan_id = ${loan.id} AND tranche = ${tranche}
+              SELECT id, ledger_tx_id FROM loan_liquidations WHERE loan_id = ${loan.id} AND tranche = ${tranche}
             `;
           return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
         },
@@ -1307,8 +1307,8 @@ export class LoanService {
       // is the difference between a liquidation and a confiscation.
       if (remaining.total <= 0n && held > 0n) await this.releaseCollateral(loan, held);
       await this.sql`
-        UPDATE bank.loans
-           SET status = ${remaining.total <= 0n ? 'liquidated' : 'margin_call'}::bank.loan_status,
+        UPDATE loans
+           SET status = ${remaining.total <= 0n ? 'liquidated' : 'margin_call'}::loan_status,
                closed_at = ${remaining.total <= 0n ? input.now : null},
                updated_at = now()
          WHERE id = ${loan.id}
@@ -1318,7 +1318,7 @@ export class LoanService {
       // More rungs to come. Back to `margin_call` rather than staying
       // `liquidating`, so the next sweep re-reads the grace clock and the ladder
       // does not run away on one mark.
-      await this.sql`UPDATE bank.loans SET status = 'margin_call', updated_at = now() WHERE id = ${loan.id}`;
+      await this.sql`UPDATE loans SET status = 'margin_call', updated_at = now() WHERE id = ${loan.id}`;
     }
   }
 
@@ -1330,7 +1330,7 @@ export class LoanService {
     try {
       const posted = await this.ledger.post(recipes.loanBadDebt({ loanId: loan.id, debtAssetId: loan.debtAssetId, shortfall }));
       await this.sql`
-        UPDATE bank.loan_liquidations SET bad_debt_ledger_tx_id = ${posted.id}
+        UPDATE loan_liquidations SET bad_debt_ledger_tx_id = ${posted.id}
          WHERE loan_id = ${loan.id} AND tranche = ${tranche}
       `;
     } catch (err) {
@@ -1347,7 +1347,7 @@ export class LoanService {
 
   private async hasOpenShortfall(loanId: string): Promise<boolean> {
     const rows = await this.sql<Array<{ n: string }>>`
-      SELECT COUNT(*)::text AS n FROM bank.loan_liquidations
+      SELECT COUNT(*)::text AS n FROM loan_liquidations
        WHERE loan_id = ${loanId}
          AND status = 'settled'
          AND shortfall > 0
@@ -1360,7 +1360,7 @@ export class LoanService {
   private async coverOpenShortfalls(loan: LoanRecord): Promise<void> {
     const rows = await this.sql<Array<{ tranche: number; shortfall: string }>>`
       SELECT tranche, shortfall::text AS shortfall
-        FROM bank.loan_liquidations
+        FROM loan_liquidations
        WHERE loan_id = ${loan.id}
          AND status = 'settled'
          AND shortfall > 0
@@ -1410,15 +1410,15 @@ export class LoanService {
       Array<{ outstanding_principal: string; bad_debt: string; drawn: string; repaid: string; recovered: string }>
     >`
       WITH open_loans AS (
-        SELECT id, principal FROM bank.loans WHERE debt_asset_id = ${debtAssetId}
+        SELECT id, principal FROM loans WHERE debt_asset_id = ${debtAssetId}
       )
       SELECT
         COALESCE((SELECT SUM(principal) FROM open_loans), 0) AS drawn,
-        COALESCE((SELECT SUM(r.principal_amount) FROM bank.loan_repayments r
+        COALESCE((SELECT SUM(r.principal_amount) FROM loan_repayments r
                    JOIN open_loans l ON l.id = r.loan_id WHERE r.status = 'settled'), 0) AS repaid,
-        COALESCE((SELECT SUM(q.principal_repaid) FROM bank.loan_liquidations q
+        COALESCE((SELECT SUM(q.principal_repaid) FROM loan_liquidations q
                    JOIN open_loans l ON l.id = q.loan_id WHERE q.status = 'settled'), 0) AS recovered,
-        COALESCE((SELECT SUM(q.shortfall) FROM bank.loan_liquidations q
+        COALESCE((SELECT SUM(q.shortfall) FROM loan_liquidations q
                    JOIN open_loans l ON l.id = q.loan_id
                   WHERE q.status = 'settled' AND q.bad_debt_ledger_tx_id IS NOT NULL), 0) AS bad_debt,
         COALESCE((SELECT SUM(l.principal) FROM open_loans l), 0) AS outstanding_principal
@@ -1547,7 +1547,7 @@ export class LoanService {
 
   private async collateralEvent(loanId: string, sequence: number): Promise<{ amount: string; ledger_tx_id: string | null } | null> {
     const rows = await this.sql<Array<{ amount: string; ledger_tx_id: string | null }>>`
-      SELECT amount, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loanId} AND sequence = ${sequence}
+      SELECT amount, ledger_tx_id FROM loan_collateral_events WHERE loan_id = ${loanId} AND sequence = ${sequence}
     `;
     return rows[0] ?? null;
   }

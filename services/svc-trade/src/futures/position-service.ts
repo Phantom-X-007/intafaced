@@ -66,15 +66,15 @@ export class PositionService {
     const rows = symbol
       ? await this.sql<PositionRow[]>`
           SELECT p.*, m.symbol
-          FROM trade.positions p
-          JOIN trade.markets m ON m.id = p.market_id
+          FROM positions p
+          JOIN markets m ON m.id = p.market_id
           WHERE p.user_id = ${userId} AND p.status = 'open' AND m.symbol = ${symbol}
           ORDER BY p.opened_at DESC
         `
       : await this.sql<PositionRow[]>`
           SELECT p.*, m.symbol
-          FROM trade.positions p
-          JOIN trade.markets m ON m.id = p.market_id
+          FROM positions p
+          JOIN markets m ON m.id = p.market_id
           WHERE p.user_id = ${userId} AND p.status = 'open'
           ORDER BY p.opened_at DESC
         `;
@@ -92,7 +92,7 @@ export class PositionService {
       }[]
     >`
       SELECT id, symbol, kind, status, quote_asset
-      FROM trade.markets
+      FROM markets
       WHERE symbol = ${input.symbol}
       LIMIT 1
     `;
@@ -126,7 +126,7 @@ export class PositionService {
 
     try {
       await this.sql`
-        INSERT INTO trade.positions (
+        INSERT INTO positions (
           id, user_id, market_id, side, status, margin_mode,
           size, entry_price, leverage, margin_initial, margin_asset, funding_paid
         ) VALUES (
@@ -160,8 +160,8 @@ export class PositionService {
 
     const [row] = await this.sql<PositionRow[]>`
       SELECT p.*, m.symbol
-      FROM trade.positions p
-      JOIN trade.markets m ON m.id = p.market_id
+      FROM positions p
+      JOIN markets m ON m.id = p.market_id
       WHERE p.id = ${positionId}
     `;
     await this.publishPositionUpdated(row!);
@@ -179,8 +179,8 @@ export class PositionService {
 
     const [row] = await this.sql<PositionRow[]>`
       SELECT p.*, m.symbol
-      FROM trade.positions p
-      JOIN trade.markets m ON m.id = p.market_id
+      FROM positions p
+      JOIN markets m ON m.id = p.market_id
       WHERE p.id = ${positionId} AND p.user_id = ${userId}
       LIMIT 1
     `;
@@ -211,15 +211,15 @@ export class PositionService {
     }
 
     await this.sql`
-      UPDATE trade.positions
+      UPDATE positions
       SET status = 'closed', closed_at = now(), updated_at = now()
       WHERE id = ${positionId} AND user_id = ${userId} AND status = 'open'
     `;
 
     const [closed] = await this.sql<PositionRow[]>`
       SELECT p.*, m.symbol
-      FROM trade.positions p
-      JOIN trade.markets m ON m.id = p.market_id
+      FROM positions p
+      JOIN markets m ON m.id = p.market_id
       WHERE p.id = ${positionId}
     `;
     await this.publishPositionUpdated(closed!, {

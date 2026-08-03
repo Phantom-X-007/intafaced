@@ -93,7 +93,7 @@ export class SpaceService {
    */
   async ensurePrimary(userId: string, assetId: string, name = 'Main'): Promise<SpaceRecord> {
     const rows = await this.sql<SpaceRow[]>`
-      INSERT INTO bank.spaces (user_id, asset_id, kind, name)
+      INSERT INTO spaces (user_id, asset_id, kind, name)
       VALUES (${userId}, ${assetId}, 'primary', ${name})
       ON CONFLICT DO NOTHING
       RETURNING id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
@@ -104,7 +104,7 @@ export class SpaceService {
 
     const existing = await this.sql<SpaceRow[]>`
       SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
-        FROM bank.spaces WHERE user_id = ${userId} AND asset_id = ${assetId} AND kind = 'primary'
+        FROM spaces WHERE user_id = ${userId} AND asset_id = ${assetId} AND kind = 'primary'
     `;
     const row = existing[0];
     if (!row) throw new BankError(`Could not resolve the primary ${assetId} space for ${userId}`, 'bank.space_not_found');
@@ -119,7 +119,7 @@ export class SpaceService {
     lockedUntil?: Date | null;
   }): Promise<SpaceRecord> {
     const rows = await this.sql<SpaceRow[]>`
-      INSERT INTO bank.spaces (user_id, asset_id, kind, name, goal_target, locked_until)
+      INSERT INTO spaces (user_id, asset_id, kind, name, goal_target, locked_until)
       VALUES (
         ${input.userId}, ${input.assetId}, 'named', ${input.name},
         ${input.goalTarget === undefined || input.goalTarget === null ? null : formatAmount(input.goalTarget)}::numeric,
@@ -133,7 +133,7 @@ export class SpaceService {
   async get(spaceId: string): Promise<SpaceRecord> {
     const rows = await this.sql<SpaceRow[]>`
       SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
-        FROM bank.spaces WHERE id = ${spaceId}
+        FROM spaces WHERE id = ${spaceId}
     `;
     const row = rows[0];
     if (!row) throw new BankError(`Space ${spaceId} not found`, 'bank.space_not_found');
@@ -144,12 +144,12 @@ export class SpaceService {
     const rows = assetId
       ? await this.sql<SpaceRow[]>`
           SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
-            FROM bank.spaces WHERE user_id = ${userId} AND asset_id = ${assetId} AND archived_at IS NULL
+            FROM spaces WHERE user_id = ${userId} AND asset_id = ${assetId} AND archived_at IS NULL
             ORDER BY kind DESC, name ASC
         `
       : await this.sql<SpaceRow[]>`
           SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
-            FROM bank.spaces WHERE user_id = ${userId} AND archived_at IS NULL
+            FROM spaces WHERE user_id = ${userId} AND archived_at IS NULL
             ORDER BY asset_id ASC, kind DESC, name ASC
         `;
     return rows.map(toRecord);
@@ -225,13 +225,13 @@ export class SpaceService {
     if (space.kind === 'primary') {
       throw new BankError('The primary space is the account itself and cannot be archived', 'bank.space_archived');
     }
-    await this.sql`UPDATE bank.spaces SET archived_at = now(), updated_at = now() WHERE id = ${spaceId}`;
+    await this.sql`UPDATE spaces SET archived_at = now(), updated_at = now() WHERE id = ${spaceId}`;
   }
 
   /** Set or clear the savings target. A goal, never a holding. */
   async setGoal(spaceId: string, goalTarget: Amount | null): Promise<SpaceRecord> {
     await this.sql`
-      UPDATE bank.spaces
+      UPDATE spaces
          SET goal_target = ${goalTarget === null ? null : formatAmount(goalTarget)}::numeric, updated_at = now()
        WHERE id = ${spaceId}
     `;

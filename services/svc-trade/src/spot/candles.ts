@@ -51,9 +51,9 @@ export async function queryCandlesFromFills(sql: Sql, opts: QueryCandlesOpts): P
            sum(qty)                                                     AS volume
       FROM (
         SELECT ${bucketExpr} AS bucket_ms, f.price, f.qty, f.sequence
-          FROM trade.fills f
-          INNER JOIN trade.orders o ON o.id = f.order_id
-          INNER JOIN trade.orders c ON c.id = f.counter_order_id
+          FROM fills f
+          INNER JOIN orders o ON o.id = f.order_id
+          INNER JOIN orders c ON c.id = f.counter_order_id
          WHERE f.market_id = ${opts.marketId}
            AND f.liquidity = 'taker'
            AND o.seeded = false
@@ -107,7 +107,7 @@ export async function materializeClosedCandles(
     if (candle.volume <= 0n) continue;
 
     await sql`
-      INSERT INTO trade.spot_candles (
+      INSERT INTO spot_candles (
         market_id, timeframe, open_time_ms,
         open, high, low, close, volume
       ) VALUES (

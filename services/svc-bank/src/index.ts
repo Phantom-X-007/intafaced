@@ -26,7 +26,7 @@ const sql = postgres(env.DATABASE_URL, {
   onnotice: () => undefined,
 });
 
-await sql`SELECT 1 FROM bank.spaces LIMIT 1`.catch(() => {
+await sql`SELECT 1 FROM spaces LIMIT 1`.catch(() => {
   throw new Error('bank schema is missing — run migrations before starting svc-bank');
 });
 

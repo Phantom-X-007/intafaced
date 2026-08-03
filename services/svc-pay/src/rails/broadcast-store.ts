@@ -128,7 +128,7 @@ export class PostgresBroadcastStore implements BroadcastStore {
 
   async get(idempotencyKey: string): Promise<string | null> {
     const rows = (await this.sql`
-      SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+      SELECT tx_hash FROM crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
     `) as ReadonlyArray<{ tx_hash: string }>;
     const v = rows[0]?.tx_hash;
     if (!v || v === BROADCAST_PENDING) return null;
@@ -137,7 +137,7 @@ export class PostgresBroadcastStore implements BroadcastStore {
 
   async claim(idempotencyKey: string): Promise<ClaimResult> {
     const inserted = (await this.sql`
-      INSERT INTO pay.crypto_broadcasts (idempotency_key, tx_hash)
+      INSERT INTO crypto_broadcasts (idempotency_key, tx_hash)
       VALUES (${idempotencyKey}, ${BROADCAST_PENDING})
       ON CONFLICT (idempotency_key) DO NOTHING
       RETURNING idempotency_key
@@ -148,7 +148,7 @@ export class PostgresBroadcastStore implements BroadcastStore {
     const maxWaits = this.opts.maxWaits ?? DEFAULT_PENDING_MAX_WAITS;
     for (let i = 0; i < maxWaits; i++) {
       const rows = (await this.sql`
-        SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+        SELECT tx_hash FROM crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
       `) as ReadonlyArray<{ tx_hash: string }>;
       const v = rows[0]?.tx_hash;
       if (v && v !== BROADCAST_PENDING) return { kind: 'done', txHash: v };
@@ -163,7 +163,7 @@ export class PostgresBroadcastStore implements BroadcastStore {
     }
     // Only replace pending (or same hash). Never overwrite a different settled hash.
     const updated = (await this.sql`
-      UPDATE pay.crypto_broadcasts
+      UPDATE crypto_broadcasts
       SET tx_hash = ${txHash}, updated_at = now()
       WHERE idempotency_key = ${idempotencyKey}
         AND (tx_hash = ${BROADCAST_PENDING} OR tx_hash = ${txHash})
@@ -172,7 +172,7 @@ export class PostgresBroadcastStore implements BroadcastStore {
     if (updated[0]?.tx_hash) return updated[0].tx_hash;
 
     const existing = (await this.sql`
-      SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+      SELECT tx_hash FROM crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
     `) as ReadonlyArray<{ tx_hash: string }>;
     const v = existing[0]?.tx_hash;
     if (v && v !== BROADCAST_PENDING) return v;

@@ -183,7 +183,7 @@ export class TransferService {
     }
 
     const rows = await this.sql<ScheduleRow[]>`
-      INSERT INTO bank.scheduled_transfers
+      INSERT INTO scheduled_transfers
         (user_id, asset_id, from_space_id, to_space_id, amount, cadence, starts_at, ends_at, next_run_at)
       VALUES (
         ${input.userId}, ${from.assetId}, ${input.fromSpaceId}, ${input.toSpaceId},
@@ -209,7 +209,7 @@ export class TransferService {
     const rows = await this.sql<ScheduleRow[]>`
       SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
              starts_at, ends_at, next_run_at, status
-        FROM bank.scheduled_transfers WHERE id = ${scheduleId}
+        FROM scheduled_transfers WHERE id = ${scheduleId}
     `;
     const row = rows[0];
     if (!row) throw new BankError(`Schedule ${scheduleId} not found`, 'bank.schedule_not_found');
@@ -220,7 +220,7 @@ export class TransferService {
     const rows = await this.sql<ScheduleRow[]>`
       SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
              starts_at, ends_at, next_run_at, status
-        FROM bank.scheduled_transfers WHERE user_id = ${userId} ORDER BY created_at DESC
+        FROM scheduled_transfers WHERE user_id = ${userId} ORDER BY created_at DESC
     `;
     return rows.map(toSchedule);
   }
@@ -235,7 +235,7 @@ export class TransferService {
    */
   async cancelSchedule(scheduleId: string): Promise<void> {
     const updated = await this.sql`
-      UPDATE bank.scheduled_transfers SET status = 'cancelled', updated_at = now()
+      UPDATE scheduled_transfers SET status = 'cancelled', updated_at = now()
        WHERE id = ${scheduleId} AND status IN ('active', 'paused')
        RETURNING id
     `;
@@ -258,7 +258,7 @@ export class TransferService {
     const due = await this.sql<ScheduleRow[]>`
       SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
              starts_at, ends_at, next_run_at, status
-        FROM bank.scheduled_transfers
+        FROM scheduled_transfers
        WHERE status = 'active' AND next_run_at <= ${now}
        ORDER BY next_run_at ASC
        LIMIT ${limit}
@@ -283,7 +283,7 @@ export class TransferService {
     // counter on the schedule row. A counter that a retry double-increments
     // skips a user's transfer silently; this cannot.
     const fired = await this.sql<Array<{ last: number | null }>>`
-      SELECT MAX(occurrence) AS last FROM bank.transfer_executions WHERE schedule_id = ${schedule.id}
+      SELECT MAX(occurrence) AS last FROM transfer_executions WHERE schedule_id = ${schedule.id}
     `;
 
     /**
@@ -297,7 +297,7 @@ export class TransferService {
      * post is idempotent on (schedule, occurrence).
      */
     const stranded = await this.sql<Array<{ occurrence: number }>>`
-      SELECT occurrence FROM bank.transfer_executions
+      SELECT occurrence FROM transfer_executions
        WHERE schedule_id = ${schedule.id} AND status = 'pending'
        ORDER BY occurrence ASC
     `;
@@ -324,7 +324,7 @@ export class TransferService {
     // them — wasted work, never a double transfer. The other order would let a
     // crash advance past an occurrence that never fired.
     await this.sql`
-      UPDATE bank.scheduled_transfers
+      UPDATE scheduled_transfers
          SET next_run_at = ${plan.nextRunAt},
              status = ${plan.completed ? 'completed' : schedule.status},
              updated_at = now()
@@ -384,7 +384,7 @@ export class TransferService {
       this.sql,
       async (tx) => {
         const claimed = await tx<Array<{ id: string }>>`
-          INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
+          INSERT INTO transfer_executions (schedule_id, occurrence, amount, status)
           VALUES (${schedule.id}, ${occurrence}, ${formatAmount(schedule.amount)}::numeric, 'pending')
           ON CONFLICT (schedule_id, occurrence) DO NOTHING
           RETURNING id
@@ -396,7 +396,7 @@ export class TransferService {
           // claim without the post, so re-drive it — the ledger post is
           // idempotent, which makes re-driving strictly safe.
           const existing = await tx<Array<{ id: string; status: string }>>`
-            SELECT id, status FROM bank.transfer_executions
+            SELECT id, status FROM transfer_executions
              WHERE schedule_id = ${schedule.id} AND occurrence = ${occurrence} FOR UPDATE
           `;
           const row = existing[0];
@@ -435,7 +435,7 @@ export class TransferService {
       );
 
       await tx`
-        UPDATE bank.transfer_executions
+        UPDATE transfer_executions
            SET status = 'settled', ledger_tx_id = ${posted.id}, settled_at = now()
          WHERE id = ${executionId}
       `;
@@ -448,7 +448,7 @@ export class TransferService {
       // longer expecting to move.
       if (err instanceof InsufficientFundsError || (err instanceof LedgerError && err.code === 'ledger.insufficient_funds')) {
         await tx`
-          UPDATE bank.transfer_executions
+          UPDATE transfer_executions
              SET status = 'rejected', rejection_code = ${err.code}
            WHERE id = ${executionId}
         `;
@@ -469,7 +469,7 @@ export class TransferService {
       Array<{ occurrence: number; amount: string; status: string; ledger_tx_id: string | null; rejection_code: string | null }>
     >`
       SELECT occurrence, amount, status, ledger_tx_id, rejection_code
-        FROM bank.transfer_executions WHERE schedule_id = ${scheduleId} ORDER BY occurrence ASC
+        FROM transfer_executions WHERE schedule_id = ${scheduleId} ORDER BY occurrence ASC
     `;
     return rows.map((r) => ({
       occurrence: r.occurrence,

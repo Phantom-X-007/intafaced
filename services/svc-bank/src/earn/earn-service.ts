@@ -143,7 +143,7 @@ export class EarnService {
     this.assertEarnable(input.assetId);
 
     const rows = await this.sql<PoolRow[]>`
-      INSERT INTO bank.earn_pools (asset_id, kind, name, apr_bps, term_days, min_deposit)
+      INSERT INTO earn_pools (asset_id, kind, name, apr_bps, term_days, min_deposit)
       VALUES (
         ${input.assetId}, ${input.kind}, ${input.name}, ${input.aprBps},
         ${input.kind === 'fixed' ? (input.termDays ?? null) : null},
@@ -157,7 +157,7 @@ export class EarnService {
   async pool(poolId: string): Promise<PoolRecord> {
     const rows = await this.sql<PoolRow[]>`
       SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
-        FROM bank.earn_pools WHERE id = ${poolId}
+        FROM earn_pools WHERE id = ${poolId}
     `;
     const row = rows[0];
     if (!row) throw new BankError(`Pool ${poolId} not found`, 'bank.pool_not_found');
@@ -168,11 +168,11 @@ export class EarnService {
     const rows = assetId
       ? await this.sql<PoolRow[]>`
           SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
-            FROM bank.earn_pools WHERE asset_id = ${assetId} AND status = 'open' ORDER BY apr_bps DESC
+            FROM earn_pools WHERE asset_id = ${assetId} AND status = 'open' ORDER BY apr_bps DESC
         `
       : await this.sql<PoolRow[]>`
           SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
-            FROM bank.earn_pools WHERE status = 'open' ORDER BY asset_id ASC, apr_bps DESC
+            FROM earn_pools WHERE status = 'open' ORDER BY asset_id ASC, apr_bps DESC
         `;
     return rows.map(toPool);
   }
@@ -218,7 +218,7 @@ export class EarnService {
    */
   async poolSize(poolId: string): Promise<Amount> {
     const rows = await this.sql<Array<{ total: string }>>`
-      SELECT COALESCE(SUM(principal), 0) AS total FROM bank.earn_positions
+      SELECT COALESCE(SUM(principal), 0) AS total FROM earn_positions
        WHERE pool_id = ${poolId} AND status = 'active'
     `;
     return parseAmount(rows[0]?.total ?? '0');
@@ -262,7 +262,7 @@ export class EarnService {
           pool.kind === 'fixed' && pool.termDays !== null ? new Date(now.getTime() + pool.termDays * 24 * 60 * 60 * 1000) : null;
 
         await this.sql`
-          INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
+          INSERT INTO earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
           VALUES (${positionId}, ${pool.id}, ${input.userId}, ${pool.assetId},
                   ${formatAmount(input.amount)}::numeric, ${now}, ${maturesAt}, 'pending')
           ON CONFLICT (id) DO NOTHING
@@ -280,13 +280,13 @@ export class EarnService {
           );
         } catch (err) {
           await this.sql`
-            DELETE FROM bank.earn_positions WHERE id = ${positionId} AND status = 'pending'
+            DELETE FROM earn_positions WHERE id = ${positionId} AND status = 'pending'
           `;
           throw err;
         }
 
         await this.sql`
-          UPDATE bank.earn_positions SET status = 'active' WHERE id = ${positionId} AND status = 'pending'
+          UPDATE earn_positions SET status = 'active' WHERE id = ${positionId} AND status = 'pending'
         `;
 
         return this.position(positionId);
@@ -297,7 +297,7 @@ export class EarnService {
   async position(positionId: string): Promise<PositionRecord> {
     const rows = await this.sql<PositionRow[]>`
       SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
-        FROM bank.earn_positions WHERE id = ${positionId}
+        FROM earn_positions WHERE id = ${positionId}
     `;
     const row = rows[0];
     if (!row) throw new BankError(`Position ${positionId} not found`, 'bank.position_not_found');
@@ -307,7 +307,7 @@ export class EarnService {
   async positionsOf(userId: string): Promise<PositionRecord[]> {
     const rows = await this.sql<PositionRow[]>`
       SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
-        FROM bank.earn_positions WHERE user_id = ${userId} AND status = 'active' ORDER BY opened_at DESC
+        FROM earn_positions WHERE user_id = ${userId} AND status = 'active' ORDER BY opened_at DESC
     `;
     return rows.map(toPosition);
   }
@@ -318,7 +318,7 @@ export class EarnService {
    */
   async principalOf(userId: string, assetId: string): Promise<Amount> {
     const rows = await this.sql<Array<{ total: string }>>`
-      SELECT COALESCE(SUM(principal), 0) AS total FROM bank.earn_positions
+      SELECT COALESCE(SUM(principal), 0) AS total FROM earn_positions
        WHERE user_id = ${userId} AND asset_id = ${assetId} AND status = 'active'
     `;
     return parseAmount(rows[0]?.total ?? '0');
@@ -327,7 +327,7 @@ export class EarnService {
   /** Sum of per-position earn stake pots on the ledger (L1 purpose keys). */
   async stakedOf(userId: string, assetId: string): Promise<Amount> {
     const rows = await this.sql<Array<{ id: string }>>`
-      SELECT id FROM bank.earn_positions
+      SELECT id FROM earn_positions
        WHERE user_id = ${userId} AND asset_id = ${assetId} AND status = 'active'
     `;
     let total = 0n;
@@ -355,7 +355,7 @@ export class EarnService {
       async (tx) => {
         const rows = await tx<PositionRow[]>`
           SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
-            FROM bank.earn_positions WHERE id = ${positionId} FOR UPDATE
+            FROM earn_positions WHERE id = ${positionId} FOR UPDATE
         `;
         const row = rows[0];
         if (!row) throw new BankError(`Position ${positionId} not found`, 'bank.position_not_found');
@@ -376,7 +376,7 @@ export class EarnService {
           }),
         );
 
-        await tx`UPDATE bank.earn_positions SET status = 'closed', closed_at = now() WHERE id = ${positionId}`;
+        await tx`UPDATE earn_positions SET status = 'closed', closed_at = now() WHERE id = ${positionId}`;
 
         return { ...toPosition(row), status: 'closed' as const };
       },
@@ -430,7 +430,7 @@ export class EarnService {
       async (tx) => {
         // Claim the day. A second run blocks here, then finds zero rows.
         const claimed = await tx<Array<{ id: string }>>`
-          INSERT INTO bank.interest_accruals (pool_id, accrual_date, rate_bps, paid_amount, recipients)
+          INSERT INTO interest_accruals (pool_id, accrual_date, rate_bps, paid_amount, recipients)
           VALUES (${pool.id}, ${date}, ${pool.aprBps}, 0, 0)
           ON CONFLICT (pool_id, accrual_date) DO NOTHING
           RETURNING id
@@ -438,7 +438,7 @@ export class EarnService {
 
         if (claimed.length === 0) {
           const existing = await tx<Array<{ paid_amount: string; recipients: number; ledger_tx_id: string | null }>>`
-            SELECT paid_amount, recipients, ledger_tx_id FROM bank.interest_accruals
+            SELECT paid_amount, recipients, ledger_tx_id FROM interest_accruals
              WHERE pool_id = ${pool.id} AND accrual_date = ${date}
           `;
           const row = existing[0]!;
@@ -457,7 +457,7 @@ export class EarnService {
         // Positions opened later than the accrual day earn nothing for it — a
         // deposit made this afternoon has not been in the pool for a day.
         const positions = await tx<Array<{ id: string; user_id: string; principal: string }>>`
-          SELECT id, user_id, principal FROM bank.earn_positions
+          SELECT id, user_id, principal FROM earn_positions
            WHERE pool_id = ${pool.id} AND status = 'active' AND opened_at <= ${at}
            ORDER BY id ASC
         `;
@@ -493,7 +493,7 @@ export class EarnService {
         }
 
         await tx`
-          UPDATE bank.interest_accruals
+          UPDATE interest_accruals
              SET paid_amount = ${formatAmount(plan.total)}::numeric,
                  recipients = ${plan.payouts.length},
                  ledger_tx_id = ${posted.id}
@@ -532,7 +532,7 @@ export class EarnService {
    */
   async interestPaid(poolId: string): Promise<Amount> {
     const rows = await this.sql<Array<{ total: string }>>`
-      SELECT COALESCE(SUM(paid_amount), 0) AS total FROM bank.interest_accruals WHERE pool_id = ${poolId}
+      SELECT COALESCE(SUM(paid_amount), 0) AS total FROM interest_accruals WHERE pool_id = ${poolId}
     `;
     return parseAmount(rows[0]?.total ?? '0');
   }

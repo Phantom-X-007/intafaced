@@ -429,7 +429,7 @@ export class PayService {
     // in a payments product, and a second merchant row for one account makes
     // "settle this account's takings" ambiguous forever after.
     await this.sql`
-      INSERT INTO pay.merchants (user_id, mode, tier, kyb_status, status, pricing, settlement_prefs)
+      INSERT INTO merchants (user_id, mode, tier, kyb_status, status, pricing, settlement_prefs)
       VALUES (
         ${input.userId}, ${input.mode ?? 'gateway'}, ${input.tier ?? 0}, ${input.kybStatus ?? 'none'},
         ${input.status ?? 'active'}, ${this.sql.json(input.pricing as never)},
@@ -440,7 +440,7 @@ export class PayService {
 
     const rows = await this.sql<MerchantRow[]>`
       SELECT id, user_id, mode, tier, kyb_status, status, pricing, settlement_prefs
-        FROM pay.merchants WHERE user_id = ${input.userId}
+        FROM merchants WHERE user_id = ${input.userId}
     `;
     const row = rows[0];
     if (!row) throw new PayError(`Merchant for user ${input.userId} not found after insert`, 'pay.merchant_not_found');
@@ -450,7 +450,7 @@ export class PayService {
   async getMerchant(merchantId: string): Promise<MerchantRecord> {
     const rows = await this.sql<MerchantRow[]>`
       SELECT id, user_id, mode, tier, kyb_status, status, pricing, settlement_prefs
-        FROM pay.merchants WHERE id = ${merchantId}
+        FROM merchants WHERE id = ${merchantId}
     `;
     const row = rows[0];
     if (!row) throw new PayError(`Merchant ${merchantId} not found`, 'pay.merchant_not_found');
@@ -466,7 +466,7 @@ export class PayService {
     await this.getMerchant(input.merchantId);
 
     const rows = await this.sql<Array<{ id: string }>>`
-      INSERT INTO pay.payment_profiles (merchant_id, checkout_config, fee_routing, domains)
+      INSERT INTO payment_profiles (merchant_id, checkout_config, fee_routing, domains)
       VALUES (
         ${input.merchantId}, ${this.sql.json((input.checkoutConfig ?? {}) as never)},
         ${this.sql.json((input.feeRouting ?? {}) as never)}, ${(input.domains ?? []) as string[]}
@@ -514,7 +514,7 @@ export class PayService {
     await this.getMerchant(input.merchantId);
     if (input.profileId) {
       const profiles = await this.sql<Array<{ id: string }>>`
-        SELECT id FROM pay.payment_profiles
+        SELECT id FROM payment_profiles
          WHERE id = ${input.profileId} AND merchant_id = ${input.merchantId}
       `;
       if (!profiles[0]) throw new PayError('payment profile not found for merchant', 'pay.profile_not_found');
@@ -534,7 +534,7 @@ export class PayService {
     const prefix = token.slice(0, 10);
 
     const rows = await this.sql<Array<{ id: string }>>`
-      INSERT INTO pay.payment_links (
+      INSERT INTO payment_links (
         merchant_id, profile_id, token_hash, token_prefix, label, amount, currency, expires_at, max_uses
       ) VALUES (
         ${input.merchantId},
@@ -632,15 +632,15 @@ export class PayService {
       ? await sql<LinkRow[]>`
           SELECT l.id, l.merchant_id, l.profile_id, l.label, l.amount::text, l.currency,
                  l.active, l.expires_at, l.max_uses, l.uses, NULL::jsonb AS checkout_config
-            FROM pay.payment_links l
+            FROM payment_links l
            WHERE l.token_hash = ${tokenHash}
            FOR UPDATE
         `
       : await sql<LinkRow[]>`
           SELECT l.id, l.merchant_id, l.profile_id, l.label, l.amount::text, l.currency,
                  l.active, l.expires_at, l.max_uses, l.uses, p.checkout_config
-            FROM pay.payment_links l
-            LEFT JOIN pay.payment_profiles p ON p.id = l.profile_id
+            FROM payment_links l
+            LEFT JOIN payment_profiles p ON p.id = l.profile_id
            WHERE l.token_hash = ${tokenHash}
         `;
 
@@ -702,7 +702,7 @@ export class PayService {
       }>
     >`
       SELECT id, token_prefix, label, amount::text, currency, active, expires_at, max_uses, uses, created_at
-        FROM pay.payment_links
+        FROM payment_links
        WHERE merchant_id = ${merchantId}
        ORDER BY created_at DESC
     `;
@@ -735,7 +735,7 @@ export class PayService {
   async deactivatePaymentLink(merchantId: string, linkId: string): Promise<{ deactivated: boolean }> {
     await this.getMerchant(merchantId);
     const result = await this.sql`
-      UPDATE pay.payment_links
+      UPDATE payment_links
          SET active = false
        WHERE id = ${linkId} AND merchant_id = ${merchantId} AND active = true
     `;
@@ -820,7 +820,7 @@ export class PayService {
         // Not a rate limiter — a rate limiter belongs at the edge, and this is
         // the bound that survives the edge being bypassed.
         const open = await tx<Array<{ n: string }>>`
-          SELECT COUNT(*)::text AS n FROM pay.checkout_sessions
+          SELECT COUNT(*)::text AS n FROM checkout_sessions
            WHERE link_id = ${link.id} AND status = 'open' AND expires_at > ${this.now()}
         `;
         if (Number.parseInt(open[0]?.n ?? '0', 10) >= this.maxOpenSessionsPerLink) {
@@ -862,7 +862,7 @@ export class PayService {
         // let anybody holding the URL read a stranger's checkout.
         const sessionToken = `cs_${randomBytes(24).toString('base64url')}`;
         const rows = await tx<CheckoutSessionRow[]>`
-          INSERT INTO pay.checkout_sessions (
+          INSERT INTO checkout_sessions (
             link_id, merchant_id, payment_id, token_hash, token_prefix,
             amount, currency, rail_adapter, expires_at
           ) VALUES (
@@ -912,8 +912,8 @@ export class PayService {
     const rows = await this.sql<Array<CheckoutSessionRow & { label: string }>>`
       SELECT s.id, s.link_id, s.merchant_id, s.payment_id, s.amount::text, s.currency,
              s.rail_adapter, s.instruction, s.status, s.expires_at, l.label
-        FROM pay.checkout_sessions s
-        JOIN pay.payment_links l ON l.id = s.link_id
+        FROM checkout_sessions s
+        JOIN payment_links l ON l.id = s.link_id
        WHERE s.token_hash = ${tokenHash}
     `;
     const row = rows[0];
@@ -927,7 +927,7 @@ export class PayService {
       // Lazily projected, and also swept by `expireCheckoutSessions`. Both, so
       // that a deployment with no sweeper still tells the payer the truth.
       await this.sql`
-        UPDATE pay.checkout_sessions SET status = 'expired', updated_at = now()
+        UPDATE checkout_sessions SET status = 'expired', updated_at = now()
          WHERE id = ${row.id} AND status = 'open'
       `;
       return toCheckoutSessionView({ ...row, status: 'expired' }, row.label, method);
@@ -961,7 +961,7 @@ export class PayService {
       railRef = (await this.authorize(row.payment_id)).railRef;
     } catch (err) {
       await this.sql`
-        UPDATE pay.checkout_sessions SET status = 'cancelled', updated_at = now()
+        UPDATE checkout_sessions SET status = 'cancelled', updated_at = now()
          WHERE id = ${row.id} AND status = 'open'
       `;
       throw err;
@@ -974,7 +974,7 @@ export class PayService {
 
     const instruction = { reference: railRef, amount: row.amount, currency: row.currency };
     await this.sql`
-      UPDATE pay.checkout_sessions
+      UPDATE checkout_sessions
          SET instruction = ${this.sql.json(instruction as never)}, updated_at = now()
        WHERE id = ${row.id} AND status = 'open'
     `;
@@ -988,7 +988,7 @@ export class PayService {
    */
   async expireCheckoutSessions(): Promise<{ expired: number }> {
     const result = await this.sql`
-      UPDATE pay.checkout_sessions
+      UPDATE checkout_sessions
          SET status = 'expired', updated_at = now()
        WHERE status = 'open' AND expires_at <= ${this.now()}
     `;
@@ -1077,7 +1077,7 @@ export class PayService {
               failureCode: result.failureCode ?? 'rail.failed',
               failureReason: result.failureReason ?? null,
             });
-            await tx`UPDATE pay.payments SET status = 'failed', updated_at = now() WHERE id = ${row.id}`;
+            await tx`UPDATE payments SET status = 'failed', updated_at = now() WHERE id = ${row.id}`;
             // Recorded, then thrown OUTSIDE the transaction. Throwing from in
             // here would roll back the very rows that say the payment failed,
             // and the next call would ask a rail that has already declined.
@@ -1091,7 +1091,7 @@ export class PayService {
             // saying otherwise is how a merchant ships against a transfer that
             // is still reorganisable.
             await tx`
-              UPDATE pay.payments SET rail_ref = ${result.railRef || null}, updated_at = now() WHERE id = ${row.id}
+              UPDATE payments SET rail_ref = ${result.railRef || null}, updated_at = now() WHERE id = ${row.id}
             `;
             await appendEvent(tx, row.id, 'rail.pending', railPayload(result));
             return { declined: false as const, view: await this.view(tx, { ...row, rail_ref: result.railRef || null }) };
@@ -1102,7 +1102,7 @@ export class PayService {
           // they are at an address we control). Booking the smaller number would
           // strand the difference.
           await tx`
-            UPDATE pay.payments
+            UPDATE payments
                SET status = 'authorized', rail_ref = ${result.railRef},
                    amount = ${formatAmount(result.amount)}::numeric, updated_at = now()
              WHERE id = ${row.id}
@@ -1225,7 +1225,7 @@ export class PayService {
             railRef: result.railRef,
             ledgerTxId: posted.id,
           });
-          await tx`UPDATE pay.payments SET status = 'captured', updated_at = now() WHERE id = ${row.id}`;
+          await tx`UPDATE payments SET status = 'captured', updated_at = now() WHERE id = ${row.id}`;
 
           // In the SAME transaction as the capture, because a hosted checkout
           // that says "paid" out of step with the book is the whole failure mode
@@ -1299,10 +1299,10 @@ export class PayService {
 
         const inFlight = await tx<Array<{ refund_id: string }>>`
           SELECT p.payload->>'refundId' AS refund_id
-            FROM pay.payment_events p
+            FROM payment_events p
            WHERE p.payment_id = ${row.id} AND p.event = 'refund.posted'
              AND NOT EXISTS (
-               SELECT 1 FROM pay.payment_events d
+               SELECT 1 FROM payment_events d
                 WHERE d.payment_id = p.payment_id
                   AND d.event IN ('refunded', 'refund.reversed')
                   AND d.payload->>'refundId' = p.payload->>'refundId'
@@ -1401,7 +1401,7 @@ export class PayService {
         });
 
         if (prepared.refunded + amount >= prepared.captured) {
-          await tx`UPDATE pay.payments SET status = 'refunded', updated_at = now() WHERE id = ${row.id}`;
+          await tx`UPDATE payments SET status = 'refunded', updated_at = now() WHERE id = ${row.id}`;
           return { ok: true as const, view: await this.view(tx, { ...row, status: 'refunded' }) };
         }
 
@@ -1459,7 +1459,7 @@ export class PayService {
   private async applyWebhook(adapter: RailAdapter, event: RailEvent): Promise<WebhookOutcome> {
     const rows = await this.sql<PaymentRow[]>`
       SELECT id, merchant_id, profile_id, amount, currency, method, rail_adapter, rail_ref, status, created_at
-        FROM pay.payments WHERE rail_adapter = ${adapter.id} AND rail_ref = ${event.railRef}
+        FROM payments WHERE rail_adapter = ${adapter.id} AND rail_ref = ${event.railRef}
     `;
     const payment = rows[0];
 
@@ -1484,7 +1484,7 @@ export class PayService {
     // nothing" exercises: a delivery we have already recorded stops here,
     // before any rail call and before the ledger.
     const seen = await this.sql<Array<{ id: string }>>`
-      SELECT id FROM pay.payment_events WHERE rail_event_id = ${deliveryKey}
+      SELECT id FROM payment_events WHERE rail_event_id = ${deliveryKey}
     `;
     if (seen.length > 0) {
       return { railId: adapter.id, eventId: event.eventId, type: event.type, duplicate: true, paymentId: payment.id, applied: false };
@@ -1530,7 +1530,7 @@ export class PayService {
     // concurrent deliveries of one event both get here; the loser reports the
     // duplicate and neither has done anything twice.
     const claimed = await this.sql<Array<{ id: string }>>`
-      INSERT INTO pay.payment_events (payment_id, event, payload, rail_event_id)
+      INSERT INTO payment_events (payment_id, event, payload, rail_event_id)
       VALUES (
         ${payment.id}, ${`webhook.${event.type}`},
         ${this.sql.json({
@@ -1564,7 +1564,7 @@ export class PayService {
         const row = await lockPayment(tx, paymentId);
         if (row.status !== 'created' && row.status !== 'authorized') return;
         await appendEvent(tx, row.id, 'failed', { failureCode });
-        await tx`UPDATE pay.payments SET status = 'failed', updated_at = now() WHERE id = ${row.id}`;
+        await tx`UPDATE payments SET status = 'failed', updated_at = now() WHERE id = ${row.id}`;
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
@@ -1613,7 +1613,7 @@ export class PayService {
           async (tx) => {
             const rows = await tx<SettlementRow[]>`
               SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
-                FROM pay.settlements WHERE id = ${prepared.id} FOR UPDATE
+                FROM settlements WHERE id = ${prepared.id} FOR UPDATE
             `;
             const row = rows[0]!;
             if (row.status !== 'pending') return toSettlement(row);
@@ -1633,12 +1633,12 @@ export class PayService {
             );
 
             await tx`
-              UPDATE pay.settlements SET status = 'posted', payout_method = 'ledger', updated_at = now()
+              UPDATE settlements SET status = 'posted', payout_method = 'ledger', updated_at = now()
                WHERE id = ${row.id}
             `;
 
             const included = await tx<Array<{ payment_id: string }>>`
-              SELECT payment_id FROM pay.payment_events
+              SELECT payment_id FROM payment_events
                WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
             `;
 
@@ -1649,7 +1649,7 @@ export class PayService {
                 assetId: row.asset_id,
               });
               await tx`
-                UPDATE pay.payments SET status = 'settled', updated_at = now()
+                UPDATE payments SET status = 'settled', updated_at = now()
                  WHERE id = ${payment_id} AND status = 'captured'
               `;
             }
@@ -1688,11 +1688,11 @@ export class PayService {
         // Lock the merchant, not the settlement row (which may not exist yet).
         // Two settlement runs for one merchant must queue, or both would select
         // the same unsettled payments and freeze them into two settlements.
-        await tx`SELECT id FROM pay.merchants WHERE id = ${input.merchantId} FOR UPDATE`;
+        await tx`SELECT id FROM merchants WHERE id = ${input.merchantId} FOR UPDATE`;
 
         const existing = await tx<SettlementRow[]>`
           SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
-            FROM pay.settlements
+            FROM settlements
            WHERE merchant_id = ${input.merchantId} AND "window" = ${input.window} AND asset_id = ${input.assetId}
         `;
         if (existing[0]) return toSettlement(existing[0]);
@@ -1701,17 +1701,17 @@ export class PayService {
           SELECT p.id,
                  COALESCE(SUM(CASE WHEN e.event = 'captured' THEN (e.payload->>'amount')::numeric END), 0) AS captured,
                  COALESCE(SUM(CASE WHEN e.event = 'refunded' THEN (e.payload->>'amount')::numeric END), 0) AS refunded
-            FROM pay.payments p
-            JOIN pay.payment_events e ON e.payment_id = p.id
+            FROM payments p
+            JOIN payment_events e ON e.payment_id = p.id
            WHERE p.merchant_id = ${input.merchantId}
              AND p.currency = ${input.assetId}
              AND p.status = 'captured'
              AND NOT EXISTS (
-               SELECT 1 FROM pay.payment_events s
+               SELECT 1 FROM payment_events s
                 WHERE s.payment_id = p.id AND s.event = 'settlement.included'
              )
              AND EXISTS (
-               SELECT 1 FROM pay.payment_events c
+               SELECT 1 FROM payment_events c
                 WHERE c.payment_id = p.id AND c.event = 'captured' AND c.ts >= ${from} AND c.ts < ${to}
              )
            GROUP BY p.id
@@ -1748,7 +1748,7 @@ export class PayService {
         }
 
         const inserted = await tx<SettlementRow[]>`
-          INSERT INTO pay.settlements (merchant_id, "window", asset_id, gross, fees, net, status)
+          INSERT INTO settlements (merchant_id, "window", asset_id, gross, fees, net, status)
           VALUES (
             ${input.merchantId}, ${input.window}, ${input.assetId},
             ${formatAmount(gross)}::numeric, ${formatAmount(fees)}::numeric, ${formatAmount(net)}::numeric, 'pending'
@@ -1844,7 +1844,7 @@ export class PayService {
         if (!result.ok) {
           await this.ledger.post(recipes.withdrawReverse(withdrawal));
           await this.sql`
-            UPDATE pay.settlements
+            UPDATE settlements
                SET status = 'failed', payout_attempts = payout_attempts + 1, updated_at = now()
              WHERE id = ${settlement.id}
           `;
@@ -1856,7 +1856,7 @@ export class PayService {
 
         await this.ledger.post(recipes.withdrawSettle(withdrawal));
         await this.sql`
-          UPDATE pay.settlements
+          UPDATE settlements
              SET status = 'paid_out', payout_method = ${adapter.id}, payout_ref = ${result.railRef}, updated_at = now()
            WHERE id = ${settlement.id}
         `;
@@ -1869,7 +1869,7 @@ export class PayService {
   async getSettlement(settlementId: string): Promise<SettlementRecord> {
     const rows = await this.sql<SettlementRow[]>`
       SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
-        FROM pay.settlements WHERE id = ${settlementId}
+        FROM settlements WHERE id = ${settlementId}
     `;
     const row = rows[0];
     if (!row) throw new PayError(`Settlement ${settlementId} not found`, 'pay.settlement_not_found');
@@ -1881,7 +1881,7 @@ export class PayService {
   async getPayment(paymentId: string): Promise<PaymentView> {
     const rows = await this.sql<PaymentRow[]>`
       SELECT id, merchant_id, profile_id, amount, currency, method, rail_adapter, rail_ref, status, created_at
-        FROM pay.payments WHERE id = ${paymentId}
+        FROM payments WHERE id = ${paymentId}
     `;
     const row = rows[0];
     if (!row) throw new PayError(`Payment ${paymentId} not found`, 'pay.payment_not_found');
@@ -1894,7 +1894,7 @@ export class PayService {
       Array<{ id: string; event: string; payload: Record<string, unknown>; rail_event_id: string | null; ts: Date }>
     >`
       SELECT id, event, payload, rail_event_id, ts
-        FROM pay.payment_events WHERE payment_id = ${paymentId} ORDER BY seq ASC
+        FROM payment_events WHERE payment_id = ${paymentId} ORDER BY seq ASC
     `;
     return rows.map((r) => ({ id: r.id, event: r.event, payload: r.payload, railEventId: r.rail_event_id, ts: r.ts }));
   }
@@ -1948,7 +1948,7 @@ async function insertPayment(
   },
 ): Promise<PaymentRow> {
   const rows = await tx<PaymentRow[]>`
-    INSERT INTO pay.payments (merchant_id, profile_id, amount, currency, method, rail_adapter, status)
+    INSERT INTO payments (merchant_id, profile_id, amount, currency, method, rail_adapter, status)
     VALUES (
       ${input.merchantId}, ${input.profileId ?? null}, ${formatAmount(input.amount)}::numeric,
       ${input.assetId}, ${input.method}, ${input.railAdapter}, 'created'
@@ -2003,13 +2003,13 @@ async function insertPayment(
  */
 async function completeCheckoutSession(tx: Sql, paymentId: string): Promise<void> {
   const closed = await tx<Array<{ link_id: string }>>`
-    UPDATE pay.checkout_sessions
+    UPDATE checkout_sessions
        SET status = 'completed', updated_at = now()
      WHERE payment_id = ${paymentId} AND status IN ('open', 'expired')
      RETURNING link_id
   `;
   for (const { link_id } of closed) {
-    await tx`UPDATE pay.payment_links SET uses = uses + 1 WHERE id = ${link_id}`;
+    await tx`UPDATE payment_links SET uses = uses + 1 WHERE id = ${link_id}`;
   }
 }
 
@@ -2037,7 +2037,7 @@ function toCheckoutSessionView(row: CheckoutSessionRow, label: string, method: s
 async function lockPayment(tx: Sql, paymentId: string): Promise<PaymentRow> {
   const rows = await tx<PaymentRow[]>`
     SELECT id, merchant_id, profile_id, amount, currency, method, rail_adapter, rail_ref, status, created_at
-      FROM pay.payments WHERE id = ${paymentId} FOR UPDATE
+      FROM payments WHERE id = ${paymentId} FOR UPDATE
   `;
   const row = rows[0];
   if (!row) throw new PayError(`Payment ${paymentId} not found`, 'pay.payment_not_found');
@@ -2065,7 +2065,7 @@ async function totalsFor(sql: Sql, paymentId: string): Promise<{ captured: Amoun
     SELECT
       COALESCE(SUM(CASE WHEN event = 'captured' THEN (payload->>'amount')::numeric END), 0) AS captured,
       COALESCE(SUM(CASE WHEN event = 'refunded' THEN (payload->>'amount')::numeric END), 0) AS refunded
-      FROM pay.payment_events WHERE payment_id = ${paymentId}
+      FROM payment_events WHERE payment_id = ${paymentId}
   `;
   const row = rows[0];
   return { captured: parseAmount(row?.captured ?? '0'), refunded: parseAmount(row?.refunded ?? '0') };
@@ -2073,14 +2073,14 @@ async function totalsFor(sql: Sql, paymentId: string): Promise<{ captured: Amoun
 
 async function countEvents(sql: Sql, paymentId: string, event: string): Promise<number> {
   const rows = await sql<Array<{ n: string }>>`
-    SELECT COUNT(*)::text AS n FROM pay.payment_events WHERE payment_id = ${paymentId} AND event = ${event}
+    SELECT COUNT(*)::text AS n FROM payment_events WHERE payment_id = ${paymentId} AND event = ${event}
   `;
   return Number.parseInt(rows[0]?.n ?? '0', 10);
 }
 
 async function appendEvent(sql: Sql, paymentId: string, event: string, payload: Record<string, unknown>): Promise<void> {
   await sql`
-    INSERT INTO pay.payment_events (payment_id, event, payload)
+    INSERT INTO payment_events (payment_id, event, payload)
     VALUES (${paymentId}, ${event}, ${sql.json(payload as never)})
   `;
 }
@@ -2088,7 +2088,7 @@ async function appendEvent(sql: Sql, paymentId: string, event: string, payload: 
 /** The instrument the payment was created with, read back off the `created` event. */
 async function instrumentFor(sql: Sql, paymentId: string): Promise<PaymentIntent['instrument']> {
   const rows = await sql<Array<{ payload: Record<string, unknown> }>>`
-    SELECT payload FROM pay.payment_events WHERE payment_id = ${paymentId} AND event = 'created' LIMIT 1
+    SELECT payload FROM payment_events WHERE payment_id = ${paymentId} AND event = 'created' LIMIT 1
   `;
   const instrument = rows[0]?.payload?.instrument;
   if (typeof instrument !== 'object' || instrument === null) return undefined;

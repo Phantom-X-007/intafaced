@@ -13,7 +13,7 @@ export function sqlFundingPeriodStore(sql: Sql): FundingPeriodStore {
   return {
     async isSettled(periodId) {
       const rows = await sql<{ period_id: string }[]>`
-        SELECT period_id FROM trade.funding_periods WHERE period_id = ${periodId} LIMIT 1
+        SELECT period_id FROM funding_periods WHERE period_id = ${periodId} LIMIT 1
       `;
       return rows.length > 0;
     },
@@ -21,7 +21,7 @@ export function sqlFundingPeriodStore(sql: Sql): FundingPeriodStore {
       // market_id embedded in periodId when using periodIdFor(market, iso)
       const marketId = periodId.includes(':') ? periodId.slice(0, periodId.indexOf(':')) : periodId;
       await sql`
-        INSERT INTO trade.funding_periods (period_id, market_id, leg_count)
+        INSERT INTO funding_periods (period_id, market_id, leg_count)
         VALUES (${periodId}, ${marketId}, ${meta.legCount})
         ON CONFLICT (period_id) DO NOTHING
       `;
@@ -33,14 +33,14 @@ export function sqlLiquidationAttemptStore(sql: Sql): LiquidationAttemptStore {
   return {
     async isDone(liquidationId) {
       const rows = await sql<{ liquidation_id: string }[]>`
-        SELECT liquidation_id FROM trade.liquidation_attempts
+        SELECT liquidation_id FROM liquidation_attempts
         WHERE liquidation_id = ${liquidationId} LIMIT 1
       `;
       return rows.length > 0;
     },
     async markDone(liquidationId) {
       await sql`
-        INSERT INTO trade.liquidation_attempts (liquidation_id)
+        INSERT INTO liquidation_attempts (liquidation_id)
         VALUES (${liquidationId})
         ON CONFLICT (liquidation_id) DO NOTHING
       `;
@@ -56,7 +56,7 @@ export function sqlPositionCloser(sql: Sql, bus: EventBus | null = null): Positi
   return {
     async markLiquidated(positionId, meta) {
       await sql`
-        UPDATE trade.positions
+        UPDATE positions
         SET status = 'liquidated', closed_at = now(), updated_at = now()
         WHERE id = ${positionId} AND status = 'open'
       `;
@@ -78,8 +78,8 @@ export function sqlPositionCloser(sql: Sql, bus: EventBus | null = null): Positi
         }[]
       >`
         SELECT p.*, m.symbol
-        FROM trade.positions p
-        JOIN trade.markets m ON m.id = p.market_id
+        FROM positions p
+        JOIN markets m ON m.id = p.market_id
         WHERE p.id = ${positionId}
         LIMIT 1
       `;

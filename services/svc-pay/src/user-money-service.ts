@@ -222,7 +222,7 @@ export class UserMoneyService {
         );
 
         await this.sql`
-          UPDATE pay.deposits SET status = 'credited', updated_at = now()
+          UPDATE deposits SET status = 'credited', updated_at = now()
            WHERE id = ${claimed.id} AND status = 'pending'
         `;
 
@@ -255,7 +255,7 @@ export class UserMoneyService {
       this.sql,
       async (tx) => {
         const inserted = await tx<DepositRow[]>`
-          INSERT INTO pay.deposits (user_id, asset_id, amount, rail, rail_ref, credited_by, status)
+          INSERT INTO deposits (user_id, asset_id, amount, rail, rail_ref, credited_by, status)
           VALUES (
             ${input.userId}, ${input.assetId}, ${formatAmount(input.amount)}::numeric,
             ${input.rail}, ${input.railRef}, ${input.creditedBy}, 'pending'
@@ -267,7 +267,7 @@ export class UserMoneyService {
 
         const rows = await tx<DepositRow[]>`
           SELECT id, user_id, asset_id, amount, rail, rail_ref, credited_by, status, created_at
-            FROM pay.deposits WHERE rail = ${input.rail} AND rail_ref = ${input.railRef} FOR UPDATE
+            FROM deposits WHERE rail = ${input.rail} AND rail_ref = ${input.railRef} FOR UPDATE
         `;
         const existing = toDeposit(rows[0]!);
 
@@ -357,7 +357,7 @@ export class UserMoneyService {
       // released hold. Different money/destination still conflicts above.
       if (claimed.status === 'failed') {
         await this.sql`
-            UPDATE pay.withdrawals
+            UPDATE withdrawals
                SET status = 'pending', failure_code = NULL, updated_at = now()
              WHERE id = ${claimed.id} AND status = 'failed'
           `;
@@ -384,7 +384,7 @@ export class UserMoneyService {
         await this.ledger.post(recipes.withdrawHold(ledgerInput));
       } catch (err) {
         await this.sql`
-            UPDATE pay.withdrawals
+            UPDATE withdrawals
                SET status = 'failed', failure_code = 'ledger.insufficient_funds', updated_at = now()
              WHERE id = ${claimed.id} AND status <> 'sent'
           `;
@@ -392,7 +392,7 @@ export class UserMoneyService {
       }
 
       await this.sql`
-          UPDATE pay.withdrawals SET status = 'held', failure_code = NULL, updated_at = now()
+          UPDATE withdrawals SET status = 'held', failure_code = NULL, updated_at = now()
            WHERE id = ${claimed.id} AND status = 'pending'
         `;
 
@@ -431,7 +431,7 @@ export class UserMoneyService {
       if (!result.ok) {
         const code = result.failureCode ?? 'rail.failed';
         await this.sql`
-            UPDATE pay.withdrawals
+            UPDATE withdrawals
                SET failure_code = ${code}, updated_at = now()
              WHERE id = ${claimed.id} AND status = 'held'
           `;
@@ -453,7 +453,7 @@ export class UserMoneyService {
       await this.ledger.post(recipes.withdrawSettle(ledgerInput));
 
       await this.sql`
-          UPDATE pay.withdrawals
+          UPDATE withdrawals
              SET status = 'sent', rail_ref = ${result.railRef}, failure_code = NULL, updated_at = now()
            WHERE id = ${claimed.id}
         `;
@@ -483,7 +483,7 @@ export class UserMoneyService {
       this.sql,
       async (tx) => {
         const inserted = await tx<WithdrawalRow[]>`
-          INSERT INTO pay.withdrawals (user_id, asset_id, amount, rail, destination, client_ref, status)
+          INSERT INTO withdrawals (user_id, asset_id, amount, rail, destination, client_ref, status)
           VALUES (
             ${input.userId}, ${input.assetId}, ${formatAmount(input.amount)}::numeric, ${input.rail},
             ${tx.json(input.destination as never)}, ${input.clientRef}, 'pending'
@@ -495,7 +495,7 @@ export class UserMoneyService {
 
         const rows = await tx<WithdrawalRow[]>`
           SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
-            FROM pay.withdrawals WHERE user_id = ${input.userId} AND client_ref = ${input.clientRef} FOR UPDATE
+            FROM withdrawals WHERE user_id = ${input.userId} AND client_ref = ${input.clientRef} FOR UPDATE
         `;
         const existing = toWithdrawal(rows[0]!);
 
@@ -538,7 +538,7 @@ export class UserMoneyService {
     };
     await this.ledger.post(recipes.withdrawReverse(ledgerInput));
     await this.sql`
-        UPDATE pay.withdrawals
+        UPDATE withdrawals
            SET status = 'failed', attempts = attempts + 1,
                failure_code = ${failureCode}, updated_at = now()
          WHERE id = ${claimed.id} AND status = 'held'
@@ -550,7 +550,7 @@ export class UserMoneyService {
   async getWithdrawal(withdrawalId: string): Promise<WithdrawalRecord> {
     const rows = await this.sql<WithdrawalRow[]>`
       SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
-        FROM pay.withdrawals WHERE id = ${withdrawalId}
+        FROM withdrawals WHERE id = ${withdrawalId}
     `;
     const row = rows[0];
     if (!row) throw new PayError(`Withdrawal ${withdrawalId} not found`, 'pay.withdrawal_not_found');
@@ -560,7 +560,7 @@ export class UserMoneyService {
   async listWithdrawals(userId: string, limit = 50): Promise<WithdrawalRecord[]> {
     const rows = await this.sql<WithdrawalRow[]>`
       SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
-        FROM pay.withdrawals WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${limit}
+        FROM withdrawals WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${limit}
     `;
     return rows.map(toWithdrawal);
   }

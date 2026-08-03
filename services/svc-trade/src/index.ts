@@ -36,7 +36,7 @@ const sql = postgres(env.DATABASE_URL, {
   onnotice: () => undefined,
 });
 
-await sql`SELECT 1 FROM trade.markets LIMIT 1`.catch(() => {
+await sql`SELECT 1 FROM markets LIMIT 1`.catch(() => {
   throw new Error('trade schema is missing — run migrations before starting svc-trade');
 });
 

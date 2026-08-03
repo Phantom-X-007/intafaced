@@ -55,8 +55,8 @@ export function sqlFundingPositionLoader(sql: Sql): FundingPositionLoader {
       const rows = await sql<OpenPosRow[]>`
         SELECT p.id, p.user_id, p.market_id, p.side, p.size, p.entry_price,
                p.margin_initial, p.margin_asset, p.liq_price, m.symbol
-        FROM trade.positions p
-        JOIN trade.markets m ON m.id = p.market_id
+        FROM positions p
+        JOIN markets m ON m.id = p.market_id
         WHERE p.status = 'open' AND p.market_id = ${marketId}
         ORDER BY p.opened_at ASC
       `;
@@ -72,8 +72,8 @@ export function sqlLiquidationPositionLoader(sql: Sql): LiquidationPositionLoade
       const rows = await sql<OpenPosRow[]>`
         SELECT p.id, p.user_id, p.market_id, p.side, p.size, p.entry_price,
                p.margin_initial, p.margin_asset, p.liq_price, m.symbol
-        FROM trade.positions p
-        JOIN trade.markets m ON m.id = p.market_id
+        FROM positions p
+        JOIN markets m ON m.id = p.market_id
         WHERE p.status = 'open'
         ORDER BY p.opened_at ASC
       `;
