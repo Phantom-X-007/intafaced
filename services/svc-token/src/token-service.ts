@@ -608,6 +608,20 @@ export class TokenService {
    * "Real revenue, not emissions" — the value comes from `houseFees`, swept
    * into the rewards engine and paid out. Nothing is minted here.
    *
+   * ── THIS IS NOT THE §4.3 WEEKLY JOB (§13 socket `token.yield`) ─────────────
+   *
+   * §4.3 specifies a weekly job that aggregates house fee accounts per asset.
+   * That job does not exist. This method has no caller in the repo outside its
+   * own tests: no cron, no bus subscriber, no admin form. It runs when a human
+   * holding admin:treasury + MFA calls the tRPC mutation, and otherwise never.
+   *
+   * `input.sources` is therefore trusted operator input. The router validates
+   * decimal shape only; nothing here compares the claimed amount against the
+   * `houseFees` balance it says it is sweeping, so an operator can under-sweep,
+   * over-sweep or invent a windowId (audit T-03). The maths below is exact and
+   * the postings are correct — the number they are exact ABOUT is typed by a
+   * person. Describe this as an operator settlement, never as a flywheel.
+   *
    * Each payout is its OWN ledger transaction keyed on (window, user), so a
    * crash halfway through is resumable: re-running pays only whoever was
    * missed. A single giant transaction would be atomic but unresumable, and
@@ -715,23 +729,31 @@ export class TokenService {
     return { windowId: input.windowId, distributed, recipients, skipped };
   }
 
-  // ── Buyback & burn (§4.3, §17.3) ───────────────────────────────────────────
+  // ── Operator burn record (§4.3 calls this buyback & burn) ──────────────────
 
   /**
-   * Record and settle a buyback run.
+   * Record an operator-asserted burn.
    *
-   * T-01 residual (explicit): this is **operator burn-from-rewards**, not a structural
-   * market-buy of revenue. `tokensBought` is trusted input; `toRewards` is not a second
-   * ledger credit — funds must already sit in the rewards engine. Full §4.3 flywheel
-   * (auto market-buy + budget from `buybackBudget`) is a product socket, not this path.
+   * NOTHING IS BOUGHT BACK HERE, and the method name is the §4.3 vocabulary
+   * rather than a description of what runs. §13 socket `token.buyback`.
    *
-   * `tokensBought` is supplied by the caller because pricing and execution are
-   * svc-trade's job, not this service's — svc-token never decides a price.
-   * Until the internal book exists (Phase 2) an operator supplies the executed
-   * amount from apps/admin.
+   * - `tokensBought` is a figure the caller types. No market-buy is executed by
+   *   this service or any other, so the platform acquires no IFC and creates no
+   *   buy pressure. Pricing and execution are svc-trade's job and svc-trade
+   *   cannot yet do it.
+   * - `revenueTotal` is written to jsonb exactly as supplied and is validated
+   *   nowhere.
+   * - The only ledger movement is the burn leg, debited from the rewards
+   *   engine — value that is already ours. `toRewards` is not a second credit;
+   *   it is the remainder, which never moves.
+   * - There is no caller: no cron, no bus subscriber, no admin form. An
+   *   operator with admin:treasury + MFA invokes the mutation or it never runs.
+   * - `buybackBudget()` (economics/buyback.ts) is what would size the spend from
+   *   revenue. It is called from nowhere but its own tests.
    *
-   * §13 socket: automated market-buy against the internal book once svc-trade
-   * lands, which turns this into a scheduled job rather than an operator action.
+   * Turning this into the §4.3 flywheel needs a real market-buy against the
+   * internal book plus a schedule — a product decision and an svc-trade
+   * dependency, not a rename.
    */
   async recordBuyback(input: {
     runId: string;
@@ -860,7 +882,14 @@ export class TokenService {
     );
   }
 
-  // ── Governance (§4.3) ──────────────────────────────────────────────────────
+  // ── Governance — ballots only (§4.3) ───────────────────────────────────────
+  //
+  // Everything below records or reads an election. Nothing below decides one,
+  // and nothing elsewhere does either: `passed`, `rejected`, `executed` and
+  // `cancelled` are declared on the enum and written by no code in this repo.
+  // §13 socket `token.governance`. Do not add a status-flip mutation to close
+  // this gap — see the note above createProposal in router.ts for why a flip
+  // with no action behind it is the worse outcome.
 
   /**
    * Open a proposal for IFC-weighted voting.
@@ -903,9 +932,21 @@ export class TokenService {
 
     const id = input.proposalId ?? crypto.randomUUID();
     const body = input.body ?? {};
-    // Open immediately when the window already includes `now`; otherwise draft
-    // until an operator (or a future open job) flips status. Voters still check
-    // the window, so a draft never accepts ballots.
+    /**
+     * Open immediately when the window already includes `now`; otherwise draft.
+     *
+     * THIS IS THE ONLY LINE IN THE REPO THAT SETS A PROPOSAL STATUS, and it runs
+     * once, at insert. There is no open job and no operator procedure to flip a
+     * draft later, so `draft` is terminal: a proposal created with a future
+     * `opensAt` can never be voted on, because castVote requires status='open'.
+     * Callers who want a votable proposal must leave `opensAt` unset or set it
+     * at or before now.
+     *
+     * Not fixed here by auto-opening on first read, which would make the window
+     * depend on who happened to fetch the row. The fix is the open/close job in
+     * §13 socket `token.governance`, together with the tally and executor that
+     * are missing for the same reason.
+     */
     const status: ProposalStatus = opensAt.getTime() <= now.getTime() && closesAt.getTime() > now.getTime() ? 'open' : 'draft';
 
     const rows = await this.sql<
@@ -1067,6 +1108,15 @@ export class TokenService {
     }));
   }
 
+  /**
+   * One proposal plus a tally computed at read time.
+   *
+   * The tally is a REPORT, not a decision. It is recomputed on every call and
+   * stored nowhere, no quorum or threshold is applied to it, and no code
+   * consumes it — a proposal whose `forWeight` dwarfs its `againstWeight` stays
+   * `open` forever. Anything rendering this must say so; a bare "for vs
+   * against" bar reads as an outcome. §13 socket `token.governance`.
+   */
   async getProposal(proposalId: string): Promise<ProposalDetail> {
     const rows = await this.sql<
       Array<{

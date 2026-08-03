@@ -1657,24 +1657,13 @@ module.exports = {
         medium: "Medium",
         reddit: "Reddit"
     },
-    bzb_description: {
-        title1: "",
-        title2: "",
-        title3: "",
-        title4: "",
-        title5: "",
-        title6: "",
-        title7: "",
-        title8: "",
-        desc1: "",
-        desc2: "",
-        desc3: "",
-        desc4: "",
-        desc5: "",
-        desc6: "",
-        desc7: "",
-        desc8: ""
-    },
+    // bzb_description (title1-8 / desc1-8) removed 2026-08-03. It captioned the
+    // eight-tile "Token Rights" grid on /bzb — dividends, voting, governance,
+    // listing priority and so on. The captions had already been blanked to empty
+    // strings, which left the icons making the claims on their own; the grid and
+    // the page prose are now a §13 socket (config/sockets.js token.rights +
+    // token.governance). Sixteen empty keys named after entitlements the
+    // platform does not provide are not a translation gap waiting to be filled.
     footer: {
         notice: 'Announcement',
         gsmc: 'Exchange The Best Cryptocurrency',

@@ -14,15 +14,26 @@
 /**
  * Holder distributions — §13 socket, and the narrowest gap of the eight.
  *
- * Worth being precise, because this screen is one procedure away from being
- * real and the others are a service away. svc-token ALREADY distributes yield:
- * `token.distributeRevenue` is live, posts through packages/ledger-client, and
- * the tracker row token.yield is `done`. The money path exists and is correct.
+ * Worth being precise, because the money path here is real and the gap is not
+ * where it first looks. `token.distributeRevenue` computes the pro-rata split
+ * correctly and posts it through packages/ledger-client. That part is built.
  *
- * What does not exist is a window onto it. `distributeRevenue` carries
- * admin:treasury — an operator action — and no `token:read` procedure returns
- * one account's distribution history. So a holder who was genuinely paid still
- * has no way to see it, and this screen could not show it if they had been.
+ * TWO THINGS ARE MISSING, NOT ONE. Corrected 2026-08-03 — this comment used to
+ * say the tracker row token.yield was `done`; it is now a §13 socket:
+ *
+ * 1. No schedule. §4.3 calls for a weekly job that aggregates the house fee
+ *    accounts; it does not exist. `distributeRevenue` has no caller anywhere
+ *    outside its own tests — no cron, no bus subscriber, no admin form — and it
+ *    carries admin:treasury, so it pays out only when a person invokes it by
+ *    hand, on amounts that person typed. Nothing checks those amounts against
+ *    the houseFees balance they claim to sweep.
+ * 2. No read. No `token:read` procedure returns one account's distribution
+ *    history, so a holder who genuinely was paid has no way to see it, and this
+ *    screen could not show it if they had been.
+ *
+ * Copy here says distributions are settled by an operator. It must never say a
+ * holder earns yield automatically — see the token.yield socket in
+ * config/sockets.js and the row in tooling/tracker/features.mjs.
  *
  * ── TWO MONEY DEFECTS REMOVED WITH THE FETCH ───────────────────────────────
  *
