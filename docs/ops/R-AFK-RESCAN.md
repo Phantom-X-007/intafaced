@@ -431,3 +431,10 @@ EXIT=0
 
 **Mode:** NO-FLEET · freeProduct=0 pivot  
 **Verdict:** live invent residual **0** (#565 already on tip) · freeProduct=0 ≠ kill.
+
+---
+
+## Re-scan cycle42 — 2026-08-03T17:20Z · tip `6d4551e1`
+
+**Mode:** NO-FLEET · freeProduct=0 pivot  
+**Verdict:** live invent residual **0** (#565/#567/#568 on history) · freeProduct=0 ≠ kill.
