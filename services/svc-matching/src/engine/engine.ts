@@ -3,7 +3,19 @@ import type { EventBus, PayloadOf } from '@intafaced/events';
 import { withEngineSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
 import { replay, serializeBooks, snapshotAll, toWire, type EngineJournal, type EngineSnapshot, type JournalRecord } from './journal.js';
-import type { CancelResult, CancelledRef, EngineOrder, Fill, MarketId, OrderId, SubmitResult, TriggerOutcome } from './types.js';
+import type {
+  CancelResult,
+  CancelledRef,
+  EngineLiveOrder,
+  EngineOrder,
+  Fill,
+  MarketId,
+  OrderId,
+  OrderSide,
+  PriceLevelState,
+  SubmitResult,
+  TriggerOutcome,
+} from './types.js';
 
 /**
  * THE MATCHING ENGINE (§5.1).
@@ -155,6 +167,76 @@ export class MatchingEngine {
    */
   depth(marketId: MarketId, limit = 50): ReturnType<OrderBook['depth']> | null {
     return this.existingBook(marketId)?.depth(limit) ?? null;
+  }
+
+  /**
+   * Every order the engine is holding, flattened. Non-destructive.
+   *
+   * THE PRIMITIVE RECONCILIATION WAS MISSING. `cancel()` was the only way to
+   * discover whether the engine still had an order, so asking cost you the
+   * order. Everything that wants to compare the engine against another system's
+   * idea of "open" needs to look without touching, and this is that look.
+   *
+   * `depth()` cannot stand in: it folds a price level down to one total, so the
+   * order ids and account ids are gone before a caller sees them.
+   *
+   * Built on `toState()` rather than reaching into the book, so `book.ts` stays
+   * pure and a book that gains a structure gains it here for free.
+   *
+   * Sorted by (marketId, sequence): two calls against the same books must
+   * produce the same list, for the same reason `serializeBooks` sorts.
+   */
+  restingOrders(marketId?: MarketId): readonly EngineLiveOrder[] {
+    const books = marketId === undefined ? [...this.books.values()] : [this.books.get(marketId)].filter((b): b is OrderBook => b != null);
+
+    const live: EngineLiveOrder[] = [];
+
+    for (const book of books) {
+      const state = book.toState();
+
+      const takeSide = (levels: readonly PriceLevelState[], side: OrderSide): void => {
+        for (const level of levels) {
+          for (const order of level.orders) {
+            live.push({
+              marketId: state.marketId,
+              orderId: order.orderId,
+              accountId: order.accountId,
+              kind: 'book',
+              side,
+              price: level.price,
+              remaining: order.remaining,
+              sequence: order.sequence,
+            });
+          }
+        }
+      };
+
+      takeSide(state.bids, 'buy');
+      takeSide(state.asks, 'sell');
+
+      // A stop that has not triggered is not on the book and never appears in
+      // depth — but the caller is holding funds for it exactly as if it were.
+      // Omitting it here would report every one of those holds as unbacked.
+      for (const stop of state.stops) {
+        live.push({
+          marketId: state.marketId,
+          orderId: stop.orderId,
+          accountId: stop.accountId,
+          kind: 'stop',
+          side: stop.side,
+          price: stop.stopPrice,
+          remaining: stop.qty,
+          sequence: stop.sequence,
+        });
+      }
+    }
+
+    return live.sort((a, b) => (a.marketId === b.marketId ? a.sequence - b.sequence : a.marketId < b.marketId ? -1 : 1));
+  }
+
+  /** How many orders the engine is holding. The number an operator wants on `/health`. */
+  get restingOrderCount(): number {
+    return this.restingOrders().length;
   }
 
   snapshot(): EngineSnapshot {
