@@ -68,7 +68,14 @@ function KlineChart(options) {
   this.symbol = options.symbol;
   this.resolution = options.resolution || '60';
   this.stompClient = options.stompClient || null;
-  this.priceScale = Math.pow(10, options.scale || 2);
+  /* priceScale is 10^scale only when the desk published a scale (from market
+     precision). A missing scale used to default to 2 decimals — that is an
+     invented increment. null means: let the library infer from the bars. */
+  var scale = options.scale;
+  this.priceScale =
+    scale != null && isFinite(Number(scale)) && Number(scale) >= 0
+      ? Math.pow(10, Number(scale))
+      : null;
   this._chart = null;
   this._series = null;
   this._handles = [];
@@ -99,14 +106,24 @@ KlineChart.prototype.mount = function () {
     timeScale: { borderColor: 'rgba(255,255,255,0.12)', timeVisible: true, secondsVisible: false },
     localization: { locale: 'en-US' }
   });
-  this._series = this._chart.addCandlestickSeries({
+  var seriesOpts = {
     upColor: '#0ecb81',
     downColor: '#f6465d',
     borderVisible: false,
     wickUpColor: '#0ecb81',
-    wickDownColor: '#f6465d',
-    priceFormat: { type: 'price', precision: Math.max(0, Math.round(Math.log10(this.priceScale))), minMove: 1 / this.priceScale }
-  });
+    wickDownColor: '#f6465d'
+  };
+  /* Only pin axis precision when the instrument published it. Without a scale,
+     omit priceFormat so the chart library derives precision from the OHLC bars
+     rather than inventing two decimal places. */
+  if (this.priceScale) {
+    seriesOpts.priceFormat = {
+      type: 'price',
+      precision: Math.max(0, Math.round(Math.log10(this.priceScale))),
+      minMove: 1 / this.priceScale
+    };
+  }
+  this._series = this._chart.addCandlestickSeries(seriesOpts);
 
   var self = this;
   this._onResize = function () {
