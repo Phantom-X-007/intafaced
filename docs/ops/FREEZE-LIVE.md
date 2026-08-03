@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `7b14d99f` — docs(ops): R07 Coord-OPS cycles 1–6 final board (#503)
-- **Generated:** 2026-08-03T14:07:36.628Z
+- **Tip:** `67e121fd` — docs(ops): P-WS residual still blocked after #424/#422 + REPORTS re-freeze (#507)
+- **Generated:** 2026-08-03T14:13:30.940Z
 - **Open PRs:** 12
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
@@ -28,7 +28,7 @@
 
 ## Open PR snapshot
 
-- #504 @ZenYoda3 · 30 files · MERGEABLE · docs(ops): thorough upgrade free TRK research (short-name)
+- #508 @ZenYoda3 · 2 files · MERGEABLE · docs(ops): R01 partner matrix + R07 living board @ e4836982
 - #448 @Phantom-X-007 · 7 files · CONFLICTING · feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code
 - #445 @Phantom-X-007 · 18 files · MERGEABLE · fix(test): five money suites could skip on CI and the build went green
 - #441 @Phantom-X-007 · 5 files · CONFLICTING · feat(ci): coverage-check — the gate §25 specified and nobody built
