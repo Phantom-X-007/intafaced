@@ -2,9 +2,9 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `6c4638b0` — docs(ops): R01 babysit cycle95 — partner matrix ready=4 (#681)
-- **Generated:** 2026-08-03T22:24:07.623Z
-- **Open PRs:** 12
+- **Tip:** `53dec119` — docs(ops): R07 cycle95 freeProduct=0 + tip 6c4638b0 (#682)
+- **Generated:** 2026-08-03T22:26:32.798Z
+- **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
 - **Anti-under-spawn:** anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).
@@ -28,18 +28,17 @@
 
 ## Open PR snapshot
 
-- #682 @ZenYoda3 · 4 files · CONFLICTING · docs(ops): R07 cycle95 freeProduct=0 + tip 19037a29
-- #448 @Phantom-X-007 · 7 files · UNKNOWN · feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code
-- #445 @Phantom-X-007 · 18 files · UNKNOWN · fix(test): five money suites could skip on CI and the build went green
-- #441 @Phantom-X-007 · 5 files · UNKNOWN · feat(ci): coverage-check — the gate §25 specified and nobody built
-- #438 @Phantom-X-007 · 2 files · UNKNOWN · fix(ci): check 7 printed clean while looking at nothing
-- #436 @Phantom-X-007 · 10 files · UNKNOWN · fix(config): the console showed capabilities off while they served traffic
-- #433 @Phantom-X-007 · 9 files · UNKNOWN · fix(matching): reconciliation is reachable — and the money-stranding case refuses rather than guesses
-- #432 @Phantom-X-007 · 7 files · UNKNOWN · fix(config): a commercial region block could satisfy the sanctions boot guard
-- #430 @Phantom-X-007 · 1 files · UNKNOWN · docs(audit): 40 law-specified capabilities have no tracker row — and the gate that was meant to catch that was never built
-- #428 @Phantom-X-007 · 18 files · UNKNOWN · feat(p2p): payment instruments — a buyer finally has somewhere to send money
-- #420 @Phantom-X-007 · 2 files · UNKNOWN · docs+fix(tracker): correct the margin-call remedy, and lock the one bank row that was not
-- #346 @shehzad002 · 12 files · UNKNOWN · feat(pay): M1 pay.gateway Done bar — card sandbox + KYB stub + durable list
+- #448 @Phantom-X-007 · 7 files · CONFLICTING · feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code
+- #445 @Phantom-X-007 · 18 files · MERGEABLE · fix(test): five money suites could skip on CI and the build went green
+- #441 @Phantom-X-007 · 5 files · CONFLICTING · feat(ci): coverage-check — the gate §25 specified and nobody built
+- #438 @Phantom-X-007 · 2 files · CONFLICTING · fix(ci): check 7 printed clean while looking at nothing
+- #436 @Phantom-X-007 · 10 files · CONFLICTING · fix(config): the console showed capabilities off while they served traffic
+- #433 @Phantom-X-007 · 9 files · MERGEABLE · fix(matching): reconciliation is reachable — and the money-stranding case refuses rather than guesses
+- #432 @Phantom-X-007 · 7 files · CONFLICTING · fix(config): a commercial region block could satisfy the sanctions boot guard
+- #430 @Phantom-X-007 · 1 files · MERGEABLE · docs(audit): 40 law-specified capabilities have no tracker row — and the gate that was meant to catch that was never built
+- #428 @Phantom-X-007 · 18 files · MERGEABLE · feat(p2p): payment instruments — a buyer finally has somewhere to send money
+- #420 @Phantom-X-007 · 2 files · MERGEABLE · docs+fix(tracker): correct the margin-call remedy, and lock the one bank row that was not
+- #346 @shehzad002 · 12 files · CONFLICTING · feat(pay): M1 pay.gateway Done bar — card sandbox + KYB stub + durable list
 
 ## NEVER-TOUCH mid-wave (open multi-PR clusters)
 
