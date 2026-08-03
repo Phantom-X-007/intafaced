@@ -1,11 +1,11 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T19:32:15.393Z
+Generated: 2026-08-03T19:36:52.183Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `8b7a7203`                                                        |
-| Tip subject                       | docs(ops): invent re-scan cycle65 tip 5da067fb (#618)             |
+| Tip                               | `1daa9889`                                                        |
+| Tip subject                       | docs(ops): P-WS still blocked tip 8b7a7203 (cycle66) (#620)       |
 | Open PRs                          | 11                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
