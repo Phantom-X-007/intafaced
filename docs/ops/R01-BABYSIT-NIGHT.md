@@ -340,3 +340,9 @@ origin/main @ 4b835c71  (recheck tip; partners re-fetch before rebase)
 ```
 
 Post-rebase stamp after #562 land: tip `78145757` — matrix **unchanged** (ready **#445 #433 #430 #420**).
+
+---
+
+## Refresh cycle40 — 2026-08-03T17:10Z · tip `823a6351`
+
+Unchanged: Denon ready **#445 #433 #420** (+#430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open after #563.

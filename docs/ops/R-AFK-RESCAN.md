@@ -391,3 +391,10 @@ EXIT=0
 ```
 
 **Verdict:** invent honesty holds · live invent residual **0** · fabricated-money findings **0**.
+
+---
+
+## Re-scan cycle40 — 2026-08-03T17:10Z · tip `823a6351`
+
+**Mode:** NO-FLEET · freeProduct=0 pivot  
+**Verdict:** live invent residual **0**.
