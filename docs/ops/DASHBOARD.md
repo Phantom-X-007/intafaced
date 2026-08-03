@@ -1,6 +1,6 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T15:33Z · tip `555ea76a` · R07 cycle24
+Last report: 2026-08-03T15:37Z · tip `00fdd51e` · FREEZE stamp after cycle24
 
 | Report          | Path                                       |
 | --------------- | ------------------------------------------ |
@@ -13,11 +13,13 @@ Last report: 2026-08-03T15:33Z · tip `555ea76a` · R07 cycle24
 
 - Free product claims: **0** (freeProduct=0 · freeTracker=0)
 - Blocked: **1** (P-WS-REPORT)
-- Open PRs: **11**
+- Open partner: **11** · open Nitro Class N: **1** (#531 babysit) · total open: **12**
+- Denon ready (self-merge only): **4** — #445 #433 #430 #420
+- invent live: **0** · SPAWN_NOW: **none**
 
 anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).
 
-SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.
+SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-\* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.
 
 - Spawn accounting: available=0 · active_spawned=0 · gap=0 · width_target=6-8
 

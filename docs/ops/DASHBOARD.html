@@ -1,9 +1,43 @@
-<!doctype html><meta charset=utf-8><title>Swarm dashboard</title>
-<style>body{font:16px/1.4 system-ui;max-width:52rem;margin:2rem auto;padding:0 1rem}
-h1{font-size:1.4rem} .ok{color:#0a0} .warn{color:#a60} code{background:#f4f4f4;padding:.1rem .3rem}</style>
+<!doctype html>
+<meta charset="utf-8" />
+<title>Swarm dashboard</title>
+<style>
+  body {
+    font: 16px/1.4 system-ui;
+    max-width: 52rem;
+    margin: 2rem auto;
+    padding: 0 1rem;
+  }
+  h1 {
+    font-size: 1.4rem;
+  }
+  .ok {
+    color: #0a0;
+  }
+  .warn {
+    color: #a60;
+  }
+  code {
+    background: #f4f4f4;
+    padding: 0.1rem 0.3rem;
+  }
+</style>
 <h1>Swarm dashboard</h1>
-<p>Tip <code>4fce39a5</code> · 2026-08-03T15:03:57.800Z</p>
-<p class=warn>Free product: <b>0</b> · Tracker free: <b>0</b> · Blocked: <b>1</b> · Open PRs: <b>11</b></p>
-<p>anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).</p>
-<p><a href="./FREEZE-LIVE.md">FREEZE-LIVE</a> · <a href="./R00-INVENTORY.md">R00</a> · <a href="./R01-PR-MATRIX.md">R01</a> · <a href="./R02-FREE-CLAIMS.md">R02</a></p>
-<p>Regenerate: <code>pnpm swarm:report</code></p>
+<p>Tip <code>00fdd51e</code> · 2026-08-03T15:37Z · FREEZE stamp after cycle24</p>
+<p class="warn">
+  Free product: <b>0</b> · Tracker free: <b>0</b> · Blocked: <b>1</b> (P-WS-REPORT) · Open partner:
+  <b>11</b> · total open: <b>12</b>
+</p>
+<p>Denon ready: <b>4</b> (#445 #433 #430 #420) · invent: <b>0</b> · SPAWN_NOW: <b>none</b></p>
+<p>
+  anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only;
+  tracker free is NOT product — see mandate).
+</p>
+<p>
+  freeProduct=0 is shell craft drained — <b>NOT</b> whole-platform done.
+</p>
+<p>
+  <a href="./FREEZE-LIVE.md">FREEZE-LIVE</a> · <a href="./R00-INVENTORY.md">R00</a> ·
+  <a href="./R01-PR-MATRIX.md">R01</a> · <a href="./R02-FREE-CLAIMS.md">R02</a>
+</p>
+<p>Regenerate: <code>pnpm swarm:freeze</code> · <code>pnpm swarm:report</code></p>
