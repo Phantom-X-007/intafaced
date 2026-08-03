@@ -545,7 +545,14 @@ services:
     container_name: intafaced-svc-academy
     command: ['node', 'services/svc-academy/dist/index.js']
     environment:
-      <<: [*service-env, *edge-secret]
+      # *internal-secret was missing here. src/env.ts merges
+      # `internalServiceEnvSchema` for the two callees named above, and
+      # INTERNAL_SERVICE_SECRET has no default — so the process died at import
+      # with `EnvError: INTERNAL_SERVICE_SECRET: Required`. The container was
+      # never created at all, which is why there were no restart-loop logs for
+      # anyone to read: a service that fails to boot is loud, a service nobody
+      # started is silent.
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-academy
       # 4016: every port from 4000 to 4015 is already claimed above.
       HTTP_PORT: '4016'
