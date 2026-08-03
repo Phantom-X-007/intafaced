@@ -5,8 +5,8 @@
 | **Claim**            | `P-WS-REPORT` (integrity report only) — **STILL BLOCKED** (no implement craft)                                                                                                                                                                                                  |
 | **Class**            | N (docs)                                                                                                                                                                                                                                                                        |
 | **Proof mode**       | **NO-FLEET** — `docker` not available on this host; live counts not re-probed this session                                                                                                                                                                                      |
-| **Tip when written** | `54795ac8` `docs(ops): R07 cycle34 freeProduct=0 + tip 87e999d8 (#550)` (`origin/main` @ AFK re-check 2026-08-03T16:37Z)                                                                                                                                                        |
-| **Upgrade**          | AFK integrity refresh on tip `54795ac8`. Freeze **still true**: open **#433** matching + **#432** edge. **#424** / **#422** remain MERGED. Prior stamps: `741d6371` (#543 era), `143ba250` (#537 era), `1f7575e4` (#527 era). **NO implement** / **NO-FLEET**. **No depth UI.** |
+| **Tip when written** | `19122f2a` `docs(ops): R07 cycle37 freeProduct=0 + tip 50d2f7e8 (#559)` (`origin/main` @ AFK re-check 2026-08-03T16:56Z)                                                                                                                                                        |
+| **Upgrade**          | AFK integrity refresh on tip `19122f2a`. Freeze **still true**: open **#433** matching + **#432** edge. **#424** / **#422** remain MERGED. Prior stamps: `54795ac8` (#553 era), `741d6371` (#543 era), `143ba250` (#537 era). **NO implement** / **NO-FLEET**. **No depth UI.** |
 | **Sources**          | Code on tip + prior live probe in [`docs/REGROUP-2026-08-03.md`](../REGROUP-2026-08-03.md) §3 + Denon board [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) **D-P0-WS**                                  |
 | **Dual-edit**        | **None.** This residual is `docs/ops/` only. Did **not** edit matching/edge/ws/nginx. Collisions (do not dual-edit): **#433** `services/svc-matching/**`, **#432** `services/svc-edge/src/env.ts` + `index.ts`.                                                                 |
 | **Landed (cleared)** | **#424** MERGED — edge CORS (`services/svc-edge` cors/* + index) no longer open collision. **#422** MERGED — scan/custody (no P-WS path intersect; noted for tip context).                                                                                                      |
@@ -14,7 +14,7 @@
 
 **Purpose:** freeze the platform-integrity facts so depth/tape work is not started against a path that cannot work. **Does not** implement nginx, market authority, depth UI, or invent markets.
 
-### AFK status (2026-08-03T16:37Z — tip `54795ac8`)
+### AFK status (2026-08-03T16:56Z — tip `19122f2a`)
 
 | Metric      | Value                                                                                           |
 | ----------- | ----------------------------------------------------------------------------------------------- |
@@ -144,7 +144,7 @@ nginx half is short; it is not the whole blocker (see §2).
 
 ## 2 · Market-ID namespace — edge vs matching vs ws
 
-### Data-plane ownership (from code on tip `54795ac8`; structural citations from prior stamp, NO-FLEET — no service re-edit)
+### Data-plane ownership (from code on tip `19122f2a`; structural citations from prior stamp, NO-FLEET — no service re-edit)
 
 | Plane                     | Source of market identity                                                                                  | Shape on the wire                                                                      | Citation                                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -345,7 +345,7 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 | Check                            | Result                                                                            |
 | -------------------------------- | --------------------------------------------------------------------------------- |
-| Tip SHA stamped                  | `54795ac8` (`origin/main` @ 2026-08-03T16:37Z)                                    |
+| Tip SHA stamped                  | `19122f2a` (`origin/main` @ 2026-08-03T16:56Z)                                    |
 | Denon #424 / #422                | **MERGED** (no longer open collisions for this claim)                             |
 | Freeze collisions remaining      | **#433** matching (OPEN, MERGEABLE) · **#432** edge env/index (OPEN, CONFLICTING) |
 | nginx `/ws` + SPA `/`            | Unchanged structural fact (prior stamp; NO-FLEET, no re-probe)                    |
@@ -356,4 +356,4 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 | freeProduct                      | **0** — shell drained; no implement craft this residual                           |
 | Depth UI                         | **Not started** (not free; D-P0-WS handoff §3 still the gate)                     |
 
-**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts remain code-backed (prior stamp on tip history through `54795ac8`). Claim **P-WS-REPORT** remains **blocked** — **NO-FLEET**, **NO implement** until **#433** (matching) and **#432** (edge) land or close without path intersect — then residual may re-open as report-only refresh, still **no depth UI**.
+**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts remain code-backed (prior stamp on tip history through `19122f2a`). Claim **P-WS-REPORT** remains **blocked** — **NO-FLEET**, **NO implement** until **#433** (matching) and **#432** (edge) land or close without path intersect — then residual may re-open as report-only refresh, still **no depth UI**.
