@@ -44,6 +44,26 @@ const schema = baseEnvSchema
        * unknown, so a deployment that forgets to configure this is restrictive
        * rather than permissive. A wrong-but-open default would let a caller
        * reach modules their actual jurisdiction forbids.
+       *
+       * ── READ THIS BEFORE TRUSTING ANY REGION-BASED CONTROL ─────────────────
+       * IT IS ONE CONSTANT FOR EVERY REQUEST. The value is read once and stamped
+       * onto the principal of every caller in the platform (`index.ts`, the
+       * `exchangePrincipal` call). No geo-IP resolution exists anywhere in this
+       * repo — no `cf-ipcountry`, no `x-vercel-ip-country`, no provider lookup.
+       *
+       * So sanctions screening and the jurisdiction matrix both work, and both
+       * evaluate THE SAME SINGLE REGION for all traffic. A counsel-supplied
+       * `INTAFACED_SANCTIONS_REGIONS` will never meet a real caller's actual
+       * jurisdiction; it can only ever match if that jurisdiction happens to be
+       * the one configured here. `assertScreeningConfigured()` passing at boot
+       * means A LIST WAS SUPPLIED. It does not mean traffic is screened.
+       *
+       * Declared as §13 `socket.geo-region-resolution` (tooling/tracker/features.mjs).
+       * Closing it is not a one-line header read: region must never come from
+       * the caller — one who could set it would choose its own regulator — so it
+       * needs a trusted upstream geo header, a stated precedence, proof the
+       * header cannot be forged by reaching origin directly, and a fail-closed
+       * answer when it is absent.
        */
       DEFAULT_REGION: z.string().length(2).default('XX'),
 
