@@ -1,185 +1,137 @@
 <template>
-  <div class="notice">
-    <div class="banner">
-      <!-- <img class="bannerimg" src="../../assets/images/help_banner.png"> -->
-      <span>{{$t("header.service")}}</span>
+  <div class="ix-page notice-page">
+    <div class="ix-page-head">
+      <h1>{{ $t('cms.noticePage.title') }}</h1>
+      <p>{{ $t('cms.noticePage.lead') }}</p>
     </div>
-    <div class="main">
-      <!-- Stream A: failed announcement list must not look like empty success. -->
-      <p v-if="loadError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ loadError }}</p>
-      <p v-else-if="!loaded" class="ix-empty ix-empty-loading">{{ $t("common.loading") }}</p>
-      <p v-else-if="FAQList.length === 0" class="ix-empty">{{ $t("cms.noticeEmpty") }}</p>
-      <div class="list" v-else>
-        <div class="item" v-for="item in FAQList" :key="item.id" @click="noticedeail(item.id)">
-        <img v-show="item.isTop==0" class="iconimg" src="../../assets/images/icon-top.png" alt="">
-          <span class="text">{{item.title}}</span>
 
-          <span class="time">
-            {{item.createTime}}
-          </span>
-        </div>
+    <!-- ── platform announcements: nothing serves them ──────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('cms.noticePage.announcements') }}</h2>
+        <span class="ix-sub">no service</span>
       </div>
-      <div class="page" v-if="loaded && !loadError && totalNum > 0">
-        <Page :total="totalNum" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
-      </div>
+      <IxState reason="no_surface" :message="$t('cms.noticePage.announcementsMissing')" />
     </div>
-    <!-- <div class="help_container">
-          <div style="line-height: 40px;font-size:16px;"><router-link to="/help" style="color:#00c2a8;">{{$t('cms.servicecenter')}}</router-link>->{{$t('cms.notice')}}</div>
 
-            <Col span="24" style="padding:0 2%;color:#000;font-size:18px;background:#fff">
-                <div class="faqlist">
-                    <div v-for="item,index in FAQList" class="faqitem" @click="noticedeail(item.id)" v-if="titleLang(item.title)===lang">{{item.title}}
-                        <span style="float:right">{{item.createTime}}</span>
-                    </div>
-                </div>
-            </Col>
+    <!-- ── the personal inbox: this one is real ─────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('cms.noticePage.inbox') }}</h2>
+        <span class="ix-sub">notify.list</span>
+      </div>
+      <p class="ix-lead">{{ $t('cms.noticePage.inboxLead') }}</p>
 
+      <IxState
+        :loading="inbox.loading"
+        :reason="inbox.reason"
+        :message="inbox.message"
+        endpoint="/api/notify/trpc/notify.list"
+      >
+        <div v-if="items.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('cms.noticePage.when') }}</th>
+                <th>{{ $t('cms.noticePage.kind') }}</th>
+                <th>{{ $t('cms.noticePage.severity') }}</th>
+                <th>{{ $t('cms.noticePage.messageKey') }}</th>
+                <th>{{ $t('cms.noticePage.read') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="n in items" :key="n.id">
+                <td>{{ n.createdAt | dateFormat }}</td>
+                <td>{{ n.kind }}</td>
+                <td>{{ n.severity }}</td>
+                <td><code>{{ n.titleKey }}</code></td>
+                <td>{{ n.readAt ? $t('cms.noticePage.yes') : $t('cms.noticePage.no') }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <Col span="24" style="padding:100px 0;">
+        <div v-else class="ix-note ix-note-quiet">{{ $t('cms.noticePage.inboxEmpty') }}</div>
 
+        <!--
+          WHY A KEY AND NOT A SENTENCE.
 
-         </Col> -->
+          svc-notify stores `titleKey` / `bodyKey` — i18n keys — plus `params`,
+          and deliberately never a rendered sentence (its own comment on
+          `refusalCode` says as much: "a code, never a sentence — the client
+          renders copy from @intafaced/i18n"). This shell is not in the pnpm
+          workspace and cannot import that catalogue, so it does not hold the
+          copy these keys resolve to.
+
+          The key is therefore shown verbatim. The alternative was to guess a
+          human sentence from the key name, which would be inventing the content
+          of a message the platform sent to this user — the exact failure the
+          honesty rules exist to prevent, and worse here than elsewhere because a
+          notification is a claim about something that happened to their money.
+        -->
+        <p class="ix-cap-note">{{ $t('cms.noticePage.keysNote') }}</p>
+      </IxState>
+    </div>
   </div>
 </template>
-<style lang="scss" scoped>
-.notice {
-.banner {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 320px;
-    background: linear-gradient(to right, #111111, #000109);
-    background-size: 100% 100%;
-    color: #fff;
-    font-size: 40px;
-  }
-.main {
-    width: 70%;
-    margin: 0 auto;
-    background-color: #000000;
-    color: #fff;
-    // box-shadow: 0 0 2px #ccc;
-    margin-top: -50px;
-    border-radius: 6px;
-    padding: 50px 100px;
-    margin-bottom: 50px;
-.list {
-      font-size: 14px;
-.item {
-        line-height: 50px;
-        height:50px;
-        border-bottom: 1px solid #141414;
-        cursor: pointer;
-.iconimg {
-          width: 35px;
-          vertical-align: sub;
-          margin-left: 10px;
-          padding-bottom: 5px;
-        }
-.time {
-          float: right;
-          color: #999;
-          font-size: 14px;
-        }
-.text{
-          display: inline-block;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          width: 70%;
-          &:hover{
-            color: #00c2a8;
-          }
-        }
-      }
-    }
-.page {
-      text-align: right;
-      margin-top: 20px;
-    }
-  }
-}
-</style>
+
 <script>
+/**
+ * ANNOUNCEMENTS — a §13 socket, next to the one adjacent surface that is real.
+ *
+ * The vendor's `/uc/announcement/page` served operator-authored posts from the
+ * Java CMS. Nothing behind our edge authors, stores or serves broadcast content:
+ * there is no CMS service, and no procedure on any service returns an article.
+ *
+ * svc-notify is close enough to be worth being precise about. It carries a
+ * per-user inbox — `notify.list`, cursor-paginated, scoped `notify:read` — and
+ * that is a real, live read. But an inbox is not an announcement board: the
+ * inbox is addressed to one user and written by services, the board is addressed
+ * to everyone and written by an operator. Rendering the inbox under the heading
+ * "Announcements" would have been the tidier-looking lie, so the two are shown
+ * as two things, each labelled as what it is.
+ */
+import IxState from '../../components/intafaced/IxState.vue';
+import ixModule from '../../components/intafaced/module-mixin.js';
+import { query } from '../../config/intafaced.js';
+
 export default {
+  name: 'CmsNotice',
+  components: { IxState },
+  mixins: [ixModule],
   data() {
     return {
-      pageNo: 1,
-      pageSize: 10,
-      totalNum: 0,
-      FAQList: [],
-      loaded: false,
-      loadError: ""
+      inbox: this.emptySection()
     };
   },
-  created: function() {
-    this.init();
-  },
   computed: {
-    lang() {
-      return this.$store.state.lang;
-    },
-    langPram() {
-      // English only — the backend must never be asked for CN content.
-      return "EN";
+    items() {
+      return (this.inbox.data && this.inbox.data.items) || [];
     }
   },
-  methods: {
-    init() {
-      this.$store.state.HeaderActiveName = "1-7";
-      this.$store.commit("navigate", "nav-service");
-      this.loadDataPage(this.pageNo);
-    },
-    loadDataPage(pageIndex) {
-      var param = {};
-      param["pageNo"] = pageIndex;
-      param["pageSize"] = this.pageSize;
-      param["lang"] = this.langPram;
-      this.pageNo = pageIndex;
-      this.loaded = false;
-      this.loadError = "";
-      this.$http
-        .post(this.host + this.api.uc.announcement, param)
-        .then(response => {
-          var resp = response.body;
-          if (resp && resp.code == 0 && resp.data) {
-            // empty content is success empty — not failure, not silent no-op
-            this.FAQList = resp.data.content || [];
-            this.totalNum = resp.data.totalElements || 0;
-            this.loaded = true;
-            this.loadError = "";
-          } else {
-            this.FAQList = [];
-            this.totalNum = 0;
-            this.loaded = true;
-            this.loadError =
-              (resp && resp.message) || this.$t("cms.noticeUnavailable");
-            this.$Notice.error({
-              title: this.$t("common.tip"),
-              desc: this.loadError
-            });
-          }
-        })
-        .catch(() => {
-          this.FAQList = [];
-          this.totalNum = 0;
-          this.loaded = true;
-          this.loadError = this.$t("cms.noticeUnavailable");
-        });
-    },
-    noticedeail(id) {
-      var path = { path: "/notice/index", query: { id: id } };
-      this.$router.push(path);
-    },
-    titleLang(str) {
-      const reg = new RegExp("[\\u4E00-\\u9FFF]+", "g");
-      if (reg.test(str)) {
-        return "Chinese";
-      } else {
-        return "English";
-      }
-    }
+  created() {
+    this.$store.commit('navigate', 'nav-notice');
+    this.$store.state.HeaderActiveName = '1-1';
+    this.load('inbox', query('notify', 'notify.list', { limit: 50 }, this.ixToken));
   }
 };
 </script>
 
+<style scoped>
+.notice-page {
+  padding-top: 80px;
+}
+.ix-lead {
+  color: var(--ix-text-dim, #8a909c);
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+.ix-cap-note {
+  margin: 12px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--ix-orange, #ff8a1f);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ix-text-faint, #6b7280);
+}
+</style>

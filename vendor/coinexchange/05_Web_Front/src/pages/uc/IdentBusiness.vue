@@ -1,556 +1,101 @@
 <template>
-  <div class="identbusiness" style=" padding: 81px;padding-top: 80px;">
-    <div class="content">
-      <!---->
-      <!--<div class="tit">{{$t('uc.identity.apply')}}</div>-->
-      <!--<div class="plancon">-->
-      <!--<span></span>-->
-
-      <!--<div class="plan">-->
-      <!--<div v-for="(step,i) in steps" :key="step" :class="{action:activeStepIndex>=i}">-->
-      <!--{{activeStepIndex>=i?'':i+1}}-->
-      <!--</div>-->
-      <!--</div>-->
-
-      <!--<div class="plans">-->
-      <!--<div v-for="step in steps" :key="step">-->
-      <!--{{step}}-->
-      <!--</div>-->
-      <!--</div>-->
-      <!--</div>-->
-      <div style="width: 80%;margin: 0 auto;margin-bottom: 60px;">
-        <div class="ident-title" v-if="certStatus === 0">
-          <!-- merchant verification application -->
-          <h3>{{$t('uc.identity.apply')}}</h3>
-          <p style="font-size: 14px;margin-top: 10px">
-            <!-- {{$t('uc.identity.become')}} -->
-          </p>
-        </div>
-        <div class="ident-title" v-else-if="certStatus == 1">
-          <h3>{{$t('uc.identity.tijiao')}}</h3>
-        </div>
-        <div class="ident-title" v-else-if="certStatus == 2">
-          <h3>{{$t('uc.identity.tijiaosuc')}}</h3>
-        </div>
-        <div class="ident-title" v-else-if="certStatus == 3">
-          <h3>{{$t("uc.identity.tijiaofail")}}</h3>
-        </div>
-        <div class="ident-title" v-else-if="certStatus == 5">
-          <h3>{{$t("uc.identity.zhuxiaotijiao")}}</h3>
-        </div>
-        <div class="ident-title" v-else-if="certStatus == 6">
-          <h3>{{$t("uc.identity.shenhefail")}}</h3>
-        </div>
-        <div class="ident-title" v-else-if="certStatus == 7">
-          <h3>{{$t("uc.identity.shenhesuc")}}</h3>
-        </div>
-        <!-- prepare:prepare: documents; review: submitted; result: outcome; certified: verified; shenheshibai: Review failed-->
-        <Steps class="apply-step" :current="certStatus == 2? 3: certStatus == 3? 2: certStatus" :status="certStatus == 3? 'error':'finish'" v-if="certStatus!= 0 && certStatus!= 5 && certStatus!= 6 && certStatus!= 7">
-          <Step :title=prepare></Step>
-          <Step :title=review></Step>
-          <Step :title="certStatus == 1 || certStatus == 0? result: certStatus == 2? certified: shenheshibai"></Step>
-        </Steps>
-        <!-- shangjiazhuxiao: deregistered; tijiaoshenqing: submitted; shenheshibai: failed; passed: approved-->
-        <Steps class="apply-step" :current="certStatus == 5? 1: certStatus == 6? 2: 3" :status="certStatus == 6? 'error':'finish'" v-if="certStatus == 5 || certStatus == 6 || certStatus == 7">
-          <Step :title=shangjiazhuxiao></Step>
-          <Step :title=tijiaoshenqing></Step>
-          <Step :title="certStatus == 5? result: certStatus == 6? shenheshibai: passed"></Step>
-        </Steps>
-
-        <div v-if="certStatus == 6" style="width: 500px;margin: 0 auto;text-align: center;">
-          <Button type="warning" style="width: 120px;background:#1ad4bc;border-color:#1ad4bc" @click="modal_return=true" long size="large">{{$t("uc.identity.shenagain")}}</Button>
-          <div class="fail-reason" style="margin-top: 50px;font-size: 16px;">
-            <Icon type="md-alert" color="red" size="16" />
-            <span style="margin-left: 10px;">{{$t('uc.identity.yuanyin')}}: {{refuseReason}}</span>
-          </div>
-        </div>
-
-        <div v-if="certStatus == 7" style="width: 500px;margin: 0 auto;text-align: center;">
-          <Button type="warning" style="width: 120px;background:#1ad4bc;border-color:#1ad4bc" @click="modal_read=true" long size="large">{{$t("uc.identity.sheqinggain")}}</Button>
-        </div>
-
-        <div v-if="certStatus == 3" style="width: 500px;margin: 0 auto;text-align: center;">
-          <Button type="warning" style="width: 120px;background:#1ad4bc;border-color:#1ad4bc" @click="modal_read=true" long size="large">{{$t("uc.identity.shenagain")}}</Button>
-          <div class="fail-reason" style="margin-top: 50px;font-size: 16px;">
-            <Icon type="md-alert" color="red" size="16" />
-            <span style="margin-left: 10px;">{{$t("uc.identity.reason")}}: {{certReason}}</span>
-          </div>
-        </div>
-
-        <div v-else-if="certStatus == 2" style="width: 500px;margin: 0 auto;text-align: center;">
-          <Button type="warning" style="width: 120px;background:#1ad4bc;border-color:#1ad4bc" @click="publishAd" long size="large">{{$t('nav.fabu')}}</Button>
-          <div style="margin-top: 30px;font-size: 16px;text-align: center;">
-            <a @click="returnAdit" style="color: #aaa;">{{$t("uc.identity.shenqingtuibao")}}</a>
-          </div>
-        </div>
-      </div>
-      <!-- merchant verification, step one -->
-      <div class="ipshang" :class="certStatus!= 0? 'applying': '' ">
-        <div class="ident-title" v-if="certStatus == 3">
-          <h3 style="font-size: 20px">{{$t('uc.identity.apply')}}</h3>
-          <p style="font-size: 14px;margin-top: 10px"> {{$t('uc.identity.become')}}</p>
-        </div>
-        <div class="ident-title" v-else-if="certStatus == 2">
-          <h3>{{$t("uc.identity.getquan")}}</h3>
-        </div>
-        <!-- step one -->
-        <Row style="margin-top:40px;">
-          <Col span="8">
-          <div class="business-function">
-            <img alt="" src="../../assets/images/business_show.png" width="300px">
-            <p style="padding: 20px 0;font-weight: 600;font-size: 18px">{{$t('uc.identity.seat')}}</p>
-            <span style="font-size: 14px;overflow:hidden; overflow: hidden;text-overflow:ellipsis;display: block;white-space:nowrap;color:#999;">{{$t("uc.identity.zhusnhu")}}</span>
-          </div>
-          </Col>
-          <Col span="8">
-          <div class="business-function">
-            <img alt="" src="../../assets/images/business_service.png" width="300px">
-            <p style="padding: 20px 0;font-weight: 600;font-size: 18px">{{$t('uc.identity.service')}}</p>
-            <span style="font-size: 14px;color:#999;">{{$t("uc.identity.service")}}</span>
-          </div>
-          </Col>
-          <Col span="8">
-          <div class="business-function">
-            <img alt="" src="../../assets/images/business_fee.png" width="300px">
-            <p style="padding: 20px 0;font-weight: 600;font-size: 18px">{{$t('uc.identity.lowfee')}}</p>
-            <span style="font-size: 14px;color:#999;">{{$t("uc.identity.lowfee")}}</span>
-          </div>
-          </Col>
-        </Row>
-        <!-- step-one agreement -->
-        <div v-show="certStatus === 0" style="text-align: center;font-size: 16px;margin-top:50px">
-          <Checkbox v-model="single"></Checkbox>
-          <span>{{$t("uc.identity.read")}}</span>
-          <router-link target="_blank" to="/helpdetail?cate=1&id=11&cateTitle=FAQ" class="cur" style="color:#00c2a8">{{$t('uc.identity.agreement')}}</router-link>
-        </div>
-        <!-- step-one button -->
-        <div v-show="certStatus === 0" class="sq">
-          <Button @click="apply" style="background:#00c2a8;color:#fff;outline:none;">{{$t("uc.identity.lijishenqing")}}</Button>
-        </div>
-      </div>
-
-      <!-- merchant end -->
-      <!-- send email -->
-      <div class="mail" v-show="isShowMailt">
-        <Input v-model="value" placeholder="Enter something..." style="width: 300px"></Input><br/>
-        <Input v-model="value" placeholder="Enter something..." style="width:202px"></Input>
-        <Button type="info">{{$t('uc.identity.sendcode')}}</Button><br/>
-        <Button type="info" style="margin-top: 25px; width: 297px;">{{$t('uc.identity.confirm')}}</Button>
-      </div>
-      <!-- email end -->
-    </div>
-    <!-- under review -->
-    <div class="submittedAudit" v-show="activeStepIndex === 1">
-      <img src="../../assets/img/accomplish.png" alt="">
-    </div>
-    <!-- end -->
-    <!-- approved -->
-    <div class="auditSuccess" v-show="activeStepIndex === 2">
-      <img src="../../assets/img/accomplish.png" alt="">
+  <div class="ix-page ident-page">
+    <div class="ix-page-head">
+      <h1>{{ $t('uc.identity.title') }}</h1>
+      <p>{{ $t('uc.identity.lead') }}</p>
+      <div class="ix-source">svc-identity · /api/identity/trpc</div>
     </div>
 
-    <Modal v-model="modal_read">
-      <!-- how to become a merchant -->
-      <p slot="header">
-        <span class="tit">{{$t('uc.identity.second.line')}}</span>
-      </p>
-      <div class="apply-note">
-        <h3 style="padding-top: 10px;">{{$t('uc.identity.second.step1')}}</h3>
-        <p>{{$t('uc.identity.second.step1c1')}}<br>{{$t('uc.identity.second.step1c2')}}</p>
-        <h3>{{$t('uc.identity.second.step2')}}</h3>
-        <p>{{$t('uc.identity.second.step2c')}}</p>
-        <h3>{{$t('uc.identity.second.step3')}}</h3>
-        <p>{{$t('uc.identity.second.stepc')}}</p>
-        <div style="text-align: left;padding: 30px 0;">
-          <Checkbox v-model="agreeFrozen"></Checkbox> {{$t('uc.identity.second.agree')}}
-          <span>
-            <font color="#00c2a8">{{auditText}}</font>{{$t('uc.identity.second.agreec')}}</span>
-        </div>
-        <Button @click="apply2" long style="font-size: 16px;background:#00c2a8;color:#fff;border:1px solid #00c2a8;">{{$t('uc.identity.second.shenqingchngweishangjia')}}</Button>
+    <!-- ── where you stand ──────────────────────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('uc.identity.current') }}</h2>
+        <span class="ix-sub">kyc.status</span>
       </div>
-      <p slot="footer">
-        <!--<span style="text-align: left">-->
-        <!--<Checkbox v-model="agreeFrozen" ></Checkbox> <span>I agree to lock{{auditText}}as a merchant bond</span>-->
-        <!--</span>-->
-        <!--<Button type="info" @click="apply2">Apply to become a merchant</Button>-->
-      </p>
-    </Modal>
 
-    <Modal v-model="modal_apply">
-      <p slot="header"></p>
-      <div class="apply-content">
-        <div class="apply-title">
-          <h3>{{$t("uc.identity.tijiaoziliao")}}</h3>
-          <p>{{$t("uc.identity.place")}}</p>
+      <IxState
+        :loading="status.loading"
+        :reason="status.reason"
+        :message="status.message"
+        endpoint="/api/identity/trpc/kyc.status"
+      >
+        <div v-if="status.data">
+          <div class="tier-row">
+            <span class="k">{{ $t('uc.identity.tier') }}</span>
+            <span class="v">{{ $t('uc.identity.tiers.' + status.data.tier) }}</span>
+          </div>
+          <p class="ix-lead">{{ $t('uc.identity.tierMeaning') }}</p>
+
+          <div v-if="status.data.records.length" class="ix-scroll">
+            <table class="ix-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('uc.identity.submitted') }}</th>
+                  <th>{{ $t('uc.identity.tier') }}</th>
+                  <th>{{ $t('uc.identity.jurisdiction') }}</th>
+                  <th>{{ $t('uc.identity.recordStatus') }}</th>
+                  <th>{{ $t('uc.identity.reviewed') }}</th>
+                  <th>{{ $t('uc.identity.expires') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in status.data.records" :key="r.id">
+                  <td>{{ r.createdAt | dateFormat }}</td>
+                  <td>{{ $t('uc.identity.tiers.' + r.tier) }}</td>
+                  <td>{{ r.jurisdiction }}</td>
+                  <td>{{ $t('uc.identity.recordStates.' + r.status) }}</td>
+                  <td>{{ r.reviewedAt ? (r.reviewedAt | dateFormat) : '—' }}</td>
+                  <td>{{ r.expiresAt ? (r.expiresAt | dateFormat) : $t('uc.identity.noExpiry') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="ix-note ix-note-quiet">{{ $t('uc.identity.noRecords') }}</div>
         </div>
-        <Form class="apply-form" :model="apply_form" label-position="top">
-          <FormItem :label="phone">
-            <Input type="text" v-model="apply_form.telno" :placeholder="noEmpty"></Input>
-          </FormItem>
-          <FormItem :label="wechat">
-            <Input type="text" v-model="apply_form.wechat" :placeholder="noEmpty"></Input>
-          </FormItem>
-          <FormItem :label="qq">
-            <Input type="text" v-model="apply_form.qq" :placeholder="noEmpty"></Input>
-          </FormItem>
-          <Row>
-            <Col span="8">
-            <FormItem :label="bizhong">
-              <Select v-model="apply_form.coinSymbol" :placeholder="select" @on-change="onCoinChange">
-                <Option v-for="(item,index) in auditCurrency" :value="item.coin.unit" :key="index"></Option>
-              </Select>
-            </FormItem>
-            </Col>
-            <Col span="8">
-            <span>&nbsp;</span>
-            </Col>
-            <Col span="8">
-            <FormItem :label="shuliang">
-              <Label v-model="apply_form.amount">{{apply_form.amount}}</Label>
-            </FormItem>
-            </Col>
-          </Row>
-          <Row>
-            <Col span="8">
-            <Upload type="drag" ref="upload1" :on-success="assetHandleSuccess" :headers="uploadHeaders" :action="uploadUrl" :on-remove="assetRemove">
-              <span style="line-height: 100px;font-size: 50px;color:#ccc;">+</span>
-              <img v-show="assetImg" class="previewImg" :src="assetImg">
-            </Upload>
-            <span>{{$t("uc.identity.gerenzichan")}}</span>
-            </Col>
-            <Col span="8">
-            <span>&nbsp;</span>
-            </Col>
-            <Col span="8">
-            <Upload type="drag" ref="upload2" :on-success="tradeHandleSuccess" :headers="uploadHeaders" :action="uploadUrl" :on-remove="tradeRemove">
-              <span style="line-height: 100px;font-size: 50px;color:#ccc;">+</span>
-              <img v-show="tradeImg" class="previewImg" :src="tradeImg">
-            </Upload>
-            <span>{{$t("uc.identity.shuzizichan")}}</span>
-            </Col>
-          </Row>
-          <FormItem style="margin-top: 20px;">
-            <Button style="width:100%;background:#00c2a8;color:#fff;border:1px solid #00c2a8;" type="info" @click="apply3('apply_form')" :disabled="applyBtn">{{$t("uc.identity.lijishenqing")}}</Button>
-          </FormItem>
-        </Form>
-      </div>
-      <p slot="footer"></p>
-    </Modal>
+      </IxState>
+    </div>
 
-    <Modal v-model="modal_return" @on-ok="returnAudit">
-      <p slot="header" style="text-align: center;">{{$t("uc.identity.tips")}}</p>
-      <p style="text-align: center;font-size: 14px;">{{$t("uc.identity.wufachexiao")}}</p>
-      <p style="text-align: center;font-size: 14px;">{{$t("uc.identity.suredo")}}</p>
-      <Input v-model="returnReason" type="textarea" :placeholder=placeholder:rows="4"></Input>
-    </Modal>
+    <!-- ── ask to be verified ───────────────────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('uc.identity.apply') }}</h2>
+        <span class="ix-sub">kyc.submit</span>
+      </div>
+      <p class="ix-lead">{{ $t('uc.identity.applyLead') }}</p>
+
+      <Form :label-width="160" class="ident-form">
+        <FormItem :label="$t('uc.identity.tier')">
+          <Select v-model="form.tier" style="width:280px">
+            <Option value="basic">{{ $t('uc.identity.tiers.basic') }}</Option>
+            <Option value="full">{{ $t('uc.identity.tiers.full') }}</Option>
+            <Option value="institutional">{{ $t('uc.identity.tiers.institutional') }}</Option>
+          </Select>
+        </FormItem>
+
+        <FormItem :label="$t('uc.identity.jurisdiction')">
+          <Input v-model="form.jurisdiction" style="width:120px" maxlength="2" placeholder="GB" />
+          <span class="hint">{{ $t('uc.identity.jurisdictionHint') }}</span>
+        </FormItem>
+
+        <p v-if="submitError" class="ix-empty ix-empty-error" role="alert">{{ submitError }}</p>
+        <p v-if="submitted" class="ix-ok" role="status">{{ $t('uc.identity.submitted_ok') }}</p>
+
+        <FormItem>
+          <Button type="primary" :loading="submitting" @click="submit">
+            {{ $t('uc.identity.submitBtn') }}
+          </Button>
+        </FormItem>
+      </Form>
+
+      <!--
+        The vendor's merchant flow had two more steps, and both are absent here.
+        Named rather than quietly dropped, because a merchant reading this page
+        needs to know the process is incomplete, not just different.
+      -->
+      <IxState reason="no_surface" :message="$t('uc.identity.missingSteps')" />
+    </div>
   </div>
-
 </template>
-<script>
-export default {
-  data() {
-    return {
-      noEmpty: "Required",
-      review: this.$t("uc.identity.review"), //Prepare documents
-      prepare: this.$t("uc.identity.prepare"), //Submit for review;
-      result: this.$t("uc.identity.result"), //Await outcome;
-      certified: this.$t("uc.identity.certified"), //Verified
-      shenheshibai: this.$t("uc.identity.shenheshibai"), //Review failed
-      shangjiazhuxiao: this.$t("uc.identity.shangjiazhuxiao"), //Merchant deregistered
-      tijiaoshenqing: this.$t("uc.identity.tijiaoshenqing"), //Submit application
-      shenheshibai: this.$t("uc.identity.shenheshibai"), //Review failed
-      passed: this.$t("uc.identity.passed"), //Approved
-      placeholder: this.$t("uc.identity.placeholder"),
-      select: this.$t("uc.identity.chosen"),
-      phone: this.$t("uc.identity.phone"),
-      qq: this.$t("uc.identity.qq"),
-      wechat: this.$t("uc.identity.wx"),
-      bizhong: this.$t("uc.identity.bizhong"),
-      shuliang: this.$t("uc.identity.shuliang"),
-      loginmsg: this.$t("common.logintip"),
-      single: false,
-      value: "",
-      isShowShang: true,
-      isShowMailt: false,
-      isShowSubmitted: false,
-      isShowSuccess: false,
-      activeStepIndex: 0,
-      steps: [
-        this.$t("uc.identity.prepare"),
-        this.$t("uc.identity.review"),
-        this.$t("uc.identity.passed")
-      ],
-      certStatus: 0, //verification status — 0: not applied, 1: under review, 2: verified, 3: failed
-      certReason: "",
-      auditCurrency: "",
-      auditText: "",
-      modal_read: false,
-      modal_return: false,
-      agreeFrozen: false,
-      modal_apply: false,
-      applyBtn: false,
-      apply_form: {
-        telno: "",
-        wechat: "",
-        qq: "",
-        coinSymbol: "",
-        amount: "",
-        assetData: "",
-        tradeData: ""
-      },
-      assetImg: "",
-      tradeImg: "",
-      uploadHeaders: { "x-auth-token": localStorage.getItem("TOKEN") },
-      uploadUrl: this.host + "/uc/upload/oss/image",
-      returnReason: "",
-      refuseReason: ""
-    };
-  },
-  methods: {
-    islogin() {
-      let self = this;
-      // ;
-      this.$http
-.post(this.host + "/uc/approve/security/setting", {})
-.then(response => {
-          var resp = response.body;
-          if (resp.code == 0) {
-            if (resp.data.realName == null || resp.data.realName == "") {
-              this.$Message.warning(this.$t("otc.publishad.submittip1"));
-              self.$router.push("/uc/safe");
-            } else if (resp.data.phoneVerified == 0) {
-              this.$Message.warning(this.$t("otc.publishad.submittip2"));
-              self.$router.push("/uc/safe");
-            } else if (resp.data.fundsVerified == 0) {
-              this.$Message.warning(this.$t("otc.publishad.submittip3"));
-              self.$router.push("/uc/safe");
-            }
-          } else {
-            this.$Message.error(resp.message);
-          }
-        });
-    },
-    timer() {
-      setInterval(() => {
-        this.getSetting();
-      }, 10000);
-    },
-    publishAd() {
-      this.$router.push("/uc/ad/create");
-    },
-    returnAdit() {
-      this.modal_return = true;
-    },
-    returnAudit() {
-      var params = {};
-      params["detail"] = this.returnReason;
-      this.$http
-.post(this.host + "/uc/approve/cancel/business", params)
-.then(res => {
-          let resp = res.body;
-          if (resp.code == 0) {
-            this.$Message.success("Submitted!");
-            this.modal_return = false;
-            this.getSetting();
-          } else {
-            this.$Message.error(resp.message);
-          }
-        });
-    },
-    getAudiCoin(symbol) {
-      var coin = null;
-      for (var i = 0; i < this.auditCurrency.length; i++) {
-        if (symbol == this.auditCurrency[i].coin.unit) {
-          coin = this.auditCurrency[i];
-          break;
-        }
-      }
-      return coin;
-    },
-    onCoinChange(value) {
-      var coin = this.getAudiCoin(value);
-      if (coin!= null) {
-        this.apply_form.amount = coin.amount;
-      }
-    },
-    getSetting() {
-      this.$http
-.get(this.host + this.api.uc.identification)
-.then(res => {
-          let certifiedBusinessStatus = res.body.data.certifiedBusinessStatus;
-          this.activeStepIndex = certifiedBusinessStatus;
-          this.certStatus = certifiedBusinessStatus;
-          this.certReason = res.body.data.detail;
-          this.refuseReason = res.body.data.reason;
-        })
-.catch(function(error) {});
-    },
-    assetHandleSuccess(res, file, fileList) {
-      // fileList = fileList[fileList.length-1]
-      this.$refs.upload1.fileList = [fileList[fileList.length - 1]];
-      this.apply_form.assetData = res.data;
-      this.assetImg = res.data;
-    },
-    tradeHandleSuccess(res, file, fileList) {
-      this.$refs.upload2.fileList = [fileList[fileList.length - 1]];
-      this.apply_form.tradeData = res.data;
-      this.tradeImg = res.data;
-    },
-    assetRemove(file, fileList) {
-      this.apply_form.assetData = "";
-      this.assetImg = "";
-    },
-    tradeRemove(file, fileList) {
-      this.apply_form.tradeData = "";
-      this.tradeImg = "";
-    },
-    getAuthFound() {
-      this.$http
-.get(this.host + "/uc/approve/business-auth-deposit/list")
-.then(res => {
-          var resp = res.body;
-          if (resp.code == 0) {
-            this.auditCurrency = resp.data;
-            var tempText = "";
-            for (var i = 0; i < resp.data.length; i++) {
-              if (i == 0) {
-                //BHB;
-                this.apply_form.coinSymbol = resp.data[i].coin.unit;
-                //10000;
-                this.apply_form.amount = resp.data[i].amount;
-              }
-              tempText += resp.data[i].amount + "" + resp.data[i].coin.unit;
-              if (i < resp.data.length - 1) tempText += "or";
-            }
-            this.auditText = tempText;
-          }
-        });
-    },
-    apply() {
-      let stasingle = this.single;
-      if (stasingle == false) {
-        this.$Message.warning(this.$t("uc.identity.approve"));
-        return;
-      }
-      this.modal_read = true;
-      return;
-      this.$http
-.get(this.host + this.api.uc.apply)
-.then(res => {
-          debugger;
-          var resp = res.body;
-          if (resp.code == 0) {
-            this.$Message.success(resp.message);
-            this.activeStepIndex = 1;
-          } else {
-            this.$Message.warning(resp.message);
-          }
-        })
-.catch(function(error) {
-          this.$Message.error(error);
-        });
-    },
-    apply2() {
-      let agreeFrozen = this.agreeFrozen;
-      if (agreeFrozen == false) {
-        this.$store.state.lang!= "English" &&
-          this.$Message.warning("Please agree to lock the required amount");
-        this.$store.state.lang == "English" &&
-          this.$Message.warning(
-            "Please agree to freeze the corresponding amount of currency"
-);
-        return;
-      }
-      this.modal_read = false;
-      this.modal_apply = true;
-    },
-    apply3(form) {
-      if (this.apply_form.telno == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Enter your phone number");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please fill in your cell phone number");
-        return;
-      }
-      if (this.apply_form.wechat == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Enter your WeChat ID");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please fill in your cell wechat number");
-        return;
-      }
-      if (this.apply_form.qq == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Enter your QQ ID");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please fill in your cell qq number");
-        return;
-      }
-      if (this.apply_form.assetData == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Upload proof of funds");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please upload the asset certificate");
-        return;
-      }
-      if (this.apply_form.tradeData == "") {
-        this.$store.state.lang!= "English" &&
-          this.$Message.error("Upload proof of trading");
-        this.$store.state.lang == "English" &&
-          this.$Message.error("Please upload the transaction certificate");
-        return;
-      }
-      var params = {};
-      params["businessAuthDepositId"] = this.getAudiCoin(
-        this.apply_form.coinSymbol
-).id;
-      params["json"] = JSON.stringify(this.apply_form);
-      this.$http
-.post(this.host + "/uc/approve/certified/business/apply", params)
-.then(res => {
-          var resp = res.body;
-          if (resp.code == 0) {
-            this.$Message.success("Submitted!");
-            this.modal_apply = false;
-            this.certStatus = 1;
-          } else {
-            this.$Message.error(resp.message);
-          }
-        });
-    }
-  },
-  created() {
-    //this.timer();
-    this.islogin();
-    this.getSetting();
-    this.getAuthFound();
-  },
-  computed: {
-    lang: function() {
-      return this.$store.state.lang;
-    }
-  },
-  watch: {
-    lang: function() {
-      this.prepare = this.$t("uc.identity.prepare");
-      this.review = this.$t("uc.identity.review");
-      this.result = this.$t("uc.identity.result");
-      this.certified = this.$t("uc.identity.certified"); //Verified
-      this.shenheshibai = this.$t("uc.identity.shenheshibai"); //Review failed
-      this.shangjiazhuxiao = this.$t("uc.identity.shangjiazhuxiao"); //Merchant deregistered
-      this.tijiaoshenqing = this.$t("uc.identity.tijiaoshenqing"); //Submit application
-      this.shenheshibai = this.$t("uc.identity.shenheshibai"); //Review failed
-      this.passed = this.$t("uc.identity.passed"); //Approved
-
-      this.phone = this.$t("uc.identity.phone");
-      this.qq = this.$t("uc.identity.qq");
-      this.wechat = this.$t("uc.identity.wx");
-      this.bizhong = this.$t("uc.identity.bizhong");
-      this.shuliang = this.$t("uc.identity.shuliang");
-    }
-  }
-};
-</script>
 
 <style scoped>
 .previewImg {
@@ -876,4 +421,144 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 }
 </style>
 
+<style scoped>
+.ident-page {
+  padding-top: 80px;
+}
+.ident-form {
+  max-width: 640px;
+}
+.tier-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.tier-row .k {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ix-text-faint, #6b7280);
+}
+.tier-row .v {
+  font-size: 20px;
+  color: var(--ix-text, #e8ebf0);
+}
+.ix-lead {
+  color: var(--ix-text-dim, #8a909c);
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+.hint {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--ix-text-faint, #6b7280);
+}
+.ix-ok {
+  color: var(--ix-up, #00b275);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+</style>
 
+<script>
+/**
+ * VERIFICATION — svc-identity `kyc.status` and `kyc.submit`.
+ *
+ * WHY THIS SCREEN MATTERS MORE THAN ITS VENDOR ORIGINAL DID. The tier shown here
+ * is the one the jurisdiction matrix reads, and it is what refuses the OTC offer
+ * list to a fresh account (`module: 'p2p'` is custodial, so §22 gates it behind
+ * a tier). A reader who cannot see the P2P book is sent here by the refusal on
+ * that screen, and this is where they can do something about it.
+ *
+ * WHAT `kyc.submit` DOES AND DOES NOT DO. It records a REQUEST — the contract's
+ * own comment is "Grants nothing." Approval is a separate operator action
+ * (`kyc.approve`, scoped `admin:compliance` plus a second factor) against the
+ * record. So this form must not read as "get verified"; it reads as "ask to be
+ * verified", and the status table above shows the request sitting at `pending`
+ * until a human moves it.
+ *
+ * NO userId INPUT, deliberately, and worth not undoing: `kyc.submit` reads the
+ * identity from the token, so there is no way to submit on somebody else's
+ * behalf. The vendor's equivalent posted a member id from the form.
+ *
+ * WHAT WAS REMOVED FROM THE MERCHANT FLOW:
+ *
+ * - DOCUMENT UPLOAD. Two `<Upload>` controls posting images to
+ *   `/uc/upload/oss/image` on the Java backend. There is no document store
+ *   behind our edge and no upload route at all. `kyc.submit` accepts a
+ *   `providerRef` string — a pointer to a document held by an outside verifier —
+ *   but no such integration exists, so there is nothing to put in it and the
+ *   field is not shown rather than shown and ignored.
+ * - THE MERCHANT DEPOSIT. `/uc/approve/business-auth-deposit/list` returned the
+ *   coin and amount a merchant had to lock as a bond. That is a money movement,
+ *   and there is no recipe for it: nothing in the ledger client posts a merchant
+ *   bond. Rendering a deposit requirement we cannot take, or worse taking one
+ *   outside the ledger, are both out of the question.
+ *
+ * Both are stated on the page. A merchant applying through this form is being
+ * verified, not bonded, and should not think otherwise.
+ */
+import IxState from "../../components/intafaced/IxState.vue";
+import ixModule from "../../components/intafaced/module-mixin.js";
+import { query, mutate } from "../../config/intafaced.js";
+
+export default {
+  components: { IxState },
+  mixins: [ixModule],
+  data() {
+    return {
+      status: this.emptySection(),
+      submitting: false,
+      submitted: false,
+      submitError: "",
+      form: {
+        tier: "basic",
+        jurisdiction: ""
+      }
+    };
+  },
+  methods: {
+    refresh() {
+      this.load("status", query("identity", "kyc.status", undefined, this.ixToken));
+    },
+    submit() {
+      var self = this;
+      this.submitError = "";
+      this.submitted = false;
+
+      // The contract wants exactly two letters and uppercases them itself. Check
+      // here so the reader is told which field is wrong rather than being handed
+      // a schema error.
+      if (!/^[A-Za-z]{2}$/.test(this.form.jurisdiction)) {
+        this.submitError = this.$t("uc.identity.badJurisdiction");
+        return;
+      }
+
+      this.submitting = true;
+      mutate(
+        "identity",
+        "kyc.submit",
+        { tier: this.form.tier, jurisdiction: this.form.jurisdiction.toUpperCase() },
+        this.ixToken
+      ).then(function (res) {
+        self.submitting = false;
+        if (!res.ok) {
+          self.submitError = res.message;
+          return;
+        }
+        self.submitted = true;
+        // Re-read rather than pushing the new record in locally: the tier is
+        // derived server-side from approved, unexpired records, and a submitted
+        // request changes no tier at all.
+        self.refresh();
+      });
+    }
+  },
+  created() {
+    this.$store.commit("navigate", "nav-other");
+    this.refresh();
+  }
+};
+</script>

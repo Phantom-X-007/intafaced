@@ -1,42 +1,94 @@
 <template>
   <div class="nav-right tradeCenter">
-    <!-- <section class="trade-group merchant-top"> -->
-    <!-- <i class="merchant-icon tips"></i>
-            <span class="tips-word">{{this.coin.toUpperCase()}}</span> -->
-    <!-- <a href="/user/merchants">Apply to become a verified merchant&gt;&gt;</a> -->
-    <!--<a href="/#/identbusiness">{{$t("otc.applymerchant")}}&gt;&gt;</a>-->
-    <!-- </section> -->
     <section class="list-content">
-      <!-- Stream A: failed ad API must not look like "no ads". -->
-      <p v-if="adsError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ adsError }}</p>
-      <Tabs :value="tabPage" v-model="tabPage" v-if="!adsError">
-        <TabPane :label="$t('otc.buyin')" name="buy">
-          <div class="table-responsive list-table">
-            <p v-if="!loading && adsReachable && advertiment.ask.rows.length === 0" class="ix-empty">{{ $t('otc.adsEmpty') }}</p>
-            <Table :no-data-text="adsTableEmptyText" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader? 250: ''" :size="tableSize" :data="advertiment.ask.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
-            <div class="page_change">
-              <div style="float: right;">
-                <Page v-if="advertiment.ask.totalElement > 0" :pageSize="advertiment.ask.pageNumber" :total="advertiment.ask.totalElement" :current="advertiment.ask.currentPage" @on-change="changePage"></Page>
+      <IxState
+        :loading="offers.loading"
+        :reason="offers.reason"
+        :message="offers.message"
+        endpoint="/api/p2p/trpc/offers.list"
+      >
+        <Tabs :value="tabPage" v-model="tabPage">
+          <!--
+            SIDE, FROM THE READER'S POINT OF VIEW.
+
+            offers.list returns the MAKER's side: an offer with side "sell" is a
+            maker selling the asset, which is the offer a reader BUYS from. The
+            vendor's two tabs meant the same thing, and its columns were built
+            from an `advertiseType` integer — exactly the kind of mapping that
+            gets inverted in a refactor and silently sells someone the wrong
+            side. Naming the tabs after what the reader does, and deriving them
+            from the maker side in one place (`buyable` / `sellable`), keeps the
+            inversion in a single expression instead of scattered through render
+            functions.
+          -->
+          <TabPane :label="$t('otc.buyin')" name="buy">
+            <div class="table-responsive list-table">
+              <p v-if="!buyable.length" class="ix-empty">{{ $t('otc.adsEmpty') }}</p>
+              <div v-else class="ix-scroll">
+                <table class="ix-table">
+                  <thead>
+                    <tr>
+                      <th>{{ $t('otc.maker') }}</th>
+                      <th>{{ $t('otc.price') }}</th>
+                      <th>{{ $t('otc.limits') }}</th>
+                      <th>{{ $t('otc.available') }}</th>
+                      <th>{{ $t('otc.paymethod') }}</th>
+                      <th>{{ $t('otc.operate') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="o in buyable" :key="o.id">
+                      <td>{{ maskMaker(o.makerId) }}</td>
+                      <td class="ix-num">{{ o.price }} {{ o.fiatCurrency }}</td>
+                      <td class="ix-num">{{ o.minAmount }} – {{ o.maxAmount }}</td>
+                      <td class="ix-num">{{ o.remainingAmount }} {{ o.asset }}</td>
+                      <td>{{ methodsOf(o) }}</td>
+                      <td>
+                        <a class="ix-act ix-act-buy" @click="openOffer(o)">{{ $t('otc.buyin') }}</a>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        </TabPane>
-        <TabPane :label="$t('otc.sellout')" name="sell">
-          <div class="table-responsive list-table">
-            <p v-if="!loading && adsReachable && advertiment.bid.rows.length === 0" class="ix-empty">{{ $t('otc.adsEmpty') }}</p>
-            <Table :no-data-text="adsTableEmptyText" :border="showBorder" :stripe="showStripe" :show-header="showHeader" :height="fixedHeader? 250: ''" :size="tableSize" :data="advertiment.bid.rows" :columns="advertiment.columns" :loading="loading" :disabled-hover="true"></Table>
-            <div class="page_change">
-              <div style="float: right;">
-                <Page v-if="advertiment.bid.totalElement > 0" :pageSize="advertiment.bid.pageNumber" :total="advertiment.bid.totalElement" :current="advertiment.bid.currentPage" @on-change="changePage"></Page>
+          </TabPane>
+          <TabPane :label="$t('otc.sellout')" name="sell">
+            <div class="table-responsive list-table">
+              <p v-if="!sellable.length" class="ix-empty">{{ $t('otc.adsEmpty') }}</p>
+              <div v-else class="ix-scroll">
+                <table class="ix-table">
+                  <thead>
+                    <tr>
+                      <th>{{ $t('otc.maker') }}</th>
+                      <th>{{ $t('otc.price') }}</th>
+                      <th>{{ $t('otc.limits') }}</th>
+                      <th>{{ $t('otc.available') }}</th>
+                      <th>{{ $t('otc.paymethod') }}</th>
+                      <th>{{ $t('otc.operate') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="o in sellable" :key="o.id">
+                      <td>{{ maskMaker(o.makerId) }}</td>
+                      <td class="ix-num">{{ o.price }} {{ o.fiatCurrency }}</td>
+                      <td class="ix-num">{{ o.minAmount }} – {{ o.maxAmount }}</td>
+                      <td class="ix-num">{{ o.remainingAmount }} {{ o.asset }}</td>
+                      <td>{{ methodsOf(o) }}</td>
+                      <td>
+                        <a class="ix-act ix-act-sell" @click="openOffer(o)">{{ $t('otc.sellout') }}</a>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        </TabPane>
-      </Tabs>
+          </TabPane>
+        </Tabs>
+        <p class="ix-cap-note">{{ $t('otc.listCap') }}</p>
+      </IxState>
     </section>
   </div>
 </template>
-
 
 <style scoped lang="scss">
 #List.nav-right {
@@ -738,382 +790,148 @@
 // }
 </style>
 
-
+<style scoped>
+.ix-act {
+  cursor: pointer;
+  font-weight: 600;
+}
+.ix-act-buy { color: var(--ix-up, #00b275); }
+.ix-act-sell { color: var(--ix-down, #f15057); }
+/* Money is a decimal string. Tabular figures align the columns without anything
+   rounding or reformatting the value to achieve it. */
+.ix-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ix-cap-note {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--ix-text-faint, #6b7280);
+}
+</style>
 
 <script>
+/**
+ * THE OFFER LIST for one asset — svc-p2p `offers.list`.
+ *
+ * MONEY. `price`, `minAmount`, `maxAmount` and `remainingAmount` arrive as
+ * decimal strings and are rendered as decimal strings. Nothing here parses,
+ * multiplies, rounds or reformats them. The vendor's version pushed every
+ * figure through iView render functions that concatenated it with a hardcoded
+ * "CNY"; this reads `fiatCurrency` off each offer, because svc-p2p serves the
+ * enabled-currency table and the currency of an offer is a property of that
+ * offer, not of the page.
+ *
+ * FILTERING IS SERVER-SIDE. `offers.list` accepts `{ asset, fiatCurrency, side,
+ * limit }`. Asking it for one asset is both less data over the wire and less
+ * opportunity to disagree with the tab strip in Main.vue, which derives its
+ * tabs from the same procedure.
+ *
+ * PAGINATION IS GONE, and that is a real reduction rather than an oversight.
+ * The vendor paged with `pageNo`/`pageSize` against a Java endpoint that
+ * returned `totalElement`. `offers.list` has no cursor and no total — it takes
+ * `limit` (max 200) and returns an array. Rendering a pager over a list with no
+ * total would have meant inventing the page count, so the list is capped and
+ * the cap is stated on screen.
+ */
+import IxState from "../../components/intafaced/IxState.vue";
+import ixModule from "../../components/intafaced/module-mixin.js";
+import { query } from "../../config/intafaced.js";
+
+/** The contract ceiling. Named so the copy and the call cannot drift apart. */
+var LIST_LIMIT = 200;
+
 export default {
-  components: {},
+  components: { IxState },
+  mixins: [ixModule],
   data() {
-    var self = this;
     return {
-      showBorder: false,
-      showStripe: false,
-      showHeader: true,
-      showIndex: false,
-      showCheckbox: false,
-      fixedHeader: false,
-      loading: true,
-      /* Stream A: empty ads ≠ failed ad API */
-      adsReachable: false,
-      adsError: "",
-      dataCount: 10,
-      tableSize: "large",
-      tabPage: "buy",
-      advertiment: {
-        // Sell
-        ask: {
-          rows: [],
-          currentPage: 1,
-          totalPage: 1,
-          pageNumber: 10,
-          totalElement: 0
-        },
-        // Buy
-        bid: {
-          rows: [],
-          currentPage: 1,
-          totalPage: 1,
-          pageNumber: 10,
-          totalElement: 0
-        },
-        columns: [
-          {
-            title: self.$t("otc.merchant"),
-            key: "memberName",
-            // width: 160,
-            ellipsis: true,
-            render: function(h, params) {
-              var avatar = params.row.avatar,
-                haveAvatar = false;
-              var innerCNT = [];
-              if (avatar!= null && avatar!= "") {
-                innerCNT[0] = h(
-                  "div",
-                  {
-                    attrs: {
-                      class: "user-face user-avatar-public"
-                    }
-                  },
-                  [
-                    h("img", {
-                      attrs: {
-                        src: avatar,
-                        width: "45px",
-                        height: "45px"
-                      },
-                      style: {
-                        "border-radius": "50%"
-                      }
-                    })
-                  ]
-);
-              } else {
-                innerCNT[0] = h(
-                  "div",
-                  {
-                    attrs: {
-                      class: "user-face user-avatar-public"
-                    }
-                  },
-                  [
-                    h(
-                      "span",
-                      {
-                        attrs: {
-                          class: "user-avatar-in"
-                        }
-                      },
-                      params.row.memberName
-.replace(/^\s+|\s+$/g, "")
-.slice(0, 1)
-)
-                  ]
-);
-              }
-              innerCNT[1] = h("p", [
-                h(
-                  "a",
-                  {
-                    style: {
-                      marginRight: "8px",
-                      cursor: "pointer",
-                      paddingTop: "5px"
-                    },
-                    class: {
-                      // renzhengA: params.row.renzheng
-                    },
-                    on: {
-                      click: function() {
-                        if (self.isLogin) {
-                          self.$router.push(
-                            "/checkuser?id=" + params.row.memberName
-);
-                        } else {
-                          self.$router.push("/login");
-                        }
-                      }
-                    }
-                  },
-                  params.row.memberName
-                  // self.strpro(params.row.memberName)
-),
-                h(
-                  "div",
-                  {
-                    class: {
-                      // renzheng: params.row.renzheng
-                    }
-                  },
-                  ""
-)
-              ]);
-              if (params.row.level == 2)
-                innerCNT[2] = h(
-                  "div",
-                  {
-                    attrs: {
-                      class: "user-business-v"
-                    },
-                    style: {
-                      display: "inline-block",
-                      "vertical-align": "text-top"
-                    }
-                  },
-                  [
-                    h("img", {
-                      attrs: {
-                        src: require("../../assets/images/business_v.png")
-                      }
-                    })
-                  ]
-);
-              return h("div", innerCNT);
-            }
-          },
-          {
-            title: self.$t("otc.volume"),
-            key: "transactions",
-            width:100,
-            align:"center"
-          },
-          {
-            title: self.$t("otc.paymethod"),
-            key: "payMode",
-            align:"center",
-            // width:130
-          },
-          {
-            align:"center",
-            title: self.$t("otc.amount"),
-            key: "remainAmount"
-          },
-          {
-            title:"Limit",
-            align:'center',
-            render:(h, params)=>{
-              return h('div',{},params.row.minLimit + "-" + params.row.maxLimit + "CNY")
-            }
-          },
-          {
-            title:"Price",
-            align:'center',
-            render:(h, params)=>{
-              return h('div',{},params.row.price + "CNY")
-            }
-          },
-          // {
-          // title: self.$t("otc.price_coin"),
-          // key: "price",
-          // width: 170,
-          // render: function(h, params) {
-          // return h("div", [
-          // h(
-          // "p",
-          // {
-          // attrs: {
-          // class: "price"
-          // }
-          // },
-          // params.row.price + "CNY"
-          //),
-          // h(
-          // "p",
-          // {
-          // attrs: {
-          // class: "price2"
-          // }
-          // },
-          // params.row.minLimit + "-" + params.row.maxLimit + "CNY"
-          //)
-          // ]);
-          // }
-          // },
-          {
-            title: self.$t("otc.operate"),
-            key: "buyBtn",
-            width:70,
-            align:"center",
-            render: function(h, params) {
-              return h("p", [
-                h(
-                  "a",
-                  {
-                    style: {
-                      color: params.row.advertiseType == 0? "#f15057": "#00b275",
-                    },
-                    on: {
-                      click: () => {
-                        if (!self.isLogin) {
-                          self.$router.push("/login");
-                        } else if (!self.member.realName) {
-                          // } else if (!self.member.memberLevel) {
-                          self.$Message.error(self.$t("otc.validate"));
-                          setTimeout(() => {
-                            self.$router.push("/uc/safe");
-                          }, 2000);
-                        } else {
-                          self.$router.push(
-                            "/otc/tradeInfo?tradeId=" + params.row.advertiseId
-);
-                        }
-                      }
-                    }
-                  },
-                  // [
-                  // h(
-                  // "div",
-                  // {
-                  // // props: {
-                  // // type:"error",
-                  // // // params.row.advertiseType == 0? "error": "success",
-                  // // long: true
-                  // // },
-                  // style: {
-                  // marginRight: "8px",
-                  // width: "80%",
-                  // }
-                  // },
-                      params.row.advertiseType == 0
-? self.$t("otc.sell")
-: self.$t("otc.buy")
-                    //)
-                  // ]
-)
-              ]);
-            }
-          }
-        ]
-      }
+      offers: this.emptySection(),
+      tabPage: "buy"
     };
   },
   computed: {
-    isLogin: function() {
+    isLogin: function () {
       return this.$store.getters.isLogin;
     },
-    member: function() {
+    member: function () {
       return this.$store.getters.member;
     },
-    coin: function() {
+    coin: function () {
       return this.$route.params[0];
     },
-    lang: function() {
-      return this.$store.state.lang;
+    rows: function () {
+      return this.offers.data || [];
     },
-    adsTableEmptyText: function() {
-      if (this.adsError) {
-        return this.adsError;
-      }
-      return this.$t("common.nodata");
+    /** Maker is selling, so the reader can buy. */
+    buyable: function () {
+      return this.rows.filter(function (o) {
+        return o.side === "sell" && o.status === "active";
+      });
+    },
+    /** Maker is buying, so the reader can sell. */
+    sellable: function () {
+      return this.rows.filter(function (o) {
+        return o.side === "buy" && o.status === "active";
+      });
     }
   },
   watch: {
-    coin: function() {
+    coin: function () {
       this.reloadAd();
-    },
-    lang: function() {
-      this.updateLangData();
     }
   },
   methods: {
-    updateLangData() {
-      this.advertiment.columns[0].title = this.$t("otc.merchant");
-      this.advertiment.columns[1].title = this.$t("otc.volume");
-      this.advertiment.columns[2].title = this.$t("otc.paymethod");
-      this.advertiment.columns[2].title = this.$t("otc.amount");
-      this.advertiment.columns[2].title = this.$t("otc.price_coin");
-      this.advertiment.columns[2].title = this.$t("otc.operate");
-    },
-    loadAd(pageNo, advertiseType, table) {
-      // fetch ads — fail must not look like "no ads"
-      let params = {};
-      table.rows = [];
-      table.totalElement = 0;
-      table.currentPage = pageNo;
-      params["pageNo"] = pageNo;
-      params["pageSize"] = table.pageNumber;
-      params["advertiseType"] = advertiseType;
-      params["unit"] = this.coin;
-      this.$http
-        .post(this.host + this.api.otc.advertise, params)
-        .then(response => {
-          var resp = response.body;
-          if (resp && resp.code == 0) {
-            if (resp.data && resp.data.context) {
-              table.rows = resp.data.context;
-              table.totalElement = resp.data.totalElement || 0;
-            } else {
-              table.rows = [];
-              table.totalElement = 0;
-            }
-            this.adsReachable = true;
-            this.adsError = "";
-            this.loading = false;
-          } else {
-            /* Parallel buy/sell loads: only surface error if nothing succeeded. */
-            if (!this.adsReachable) {
-              this.adsError =
-                this.$t("otc.adsUnavailable") ||
-                "OTC ads did not answer — list is unknown, not empty.";
-            }
-            this.loading = false;
-            if (resp && resp.message) this.$Message.error(resp.message);
-          }
-        })
-        .catch(() => {
-          if (!this.adsReachable) {
-            this.adsError =
-              this.$t("otc.adsUnavailable") ||
-              "OTC ads service did not respond — list is unknown, not empty.";
-          }
-          this.loading = false;
-        });
-    },
-    changePage(page) {
-      if (this.tabPage == "sell") {
-        this.loadAd(page, 0, this.advertiment.bid);
-      } else {
-        this.loadAd(page, 1, this.advertiment.ask);
-      }
-    },
     reloadAd() {
-      this.loading = true;
-      this.adsError = "";
-      this.adsReachable = false;
-      this.loadAd(1, 0, this.advertiment.bid);
-      this.loadAd(1, 1, this.advertiment.ask);
+      var input = { limit: LIST_LIMIT };
+      if (this.coin) input.asset = String(this.coin).toUpperCase();
+      this.load("offers", query("p2p", "offers.list", input, this.ixToken));
     },
-    strpro(str) {
-      let newStr = str;
-      str = str.slice(1);
-      var re = /[\D\d]*/g;
-      var str2 = str.replace(re, function(str) {
-        var result = "";
-        for (var i = 0; i < str.length; i++) {
-          result += "*";
+    /**
+     * Payment methods, as the offer states them.
+     *
+     * `methods` is `z.array(z.unknown())` in the contract — svc-p2p does not
+     * constrain the shape, so this renders what is there without asserting a
+     * schema it has not been promised. An offer with no methods says so rather
+     * than rendering an empty cell that reads as "any method".
+     */
+    methodsOf(offer) {
+      var m = offer.methods;
+      if (!m || !m.length) return this.$t("otc.noMethods");
+      var names = [];
+      for (var i = 0; i < m.length; i++) {
+        var x = m[i];
+        if (x == null) continue;
+        if (typeof x === "string") {
+          names.push(x);
+        } else {
+          // A named object is the likely future shape. Fall through to nothing
+          // rather than printing "[object Object]" at a reader.
+          var n = x.name || x.method || x.type;
+          if (n) names.push(String(n));
         }
-        return result;
-      });
-      return newStr.slice(0, 1) + str2;
+      }
+      return names.length ? names.join(", ") : this.$t("otc.noMethods");
+    },
+    /**
+     * The maker, shown partially.
+     *
+     * `makerId` is a user id, not a display name — svc-p2p carries no nickname
+     * and this screen will not invent one. Showing it in full would hand a
+     * stable identifier to anyone browsing the book, so it is truncated the way
+     * the vendor truncated its usernames.
+     */
+    maskMaker(makerId) {
+      if (!makerId) return "—";
+      var s = String(makerId);
+      return s.length <= 8 ? s : s.slice(0, 8) + "…";
+    },
+    openOffer(offer) {
+      if (!this.isLogin) {
+        this.$router.push("/login");
+        return;
+      }
+      this.$router.push("/otc/tradeInfo?offerId=" + offer.id);
     }
   },
   created() {

@@ -25,12 +25,42 @@ export default new Vuex.Store({
         navigate(state, nav) {
             state.activeNav = nav;
         },
+        /**
+         * The signed-in user as the shell's chrome and screens read it.
+         *
+         * NO LONGER PERSISTED, and that is the whole point. `member` used to be
+         * the vendored exchange's ucenter login, written to localStorage and
+         * read back by `recoveryMember` on every boot. Authentication now runs
+         * against svc-identity (pages/uc/Login.vue), whose session is held in
+         * memory only — see setIxSession below for why.
+         *
+         * Persisting `member` beside a memory-only bearer would manufacture the
+         * one state that must never exist: `isLogin === true` with no token
+         * behind it, after a reload, across the ~25 screens that branch on it.
+         * Each would call a scoped procedure as an anonymous caller and render
+         * the refusal as though the reader had done something wrong.
+         *
+         * A memory-only member and a memory-only session cannot disagree.
+         */
         setMember(state, member) {
             state.member = member;
-            localStorage.setItem('MEMBER', JSON.stringify(member));
         },
+        /**
+         * Boot-time recovery — which now deliberately recovers nothing.
+         *
+         * Kept as a mutation because App.vue commits it on every boot. It clears
+         * the vendored keys instead of restoring them, so a `MEMBER` or `TOKEN`
+         * left behind by an older build of this shell, or by the dead Java
+         * ucenter login, cannot present itself as a live session.
+         */
         recoveryMember(state) {
-            state.member = JSON.parse(localStorage.getItem('MEMBER'));
+            state.member = null;
+            try {
+                localStorage.removeItem('MEMBER');
+                localStorage.removeItem('TOKEN');
+            } catch (e) {
+                // A private-mode storage refusal is not a reason to fail boot.
+            }
         },
         // English only. Both mutations are hard-wired: components across the app
         // branch on `state.lang`, and a stored preference from an earlier build
@@ -66,9 +96,10 @@ export default new Vuex.Store({
          * exposure before the fix lands rather than after. A reload signs the
          * platform session out; the screens say so.
          *
-         * This is a SEPARATE session from `member`, which is the vendored
-         * exchange's own ucenter login. One account is the goal; this is not it
-         * yet, and no screen pretends otherwise.
+         * This WAS a separate session from `member`, the vendored exchange's own
+         * ucenter login. It is not any more: `member` is now a projection of
+         * this session (see setMember), so the shell has exactly one notion of
+         * who is signed in, and it is the svc-identity one.
          */
         setIxSession(state, session) {
             state.ixSession = session;
@@ -78,6 +109,7 @@ export default new Vuex.Store({
         clearIxSession(state) {
             state.ixSession = null;
             state.ixSubAccountId = null;
+            state.member = null;
         },
         /** @param {string|null} id identity sub-account uuid, or null for parent */
         setIxSubAccountId(state, id) {
@@ -88,8 +120,17 @@ export default new Vuex.Store({
         member(state) {
             return state.member;
         },
+        /**
+         * Signed in means: we hold a live svc-identity access token.
+         *
+         * It used to mean "a `member` object exists", which after the change to
+         * setMember/recoveryMember would have been true for a stale localStorage
+         * blob with no bearer behind it. Deriving it from the session instead
+         * makes the check fail closed — a reload signs you out, which is the
+         * truth while the platform session is memory-only.
+         */
         isLogin(state) {
-            return state.member!= null;
+            return state.ixSession != null;
         },
         lang(state) {
             return state.lang;

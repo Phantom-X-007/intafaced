@@ -3,315 +3,59 @@
     <div class="nav-right">
       <div class="bill_box_order">
         <div class="order_box">
-          <Tabs value="name1" @on-click="showItem">
-            <TabPane :label="$t('uc.otcorder.unpaid')" name="name1">
-              <div class="order-table">
-                <IxHonestState v-if="listError" kind="error" :message="listError" />
-                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
-                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
-                  <div style="float: right;">
-                    <Page v-if="totalPage > 0" :total="totalNum" :current="currentPage" show-total @on-change="changePage" :page-size="pageSize"></Page>
+          <IxState
+            :loading="trades.loading"
+            :reason="trades.reason"
+            :message="trades.message"
+            endpoint="/api/p2p/trpc/trades.list"
+          >
+            <Tabs :value="tab" v-model="tab">
+              <TabPane v-for="p in panes" :key="p.name" :label="p.label" :name="p.name">
+                <div class="order-table">
+                  <p v-if="!visible.length" class="ix-empty">{{ $t('uc.otcorder.emptyTab') }}</p>
+                  <div v-else class="ix-scroll">
+                    <table class="ix-table">
+                      <thead>
+                        <tr>
+                          <th>{{ $t('uc.otcorder.created') }}</th>
+                          <th>{{ $t('otc.side') }}</th>
+                          <th>{{ $t('otc.asset') }}</th>
+                          <th>{{ $t('otc.tradeinfo.num') }}</th>
+                          <th>{{ $t('otc.tradeinfo.price') }}</th>
+                          <th>{{ $t('otc.chat.transmoney') }}</th>
+                          <th>{{ $t('uc.otcorder.status') }}</th>
+                          <th>{{ $t('otc.operate') }}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="tr in visible" :key="tr.id">
+                          <td>{{ tr.createdAt | dateFormat }}</td>
+                          <td>{{ sideOf(tr) }}</td>
+                          <td>{{ tr.asset }}</td>
+                          <td class="ix-num">{{ tr.amount }}</td>
+                          <td class="ix-num">{{ tr.price }} {{ tr.fiatCurrency }}</td>
+                          <td class="ix-num">{{ tr.fiatAmount }} {{ tr.fiatCurrency }}</td>
+                          <td>{{ $t('otc.chat.state.' + tr.status) }}</td>
+                          <td>
+                            <router-link :to="'/chat?tradeId=' + tr.id" class="ix-act">
+                              {{ $t('otc.moredetail') }}
+                            </router-link>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </div>
-            </TabPane>
-            <TabPane :label="$t('uc.otcorder.paided')" name="name2">
-              <div class="order-table">
-                <IxHonestState v-if="listError" kind="error" :message="listError" />
-                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
-                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
-                  <div style="float: right;">
-                    <Page v-if="totalPage > 0" :total="totalNum" :current="currentPage" show-total @on-change="changePage" :page-size="pageSize"></Page>
-                  </div>
-                </div>
-              </div>
-            </TabPane>
-            <TabPane :label="$t('uc.otcorder.finished')" name="name3">
-              <div class="order-table">
-                <IxHonestState v-if="listError" kind="error" :message="listError" />
-                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
-                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
-                  <div style="float: right;">
-                    <Page v-if="totalPage > 0" :total="totalNum" :current="currentPage" show-total @on-change="changePage" :page-size="pageSize"></Page>
-                  </div>
-                </div>
-              </div>
-            </TabPane>
-            <TabPane :label="$t('uc.otcorder.canceled')" name="name0">
-              <div class="order-table">
-                <IxHonestState v-if="listError" kind="error" :message="listError" />
-                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
-                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
-                  <div style="float: right;">
-                    <Page v-if="totalPage > 0" :total="totalNum" :pageSize="pageSize" show-total :current="currentPage" @on-change="changePage"></Page>
-                  </div>
-                </div>
-              </div>
-            </TabPane>
-            <TabPane :label="$t('uc.otcorder.appealing')" name="name4">
-              <div class="order-table">
-                <IxHonestState v-if="listError" kind="error" :message="listError" />
-                <IxHonestState v-else-if="!loading && listReachable && tableOrder.length === 0" kind="empty" message="No OTC orders in this tab yet" />
-                <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsOrder" :data="tableOrder" :loading="loading" :disabled-hover="true"></Table>
-                <div style="margin: 10px;overflow: hidden" class="page" v-if="!listError">
-                  <div style="float: right;">
-                    <Page v-if="totalPage > 0" :total="totalNum" :current="currentPage" show-total @on-change="changePage" :page-size="pageSize"></Page>
-                  </div>
-                </div>
-              </div>
-            </TabPane>
-            <Input v-model="ordKeyword" slot="extra" @on-click="handleSearch" icon="ios-search" :placeholder="$t('uc.otcorder.searchtip')" style="width: 250px;margin-right: 20px;"></Input>
-          </Tabs>
+              </TabPane>
+            </Tabs>
+            <p class="ix-cap-note">{{ $t('uc.otcorder.listCap') }}</p>
+          </IxState>
         </div>
-
       </div>
     </div>
   </div>
 </template>
-<script>
-import IxHonestState from './IxHonestState.vue';
 
-export default {
-  components: { IxHonestState },
-  data() {
-    return {
-      ordKeyword: "",
-      choseBtn: 0,
-      whichItem: 1,
-      tableOrder: [],
-      loading: true,
-      listReachable: false,
-      listError: "",
-      totalPage: 0,
-      pageSize: 10,
-      totalNum: 0,
-      currentPage: 1,
-      loginmsg: this.$t("common.logintip")
-    };
-  },
-  methods: {
-    handleListApproveHistory() {},
-    changePage(pageNo) {
-      if (pageNo > 0) pageNo = pageNo - 1;
-      if (this.whichItem == 1) {
-        this.getOrder(1, pageNo);
-      } else if (this.whichItem == 2) {
-        this.getOrder(2, pageNo);
-      } else if (this.whichItem == 3) {
-        this.getOrder(3, pageNo);
-      } else if (this.whichItem == 0) {
-        this.getOrder(0, pageNo);
-      } else if (this.whichItem == 4) {
-        this.getOrder(4, pageNo);
-      }
-    },
-    applyOrderPayload(resp) {
-      if (resp && resp.code == 0 && resp.data) {
-        this.tableOrder = resp.data.content || [];
-        this.totalPage = resp.data.totalPages || 0;
-        this.totalNum = resp.data.totalElements || 0;
-        this.listReachable = true;
-        this.listError = "";
-        this.loading = false;
-        return true;
-      }
-      this.tableOrder = [];
-      this.listReachable = false;
-      this.listError =
-        "OTC orders did not answer — list is unknown, not empty.";
-      this.loading = false;
-      return false;
-    },
-    getOrder(status, pageNo) {
-      this.loading = true;
-      this.listReachable = false;
-      this.listError = "";
-      this.tableOrder = [];
-      let params = {};
-      params["status"] = status;
-      params["pageNo"] = pageNo;
-      params["pageSize"] = this.pageSize;
-      this.currentPage = pageNo + 1;
-      this.$http
-        .post(this.host + "/otc/order/self", params)
-        .then(response => {
-          var resp = response.body;
-          if (!this.applyOrderPayload(resp)) {
-            if (resp && resp.message) this.$Message.error(resp.message);
-            else this.$Message.error(this.loginmsg);
-          }
-        })
-        .catch(() => {
-          this.tableOrder = [];
-          this.listReachable = false;
-          this.listError =
-            "OTC order service did not respond — list is unknown, not empty.";
-          this.loading = false;
-        });
-    },
-    init() {},
-    handleSearch() {
-      this.loading = true;
-      this.listReachable = false;
-      this.listError = "";
-      this.tableOrder = [];
-      let params = {};
-      params["status"] = this.whichItem;
-      params["pageNo"] = 0;
-      params["pageSize"] = this.pageSize;
-      if (this.ordKeyword != "") {
-        params["orderSn"] = this.ordKeyword;
-      }
-      this.currentPage = 1;
-      this.$http
-        .post(this.host + "/otc/order/self", params)
-        .then(response => {
-          var resp = response.body;
-          if (!this.applyOrderPayload(resp)) {
-            if (resp && resp.message) this.$Message.error(resp.message);
-          }
-        })
-        .catch(() => {
-          this.tableOrder = [];
-          this.listReachable = false;
-          this.listError =
-            "OTC order service did not respond — list is unknown, not empty.";
-          this.loading = false;
-        });
-    },
-    showItem(name) {
-      if (name == "name1") {
-        this.whichItem = 1;
-      } else if (name == "name2") {
-        this.whichItem = 2;
-      } else if (name == "name3") {
-        this.whichItem = 3;
-      } else if (name == "name0") {
-        this.whichItem = 0;
-      } else if (name == "name4") {
-        this.whichItem = 4;
-      }
-      this.changePage(0);
-    },
-    strpro(str) {
-      let newStr = str;
-      str = str.slice(1);
-      var re = /[\D\d]*/g;
-      var str2 = str.replace(re, function(str) {
-        var result = "";
-        for (var i = 0; i < str.length; i++) {
-          result += "*";
-        }
-        return result;
-      });
-      return newStr.slice(0, 1) + str2;
-    }
-  },
-  created() {
-    this.changePage(0);
-  },
-  mounted() {
-    // this.init();
-  },
-  computed: {
-    tableColumnsOrder() {
-      let self = this;
-      let columns = [];
-      columns.push({
-        title: this.$t("uc.otcorder.orderno"),
-        key: "orderSn",
-        minWidth: 60,
-        align: "center",
-        render: function(h, params) {
-          return h("p", [
-            h(
-              "a",
-              {
-                on: {
-                  click: function() {
-                    self.$router.push("/chat?tradeId=" + params.row.orderSn);
-                  }
-                }
-              },
-              params.row.orderSn
-)
-          ]);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.otcorder.created"),
-        key: "createTime",
-        minWidth: 90,
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.otcorder.symbol"),
-        key: "unit",
-        // width: 80,
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.otcorder.type"),
-        key: "type",
-        // width: 90,
-        align: "center",
-        render: (h, params) => {
-          let text = "";
-          if (params.row.type == 0) {
-            text = self.$t("uc.otcorder.type_buy");
-          } else {
-            text = self.$t("uc.otcorder.type_sell");
-          }
-          return h("div", [h("p", text)]);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.otcorder.tradename"),
-        key: "name",
-        // width: 80,
-        ellipsis: "true",
-        align: "center",
-        render: function(h, params) {
-          return h("p", [
-            h(
-              "a",
-              {
-                on: {
-                  click: function() {
-                    self.$router.push("/checkuser?id=" + params.row.name);
-                  }
-                }
-              },
-              params.row.name
-)
-          ]);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.otcorder.amount"),
-        key: "amount",
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.otcorder.money"),
-        key: "money",
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.otcorder.fee"),
-        key: "commission",
-        align: "center"
-      });
-
-      return columns;
-    }
-  }
-};
-</script>
 <style scoped>
 .bill_box_order {
   width: 99%;
@@ -407,3 +151,100 @@ export default {
   }
 }
 </style>
+
+<style scoped>
+.ix-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ix-act {
+  color: var(--ix-orange, #ff8a1f);
+}
+.ix-cap-note {
+  margin: 10px;
+  font-size: 11.5px;
+  color: var(--ix-text-faint, #6b7280);
+}
+</style>
+
+<script>
+/**
+ * MY OTC TRADES — svc-p2p `trades.list`.
+ *
+ * `trades.list` returns the caller's own trades: svc-p2p reads the user id from
+ * the principal, so there is no userId input and no way to ask for somebody
+ * else's. That is also why this screen has no "signed out" branch of its own —
+ * without a session the procedure answers UNAUTHORIZED and IxState renders it
+ * with a route to sign in.
+ *
+ * TABS ARE CLIENT-SIDE, and deliberately so. `trades.list` takes only `limit` —
+ * it cannot filter by status. The vendor's five tabs each re-queried the Java
+ * backend with a status code. Here one read is partitioned by the state names
+ * the service returned, so the tab counts and the rows can never disagree with
+ * each other. The cost is the 200-row cap, which is stated on screen rather
+ * than hidden behind a pager over a total nobody reports.
+ *
+ * The vendor's "appealing" tab maps to `disputed`, and its "unpaid"/"paid" split
+ * maps to `escrowed`/`fiat_sent`. `created` is a state the vendor had no tab for
+ * at all — a trade whose escrow lock has not yet completed — so it is grouped
+ * with the live ones rather than being dropped, which is what a five-tab layout
+ * over six states would otherwise do.
+ *
+ * MONEY. `amount`, `price` and `fiatAmount` are printed as the decimal strings
+ * they arrive as.
+ */
+import IxState from "../intafaced/IxState.vue";
+import ixModule from "../intafaced/module-mixin.js";
+import { query, subjectOf } from "../../config/intafaced.js";
+
+var LIST_LIMIT = 200;
+
+export default {
+  components: { IxState },
+  mixins: [ixModule],
+  data() {
+    return {
+      trades: this.emptySection(),
+      tab: "live"
+    };
+  },
+  computed: {
+    panes: function () {
+      return [
+        { name: "live", label: this.$t("uc.otcorder.unpaid") },
+        { name: "sent", label: this.$t("uc.otcorder.paided") },
+        { name: "done", label: this.$t("uc.otcorder.finished") },
+        { name: "cancelled", label: this.$t("uc.otcorder.canceled") },
+        { name: "disputed", label: this.$t("uc.otcorder.appealing") }
+      ];
+    },
+    rows: function () {
+      return this.trades.data || [];
+    },
+    visible: function () {
+      var tab = this.tab;
+      return this.rows.filter(function (t) {
+        if (tab === "live") return t.status === "created" || t.status === "escrowed";
+        if (tab === "sent") return t.status === "fiat_sent";
+        if (tab === "done") return t.status === "released";
+        if (tab === "cancelled") return t.status === "cancelled";
+        if (tab === "disputed") return t.status === "disputed";
+        return false;
+      });
+    },
+    myId: function () {
+      return subjectOf(this.ixToken);
+    }
+  },
+  methods: {
+    /** Which side of this trade the reader is on. Buyer and seller are named on it. */
+    sideOf(trade) {
+      if (!this.myId) return "—";
+      return trade.buyerId === this.myId ? this.$t("otc.buyin") : this.$t("otc.sellout");
+    }
+  },
+  created() {
+    this.load("trades", query("p2p", "trades.list", { limit: LIST_LIMIT }, this.ixToken));
+  }
+};
+</script>

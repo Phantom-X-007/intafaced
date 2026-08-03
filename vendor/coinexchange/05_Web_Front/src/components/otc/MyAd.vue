@@ -2,270 +2,63 @@
   <div class="nav-rights">
     <div class="my_ad_box">
       <div class="add_ad">
-        <Button icon="plus-round" @click="publish">{{$t('otc.myad.post')}}</Button>
+        <Button icon="plus-round" @click="publish">{{ $t('otc.myad.post') }}</Button>
       </div>
-      <Alert>{{$t('otc.myad.alert')}}</Alert>
+      <Alert>{{ $t('otc.myad.alert') }}</Alert>
       <div class="order-table">
-        <Table :columns="tableColumnsAdv" :data="tableAdv" :no-data-text="$t('common.nodata')" :loading="loading" class="tables" :disabled-hover="true"></Table>
-        <div style="margin: 10px;overflow: hidden" id="pages">
-          <div style="float: right;">
-            <Page v-if="totalPage > 0" :pageSize="pageNumber" :total="totalPage" :current="currentPage" @on-change="changePage"></Page>
+        <IxState
+          :loading="offers.loading"
+          :reason="offers.reason"
+          :message="offers.message"
+          endpoint="/api/p2p/trpc/offers.list"
+        >
+          <p v-if="!mine.length" class="ix-empty">{{ $t('otc.myad.empty') }}</p>
+          <div v-else class="ix-scroll">
+            <table class="ix-table tables">
+              <thead>
+                <tr>
+                  <th>{{ $t('otc.myad.type') }}</th>
+                  <th>{{ $t('otc.myad.coin') }}</th>
+                  <th>{{ $t('otc.price') }}</th>
+                  <th>{{ $t('otc.myad.limit') }}</th>
+                  <th>{{ $t('otc.myad.remain') }}</th>
+                  <th>{{ $t('otc.myad.created') }}</th>
+                  <th>{{ $t('otc.myad.operate') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="o in mine" :key="o.id">
+                  <td>{{ o.side === 'sell' ? $t('otc.myad.sell') : $t('otc.myad.buy') }}</td>
+                  <td>{{ o.asset }}</td>
+                  <td class="ix-num">{{ o.price }} {{ o.fiatCurrency }}</td>
+                  <td class="ix-num">{{ o.minAmount }} – {{ o.maxAmount }}</td>
+                  <td class="ix-num">{{ o.remainingAmount }}</td>
+                  <td>{{ o.createdAt | dateFormat }}</td>
+                  <td>
+                    <a
+                      v-if="o.status === 'active'"
+                      class="ix-act-danger"
+                      @click="askClose(o)"
+                    >{{ $t('otc.myad.close') }}</a>
+                    <span v-else class="ix-dim">{{ o.status }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </div>
+
+          <p v-if="closeError" class="ix-empty ix-empty-error" role="alert">{{ closeError }}</p>
+          <p class="ix-cap-note">{{ $t('otc.myad.editSocket') }}</p>
+        </IxState>
       </div>
     </div>
+
+    <Modal v-model="confirmClose" :title="$t('otc.chat.tip')" @on-ok="doClose">
+      <p style="font-weight:600;">{{ $t('otc.myad.closeConfirm') }}</p>
+    </Modal>
   </div>
 </template>
-<script>
-export default {
-  components: {},
-  data() {
-    let self = this;
-    return {
-      loginmsg: this.$t("common.logintip"),
-      dataCount: 0,
-      tableAdv: [],
-      loading: true,
-      tableColumnsAdv: [
-        {
-          title: self.$t("otc.myad.no"),
-          key: "id",
-          width: 55,
-          align: "center"
-        },
-        {
-          title: self.$t("otc.myad.type"),
-          key: "advertiseType",
-          width: 90,
-          align: "center",
-          render: (h, params) => {
-            let text = "";
-            if (params.row.advertiseType == 0) {
-              text = self.$t("otc.myad.buy");
-            } else if (params.row.advertiseType == 1) {
-              text = self.$t("otc.myad.sell");
-            }
-            return h("div", [h("p", text)]);
-          }
-        },
-        {
-          title: self.$t("otc.myad.limit"),
-          key: "limit",
-          width: 100,
-          align: "center",
-          render: (h, params) => {
-            return h("div", [
-              h("p", params.row.minLimit + "~" + params.row.maxLimit)
-            ]);
-          }
-        },
-        {
-          title: self.$t("otc.myad.remain"),
-          key: "remainAmount",
-          width: 90,
-          align: "center"
-        },
-        {
-          title: self.$t("otc.myad.coin"),
-          key: "coinUnit",
-          width: 100,
-          align: "center"
-        },
-        {
-          title: self.$t("otc.myad.created"),
-          key: "createTime",
-          width: 160,
-          align: "center"
-        },
-        {
-          title: self.$t("otc.myad.operate"),
-          key: "buyBtn",
-          width: 180,
-          align: "center",
-          render: function(h, params) {
-            return h("p", [
-              h(
-                "a",
-                {
-                  on: {
-                    click: function() {
-                      if (params.row.status == 0) {
-                        self.$Message.error(self.$t("otc.myad.errmsg"));
-                      } else {
-                        self.$router.push("/uc/ad/update?id=" + params.row.id);
-                      }
-                    }
-                  }
-                },
-                [
-                  h(
-                    "Button",
-                    {
-                      props: {
-                        size: "small"
-                      },
-                      style: {
-                        marginRight: "8px"
-                      }
-                    },
-                    self.$t("otc.myad.update")
-)
-                ]
-),
-              h(
-                "Button",
-                {
-                  props: {
-                    type: "primary",
-                    size: "small"
-                  },
-                  style: {
-                    marginRight: "8px"
-                  },
-                  on: {
-                    click: () => {
-                      if (params.row.status == 1) {
-                        let canshu = {};
-                        canshu["id"] = params.row.id;
-                        // canshu['status'] = params.row.status == 0? 1: 0
-                        self.$http
-.post(self.host + "/otc/advertise/on/shelves", canshu)
-.then(response => {
-                            var resp = response.body;
-                            if (resp.code == 0) {
-                              self.$Message.success(resp.message);
-                              // self.$router.go(0)
-                              self.getAd();
-                            } else {
-                              self.$Message.error(resp.message);
-                            }
-                          });
-                      } else if (params.row.status == 0) {
-                        let canshu = {};
-                        canshu["id"] = params.row.id;
-                        // canshu['status'] = params.row.status == 0? 1: 0
-                        self.$http
-.post(
-                            self.host + "/otc/advertise/off/shelves",
-                            canshu
-)
-.then(response => {
-                            var resp = response.body;
-                            if (resp.code == 0) {
-                              self.$Message.success(resp.message);
-                              // self.$router.go(0)
-                              self.getAd();
-                            } else {
-                              self.$Message.error(resp.message);
-                            }
-                          });
-                      }
-                    }
-                  }
-                },
-                params.row.status == 0
-? self.$t("otc.myad.dropoff")
-: self.$t("otc.myad.shelf")
-),
-              h(
-                "Button",
-                {
-                  props: {
-                    type: "error",
-                    size: "small"
-                  },
-                  on: {
-                    click: () => {
-                      let canshu = {};
-                      canshu["id"] = params.row.id;
 
-                      if (params.row.status == 1) {
-                        self.$Modal.confirm({
-                          title: self.$t("common.tip"),
-                          content: "<p>" + self.$t("common.delete") + "</p>",
-                          onOk: () => {
-                            self.$http
-.post(self.host + "/otc/advertise/delete", canshu)
-.then(response => {
-                                var resp = response.body;
-                                if (resp.code == 0) {
-                                  self.$Message.success(resp.message);
-                                  self.remove(params.index);
-                                } else {
-                                  self.$Message.error(resp.message);
-                                }
-                              });
-                          }
-                        });
-                      } else {
-                        self.$Message.error("Take the ad offline before deleting it.");
-                      }
-                    }
-                  }
-                },
-                self.$t("otc.myad.delete")
-)
-            ]);
-          }
-        }
-      ],
-      totalPage: 0,
-      pageNumber: 10,
-      currentPage: 1
-    };
-  },
-  methods: {
-    updateLangData() {
-      this.tableColumnsAdv[0].title = this.$t("otc.myad.no");
-      this.tableColumnsAdv[1].title = this.$t("otc.myad.type");
-      this.tableColumnsAdv[2].title = this.$t("otc.myad.limit");
-      this.tableColumnsAdv[3].title = this.$t("otc.myad.remain");
-      this.tableColumnsAdv[4].title = this.$t("otc.myad.coin");
-      this.tableColumnsAdv[5].title = this.$t("otc.myad.created");
-      this.tableColumnsAdv[6].title = this.$t("otc.myad.operate");
-    },
-    remove(index) {
-      this.tableAdv.splice(index, 1);
-    },
-    changePage() {},
-    getAd() {
-      this.$http.post(this.host + "/otc/advertise/all").then(response => {
-        var resp = response.body;
-        if (resp.code == 0) {
-          this.tableAdv = resp.data.content;
-          // console.log(this.tableAdv);
-          for (var i = 0; i < this.tableAdv.length; i++) {
-            this.tableAdv[i].coinUnit = this.tableAdv[i].coin.unit;
-          }
-          this.loading = false;
-          //this.dataCount = resp.data.length
-          this.totalPage = resp.data.totalElements;
-        } else {
-          // this.$Message.error(resp.message);
-          // this.$Message.error(this.$t('common.logintip'));
-          this.$Message.error(this.loginmsg);
-        }
-      });
-    },
-    publish() {
-      this.$router.push(this.api.otc.createAd);
-    }
-  },
-  computed: {
-    lang: function() {
-      return this.$store.state.lang;
-    }
-  },
-  watch: {
-    lang: function() {
-      this.updateLangData();
-    }
-  },
-  created() {
-    this.getAd();
-  }
-};
-</script>
 <style scoped lang="scss">
 .nav-rights {
   padding: 0 0 0 20px;
@@ -338,3 +131,111 @@ export default {
   }
 }
 </style>
+
+<style scoped>
+.ix-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ix-act-danger {
+  color: var(--ix-down, #f15057);
+  cursor: pointer;
+  font-weight: 600;
+}
+.ix-dim {
+  color: var(--ix-text-faint, #6b7280);
+}
+.ix-cap-note {
+  margin: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ix-text-faint, #6b7280);
+  border-left: 2px solid var(--ix-orange, #ff8a1f);
+  padding-left: 10px;
+}
+</style>
+
+<script>
+/**
+ * MY OFFERS — svc-p2p `offers.list`, filtered to the caller, plus `offers.close`.
+ *
+ * WHY THE FILTER IS CLIENT-SIDE. `offers.list` accepts `{ asset, fiatCurrency,
+ * side, limit }` and has no `makerId` filter — it is the public book. So the
+ * caller's own id is read from the access token and the list is narrowed here.
+ * That is a real inefficiency and worth naming: with more than 200 offers in the
+ * book, a maker's own offer could fall outside the window and silently vanish
+ * from this screen. A `mine` filter on the procedure is the fix.
+ *
+ * WHAT "DELETE" AND "EDIT" BECAME. The vendor offered edit, shelf, drop-off and
+ * delete against `/otc/advertise/*`. svc-p2p has exactly one mutation on an
+ * offer besides create: `offers.close`, which is terminal — the status enum is
+ * `active | paused | closed` and nothing transitions back out of `closed`. There
+ * is no update, no pause and no delete. So this screen offers close, calls it
+ * close, and states the rest as missing rather than wiring four buttons to one
+ * endpoint and hoping nobody notices which is which.
+ *
+ * MONEY. Decimal strings in, decimal strings rendered.
+ */
+import IxState from "../intafaced/IxState.vue";
+import ixModule from "../intafaced/module-mixin.js";
+import { query, mutate, subjectOf } from "../../config/intafaced.js";
+
+var LIST_LIMIT = 200;
+
+export default {
+  components: { IxState },
+  mixins: [ixModule],
+  data() {
+    return {
+      offers: this.emptySection(),
+      confirmClose: false,
+      closing: null,
+      closeError: ""
+    };
+  },
+  computed: {
+    lang: function () {
+      return this.$store.state.lang;
+    },
+    myId: function () {
+      return subjectOf(this.ixToken);
+    },
+    mine: function () {
+      var me = this.myId;
+      var rows = this.offers.data || [];
+      if (!me) return [];
+      return rows.filter(function (o) {
+        return o.makerId === me;
+      });
+    }
+  },
+  methods: {
+    getAd() {
+      this.load("offers", query("p2p", "offers.list", { limit: LIST_LIMIT }, this.ixToken));
+    },
+    askClose(offer) {
+      this.closing = offer;
+      this.closeError = "";
+      this.confirmClose = true;
+    },
+    doClose() {
+      var self = this;
+      if (!this.closing) return;
+      mutate("p2p", "offers.close", { offerId: this.closing.id }, this.ixToken).then(function (res) {
+        self.closing = null;
+        if (!res.ok) {
+          self.closeError = res.message;
+          return;
+        }
+        self.getAd();
+      });
+    },
+    publish() {
+      this.$router.push("/uc/ad/create");
+    }
+  },
+  created() {
+    this.getAd();
+  }
+};
+</script>
