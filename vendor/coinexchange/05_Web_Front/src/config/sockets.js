@@ -224,6 +224,23 @@ export const SOCKETS = {
         ]
     },
 
+    'trade.mining': {
+        capability: 'Trade-fee mining — rebate / mine amounts credited against your fills.',
+        deadPath: '/uc/mine/* · api.uc.mylist (removed)',
+        tracker: null,
+        missing: [
+            'No service credits a mine amount or fee rebate against fills. nginx never proxied the retired /uc/mine path; api.uc.mylist was deleted with the other unproxied promotions constants.',
+            'The retired screen painted cumulative return, pending return, poundage and mine_amount. Those are yield figures. DIRECTION-2026-07-31 §7 requires a named source for yield; there is none here.',
+            'mining.pool is a different product (Stratum shares, PPLNS). It does not cover sold fee-rebate mining, and reading it as cover would invent a programme nobody planned.',
+            'No tracker row plans trade-fee mining. An empty table with those columns still says "you earned nothing yet" rather than "this programme does not exist".'
+        ],
+        needed: [
+            'An owner decision that fee-rebate mining is a product, with named funding (not unallocated yield).',
+            'A ledger recipe that posts the rebate from a real house account, and a per-account read of those postings as decimal strings.',
+            'Until both exist, this screen must not show mine totals, zeros, or a filter UI that implies a book behind it.'
+        ]
+    },
+
     'token.dividends': {
         capability: 'Holder distributions — your share of platform fee revenue.',
         deadPath: '/uc/bonus/user/page',
