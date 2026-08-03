@@ -13,6 +13,16 @@
  *     it. In prod it falls back to English and reports — because an untranslated
  *     string is a small problem and a blank button is a big one.
  *
+ *  3. **A locale with no catalog says so.** Omitting the catalog argument used
+ *     to default it to English — which meant `createTranslator('ar')` resolved
+ *     every key out of the English catalog as though it were Arabic's own.
+ *     `hasOwn()` returned `true`, no `untranslated` report ever fired, and the
+ *     coverage number for a language nobody had written a word of came back at
+ *     100%. The rendered text was fine; the reporting was a fabrication, and it
+ *     was the reporting we were going to make decisions from. Now the catalog
+ *     is looked up in the registry, a locale that has none gets an empty one,
+ *     and every key travels the fallback path where it is counted.
+ *
  * A key that exists in English but not yet in the target language is NOT a
  * missing key. Translations lag; that is expected, reported, and never fatal.
  */
@@ -27,6 +37,7 @@ import {
   type PluralCategory,
   type PluralMessage,
 } from './catalog.js';
+import { catalogFor, catalogOrEmpty } from './catalogs.js';
 import { formatNumber } from './format.js';
 import { DEFAULT_LOCALE, dir, intlTagFor, type Direction } from './locales.js';
 
@@ -51,7 +62,14 @@ export type MissingKind =
   /** The message wants a placeholder the caller did not supply. */
   | 'missing-param'
   /** The language's catalog has no entry for the plural category `Intl` selected. */
-  | 'missing-plural-form';
+  | 'missing-plural-form'
+  /**
+   * The locale is declared in `SUPPORTED_LOCALES` but no catalog exists for it,
+   * so every string will come from English. Reported once per translator, at
+   * construction, with `key: ''` — it is a statement about the locale, not
+   * about any particular message.
+   */
+  | 'no-catalog';
 
 export interface MissingReport {
   readonly kind: MissingKind;
@@ -103,6 +121,22 @@ export interface Translator {
   readonly locale: string;
   /** Layout direction for this locale — put it on the document element. */
   readonly dir: Direction;
+  /**
+   * Does this locale have a catalog of its own, or is every string coming from
+   * English? `false` is not an error — it is the state of 27 of the 28 declared
+   * locales — but a surface that shows a language name, or a payload that tells
+   * a downstream renderer which language it is holding, must not claim
+   * otherwise. See `renderedLocale`.
+   */
+  readonly hasCatalog: boolean;
+  /**
+   * The locale the strings are actually IN, which is `locale` when a catalog
+   * exists and the default locale when it does not. This is the value to put on
+   * an outbound payload or an `html lang` attribute: labelling English text
+   * `ar` makes a renderer mirror the layout around words that read left to
+   * right.
+   */
+  readonly renderedLocale: string;
   /** Translate. Typed: unknown keys and missing params do not compile. */
   t<K extends MessageKey>(key: K, ...args: TranslateArgs<K>): string;
   /**
@@ -153,26 +187,47 @@ const PLACEHOLDER_RE = /\{(\w+)\}/g;
  *
  * @param localeCode App locale code (`'ru'`, `'pt-BR'`, …).
  * @param catalog    That language's messages. May be partial — English fills the gaps.
+ *                   Omit it and the registry in `catalogs.ts` is consulted; a locale
+ *                   with no catalog gets an empty one, NOT English-masquerading-as-itself.
  */
 export function createTranslator(
   localeCode: string = DEFAULT_LOCALE,
-  catalog: PartialCatalog = en,
+  catalog?: PartialCatalog,
   options: TranslatorOptions = {},
 ): Translator {
   const mode = options.mode ?? detectMode();
   const fallback: Catalog = options.fallback ?? (en as unknown as Catalog);
   const onMissing = options.onMissing ?? defaultOnMissing;
   const tag = intlTagFor(localeCode);
-  const direction = dir(localeCode);
+
+  // An explicit catalog is the caller's word and is taken as given — that is how
+  // a translation file under review, or a test fixture, gets in. With no
+  // explicit catalog we ask the registry, and if the registry has nothing we use
+  // an EMPTY catalog rather than English. Same words on screen either way; the
+  // difference is that the empty catalog makes every key report `untranslated`,
+  // so coverage is measured instead of assumed.
+  const own = catalog ?? catalogOrEmpty(localeCode);
+  const catalogExists = catalog !== undefined || catalogFor(localeCode) !== undefined;
+
+  // Direction follows the language we are actually rendering. An RTL locale with
+  // no catalog is English text, and mirroring the layout around it is a defect a
+  // user sees on the first screen.
+  const renderedLocale = catalogExists ? localeCode : DEFAULT_LOCALE;
+  const direction = dir(renderedLocale);
 
   function report(kind: MissingKind, key: string, extra: { param?: string; category?: PluralCategory } = {}): void {
     onMissing({ kind, key, locale: localeCode, ...extra });
   }
 
+  // Said once, at construction, so the fact is available even for a locale that
+  // is never asked for a single key. The per-key `untranslated` reports still
+  // fire; this one answers "why are all of them firing".
+  if (!catalogExists) report('no-catalog', '');
+
   /** Resolve a key to a message, applying the fallback and missing-key policy. */
   function resolve(key: string): { message: Message; translated: boolean } | undefined {
-    const own = (catalog as Readonly<Record<string, Message | undefined>>)[key];
-    if (own !== undefined) return { message: own, translated: true };
+    const mine = (own as Readonly<Record<string, Message | undefined>>)[key];
+    if (mine !== undefined) return { message: mine, translated: true };
 
     const base = (fallback as Readonly<Record<string, Message | undefined>>)[key];
     if (base !== undefined) {
@@ -242,6 +297,8 @@ export function createTranslator(
   return {
     locale: localeCode,
     dir: direction,
+    hasCatalog: catalogExists,
+    renderedLocale,
     t<K extends MessageKey>(key: K, ...args: TranslateArgs<K>): string {
       return translate(key, (args[0] ?? {}) as Readonly<Record<string, ParamValue>>);
     },
@@ -249,7 +306,7 @@ export function createTranslator(
       return translate(key, params);
     },
     hasOwn(key: MessageKey): boolean {
-      return (catalog as Readonly<Record<string, Message | undefined>>)[key] !== undefined;
+      return (own as Readonly<Record<string, Message | undefined>>)[key] !== undefined;
     },
   };
 }
