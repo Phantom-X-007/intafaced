@@ -14,12 +14,12 @@ catalogued) and never claim 100% from one English file.
 
 ## Path on tip
 
-| Area | Location |
-| --- | --- |
-| Package | `packages/i18n/` (`locales.ts`, catalogs, formatters) |
-| Consumer today | `services/svc-notify` (out-of-app copy) |
-| Hardcoded English | `apps/web/src/**` many `const copy = { … }` modules |
-| Gate | §9 / §14.4; brand-scan separate |
+| Area              | Location                                              |
+| ----------------- | ----------------------------------------------------- |
+| Package           | `packages/i18n/` (`locales.ts`, catalogs, formatters) |
+| Consumer today    | `services/svc-notify` (out-of-app copy)               |
+| Hardcoded English | `apps/web/src/**` many `const copy = { … }` modules   |
+| Gate              | §9 / §14.4; brand-scan separate                       |
 
 **Tip residual:** ~28 locales declared; **1 catalog (en)**; surfaces **not**
 keyed. Package README is the honest scoreboard (`localeCoverage()`). Adding a
@@ -27,11 +27,11 @@ language is an **owner content cost**, not “run a model over strings.”
 
 ## Blocked by
 
-| Blocker | Notes |
-| --- | --- |
+| Blocker           | Notes                                                                       |
+| ----------------- | --------------------------------------------------------------------------- |
 | Content ownership | Non-English catalogs need human/process owner (Class X-ish content quality) |
-| Product shell | `apps/web` keying is craft residual — free for agents if claimed |
-| Money copy risk | Mistranslated withdraw/confirm is a loss event — no auto-MT |
+| Product shell     | `apps/web` keying is craft residual — free for agents if claimed            |
+| Money copy risk   | Mistranslated withdraw/confirm is a loss event — no auto-MT                 |
 
 Not blocked by money spine or Shehzad. Not blocked by Denon product law for
 keying existing English.

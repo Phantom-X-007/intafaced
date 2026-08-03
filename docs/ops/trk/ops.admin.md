@@ -15,13 +15,13 @@ shared secret), not open network ACL alone. Reconcile does not invent balances.
 
 ## Path on tip
 
-| Area | Location |
-| --- | --- |
-| Console app | `apps/admin/` |
-| Kill / freeze BFF | `apps/admin/src/app/api/`, `src/lib/control-plane-*.ts` |
+| Area               | Location                                                        |
+| ------------------ | --------------------------------------------------------------- |
+| Console app        | `apps/admin/`                                                   |
+| Kill / freeze BFF  | `apps/admin/src/app/api/`, `src/lib/control-plane-*.ts`         |
 | Edge control plane | `services/svc-edge` — `/admin/kill-switches`, `/admin/ledger/*` |
-| Runbook | `docs/OPS-KILL-SWITCH-RUNBOOK.md` |
-| Flags | `packages/config` flag registry (§13 staged flags) |
+| Runbook            | `docs/OPS-KILL-SWITCH-RUNBOOK.md`                               |
+| Flags              | `packages/config` flag registry (§13 staged flags)              |
 
 **Tip residual (honest):** module kill-switches and ledger freeze **are wired**
 when `EDGE_URL` + operator tokens set. Per-flag rows still **session-staged**.
@@ -32,12 +32,12 @@ claiming work.
 
 ## Blocked by
 
-| Blocker | Notes |
-| --- | --- |
+| Blocker          | Notes                                                          |
+| ---------------- | -------------------------------------------------------------- |
 | Deploy / secrets | Operator tokens, EDGE_URL, BFF secret — Class X ops, not craft |
-| SSO | Product/ops decision for production exposure |
-| Flag store (§13) | Durable remote flags not fully productized |
-| Free residual | Reconcile wire + freeze UI page using live BFF only |
+| SSO              | Product/ops decision for production exposure                   |
+| Flag store (§13) | Durable remote flags not fully productized                     |
+| Free residual    | Reconcile wire + freeze UI page using live BFF only            |
 
 Not blocked by Shehzad money spine for kill-switch residual. Do **not** invent
 treasury money flows.

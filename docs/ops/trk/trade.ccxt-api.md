@@ -14,13 +14,13 @@ either real or absent — never stub success. OHLCV is real fills or honest empt
 
 ## Path on tip
 
-| Area | Location |
-| --- | --- |
-| REST surface | `services/svc-trade` + edge public/private routes (CCXT-shaped) |
-| Candles | `TRADE_CANDLE_JOBS_*` materialize job (default **OFF**) |
-| Matching | books empty until journal has orders or MM seeds |
-| Private WS | `ws.gateway` — not this REST mountain |
-| Venue note | Not “via CCXT package” — we **are** the compatibility layer (§27) |
+| Area         | Location                                                          |
+| ------------ | ----------------------------------------------------------------- |
+| REST surface | `services/svc-trade` + edge public/private routes (CCXT-shaped)   |
+| Candles      | `TRADE_CANDLE_JOBS_*` materialize job (default **OFF**)           |
+| Matching     | books empty until journal has orders or MM seeds                  |
+| Private WS   | `ws.gateway` — not this REST mountain                             |
+| Venue note   | Not “via CCXT package” — we **are** the compatibility layer (§27) |
 
 **Tip residual:** large REST surface already partial (public + private order
 paths, balances, fees, positions read). Still open: OHLCV empty until candle job
@@ -29,11 +29,11 @@ depth residual; futures jobs default OFF. Empty book is honest `[]` (not 502).
 
 ## Blocked by
 
-| Blocker | Notes |
-| --- | --- |
-| Soft | Live depth needs MM seed or organic flow (`trade.mm-bot` Nitro) |
+| Blocker             | Notes                                                                   |
+| ------------------- | ----------------------------------------------------------------------- |
+| Soft                | Live depth needs MM seed or organic flow (`trade.mm-bot` Nitro)         |
 | Futures product law | Leverage/margin mode — **Shehzad / human M3** territory; agents babysit |
-| Candle ops | Enabling job is ops flag + markets with fills — not invent candles |
+| Candle ops          | Enabling job is ops flag + markets with fills — not invent candles      |
 
 Public spot REST residual is agent-accessible. Futures control endpoints are
 **not** free craft under hard ownership.

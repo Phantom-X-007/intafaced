@@ -14,12 +14,12 @@ Progress/certs remain out of scope for this row (`academy.certs`).
 
 ## Path on tip
 
-| Area | Location |
-| --- | --- |
-| Service | `services/svc-academy/` |
+| Area    | Location                                                    |
+| ------- | ----------------------------------------------------------- |
+| Service | `services/svc-academy/`                                     |
 | Catalog | `src/curriculum/catalog.ts` — pure in-process day-one spine |
-| API | `curriculum`, `curriculumItem` (academy:read) |
-| Mount | edge `/api/academy` |
+| API     | `curriculum`, `curriculumItem` (academy:read)               |
+| Mount   | edge `/api/academy`                                         |
 
 **Tip residual:** thin catalog **ships**; full DERIV//DESK library is
 **proprietary and not in the monorepo**. README: full import is residual, not
@@ -27,11 +27,11 @@ invented. No DB table for curriculum; no progress write.
 
 ## Blocked by
 
-| Blocker | Notes |
-| --- | --- |
-| Content / rights | Owner must supply importable library (Class X content / legal) |
-| Brand (§0.7) | Import pipeline must strip/rename forbidden third-party strings |
-| Not blocked | Lobbies API, read path, Blueprint path enum already real |
+| Blocker          | Notes                                                           |
+| ---------------- | --------------------------------------------------------------- |
+| Content / rights | Owner must supply importable library (Class X content / legal)  |
+| Brand (§0.7)     | Import pipeline must strip/rename forbidden third-party strings |
+| Not blocked      | Lobbies API, read path, Blueprint path enum already real        |
 
 Agents must **not** fabricate 20 playbooks of educational IP.
 

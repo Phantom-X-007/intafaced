@@ -15,12 +15,12 @@ configured for a deployment make readiness fail if those gateways are down.
 
 ## Path on tip
 
-| Area | Location |
-| --- | --- |
-| Service | `services/svc-notify/` |
-| Channels | `src/channels/` — adapter interface + email/push/SMS |
+| Area          | Location                                                              |
+| ------------- | --------------------------------------------------------------------- |
+| Service       | `services/svc-notify/`                                                |
+| Channels      | `src/channels/` — adapter interface + email/push/SMS                  |
 | Bus consumers | fillSettled, P2P escrow events, kyc, rank, stake, bankMarginCalled, … |
-| Mount | edge `/api/notify` (re-derive compose) |
+| Mount         | edge `/api/notify` (re-derive compose)                                |
 
 **Tip residual:** multi-channel fan-out **code exists**; real delivery needs
 **owner-supplied gateway credentials**. Without them, out-of-app refuses with
@@ -29,10 +29,10 @@ configured for a deployment make readiness fail if those gateways are down.
 
 ## Blocked by
 
-| Blocker | Notes |
-| --- | --- |
-| Class X / ops secrets | ESP, push, SMS credentials — Nitro human / ops |
-| Optional product | Alerts/watchlists (§ doctrine alerts) = extension, not this mountain’s min DoD |
+| Blocker               | Notes                                                                          |
+| --------------------- | ------------------------------------------------------------------------------ |
+| Class X / ops secrets | ESP, push, SMS credentials — Nitro human / ops                                 |
+| Optional product      | Alerts/watchlists (§ doctrine alerts) = extension, not this mountain’s min DoD |
 
 Not blocked by Shehzad. Not blocked by Denon for credential-wiring docs +
 readiness. Code residual is small vs secrets residual.

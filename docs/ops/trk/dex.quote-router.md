@@ -14,12 +14,12 @@ as multi-venue best execution. No third-party CCXT lib in the money path (§27).
 
 ## Path on tip
 
-| Area | Location |
-| --- | --- |
-| Service | `services/svc-dex/` |
-| Quote assembly | `src/quote/` + venues adapters |
-| Config | `DEX_EXTERNAL_VENUES`, indexer/matching URLs, `QUOTE_MAX_AGE_MS` |
-| Related | `packages/venue-adapter`, `services/svc-indexer`, `svc-matching` |
+| Area           | Location                                                         |
+| -------------- | ---------------------------------------------------------------- |
+| Service        | `services/svc-dex/`                                              |
+| Quote assembly | `src/quote/` + venues adapters                                   |
+| Config         | `DEX_EXTERNAL_VENUES`, indexer/matching URLs, `QUOTE_MAX_AGE_MS` |
+| Related        | `packages/venue-adapter`, `services/svc-indexer`, `svc-matching` |
 
 **Tip residual (tracker note + live probe):** **code finished**; default config
 returns **503** `dex.quote.no_venue_available` (venues unreachable / unset).
@@ -28,11 +28,11 @@ Honesty flags already in response.
 
 ## Blocked by
 
-| Blocker | Notes |
-| --- | --- |
-| Ops config | Wire live venues / internal-book / indexer in the target env |
+| Blocker        | Notes                                                                            |
+| -------------- | -------------------------------------------------------------------------------- |
+| Ops config     | Wire live venues / internal-book / indexer in the target env                     |
 | Protocol depth | intachain-clob depends on real venue contracts (Shehzad / protocol) for that leg |
-| Not code | Router itself is not the blocker for “one live venue” |
+| Not code       | Router itself is not the blocker for “one live venue”                            |
 
 Cross-venue “best of many” needs multiple live venues; single-venue degraded is
 already honest.

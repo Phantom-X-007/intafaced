@@ -14,24 +14,24 @@ it refuses honestly rather than freelancing.
 
 ## Path on tip
 
-| Area | Location |
-| --- | --- |
+| Area           | Location                                                                |
+| -------------- | ----------------------------------------------------------------------- |
 | Runtime (done) | `services/svc-agents/` — gateway, sessions, guardrails, metering, audit |
-| Product agent | **Not registered** — fleet expects later guardrail + tool drivers |
-| KB dependency | Overlaps `ops.support` — may need KB store first |
-| Account state | Read via identity / ledger projection contracts — no local balance |
+| Product agent  | **Not registered** — fleet expects later guardrail + tool drivers       |
+| KB dependency  | Overlaps `ops.support` — may need KB store first                        |
+| Account state  | Read via identity / ledger projection contracts — no local balance      |
 
 README: product agents (Navigator, Support, Scanner, …) “register guardrails +
 drive the runtime; not seeded here.”
 
 ## Blocked by
 
-| Blocker | Notes |
-| --- | --- |
-| Soft block | `ops.support` KB empty → agent has nothing grounded to cite |
-| Provider config | `AGENTS_UPSTREAM_*` vault — Class X secrets for live models |
-| Product law | Which tools Support may call (refund? cancel order?) — Denon/Nitro |
-| Money | Metering path exists; **no new money invention** — use existing recipes |
+| Blocker         | Notes                                                                   |
+| --------------- | ----------------------------------------------------------------------- |
+| Soft block      | `ops.support` KB empty → agent has nothing grounded to cite             |
+| Provider config | `AGENTS_UPSTREAM_*` vault — Class X secrets for live models             |
+| Product law     | Which tools Support may call (refund? cancel order?) — Denon/Nitro      |
+| Money           | Metering path exists; **no new money invention** — use existing recipes |
 
 Agents gateway is done; this is product registration, not runtime rebuild.
 

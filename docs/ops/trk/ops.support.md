@@ -14,23 +14,23 @@ Agent assist (see `agents.support`) is optional later — human desk works alone
 
 ## Path on tip
 
-| Area | Location |
-| --- | --- |
-| Service | **None** — no `svc-support` |
-| Related | `services/svc-agents` runtime for future agent; `packages/i18n` for copy |
-| UI | No support desk route in `apps/web` / `apps/admin` |
-| Doctrine | Core ops phase 5; admin may host operator queue later |
+| Area     | Location                                                                 |
+| -------- | ------------------------------------------------------------------------ |
+| Service  | **None** — no `svc-support`                                              |
+| Related  | `services/svc-agents` runtime for future agent; `packages/i18n` for copy |
+| UI       | No support desk route in `apps/web` / `apps/admin`                       |
+| Doctrine | Core ops phase 5; admin may host operator queue later                    |
 
 Greenfield relative to monorepo: only incidental “ticket” strings in trading UI
 (order ticket), not support tickets.
 
 ## Blocked by
 
-| Blocker | Notes |
-| --- | --- |
-| Product law / scope | Ticket model, SLA, which PII support may see — Denon or Nitro direction |
-| Unknown | Whether KB is markdown-in-repo, CMS, or blueprint-adjacent |
-| Optional money | Refunds/chargebacks stay in pay/ledger — support only **requests**, never posts |
+| Blocker             | Notes                                                                           |
+| ------------------- | ------------------------------------------------------------------------------- |
+| Product law / scope | Ticket model, SLA, which PII support may see — Denon or Nitro direction         |
+| Unknown             | Whether KB is markdown-in-repo, CMS, or blueprint-adjacent                      |
+| Optional money      | Refunds/chargebacks stay in pay/ledger — support only **requests**, never posts |
 
 Not Shehzad M1–M7. **Do not invent refund recipes under this id.**
 
