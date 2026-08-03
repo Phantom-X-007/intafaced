@@ -957,6 +957,7 @@ var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
 var deskA11y = require('../../assets/js/desk-a11y.js');
 var deskPrefs = require('../../assets/js/desk-prefs.js');
 var bookHonesty = require('../../assets/js/book-honesty.js');
+var ixMoney = require('../../assets/js/ix-money.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
 

@@ -19,11 +19,6 @@ function assert(cond, msg) {
   }
 }
 
-function num(v) {
-  var n = parseFloat(v);
-  return isFinite(n) ? n : 0;
-}
-
 /* ── empty book labels ───────────────────────────────────────────────── */
 assert(
   h.bookSideEmptyLabel({ loading: true, reachable: false, side: 'bids' }) ===
@@ -59,6 +54,8 @@ assert(
 );
 
 /* ── no fake levels ──────────────────────────────────────────────────── */
+/* Levels are decimal STRINGS now (see normalizePlateLevels): the ladder's
+   cumulative column is a BigNumber running sum, not `total += amount`. */
 var levels = h.normalizePlateLevels(
   [
     { price: 100, amount: 1 },
@@ -69,15 +66,15 @@ var levels = h.normalizePlateLevels(
     null,
     { price: '97.5', amount: '2.5' }
   ],
-  14,
-  num
+  14
 );
 assert(levels.length === 3, 'drops zero/invalid levels (got ' + levels.length + ')');
-assert(levels[0].price === 100 && levels[0].totalAmount === 1, 'first real level + cumulative');
-assert(levels[1].price === 98 && levels[1].totalAmount === 4, 'second cumulative');
-assert(levels[2].price === 97.5 && levels[2].amount === 2.5, 'string numbers ok');
-assert(h.normalizePlateLevels([], 14, num).length === 0, 'empty in → empty out (no pad)');
-assert(h.normalizePlateLevels(null, 14, num).length === 0, 'null in → empty out');
+assert(levels[0].price === '100' && levels[0].totalAmount === '1', 'first real level + cumulative');
+assert(levels[1].price === '98' && levels[1].totalAmount === '4', 'second cumulative');
+assert(levels[2].price === '97.5' && levels[2].amount === '2.5', 'string numbers ok');
+assert(levels[2].totalAmount === '6.5', 'third cumulative');
+assert(h.normalizePlateLevels([], 14).length === 0, 'empty in → empty out (no pad)');
+assert(h.normalizePlateLevels(null, 14).length === 0, 'null in → empty out');
 assert(
   h.normalizePlateLevels(
     [
@@ -85,10 +82,35 @@ assert(
       { price: 2, amount: 1 },
       { price: 3, amount: 1 }
     ],
-    2,
-    num
+    2
   ).length === 2,
   'respects maxDepth'
+);
+assert(
+  h.normalizePlateLevels([{ price: '1', amount: 'nope' }], 14).length === 0,
+  'unreadable amount is not depth (never a fabricated zero level)'
+);
+
+/* The float trap the old `total += num(amount)` fell into: ten 0.1 levels.
+   Row ten read 0.9999999999999999 on a ladder whose depth is exactly 1. */
+var tenths = [];
+for (var t = 0; t < 10; t++) tenths.push({ price: '100', amount: '0.1' });
+var ladder = h.normalizePlateLevels(tenths, 14);
+assert(ladder.length === 10, 'ten tenth-levels survive');
+assert(ladder[2].totalAmount === '0.3', 'cumulative 0.1+0.1+0.1 is 0.3, not 0.30000000000000004');
+assert(ladder[9].totalAmount === '1', 'cumulative ten tenths is 1, not 0.9999999999999999');
+assert(
+  ladder[9].totalAmount !== String(0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1),
+  'ladder total no longer agrees with the float sum it replaced'
+);
+
+/* A venue price with more digits than a double can hold survives verbatim —
+   the old path coerced it and the ladder printed digits nobody quoted. */
+var deep = h.normalizePlateLevels([{ price: '68412.123456789012345', amount: '0.5' }], 14);
+assert(deep[0].price === '68412.123456789012345', 'venue price kept digit-for-digit');
+assert(
+  deep[0].price !== String(parseFloat('68412.123456789012345')),
+  'venue price is not a float round-trip'
 );
 
 /* ── order reject envelope ───────────────────────────────────────────── */
