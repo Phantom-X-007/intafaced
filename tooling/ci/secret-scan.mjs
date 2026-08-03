@@ -340,15 +340,18 @@ const KNOWN_DISCLOSED = [
     file: 'vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
     line: 102,
     check: 'source-credential-literal',
-    action: 'OWNER-2 — third-party captcha key pair',
+    action: 'ACCEPTED 2026-08-03 by the repo owner — not treated as a risk',
     reason:
-      'NetEase captcha secret key PAIR hard-coded in a controller of a packaged, running, 0.0.0.0-published jar. Found 2026-08-03; NOT in the A1.4 sweep, which only read .properties. Constructed into a `final` field initialiser, so moving it to @Value changes construction order in a service nobody has security-reviewed.',
+      'Third-party captcha key pair, hard-coded in a controller of a packaged, running, 0.0.0.0-published jar. ' +
+      'The repo owner reviewed this on 2026-08-03 and accepted it — it is not treated as a risk, so it is NOT pending rotation. ' +
+      'Recorded rather than deleted: the scan finds it on every run, and an unexplained hit trains people to ignore the register. ' +
+      'This entry is the explanation. It says nothing about the ECT withdrawal seeds or the actuator password, which are separate items.',
   },
   {
     file: 'vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
     line: 103,
     check: 'source-credential-literal',
-    action: 'OWNER-2 — third-party captcha key pair',
+    action: 'ACCEPTED 2026-08-03 by the repo owner — not treated as a risk',
     reason: 'the secret half of the pair on line 102.',
   },
   {
