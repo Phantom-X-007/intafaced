@@ -164,3 +164,22 @@ Open partner still **11** (10 Denon + 1 Shehzad). Comments: **0** this cycle (pr
 ```
 origin/main @ 89f1b614  (at doc write; partners re-fetch before rebase)
 ```
+
+---
+
+## Refresh cycle27 — 2026-08-03T15:47Z · tip `d2437b53`
+
+Re-checked via `gh` @ tip after #534 R07 cycle26 land:
+
+| Bucket                 | PRs                                                                                                  | Action         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
+| Ready Denon self-merge | **#445** full green · **#433** full green (P-WS path) · **#430** docs Prettier · **#420** full green | his merge only |
+| MERGEABLE red          | **#428** Prettier+Typecheck                                                                          | owner fix      |
+| CONFLICTING rebase     | Denon **#448** (gates FAIL) **#441** **#438** **#436** **#432** (P-WS edge) + Shehzad **#346** M1    | babysit only   |
+| Nitro Class N open     | **0**                                                                                                | —              |
+
+Open partner still **11** (10 Denon + 1 Shehzad). Comments: **0** this cycle (prior babysit already on every CONFLICTING). P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**. invent live **0**. Agents do **not** merge partner PRs.
+
+```
+origin/main @ d2437b53  (at doc write; partners re-fetch before rebase)
+```
