@@ -2,12 +2,12 @@
 
 **Proof:** NO-FLEET · Docker no · :8090 foreign worktree  
 **Tip (re-derive):** `git fetch && git log -1 --oneline origin/main`  
-**Last coord cycle:** 2026-08-03T15:47Z · tip=`d2437b53` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11  
+**Last coord cycle:** 2026-08-03T15:51Z · tip=`143ba250` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11  
 **Mandate:** freeProduct=0 is shell craft drained — **not** session kill.
 
 ## Living board (one paragraph)
 
-Shell product drained (freeProduct=0); freeTracker=0; tip `d2437b53` after #534 cycle26 land; partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0**; SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N green to merge**.
+Shell product drained (freeProduct=0); freeTracker=0; tip `143ba250` after #536 cycle27 land; partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0** (#535 findings already on history); SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N green to merge**.
 
 ## Merged Class N (shell wave)
 
@@ -52,10 +52,9 @@ Buckets: [R02-BUCKETS-LIVE.md](./R02-BUCKETS-LIVE.md) · Night law: [NIGHT-ENGIN
 
 ## Open Nitro
 
-| PR   | State                                                                         |
-| ---- | ----------------------------------------------------------------------------- |
-| #532 | dashboard freeze stamp tip 00fdd51e — CONFLICTING stale; absorb into cycle26  |
-| #534 | R07 cycle26 freeProduct=0 + tip 89f1b614 — this keep-alive (absorbs R01+dash) |
+| PR  | State                                                 |
+| --- | ----------------------------------------------------- |
+| —   | re-derive `gh pr list --author ZenYoda3 --state open` |
 
 ## Still blocked / babysit
 
@@ -98,6 +97,7 @@ Buckets: [R02-BUCKETS-LIVE.md](./R02-BUCKETS-LIVE.md) · Night law: [NIGHT-ENGIN
 | 25 | →00fdd51e | 0 | #529 land; freeze+report @ tip; open Nitro #531 #532 #533; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 26 | →89f1b614 | 0 | #533 land; freeze+report @ tip; absorb #531 closed + #532 CONFLICTING; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 27 | →d2437b53 | 0 | #534 cycle26 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
+| 28 | →143ba250 | 0 | #536 cycle27 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 (#535 on history) |
 
 ## Invent re-scan (cycle20)
 
@@ -130,6 +130,10 @@ Static `rg` on vendor front: live `dataFanyong` / `CNYRate || 6.5` hits are **co
 ## Invent re-scan (cycle27)
 
 Static `rg` on vendor front: live `dataFanyong` / `CNYRate || 6.5` hits are **comment-only** (Index.vue / Invite.vue honesty notes) · live invent **0** · **no new invent residual** · tip `d2437b53` · #534 cycle26 on main.
+
+## Invent re-scan (cycle28)
+
+#535 invent findings **0** already on history · no new invent residual · tip `143ba250` · #536 cycle27 on main · freeProduct=0 ≠ kill.
 
 ## Coord actions this session
 
