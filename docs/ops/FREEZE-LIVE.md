@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `94cc463d` — docs(ops): R01 partner babysit refresh @ e91fb244 (#502)
-- **Generated:** 2026-08-03T14:05:41.123Z
+- **Tip:** `e4836982` — docs(ops): thorough upgrade free TRK research (short-name) (#504)
+- **Generated:** 2026-08-03T14:08:57.447Z
 - **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
