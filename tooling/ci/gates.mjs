@@ -178,6 +178,27 @@ export const GATES = [
       'prints on every run and fails on if an entry goes stale.',
   },
   {
+    id: 'compose-secret-parity',
+    script: 'tooling/ci/compose-secret-parity.mjs',
+    doctrine: '§14',
+    why:
+      'every secret a service refuses to boot without must actually be passed to its container. ' +
+      'This class has bitten twice: svc-ledger crash-looped on JWT_ACCESS_SECRET (#431) and svc-academy was ' +
+      'never created at all (#442). It is silent in BOTH directions — a running container keeps the environment ' +
+      'it started with, and a container nobody started writes no logs. Run against the commit before #431, this ' +
+      'gate reproduces that bug and emits the exact fix that was applied.',
+  },
+  {
+    id: 'secret-scan-mutation',
+    script: 'tooling/ci/secret-scan.mutation.mjs',
+    doctrine: '§14',
+    why:
+      'the mutation proof for secret-scan, and it belongs beside it rather than in a doc nobody re-runs. ' +
+      'A scanner that passes is indistinguishable from a scanner that is switched off — `process.exit(0)` on line 1 ' +
+      'prints the same green tick. This is what tells the two apart: 13 planted credentials must be caught and ' +
+      '15 credential-shaped-but-correct fixtures must NOT fire.',
+  },
+  {
     id: 'i18n-bypass',
     script: 'tooling/ci/i18n-bypass-scan.mjs',
     doctrine: '§9, §14.4',

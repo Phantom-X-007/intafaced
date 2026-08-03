@@ -203,13 +203,15 @@ const supplied = new Map();
  * produced a merge conflict on a file that PR already touches, and claim-check
  * warns about exactly that.
  */
-const FIXED_IN_OPEN_PR = [
-  {
-    svc: 'svc-academy',
-    missing: ['INTERNAL_SERVICE_SECRET'],
-    ref: 'PR #442 fix/academy-actually-starts',
-  },
-];
+// Empty, and that is the point: the one entry it held — svc-academy missing
+// INTERNAL_SERVICE_SECRET, deferred to PR #442 — was removed when #442 merged.
+//
+// The gate FAILED on it first. That is the anti-rot rule working: an entry here
+// says "a real gap, already fixed on a branch", and the moment that stops being
+// true it must stop being here. Otherwise this list quietly becomes an
+// exemption list, which is how a gate ends up green while the thing it guards
+// is broken.
+const FIXED_IN_OPEN_PR = [];
 const excusedKey = (svc, missing) => `${svc}:${[...missing].sort().join(',')}`;
 const EXCUSED = new Map(FIXED_IN_OPEN_PR.map((e) => [excusedKey(e.svc, e.missing), e]));
 
