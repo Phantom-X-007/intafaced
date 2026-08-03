@@ -15,3 +15,7 @@
 **Do not hand-edit generated files** — re-run the scripts after tip moves.
 
 **Kill switch:** remove `swarm:*` from `package.json` and delete `tooling/scripts/swarm.mjs` if these tools thrash; residual + `claim:check` remain.
+
+## Denon hard board
+
+Platform/money tasks agents leave for Denon: [`../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md)

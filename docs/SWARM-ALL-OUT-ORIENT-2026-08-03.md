@@ -118,6 +118,12 @@ Invent-money scan · PR risk rank · branch-ahead audit · design critique → *
 
 ---
 
+### G · Denon hard board (not free agent implement)
+
+While Nitro agents swarm free shell residual, **platform integrity, money Class M under open Denon PRs, product law, and Denon's CONFLICTING integrity pile** are tracked here — agents babysit only, do not dual-edit:
+
+→ [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md)
+
 ## 3 · Swarm anti-negatives (accounted for)
 
 | Negative                     | Combat                                                            |
