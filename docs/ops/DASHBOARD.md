@@ -1,19 +1,19 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T11:56:08.181Z · tip `5820cdc`
+Last report: 2026-08-03T12:11:16.413Z · tip `8abeb1c`
 
-| Report          | Path                                       |
-| --------------- | ------------------------------------------ |
-| Live FREEZE     | [FREEZE-LIVE.md](./FREEZE-LIVE.md)         |
-| R00 inventory   | [R00-INVENTORY.md](./R00-INVENTORY.md)     |
-| R01 PR matrix   | [R01-PR-MATRIX.md](./R01-PR-MATRIX.md)     |
+| Report | Path |
+| --- | --- |
+| Live FREEZE | [FREEZE-LIVE.md](./FREEZE-LIVE.md) |
+| R00 inventory | [R00-INVENTORY.md](./R00-INVENTORY.md) |
+| R01 PR matrix | [R01-PR-MATRIX.md](./R01-PR-MATRIX.md) |
 | R02 free claims | [R02-FREE-CLAIMS.md](./R02-FREE-CLAIMS.md) |
 
 ## At a glance
 
-- Free product claims: **14**
-- Blocked: **10**
-- Open PRs: **21**
+- Free product claims: **22**
+- Blocked: **2**
+- Open PRs: **19**
 
 FREE product claims exist — coordinator must spawn or residual-own each (anti-under-spawn).
 
