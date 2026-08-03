@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `705034e4` — docs(ops): R01 cycle86b partner babysit tip 42ce8da2 (#664)
-- **Generated:** 2026-08-03T21:41:48.836Z
+- **Tip:** `8cfec3f1` — docs(ops): R07 cycle87 freeProduct=0 + tip 705034e4 (#666)
+- **Generated:** 2026-08-03T21:46:06.757Z
 - **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
