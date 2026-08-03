@@ -1,12 +1,10 @@
 # R01 PR matrix (generated)
 
-Tip `00fdd51e` · 2026-08-03T15:39:22.453Z
+Tip `89f1b614` · 2026-08-03T15:42:57.901Z
 
 |   # | author         | files | mergeable   | title                                                                                                                      | action                              |
 | --: | -------------- | ----: | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| 533 | @ZenYoda3      |     3 | MERGEABLE   | docs(ops): R07 cycle25 freeProduct=0 + tip 00fdd51e                                                                        | own — rebase/merge if Class N green |
-| 532 | @ZenYoda3      |     3 | MERGEABLE   | docs(ops): dashboard freeze stamp tip 00fdd51e                                                                             | own — rebase/merge if Class N green |
-| 531 | @ZenYoda3      |     1 | MERGEABLE   | docs(ops): R01 partner babysit refresh tip 00fdd51e                                                                        | own — rebase/merge if Class N green |
+| 532 | @ZenYoda3      |     3 | CONFLICTING | docs(ops): dashboard freeze stamp tip 00fdd51e                                                                             | own — rebase/merge if Class N green |
 | 448 | @Phantom-X-007 |     7 | CONFLICTING | feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code                               | no dual-edit files                  |
 | 445 | @Phantom-X-007 |    18 | MERGEABLE   | fix(test): five money suites could skip on CI and the build went green                                                     | no dual-edit files                  |
 | 441 | @Phantom-X-007 |     5 | CONFLICTING | feat(ci): coverage-check — the gate §25 specified and nobody built                                                         | no dual-edit files                  |
