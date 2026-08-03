@@ -97,3 +97,19 @@ Nitro agents will not dual-edit Denon/Shehzad branches. Free to rebase when read
 | #346                     | Shehzad | CONFLICTING | M1 babysit only                                        |
 
 No Nitro open Class N this cycle. Agents do **not** merge partner PRs.
+
+---
+
+## Refresh cycle14 — 2026-08-03T14:50Z · tip `ed0421f7`
+
+| PR                       | Author  | Mergeable   | Notes                                                  |
+| ------------------------ | ------- | ----------- | ------------------------------------------------------ |
+| #445                     | Denon   | MERGEABLE   | full CI green — **his merge**                          |
+| #433                     | Denon   | MERGEABLE   | full CI green — **his merge** (also blocks P-WS paths) |
+| #430                     | Denon   | MERGEABLE   | docs Prettier green                                    |
+| #420                     | Denon   | MERGEABLE   | full CI green — **his merge**                          |
+| #428                     | Denon   | MERGEABLE   | Prettier+Typecheck **red** — owner fix                 |
+| #448 #441 #438 #436 #432 | Denon   | CONFLICTING | rebase needed — no dual-edit                           |
+| #346                     | Shehzad | CONFLICTING | M1 babysit only                                        |
+
+No Nitro open Class N this cycle. Agents do **not** merge partner PRs.
