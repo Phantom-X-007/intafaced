@@ -247,9 +247,6 @@
               <MenuItem name="6-1">
               <router-link to="/uc/innovation/myorders">{{$t('uc.activity.subNavTitle1')}}</router-link>
               </MenuItem>
-              <MenuItem name="6-2">
-              <router-link to="/uc/innovation/myminings">{{$t('uc.activity.subNavTitle2')}}</router-link>
-              </MenuItem>
             </Submenu>
           </Menu>
         </Col>
@@ -334,9 +331,6 @@
               <MenuItem name="6-1">
               <router-link to="/uc/innovation/myorders">{{$t('uc.activity.subNavTitle1')}}</router-link>
               </MenuItem>
-              <MenuItem name="6-2">
-              <router-link to="/uc/innovation/myminings">{{$t('uc.activity.subNavTitle2')}}</router-link>
-              </MenuItem>
             </Submenu>
           </Menu>
     </Drawer>
@@ -370,8 +364,7 @@ export default {
         "/uc/ad/update":"4-4",
         "/uc/promotion/mypromotion":"5-1",
         "/uc/promotion/mycards":"5-2",
-        "/uc/innovation/myorders":"6-1",
-        "/uc/innovation/myminings":"6-2"
+        "/uc/innovation/myorders":"6-1"
       },
       ucNavDrawerModal: false
     };
@@ -433,9 +426,6 @@ export default {
           break;
         case "6-1":
           this.$router.push("/uc/innovation/myorders");
-          break;
-        case "6-2":
-          this.$router.push("/uc/innovation/myminings");
           break;
         default:
           this.$router.push("/uc/safe");

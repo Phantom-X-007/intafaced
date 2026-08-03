@@ -233,7 +233,12 @@
                 <router-link to="/uc/money">
                   <MenuItem name="nav_assets" class="lang-item" style="padding-left:20px!important;">{{$t("header.assetmanage")}}</MenuItem>
                 </router-link>
-                <router-link to="/uc/innovation/myminings">
+                <!-- Was /uc/innovation/myminings; that screen is deleted (see
+                     config/sockets.js REMOVED). Pointed at the sibling that
+                     still exists rather than left dangling — a mobile menu item
+                     resolving to the catch-all route lands on the home page with
+                     no explanation, which is the hang this pass was fixing. -->
+                <router-link to="/uc/innovation/myorders">
                   <MenuItem name="nav_innnovationmanage" class="lang-item" style="padding-left:20px!important;">{{$t("header.innovationmanage")}}</MenuItem>
                 </router-link>
             </Submenu>
@@ -506,9 +511,11 @@ export default {
         this.pageView = "page-view2";
       }
 
-      if(to.path.length > 11 && to.path.substr(0,9) == "/envelope"){
-        this.pageView = "page-view3";
-      }
+      /* The `/envelope` branch that set page-view3 is gone with that route
+         (config/sockets.js REMOVED). The .page-view3 rule stays in this file's
+         stylesheet: it is a generic chrome-less layout, not envelope-specific,
+         and deleting a style nothing selects is a separate change from
+         deleting a product. */
     },
     exchangeSkin() {
 
@@ -610,7 +617,7 @@ export default {
         "nav-appdownload": "/app",
         "nav_safe": "/uc/safe",
         "nav_assets": "/uc/money",
-        "nav_innnovationmanage": "/uc/innovation/myminings",
+        "nav_innnovationmanage": "/uc/innovation/myorders",
         "1-1": "/login",
         "1-2": "/register"
       };

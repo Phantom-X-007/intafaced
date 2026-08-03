@@ -9,23 +9,24 @@ export default {
         captcha: '/uc/start/captcha',
         identification: '/uc/approve/certified/business/status', //Merchant verification
         apply: '/uc/approve/certified/business/apply', //merchant verification application
-        announcement: '/uc/announcement/page', //announcement list
-        paydividends: "/uc/bonus/user/page", //holder dividends
-        mylistrecord: "/uc/mine/detail/", //trading-mining detail
-        activitylist: "/uc/activity/page-query", // activity list
-        memberactivity: "/uc/activity/getmemberrecords", // user activity list
-        attendActivity: "/uc/activity/attend", // join activity
-        mypromotion: "/uc/promotion/mypromotion", // my referral commission
-        toppromotion: "/uc/promotion/toprank", // Partner Leaderboard
-        getfreecard: "/uc/promotion/promotioncard/getfreecard", // claim free promo card
-        exchangecard: "/uc/promotion/promotioncard/exchangecard", // Redeem promo card
-        mycardlist: "/uc/promotion/promotioncard/mycard", // Redeem promo card
-        toppromotionmonth: "/uc/promotion/monthtoprank", // Partner Leaderboard
-        toppromotionweek: "/uc/promotion/weektoprank", // Partner Leaderboard
-        memberInfo: "/uc/member/my-info", // fetch user info
-        mypromotionrecord: "/uc/promotion/record", //fetch referral records
-        myInnovationOrderList: "/uc/activity/getmyorders", // launchpad order list
-        myInnovationMinings: "/uc/miningorder/my-minings" // fetch my miners
+        announcement: '/uc/announcement/page' //announcement list
+        // ── SIXTEEN RETIRED PATHS REMOVED ───────────────────────────────────
+        // The promotions, referral, launchpad, gift and dividend endpoints
+        // (/uc/bonus/*, /uc/mine/*, /uc/activity/*, /uc/promotion/*,
+        // /uc/miningorder/*, /uc/member/my-info) lived here and had no caller
+        // left after their screens were socketed or deleted.
+        //
+        // Deleted rather than commented out, and that is the point of writing
+        // it down: a named constant pointing at an unproxied path is an
+        // invitation. Anyone adding a screen reads this file, finds
+        // `api.uc.mycardlist`, and reasonably concludes there is a card service
+        // to call. There is not — nginx proxies only /api/ and /ws, so every one
+        // of these returned index.html with a 200 and the caller read HTML as a
+        // failed API response.
+        //
+        // What each screen actually needs instead is stated per screen in
+        // ./sockets.js. Anything genuinely behind the front door goes through
+        // ./intafaced.js, which is a different transport for a reason.
     },
     // REMOVED: the `market` and `exchange` groups.
     //

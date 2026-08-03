@@ -51,6 +51,22 @@ export const REASON = {
     NOT_ROUTED: 'not_routed',
     /** The edge routed it, but the service serves no such path — router not mounted. */
     NOT_MOUNTED: 'not_mounted',
+    /**
+     * There is nothing to call, anywhere — and that is a statement about the
+     * platform, not about this request.
+     *
+     * The three reasons above all describe a call that was MADE and refused, so
+     * each of them implies a service that exists. This one is different in kind:
+     * the capability has never been built, so no call is issued at all and the
+     * screen says so from local knowledge (config/sockets.js).
+     *
+     * It earns its own value because collapsing it into NOT_ROUTED would be a
+     * lie of omission — "the prefix is not in the route table" invites someone
+     * to add a route to a service that was never written. The honest sentence is
+     * that the product does not exist yet, and the socket row names what would
+     * have to be built for it to.
+     */
+    NO_SURFACE: 'no_surface',
     /** No platform session. */
     UNAUTHORIZED: 'unauthorized',
     /** Signed in, but the session does not carry the scope this procedure demands. */
