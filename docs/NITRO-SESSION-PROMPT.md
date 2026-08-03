@@ -7,6 +7,16 @@ Copy **only** the block below into a new agent session opened on this repo (work
 ```
 Project: INTAFACED Sovereign OS — Phantom-X-007/intafaced (this workspace).
 
+PRE-FLIGHT (first 30s — anti-drift)
+1. git fetch origin main && git rev-parse --short origin/main
+2. gh pr list --state open
+3. Product UI = vendor/coinexchange/05_Web_Front @ http://localhost:8090 — NOT apps/web.
+4. Never implement on main checkout — worktree only.
+5. Read if present: docs/START-HERE.md · docs/BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md · docs/WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md
+6. Owners: Nitro=FE/shell · Denon=spine + his open PRs (no dual-edit) · Shehzad @shehzad002=M1–M7 (babysit only, never implement).
+7. Do not rebuild Bizzan screens from scratch. Do not re-lie custody screens that are CustodyNotBuilt.
+8. Chat memory is not high water. Tip + open PRs + docs on main are.
+
 WHO I AM
 - Non-technical director / vibe coder. Infer unspoken needs. Plain language only; I verify outcomes, not diffs.
 - I do not run git/PR by hand. You are in Nitro operator mode (AGENTS.md): worktree → implement → pnpm verify → PR → merge when Class gates pass (ownership law) → give me links + green/red/merged. Autonomous ship when residual campaign / I said go all-out.
@@ -19,8 +29,8 @@ WHAT THIS IS
 - Board: docs/TRACKER.md · README status band · `pnpm tracker ready`.
 - **Truth layers (FINISHED law — do not collapse):** docs/COORDINATION-TRUTH-LAYERS.md · finish audit docs/COORDINATION-FINISH-AUDIT-2026-08-02.md — product free/owner/done = features.mjs; campaign next = BOARD-CLEAR-NEXT; session dual-build = LIVE-LANES + open PRs; code = git. Tracker touch = mountain events only (not every craft PR). No new Approve gates / PR caps / CI tax. Agents re-audit via finish-audit checklist; Nitro never updates boards by hand.
 - **ACTIVE CAMPAIGN — BOARD CLEAR (finish product table; full autonomy):** docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-ENGINEERING-STANDARD.md · docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md · docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-GO-READINESS.md · docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md · docs/BOARD-CLEAR-PROCESS-LOOPS.md · docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md · docs/BOARD-CLEAR-SCOREBOARD.md · docs/BOARD-CLEAR-NEXT.md · docs/BOARD-CLEAR-DECISION-LOG.md · **paste GO:** docs/BOARD-CLEAR-AUTONOMOUS-RUN.md. Anti-slop + evidence-before-claims. UI = vendor :8090. #289 rebase. Locked B. Done/Cut only; no continue; no residual theater.
-- Plain map: docs/START-HERE.md · Ownership: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Older residual mode: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md (superseded when Board Clear docs present) · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
-- Stream A / UI: docs/NITRO-STREAM-A-CLAIM.md · #83 · docs/FRONTEND-STATE-OF-TRUTH-2026-07-31.md under Board Clear web.terminal Done bar.
+- Plain map: docs/START-HERE.md · Anti-drift: docs/BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md · docs/ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md · Ownership: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Older residual mode: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md (superseded when Board Clear docs present) · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
+- Stream A / UI: docs/NITRO-STREAM-A-CLAIM.md · #83 · docs/FRONTEND-STATE-OF-TRUTH-2026-07-31.md under Board Clear web.terminal Done bar · apps/web not product (docs/REDUNDANT-VS-PORT-2026-08-03.md).
 - **Stream A AFK drain (vendor :8090 honesty/craft):** docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md · AOS · residual-register.json (`afk_safe`) · GO-READY · paste AFK block below when leaving laptop.
 - History boards (not live law): docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md · docs/POST-MERGE-RESIDUAL-AFTER-86.md.
 
@@ -36,8 +46,9 @@ PARTNER + OWNERSHIP (durable — see NITRO-OWNERSHIP doc)
 
 ALREADY TRUE (re-verify live each session — do not trust this paragraph as eternal)
 - Fleet on main: edge, mounts, platform:up, ledger/identity/token, trade/pay/p2p/bank shells. Do not rebuild services already on main.
-- Product UI = vendored exchange shell at http://localhost:8090 — not apps/web. Books = TypeScript ledger only.
-- Residual program + Stream A are Nitro-executed; re-check NITRO-RESIDUAL-CAMPAIGN + LIVE-LANES + `gh pr list` for what is open.
+- Product UI = vendored exchange shell at http://localhost:8090 — not apps/web. Books = TypeScript ledger only. Shell rewire/deploy waves may land often — re-fetch tip; do not assume July-era state.
+- Custody screens may be honest NotBuilt until wallet-RPC review — do not invent live withdraw against dead Java.
+- Residual program + Stream A are Nitro-executed; re-check NITRO-RESIDUAL-CAMPAIGN + LIVE-LANES + `gh pr list` for what is open. Never dual-edit files in Denon’s open PRs.
 - Strix PARKED — never run without my explicit go + non-prod target.
 - Not real customer money until rails/chain + perimeter + kill path + dual-book discipline (Denon direction for go-live posture).
 

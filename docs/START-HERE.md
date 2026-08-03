@@ -2,7 +2,15 @@
 
 **One page.** Read this when confused. Agents: load this _after_ `AGENTS.md` if the human needs orientation, not instead of the law.
 
-**Snapshot date:** 2026-07-29 evening · trust floor = mega-wave after #86 (re-check `git rev-parse origin/main` + [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md)).
+**Re-derive every session (do not trust frozen SHAs in chat):**  
+`git fetch origin main && git rev-parse --short origin/main` · `gh pr list --state open`  
+**Anti-drift pack (2026-08-03):** product + recovery + owners live in  
+[`BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md`](BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md) ·  
+[`WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md`](WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md) ·  
+[`ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md`](ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md) ·  
+[`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md) ·  
+[`DENON-CALL-EXTRACT-2026-08-03.md`](DENON-CALL-EXTRACT-2026-08-03.md).  
+Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md).
 
 ---
 
@@ -48,13 +56,15 @@ Phase 2 Trade+       ████████░░ mounted behind edge; termina
 Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox still not live product
 ```
 
-**Snapshot date:** 2026-07-29 · main tip includes audit **#80 + #81** (`88e5e33`).
+**Live status:** re-derive tip (command above). Historical July snapshots below are **orientation only**, not the tip SHA.
 
-- **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists.
+- **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists. Shell deployable on **:8090** (Dockerfile + compose). Major shell rewire waves landed (#412 deploy, #418 OTC/identity, #419 nav, #421 trading edge, #426 promo honesty — re-check `gh` for newer).
 - **Not a live money product:** rails/sandbox, chain feed propped — see trust floor.
-- **Do not rebuild** services already on main.
+- **Do not rebuild** services already on main. **Do not rebuild Bizzan screens from scratch** — rewire / honesty / i18n / brand only ([`BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md`](BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md)).
 - **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · what “proper cleanup” means: [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md)
-- **Product UI:** vendored exchange shell → http://localhost:8090 (`vendor/<exchange-tree>/05_Web_Front`). `apps/web` is **not** the product.
+- **Product UI (law):** vendored exchange shell → http://localhost:8090 (`vendor/coinexchange/05_Web_Front`). **`apps/web` is not the product** (retire as product; optional pattern port only — [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md)).
+- **Custody honesty:** some money screens may be **CustodyNotBuilt** until wallet-RPC security review — do not re-paint fake withdraw/recharge UI over that.
+- **Owners:** Nitro = FE/shell · Denon = spine / his open PRs (do not dual-edit) · Shehzad `@shehzad002` = M1–M7 (agents babysit only).
 - **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
 - **Security when-to:** [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) · tooling floor: [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md)
 - **After a big ship wave:** [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md) or [`WAVE-AUDIT.md`](WAVE-AUDIT.md) — full A–E is **closed**
