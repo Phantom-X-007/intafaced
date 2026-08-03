@@ -21,9 +21,19 @@ import {
 /**
  * KILL-SWITCH BOARD — §14.6 "Admin controls: kill-switch + config surface".
  *
- * Flag rows: session-staged preview of what an override would do (flag store §13).
- * Module kill rows: LIVE against svc-edge when the control plane is reachable
- * (A-P5-OPS). A board that only flipped React state after #186 was a lie.
+ * Two kinds of switch on one board, and telling them apart is the whole job:
+ *
+ *   · MODULE rows are LIVE against svc-edge when the control plane is reachable
+ *     (#186 / A-P5-OPS), and disabled — with the reason — when it is not.
+ *   · FLAG rows are a session preview of what an override WOULD do. There is no
+ *     durable flag store yet (§13), so flipping one changes this browser tab and
+ *     nothing else, for ever, no matter how the console is configured.
+ *
+ * The second fact used to be stated in a footnote that appeared only AFTER a
+ * flag had been flipped, and on the `ledger.posting` panel — the switch labelled
+ * "halts ALL value movement platform-wide" — not at all. So the most dangerous
+ * control on the board was also the one whose inertness was hardest to discover.
+ * Every preview control now carries the word at the control.
  */
 
 export interface KillSwitchBoardProps {
@@ -248,7 +258,18 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
         </Panel>
       )}
 
-      <Panel title="Flags by module" className="adm-flush">
+      <Panel
+        title="Flags by module"
+        actions={
+          <Chip tone="warn" dot>
+            Flag switches: preview only
+          </Chip>
+        }
+      >
+        <div className="adm-callout" data-tone="warn">
+          <strong>The per-flag switches in this table change nothing outside this browser tab</strong>
+          {stageNotice}
+        </div>
         <div className="adm-scroll">
           <table className="adm-table">
             <thead>
@@ -258,7 +279,7 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
                 <th>Drop</th>
                 <th>State</th>
                 <th>Decided by</th>
-                <th>Switch</th>
+                <th>Switch — preview only</th>
               </tr>
             </thead>
             {groups.map((group) => (
@@ -281,11 +302,15 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
                       ) : (
                         <Chip tone="warn">Not edge-enforced</Chip>
                       )}
+                      {liveModules ? <Chip tone="live">Live switch</Chip> : <Chip tone="danger">Inert — {plane.status}</Chip>}
                       <Switch
                         on={!group.killed}
                         onLabel="Enabled"
                         offLabel="Killed"
                         disabled={!liveModules || isPending}
+                        // The reason travels with the control. A disabled switch
+                        // with no explanation reads as a broken console.
+                        title={liveModules ? undefined : (plane.detail ?? `control plane ${plane.status}`)}
                         onToggle={() => requestModuleToggle(group.module)}
                       />
                     </span>
@@ -357,7 +382,10 @@ function ControlPlanePanel({ plane }: { plane: ControlPlaneState }) {
           )}
           {plane.status === 'unconfigured' && (
             <>
-              Set <code>EDGE_URL</code> and <code>ADMIN_OPERATOR_TOKEN</code> on this app. Module switches stay disabled until the console
+              {/* `detail` names the variable that is ACTUALLY missing. The old
+                  copy always said "set EDGE_URL and ADMIN_OPERATOR_TOKEN", which
+                  sends an operator to check a setting that was already right. */}
+              {plane.detail ?? 'This console holds no credential for the control plane.'} Module switches stay disabled until the console
               can reach the edge — a local flip that looks like a halt is worse than no switch.
             </>
           )}
@@ -380,8 +408,9 @@ function ControlPlanePanel({ plane }: { plane: ControlPlaneState }) {
 const FLAG_COUNT_COPY = 'Every flag declared in the registry, grouped by the module that owns it.';
 
 const stageNotice =
-  'Per-flag staged changes are held in this browser session only. Module kills above are live when the control plane is reachable. ' +
-  'A durable flag store is the §13 socket for pushing per-flag overrides into services.';
+  'Per-flag switches stage a preview in this browser session and are read by no service — there is no durable flag store yet (§13 socket). ' +
+  'The MODULE switch on each group header is the live one: it posts to svc-edge and refuses new commitments at the door. ' +
+  'To halt all value movement use Ledger ops, which writes an attributed freeze row in svc-ledger.';
 
 // ── Rows ────────────────────────────────────────────────────────────────────
 
@@ -426,10 +455,12 @@ function FlagRow({
             on={state.enabled}
             critical={critical}
             disabled={locked}
+            preview
             onLabel="On"
             offLabel="Off"
             onToggle={() => onSet(state.def.key, !state.enabled)}
           />
+          <Chip tone="dark">Preview</Chip>
           {state.provenance === 'override' && (
             <button type="button" className="adm-btn" onClick={() => onClear(state.def.key)}>
               Clear
@@ -462,6 +493,8 @@ function Switch({
   onToggle,
   critical = false,
   disabled = false,
+  preview = false,
+  title,
 }: {
   on: boolean;
   onLabel: string;
@@ -469,6 +502,9 @@ function Switch({
   onToggle: () => void;
   critical?: boolean;
   disabled?: boolean;
+  /** True when flipping this changes only this browser session. */
+  preview?: boolean;
+  title?: string;
 }) {
   return (
     <button
@@ -476,8 +512,13 @@ function Switch({
       className="adm-switch"
       data-on={on}
       data-critical={critical}
+      data-preview={preview}
       disabled={disabled}
       aria-pressed={on}
+      // Announced by a screen reader and shown on hover. A switch that stages a
+      // preview and a switch that halts a market must not present identically.
+      aria-description={preview ? 'Preview only — changes this browser session, not the platform' : undefined}
+      title={title ?? (preview ? 'Preview only — changes this browser session, not the platform' : undefined)}
       onClick={onToggle}
     >
       <span>{onLabel}</span>
@@ -504,22 +545,56 @@ function CriticalSwitch({
   return (
     <Panel
       title="ledger.posting — platform-wide value movement"
-      className="adm-panel--danger"
-      actions={<StateChip on={state.enabled} critical={!state.enabled} />}
+      className="adm-panel--warn"
+      actions={
+        <span className="adm-inline">
+          <Chip tone="warn" dot>
+            Preview only
+          </Chip>
+          <StateChip on={state.enabled} critical={!state.enabled} />
+        </span>
+      }
     >
       <div className="adm-stack">
+        {/*
+          THE MOST MISLEADING CONTROL IN THE CONSOLE, BEFORE THIS.
+
+          A panel styled as the platform's emergency stop, a "Halt posting"
+          button behind an acknowledgement checkbox, and a flag switch underneath
+          it — all of which set `overrides` in this component's React state. It
+          read exactly like the money plane's kill and it was a browser boolean,
+          and nothing on the panel said otherwise.
+
+          It is kept, because seeing the resolved value of `ledger.posting` and
+          WHY it resolved that way is genuinely useful. It is de-escalated: warn
+          rather than danger, "preview" in the title bar, and the real control
+          named with a link, so an operator who came here to stop the platform
+          leaves this panel and goes to the one that can.
+        */}
+        <div className="adm-callout" data-tone="warn">
+          <strong>This panel halts nothing — it previews a flag</strong>
+          The buttons below stage a value for <code>ledger.posting</code> in this browser session. There is no durable flag store (§13), so
+          no service ever reads what is staged here. <b>To actually stop value movement, use Ledger ops</b> — that screen posts to
+          <code> /api/ledger-freeze</code> and svc-ledger writes a durable, attributed <code>posting_freeze</code> row.
+        </div>
+
         <div className="adm-callout" data-tone="danger">
-          <strong>Blast radius: the entire platform</strong>
-          Every module posts through the ledger. Turning <code>ledger.posting</code> OFF halts ALL value movement platform-wide — trade
-          fills, payouts, escrow releases, card authorisations, staking, settlement — at once and without warning to users. It is the
-          correct action after a reconciliation mismatch (§4.2: an unverifiable book must stop accepting writes) and the wrong action for
-          anything smaller.
+          <strong>What the real freeze does</strong>
+          Every module posts through the ledger. Freezing it halts ALL value movement platform-wide — trade fills, payouts, escrow releases,
+          card authorisations, staking, settlement — at once and without warning to users. It is the correct action after a reconciliation
+          mismatch (§4.2: an unverifiable book must stop accepting writes) and the wrong action for anything smaller.
+        </div>
+
+        <div className="adm-inline">
+          <a className="adm-btn" data-tone="danger" href="/ledger">
+            Go to Ledger ops — the freeze that works
+          </a>
         </div>
 
         <div className="adm-inline">
           <label className="adm-check">
             <input type="checkbox" checked={armed} onChange={(event) => onArm(event.target.checked)} />
-            <span>I understand this halts all value movement platform-wide, for every user, immediately.</span>
+            <span>I understand the two buttons below only stage a preview in this browser and halt nothing.</span>
           </label>
         </div>
 
@@ -527,14 +602,20 @@ function CriticalSwitch({
           <button
             type="button"
             className="adm-btn"
-            data-tone="danger"
             disabled={!armed || !state.enabled}
+            title="Preview only — changes this browser session, not the platform"
             onClick={() => onSet(state.def.key, false)}
           >
-            Halt posting
+            Preview OFF
           </button>
-          <button type="button" className="adm-btn" disabled={state.enabled} onClick={() => onSet(state.def.key, true)}>
-            Resume posting
+          <button
+            type="button"
+            className="adm-btn"
+            disabled={state.enabled}
+            title="Preview only — changes this browser session, not the platform"
+            onClick={() => onSet(state.def.key, true)}
+          >
+            Preview ON
           </button>
           {state.provenance === 'override' && (
             <button type="button" className="adm-btn" onClick={() => onClear(state.def.key)}>
@@ -542,8 +623,7 @@ function CriticalSwitch({
             </button>
           )}
           <span className="adm-footnote">
-            Decided by <b>{PROVENANCE_LABEL[state.provenance]}</b>. A freeze issued from Ledger ops is the operational equivalent and
-            carries its own confirmation.
+            Decided by <b>{PROVENANCE_LABEL[state.provenance]}</b>.
           </span>
         </div>
       </div>

@@ -545,14 +545,7 @@ services:
     container_name: intafaced-svc-academy
     command: ['node', 'services/svc-academy/dist/index.js']
     environment:
-      # *internal-secret was missing here. src/env.ts merges
-      # `internalServiceEnvSchema` for the two callees named above, and
-      # INTERNAL_SERVICE_SECRET has no default — so the process died at import
-      # with `EnvError: INTERNAL_SERVICE_SECRET: Required`. The container was
-      # never created at all, which is why there were no restart-loop logs for
-      # anyone to read: a service that fails to boot is loud, a service nobody
-      # started is silent.
-      <<: [*service-env, *edge-secret, *internal-secret]
+      <<: [*service-env, *edge-secret]
       SERVICE_NAME: svc-academy
       # 4016: every port from 4000 to 4015 is already claimed above.
       HTTP_PORT: '4016'
@@ -755,6 +748,50 @@ services:
       timeout: 5s
       retries: 12
 
+  # THE OPERATOR CONSOLE — and the one container in this file that is a SAFETY
+  # CONTROL rather than a surface.
+  #
+  # ── Why this block grew ────────────────────────────────────────────────────
+  #
+  # #186 wired `apps/admin` to svc-edge: `src/lib/control-plane-client.ts` reads
+  # `EDGE_URL` + `ADMIN_OPERATOR_TOKEN` and posts module kills, and
+  # `ADMIN_TREASURY_TOKEN` reaches the ledger freeze. This block set NONE of the
+  # three. So the deployed console fell into `unconfigured` on every request and
+  # an operator flipping a switch changed a React boolean — the exact failure the
+  # client file's own header describes, reintroduced by the deployment rather
+  # than by the code.
+  #
+  # A wire that exists in `src/` and not in the environment is not a wire. This
+  # is where that is fixed.
+  #
+  # ── EDGE_URL has a default; the tokens deliberately do not ─────────────────
+  #
+  # An address is not a credential. `http://svc-edge:4000` is the edge's name on
+  # this network and nothing else — getting it wrong costs an operator an hour,
+  # and there is no version of this stack where it is anything else.
+  #
+  # The two tokens are OWNER-SUPPLIED SECRETS and are written in pass-through
+  # form (key, no value) exactly like `AGENTS_UPSTREAM_API_KEY` above: compose
+  # forwards them only if they are set in `.env`, and omits them entirely
+  # otherwise. `${VAR:-}` would instead set them to the EMPTY STRING, which is a
+  # present-but-invalid value — `docker inspect` would show the variable, and the
+  # console's `config()` would still refuse. "Configured, blank" and "not
+  # configured" must not look the same to somebody debugging at 3am.
+  #
+  # They are NOT `:?`-required like EDGE_PRINCIPAL_SECRET. Refusing to start the
+  # console because it has no operator token would remove the surface that tells
+  # you it has no operator token — and the launch, drop and jurisdiction screens
+  # do not need one. Absent means the console SAYS, on every page, that it cannot
+  # halt anything. See `src/lib/console-status.ts`.
+  #
+  # ── No `depends_on: svc-edge` ──────────────────────────────────────────────
+  #
+  # Unlike the note above about browser-side URLs, this container now DOES call
+  # svc-edge server-side (`/` and `/ledger` server-load the control plane before
+  # first paint). Ordering it behind the edge would still be wrong: the moment an
+  # operator most needs this console is the moment the edge is unhealthy, and a
+  # console that will not boot then is a console that is absent during exactly
+  # the incident it exists for. Both pages render `unreachable` and say why.
   admin:
     <<: *app
     container_name: intafaced-admin
@@ -768,6 +805,19 @@ services:
       HOSTNAME: 0.0.0.0
       HEALTHCHECK_PORT: '3100'
       HEALTHCHECK_PATH: /
+      # The control plane this console reaches (§14.6). Container port 4000, not
+      # the host's — the console calls the edge across the compose network.
+      EDGE_URL: ${EDGE_URL:-http://svc-edge:4000}
+      # `admin:write` + MFA — reaches the module kill-switches.
+      ADMIN_OPERATOR_TOKEN:
+      # `admin:treasury` — reaches the ledger freeze. A SEPARATE authority on
+      # purpose: a console holding only the operator token cannot stop the money
+      # plane, and svc-edge enforces that split independently.
+      ADMIN_TREASURY_TOKEN:
+      # Until operator SSO lands, the optional shared-secret gate on the BFF
+      # routes (`x-intafaced-admin-bff`), injected by a reverse proxy. Unset
+      # means network ACL is the only thing in front of these routes.
+      ADMIN_BFF_SHARED_SECRET:
     ports: ['3100:3100']
     healthcheck: *healthcheck
 

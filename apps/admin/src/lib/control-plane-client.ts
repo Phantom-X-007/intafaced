@@ -1,5 +1,6 @@
 import 'server-only';
 import type { ModuleId } from '@intafaced/config';
+import { describeUnconfigured, readConsoleStatus, type Authority } from '@/lib/console-status';
 
 /**
  * THE WIRE FROM THIS CONSOLE TO THE PLATFORM (§14.6).
@@ -85,21 +86,31 @@ const EMPTY: KillSwitchSnapshot = { disabledModules: [], reasons: {}, audit: [] 
 /** How long the console waits before reporting the control plane as unreachable. */
 const TIMEOUT_MS = 5_000;
 
-function config(tokenVar: 'ADMIN_OPERATOR_TOKEN' | 'ADMIN_TREASURY_TOKEN'): { edgeUrl: string; token: string } | null {
-  const edgeUrl = process.env.EDGE_URL;
-  const token = process.env[tokenVar];
-  if (!edgeUrl || !token) return null;
-  return { edgeUrl: edgeUrl.replace(/\/$/, ''), token };
+/**
+ * The edge address plus the token for ONE authority, or the reason there is not
+ * one.
+ *
+ * `readConsoleStatus` is the single place that decides what "configured" means,
+ * so the banner in the layout, the panel on the board and the 503 from a BFF
+ * route cannot disagree about whether this console can halt anything. The
+ * `reason` it returns names the variable that is actually missing rather than
+ * both candidates — the old copy said "Set EDGE_URL and ADMIN_OPERATOR_TOKEN"
+ * even when `EDGE_URL` was already right, which sends an operator to check a
+ * setting that was never the problem.
+ */
+function config(authority: Authority): { edgeUrl: string; token: string } | { reason: string } {
+  const status = readConsoleStatus();
+  const state = status[authority];
+  if (!state.configured || !status.edgeUrl) return { reason: describeUnconfigured(state) };
+  return { edgeUrl: status.edgeUrl, token: (process.env[state.tokenVar] ?? '').trim() };
 }
 
+const isConfigured = (cfg: ReturnType<typeof config>): cfg is { edgeUrl: string; token: string } => 'token' in cfg;
+
 export async function readKillSwitches(): Promise<ControlPlaneState> {
-  const cfg = config('ADMIN_OPERATOR_TOKEN');
-  if (!cfg) {
-    return {
-      status: 'unconfigured',
-      snapshot: EMPTY,
-      detail: 'Set EDGE_URL and ADMIN_OPERATOR_TOKEN on this app to reach the platform control plane.',
-    };
+  const cfg = config('module');
+  if (!isConfigured(cfg)) {
+    return { status: 'unconfigured', snapshot: EMPTY, detail: cfg.reason };
   }
 
   try {
@@ -139,9 +150,11 @@ export interface ToggleResult {
 }
 
 export async function setKillSwitch(input: ToggleInput): Promise<ToggleResult> {
-  const cfg = config('ADMIN_OPERATOR_TOKEN');
-  if (!cfg) {
-    return { ok: false, status: 503, snapshot: EMPTY, detail: 'This console is not configured to reach the control plane.' };
+  const cfg = config('module');
+  if (!isConfigured(cfg)) {
+    // 503, never a 200 with a cheerful snapshot. This is the branch a console
+    // with no token takes, and it is the branch that used to be invisible.
+    return { ok: false, status: 503, snapshot: EMPTY, detail: cfg.reason };
   }
 
   try {
@@ -184,12 +197,9 @@ export interface FreezeResult {
   readonly detail: string | null;
 }
 
-const UNCONFIGURED_TREASURY =
-  'Set EDGE_URL and ADMIN_TREASURY_TOKEN to reach the ledger freeze. This is a separate credential from ADMIN_OPERATOR_TOKEN on purpose.';
-
 export async function readFreeze(): Promise<FreezeResult> {
-  const cfg = config('ADMIN_TREASURY_TOKEN');
-  if (!cfg) return { ok: false, status: 503, state: null, detail: UNCONFIGURED_TREASURY };
+  const cfg = config('treasury');
+  if (!isConfigured(cfg)) return { ok: false, status: 503, state: null, detail: cfg.reason };
 
   try {
     const res = await fetch(`${cfg.edgeUrl}/admin/ledger/freeze`, {
@@ -220,8 +230,8 @@ export async function readFreeze(): Promise<FreezeResult> {
  * away from a book that is still accepting writes.
  */
 export async function setFreeze(frozen: boolean, reason?: string): Promise<FreezeResult> {
-  const cfg = config('ADMIN_TREASURY_TOKEN');
-  if (!cfg) return { ok: false, status: 503, state: null, detail: UNCONFIGURED_TREASURY };
+  const cfg = config('treasury');
+  if (!isConfigured(cfg)) return { ok: false, status: 503, state: null, detail: cfg.reason };
 
   try {
     const res = await fetch(`${cfg.edgeUrl}/admin/ledger/${frozen ? 'freeze' : 'unfreeze'}`, {
