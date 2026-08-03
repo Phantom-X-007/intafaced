@@ -855,6 +855,69 @@ export const FEATURES = [
     note: '§13 — adapter shipped (GatewayChannel over NOTIFY_SMS_GATEWAY_URL/TOKEN, E.164 addresses confirmed by code). Blocked on an outbound SMS rail the owner must supply; unconfigured it refuses by name.',
   }),
 
+  // ── PHASE 5 · DEX — THE PROTOCOL PLANE'S FRONT DOOR (§8.6, §17.5) ────────
+  //
+  // Added 2026-08-03. `dex` was the 21st module and the tracker listed 20: the
+  // service had ~2,100 lines of source, 87 tests, an edge route and a running
+  // process, and NO ROW OF ANY KIND. That is the exact mechanism a previous
+  // audit named for five other capabilities — untracked work gets rebuilt by
+  // accident, because nothing tells the next person it exists.
+  //
+  // It is deliberately not one row saying "done". The custody posture is
+  // finished and provable; the routing arithmetic is finished and mounted; the
+  // live quote path is finished and CANNOT SERVE A QUOTE, because no venue it
+  // is configured to read is reachable. Those are three different truths.
+  f('dex.permissionless-access', 'Provably non-custodial, permissionless front door (§503, §585)', {
+    module: 'dex',
+    phase: '5',
+    plane: 'P',
+    status: 'done',
+    dependsOn: ['infra.gates'],
+    requires: ['services/svc-dex'],
+    note: "PROVEN END TO END 2026-08-03, and this is the part of svc-dex that is genuinely finished. packages/config/src/modules.ts declares `dex: { planes: ['protocol'], custodial: false }`, and `checkAccess` short-circuits exactly that shape to `allowed.permissionless` BEFORE any tier is read — with region screening still ahead of the short-circuit, which is the ordering §24 Lane A requires (sovereign does not mean unscreened). Enforced three ways, not asserted once: (1) `custody-scan` includes svc-dex in its Protocol Plane list and fails the build on any ledger write import — run clean at 97 files across 3 services; (2) env.ts withholds both DATABASE_URL and INTERNAL_SERVICE_SECRET, so a bug here could not reach `ledger.post` even if an import slipped past the scanner; (3) `/ready` states `{custodial: false, plane: 'protocol'}` and the `health` procedure's output schema types `custodial` as `z.literal(false)`, so a deployment that contradicted the posture could not typecheck. Live probe: `/health` 200, `/ready` 200 `{ready:true,custodial:false,plane:'protocol'}`, `health` procedure `{ok:true,service:'svc-dex',custodial:false}`. §0.6 holds — svc-dex moves no value and has no code path that could. 5 dedicated tests in permissionless.test.ts.",
+  }),
+  f('dex.route-preview', 'Best-execution routing arithmetic over caller-supplied quotes', {
+    module: 'dex',
+    phase: '5',
+    plane: 'P',
+    status: 'done',
+    requires: ['services/svc-dex/src/router-quote.ts'],
+    note: 'Mounted, tested and probed live 2026-08-03. `routePreview` sweeps a set of venue quotes by effective price and returns the split. It is explicitly NOT a price and the router says so in its own header — it was called `quote` once, which is precisely how a caller ends up rendering invented numbers in good faith, so it was renamed rather than deleted because the arithmetic is genuinely useful for a routing explainer. Live probe with two venues (a: 3 @ 90000 @ 10bps, b: 4 @ 124000 @ 30bps, want 5) returned 200 and correctly took 3 from the cheaper venue and 2 from the dearer, effective prices 30030.03003003003003003 and 31093.279839518555667001, all decimal strings. Money law holds on the wire: a JSON-number `qty` is refused with HTTP 400 by the zod schema, and every amount is parsed to scaled bigint via parseAmount before any arithmetic. 16 tests in router-quote.test.ts plus 16 mount tests that would fail if it stopped being reachable.',
+  }),
+  f('dex.quote-router', 'Live cross-venue quote — real prices or a typed refusal', {
+    module: 'dex',
+    phase: '5',
+    plane: 'P',
+    status: 'ready',
+    dependsOn: ['indexer.readmodels'],
+    requires: ['services/svc-dex/src/quote'],
+    note: "THE CODE IS FINISHED. IT CANNOT SERVE A QUOTE. Both halves of that are true and the row exists to stop either half being read alone. `quote` sources its own prices from live venues, enforces QUOTE_MAX_AGE_MS against the moment THIS process finished reading (not a timestamp a venue supplied), and REFUSES when it cannot — there is no cache and no fallback. LIVE PROBE 2026-08-03 on the shipped default config: HTTP 503, `dex.quote.no_venue_available — No venue could price BTC-USDT: intachain-clob (unreachable); internal-book (unreachable)`. It fails safe and names both dead venues. PROOF THE CODE IS NOT THE BLOCKER: the same binary, given one reachable venue via DEX_EXTERNAL_VENUES and nothing else changed, returned HTTP 200 with a real route — one leg, filledQty 1, quoteAmount '30010.25', effectivePrice '30040.29029029029029029' (the taker fee grossed up as quoteAmount/(1-bps), which errs AGAINST the user rather than understating cost), `degraded: true`, `singleVenue: true`, `custodialLegs: true`, and the dead intachain-clob leg still named in `unavailable`. Every response carries venuesConfigured / degraded / singleVenue precisely so a client cannot present the only venue that answered as the best of several — the quiet failure mode of every cross-venue router. Three adapters, one interface, so the router has no notion of ours-versus-theirs and cannot quietly favour us: intachain-clob (svc-indexer read models, protocol plane), internal-book (svc-matching, custodial and disclosed as such), and external venues (operator config, EMPTY BY DEFAULT). No third-party connectivity library: `parseLevels` refuses a JSON number outright, which is why there is no ccxt import — its unified fetchOrderBook returns floats. NOT `done` for one reason and it is not a code reason: no real venue has ever answered this service. See socket.dex-venue-set.",
+  }),
+  f('socket.dex-venue-set', 'A venue this platform actually quotes', {
+    module: 'dex',
+    phase: '5',
+    plane: 'P',
+    status: 'socket',
+    dependsOn: ['dex.quote-router'],
+    note: '§13 — THE BLOCKER, and it is a DECISION, not code, not a chain. svc-dex can read three kinds of venue and all three are dark for different reasons. (1) `intachain-clob` reads svc-indexer, whose chain feed needs a contract emitting BookLevel/Fill/Position; only contracts/dev/DevVenue.sol does, a dev fixture with no book and no access control, INDEXER_VENUE_ADDRESS is the zero address and the adapter refuses to construct on it — that is socket.clob-contracts, a contracts decision. (2) `internal-book` reads svc-matching, which derives markets from journal replay, so its books stay empty until an order lands or trade.mm-bot seeds depth — an operations problem, not a code one. (3) External venues need one row in DEX_EXTERNAL_VENUES, and the default is `[]` deliberately: a service that had no outbound egress yesterday does not silently acquire it. THAT THIRD PATH NEEDS NO CODE, NO CHAIN AND NO CREDENTIALS — public depth is unauthenticated on any tier-one venue, and a live probe against a throwaway depth server proved the adapter prices correctly the moment a row exists. So the honest blocker is: NOBODY HAS DECIDED WHICH VENUE THIS PLATFORM QUOTES. Checked 2026-08-03 against both accepted ADRs (2026-07-28-vendored-exchange-integration, Accepted 2026-07-31 Option B; 2026-08-02-adopt-vendored-product-keep-our-ledger, Accepted 2026-08-02) and docs/SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md: NONE of them mentions svc-dex, a DEX, a CLOB, INTACORE or a venue at all, and none lists a DEX question among its open owner-gated items. The decision is not taken AND not tracked as pending — which is why this socket exists. Until it is taken, refusing with 503 is the correct product behaviour and must not be softened to make a screen look alive.',
+  }),
+  f('socket.dex-fee-source', 'Authoritative per-venue fee and settlement schedule', {
+    module: 'dex',
+    phase: '5',
+    plane: 'P',
+    status: 'socket',
+    dependsOn: ['dex.quote-router'],
+    note: "§13 — named in services/svc-dex/src/env.ts and never tracked until 2026-08-03. Fees are CONFIGURED, not sourced: DEX_CLOB_FEE_BPS (0), DEX_INTERNAL_BOOK_FEE_BPS (20) and DEX_CLOB_SETTLEMENT_COST ('0'). Understate either and the effective price reported is better than the one the user actually gets. The authoritative figures cannot be read yet — the per-market spot schedule lives in svc-trade's own `markets` row and §2 forbids reading another service's tables, and the on-chain CLOB has no deployed contract to publish one. The settlement cost of '0' is a DECLARED UNDERSTATEMENT: converting gas into the quote asset needs a gas oracle and a native-token price and neither exists in this stack. It costs nothing today because that venue has no chain to read, and it must be set before the first real on-chain quote is served. What keeps this honest rather than hidden is that every quote response discloses the exact feeBps and settlementCost applied per venue, so a caller can check the arithmetic against the venue's real schedule.",
+  }),
+  f('socket.dex-execution', 'Order execution against a quoted venue (§27 vault, §28 OMS)', {
+    module: 'dex',
+    phase: '5',
+    plane: 'P',
+    status: 'socket',
+    dependsOn: ['dex.quote-router'],
+    note: "§13 — svc-dex QUOTES AND ROUTES; it cannot execute, and that is deliberate rather than unfinished. Every adapter declares `capabilities: ['quote','orderbook']` and `MarketDataSource.submit()` throws `VenueExecutionRefused` rather than returning a plausible rejection. Quoting needs no credentials (public depth is unauthenticated); execution needs trade-scoped Venue Vault credentials (§27) and an OMS (§28, svc-execution), and neither exists — there is no services/svc-execution in this repo. Keeping the refusal loud matters more here than anywhere else in the service: a silent or plausible-looking rejection on an execution path is how a caller concludes an order was placed. Also absent and named rather than implied: no per-venue rate-limit governor (this adapter fetches on every quote, so a busy market will be throttled — a venue answering 429 degrades to `unreachable` and drops out of routing, which is correct but is a degradation, not a governor), no WS streaming or sequenced/gap-detected books (§27 asks for WS-first; this is REST polling, and packages/market-data already holds the sequence machinery), and no cross-venue latency weighting (health() records round-trip per venue, so the input exists and nothing consumes it).",
+  }),
+
   // ── PHASE 5P · PROTOCOL P2–P3 ────────────────────────────────────────────
   f('chain.rust-core', 'Rust CLOB execution engine', {
     module: 'chain',
