@@ -6,6 +6,7 @@
 **title:** ⌘K catalog expand real routes only
 **track:** AFK
 **paths:**
+
 - vendor/coinexchange/05_Web_Front/src/assets/js/cmd-palette.js
 
 ## Done bar
