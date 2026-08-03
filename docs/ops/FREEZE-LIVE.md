@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `206aa5e6` — docs(ops): R07 cycle10 freeProduct=0 + tip 7a02302d (#512)
-- **Generated:** 2026-08-03T14:28:46.774Z
+- **Tip:** `635d703a` — docs(ops): R07 cycle11 freeProduct=0 + tip 206aa5e6 (#513)
+- **Generated:** 2026-08-03T14:33:30.817Z
 - **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
