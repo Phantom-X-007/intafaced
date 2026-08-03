@@ -1,31 +1,15 @@
 # R-AFK-RESCAN — invent-pattern scan (Coord-OPS)
 
-<<<<<<< HEAD
-
 ## AFK invent re-scan cycle80 (2026-08-03T20:50Z · tip `d36b2823`)
 
 | check                                | result                                                                                    |
 | ------------------------------------ | ----------------------------------------------------------------------------------------- |
-| tip                                  | `d36b2823` · #647 R07 cycle79 on main (after #645 R01 + #644 R07 c78)                     |
+| tip                                  | `d36b2823` · #647 R07 cycle79 on main; full detail in Re-scan cycle80 below (#648)        |
 | fabricated-money-scan                | **EXIT=0** · 0 findings / 0 baseline · 93 shell files                                     |
 | invent (vendor front)                | honesty/doctrine comments only (`dataFanyong` / `CNYRate \|\| 6.5` are **comment** lines) |
 | NEW hard invent residual             | **0**                                                                                     |
-| shell product delta since invent c79 | **empty** (docs/ops only)                                                                 |
+| shell product delta since invent c77 | **empty** (docs/ops only)                                                                 |
 | freeProduct                          | **0** — re-scan is OPS pivot, not product spawn                                           |
-| =======                              |
-
-## AFK invent re-scan cycle80 (2026-08-03T20:49Z · tip `d36b2823`)
-
-| check                                       | result                                                                                    |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| tip                                         | `d36b2823` · #647 R07 cycle79 freeProduct=0 + tip 25f73927                                |
-| fabricated-money-scan                       | **EXIT=0** · 0 findings / 0 baseline · 93 shell files                                     |
-| invent (vendor front)                       | honesty/doctrine comments only (`dataFanyong` / `CNYRate \|\| 6.5` are **comment** lines) |
-| NEW hard invent residual                    | **0**                                                                                     |
-| shell product delta since invent c77 (#642) | **empty** (docs/ops only)                                                                 |
-| freeProduct                                 | **0** — re-scan is OPS pivot, not product spawn                                           |
-
-> > > > > > > e8a3b348 (docs(ops): invent re-scan cycle80 tip d36b2823)
 
 **Verdict:** no new invent residual · no invent-fix PR · freeProduct=0 ≠ kill.
 
@@ -1031,7 +1015,7 @@ EXIT=0
 
 **Mode:** NO-FLEET · static `rg` + `tooling/ci/fabricated-money-scan.mjs`  
 **Trigger:** AFK OPS invent re-scan keep-alive (freeProduct=0 shell drain — **not** platform done)  
-**Tip full:** `d36b2823fbb3aa1281f736562dcabe1f0c8b73fb` · main after R07 cycle79 land (#647) · prior invent stamp cycle79 @ `25f73927` / cycle77 @ `083a26fa`
+**Tip full:** `d36b2823fbb3aa1281f736562dcabe1f0c8b73fb` · R07 #649 stamped compact cycle80; this section is invent full detail (#648 fix) · prior invent c77 @ `083a26fa`
 
 | check                         |                                                 result | verdict                                           |
 | ----------------------------- | -----------------------------------------------------: | ------------------------------------------------- |
