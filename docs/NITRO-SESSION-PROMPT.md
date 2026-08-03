@@ -7,10 +7,17 @@ Copy **only** the block below into a new agent session opened on this repo (work
 ```
 Project: INTAFACED Sovereign OS — Phantom-X-007/intafaced (this workspace).
 
+<<<<<<< HEAD
 PRE-FLIGHT (first 60s — anti-drift + free-work discovery)
 1. git fetch origin && git log -1 --oneline origin/main
 2. gh pr list --state open  (then path-intersect before any claim: gh pr view N --json files)
-3. Product UI = vendor/coinexchange/05_Web_Front @ http://localhost:8090 — NOT apps/web.
+3. Product UI = vendor/*/05_Web_Front @ http://localhost:8090 — NOT apps/web.
+=======
+PRE-FLIGHT (first 30s — anti-drift)
+1. git fetch origin main && git rev-parse --short origin/main
+2. gh pr list --state open
+3. Product UI = vendor/*/05_Web_Front @ http://localhost:8090 — NOT apps/web.
+>>>>>>> 29e17c2 (fix(docs): session preflight shell path uses vendor/*/05_Web_Front)
 4. Never implement on main checkout — worktree only.
 5. Swarm / free work (mandatory when go all-out / AFK / parallel): docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md
 6. Denon product queue (tip): docs/REGROUP-2026-08-03.md · retire ADR: docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md
