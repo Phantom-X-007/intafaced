@@ -81,3 +81,19 @@ origin/main @ 635d703a  (at doc write; re-fetch before rebase)
 ## Agent stance
 
 Nitro agents will not dual-edit Denon/Shehzad branches. Free to rebase when ready. Denon self-merges green MERGEABLE PRs.
+
+---
+
+## Refresh cycle13 — 2026-08-03T14:42Z · tip `4c0a5a16`
+
+| PR                       | Author  | Mergeable   | Notes                                                  |
+| ------------------------ | ------- | ----------- | ------------------------------------------------------ |
+| #445                     | Denon   | MERGEABLE   | full CI green — **his merge**                          |
+| #433                     | Denon   | MERGEABLE   | full CI green — **his merge** (also blocks P-WS paths) |
+| #430                     | Denon   | MERGEABLE   | docs Prettier green                                    |
+| #420                     | Denon   | MERGEABLE   | full CI green — **his merge**                          |
+| #428                     | Denon   | MERGEABLE   | Prettier+Typecheck **red** — owner fix                 |
+| #448 #441 #438 #436 #432 | Denon   | CONFLICTING | rebase needed — no dual-edit                           |
+| #346                     | Shehzad | CONFLICTING | M1 babysit only                                        |
+
+No Nitro open Class N this cycle. Agents do **not** merge partner PRs.
