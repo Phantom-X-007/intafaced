@@ -325,7 +325,7 @@
                       {{ fmt(row.price, baseCoinScale) }}
                     </span>
                     <span class="ix-num">{{ fmt(row.amount, coinScale) }}</span>
-                    <span class="ix-num ix-dim">{{ fmt(row.price * row.amount, 2) }}</span>
+                    <span class="ix-num ix-dim">{{ fmt(turnoverOf(row), 2) }}</span>
                   </div>
                 </template>
               </div>
@@ -853,7 +853,7 @@
                 <template v-if="feeKnown">
                   Pair fee from venue symbol-info for
                   <strong>{{ currentCoin.coin }}/{{ currentCoin.base }}</strong>
-                  — {{ (num(symbolFee) * 100).toFixed(4) }}% schedule rate. Not a free tier.
+                  — {{ pctOf(symbolFee, 4) }}% schedule rate. Not a free tier.
                 </template>
                 <template v-else>
                   Market did not return a fee field for this pair. Estimate is
@@ -978,7 +978,9 @@ export default {
       coinInfo: {},
       coinScale: 6,
       baseCoinScale: 6,
-      symbolFee: 0.001,
+      /* A fee RATE is money-shaped: a decimal string, never a float literal.
+         Shown only when feeKnown — the ticket says "unknown", not "free". */
+      symbolFee: '0.001',
       enableMarketBuy: 1,
       enableMarketSell: 1,
       exchangeable: 1,
@@ -1033,7 +1035,7 @@ export default {
       tradesLoading: true,
       tradesReachable: false,
 
-      plate: { asks: [], bids: [], askTotal: 0, bidTotal: 0 },
+      plate: { asks: [], bids: [], askTotal: '0', bidTotal: '0' },
       trades: [],
       openOrders: [],
       historyOrders: [],
@@ -1230,18 +1232,15 @@ export default {
       return this.side === 'BUY' ? this.wallet.base : this.wallet.coin;
     },
     /**
-     * The same figure as a number, for the percent slider ONLY.
-     *
-     * This is sizing arithmetic for a UI affordance, not a money movement — the
-     * value that reaches `POST /orders` is the string in the input box. Null
-     * (no ledger row) yields NaN rather than 0 so nothing sizes against a
+     * Balance as a float ONLY for inequality checks in validateOrderFields /
+     * canSize. Percent sizing uses the string balance through ix-money — never
+     * this number — so the value that reaches POST /orders is not a float.
+     * Null (no ledger row) yields NaN rather than 0 so nothing sizes against a
      * balance that does not exist.
      */
     availableBalanceNum() {
-      const raw = this.availableBalance;
-      if (raw === null || raw === undefined || raw === '') return NaN;
-      const n = parseFloat(raw);
-      return isFinite(n) ? n : NaN;
+      const n = ixMoney.toFloat(this.availableBalance);
+      return n === null ? NaN : n;
     },
     /* Market buys are sized in the quote asset, everything else in the base. */
     quoteSized() {
@@ -1255,9 +1254,10 @@ export default {
     },
     orderValue() {
       if (this.quoteSized) {
-        return this.num(this.form.amount);
+        return this.form.amount;
       }
-      return this.num(this.form.price) * this.num(this.form.amount);
+      /* Decimal product for the ticket summary — not a wire amount. */
+      return ixMoney.multiply(this.form.price, this.form.amount, this.baseCoinScale);
     },
     /**
      * Wave B8 — rough walk of top-of-book for market size already on the page.
@@ -1307,12 +1307,11 @@ export default {
       }
       return slip == null ? `avg ${avgTxt}` : `avg ${avgTxt} · ~${slip.toFixed(2)}%`;
     },
-    /* A percent of an unknown balance is not a number. availableBalanceNum is
-       NaN when the ledger holds no row for the asset, and NaN > 0 is false, so
-       the percent buttons stay off rather than sizing against a fiction. */
+    /* A percent of an unknown balance is not a number. isPositive is false for
+       null/empty, so the percent buttons stay off rather than sizing fiction. */
     canSize() {
-      return this.isLogin && this.availableBalanceNum > 0 &&
-        (this.orderType === 'MARKET_PRICE' || this.num(this.form.price) > 0);
+      return this.isLogin && ixMoney.isPositive(this.availableBalance) &&
+        (this.orderType === 'MARKET_PRICE' || ixMoney.isPositive(this.form.price));
     },
     marketAllowed() {
       return this.side === 'BUY' ? this.enableMarketBuy == 1 : this.enableMarketSell == 1;
@@ -1349,9 +1348,8 @@ export default {
         return 'unknown · the venue published no fee for this pair (not free)';
       }
       /* symbolFee is the published TAKER rate as a decimal string ("0.001").
-         Parsed here only to render a percentage — a label, not a charge. The
-         fee actually taken is computed by the engine and reported per fill. */
-      return (this.num(this.symbolFee) * 100).toFixed(2) + '% taker · venue schedule for this pair';
+         pctOf multiplies in decimal — a label, not a charge. */
+      return this.pctOf(this.symbolFee, 2) + '% taker · venue schedule for this pair';
     },
     tradesEmptyLabel() {
       return bookHonesty.tradesEmptyLabel({
@@ -1848,10 +1846,14 @@ export default {
      */
     getSymbolScale() {
       return rest('/markets').then(res => {
-        if (!res.ok || !Array.isArray(res.data)) {
+        if (!res.ok) {
           return;
         }
-        const market = res.data.filter(m => m.symbol === this.currentCoin.symbol)[0];
+        const gate = ixTrade.accept(ixTrade.schemas.markets, res.data);
+        if (!gate.ok || !Array.isArray(gate.data)) {
+          return;
+        }
+        const market = gate.data.filter(m => m.symbol === this.currentCoin.symbol)[0];
         if (!market) {
           return;
         }
@@ -1897,15 +1899,25 @@ export default {
         const marketsRes = results[0];
         const tickersRes = results[1];
         this.marketsLoading = false;
-        if (!marketsRes.ok || !Array.isArray(marketsRes.data)) {
+        if (!marketsRes.ok) {
+          this.marketsReachable = false;
+          return;
+        }
+        const marketsGate = ixTrade.accept(ixTrade.schemas.markets, marketsRes.data);
+        if (!marketsGate.ok || !Array.isArray(marketsGate.data)) {
           this.marketsReachable = false;
           return;
         }
         this.marketsReachable = true;
         /* Tickers can fail on their own. The listing is still true, so markets
-           are shown priceless rather than hidden. */
-        const tickers = tickersRes.ok && tickersRes.data ? tickersRes.data : {};
-        const rows = ixTrade.toMarketRows(marketsRes.data, tickers);
+           are shown priceless rather than hidden. A shape failure on tickers is
+           treated the same as a transport failure: listing without prices. */
+        var tickers = {};
+        if (tickersRes.ok) {
+          var tickersGate = ixTrade.accept(ixTrade.schemas.tickers, tickersRes.data);
+          if (tickersGate.ok && tickersGate.data) tickers = tickersGate.data;
+        }
+        const rows = ixTrade.toMarketRows(marketsGate.data, tickers);
         const map = {};
         rows.forEach(row => {
           row.isFavor = this.localFavorites.indexOf(row.symbol) >= 0;
@@ -1917,11 +1929,12 @@ export default {
         const current = map[this.currentCoin.symbol];
         if (current) {
           this.currentCoin = Object.assign({}, this.currentCoin, current);
-          /* Seed the limit price from the last print ONLY if there is one. An
-             empty book has no last price, and pre-filling 0 would put a real
-             order at zero one click away. */
+          /* Seed the limit price from the last print ONLY if there is one.
+             bookPriceForForm keeps the venue decimal string (truncate/pad),
+             never parseFloat().toFixed(). Empty book → no prefill of 0. */
           if (!this.form.price && current.close) {
-            this.form.price = String(current.close);
+            var seeded = ixMoney.bookPriceForForm(current.close, this.baseCoinScale);
+            if (seeded) this.form.price = seeded;
           }
         }
         this.currentCoinIsFavor = this.localFavorites.indexOf(this.currentCoin.symbol) >= 0;
@@ -1944,12 +1957,20 @@ export default {
           /* Unreachable — clear any prior levels so we never paint a stale book. */
           this.bookReachable = false;
           this.bookMessage = res.message || '';
-          this.plate = { asks: [], bids: [], askTotal: 0, bidTotal: 0 };
+          this.plate = { asks: [], bids: [], askTotal: '0', bidTotal: '0' };
+          return;
+        }
+        const gate = ixTrade.accept(ixTrade.schemas.orderBook, res.data);
+        if (!gate.ok) {
+          /* Shape failure (e.g. float levels) — not an empty book. */
+          this.bookReachable = false;
+          this.bookMessage = gate.message || '';
+          this.plate = { asks: [], bids: [], askTotal: '0', bidTotal: '0' };
           return;
         }
         this.bookReachable = true;
         this.bookMessage = '';
-        const book = res.data || {};
+        const book = gate.data || {};
         this.applyPlate('SELL', ixTrade.toPlateItems(book.asks));
         this.applyPlate('BUY', ixTrade.toPlateItems(book.bids));
       });
@@ -1967,8 +1988,9 @@ export default {
        book cannot drift between the two sources. Asks are stored best-last.
        Invalid (≤0) levels are dropped — never pad with zero-price placeholders. */
     applyPlate(direction, items) {
-      const rows = bookHonesty.normalizePlateLevels(items, BOOK_DEPTH, v => this.num(v));
-      const total = rows.length ? rows[rows.length - 1].totalAmount : 0;
+      /* normalizePlateLevels owns decimal totals via ix-money; no num callback. */
+      const rows = bookHonesty.normalizePlateLevels(items, BOOK_DEPTH);
+      const total = rows.length ? rows[rows.length - 1].totalAmount : '0';
       if (direction === 'SELL') {
         this.plate.asks = rows.slice().reverse();
         this.plate.askTotal = total;
@@ -2006,7 +2028,12 @@ export default {
           this.$refs.depthGraph.draw({});
           return;
         }
-        const book = res.data || {};
+        const gate = ixTrade.accept(ixTrade.schemas.orderBook, res.data);
+        if (!gate.ok) {
+          this.$refs.depthGraph.draw({});
+          return;
+        }
+        const book = gate.data || {};
         /* DepthGraph expects the vendor's { ask: { items }, bid: { items } }. */
         this.$refs.depthGraph.draw({
           ask: { items: ixTrade.toPlateItems(book.asks) },
@@ -2031,9 +2058,16 @@ export default {
           this.trades = [];
           return;
         }
+        const gate = ixTrade.accept(ixTrade.schemas.trades, res.data);
+        if (!gate.ok) {
+          this.tradesReachable = false;
+          this.tradesMessage = gate.message || '';
+          this.trades = [];
+          return;
+        }
         this.tradesReachable = true;
         this.tradesMessage = '';
-        this.trades = ixTrade.toDeskTrades(res.data, TRADE_LIMIT);
+        this.trades = ixTrade.toDeskTrades(gate.data, TRADE_LIMIT);
       });
     },
 
@@ -2127,7 +2161,12 @@ export default {
         if (!res.ok) {
           return;
         }
-        const rows = ixTrade.toBalanceRows(res.data);
+        const gate = ixTrade.accept(ixTrade.schemas.balances, res.data);
+        if (!gate.ok) {
+          this.noteRefusal(gate);
+          return;
+        }
+        const rows = ixTrade.toBalanceRows(gate.data);
         this.balances = rows;
         this.wallet = {
           base: ixTrade.freeBalanceOf(rows, this.currentCoin.base),
@@ -2146,8 +2185,13 @@ export default {
         if (!res.ok) {
           return;
         }
+        const gate = ixTrade.accept(ixTrade.schemas.orders, res.data);
+        if (!gate.ok) {
+          this.noteRefusal(gate);
+          return;
+        }
         // A 200 with [] is "you have none" — a real answer, so reachable.
-        this.openOrders = ixTrade.toDeskOrders(res.data);
+        this.openOrders = ixTrade.toDeskOrders(gate.data);
         this.ordersReachable = true;
       });
     },
@@ -2161,7 +2205,12 @@ export default {
         if (!res.ok) {
           return;
         }
-        this.historyOrders = ixTrade.toDeskOrders(res.data);
+        const gate = ixTrade.accept(ixTrade.schemas.orders, res.data);
+        if (!gate.ok) {
+          this.noteRefusal(gate);
+          return;
+        }
+        this.historyOrders = ixTrade.toDeskOrders(gate.data);
         this.ordersReachable = true;
       });
     },
@@ -2185,7 +2234,13 @@ export default {
           this.fillsReachable = false;
           return;
         }
-        this.myFills = ixTrade.toDeskFills(res.data);
+        const gate = ixTrade.accept(ixTrade.schemas.trades, res.data);
+        if (!gate.ok) {
+          this.noteRefusal(gate);
+          this.fillsReachable = false;
+          return;
+        }
+        this.myFills = ixTrade.toDeskFills(gate.data);
         this.fillsReachable = true;
       });
     },
@@ -2200,39 +2255,72 @@ export default {
     },
 
     /**
-     * Display grouping only. N=1 is raw book. Higher N folds by N×10^(-scale).
+     * Fold the book into N×10^(-scale) buckets. N=1 is the raw book.
+     *
+     * NOT DISPLAY-ONLY, WHICH IS WHY IT IS DECIMAL NOW. A grouped row is still
+     * clickable, and `useBookPrice` copies its price into the order form — so
+     * the bucket price computed here can reach `POST /orders`. It used to be
+     * `Math.floor(px / step) * step` on floats, then `toFixed`: a bucket
+     * boundary that lands one ulp low puts the row in the wrong bucket, and the
+     * `toFixed` re-rounds the boundary itself. Every step below is BigNumber and
+     * every price out is a decimal string.
+     *
+     * Bids fold DOWN and asks fold UP, both away from the spread, so a grouped
+     * level never claims a better price than the depth behind it.
      */
     groupPlate(rows, side) {
       var list = rows || [];
-      var g = Number(this.bookGroup) || 1;
+      var g = Math.floor(Number(this.bookGroup) || 1);
       if (g <= 1 || list.length === 0) return list;
       var scale = this.baseCoinScale || 2;
-      var step = g * Math.pow(10, -scale);
-      if (!(step > 0)) return list;
+      /* The bucket width as a decimal string: g ticks of 10^-scale. */
+      var step = ixMoney.multiply(String(g), '1e-' + scale, scale);
+      if (step === null || !ixMoney.isPositive(step)) return list;
       var map = {};
       var order = [];
       for (var i = 0; i < list.length; i++) {
         var row = list[i];
-        var px = this.num(row.price);
-        if (!isFinite(px)) continue;
-        var bucket = side === 'bid' ? Math.floor(px / step) * step : Math.ceil(px / step) * step;
-        var key = bucket.toFixed(Math.min(scale + 4, 12));
+        /* divide(_, _, 0) truncates toward zero, and book prices are positive,
+           so this is floor. Null means the level was unreadable — drop it
+           rather than folding it into a bucket it does not belong to. */
+        var index = ixMoney.divide(row.price, step, 0);
+        if (index === null) continue;
+        if (side !== 'bid' && ixMoney.compare(ixMoney.multiply(index, step, scale), row.price) !== 0) {
+          /* An ask that does not sit exactly on a boundary folds up. */
+          index = ixMoney.add(index, '1');
+        }
+        var key = ixMoney.multiply(index, step, scale);
+        if (key === null) continue;
         if (!map[key]) {
-          map[key] = { price: key, amount: 0, totalAmount: 0 };
+          map[key] = { price: key, amount: '0', totalAmount: '0' };
           order.push(key);
         }
-        map[key].amount += this.num(row.amount) || 0;
-        map[key].totalAmount += this.num(row.totalAmount != null ? row.totalAmount : row.amount) || 0;
+        /* Preserves the vendor's summing semantics exactly — see the PR note on
+           the cumulative column, which this change deliberately does not alter. */
+        map[key].amount = ixMoney.add(map[key].amount, row.amount) || map[key].amount;
+        var cumulative = row.totalAmount != null ? row.totalAmount : row.amount;
+        map[key].totalAmount = ixMoney.add(map[key].totalAmount, cumulative) || map[key].totalAmount;
       }
       return order.map(function (k) { return map[k]; });
     },
+
+    /**
+     * Click a book row → its price in the limit input.
+     *
+     * THE VENUE'S OWN DECIMAL STRING, truncated to the market's price
+     * precision. This was `fmt(parseFloat(row.price), scale)`, which both
+     * re-encoded the quote through a binary double and ROUNDED it — 1.45 at one
+     * place became 1.5, and the buy button then offered a price the venue never
+     * quoted. `bookPriceForForm` answers null for a level that is not real
+     * depth, and null leaves the form untouched rather than blanking it.
+     */
     useBookPrice(row) {
-      const price = this.num(row.price);
-      if (price <= 0) {
+      const price = ixMoney.bookPriceForForm(row.price, this.baseCoinScale);
+      if (price === null) {
         return;
       }
       this.orderType = 'LIMIT_PRICE';
-      this.form.price = this.fmt(price, this.baseCoinScale);
+      this.form.price = price;
       this.applyPercent();
     },
 
@@ -2253,6 +2341,22 @@ export default {
       this.applyPercent();
     },
 
+    /**
+     * The size behind the 25/50/75/100% buttons — the second half of the money
+     * path, and the one that used to be float all the way through.
+     *
+     * It was `(availableBalanceNum * percent) / 100` on a parsed balance, then
+     * `budget / price`, then `Math.floor(n * 10**scale) / 10**scale`. Three
+     * lossy operations, and the result went into `form.amount` and straight out
+     * to `POST /orders`. A 100% sell has to come out as a size the ledger's own
+     * balance covers exactly: one ulp over is a rejection the trader cannot
+     * explain, one ulp under quietly strands dust.
+     *
+     * `percentSize` takes the balance as the STRING the ledger sent, does every
+     * step in BigNumber and truncates once at the end. Null in means an unknown
+     * balance or an unusable price, and null clears the box — it never sizes
+     * against a balance that does not exist.
+     */
     applyPercent() {
       if (!this.canSize || this.percent <= 0) {
         if (this.percent <= 0) {
@@ -2260,18 +2364,17 @@ export default {
         }
         return;
       }
-      /* canSize already guarantees this is a real number, not NaN. */
-      const budget = (this.availableBalanceNum * this.percent) / 100;
-      if (this.quoteSized) {
-        this.form.amount = this.floor(budget, this.baseCoinScale);
-        return;
-      }
-      if (this.side === 'SELL') {
-        this.form.amount = this.floor(budget, this.coinScale);
-        return;
-      }
-      const price = this.num(this.form.price);
-      this.form.amount = price > 0 ? this.floor(budget / price, this.coinScale) : '';
+      const quoteSized = this.quoteSized;
+      const size = ixMoney.percentSize({
+        balance: this.availableBalance,
+        percent: this.percent,
+        scale: quoteSized ? this.baseCoinScale : this.coinScale,
+        /* A limit/market BUY sized in the base asset spends quote at the limit
+           price. A SELL and a quote-sized market BUY are already denominated in
+           the asset being sized, so there is nothing to divide by. */
+        divideBy: quoteSized || this.side === 'SELL' ? null : this.form.price
+      });
+      this.form.amount = size === null ? '' : size;
     },
 
     onPriceInput() {
@@ -2299,21 +2402,26 @@ export default {
       if (/[eE]/.test(amountRaw) || /[eE]/.test(priceRaw)) {
         return 'Scientific notation is not accepted — use a plain decimal.';
       }
-      const amount = this.num(amountRaw);
-      const price = this.num(priceRaw);
-      if (!isFinite(amount) || amount <= 0) return 'Enter a valid amount greater than zero.';
-      if (amount > 1e12) return 'Amount is too large.';
+      if (!ixMoney.isPositive(amountRaw)) return 'Enter a valid amount greater than zero.';
+      if (ixMoney.greaterThan(amountRaw, '1000000000000')) return 'Amount is too large.';
       if (this.orderType === 'LIMIT_PRICE') {
         if (!priceRaw) return 'Enter a limit price.';
-        if (!isFinite(price) || price <= 0) return 'Enter a valid limit price greater than zero.';
-        if (price > 1e12) return 'Price is too large.';
+        if (!ixMoney.isPositive(priceRaw)) return 'Enter a valid limit price greater than zero.';
+        if (ixMoney.greaterThan(priceRaw, '1000000000000')) return 'Price is too large.';
       }
-      const cost = this.quoteSized ? amount : this.side === 'BUY' ? price * amount : amount;
-      /* Only claim "insufficient" when we actually know the balance. A missing
-         ledger row gives NaN, and NaN comparisons are false, so an unknown
-         balance never blocks a submit the venue might well accept — and never
-         gets reported to the user as a zero. */
-      if (this.isLogin && this.walletReachable && isFinite(cost) && cost > this.availableBalanceNum) {
+      /* Cost for the insufficient-balance check only — not a wire amount. */
+      var costStr = this.quoteSized
+        ? amountRaw
+        : this.side === 'BUY'
+          ? ixMoney.multiply(priceRaw, amountRaw)
+          : amountRaw;
+      if (
+        this.isLogin &&
+        this.walletReachable &&
+        costStr !== null &&
+        ixMoney.isPositive(this.availableBalance) &&
+        ixMoney.greaterThan(costStr, this.availableBalance)
+      ) {
         return 'Insufficient balance. Available ' + this.availableBalance + '.';
       }
       return '';
@@ -2574,9 +2682,19 @@ export default {
 
     /* ── formatting ────────────────────────────────────────────────────── */
 
+    /**
+     * The float escape hatch, and the only one on this page.
+     *
+     * `ixMoney.toFloat` is the named lossy conversion — for comparison, ordering
+     * and the pixel arithmetic behind the depth estimate. It answers null for an
+     * unreadable value; 0 is kept here as the fallback because every remaining
+     * caller is a `> 0` guard that must stay false, not because 0 is a price.
+     * Nothing this returns may be rendered as money or reach the wire: the money
+     * path below goes through bookPriceForForm / percentSize / toFixedString.
+     */
     num(value) {
-      const n = parseFloat(value);
-      return isFinite(n) ? n : 0;
+      const n = ixMoney.toFloat(value);
+      return n === null ? 0 : n;
     },
 
     /**
@@ -2593,25 +2711,42 @@ export default {
       return String(value);
     },
 
+    /**
+     * A money figure at a fixed number of places — TRUNCATED, never rounded.
+     *
+     * This used to be `parseFloat(value).toFixed(scale)`, which rounds: a venue
+     * quote of 1.45 printed at one place became 1.5, a price the venue never
+     * made. The ladder is not only read — clicking a row copies the printed
+     * price into the order form, so a rounded display was one click from an
+     * order at an invented price. Unreadable stays a dash, never "0.00".
+     */
     fmt(value, scale) {
-      const n = parseFloat(value);
-      if (!isFinite(n)) {
-        return '—';
-      }
-      return n.toFixed(scale == null ? 2 : scale);
+      const text = ixMoney.toFixedString(value, scale == null ? 2 : scale);
+      return text === null ? '—' : text;
+    },
+
+    /** A decimal RATE ("0.001") as a percent label. A label, never a charge. */
+    pctOf(rate, places) {
+      const text = ixMoney.multiply(rate, '100', places == null ? 2 : places);
+      return text === null ? '—' : text;
     },
 
     /* Market headline numbers: if the feed is down and the value is zero/empty,
        show a dash so "0.000000" cannot be read as a real print. */
     marketNum(value, scale) {
-      if (typeof value === 'string' && value.trim() !== '' && isNaN(parseFloat(value))) {
-        return this.feedLive ? value : (value || '—');
-      }
-      const n = parseFloat(value);
-      if (!isFinite(n) || (!this.feedLive && n === 0)) {
+      if (value === null || value === undefined || value === '') {
         return '—';
       }
-      return this.fmt(n, scale);
+      if (typeof value === 'string' && value.trim() !== '' && ixMoney.toBN(value) === null) {
+        return this.feedLive ? value : (value || '—');
+      }
+      if (ixMoney.toBN(value) === null) {
+        return '—';
+      }
+      if (!this.feedLive && !ixMoney.isPositive(value) && ixMoney.compare(value, '0') === 0) {
+        return '—';
+      }
+      return this.fmt(value, scale);
     },
 
     marketStat(value) {
@@ -2627,20 +2762,31 @@ export default {
     /* Display helper: never paint 0.000000 as a real print. Ladder rows are
        not padded — invalid levels are dropped in applyPlate (A-UI-2). */
     zero(value, scale) {
-      const n = parseFloat(value);
-      if (!isFinite(n) || n === 0) {
-        return '—';
-      }
-      return n.toFixed(scale);
+      /* null = unreadable, 0 = a real zero. Both are a dash: neither is a print. */
+      const c = ixMoney.compare(value, '0');
+      return c === null || c === 0 ? '—' : this.fmt(value, scale);
     },
 
+    /** Tape/turnover display product — decimal strings only, never float *. */
+    turnoverOf(row) {
+      if (!row) return null;
+      if (row.turnover != null && row.turnover !== '') return row.turnover;
+      return ixMoney.multiply(row.price, row.amount);
+    },
+
+    /**
+     * Truncate toward zero at `scale` places. Empty string for anything that is
+     * not a readable positive value — the callers put this straight into an
+     * input, and "" is an empty box while "0.00" is a size the user did not ask
+     * for. Float `Math.floor(n * 10**scale)` is gone: at eight places the
+     * multiply itself lands below the integer and drops a whole unit.
+     */
     floor(value, scale) {
-      const n = parseFloat(value);
-      if (!isFinite(n) || n <= 0) {
+      if (!ixMoney.isPositive(value)) {
         return '';
       }
-      const factor = Math.pow(10, scale);
-      return (Math.floor(n * factor) / factor).toFixed(scale);
+      const text = ixMoney.toFixedString(value, scale);
+      return text === null ? '' : text;
     },
 
     clamp(value, scale) {
@@ -2653,19 +2799,21 @@ export default {
       return text;
     },
 
+    /* A CSS length, and the one place a float is legitimate — no user reads a
+       bar width as a quantity. `ratio` scales in decimal first so the lossy
+       division is the last operation rather than the first. */
     barWidth(row, side) {
       const total = side === 'bid' ? this.plate.bidTotal : this.plate.askTotal;
-      if (!total || !row.totalAmount) {
-        return '0%';
-      }
-      return Math.min(100, (row.totalAmount / total) * 100).toFixed(2) + '%';
+      return (ixMoney.ratio(row.totalAmount, total) * 100).toFixed(2) + '%';
     },
 
     roseClass(rose) {
       if (!rose) {
         return '';
       }
-      return parseFloat(rose) < 0 ? 'ix-down' : parseFloat(rose) > 0 ? 'ix-up' : '';
+      const n = ixMoney.toFloat(rose);
+      if (n === null || n === 0) return '';
+      return n < 0 ? 'ix-down' : 'ix-up';
     },
 
     /* A market order has no price. Its `price` is null on the wire, and
