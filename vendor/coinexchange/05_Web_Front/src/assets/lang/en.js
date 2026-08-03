@@ -1039,8 +1039,8 @@ module.exports = {
                 totalassets: "Estimated Total Value of Assets: "
             },
             trade: {
-                accumulative_return: 'Mining fees have been repaid (BHB): ',
-                accumulat_return: 'Mining fees should be repaid(BHB): ',
+                accumulative_return: 'Mining fees have been repaid: ',
+                accumulat_return: 'Mining fees should be repaid: ',
                 start_end: 'Start-End',
                 account_date: 'Time for receiving the capital',
                 to: 'To',
@@ -1075,7 +1075,7 @@ module.exports = {
                 havedeal: 'Have done a deal',
                 poundageAmount: 'Service Charge ',
                 exchangeOrderId: "The order ID",
-                mineAmount: "Dig a currency (BHB)",
+                mineAmount: "Amount mined",
                 buy: "BUY",
                 sell: "SELL",
                 limit: "LIMIT",
@@ -1706,50 +1706,13 @@ module.exports = {
         apidoc: "Api Doc",
         zwkf: "come soon"
     },
-    index: {
-        circulation: 'Safety and development fund circulation',
-        hourEth: 'Cumulative revenue to be distributed in today',
-        yesterdayEth: 'Cumulative revenue to be distributed in yesterday',
-        yesterday: 'Mining output of the previous day:',
-        bhbTotal: "BHB Total flux",
-        bhbSecond: "BHB Two level market circulation",
-        checkMineprinciple: "View the principle of mining",
-        checkFlowVolum: 'Inspection of circulation',
-        checkLockPosition: 'Check the lock situation',
-        BHBregister: "INTAFACED account registration",
-        tibi: "The time and limit of the payment of the money to the bill",
-        line_plane: "Announcement on BHB's on-line plan, circulation and service fee return",
-        fenpeijizhi: 'A description of the INTAFACED income distribution mechanism',
-        jiangli_jihua: "Inviting the mining Award Scheme",
-        friend_fanhuan: "Invite friends, earn extra fee and return"
-    },
-    plate: {
-        title: "Platform income distribution scheme (BHB Holder's equity)",
-        content1: "Platform fee allocation and token economics are defined by operator policy and the definitive build — this shell does not invent fixed 80/20 revenue splits.",
-        content2: "Where an income distribution runs, it settles on a daily cycle. The start date and the proportions are operator policy and are not published here.",
-        content3: " (notice: 1. the BHB here only refers to the BHB that has been released / circulated. See also[",
-        content3_1: 'Note on the ratio of BHB circulation / participation in income distribution',
-        content3_2: "2. the hourly (whole point) snapshot is calculated once and the income distribution is executed once a day.",
-        hourFenpei: "Distribution of income today",
-        hourTotal: "Total income of today's platform",
-        xiangqing: "Details of today's income distribution",
-        yesterdaytit: "Distribution of income yesterday",
-        yesterdaytotal: "Total income of yesterday's platform",
-        yesterdayxiangqing: "Details of yesterday's income distribution",
-        yesterday: {
-            total: "Total Revenues",
-            allocated: "Undistributed Revenues",
-        }
-    },
-    feereturn: {
-        ruletitle: "Note",
-        rulecontent: 'Fee reimbursement terms — the share of supply committed, and whether the mechanism runs at all — are defined by the definitive build and operator policy. This shell does not state a percentage it cannot source.',
-        recordtitle: 'List',
-        recordcontent: 'Any reimbursement that runs is listed below as it settles. The reimbursed share, the reference price and the settlement time are operator policy and are not asserted here.',
-        time: "Date",
-        todaycharge: "Average price (ETH)",
-        totalChange: 'Total (ETH)',
-        returnCharge: "Trans-Fee Mining reimbursement(BHB)",
-        todayChargeReturn: "Incentive Program for FCoin reimbursement (BHB)"
-    }
+    /* REMOVED: the `index`, `plate` and `feereturn` catalogues (37 keys).
+       They were the copy for the upstream venue's trans-fee-mining and
+       revenue-distribution screens: daily 'income distribution', a holder's
+       equity scheme, and a reimbursement programme quoting the upstream
+       token symbol and another exchange by name. Those screens were deleted
+       with the promo cluster, so nothing rendered these — but a dead
+       translation string is how a purged name comes back, the next time
+       somebody wires a screen to a key that already exists and looks
+       official. Deleted rather than kept. */
 }

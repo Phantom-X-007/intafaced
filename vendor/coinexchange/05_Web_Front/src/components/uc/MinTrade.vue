@@ -48,7 +48,12 @@
     </div>
 </template>
 <script>
-// import expandRow from './TradeExpand';
+// The expand-row component this once imported (TradeExpand.vue) is DELETED.
+// It was dead — the import had been commented out, so webpack never bundled
+// it — and it rendered per-row columns keyed on the upstream venue's own token
+// symbol, plus three $t() keys that do not exist in en.js. A dead component is
+// how a purged name returns: the next person to want an expandable row finds a
+// file that already looks official and wires it back up.
 export default {
   components: {
     // expandRow,
