@@ -1,7 +1,7 @@
 # Swarm all-out orient — cold agents (GitHub tip)
 
 **Status:** BINDING for multi-chat / multi-model / insane parallel when Nitro says go all-out / AFK / swarms  
-**Audience:** every agent (Grok, Claude, Fable, Orca) — Nitro does not run git  
+**Audience:** every agent (any coding agent CLI) — Nitro does not run git  
 **Re-derive tip every fire.** Chat memory is never high water.
 
 ---
