@@ -16,6 +16,33 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Pack 3 — `docs/trk-research-pack-3` (tip freeze `b3d08931`)
+
+Next free tracker rows **not** covered by pack 1/2 short specs. Research only —
+no implement swarm.
+
+| Id                       | Title                                              | Spec                                                     |
+| ------------------------ | -------------------------------------------------- | -------------------------------------------------------- |
+| `ops.analytics`          | Warehouse — read replica + cube layer              | [ops.analytics.md](./ops.analytics.md)                   |
+| `ops.affiliates`         | Multi-tier affiliate / IB trees, payout automation | [ops.affiliates.md](./ops.affiliates.md)                 |
+| `agents.scanner`         | Market Scanner — ranked signals by tier            | [agents.scanner.md](./agents.scanner.md)                 |
+| `blueprint.ownership`    | Export + hard delete, cascading                    | [blueprint.ownership.md](./blueprint.ownership.md)       |
+| `blueprint.attestations` | On-chain rank attestations, zero PII (§19)         | [blueprint.attestations.md](./blueprint.attestations.md) |
+| `venue.aggregation`      | External venue fabric (not CCXT)                   | [venue.aggregation.md](./venue.aggregation.md)           |
+| `p2p.merchants`          | P2P merchant programme — badges, limits, API       | [p2p.merchants.md](./p2p.merchants.md)                   |
+| `indexer.readmodels`     | Chain → Postgres read models                       | [indexer.readmodels.md](./indexer.readmodels.md)         |
+
+**Pack 3 highlights:**
+
+- `blueprint.ownership`: identity cascade **is wired on tip** — tracker note that
+  said no subscriber is **stale**; residual is cross-service proof / honesty.
+- `venue.aggregation`: title “via CCXT” is stale; fabric is first-party packages.
+- `indexer.readmodels`: craft deep; **done** blocked on `socket.clob-contracts`.
+- `ops.affiliates`: Class M payout path — recipes only, no ops-local balances.
+- `ops.analytics`: do not confuse with bank spend analytics.
+
+---
+
 ## Pack 4 — `docs/trk-research-pack-4` (tip freeze re-derive at open)
 
 Academy + agent fleet free rows (status `ready`, no owner). Research only —
@@ -90,7 +117,6 @@ useful, do not fork implement plans from conflicting freezes.
 
 ## Not packed yet (still free, lower priority or heavier blockers)
 
-chain.\*, launch.\*, mining.pool, trade.options/forex, ops.affiliates (payout
-money), ops.analytics warehouse, blueprint.attestations / blueprint.ownership
-cascade half, market.\*, agents.scanner product law, venue.aggregation trading
-half, p2p.merchants, ops.compliance (counsel list Class X content).
+chain.\*, launch.\*, mining.pool, trade.options/forex, market.\*,
+ops.compliance (counsel list Class X content), bridge.canonical,
+chain.validators / governance.
