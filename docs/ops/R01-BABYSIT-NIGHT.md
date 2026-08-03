@@ -107,3 +107,22 @@ Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merg
 ## Refresh cycle23 — 2026-08-03T15:28Z · tip `c04a072a`
 
 Re-checked via `gh`: Denon ready **#445 #433 #430 #420** (MERGEABLE + green / docs Prettier) self-merge only; #428 MERGEABLE red Prettier+Typecheck owner fix; CONFLICTING #448 #441 #438 #436 #432 + Shehzad #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs. P-WS still blocked by #433/#432.
+
+---
+
+## Refresh cycle24 — 2026-08-03T15:33Z · tip `555ea76a`
+
+Re-checked via `gh` @ tip after #526 invent / #527 P-WS / #528 cycle23:
+
+| Bucket                 | PRs                                                                                                  | Action         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
+| Ready Denon self-merge | **#445** full green · **#433** full green (P-WS path) · **#430** docs Prettier · **#420** full green | his merge only |
+| MERGEABLE red          | **#428** Prettier+Typecheck                                                                          | owner fix      |
+| CONFLICTING rebase     | Denon **#448** (gates FAIL) **#441** **#438** **#436** **#432** (P-WS edge) + Shehzad **#346** M1    | babysit only   |
+| Nitro Class N open     | **0**                                                                                                | —              |
+
+Open partner still **11** (10 Denon + 1 Shehzad). Comments: **0** this cycle (prior babysit already on every CONFLICTING). P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**. invent live **0**. Agents do **not** merge partner PRs.
+
+```
+origin/main @ 555ea76a  (at doc write; partners re-fetch before rebase)
+```
