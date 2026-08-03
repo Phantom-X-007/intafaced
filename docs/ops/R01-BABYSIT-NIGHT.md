@@ -1,7 +1,7 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03 ~14:52Z (AFK R07 cycle16 tip stamp)  
-**Tip at run:** `26d42dfd` (`origin/main`) — docs(ops): R07 cycle15 freeProduct=0 + tip cb522a6c (#518)  
+**When:** 2026-08-03 ~14:59Z (AFK R07 cycle17 tip stamp)  
+**Tip at run:** `c06a4782` (`origin/main`) — docs(ops): R07 cycle16 freeProduct=0 + tip 26d42dfd (#519)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
 **Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day babysit already on every open CONFLICTING partner PR)  
 **Open list delta:** **none** — same 11 partner PRs; ready list unchanged
@@ -24,7 +24,7 @@
 
 **Ready count: 4** — agents do **not** merge these.
 
-## CONFLICTING — needs rebase to tip `26d42dfd`
+## CONFLICTING — needs rebase to tip `c06a4782`
 
 | PR                                                          | Author  | Mergeable         | Failing / notes          | Action                                        |
 | ----------------------------------------------------------- | ------- | ----------------- | ------------------------ | --------------------------------------------- |
@@ -54,14 +54,14 @@ None. Avoid spam — prior night-engine / AFK babysit comments already on every 
 | [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | commented 13:39Z                                          |
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 
-## Snapshot counts (14:52Z · tip `26d42dfd`)
+## Snapshot counts (14:59Z · tip `c06a4782`)
 
 - **Open partner:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
 - **Ready for Denon self-merge:** **4** (#445 #433 #430 #420) — full green re-checked this cycle
 - **CONFLICTING (rebase):** 5 Denon + #346 Shehzad
 - **MERGEABLE red CI:** 1 (#428 Prettier+Typecheck)
 
-**Merged since tip `cb522a6c` / #516:** #518 (R07 cycle15).
+**Merged since tip `26d42dfd` / #518:** #519 (R07 cycle16).
 
 ## P-WS (report only — no dual-edit)
 
@@ -75,41 +75,5 @@ Agents: docs/report only. No implement on matching or edge while those PRs stay 
 ## Rebase tip (for partners)
 
 ```
-origin/main @ 26d42dfd  (at doc write; re-fetch before rebase)
+origin/main @ c06a4782  (at doc write; re-fetch before rebase)
 ```
-
-## Agent stance
-
-Nitro agents will not dual-edit Denon/Shehzad branches. Free to rebase when ready. Denon self-merges green MERGEABLE PRs.
-
----
-
-## Refresh cycle13 — 2026-08-03T14:42Z · tip `4c0a5a16`
-
-| PR                       | Author  | Mergeable   | Notes                                                  |
-| ------------------------ | ------- | ----------- | ------------------------------------------------------ |
-| #445                     | Denon   | MERGEABLE   | full CI green — **his merge**                          |
-| #433                     | Denon   | MERGEABLE   | full CI green — **his merge** (also blocks P-WS paths) |
-| #430                     | Denon   | MERGEABLE   | docs Prettier green                                    |
-| #420                     | Denon   | MERGEABLE   | full CI green — **his merge**                          |
-| #428                     | Denon   | MERGEABLE   | Prettier+Typecheck **red** — owner fix                 |
-| #448 #441 #438 #436 #432 | Denon   | CONFLICTING | rebase needed — no dual-edit                           |
-| #346                     | Shehzad | CONFLICTING | M1 babysit only                                        |
-
-No Nitro open Class N this cycle. Agents do **not** merge partner PRs.
-
----
-
-## Refresh cycle14 — 2026-08-03T14:50Z · tip `ed0421f7`
-
-| PR                       | Author  | Mergeable   | Notes                                                  |
-| ------------------------ | ------- | ----------- | ------------------------------------------------------ |
-| #445                     | Denon   | MERGEABLE   | full CI green — **his merge**                          |
-| #433                     | Denon   | MERGEABLE   | full CI green — **his merge** (also blocks P-WS paths) |
-| #430                     | Denon   | MERGEABLE   | docs Prettier green                                    |
-| #420                     | Denon   | MERGEABLE   | full CI green — **his merge**                          |
-| #428                     | Denon   | MERGEABLE   | Prettier+Typecheck **red** — owner fix                 |
-| #448 #441 #438 #436 #432 | Denon   | CONFLICTING | rebase needed — no dual-edit                           |
-| #346                     | Shehzad | CONFLICTING | M1 babysit only                                        |
-
-No Nitro open Class N this cycle. Agents do **not** merge partner PRs.
