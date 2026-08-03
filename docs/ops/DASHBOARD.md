@@ -1,6 +1,6 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T12:11:16.413Z · tip `8abeb1c`
+Last report: 2026-08-03T13:17:22.647Z · tip `f96ac6b4`
 
 | Report          | Path                                       |
 | --------------- | ------------------------------------------ |
@@ -11,10 +11,10 @@ Last report: 2026-08-03T12:11:16.413Z · tip `8abeb1c`
 
 ## At a glance
 
-- Free product claims: **22**
-- Blocked: **2**
-- Open PRs: **19**
+- Free product claims: **0**
+- Blocked: **1**
+- Open PRs: **17**
 
-FREE product claims exist — coordinator must spawn or residual-own each (anti-under-spawn).
+No free REGROUP/AFK claims (or only OPS).
 
 Commands: `pnpm swarm:freeze` · `pnpm swarm:status` · `pnpm swarm:report` · `pnpm swarm:next`

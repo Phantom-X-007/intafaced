@@ -20,7 +20,7 @@ While AFK overnight, loop until human returns:
 | Class N Nitro  | merge when CI green                     | none open green               |
 | Partner PRs    | babysit comment only                    | never implement               |
 | P-WS           | **report only** integrity               | no depth UI                   |
-| TRK-*          | research/spec packs under docs/ops/trk/ | not full implement swarms     |
+| TRK-\*         | research/spec packs under docs/ops/trk/ | not full implement swarms     |
 | #425           | rebase/conflict resolve Class N         | merged or blocked with reason |
 
 Cadence: every ~15–30m re-freeze · PR matrix · merge green · spawn free · write R07.
@@ -28,3 +28,20 @@ Cadence: every ~15–30m re-freeze · PR matrix · merge green · spawn free · 
 ## Honest limit (not thrift theater)
 
 There is **not** infinite free product UI once residual is drained. Night value then is: partner CI hygiene, conflict unstick, integrity reports, tracker research, gate hardening — not 20 agents inventing depth.
+
+## Cycle log (Coord-OPS)
+
+### Cycle 2026-08-03 ~13:12–13:17Z
+
+| Item            | Result                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| Tip start       | `a0f73c86` #472 Index announce                                     |
+| freeProduct     | **0** every freeze · SPAWN_NOW none                                |
+| Merged          | #470 (pre-session) · #473 Denon format · **#474** night-engine law |
+| Tip after       | `f96ac6b4` docs(ops): night engine keep-alive law (#474)           |
+| Nitro open      | #425 rebased + force-push · #475 P-WS report prettier re-push      |
+| Denon babysit   | comments on #448 #445 #422 #441 #428 #433 — no file edits          |
+| Shehzad         | #346 still CONFLICTING — babysit only                              |
+| Blocked product | P-WS-REPORT only                                                   |
+
+Do **not** stop the loop solely because freeProduct=0 — continue Class N merges, partner babysit, #425, integrity docs, TRK research packs.
