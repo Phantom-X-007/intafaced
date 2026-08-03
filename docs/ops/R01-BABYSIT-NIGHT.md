@@ -1,7 +1,7 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03T20:05Z (AFK R01 cycle72 tip stamp)  
-**Tip at run:** `ed9ebd3a` (`origin/main`) — docs(ops): R07 cycle71 freeProduct=0 + tip aaa2bb3b (#630)  
+**When:** 2026-08-03T20:12Z (AFK R07+R01 cycle73 tip stamp)  
+**Tip at run:** `f94bb7b9` (`origin/main`) — docs(ops): R01 cycle73 partner babysit ready=4 tip 702cb621 (#633)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
 **Comment budget:** **0** this cycle (instruction) — used 0  
 **Open list delta:** **none** — same 11 partner PRs; ready list unchanged
@@ -24,7 +24,7 @@
 
 **Ready count: 4** — agents do **not** merge these.
 
-## CONFLICTING — needs rebase to tip `ed9ebd3a`
+## CONFLICTING — needs rebase to tip `f94bb7b9`
 
 | PR                                                          | Author  | Mergeable         | Failing / notes          | Action                                        |
 | ----------------------------------------------------------- | ------- | ----------------- | ------------------------ | --------------------------------------------- |
@@ -55,14 +55,14 @@ None. Comment budget **0**. Prior night-engine / AFK babysit comments already on
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 | [#428](https://github.com/Phantom-X-007/intafaced/pull/428) | Denon   | prior red CI comment — not NEW red                        |
 
-## Snapshot counts (2026-08-03T20:05Z · tip `ed9ebd3a`)
+## Snapshot counts (2026-08-03T20:12Z · tip `f94bb7b9`)
 
 - **Open partner:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
 - **Ready for Denon self-merge:** **4** (#445 #433 #430 #420) — full green re-checked this cycle
 - **CONFLICTING (rebase):** 5 Denon + #346 Shehzad
 - **MERGEABLE red CI:** 1 (#428 Prettier+Typecheck)
 
-**Merged since tip `aaa2bb3b` / #628:** #630 R07 cycle71 on main (tip now `ed9ebd3a`).
+**Merged since tip `702cb621` / #632:** #633 R01 cycle73 on main (tip now `f94bb7b9`).
 
 ## P-WS (report only — no dual-edit)
 
@@ -76,7 +76,7 @@ Agents: docs/report only. No implement on matching or edge while those PRs stay 
 ## Rebase tip (for partners)
 
 ```
-origin/main @ ed9ebd3a  (at doc write; partners re-fetch before rebase)
+origin/main @ f94bb7b9  (at doc write; partners re-fetch before rebase)
 ```
 
 ---
@@ -991,19 +991,19 @@ origin/main @ ed9ebd3a  (at doc write; partners re-fetch before rebase)
 
 ---
 
-## Refresh cycle73 (R01) — 2026-08-03T20:09Z · tip `702cb621`
+## Refresh cycle73 (R07+R01) — 2026-08-03T20:12Z · tip `f94bb7b9`
 
-R01 partner recheck (gh) after #632 R07 cycle72 land. Same open list **448 445 441 438 436 433 432 430 428 420 346** @ tip `702cb621`:
+R01 partner recheck (gh) after #632 R07 cycle72 + #633 R01 cycle73 land. Same open list **448 445 441 438 436 433 432 430 428 420 346** @ tip `f94bb7b9`:
 
 | Bucket                 | PRs                                                                                                  | Action         |
 | ---------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
 | Ready Denon self-merge | **#445** full green · **#433** full green (P-WS path) · **#430** docs Prettier · **#420** full green | his merge only |
 | MERGEABLE red          | **#428** Prettier+Typecheck                                                                          | owner fix      |
 | CONFLICTING rebase     | Denon **#448** (gates FAIL) **#441** **#438** **#436** **#432** (P-WS edge) + Shehzad **#346** M1    | babysit only   |
-| Nitro Class N open     | **0** (R01 cycle73 this PR)                                                                          | Class N only   |
+| Nitro Class N open     | **0** (R07 cycle73 keep-alive this PR; #633 R01 already on main)                                     | Class N only   |
 
 Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4** (#445 #433 #430 #420). Comments: **0** (budget 0). P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**. invent live **0**. Agents do **not** merge partner PRs.
 
 ```
-origin/main @ 702cb621  (at doc write; partners re-fetch before rebase)
+origin/main @ f94bb7b9  (at doc write; partners re-fetch before rebase)
 ```
