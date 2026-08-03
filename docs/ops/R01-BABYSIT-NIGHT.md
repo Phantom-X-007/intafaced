@@ -1,7 +1,7 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03T22:14Z (AFK R07 cycle94 tip stamp)
-**Tip at run:** `2bc2b4ed` (`origin/main`) — docs(ops): R07 cycle93 freeProduct=0 + tip 935050dc (#678)
+**When:** 2026-08-03T22:34Z (AFK R07+R01 cycle98 tip stamp)
+**Tip at run:** `182635f8` (`origin/main`) — docs(ops): P-WS still blocked tip 1f28bc66 (cycle97) (#685)
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
 **Comment budget:** **0** this cycle (instruction) — used 0  
 **Open list delta:** **none** — same 11 partner PRs; ready list unchanged
@@ -1530,4 +1530,23 @@ Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4** (#445 #433 
 
 ```
 origin/main @ 1f28bc66  (at doc write; partners re-fetch before rebase)
+```
+
+---
+
+## Refresh cycle98 (R07+R01) — 2026-08-03T22:34Z · tip `182635f8`
+
+R07 keep-alive after **#686** R07 cycle97 + **#685** P-WS cycle97 land. Partner recheck (gh) same list **448 445 441 438 436 433 432 430 428 420 346** @ tip `182635f8`:
+
+| Bucket                 | PRs                                                                                                  | Action         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
+| Ready Denon self-merge | **#445** full green · **#433** full green (P-WS path) · **#430** docs Prettier · **#420** full green | his merge only |
+| MERGEABLE red          | **#428** Prettier+Typecheck                                                                          | owner fix      |
+| CONFLICTING rebase     | Denon **#448** (gates FAIL) **#441** **#438** **#436** **#432** (P-WS edge) + Shehzad **#346** M1    | babysit only   |
+| Nitro Class N open     | **0** (R07 cycle98 keep-alive this PR)                                                               | Class N only   |
+
+Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4** (#445 #433 #430 #420). Comments: **0** (budget 0). P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**. invent live **0**. Agents do **not** merge partner PRs. freeProduct=0 ≠ kill. Milestone cycle **98**.
+
+```
+origin/main @ 182635f8  (at doc write; partners re-fetch before rebase)
 ```
