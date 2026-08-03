@@ -83,3 +83,9 @@ origin/main @ 4fce39a5  (at doc write; re-fetch before rebase)
 ## Refresh cycle19 — 2026-08-03T15:12Z · tip `3d477ef0`
 
 Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs.
+
+---
+
+## Refresh cycle20 — 2026-08-03T15:15Z · tip `97085936`
+
+Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs. P-WS still blocked by #433/#432.
