@@ -1,17 +1,44 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03 ~14:16Z (AFK cycle9)  
-**Tip at run:** `02d8f19c` (`origin/main`) — docs(ops): R01 partner matrix + R07 living board @ e4836982 (#508)  
+**When:** 2026-08-03 ~14:21Z (AFK refresh)  
+**Tip at run:** `bf214291` (`origin/main`) — docs(ops): R07 cycle9 freeProduct=0 + R01 babysit @ 02d8f19c (#510)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
-**Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day night babysit already on every open CONFLICTING partner PR)  
-**Open list delta:** **none** — same 11 PRs as cycle8 / #508 matrix
+**Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day night babysit already on every open CONFLICTING partner PR)
 
 ## Policy
 
-- Skip **MERGEABLE + full green** — Denon merges himself.
+- Skip **MERGEABLE + full green** — Denon merges himself (**ready for Denon self-merge**).
 - One short PR comment only when **CONFLICTING** or **red CI**, and only if not already commented tonight.
 - Shehzad **#346**: status only if not recently commented (skipped — last at 13:44Z).
 - **Never merge partner PRs** from Nitro agents.
+
+## Ready for Denon self-merge (MERGEABLE + green)
+
+| PR                                                          | Author | Mergeable       | Checks              | Action                                                   |
+| ----------------------------------------------------------- | ------ | --------------- | ------------------- | -------------------------------------------------------- |
+| [#445](https://github.com/Phantom-X-007/intafaced/pull/445) | Denon  | MERGEABLE CLEAN | full CI green       | **ready for Denon self-merge**                           |
+| [#433](https://github.com/Phantom-X-007/intafaced/pull/433) | Denon  | MERGEABLE CLEAN | full CI green       | **ready for Denon self-merge** · **P-WS path collision** |
+| [#430](https://github.com/Phantom-X-007/intafaced/pull/430) | Denon  | MERGEABLE CLEAN | docs Prettier green | **ready for Denon self-merge**                           |
+| [#420](https://github.com/Phantom-X-007/intafaced/pull/420) | Denon  | MERGEABLE CLEAN | full CI green       | **ready for Denon self-merge**                           |
+
+**Ready count: 4** — agents do **not** merge these.
+
+## CONFLICTING — needs rebase to tip `bf214291`
+
+| PR                                                          | Author  | Mergeable         | Failing / notes          | Action                                        |
+| ----------------------------------------------------------- | ------- | ----------------- | ------------------------ | --------------------------------------------- |
+| [#448](https://github.com/Phantom-X-007/intafaced/pull/448) | Denon   | CONFLICTING DIRTY | Doctrine gates FAILURE   | needs rebase + fix gates                      |
+| [#441](https://github.com/Phantom-X-007/intafaced/pull/441) | Denon   | CONFLICTING DIRTY | (no checks rollup)       | needs rebase                                  |
+| [#438](https://github.com/Phantom-X-007/intafaced/pull/438) | Denon   | CONFLICTING DIRTY | last CI was green        | needs rebase                                  |
+| [#436](https://github.com/Phantom-X-007/intafaced/pull/436) | Denon   | CONFLICTING DIRTY | last CI was green        | needs rebase                                  |
+| [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | CONFLICTING DIRTY | last CI was green        | needs rebase; **P-WS edge collision**         |
+| [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | CONFLICTING DIRTY | last CI green 2026-08-01 | H-PAY / M1 — human rebase; no agent dual-edit |
+
+## MERGEABLE but not green
+
+| PR                                                          | Author | Mergeable          | Failing checks                     | Action                             |
+| ----------------------------------------------------------- | ------ | ------------------ | ---------------------------------- | ---------------------------------- |
+| [#428](https://github.com/Phantom-X-007/intafaced/pull/428) | Denon  | MERGEABLE UNSTABLE | Prettier (docs), Typecheck & build | red CI — owner fix (prior comment) |
 
 ## Comments posted this run
 
@@ -26,25 +53,14 @@ None. Avoid spam — prior night-engine / AFK babysit comments already on every 
 | [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | commented 13:39Z                                          |
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 
-## Full partner PR matrix (snapshot 14:16Z · tip `02d8f19c`)
+## Snapshot counts (14:21Z · tip `bf214291`)
 
-| PR                                                          | Author  | Mergeable          | Failing / pending checks           | Action                                        |
-| ----------------------------------------------------------- | ------- | ------------------ | ---------------------------------- | --------------------------------------------- |
-| [#448](https://github.com/Phantom-X-007/intafaced/pull/448) | Denon   | CONFLICTING DIRTY  | Doctrine gates FAILURE             | needs rebase + fix gates                      |
-| [#445](https://github.com/Phantom-X-007/intafaced/pull/445) | Denon   | MERGEABLE CLEAN    | — (full CI green)                  | skip — free to merge (his)                    |
-| [#441](https://github.com/Phantom-X-007/intafaced/pull/441) | Denon   | CONFLICTING DIRTY  | (no checks rollup)                 | needs rebase                                  |
-| [#438](https://github.com/Phantom-X-007/intafaced/pull/438) | Denon   | CONFLICTING DIRTY  | — (last CI green)                  | needs rebase                                  |
-| [#436](https://github.com/Phantom-X-007/intafaced/pull/436) | Denon   | CONFLICTING DIRTY  | — (last CI green)                  | needs rebase                                  |
-| [#433](https://github.com/Phantom-X-007/intafaced/pull/433) | Denon   | MERGEABLE CLEAN    | — (full CI green)                  | skip — free to merge; **P-WS path collision** |
-| [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | CONFLICTING DIRTY  | — (last CI green)                  | needs rebase; **P-WS edge collision**         |
-| [#430](https://github.com/Phantom-X-007/intafaced/pull/430) | Denon   | MERGEABLE CLEAN    | — (docs Prettier green)            | skip — free to merge (his)                    |
-| [#428](https://github.com/Phantom-X-007/intafaced/pull/428) | Denon   | MERGEABLE UNSTABLE | Prettier (docs), Typecheck & build | red CI — owner fix (prior comment)            |
-| [#420](https://github.com/Phantom-X-007/intafaced/pull/420) | Denon   | MERGEABLE CLEAN    | — (full CI green)                  | skip — free to merge (his)                    |
-| [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | CONFLICTING DIRTY  | — (last CI green 2026-08-01)       | H-PAY / M1 — human rebase; no agent dual-edit |
+- **Open partner:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
+- **Ready for Denon self-merge:** **4** (#445 #433 #430 #420)
+- **CONFLICTING (rebase):** 5 Denon + #346 Shehzad
+- **MERGEABLE red CI:** 1 (#428)
 
-**Open count:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
-
-**Merged since prior R01 snapshot (`67e121fd` / #507):** #508 (R01 partner matrix + R07 living board).
+**Merged since tip `02d8f19c` / #508:** #510 (R07 cycle9 + R01 babysit snapshot).
 
 ## P-WS (report only — no dual-edit)
 
@@ -58,9 +74,9 @@ Agents: docs/report only. No implement on matching or edge while those PRs stay 
 ## Rebase tip (for partners)
 
 ```
-origin/main @ 02d8f19c  (at doc write; re-fetch before rebase)
+origin/main @ bf214291  (at doc write; re-fetch before rebase)
 ```
 
 ## Agent stance
 
-Nitro agents will not dual-edit Denon/Shehzad branches. Free to rebase when ready.
+Nitro agents will not dual-edit Denon/Shehzad branches. Free to rebase when ready. Denon self-merges green MERGEABLE PRs.
