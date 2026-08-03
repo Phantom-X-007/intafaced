@@ -72,3 +72,4 @@ vendor/**/charting_library/
 # Local agent worktrees + pnpm store (never commit)
 .worktrees/
 .pnpm-store/
+docs/ops/FREEZE-LIVE.json

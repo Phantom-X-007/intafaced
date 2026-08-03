@@ -28,7 +28,9 @@ git log -1 --oneline origin/main
 # Machine free board (Wave 1) — residual ∩ REGROUP ∩ open PR files
 pnpm swarm:freeze          # writes docs/ops/FREEZE-LIVE.md
 pnpm swarm:status          # free vs blocked counts
-pnpm swarm:next            # one worker paste pack for first free claim
+pnpm swarm:next            # first free claim paste
+pnpm swarm:next --all       # ALL free product pastes (anti-under-spawn)
+pnpm swarm:claim <id>       # atomic lock docs/ops/claims/<id>.md (not LIVE-LANES)
 # Before first edit on claimed paths:
 pnpm claim:check <paths>   # or pnpm claim:check after your branch has diffs
 gh pr list --state open --limit 50
@@ -44,7 +46,7 @@ gh pr list --state open --limit 50
 #   origin/fix/shell-landing-honesty · origin/fix/shell-money-on-the-wire · origin/fix/shell-wire-validation
 ```
 
-**Anti-under-spawn:** if `pnpm swarm:status` shows free product claims, the coordinator must spawn or residual-own each — idle free claims = FAIL for an all-out run.
+**NO-FLEET proof:** Docker may be absent — honesty ships with `proof_missing: fleet-blocked`, never fake browser done. **:8090:** if `lsof` listener cwd ≠ your worktree, visual proof is invalid.\n\n**Anti-under-spawn:** if `pnpm swarm:status` shows free product claims, the coordinator must spawn or residual-own each — idle free claims = FAIL for an all-out run.
 
 ### What answers which question
 

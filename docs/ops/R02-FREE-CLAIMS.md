@@ -1,6 +1,6 @@
 # R02 free claims (generated)
 
-Tip `09e2b9e` · 2026-08-03T11:28:45.211Z
+Tip `09e2b9e` · 2026-08-03T11:44:21.220Z
 
 ## Free
 
@@ -28,6 +28,46 @@ Tip `09e2b9e` · 2026-08-03T11:28:45.211Z
 - **B12** [AFK] Marketing/OS/OTC/CMS craft last
 - **BABYSIT-MATRIX** [OPS] Babysit open partner PRs (comment/CI only)
 - **REPORTS** [OPS] Refresh R00–R02 via pnpm swarm:report
+- **TRK-academy.ambassadors** [TRACKER] Residencies, IFC pay, revenue share
+- **TRK-academy.certs** [TRACKER] Certifications → XP → real perks
+- **TRK-academy.curriculum** [TRACKER] DERIV//DESK library import — 20 playbooks + 3 workbooks
+- **TRK-academy.paper-trading** [TRACKER] Paper-trading market flag for workbooks
+- **TRK-academy.spatial** [TRACKER] 2D navigable room canvas, VR-ready scene state
+- **TRK-academy.tournaments** [TRACKER] Seasonal ladders, IFC prize pools
+- **TRK-agents.copy-intel** [TRACKER] Copy-Intel — writes audited leader stats
+- **TRK-agents.merchant** [TRACKER] Merchant agent — approval-rate watch
+- **TRK-agents.navigator** [TRACKER] Navigator — tool-calling inside user guardrails
+- **TRK-agents.scanner** [TRACKER] Market Scanner — ranked signals by tier
+- **TRK-agents.support** [TRACKER] Support agent — KB + account-state grounded
+- **TRK-blueprint.attestations** [TRACKER] On-chain rank attestations, zero PII (§19)
+- **TRK-blueprint.card** [TRACKER] Share card render (1080×1350, 1200×630)
+- **TRK-blueprint.ownership** [TRACKER] Export + hard delete, cascading
+- **TRK-bridge.canonical** [TRACKER] Canonical IFC bridge + attestations
+- **TRK-chain.evm** [TRACKER] INTAEVM sharing validator set + state
+- **TRK-chain.governance** [TRACKER] Governance parameter handover
+- **TRK-chain.mainnet** [TRACKER] INTACHAIN — CometBFT + native CLOB module
+- **TRK-chain.validators** [TRACKER] Validator set opening, published schedule
+- **TRK-dex.quote-router** [TRACKER] Live cross-venue quote — real prices or a typed refusal
+- **TRK-indexer.readmodels** [TRACKER] Chain → Postgres read models
+- **TRK-infra.i18n** [TRACKER] 100+ languages — keyed from day one (§9)
+- **TRK-launch.launchpad** [TRACKER] Presale / fair launch, vesting, staked allocation tiers
+- **TRK-launch.meme-factory** [TRACKER] One-click meme launch + instant market + LP
+- **TRK-launch.nft** [TRACKER] NFT mint / list / auction, on-chain royalties
+- **TRK-launch.token-factory** [TRACKER] ERC-20 deploy from audited templates
+- **TRK-market.commerce** [TRACKER] Listings, subscriptions, purchases, house commission
+- **TRK-market.vendors** [TRACKER] Vendor lifecycle — apply, vet, list, stake-gated slots
+- **TRK-mining.pool** [TRACKER] Stratum share protocol, PPLNS payouts
+- **TRK-ops.admin** [TRACKER] apps/admin — listings, fee params, treasury, kill-switches
+- **TRK-ops.affiliates** [TRACKER] Multi-tier affiliate / IB trees, payout automation
+- **TRK-ops.analytics** [TRACKER] Warehouse — read replica + cube layer
+- **TRK-ops.compliance** [TRACKER] Screening queues, geo-block, VPN/Tor detection
+- **TRK-ops.notifications** [TRACKER] Event-driven fan-out: in-app, push, email, SMS
+- **TRK-ops.support** [TRACKER] Support desk, tickets, KB
+- **TRK-p2p.merchants** [TRACKER] P2P merchant programme — badges, limits, API
+- **TRK-trade.ccxt-api** [TRACKER] CCXT-compatible public API (bots + terminals connect)
+- **TRK-trade.forex** [TRACKER] Fiat pairs on the same engine
+- **TRK-trade.options** [TRACKER] European options, cash-settled, full collateral in v1
+- **TRK-venue.aggregation** [TRACKER] External venue adapters via CCXT (cross-venue)
 
 ## Blocked
 

@@ -8,19 +8,24 @@
  *   pnpm swarm:freeze   → docs/ops/FREEZE-LIVE.md + stdout summary
  *   pnpm swarm:status   → short tip + free/blocked counts
  *   pnpm swarm:report   → docs/ops/R00 R01 R02 + DASHBOARD.md
- *   pnpm swarm:next     → first free claim + worker paste pack
+ *   pnpm swarm:next [--all] → first free claim paste, or all free product pastes
+ *   pnpm swarm:claim <id>   → write docs/ops/claims/<id>.md lock file
  *
  * Exit 0 always when the tool answered honestly (including "0 free").
  * Exit 2 when gh/git cannot answer (same spirit as claim-check).
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OPS = join(ROOT, 'docs', 'ops');
+const CLAIMS_DIR = join(OPS, 'claims');
 const cmd = process.argv[2] || 'status';
+const args = process.argv.slice(3);
 // Brand-scan forbids the vendor directory name as a literal token in source;
 // same join trick as tooling/scripts/vendor-money-inventory.mjs.
 const SHELL = ['vendor', ['coin', 'exchange'].join(''), '05_Web_Front'].join('/');
@@ -146,6 +151,76 @@ const RESIDUAL_PATH_HINTS = {
   'P0.4': ['tooling/uiproof'],
 };
 
+function loadTrackerFree() {
+  try {
+    // Dynamic import sync via pathToFileURL not available — use child node -e
+    const out = execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `import { FEATURES } from '${join(ROOT, 'tooling/tracker/features.mjs')}';
+         const free = FEATURES.filter((f) => (f.status === 'ready' || f.status === 'wip') && !f.owner);
+         process.stdout.write(JSON.stringify(free.map((f) => ({
+           id: 'TRK-' + f.id,
+           rank: 300,
+           track: 'TRACKER',
+           title: f.title || f.id,
+           paths: f.requires || [],
+           note: 'features.mjs free-to-start (' + f.status + '); research/spec first unless DoD tiny. Mid-wave claim-file only, not features.mjs edit.',
+           featureId: f.id,
+         }))));`,
+      ],
+      { encoding: 'utf8', cwd: ROOT, maxBuffer: 10 * 1024 * 1024 },
+    );
+    return JSON.parse(out);
+  } catch (e) {
+    return { error: String(e.message || e) };
+  }
+}
+
+function listClaimLocks() {
+  if (!existsSync(CLAIMS_DIR)) return [];
+  return readdirSync(CLAIMS_DIR)
+    .filter((n) => n.endsWith('.md'))
+    .map((n) => n.replace(/\.md$/, ''));
+}
+
+function writeClaimFile(id, claim) {
+  mkdirSync(CLAIMS_DIR, { recursive: true });
+  const path = join(CLAIMS_DIR, `${id}.md`);
+  if (existsSync(path)) {
+    return { path, existed: true };
+  }
+  const body = [
+    `# Claim ${id}`,
+    '',
+    `**status:** claimed`,
+    `**started:** ${new Date().toISOString()}`,
+    `**heartbeat:** ${new Date().toISOString()}`,
+    `**title:** ${(claim && claim.title) || id}`,
+    `**track:** ${(claim && claim.track) || '?'}`,
+    `**paths:**`,
+    ...((claim && claim.paths) || []).map((p) => `- ${p}`),
+    '',
+    '## Done bar',
+    '',
+    '- [ ] Implemented',
+    '- [ ] claim:check clean or residual-owned',
+    '- [ ] pnpm verify (or FE-VERIFY when available)',
+    '- [ ] Proof: fleet OR proof_missing: fleet-blocked (NO-FLEET)',
+    '- [ ] PR link',
+    '',
+    '## Law',
+    '',
+    '- Do not hand-edit docs/LIVE-LANES.md mid-wave (inside Denon open PRs).',
+    '- Do not invent money/depth. No Shehzad implement. No dual-edit Denon open files.',
+    '',
+  ].join('\n');
+  writeFileSync(path, body, 'utf8');
+  return { path, existed: false };
+}
+
 function loadResidual() {
   const p = join(ROOT, 'tooling/frontend/residual-register.json');
   if (!existsSync(p)) return { items: [], error: 'residual-register.json missing' };
@@ -215,6 +290,22 @@ function buildModel() {
     });
   }
 
+  const tracker = loadTrackerFree();
+  if (tracker.error) {
+    // non-fatal
+  } else if (Array.isArray(tracker)) {
+    const locks = new Set(listClaimLocks());
+    for (const c of tracker) {
+      claims.push({
+        ...c,
+        status: locks.has(c.id) ? 'claimed' : 'free',
+        collisions: locks.has(c.id) ? ['claim file exists'] : [],
+        priority: c.rank,
+        note: c.note + (locks.has(c.id) ? ' · CLAIMED' : ''),
+      });
+    }
+  }
+
   // Hygiene / babysit always-on non-writer rows
   claims.push({
     id: 'BABYSIT-MATRIX',
@@ -268,6 +359,7 @@ function buildModel() {
     free,
     blocked,
     freeProduct: free.filter((c) => c.track === 'REGROUP' || c.track === 'AFK' || c.track === 'LANDER'),
+    freeTracker: free.filter((c) => c.track === 'TRACKER'),
     underSpawnNote: underSpawnFail
       ? 'FREE product claims exist — coordinator must spawn or residual-own each (anti-under-spawn).'
       : 'No free REGROUP/AFK claims (or only OPS).',
@@ -285,6 +377,8 @@ function renderFreezeMd(m) {
   lines.push(`- **Open PRs:** ${m.openPrCount}`);
   lines.push(`- **Free claims:** ${m.free.length} (product ${m.freeProduct.length}) · **Blocked:** ${m.blocked.length}`);
   lines.push(`- **Anti-under-spawn:** ${m.underSpawnNote}`);
+  lines.push('- **Proof mode:** NO-FLEET until Docker present — static build + scans; never fake UI done');
+  lines.push('- **Claims:** docs/ops/claims/<id>.md (do not hand-edit LIVE-LANES mid-wave)');
   if (m.residualError) lines.push(`- **Residual error:** ${m.residualError}`);
   else lines.push(`- **Residual:** updated=${m.residualUpdated} tip_note=${m.residualTipNote || '—'}`);
   lines.push('');
@@ -315,6 +409,20 @@ function renderFreezeMd(m) {
     lines.push(`- #${p.number} @${p.author} · ${p.fileCount} files · ${p.mergeable || '?'} · ${p.title}`);
   }
   lines.push('');
+  lines.push('## NEVER-TOUCH mid-wave (open multi-PR clusters)');
+  lines.push('');
+  lines.push('- `docs/LIVE-LANES.md` — inside Denon open PRs (#436/#428); use `docs/ops/claims/<id>.md` instead');
+  lines.push('- `tooling/tracker/features.mjs` / `docs/TRACKER.md` — batch at wave end');
+  lines.push(
+    '- `package.json` / `tooling/ci/brand-scan.mjs` / `gates.mjs` / `.github/workflows/ci.yml` — multi-PR pile; use `node tooling/scripts/swarm.mjs` if aliases conflict',
+  );
+  lines.push('- Visual proof on :8090 if `lsof` path is not your worktree (stale squatter risk)');
+  lines.push('- Full fleet proof if Docker missing — stamp `proof_missing: fleet-blocked` (NO-FLEET mode)');
+  lines.push('');
+  lines.push('## Claim files');
+  lines.push('');
+  lines.push('Atomic claim: `pnpm swarm:claim <id>` → `docs/ops/claims/<id>.md` (first writer wins).');
+  lines.push('');
   lines.push('## Law');
   lines.push('');
   lines.push('- `docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md` · `docs/REGROUP-2026-08-03.md`');
@@ -335,7 +443,9 @@ function writeFreeze(m) {
 
 function printStatus(m) {
   console.log(`swarm:status  tip=${m.tip}  openPRs=${m.openPrCount}`);
-  console.log(`  free=${m.free.length}  freeProduct=${m.freeProduct.length}  blocked=${m.blocked.length}`);
+  console.log(
+    `  free=${m.free.length}  freeProduct=${m.freeProduct.length}  freeTracker=${(m.freeTracker || []).length}  blocked=${m.blocked.length}`,
+  );
   console.log(`  ${m.underSpawnNote}`);
   console.log('  free product ids:', m.freeProduct.map((c) => c.id).join(', ') || '(none)');
   if (m.blocked.length) {
@@ -429,31 +539,58 @@ function writeReports(m) {
     '',
   ].join('\n');
   writeFileSync(join(OPS, 'DASHBOARD.md'), dash, 'utf8');
+  const html = `<!doctype html><meta charset=utf-8><title>Swarm dashboard</title>
+<style>body{font:16px/1.4 system-ui;max-width:52rem;margin:2rem auto;padding:0 1rem}
+h1{font-size:1.4rem} .ok{color:#0a0} .warn{color:#a60} code{background:#f4f4f4;padding:.1rem .3rem}</style>
+<h1>Swarm dashboard</h1>
+<p>Tip <code>${m.tip}</code> · ${m.generatedAt}</p>
+<p class=warn>Free product: <b>${m.freeProduct.length}</b> · Tracker free: <b>${(m.freeTracker || []).length}</b> · Blocked: <b>${m.blocked.length}</b> · Open PRs: <b>${m.openPrCount}</b></p>
+<p>${m.underSpawnNote}</p>
+<p><a href="./FREEZE-LIVE.md">FREEZE-LIVE</a> · <a href="./R00-INVENTORY.md">R00</a> · <a href="./R01-PR-MATRIX.md">R01</a> · <a href="./R02-FREE-CLAIMS.md">R02</a></p>
+<p>Regenerate: <code>pnpm swarm:report</code></p>`;
+  writeFileSync(join(OPS, 'DASHBOARD.html'), html, 'utf8');
   return OPS;
 }
 
-function printNext(m) {
-  const next = m.freeProduct[0] || m.free.find((c) => c.track === 'INTEGRITY') || m.free.find((c) => c.track === 'OPS') || m.free[0];
-  if (!next) {
-    console.log('swarm:next — no free claims. Board empty or only blocked.');
-    console.log('Re-run: pnpm swarm:freeze && pnpm swarm:status');
+function pasteFor(claim) {
+  const paths = (claim.paths || []).join('\n  ') || '(none — research/ops/tracker)';
+  return [
+    `swarm:next → ${claim.id} [${claim.track}]`,
+    `  ${claim.title}`,
+    '',
+    '--- worker paste ---',
+    'PRE-FLIGHT: pnpm swarm:freeze · pnpm claim:check <paths> · docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md',
+    `FIRST: pnpm swarm:claim ${claim.id}  # writes docs/ops/claims/${claim.id}.md — do NOT edit LIVE-LANES`,
+    `You own ONLY claim: ${claim.id}`,
+    `Scope: ${claim.title}`,
+    `Allowed paths:\n  ${paths}`,
+    `Note: ${claim.note || '—'}`,
+    'Forbidden: Shehzad M1–M7; dual-edit Denon open PR files; invent money/depth; apps/web product; main checkout; mid-wave features.mjs/package.json.',
+    'Proof: if no Docker — NO-FLEET (proof_missing: fleet-blocked). If :8090 listener cwd ≠ your worktree — visual proof invalid.',
+    'Worktree from origin/main. pnpm verify when code. One PR. Stamp residual if AFK id.',
+    '--- end paste ---',
+  ].join('\n');
+}
+
+function printNext(m, all = false) {
+  const list = m.freeProduct.length ? m.freeProduct : m.free.filter((c) => c.track !== 'OPS');
+  if (!list.length) {
+    console.log('swarm:next — no free product claims. Board empty or only blocked/OPS.');
     return;
   }
-  const paths = (next.paths || []).join('\n  ') || '(none — research/ops)';
-  console.log(`swarm:next → ${next.id} [${next.track}]`);
-  console.log(`  ${next.title}`);
+  if (all) {
+    console.log(`swarm:next --all → ${list.length} free product claims\n`);
+    for (const c of list) {
+      console.log(pasteFor(c));
+      console.log('');
+    }
+    console.log(`ANTI-UNDER-SPAWN: spawn or residual-own every id above (${list.length}).`);
+    return;
+  }
+  console.log(pasteFor(list[0]));
   console.log('');
-  console.log('--- worker paste ---');
-  console.log(`PRE-FLIGHT: pnpm swarm:freeze · pnpm claim:check · docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md`);
-  console.log(`You own ONLY claim: ${next.id}`);
-  console.log(`Scope: ${next.title}`);
-  console.log(`Allowed paths:\n  ${paths}`);
-  console.log(`Note: ${next.note || '—'}`);
-  console.log(`Forbidden: Shehzad M1–M7 implement; dual-edit Denon open PR files; invent money/depth; apps/web product; main checkout.`);
-  console.log(`Worktree from origin/main. Claim LIVE-LANES. pnpm verify when code. One PR. Stamp residual if AFK id.`);
-  console.log('--- end paste ---');
-  console.log('');
-  console.log(`Remaining free product after this: ${Math.max(0, m.freeProduct.length - (m.freeProduct[0] === next ? 1 : 0))}`);
+  console.log(`Remaining free product after this: ${list.length - 1}`);
+  console.log('Tip: pnpm swarm:next --all  for every free product paste.');
 }
 
 // --- main ---
@@ -485,12 +622,31 @@ switch (cmd) {
     break;
   }
   case 'next': {
-    // prefer fresh freeze if missing; still recompute
     writeFreeze(m);
-    printNext(m);
+    printNext(m, args.includes('--all'));
+    break;
+  }
+  case 'claim': {
+    const id = args[0];
+    if (!id) {
+      console.error('Usage: pnpm swarm:claim <id>');
+      process.exit(1);
+    }
+    writeFreeze(m);
+    const claim = m.claims.find((c) => c.id === id);
+    if (!claim) {
+      console.error(`Unknown claim id ${id} — run pnpm swarm:freeze and pick an id`);
+      process.exit(1);
+    }
+    if (claim.status === 'blocked') {
+      console.error(`Claim ${id} is blocked: ${(claim.collisions || []).join('; ')}`);
+      process.exit(1);
+    }
+    const r = writeClaimFile(id, claim);
+    console.log(r.existed ? `claim exists: ${r.path}` : `claim locked: ${r.path}`);
     break;
   }
   default:
-    console.error(`Usage: node tooling/scripts/swarm.mjs <freeze|status|report|next>`);
+    console.error(`Usage: node tooling/scripts/swarm.mjs <freeze|status|report|next|claim>`);
     process.exit(1);
 }
