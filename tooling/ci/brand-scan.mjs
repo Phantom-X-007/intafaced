@@ -83,6 +83,19 @@ const SKIP_DIRS = new Set([
   // are what catch it if it tries. Note the trade-off this makes: our own code
   // would go unscanned if it were ever parked under a `vendor/` directory.
   // Don't do that.
+  //
+  // 2026-08-03: that paragraph was describing a hole while calling it a
+  // trade-off. The vendored Vue shell became the SOLE product surface, so the
+  // one tree this scan never opens is now the only one whose copy a user reads,
+  // and the file count printed at the bottom has never included a single file
+  // of it. Deleting this entry is still the wrong fix — measured, it takes the
+  // repo-wide result from 0 findings to 59, of which 51 are build tooling,
+  // compose bind-mount paths and the upstream's own attribution documents — and
+  // it would not even work, because EXTENSIONS below has no `.vue` and the
+  // shell is 70 single-file components. `tooling/ci/shell-brand-scan.mjs`
+  // covers it instead: the same FORBIDDEN list, PARSED OUT OF THIS FILE so the
+  // two cannot drift, plus `.vue`, against a frozen baseline that can only
+  // shrink. The Java trees stay skipped, for the reason above.
   'vendor',
 ]);
 
