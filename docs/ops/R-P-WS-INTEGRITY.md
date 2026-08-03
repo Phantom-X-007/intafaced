@@ -5,7 +5,8 @@
 | **Claim**            | `P-WS-REPORT` (integrity report only)                                                                                                                                                                                                          |
 | **Class**            | N (docs)                                                                                                                                                                                                                                       |
 | **Proof mode**       | **NO-FLEET** — `docker` not available on this host; live counts not re-probed this session                                                                                                                                                     |
-| **Tip when written** | re-derive: `git fetch && git log -1 --oneline origin/main`                                                                                                                                                                                     |
+| **Tip when written** | `c773dafa` `docs(ops): R07 night-engine cycle2 — session merge board (#482)` (`origin/main` @ write)                                                                                                                                           |
+| **Upgrade**          | Code citations + tip SHA re-derived 2026-08-03 night AFK; prior merge #475 / dated sibling #478                                                                                                                                                |
 | **Sources**          | Code on tip + prior live probe in [`docs/REGROUP-2026-08-03.md`](../REGROUP-2026-08-03.md) §3 + Denon board [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) **D-P0-WS** |
 | **Dual-edit**        | **None.** This PR is `docs/ops/` only. Did **not** edit `services/svc-matching` or `services/svc-edge` (open Denon paths: #433 matching, #432/#424 edge).                                                                                      |
 
@@ -17,30 +18,98 @@
 
 ### What the shell proxies
 
-`vendor/coinexchange/05_Web_Front/nginx.conf` (serving `:8090`):
+`vendor/coinexchange/05_Web_Front/nginx.conf` (compose maps host `:8090` → container `:80`):
 
-| Location         | Behaviour                                                                                  |
-| ---------------- | ------------------------------------------------------------------------------------------ |
-| `location /`     | SPA `try_files $uri $uri/ /index.html`                                                     |
-| `location /api/` | `proxy_pass http://svc-edge:4000`                                                          |
-| `location /ws`   | `proxy_pass http://svc-ws:4014` **with no URI rewrite** + `Upgrade` / `Connection` headers |
+| Location         | Lines | Behaviour                                                                                  |
+| ---------------- | ----- | ------------------------------------------------------------------------------------------ |
+| `location /`     | 55–57 | SPA `try_files $uri $uri/ /index.html`                                                     |
+| `location /api/` | 64–71 | `proxy_pass http://svc-edge:4000`                                                          |
+| `location /ws`   | 76–83 | `proxy_pass http://svc-ws:4014` **with no URI rewrite** + `Upgrade` / `Connection` headers |
+
+```76:83:vendor/coinexchange/05_Web_Front/nginx.conf
+    location /ws {
+        proxy_pass http://svc-ws:4014;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host       $host;
+        proxy_read_timeout 3600s;
+    }
+```
+
+`proxy_pass` without a URI path → request URI is forwarded **unchanged**. Browser `GET /ws?…` arrives at svc-ws as **`/ws`**.
 
 ### What svc-ws accepts
 
 `services/svc-ws/src/ws/gateway.ts`:
 
-- Public upgrade path constant: `STREAM_PATH = '/stream'`.
-- Upgrade handler: if pathname is `/private/stream` → ignore (private gateway); if pathname is **not** `/stream` → **HTTP 404** and destroy socket.
-- Required query: `?market=<id>` matching `^[A-Za-z0-9._:-]{1,64}$`; optional `channel=depth|trades`.
+```56:58:services/svc-ws/src/ws/gateway.ts
+/** Bounded before anything else touches it. The hub does the authoritative check. */
+const MARKET_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 
-Documented surface (`services/svc-ws/README.md`):
+export const STREAM_PATH = '/stream';
+```
 
-- `GET /stream?market=<id>` (depth)
-- `GET /stream?market=<id>&channel=trades` (tape)
-- `GET /private/stream` (auth)
-- REST: `GET /markets`, `GET /markets/:marketId/depth`
+```127:140:services/svc-ws/src/ws/gateway.ts
+  const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
+    const url = new URL(request.url ?? '/', 'http://gateway.invalid');
+    // Co-mounted with private gateway: Node fires every upgrade listener.
+    // Only ignore the private path so private auth can run; other paths still 404.
+    if (url.pathname === '/private/stream') return;
+    if (url.pathname !== STREAM_PATH) return reject(socket, 404, 'Not Found');
 
-Retired `apps/web` clients already target **`/stream`**, not `/ws` (`apps/web/src/lib/market/ws-transport.ts`).
+    if (!enabled()) return reject(socket, 503, 'Service Unavailable');
+
+    const marketId = url.searchParams.get('market');
+    if (!marketId || !MARKET_ID.test(marketId)) return reject(socket, 400, 'Bad Request');
+
+    const channel = parseChannel(url.searchParams.get('channel'));
+    if (channel === null) return reject(socket, 400, 'Bad Request');
+```
+
+- Public upgrade path constant: **`STREAM_PATH = '/stream'`**.
+- Pathname `/private/stream` → ignore (private gateway co-mount).
+- Pathname **not** `/stream` → **HTTP 404** + destroy socket.
+- Required query: `?market=<id>` matching `^[A-Za-z0-9._:-]{1,64}$`; optional `channel=depth|trades` (`parseChannel`).
+
+Documented surface (`services/svc-ws/README.md` §API):
+
+| Route                                          | Role                          |
+| ---------------------------------------------- | ----------------------------- |
+| `GET /stream?market=<id>`                      | depth snapshot then deltas    |
+| `GET /stream?market=<id>&channel=trades`       | public tape                   |
+| `GET /private/stream`                          | auth private (orders/fills/…) |
+| `GET /markets`, `GET /markets/:marketId/depth` | REST mirrors                  |
+
+Retired `apps/web` clients already target **`/stream`**, not `/ws`:
+
+```90:98:apps/web/src/lib/market/ws-transport.ts
+export function streamUrl(origin: string, marketId: string): string {
+  const url = new URL(origin);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`depth origin must be http(s), got "${url.protocol}"`);
+  }
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = '/stream';
+  url.search = `market=${encodeURIComponent(marketId)}`;
+  return url.toString();
+}
+```
+
+Edge does **not** proxy WebSocket. `OUTSIDE_THE_DOOR.ws` documents the gap:
+
+```126:141:services/svc-edge/src/routes.ts
+export const OUTSIDE_THE_DOOR: Readonly<Record<string, string>> = {
+  /**
+   * SOCKET §13 · `socket.ws-behind-the-edge`
+   *
+   * svc-ws publishes 4014 and the browser connects to it directly
+   * (`NEXT_PUBLIC_WS_URL`); the vendored shell's nginx proxies `/ws` straight to
+   * `svc-ws:4014`. Neither path crosses svc-edge, so the operator kill-switch
+   * cannot reach it. …
+   */
+  ws: 'svc-ws is reached directly by the browser on its own port, not through this edge (SOCKET §13 socket.ws-behind-the-edge)',
+```
 
 ### The mismatch (code-level, independent of fleet)
 
@@ -62,17 +131,91 @@ nginx half is short; it is not the whole blocker (see §2).
 
 ## 2 · Market-ID namespace — edge vs matching vs ws
 
-### Data-plane ownership (from code)
+### Data-plane ownership (from code on tip `c773dafa`)
 
-| Plane                     | Source of market identity                                                                                       | Shape on the wire                                                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **Browser REST via edge** | Edge routes `/api/v1/*` → **svc-trade** (`TRADE_URL`, `preservePath: true`) — `services/svc-edge/src/routes.ts` | Public list: `GET /api/v1/markets` on trade                                                                            |
-| **Trade catalog**         | Postgres `trade.markets`                                                                                        | `Market.id` = **UUID string**; `Market.symbol` = human pair (e.g. `BTC/USDT`) — `services/svc-trade/src/spot/types.ts` |
-| **Trade → matching**      | `matching.submit(market.id, …)`, `matching.depth(market.id, …)`                                                 | Engine key = **trade UUID**, not symbol — `trade-service.ts`                                                           |
-| **Matching books**        | In-process map; `GET /markets` → `{ markets: engine.markets }`                                                  | IDs that have ever had a book / journal presence — **not** a copy of Postgres listings                                 |
-| **svc-ws**                | `HttpDepthSource.markets()` = matching `GET /markets`; `ensureKnownMarket` before any depth poll or attach      | Subscribe with that same string or close **`unknown market "<id>"`**                                                   |
+| Plane                     | Source of market identity                                                                                  | Shape on the wire                                                                      | Citation                                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Browser REST via edge** | Edge `/api/v1/*` → **svc-trade** (`TRADE_URL`, `preservePath: true`)                                       | Public list: `GET /api/v1/markets` on trade                                            | `services/svc-edge/src/routes.ts` L60–69                                                 |
+| **Trade catalog**         | Postgres `trade.markets`                                                                                   | `id` = **uuid PK**; `symbol` = human pair (e.g. `BTC/USDT`)                            | `services/svc-trade/drizzle/0000_trade_init.sql` L51–52; `types.ts` `Market.id`/`symbol` |
+| **Trade → matching**      | `matching.submit(market.id, …)`, `matching.depth(market.id, …)`                                            | Engine key = **trade UUID string**, not symbol                                         | `trade-service.ts` L367, L580                                                            |
+| **Matching books**        | In-process map; `GET /markets` → `{ markets: engine.markets }`                                             | IDs that have ever had a book / journal presence — **not** a copy of Postgres listings | `services/svc-matching/src/router.ts` L239; `engine.ts` `get markets()` L144–146         |
+| **svc-ws**                | `HttpDepthSource.markets()` = matching `GET /markets`; `ensureKnownMarket` before any depth poll or attach | Subscribe with that same string or close **`unknown market "<id>"`**                   | `depth/source.ts` L102–108; `depth/hub.ts` L196–199, L225–232                            |
 
-Critical safety note (svc-ws README / `depth/source.ts`): matching `engine.book(id)` historically auto-created empty books; ws **must** gate on matching’s market list so the public internet cannot grow engine memory with arbitrary IDs.
+Edge route table (trade only for public markets REST; matching **absent**):
+
+```60:69:services/svc-edge/src/routes.ts
+export const UPSTREAMS: readonly Upstream[] = [
+  { prefix: '/api/identity', module: 'identity', envVar: 'IDENTITY_URL', devUrl: 'http://localhost:4002' },
+  { prefix: '/api/trade', module: 'trade', envVar: 'TRADE_URL', devUrl: 'http://localhost:4004' },
+  // Public exchange REST (CCXT contract paths). Path preserved so
+  // edge /api/v1/markets → trade /api/v1/markets.
+  //
+  // `module: 'trade'` and not 'v1'. This is the same service as the row above
+  // reached under a different contract, so the kill-switch must treat the two
+  // as one module or halting the market would only halt half of it.
+  { prefix: '/api/v1', module: 'trade', envVar: 'TRADE_URL', devUrl: 'http://localhost:4004', preservePath: true },
+```
+
+Trade schema:
+
+```51:53:services/svc-trade/drizzle/0000_trade_init.sql
+CREATE TABLE IF NOT EXISTS "trade"."markets" (
+  "id"           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "symbol"       text NOT NULL,
+```
+
+Money path keys matching by **UUID**:
+
+```367:367:services/svc-trade/src/spot/trade-service.ts
+    const depth = await this.matching.depth(market.id, 50);
+```
+
+```580:580:services/svc-trade/src/spot/trade-service.ts
+      result = await this.matching.submit(market.id, this.toEngineRequest(orderId, userId, input, orderType, tif, protectionPrice));
+```
+
+Matching public list + depth authority:
+
+```224:239:services/svc-matching/src/router.ts
+  app.get('/markets/:marketId/depth', async (req, reply) => {
+    const { marketId } = req.params as { marketId: string };
+    const limit = Number((req.query as { limit?: string }).limit ?? '50');
+    const depth = engine.depth(marketId, Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 50);
+
+    // 404 for a market that has never traded. Previously this route allocated
+    // and STORED a book for any string, so an unauthenticated caller could grow
+    // the engine's memory without bound — and every one of those phantom books
+    // then appeared to exist. Reading must not create.
+    if (depth === null) {
+      return reply.code(404).send({ code: 'MarketNotFound', message: `${marketId} is not a market on this engine` });
+    }
+    return reply.code(200).send({ marketId, ...depth });
+  });
+
+  app.get('/markets', async () => ({ markets: engine.markets }));
+```
+
+svc-ws market gate (matching list only; never trade Postgres):
+
+```102:108:services/svc-ws/src/depth/source.ts
+  async markets(): Promise<readonly string[]> {
+    const body = await this.#get('/markets');
+    const markets = (body as { markets?: unknown }).markets;
+    if (!Array.isArray(markets) || markets.some((m) => typeof m !== 'string')) {
+      throw new DepthSourceError('svc-matching returned no market list', null);
+    }
+    return markets as readonly string[];
+  }
+```
+
+```196:199:services/svc-ws/src/depth/hub.ts
+      if (!(await this.ensureKnownMarket(sub.marketId))) {
+        // Never call depth for an id the engine has no book for: that call would
+        // CREATE the book upstream. See `DepthSource.markets`.
+        this.#evict(sub, CLOSE_POLICY, `unknown market "${sub.marketId}"`);
+```
+
+**Safety note:** tip matching depth **404s** unknown markets without allocating (`engine.depth` → `existingBook`). ws **still** gates on `GET /markets` so junk ids never poll and historically protected against the allocate-on-read bug (`source.ts` L13–21 header; engine comment L119–135). Both layers remain correct.
 
 ### Three namespaces, not two
 
@@ -100,6 +243,8 @@ When the fleet was healthy, product-surfaces session recorded:
 | Set intersection                        | **0**                                     | **Unverified** (NO-FLEET); structural risk still holds from code |
 | Direct upgrade to svc-ws with edge UUID | closes with `unknown market "a7cc445e-…"` | Anecdote from REGROUP; UUID shape matches trade `id`             |
 
+Source: [`docs/REGROUP-2026-08-03.md`](../REGROUP-2026-08-03.md) §3 items 1–2.
+
 ### Structural risk that remains true without Docker
 
 - Edge does **not** proxy market identity into matching or ws.
@@ -110,18 +255,18 @@ When the fleet was healthy, product-surfaces session recorded:
 
 ### What would prove ∩ ≠ 0 (when fleet returns)
 
-1. `GET http://svc-trade:…/api/v1/markets` (or via edge `:8090/api/v1/markets`) → collect `id` (and symbols).
-2. `GET http://svc-matching:…/markets` → collect engine market ids.
-3. `GET http://svc-ws:…/markets` → must equal (2) (modulo refresh lag).
+1. `GET` trade (or edge) `/api/v1/markets` → collect `id` (and symbols).
+2. `GET` matching `/markets` → collect engine market ids.
+3. `GET` svc-ws `/markets` → must equal (2) (modulo refresh lag).
 4. Assert non-empty intersection of trade `id` set with matching set.
-5. `wscat`/`websocat` to `ws://svc-ws:4014/stream?market=<id_from_intersection>` → first frame `type: snapshot` (not close 1008 unknown market).
+5. Upgrade to `ws://svc-ws:4014/stream?market=<id_from_intersection>` → first frame `type: snapshot` (not close 1008 unknown market).
 6. After nginx fix: same against `:8090` public path.
 
 ---
 
 ## 3 · Handoff Denon needs (D-P0-WS)
 
-Platform-integrity lane. Agents **do not** invent the authority rule ([DENON hard board](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md)).
+Platform-integrity lane. Agents **do not** invent the authority rule ([DENON hard board](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) **D-P0-WS** / “product law, not only plumbing”).
 
 ### Decide first (product law — write on tip)
 
@@ -170,16 +315,16 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 ## 5 · File / PR touch map (for implementers)
 
-| Area                | Path                                                       | Role                           |
-| ------------------- | ---------------------------------------------------------- | ------------------------------ |
-| nginx               | `vendor/coinexchange/05_Web_Front/nginx.conf`              | `/ws` proxy vs SPA `/`         |
-| ws gateway          | `services/svc-ws/src/ws/gateway.ts`                        | `/stream` only                 |
-| ws market gate      | `services/svc-ws/src/depth/source.ts`, `hub.ts`            | matching list                  |
-| edge route          | `services/svc-edge/src/routes.ts`                          | `/api/v1` → trade only (no ws) |
-| trade id            | `services/svc-trade/src/spot/types.ts`, `trade-service.ts` | UUID to matching               |
-| matching list       | `services/svc-matching` `GET /markets`                     | journal books                  |
-| prior live write-up | `docs/REGROUP-2026-08-03.md` §3                            | 16 vs 10, ∩0                   |
-| Denon queue id      | **D-P0-WS**                                                | authority + implement          |
+| Area                | Path                                                     | Role                          |
+| ------------------- | -------------------------------------------------------- | ----------------------------- |
+| nginx               | `vendor/coinexchange/05_Web_Front/nginx.conf` L76–83     | `/ws` proxy vs SPA `/` L55–57 |
+| ws gateway          | `services/svc-ws/src/ws/gateway.ts` L58, L127–140        | `/stream` only                |
+| ws market gate      | `services/svc-ws/src/depth/source.ts`, `hub.ts`          | matching list                 |
+| edge route          | `services/svc-edge/src/routes.ts` L60–69, L126–141       | `/api/v1` → trade; ws outside |
+| trade id            | `drizzle/0000_trade_init.sql` L51–52; `trade-service.ts` | UUID to matching              |
+| matching list       | `services/svc-matching/src/router.ts` L224–239           | journal books + depth 404     |
+| prior live write-up | `docs/REGROUP-2026-08-03.md` §3                          | 16 vs 10, ∩0                  |
+| Denon queue id      | **D-P0-WS**                                              | authority + implement         |
 
 ---
 
@@ -187,11 +332,12 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 | Check                               | Result                          |
 | ----------------------------------- | ------------------------------- |
-| nginx `/ws` + SPA `/` read from tip | Yes                             |
-| svc-ws `/stream` only               | Yes                             |
-| trade UUID → matching               | Yes (code)                      |
+| Tip SHA stamped                     | `c773dafa`                      |
+| nginx `/ws` + SPA `/` read from tip | Yes (L55–57, L76–83)            |
+| svc-ws `/stream` only               | Yes (`STREAM_PATH`, upgrade)    |
+| trade UUID → matching               | Yes (code L367, L580)           |
 | Live 16/10/∩0 re-probe              | **No** — NO-FLEET; cite REGROUP |
 | Code changes to matching/edge       | **None** (avoid dual-edit)      |
 | Depth UI                            | **Not started** (not free)      |
 
-**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts above are code-backed on tip.
+**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts above are code-backed on tip `c773dafa`.
