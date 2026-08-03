@@ -95,6 +95,15 @@ export const GATES = [
     why: 'a Java money mutator is a second book, and there is only one book',
   },
   {
+    id: 'fabricated-money',
+    script: 'tooling/ci/fabricated-money-scan.mjs',
+    doctrine: '§0.6',
+    why:
+      'a money figure on a surface that no service supplied. Was `apps/web/src/testing/fabricated-money.ts`, which had two ' +
+      'consumers and dies with that app; the shell replacing it has one unit spec and no root script that runs it. ' +
+      'Enforcing, at a frozen baseline of 12 named findings that can only shrink — see BASELINE in the scan.',
+  },
+  {
     id: 'dual-book-door',
     script: 'tooling/ci/dual-book-door-scan.mjs',
     doctrine: 'Architect A1',
