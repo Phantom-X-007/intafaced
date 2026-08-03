@@ -1,12 +1,12 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T22:37:49.251Z
+Generated: 2026-08-03T22:49:45.497Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `28fde7a2`                                                        |
-| Tip subject                       | docs(ops): R01 babysit cycle98 — partner matrix ready=4 (#687)    |
-| Open PRs                          | 11                                                                |
+| Tip                               | `e78555ea`                                                        |
+| Tip subject                       | docs(ops): R-AFK-RESCAN invent cycle99 residual 0 (#690)          |
+| Open PRs                          | 12                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
 | Blocked                           | 1                                                                 |
