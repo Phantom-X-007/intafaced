@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `8b7a7203` — docs(ops): invent re-scan cycle65 tip 5da067fb (#618)
-- **Generated:** 2026-08-03T19:32:15.393Z
+- **Tip:** `1daa9889` — docs(ops): P-WS still blocked tip 8b7a7203 (cycle66) (#620)
+- **Generated:** 2026-08-03T19:36:52.183Z
 - **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8

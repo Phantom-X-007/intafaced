@@ -830,3 +830,21 @@ EXIT=0
 ```
 
 **Verdict:** invent honesty holds · live invent residual **0** · fabricated-money findings **0**.
+
+---
+
+## Re-scan cycle67 — 2026-08-03T19:38Z · tip `1daa9889`
+
+**Mode:** NO-FLEET · static `rg` + `tooling/ci/fabricated-money-scan.mjs`  
+**Trigger:** AFK OPS invent re-scan keep-alive (freeProduct=0 shell drain — **not** platform done)  
+**Tip:** `1daa9889` · main after R07 cycle66 + P-WS c66 (#619/#620)
+
+| check                        |                                            result | verdict                          |
+| ---------------------------- | ------------------------------------------------: | -------------------------------- |
+| `fabricated-money-scan.mjs`  | **0** finding(s) / **0** frozen baseline · EXIT=0 | queue not grown                  |
+| shell files scanned          |                                            **93** | gate path green                  |
+| `invent` (ci) vendor front   |                                            **94** | doctrine / honesty comments only |
+| live `dataFanyong` / CNY 6.5 |                                             **0** | honesty comments only            |
+| **NEW hard invent residual** |                                             **0** | no invent-fix PR                 |
+
+**Verdict:** invent honesty holds · live invent residual **0** · freeProduct=0 ≠ kill · P-WS still blocked by #433/#432.
