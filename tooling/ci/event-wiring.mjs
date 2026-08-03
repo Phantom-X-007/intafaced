@@ -233,7 +233,8 @@ const publishers = new Map(EVENTS.map((e) => [e, []]));
 const subscribers = new Map(EVENTS.map((e) => [e, []]));
 const sideFor = (direction) => (direction === 'publish' ? publishers : subscribers);
 
-const BUS_CALL = /\.(publish|subscribe)\s*(?:<[^>()]*>)?\(\s*/g;
+/** Captures the dotted receiver so `hub.publish` can be told from `this.bus.publish`. */
+const BUS_CALL = /([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\.\s*(publish|subscribe)\s*(?:<[^<>()]*>)?\(\s*/g;
 const FIRST_ARG_LITERAL = /^(['"])([A-Za-z_$][\w$]*)\1/;
 /** `function name(`, `const name =`, `const name:` — the nearest one above an index. */
 const ENCLOSING_FN = /(?:function\s+([A-Za-z_$][\w$]*)|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*[=:])/g;
@@ -253,16 +254,56 @@ const ENCLOSING_FN = /(?:function\s+([A-Za-z_$][\w$]*)|(?:const|let|var)\s+([A-Z
  * catalog event literal counts as a subscriber. Module-local only — a relay is
  * matched against calls in its own file, so an unrelated same-named helper in
  * another package cannot be mistaken for one.
+ *
+ * `publish` and `subscribe` are ORDINARY WORDS, and this repo uses them for
+ * things that are not the bus: svc-ws has a `hub.publish(update)` that fans a
+ * private order to sockets, and apps/web has stores with `.subscribe(setState)`.
+ * An early draft treated every one of those as a bus call, which made
+ * `subscribePrivateOrders()` look like a relay publishing some undetermined
+ * subject — a fabricated finding against a file that is entirely correct.
+ *
+ * The fix is to define a relay precisely rather than to guess from names. A
+ * relay FORWARDS ITS OWN PARAMETER TO A BUS, so all four of these must hold:
+ *
+ *   · the file imports the bus;
+ *   · the first argument is a bare identifier, not a literal or an object —
+ *     `hub.publish({ … })` is excluded by its shape, with no name-matching;
+ *   · that identifier is a PARAMETER of the enclosing named function, which is
+ *     what makes it forwarded rather than captured;
+ *   · that function takes an `EventBus`.
+ *
+ * The last one is load-bearing and was learned the hard way. Without it, a
+ * helper like `fanOut(hub, update) { hub.publish(update) }` — a socket fan-out
+ * in svc-ws, nothing to do with NATS — registers as a publish-relay for an
+ * undetermined subject and the gate fails on a correct file. A mutation test
+ * caught that; reading the code had not.
+ *
+ * And it is keyed on the TYPE rather than on the receiver being spelled `bus`.
+ * A name rule also passes today and breaks the day somebody renames the
+ * parameter to `eventPipe` — breaking by reporting nine wired consumers as
+ * orphans, which is the one failure mode this gate must never have. The type
+ * survives the rename; the name does not.
  */
 const relays = new Map();
 const unresolved = [];
+
+/** The parameter list of the nearest named function above `index`, as text. */
+function enclosingFunction(src, index) {
+  ENCLOSING_FN.lastIndex = 0;
+  let found = null;
+  let match;
+  while ((match = ENCLOSING_FN.exec(src)) && match.index < index) found = { name: match[1] ?? match[2], at: match.index };
+  if (found === null) return null;
+  const open = src.indexOf('(', found.at);
+  return open === -1 ? null : { name: found.name, params: argumentListAt(src, open) };
+}
 
 for (const file of files) {
   if (file.test || !file.busAware) continue;
   BUS_CALL.lastIndex = 0;
   let call;
   while ((call = BUS_CALL.exec(file.src))) {
-    const direction = call[1];
+    const direction = call[2];
     const rest = file.src.slice(call.index + call[0].length);
     const literal = FIRST_ARG_LITERAL.exec(rest);
 
@@ -273,31 +314,94 @@ for (const file of files) {
       continue;
     }
 
-    ENCLOSING_FN.lastIndex = 0;
-    let name = null;
-    let match;
-    while ((match = ENCLOSING_FN.exec(file.src)) && match.index < call.index) name = match[1] ?? match[2];
-    if (name) relays.set(`${file.rel}::${name}`, direction);
-    else unresolved.push(`${file.rel}:${lineOf(file.src, call.index)} — .${direction}() on a computed name with no enclosing function to resolve it through`);
+    // Anything that is not a bare identifier is not a forwarded event name.
+    const identifier = /^([A-Za-z_$][\w$]*)\s*[,)]/.exec(rest);
+    if (identifier === null) continue;
+
+    const enclosing = enclosingFunction(file.src, call.index);
+    if (enclosing === null) {
+      unresolved.push(`${file.rel}:${lineOf(file.src, call.index)} — .${direction}() on a computed name with no enclosing function to resolve it through`);
+      continue;
+    }
+    // Captured from an outer scope rather than forwarded: this gate cannot say
+    // what it wires, and will not pretend either way.
+    if (!new RegExp('\\b' + identifier[1] + '\\b').test(enclosing.params)) continue;
+    // Forwards a parameter, but not to a bus — a socket hub, a store, an
+    // observable. Not this gate's business, and treating it as one fabricates
+    // a finding against a correct file.
+    if (!/\bEventBus\b/.test(enclosing.params)) continue;
+
+    relays.set(`${file.rel}::${enclosing.name}`, direction);
   }
 }
 
+/**
+ * The argument list of the call whose `(` is at `open`, read by balancing
+ * parentheses and skipping strings.
+ *
+ * A fixed-size window was the obvious thing and it is a guess: too small and a
+ * relay call with a long first argument loses the event name, too large and it
+ * reads into whatever follows. Balancing is exact, and it costs ten lines.
+ */
+function argumentListAt(src, open) {
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === "'" || c === '"' || c === '`') {
+      const quote = c;
+      i++;
+      while (i < src.length) {
+        if (src[i] === '\\') {
+          i += 2;
+          continue;
+        }
+        if (src[i] === quote) break;
+        i++;
+      }
+      continue;
+    }
+    if (c === '(') depth++;
+    else if (c === ')') {
+      depth--;
+      if (depth === 0) return src.slice(open, i + 1);
+    }
+  }
+  return src.slice(open);
+}
+
+/**
+ * NO REGEX IS BUILT FROM A NAME HERE, and that is the point.
+ *
+ * This loop used to compile `new RegExp(\`\\b${fn}\\s*…\`)` per relay. Writing
+ * that `\\s` as `\s` inside the template literal turns it into the letter s —
+ * the trap that has broken three gates in this repo in three days. Worse, a
+ * mutation test of exactly that mistake SURVIVED: `attach(` has no space before
+ * its parenthesis, so `s*` happily matched zero literal s and the gate reported
+ * CLEAN while carrying the bug. It would have started crying wolf — nine false
+ * orphans from svc-notify — the first time somebody wrote `attach (bus, …)`.
+ *
+ * A regex that cannot be killed by a mutation is not verified, it is lucky. So
+ * the dynamic regex is gone: every call site is found ONCE with a regex literal,
+ * and the captured name is looked up in the relay map. There is no template
+ * literal left to get wrong.
+ */
+const CALL_SITE = /\b([A-Za-z_$][\w$]*)\s*(?:<[^<>()]*>)?\(/g;
 const relaysUsed = new Set();
+
 for (const file of files) {
   if (file.test) continue;
-  for (const [key, direction] of relays) {
-    const [relayFile, fn] = key.split('::');
-    if (relayFile !== file.rel) continue;
-    for (const call of file.src.matchAll(new RegExp(`\\b${fn}\\s*(?:<[^>()]*>)?\\(`, 'g'))) {
-      // The event name is an argument to the relay, not necessarily the first —
-      // svc-notify passes the bus first. Read the argument list, take the first
-      // catalog key in it.
-      const args = file.src.slice(call.index, call.index + 400);
-      const named = [...args.matchAll(/(['"])([A-Za-z_$][\w$]*)\1/g)].map(([, , n]) => n).find(isEvent);
-      if (named === undefined) continue;
-      relaysUsed.add(key);
-      sideFor(direction).get(named).push(`${file.rel}:${lineOf(file.src, call.index)} (via ${fn}())`);
-    }
+  for (const call of file.src.matchAll(CALL_SITE)) {
+    const direction = relays.get(`${file.rel}::${call[1]}`);
+    if (direction === undefined) continue;
+
+    // The event name is an argument to the relay, not necessarily the first —
+    // svc-notify passes the bus first. Take the first catalog key in the list.
+    const args = argumentListAt(file.src, file.src.indexOf('(', call.index + call[1].length));
+    const named = [...args.matchAll(/(['"])([A-Za-z_$][\w$]*)\1/g)].map(([, , name]) => name).find(isEvent);
+    if (named === undefined) continue;
+
+    relaysUsed.add(`${file.rel}::${call[1]}`);
+    sideFor(direction).get(named).push(`${file.rel}:${lineOf(file.src, call.index)} (via ${call[1]}())`);
   }
 }
 
