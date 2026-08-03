@@ -12,7 +12,7 @@ PRE-FLIGHT (first 60s — anti-drift + free-work discovery)
 2. gh pr list --state open  (then path-intersect before any claim: gh pr view N --json files)
 3. Product UI = vendor/*/05_Web_Front @ http://localhost:8090 — NOT apps/web.
 4. Never implement on main checkout — worktree only.
-5. Swarm / free work (mandatory when go all-out / AFK / parallel): docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md
+5. Swarm / free work (mandatory when go all-out / AFK / parallel): docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md · pnpm swarm:freeze · pnpm swarm:status · pnpm swarm:next · docs/ops/DASHBOARD.md
 6. Denon product queue (tip): docs/REGROUP-2026-08-03.md · retire ADR: docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md
 7. FE residual: docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md · tooling/frontend/residual-register.json · pnpm frontend:residual
 8. Also if present: docs/START-HERE.md · docs/VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md · docs/WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md · docs/REDUNDANT-VS-PORT-2026-08-03.md
@@ -115,9 +115,11 @@ Historical Denon↔Nitro board (file territory era): `docs/DENON-NITRO-PARALLEL-
 ## All-out swarms GO (paste when you want insane parallel)
 
 ```
-Go all-out swarms. Law: docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md + docs/REGROUP-2026-08-03.md + residual-register + ownership matrix + LIVE-LANES.
-PRE-FLIGHT discovery §1 of swarm orient. Specs = main docs + open PRs + branches (git fetch). Spawn all path-clean free claims in parallel: REGROUP RP1–RP5, shell branch landers, AFK residual writers, reports R00–R07, babysit partners, research readers.
-No dual-edit Denon open PR files. No Shehzad implement. No invent money/depth. No depth UI until WS integrity free. Worktrees. pnpm verify. Tokens unlimited for productive width+depth+reports.
+Go all-out swarms. Law: docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md + docs/REGROUP-2026-08-03.md + residual + ownership + LIVE-LANES.
+PRE-FLIGHT: git fetch · pnpm swarm:freeze · pnpm swarm:status · pnpm swarm:report · docs/ops/DASHBOARD.md
+Loop: pnpm swarm:next → spawn workers for all free product claims (under-spawn FAIL) → re-freeze after merges.
+No dual-edit Denon open PR files. No Shehzad implement. No invent money/depth. No depth UI until WS integrity free.
+Worktrees. pnpm claim:check. Verify. Tokens unlimited for productive width+depth+reports.
 I am AFK. Peace scoreboard when free residual empty or blocked-only.
 ```
 

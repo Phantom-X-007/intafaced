@@ -1,0 +1,1235 @@
+{
+  "tip": "09e2b9e",
+  "tipFull": "09e2b9e812ce4b8f206f737493fd3759726f7ae3",
+  "tipSubject": "fix(docs): session preflight shell path uses vendor/*/05_Web_Front (#453)",
+  "generatedAt": "2026-08-03T11:28:45.211Z",
+  "openPrCount": 18,
+  "openPrs": [
+    {
+      "number": 448,
+      "title": "feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/448",
+      "mergeable": "MERGEABLE",
+      "fileCount": 7
+    },
+    {
+      "number": 446,
+      "title": "fix(events): 17 of 32 events are published into the void, and a stale build silently deleted a field",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/446",
+      "mergeable": "CONFLICTING",
+      "fileCount": 10
+    },
+    {
+      "number": 445,
+      "title": "fix(test): five money suites could skip on CI and the build went green",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/445",
+      "mergeable": "CONFLICTING",
+      "fileCount": 20
+    },
+    {
+      "number": 441,
+      "title": "feat(ci): coverage-check — the gate §25 specified and nobody built",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/441",
+      "mergeable": "CONFLICTING",
+      "fileCount": 5
+    },
+    {
+      "number": 438,
+      "title": "fix(ci): check 7 printed clean while looking at nothing",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/438",
+      "mergeable": "CONFLICTING",
+      "fileCount": 2
+    },
+    {
+      "number": 437,
+      "title": "fix(ledger): schema.ts had drifted from the migrations, including all eight CHECK constraints",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/437",
+      "mergeable": "MERGEABLE",
+      "fileCount": 3
+    },
+    {
+      "number": 436,
+      "title": "fix(config): the console showed capabilities off while they served traffic",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/436",
+      "mergeable": "CONFLICTING",
+      "fileCount": 10
+    },
+    {
+      "number": 433,
+      "title": "fix(matching): reconciliation is reachable — and the money-stranding case refuses rather than guesses",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/433",
+      "mergeable": "MERGEABLE",
+      "fileCount": 9
+    },
+    {
+      "number": 432,
+      "title": "fix(config): a commercial region block could satisfy the sanctions boot guard",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/432",
+      "mergeable": "CONFLICTING",
+      "fileCount": 7
+    },
+    {
+      "number": 430,
+      "title": "docs(audit): 40 law-specified capabilities have no tracker row — and the gate that was meant to catch that was never built",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/430",
+      "mergeable": "MERGEABLE",
+      "fileCount": 1
+    },
+    {
+      "number": 428,
+      "title": "feat(p2p): payment instruments — a buyer finally has somewhere to send money",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/428",
+      "mergeable": "CONFLICTING",
+      "fileCount": 19
+    },
+    {
+      "number": 427,
+      "title": "fix(test): nonce too low was two suites sharing one account, not chain age",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/427",
+      "mergeable": "MERGEABLE",
+      "fileCount": 11
+    },
+    {
+      "number": 425,
+      "title": "chore(ci): rescue shell-i18n-scan from stranded feat/app-i18n-keys",
+      "author": "ZenYoda3",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/425",
+      "mergeable": "CONFLICTING",
+      "fileCount": 2
+    },
+    {
+      "number": 424,
+      "title": "fix(edge): no CORS headers at all — the edge was healthy and unreadable",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/424",
+      "mergeable": "MERGEABLE",
+      "fileCount": 6
+    },
+    {
+      "number": 423,
+      "title": "feat(notify): real email, push and SMS adapters — and a column renamed because it was overclaiming",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/423",
+      "mergeable": "CONFLICTING",
+      "fileCount": 21
+    },
+    {
+      "number": 422,
+      "title": "fix(scan): 27 balance writes no gate could see — including code no HTTP interceptor can reach",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/422",
+      "mergeable": "CONFLICTING",
+      "fileCount": 4
+    },
+    {
+      "number": 420,
+      "title": "docs+fix(tracker): correct the margin-call remedy, and lock the one bank row that was not",
+      "author": "Phantom-X-007",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/420",
+      "mergeable": "MERGEABLE",
+      "fileCount": 2
+    },
+    {
+      "number": 346,
+      "title": "feat(pay): M1 pay.gateway Done bar — card sandbox + KYB stub + durable list",
+      "author": "shehzad002",
+      "url": "https://github.com/Phantom-X-007/intafaced/pull/346",
+      "mergeable": "CONFLICTING",
+      "fileCount": 12
+    }
+  ],
+  "residualUpdated": "2026-08-02",
+  "residualTipNote": "AFK-ACTIVE · Invite honesty restacked",
+  "claims": [
+    {
+      "id": "P-WS-REPORT",
+      "rank": 5,
+      "track": "INTEGRITY",
+      "title": "WS market-ID + /ws→/stream integrity report (no depth UI)",
+      "paths": [
+        "services/svc-ws",
+        "services/svc-matching",
+        "services/svc-edge",
+        "vendor/coinexchange/05_Web_Front/nginx.conf"
+      ],
+      "note": "Report/handoff first; implement only if path-clear vs Denon open PRs",
+      "status": "blocked",
+      "collisions": [
+        "#433@Phantom-X-007 services/svc-matching/README.md",
+        "#433@Phantom-X-007 services/svc-matching/src/engine/engine.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/engine/types.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/index.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/reconcile.test.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/reconcile.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/router.test.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/router.ts",
+        "#432@Phantom-X-007 services/svc-edge/src/env.ts",
+        "#432@Phantom-X-007 services/svc-edge/src/index.ts",
+        "#424@Phantom-X-007 services/svc-edge/README.md",
+        "#424@Phantom-X-007 services/svc-edge/src/cors.browser.e2e.test.ts"
+      ],
+      "priority": 5
+    },
+    {
+      "id": "RP1",
+      "rank": 10,
+      "track": "REGROUP",
+      "title": "Exchange.vue call sites → ix-money (money-on-wire finish)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/exchange/Exchange.vue",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-money.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/book-honesty.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Branch origin/fix/shell-money-on-the-wire may already have module — finish call sites",
+      "status": "free",
+      "collisions": [],
+      "priority": 10
+    },
+    {
+      "id": "RP-LAND-MONEY",
+      "rank": 15,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-money-on-the-wire",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-money.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/book-honesty.js"
+      ],
+      "note": "Prefer land branch; do not rewrite from zero",
+      "status": "free",
+      "collisions": [],
+      "priority": 15
+    },
+    {
+      "id": "RP2",
+      "rank": 20,
+      "track": "REGROUP",
+      "title": "Index.vue landing honesty (null / green ▲ / PRICE TREND)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/index/Index.vue",
+        "vendor/coinexchange/05_Web_Front/src/assets/lang/en.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Sole Index owner vs AFK-INDEX — claim one only",
+      "blocks": [
+        "AFK-INDEX"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 20
+    },
+    {
+      "id": "RP-LAND-LANDING",
+      "rank": 25,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-landing-honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/lang/en.js"
+      ],
+      "note": "Strings only until RP2 wires Index",
+      "status": "free",
+      "collisions": [],
+      "priority": 25
+    },
+    {
+      "id": "RP3",
+      "rank": 30,
+      "track": "REGROUP",
+      "title": "Announcement strip stated reason (sockets / IxNoSurface)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/sockets.js",
+        "vendor/coinexchange/05_Web_Front/src/components/IxNoSurface.vue",
+        "vendor/coinexchange/05_Web_Front/src/pages/index/Index.vue"
+      ],
+      "note": "May share Index paths with RP2 — check freeze",
+      "status": "free",
+      "collisions": [],
+      "priority": 30
+    },
+    {
+      "id": "RP-LAND-WIRE",
+      "rank": 35,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-wire-validation",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-wire.js"
+      ],
+      "note": "Schemas exist; golden + adopt is RP4",
+      "status": "free",
+      "collisions": [],
+      "priority": 35
+    },
+    {
+      "id": "RP4",
+      "rank": 40,
+      "track": "REGROUP",
+      "title": "ix-wire golden + adopt schemas on ix-trade reads",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-wire.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Branch origin/fix/shell-wire-validation may have schemas",
+      "status": "free",
+      "collisions": [],
+      "priority": 40
+    },
+    {
+      "id": "META-ORCA",
+      "rank": 108,
+      "track": "AFK",
+      "title": "Orca primary every HONESTY/CRAFT",
+      "paths": [],
+      "status": "free",
+      "collisions": [],
+      "priority": 8,
+      "note": "ORCA_REQUIRED craft continues",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "META-CRITIQUE",
+      "rank": 110,
+      "track": "AFK",
+      "title": "impeccable/design-taste on craft",
+      "paths": [
+        "docs/refs"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 10,
+      "note": "Critique every craft slice",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "META-STEAL",
+      "rank": 110,
+      "track": "AFK",
+      "title": "Steal lines + refs layout",
+      "paths": [
+        "docs/refs"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 10,
+      "note": "Keep enforcing via CRAFT preflight",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "B13",
+      "rank": 120,
+      "track": "AFK",
+      "title": "Anti-slop certify non-implementer",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 20,
+      "note": "Non-auth anti-slop only while AFK; full cert needs session",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "AFK-UC-COMP",
+      "rank": 128,
+      "track": "AFK",
+      "title": "uc components empty≠zero sweep",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/components/uc"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 28,
+      "note": "Sweep components/uc",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-IDENT",
+      "rank": 130,
+      "track": "AFK",
+      "title": "IdentBusiness placeholder invent",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/uc/IdentBusiness.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 30,
+      "note": "IdentBusiness.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-LAB-PASS",
+      "rank": 132,
+      "track": "AFK",
+      "title": "intafaced/* invent yield dual-book pass",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/intafaced"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 32,
+      "note": "Scan intafaced pages",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-INDEX",
+      "rank": 134,
+      "track": "AFK",
+      "title": "Index residual honesty/craft",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/index/Index.vue"
+      ],
+      "status": "blocked",
+      "collisions": [
+        "RP2 owns Index"
+      ],
+      "priority": 34,
+      "note": "Blocked while RP2 free (sole Index.vue owner)",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-CMDK-ROUTES",
+      "rank": 136,
+      "track": "AFK",
+      "title": "⌘K catalog expand real routes only",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/cmd-palette.js"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 36,
+      "note": "cmd-palette.js + golden",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-HELP-DETAIL",
+      "rank": 138,
+      "track": "AFK",
+      "title": "HelpDetail sidebar honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/HelpDetail.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 38,
+      "note": "HelpDetail.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-WHITEPAPER",
+      "rank": 140,
+      "track": "AFK",
+      "title": "WhitePaper honesty shell",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/WhitePaper.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 40,
+      "note": "WhitePaper.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-APPDOWNLOAD",
+      "rank": 142,
+      "track": "AFK",
+      "title": "AppDownload store honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/AppDownload.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 42,
+      "note": "AppDownload if invent",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-FOOTER",
+      "rank": 144,
+      "track": "AFK",
+      "title": "Terminal footer hide consistency",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/App.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 44,
+      "note": "App.vue footer rules",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "AFK-RESCAN",
+      "rank": 148,
+      "track": "AFK",
+      "title": "Every 5 merges re-scan invent patterns",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 48,
+      "note": "Grep invent campaign",
+      "residualStatus": "open"
+    },
+    {
+      "id": "P0.4",
+      "rank": 150,
+      "track": "AFK",
+      "title": "ui:proof matrix green",
+      "paths": [
+        "tooling/uiproof"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 50,
+      "note": "Optional CI job or skip; never stall queue on P0.4",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "B12",
+      "rank": 155,
+      "track": "AFK",
+      "title": "Marketing/OS/OTC/CMS craft last",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 55,
+      "note": "AFK-LAB-PASS + marketing leftovers via AFK ids",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "BABYSIT-MATRIX",
+      "rank": 200,
+      "track": "OPS",
+      "title": "Babysit open partner PRs (comment/CI only)",
+      "paths": [],
+      "status": "free",
+      "collisions": [],
+      "priority": 200,
+      "note": "Shehzad #346 + Denon open — no implement"
+    },
+    {
+      "id": "REPORTS",
+      "rank": 210,
+      "track": "OPS",
+      "title": "Refresh R00–R02 via pnpm swarm:report",
+      "paths": [
+        "docs/ops"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 210,
+      "note": "Coord-OPS"
+    }
+  ],
+  "free": [
+    {
+      "id": "RP1",
+      "rank": 10,
+      "track": "REGROUP",
+      "title": "Exchange.vue call sites → ix-money (money-on-wire finish)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/exchange/Exchange.vue",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-money.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/book-honesty.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Branch origin/fix/shell-money-on-the-wire may already have module — finish call sites",
+      "status": "free",
+      "collisions": [],
+      "priority": 10
+    },
+    {
+      "id": "RP-LAND-MONEY",
+      "rank": 15,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-money-on-the-wire",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-money.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/book-honesty.js"
+      ],
+      "note": "Prefer land branch; do not rewrite from zero",
+      "status": "free",
+      "collisions": [],
+      "priority": 15
+    },
+    {
+      "id": "RP2",
+      "rank": 20,
+      "track": "REGROUP",
+      "title": "Index.vue landing honesty (null / green ▲ / PRICE TREND)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/index/Index.vue",
+        "vendor/coinexchange/05_Web_Front/src/assets/lang/en.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Sole Index owner vs AFK-INDEX — claim one only",
+      "blocks": [
+        "AFK-INDEX"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 20
+    },
+    {
+      "id": "RP-LAND-LANDING",
+      "rank": 25,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-landing-honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/lang/en.js"
+      ],
+      "note": "Strings only until RP2 wires Index",
+      "status": "free",
+      "collisions": [],
+      "priority": 25
+    },
+    {
+      "id": "RP3",
+      "rank": 30,
+      "track": "REGROUP",
+      "title": "Announcement strip stated reason (sockets / IxNoSurface)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/sockets.js",
+        "vendor/coinexchange/05_Web_Front/src/components/IxNoSurface.vue",
+        "vendor/coinexchange/05_Web_Front/src/pages/index/Index.vue"
+      ],
+      "note": "May share Index paths with RP2 — check freeze",
+      "status": "free",
+      "collisions": [],
+      "priority": 30
+    },
+    {
+      "id": "RP-LAND-WIRE",
+      "rank": 35,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-wire-validation",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-wire.js"
+      ],
+      "note": "Schemas exist; golden + adopt is RP4",
+      "status": "free",
+      "collisions": [],
+      "priority": 35
+    },
+    {
+      "id": "RP4",
+      "rank": 40,
+      "track": "REGROUP",
+      "title": "ix-wire golden + adopt schemas on ix-trade reads",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-wire.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Branch origin/fix/shell-wire-validation may have schemas",
+      "status": "free",
+      "collisions": [],
+      "priority": 40
+    },
+    {
+      "id": "META-ORCA",
+      "rank": 108,
+      "track": "AFK",
+      "title": "Orca primary every HONESTY/CRAFT",
+      "paths": [],
+      "status": "free",
+      "collisions": [],
+      "priority": 8,
+      "note": "ORCA_REQUIRED craft continues",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "META-CRITIQUE",
+      "rank": 110,
+      "track": "AFK",
+      "title": "impeccable/design-taste on craft",
+      "paths": [
+        "docs/refs"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 10,
+      "note": "Critique every craft slice",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "META-STEAL",
+      "rank": 110,
+      "track": "AFK",
+      "title": "Steal lines + refs layout",
+      "paths": [
+        "docs/refs"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 10,
+      "note": "Keep enforcing via CRAFT preflight",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "B13",
+      "rank": 120,
+      "track": "AFK",
+      "title": "Anti-slop certify non-implementer",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 20,
+      "note": "Non-auth anti-slop only while AFK; full cert needs session",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "AFK-UC-COMP",
+      "rank": 128,
+      "track": "AFK",
+      "title": "uc components empty≠zero sweep",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/components/uc"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 28,
+      "note": "Sweep components/uc",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-IDENT",
+      "rank": 130,
+      "track": "AFK",
+      "title": "IdentBusiness placeholder invent",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/uc/IdentBusiness.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 30,
+      "note": "IdentBusiness.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-LAB-PASS",
+      "rank": 132,
+      "track": "AFK",
+      "title": "intafaced/* invent yield dual-book pass",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/intafaced"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 32,
+      "note": "Scan intafaced pages",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-CMDK-ROUTES",
+      "rank": 136,
+      "track": "AFK",
+      "title": "⌘K catalog expand real routes only",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/cmd-palette.js"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 36,
+      "note": "cmd-palette.js + golden",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-HELP-DETAIL",
+      "rank": 138,
+      "track": "AFK",
+      "title": "HelpDetail sidebar honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/HelpDetail.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 38,
+      "note": "HelpDetail.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-WHITEPAPER",
+      "rank": 140,
+      "track": "AFK",
+      "title": "WhitePaper honesty shell",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/WhitePaper.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 40,
+      "note": "WhitePaper.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-APPDOWNLOAD",
+      "rank": 142,
+      "track": "AFK",
+      "title": "AppDownload store honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/AppDownload.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 42,
+      "note": "AppDownload if invent",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-FOOTER",
+      "rank": 144,
+      "track": "AFK",
+      "title": "Terminal footer hide consistency",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/App.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 44,
+      "note": "App.vue footer rules",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "AFK-RESCAN",
+      "rank": 148,
+      "track": "AFK",
+      "title": "Every 5 merges re-scan invent patterns",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 48,
+      "note": "Grep invent campaign",
+      "residualStatus": "open"
+    },
+    {
+      "id": "P0.4",
+      "rank": 150,
+      "track": "AFK",
+      "title": "ui:proof matrix green",
+      "paths": [
+        "tooling/uiproof"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 50,
+      "note": "Optional CI job or skip; never stall queue on P0.4",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "B12",
+      "rank": 155,
+      "track": "AFK",
+      "title": "Marketing/OS/OTC/CMS craft last",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 55,
+      "note": "AFK-LAB-PASS + marketing leftovers via AFK ids",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "BABYSIT-MATRIX",
+      "rank": 200,
+      "track": "OPS",
+      "title": "Babysit open partner PRs (comment/CI only)",
+      "paths": [],
+      "status": "free",
+      "collisions": [],
+      "priority": 200,
+      "note": "Shehzad #346 + Denon open — no implement"
+    },
+    {
+      "id": "REPORTS",
+      "rank": 210,
+      "track": "OPS",
+      "title": "Refresh R00–R02 via pnpm swarm:report",
+      "paths": [
+        "docs/ops"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 210,
+      "note": "Coord-OPS"
+    }
+  ],
+  "blocked": [
+    {
+      "id": "P-WS-REPORT",
+      "rank": 5,
+      "track": "INTEGRITY",
+      "title": "WS market-ID + /ws→/stream integrity report (no depth UI)",
+      "paths": [
+        "services/svc-ws",
+        "services/svc-matching",
+        "services/svc-edge",
+        "vendor/coinexchange/05_Web_Front/nginx.conf"
+      ],
+      "note": "Report/handoff first; implement only if path-clear vs Denon open PRs",
+      "status": "blocked",
+      "collisions": [
+        "#433@Phantom-X-007 services/svc-matching/README.md",
+        "#433@Phantom-X-007 services/svc-matching/src/engine/engine.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/engine/types.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/index.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/reconcile.test.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/reconcile.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/router.test.ts",
+        "#433@Phantom-X-007 services/svc-matching/src/router.ts",
+        "#432@Phantom-X-007 services/svc-edge/src/env.ts",
+        "#432@Phantom-X-007 services/svc-edge/src/index.ts",
+        "#424@Phantom-X-007 services/svc-edge/README.md",
+        "#424@Phantom-X-007 services/svc-edge/src/cors.browser.e2e.test.ts"
+      ],
+      "priority": 5
+    },
+    {
+      "id": "AFK-INDEX",
+      "rank": 134,
+      "track": "AFK",
+      "title": "Index residual honesty/craft",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/index/Index.vue"
+      ],
+      "status": "blocked",
+      "collisions": [
+        "RP2 owns Index"
+      ],
+      "priority": 34,
+      "note": "Blocked while RP2 free (sole Index.vue owner)",
+      "residualStatus": "open"
+    }
+  ],
+  "freeProduct": [
+    {
+      "id": "RP1",
+      "rank": 10,
+      "track": "REGROUP",
+      "title": "Exchange.vue call sites → ix-money (money-on-wire finish)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/exchange/Exchange.vue",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-money.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/book-honesty.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Branch origin/fix/shell-money-on-the-wire may already have module — finish call sites",
+      "status": "free",
+      "collisions": [],
+      "priority": 10
+    },
+    {
+      "id": "RP-LAND-MONEY",
+      "rank": 15,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-money-on-the-wire",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-money.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/book-honesty.js"
+      ],
+      "note": "Prefer land branch; do not rewrite from zero",
+      "status": "free",
+      "collisions": [],
+      "priority": 15
+    },
+    {
+      "id": "RP2",
+      "rank": 20,
+      "track": "REGROUP",
+      "title": "Index.vue landing honesty (null / green ▲ / PRICE TREND)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/index/Index.vue",
+        "vendor/coinexchange/05_Web_Front/src/assets/lang/en.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Sole Index owner vs AFK-INDEX — claim one only",
+      "blocks": [
+        "AFK-INDEX"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 20
+    },
+    {
+      "id": "RP-LAND-LANDING",
+      "rank": 25,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-landing-honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/lang/en.js"
+      ],
+      "note": "Strings only until RP2 wires Index",
+      "status": "free",
+      "collisions": [],
+      "priority": 25
+    },
+    {
+      "id": "RP3",
+      "rank": 30,
+      "track": "REGROUP",
+      "title": "Announcement strip stated reason (sockets / IxNoSurface)",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/sockets.js",
+        "vendor/coinexchange/05_Web_Front/src/components/IxNoSurface.vue",
+        "vendor/coinexchange/05_Web_Front/src/pages/index/Index.vue"
+      ],
+      "note": "May share Index paths with RP2 — check freeze",
+      "status": "free",
+      "collisions": [],
+      "priority": 30
+    },
+    {
+      "id": "RP-LAND-WIRE",
+      "rank": 35,
+      "track": "LANDER",
+      "title": "Open/finish PR from origin/fix/shell-wire-validation",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-wire.js"
+      ],
+      "note": "Schemas exist; golden + adopt is RP4",
+      "status": "free",
+      "collisions": [],
+      "priority": 35
+    },
+    {
+      "id": "RP4",
+      "rank": 40,
+      "track": "REGROUP",
+      "title": "ix-wire golden + adopt schemas on ix-trade reads",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-wire.js",
+        "vendor/coinexchange/05_Web_Front/src/assets/js/ix-trade.js"
+      ],
+      "note": "Branch origin/fix/shell-wire-validation may have schemas",
+      "status": "free",
+      "collisions": [],
+      "priority": 40
+    },
+    {
+      "id": "META-ORCA",
+      "rank": 108,
+      "track": "AFK",
+      "title": "Orca primary every HONESTY/CRAFT",
+      "paths": [],
+      "status": "free",
+      "collisions": [],
+      "priority": 8,
+      "note": "ORCA_REQUIRED craft continues",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "META-CRITIQUE",
+      "rank": 110,
+      "track": "AFK",
+      "title": "impeccable/design-taste on craft",
+      "paths": [
+        "docs/refs"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 10,
+      "note": "Critique every craft slice",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "META-STEAL",
+      "rank": 110,
+      "track": "AFK",
+      "title": "Steal lines + refs layout",
+      "paths": [
+        "docs/refs"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 10,
+      "note": "Keep enforcing via CRAFT preflight",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "B13",
+      "rank": 120,
+      "track": "AFK",
+      "title": "Anti-slop certify non-implementer",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 20,
+      "note": "Non-auth anti-slop only while AFK; full cert needs session",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "AFK-UC-COMP",
+      "rank": 128,
+      "track": "AFK",
+      "title": "uc components empty≠zero sweep",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/components/uc"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 28,
+      "note": "Sweep components/uc",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-IDENT",
+      "rank": 130,
+      "track": "AFK",
+      "title": "IdentBusiness placeholder invent",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/uc/IdentBusiness.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 30,
+      "note": "IdentBusiness.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-LAB-PASS",
+      "rank": 132,
+      "track": "AFK",
+      "title": "intafaced/* invent yield dual-book pass",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/intafaced"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 32,
+      "note": "Scan intafaced pages",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-CMDK-ROUTES",
+      "rank": 136,
+      "track": "AFK",
+      "title": "⌘K catalog expand real routes only",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/assets/js/cmd-palette.js"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 36,
+      "note": "cmd-palette.js + golden",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-HELP-DETAIL",
+      "rank": 138,
+      "track": "AFK",
+      "title": "HelpDetail sidebar honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/HelpDetail.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 38,
+      "note": "HelpDetail.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-WHITEPAPER",
+      "rank": 140,
+      "track": "AFK",
+      "title": "WhitePaper honesty shell",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/WhitePaper.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 40,
+      "note": "WhitePaper.vue",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-APPDOWNLOAD",
+      "rank": 142,
+      "track": "AFK",
+      "title": "AppDownload store honesty",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages/cms/AppDownload.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 42,
+      "note": "AppDownload if invent",
+      "residualStatus": "open"
+    },
+    {
+      "id": "AFK-FOOTER",
+      "rank": 144,
+      "track": "AFK",
+      "title": "Terminal footer hide consistency",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/App.vue"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 44,
+      "note": "App.vue footer rules",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "AFK-RESCAN",
+      "rank": 148,
+      "track": "AFK",
+      "title": "Every 5 merges re-scan invent patterns",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 48,
+      "note": "Grep invent campaign",
+      "residualStatus": "open"
+    },
+    {
+      "id": "P0.4",
+      "rank": 150,
+      "track": "AFK",
+      "title": "ui:proof matrix green",
+      "paths": [
+        "tooling/uiproof"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 50,
+      "note": "Optional CI job or skip; never stall queue on P0.4",
+      "residualStatus": "partial"
+    },
+    {
+      "id": "B12",
+      "rank": 155,
+      "track": "AFK",
+      "title": "Marketing/OS/OTC/CMS craft last",
+      "paths": [
+        "vendor/coinexchange/05_Web_Front/src/pages"
+      ],
+      "status": "free",
+      "collisions": [],
+      "priority": 55,
+      "note": "AFK-LAB-PASS + marketing leftovers via AFK ids",
+      "residualStatus": "partial"
+    }
+  ],
+  "underSpawnNote": "FREE product claims exist — coordinator must spawn or residual-own each (anti-under-spawn)."
+}
