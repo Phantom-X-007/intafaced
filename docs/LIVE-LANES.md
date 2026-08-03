@@ -7,29 +7,32 @@
 **Product queue (Denon):** [`REGROUP-2026-08-03.md`](REGROUP-2026-08-03.md)  
 **Re-derive tip every fire:** `git fetch && git log -1 --oneline origin/main` · `gh pr list`
 
-| Lane id              | Owner session | Scope                               | Status             | PR / proof                                | Do not touch                       |
-| -------------------- | ------------- | ----------------------------------- | ------------------ | ----------------------------------------- | ---------------------------------- |
-| shehzad-m1-pay       | shehzad002    | Pay OS M1                           | **OPEN #346**      | #346                                      | agents implement                   |
-| denon-open-integrity | Phantom-X-007 | His open integrity/spine PRs on tip | **live**           | `gh pr list` (re-derive)                  | dual-edit those file sets          |
-| denon-shell-branches | free/claim    | finish fix/shell-* (land/PR)        | free if path clean | origin/fix/shell-*                        | rewrite from zero if branch ahead  |
-| rp1-ix-money         | free / claim  | Exchange.vue → ix-money             | free               | REGROUP §6                                | invent prices                      |
-| rp2-landing-index    | free / claim  | Index.vue landing honesty           | free               | REGROUP §6                                | dual with AFK-INDEX                |
-| afk-residual         | free / claim  | one residual id per worker          | free               | residual-register                         | human_or_fleet / blocked           |
-| stream-a-ui          | free / claim  | Vendor shell :8090 craft residual   | free               | issue #83                                 | services money spine               |
-| fab-money-shrink     | agent AFK     | fabricated-money baseline → 0       | **this PR**        | fix/shell-fabricated-money-ratchet-shrink | invent prices / dual-edit Exchange |
-| board-clear-agent    | closed        | Agent Done bars                     | **AGENT-COMPLETE** | SCOREBOARD                                | re-open as implement               |
-| order-route-b        | closed        | CX-8                                | closed #380        | CX-8 green                                | invent dual-book                   |
+| Lane id              | Owner session | Scope                               | Status                    | PR / proof                 | Do not touch                       |
+| -------------------- | ------------- | ----------------------------------- | ------------------------- | -------------------------- | ---------------------------------- |
+| shehzad-m1-pay       | shehzad002    | Pay OS M1                           | **OPEN #346**             | #346                       | agents implement                   |
+| denon-open-integrity | Phantom-X-007 | His open integrity/spine PRs on tip | **live**                  | `gh pr list` (re-derive)   | dual-edit those file sets          |
+| denon-shell-branches | free/claim    | finish fix/shell-* (land/PR)        | free if path clean        | origin/fix/shell-*         | rewrite from zero if branch ahead  |
+| rp1-ix-money         | residual-own  | Exchange.vue → ix-money             | **merged** #468           | claim RP1                  | invent prices                      |
+| rp2-landing-index    | residual-own  | Index.vue landing honesty           | **merged** #465           | claim RP2                  | dual with AFK-INDEX                |
+| afk-residual         | residual-own  | AFK shell wave                      | **drained** freeProduct=0 | residual-register + claims | re-open only new invent residual   |
+| stream-a-ui          | free / claim  | Vendor shell :8090 craft residual   | free                      | issue #83                  | services money spine               |
+| fab-money-shrink     | residual-own  | fabricated-money baseline → 0       | **done** #489             | baseline empty             | invent prices / dual-edit Exchange |
+| board-clear-agent    | closed        | Agent Done bars                     | **AGENT-COMPLETE**        | SCOREBOARD                 | re-open as implement               |
+| order-route-b        | closed        | CX-8                                | closed #380               | CX-8 green                 | invent dual-book                   |
 
 ## Free agent work (re-derive every fire)
 
-1. **REGROUP product queue** RP1–RP5 / shell branch landers — [`REGROUP-2026-08-03.md`](REGROUP-2026-08-03.md)
-2. **AFK residual** `afk_safe` open/partial — `pnpm frontend:residual`
-3. **Babysit** #346 + Denon open PRs (comment/CI only on partner code)
-4. **Reports** under `docs/ops/` per swarm orient
-5. **Denon hard board (platform/money):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — agents do not implement those rows.
+**Priority law:** [`ops/SWARM-MANDATE.md`](ops/SWARM-MANDATE.md) AFK ladder — no stamp mill when freeProduct=0.
+
+1. **P0 SPAWN_NOW** — only if `pnpm swarm:next` lists free product (re-freeze first).
+2. **P1 Stranded branches** — rebase/land path-clean `origin/feat/*` (e.g. shell i18n keys residual).
+3. **P2 Babysit** #346 + Denon open PRs (comment/CI only; never merge partners).
+4. **P3 TRK research** — deepen thin `docs/ops/trk/*` for tracker **ready** non-shehzad rows.
+5. **P4 Integrity** — invent re-scan only after shell code change; P-WS report only if #433/#432 state changes.
+6. **Denon hard board (no agent implement):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).
 
 **Not free:** Shehzad M1–M7 implement · invent futures risk · depth UI before WS integrity · dual-edit Denon open PR files · apps/web product
 
 ## Last board update
 
-- **2026-08-03 swarm orient:** tip after #451 hygiene. Board Clear AGENT-COMPLETE. Product spine = REGROUP + residual. LIVE-LANES refreshed for all-out discovery (this file). Open PR list always wins over this table for collisions.
+- **2026-08-04 AFK anti-drift:** freeProduct=0 ladder P1–P3; residual-own RP1/RP2/AFK wave; no R07 stamp mill.

@@ -338,3 +338,11 @@ Do **not** stop the loop solely because freeProduct=0 — continue Class N merge
 | Invent      | live residual **0**                                                      |
 | Partner     | Denon #445/#433/#420 full green — his merge; #428 red; conflicts babysit |
 | P-WS        | still blocked #433+#432 — no dual-edit                                   |
+
+## Anti-drift (2026-08-04)
+
+**Problem observed:** freeProduct=0 AFK loop degraded into R07/R01/P-WS tip-bump stamps every few minutes while the partner matrix and invent residual stayed unchanged.
+
+**Rule:** Prefer the **AFK priority ladder** in [`SWARM-MANDATE.md`](./SWARM-MANDATE.md). Cadence re-freeze is OK; **shipping a docs PR requires a board delta or a P1–P3 deliverable** (stranded branch land, partner unblock signal, TRK deepen, invent findings change).
+
+**Cadence when freeProduct=0:** re-check board every 30–45m (schedulers). Spawn writers only for P1–P3. Do not open R07 cycle N solely because the previous cycle merged.
