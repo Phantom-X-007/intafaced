@@ -16,6 +16,28 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Pack 5 — `docs/trk-research-pack-5` (chain / launch / market)
+
+**Chain / launch / market** rows. Research only — several sit on Shehzad protocol
+runway (babysit implement). `venue.aggregation` also in pack 3; one spec file.
+
+| Id                     | Title                                                | Spec                                                 | Implement note                                       |
+| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
+| `chain.mainnet`        | INTACHAIN — CometBFT + native CLOB                   | [chain.mainnet.md](./chain.mainnet.md)               | Shehzad **S-D4** · no `svc-chain` on tip             |
+| `chain.evm`            | INTAEVM sharing validator set + state                | [chain.evm.md](./chain.evm.md)                       | After mainnet · Tier D                               |
+| `chain.validators`     | Validator set opening, published schedule            | [chain.validators.md](./chain.validators.md)         | Shehzad **S-D3** · phase 5P                          |
+| `chain.governance`     | Governance parameter handover                        | [chain.governance.md](./chain.governance.md)         | Blocked: validators + `token.governance` **socket**  |
+| `launch.token-factory` | ERC-20 deploy from audited templates                 | [launch.token-factory.md](./launch.token-factory.md) | Shehzad **S-A7** · code exists; not audited/done     |
+| `launch.launchpad`     | Presale / fair launch, vesting, stake tiers          | [launch.launchpad.md](./launch.launchpad.md)         | No `svc-launch` · stake gates only                   |
+| `market.commerce`      | Listings, subscriptions, purchases, house commission | [market.commerce.md](./market.commerce.md)           | Greenfield · dep `market.vendors`                    |
+| `venue.aggregation`    | External venue fabric (not CCXT)                     | [venue.aggregation.md](./venue.aggregation.md)       | Public MD partial · trading half not built · M3 risk |
+
+**Pack 5 honesty:** title “via CCXT” on venue is stale (§27 first-party fabric);
+token-factory mounted + dev-proven with `audited:false`; `chain.*` has no
+`svc-chain` — free research, Shehzad Tier D / S-A7 for implement babysit only.
+
+---
+
 ## Pack 3 — `docs/trk-research-pack-3` (tip freeze `b3d08931`)
 
 Next free tracker rows **not** covered by pack 1/2 short specs. Research only —
@@ -123,8 +145,9 @@ useful, do not fork implement plans from conflicting freezes.
 
 ---
 
-## Not packed yet (still free, lower priority or heavier blockers)
+## Not packed yet (still free / heavier blockers)
 
-chain.\*, launch.\*, mining.pool, trade.options/forex, market.\*,
-bridge.canonical,
-chain.validators / governance.
+mining.pool, trade.options/forex, market.vendors (upstream of commerce),
+launch.meme-factory / launch.nft (after token-factory), bridge.canonical,
+chain.rust-core (**socket**). `ops.compliance` has a research file on tip —
+counsel Class X content remains human.
