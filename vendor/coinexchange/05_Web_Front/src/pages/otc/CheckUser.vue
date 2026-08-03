@@ -161,7 +161,7 @@
   width: 4px;
   height: 22px;
   margin-right: 10px;
-  background: #00c2a8;
+  background: #ff6b00;
   display: inline-block;
   margin-left: 4px;
 }
@@ -423,7 +423,7 @@
   -webkit-box-align: center;
   -ms-flex-align: center;
   align-items: center;
-  background: #00c2a8;
+  background: #ff6b00;
   height: 60px;
   width: 60px;
   color: #fff;
@@ -517,14 +517,14 @@
 .ivu-tabs-nav-container{
 .nav-text.ivu-tabs-nav{
 .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused{
-                            color: #00c2a8;
+                            color: #ff6b00;
                         }
 .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated{
-                            background-color: #00c2a8;
+                            background-color: #ff6b00;
                         }
 .ivu-tabs-tab{
                             &:hover{
-                                color: #00c2a8;
+                                color: #ff6b00;
                             }
                         }
                     }

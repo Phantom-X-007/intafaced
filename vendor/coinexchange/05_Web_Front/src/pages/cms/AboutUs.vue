@@ -97,16 +97,16 @@
 .ix-dualbook.ix-about-note {
   margin: 0 0 16px;
   padding: 10px 12px;
-  border: 1px solid rgba(0, 194, 168, 0.35);
+  border: 1px solid rgba(255, 107, 0, 0.35);
   border-radius: 6px;
-  background: rgba(0, 194, 168, 0.06);
+  background: rgba(255, 107, 0, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
   text-indent: 0;
 }
 .ix-dualbook.ix-about-note strong {
-  color: #00c2a8;
+  color: #ff6b00;
   font-weight: 600;
 }
 
@@ -193,30 +193,15 @@
         </div>
         <div class="content1" style="border: none">
           <h5>{{ $t('description.community') }}</h5>
+          <!-- The row named six specific platforms, three of which (WeChat,
+               Weibo, Biyong) are China-only and were here because the upstream
+               vendor operated there. Naming a platform we have no account on is
+               a plan, not a contact route, and a reader cannot tell the two
+               apart. One honest line replaces six. -->
           <ul class="ix-contact-list" role="list">
             <li>
-              <strong>{{ $t('description.wechat') }}</strong>
-              <span>Not published yet.</span>
-            </li>
-            <li>
-              <strong>{{ $t('description.weibo') }}</strong>
-              <span>Not published yet — no invent profile URL.</span>
-            </li>
-            <li>
-              <strong>{{ $t('description.twitter') }}</strong>
-              <span>Not published yet — no invent profile URL.</span>
-            </li>
-            <li>
-              <strong>{{ $t('description.telegram') }}</strong>
-              <span>Not published yet — no invent channel URL.</span>
-            </li>
-            <li>
-              <strong>{{ $t('description.medium') }}</strong>
-              <span>Not published yet.</span>
-            </li>
-            <li>
-              <strong>{{ $t('description.reddit') }}</strong>
-              <span>Not published yet.</span>
+              <strong>Channels</strong>
+              <span>None published yet — no invent profile URL.</span>
             </li>
           </ul>
         </div>

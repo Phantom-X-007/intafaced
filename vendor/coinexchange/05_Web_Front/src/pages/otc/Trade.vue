@@ -112,15 +112,15 @@
 .ivu-tabs-nav-wrap {
 .ivu-tabs-nav-scroll {
 .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
-                background: #1ad4bc;
+                background: #ff8534;
               }
 .ivu-tabs-tab {
                 &:hover {
-                  color: #1ad4bc;
+                  color: #ff8534;
                 }
               }
 .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
-                color: #1ad4bc;
+                color: #ff8534;
               }
             }
           }
@@ -136,11 +136,11 @@
 .ivu-table-cell.ivu-table-cell-ellipsis{
 .user-face.user-avatar-public{
                       span{
-                        background:#1ad4bc;
+                        background:#ff8534;
                       }
                     }
                     p a{
-                      color:#1ad4bc;
+                      color:#ff8534;
                     }
                   }
                 }
@@ -263,7 +263,7 @@
 // height: 75px;
 // }
 //.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu) {
-// color: #00c2a8;
+// color: #ff6b00;
 // }
 // #List.nav-right.list-content.list-table.user-name {
 // display: flex;
@@ -272,7 +272,7 @@
 // }
 
 // #List.nav-right.list-content.list-table.user-name.user-icon {
-// background: #00c2a8;
+// background: #ff6b00;
 // border-radius: 50%;
 // height: 42px;
 // width: 42px;
@@ -412,7 +412,7 @@
   width: 4px;
   height: 22px;
   margin-right: 10px;
-  background: #00c2a8;
+  background: #ff6b00;
 }
 
 .merchant-icon.alipay {
@@ -507,7 +507,7 @@
   border-radius: 42px;
   -webkit-border-radius: 42px;
   color: #fff;
-  background: #00c2a8;
+  background: #ff6b00;
 }
 
 .merchant-item.item-hd.item-name {
@@ -736,7 +736,7 @@
 }
 
 .user-avatar-public >.user-avatar-in {
-  background: #00c2a8;
+  background: #ff6b00;
   border-radius: 50%;
   height: 35px;
   width: 35px;
@@ -769,20 +769,20 @@
 //.ivu-table-cell.ivu-table-cell-ellipsis
 // p
 // a {
-// color: #00c2a8;
+// color: #ff6b00;
 // }
 //.list-content {
 //.ivu-tabs-bar {
 //.ivu-tabs-nav-container {
 //.ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
-// background: #00c2a8;
+// background: #ff6b00;
 // }
 //.ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
-// color: #00c2a8;
+// color: #ff6b00;
 // }
 //.ivu-tabs-tab {
 // &:hover {
-// color: #00c2a8;
+// color: #ff6b00;
 // }
 // }
 // }

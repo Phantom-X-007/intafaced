@@ -12,23 +12,27 @@
    properties the vendor itself set inline.
 
    Palette is declared once here as custom properties (modular swap point).
-   Historical template hex was remapped by retheme.mjs; brand accent hex is
+   Historical template hex was remapped by ../../retheme.mjs; the accent hex is
    kept in sync with these tokens when the lock changes (see COLOR-LOCK doc).
+   The sync pass is ./accent-remap.mjs — the token block alone reaches only a
+   fraction of the shell, because most of the inherited template hard-codes its
+   colours as literals.
 
-   LOCK: P21 Deep neutral · teal — provisional 2026-07-31 (easy to change).
+   LOCK: black + orange — owner's standing direction, restored 2026-08-02.
+   (Superseded the provisional P21 teal pick of 2026-07-31.)
    ========================================================================== */
 
 :root {
-  /* ── brand accent (token names keep --ix-orange* for call-site stability;
-       values are P21 teal; rename later if desired) ─────────────────────── */
-  --ix-orange: #00c2a8;
-  --ix-orange-light: #1ad4bc;
-  --ix-orange-dark: #009e89;
-  --ix-orange-soft: rgba(0, 194, 168, 0.12);
-  --ix-orange-glow: rgba(0, 194, 168, 0.28);
-  --ix-on-accent: #041210;
+  /* ── brand accent — INTAFACED orange. Token names and values agree again;
+       under the P21 lock these were named --ix-orange* and valued teal. ──── */
+  --ix-orange: #ff6b00;
+  --ix-orange-light: #ff8534;
+  --ix-orange-dark: #cc5500;
+  --ix-orange-soft: rgba(255, 107, 0, 0.12);
+  --ix-orange-glow: rgba(255, 107, 0, 0.28);
+  --ix-on-accent: #1a0a00;
 
-  /* ── surfaces: P21 deep neutral (not pure #000; solid panel lift) ──────── */
+  /* ── surfaces: deep neutral (not pure #000; solid panel lift) ─────────── */
   --ix-bg: #0a0c10;
   --ix-surface: #12151c;
   --ix-surface-raised: #161a22;
@@ -97,7 +101,7 @@
 }
 
 /* ── base ──────────────────────────────────────────────────────────────────
-   Soft teal wash on P21 deep base — restrained, not casino glow. */
+   Soft orange wash on the deep base — restrained, not casino glow. */
 html,
 body {
   background: var(--ix-bg);
@@ -113,8 +117,8 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(1100px 700px at 12% -10%, rgba(0, 194, 168, 0.1), transparent 60%),
-    radial-gradient(900px 600px at 100% 0%, rgba(0, 194, 168, 0.05), transparent 55%),
+    radial-gradient(1100px 700px at 12% -10%, rgba(255, 107, 0, 0.1), transparent 60%),
+    radial-gradient(900px 600px at 100% 0%, rgba(255, 107, 0, 0.05), transparent 55%),
     radial-gradient(800px 800px at 50% 120%, rgba(26, 212, 188, 0.04), transparent 60%);
 }
 
@@ -152,7 +156,7 @@ body::before {
    GLASS — the shared surface treatment
    ========================================================================== */
 
-/* B1 — solid P21 surfaces (no frosted glass on desk chrome). */
+/* B1 — solid surfaces (no frosted glass on desk chrome). */
 .ix-glass,
 .ivu-card,
 .ivu-modal-content,
@@ -277,7 +281,7 @@ img.avatar,
 }
 .ivu-btn-primary:hover,
 .ivu-btn-warning:hover {
-  background: linear-gradient(180deg, #33dcc8, var(--ix-orange-light)) !important;
+  background: linear-gradient(180deg, #ff9d5c, var(--ix-orange-light)) !important;
   box-shadow: 0 10px 28px var(--ix-orange-glow);
   color: var(--ix-on-accent) !important;
 }
@@ -591,7 +595,7 @@ textarea::placeholder {
 }
 .ivu-alert-warning {
   background: var(--ix-orange-soft) !important;
-  border-color: rgba(0, 194, 168, 0.3) !important;
+  border-color: rgba(255, 107, 0, 0.3) !important;
 }
 
 /* ============================================================================
@@ -824,7 +828,7 @@ a:hover {
 .ix-pill-partial {
   background: var(--ix-orange-soft);
   color: var(--ix-orange);
-  border-color: rgba(0, 194, 168, 0.32);
+  border-color: rgba(255, 107, 0, 0.32);
 }
 .ix-pill-absent {
   background: rgba(255, 255, 255, 0.05);
@@ -911,7 +915,7 @@ a:hover {
 }
 .ix-tag-on {
   background: var(--ix-orange-soft);
-  border-color: rgba(0, 194, 168, 0.3);
+  border-color: rgba(255, 107, 0, 0.3);
   color: var(--ix-orange);
 }
 
@@ -1033,7 +1037,7 @@ textarea:focus-visible {
   z-index: 10000;
   padding: 8px 12px;
   background: var(--accent);
-  color: var(--on-accent, #041210);
+  color: var(--on-accent, #1A0A00);
   font-weight: 600;
   border-radius: 0 0 8px 0;
 }

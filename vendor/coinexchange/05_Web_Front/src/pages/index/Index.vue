@@ -52,9 +52,11 @@
           </div>
           <div class="agent-list">
             <div class="agent-item">
+              <!-- One tile, not a CN/EN pair. new_1cny.png carried a ¥ mark
+                   baked into the artwork and could only ever be reached by a
+                   language this shell no longer ships. -->
               <div class="agent-img">
-                <img v-if="langPram=='EN'" src="../../assets/images/new_1usd.png"></img>
-                <img v-else="langPram=='CN'" src="../../assets/images/new_1cny.png"></img>
+                <img src="../../assets/images/new_1usd.png"></img>
               </div>
               <router-link to="/helpdetail?cate=0&id=20&cateTitle=Beginner's Guide" target="_blank">
                 <div class="agent-detail">
@@ -99,11 +101,9 @@
           </div>
         </div>
       </div>
-      <div style="width: 100%;background: #000000;display:none;">
-        <router-link to="/announcement/118930" target="_blank" style="width: 100%;">
-          <img src="/static/bannerimg.png" style="width: 72%;margin-left: 14%;margin-top: 20px;">
-        </router-link>
-      </div>
+      <!-- Removed: a display:none banner linking to /announcement/118930 — an
+           announcement id from the upstream vendor's own database — over an
+           image at /static/bannerimg.png, a directory this repo does not have. -->
       <div class="section" id="page2">
         <div class="page2nav">
           <div class="board-title" style="display:inline-block;display: none;">{{$t('sectionPage.mainboard')}} &nbsp; >>></div>
@@ -152,29 +152,14 @@
         </ul>
       </div>
 
-      <div class="section" id="page5">
-        <div class="phone_image"></div>
-        <ul class="download">
-          <li class="qrcode">{{$t('description.scanqrcode')}}</li>
-          <li class="wrapper">
-            <div class="download_app">
-              <img src="../../assets/images/appdownload.png">
-            </div>
-            <div class="abstract">
-              <div class="content">
-                <span></span>
-              </div>
-            </div>
-          </li>
-        </ul>
-      </div>
-    </div>
-    <div class="app_bottom">
-      <div class="left_logo">
-        <img style="float:left;" src="../../assets/images/applogo.svg"></img>
-        <div style="float:left;height: 40px;line-height:40px;color:#000;">{{$t("cms.downloadslogan")}}</div>
-      </div>
-      <div class="right_btn_wrap"><router-link target="_blank" to="/app" class="right_btn">{{$t("cms.download")}}</router-link></div>
+      <!-- The "scan to download" section is gone, along with the sticky app bar
+           that used to sit under it. Three separate pieces of the upstream
+           vendor's identity lived here: appdownload.png was a QR code encoding
+           THEIR download URL, phone_img.png was a screenshot of THEIR app, and
+           app-download.jpg was their marketing band behind it. Behind the bar,
+           /app fetched an APK path that has never existed in this repo. There is
+           no INTAFACED mobile app to download today, so the page no longer says
+           there is. -->
     </div>
   </div>
 </template>
@@ -216,7 +201,6 @@ export default {
       totalNum: 0,
       FAQList: [],
       yesDayCashDividensBonusETH: 0,
-      CNYRate: null,
       dataIndex: [],
       pageNo: 1,
       totalNum: 0,
@@ -231,7 +215,7 @@ export default {
             let flag = this.isLogin;
             return h("Icon", {
               props: {
-                color: "#00c2a8",
+                color: "#ff6b00",
                 size: "18",
                 type: params.row.isFavor
 ? "ios-star"
@@ -283,11 +267,12 @@ export default {
             }
           },
           render: function(h, params) {
-            // var rmb = self.round(self.mul(params.row.price, 6.5), 2);
-            // if (self.CNYRate!= null)
-            // rmb = self.round(self.mul(params.row.price, self.CNYRate), 2);
-            let CNYRate = self.CNYRate || 6.5,
-              rmb = self.round(self.mul(params.row.usdRate, CNYRate), 2);
+            // The "≈ ¥nnn" secondary price is gone. It multiplied the row by
+            // `self.CNYRate || 6.5`, and CNYRate starts null and is only set by
+            // an endpoint with no error branch — so whenever that call failed,
+            // every row printed a CNY price computed at an invented 6.5 rate
+            // and rendered it in the same cell as the real one. A reader had no
+            // way to tell the two apart. Doctrine: never invent a number.
             const isgreen =
               parseFloat(params.row.rose) < 0? "none": "inline-block";
             const nogreen =
@@ -298,11 +283,6 @@ export default {
                   }
             },[
               h("span", {}, params.row.price),
-              h("span", {
-                  attrs: {
-                    class: "price-rmb"
-                  }
-                }, " ≈ ¥" + rmb),
               h(
                 "Icon",
                 {
@@ -476,7 +456,7 @@ export default {
                 h("span", {
                   style: {
                     cursor: "pointer",
-                    color: "#00c2a8",
+                    color: "#ff6b00",
                     display: "inline-block",
                     padding: "2px 8px"
                   },
@@ -514,7 +494,7 @@ export default {
             // renderHeader: (h, params) => {
             // return h("Icon", {
             // props: {
-            // color: "#00c2a8",
+            // color: "#ff6b00",
             // size: "18",
             // type: "android-star-outline"
             // }
@@ -524,7 +504,7 @@ export default {
               let flag = this.isLogin;
               return h("Icon", {
                 props: {
-                  color: "#00c2a8",
+                  color: "#ff6b00",
                   size: "18",
                   type: params.row.isFavor
 ? "ios-star"
@@ -581,11 +561,10 @@ export default {
               }
             },
             render: function(h, params) {
-              // var rmb = self.round(self.mul(params.row.price, 6.5), 2);
-              // if (self.CNYRate!= null)
-              // rmb = self.round(self.mul(params.row.price, self.CNYRate), 2);
-              let CNYRate = self.CNYRate || 6.5,
-                rmb = self.round(self.mul(params.row.usdRate, self.CNYRate), 2);
+              // Same removal as the favourites table above. This copy was worse:
+              // it computed a guarded local `CNYRate` and then multiplied by the
+              // unguarded `self.CNYRate`, so it printed NaN as often as it
+              // printed a fabricated rate.
               const isgreen =
                 parseFloat(params.row.rose) < 0? "none": "inline-block";
               const nogreen =
@@ -596,11 +575,6 @@ export default {
                   }
               }, [
                 h("span", {}, params.row.price + ""),
-                h("span", {
-                  attrs: {
-                    class: "price-rmb"
-                  }
-                }, " ≈ ¥" + rmb),
                 h(
                   "Icon",
                   {
@@ -757,7 +731,7 @@ export default {
                 h("span", {
                   style: {
                     cursor: "pointer",
-                    color: "#00c2a8",
+                    color: "#ff6b00",
                     display: "inline-block",
                     padding: "2px 8px"
                   },
@@ -1169,9 +1143,6 @@ export default {
 </script>
 <style scoped lang="scss" >
 @media screen and (max-width:768px){
-.app_bottom{
-    display: block!important;
-  }
   #fullpage {
     padding-top: 45px!important;
   }
@@ -1274,7 +1245,7 @@ export default {
       }
     }
 .agent-all{
-      height:62px;text-align:right;line-height:62px;background:transparent;position:absolute;right:12px;font-size:12px;color: #00c2a8;
+      height:62px;text-align:right;line-height:62px;background:transparent;position:absolute;right:12px;font-size:12px;color: #ff6b00;
     }
   }
 }
@@ -1317,7 +1288,7 @@ export default {
               font-size:12px;
             }
             a:hover{
-              color: #00c2a8!important;
+              color: #ff6b00!important;
             }
           }
         }
@@ -1335,7 +1306,7 @@ export default {
         z-index: 0;
         right: 0;
         a {
-          color: #00c2a8!important;
+          color: #ff6b00!important;
           font-size: 12px;
           padding: 3px 12px;
           border-radius:3px;
@@ -1350,7 +1321,7 @@ export default {
     height: 100%;
     line-height: 40px;
     a {
-      color: #00c2a8;
+      color: #ff6b00;
       font-size: 14px;
     }
   }
@@ -1373,7 +1344,7 @@ export default {
 .special {
           line-height: 26px;
 .num {
-            color: #00c2a8;
+            color: #ff6b00;
           }
         }
 .list-opBHB {
@@ -1385,17 +1356,17 @@ export default {
           margin-right: 20px;
 .num {
             font-size: 30px;
-            color: #00c2a8;
+            color: #ff6b00;
             font-weight: 500;
           }
 .type {
             font-size: 16px;
-            color: #00c2a8;
+            color: #ff6b00;
             font-weight: 500;
           }
         }
 .num2 {
-          color: #00c2a8;
+          color: #ff6b00;
         }
       }
     }
@@ -1404,7 +1375,7 @@ export default {
 #progress {
   padding: 20px 14%;
 .title {
-    color: #00c2a8;
+    color: #ff6b00;
     overflow: hidden;
     line-height: 30px;
     font-size: 16px;
@@ -1413,7 +1384,7 @@ export default {
     }
 .total {
       float: right;
-      color: #1ad4bc;
+      color: #ff8534;
     }
   }
 .ivu-progress.ivu-progress-normal {
@@ -1464,9 +1435,9 @@ export default {
       }
       li.active {
         background: #141414;
-        color: #00c2a8;
+        color: #ff6b00;
         position: relative;
-        border-bottom: 2px solid #00c2a8;
+        border-bottom: 2px solid #ff6b00;
       }
     }
   }
@@ -1570,69 +1541,8 @@ export default {
     text-align:justify;
   }
 }
-#page5 {
-  height: 517px;
-  padding: 0 14%;
-  position: relative;
-  background: #000000 url("../../assets/images/app-download.jpg") no-repeat 0 0;
-  background-size: 100% 517px;
-  overflow: hidden;
-.phone_image {
-    width: 480px;
-    float: left;
-    height: 100%;
-    background: url("../../assets/images/phone_img.png") no-repeat left 150px;
-    background-size: 480px;
-  }
-.download {
-    float: right;
-    list-style-type: none;
-.qrcode {
-      color: #fff;
-      font-size: 18px;
-      font-weight: 500;
-      margin-top: 140px;
-      text-align: left;
-      line-height: 40px;
-      margin-bottom: 14px;
-      font-weight: 900;
-    }
-.wrapper {
-      width: 190px;
-      height: 300px;
-      float: left;
-      padding: 0;
-      margin-right: 0px;
-.download_app {
-        height: 190px;
-        img {
-          width: 100%;
-          border-radius: 5px;
-        }
-      }
-.abstract {
-        text-align: center;
-        display: flex;
-        margin-top: 14px;
-        justify-content: center;
-        align-items: center;
-        height: 30px;
-.image {
-          width: 18px;
-          img {
-            vertical-align: middle;
-          }
-        }
-.content {
-          font-size: 12px;
-          text-align: left;
-          color: #fff;
-          margin-left: 15px;
-        }
-      }
-    }
-  }
-}
+/* #page5 (app-download band) removed with its markup: it painted
+   app-download.jpg, phone_img.png and the vendor QR. */
 </style>
 <style lang="scss">
 #progress {
@@ -1640,10 +1550,10 @@ export default {
 .ivu-progress-inner {
       background: #fff;
       border-radius: 5px;
-      border: 1px solid #00c2a8;
+      border: 1px solid #ff6b00;
 .ivu-progress-bg {
         border-radius: 0;
-        background: #00c2a8;
+        background: #ff6b00;
       }
     }
   }
@@ -1774,10 +1684,6 @@ export default {
   height: 55px;
   margin: 0 15px;
 }
-
-/*.register {
-  background: url(../../assets/images/register.png) no-repeat;
-}*/
 
 /*.usdt {
   float: left;
@@ -1947,11 +1853,6 @@ export default {
 .ptjy.ivu-table td,.ptjy.ivu-table th{
   height: 25px;
 }
-.price-rmb{
-  color: #8a8a8a;
-  font-size: 10px;
-  margin-left: 3px;
-}
 .price-td{
   padding-left: 100px;
   text-align: left;
@@ -1962,32 +1863,7 @@ th.ivu-table-cell span{
 .ivu-table td{
   background: transparent!important;
 }
-.app_bottom{
-  display: none;
-  z-index: 999;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 40px;
-  background: rgba(242,246,250,1)!important;
-}
-.app_bottom.left_logo img{
-  height: 30px;margin-top:5px;border-radius: 5px;margin-left: 5px;margin-right: 5px;
-}
-.app_bottom.right_btn_wrap{
-  float: right;height: 40px;line-height: 40px;margin-right: 5px;
-}
-.app_bottom.right_btn{
-  color: #FFF;
-  border-radius: 3px;
-  padding: 0px 10px;
-  line-height: 26px;
-  height: 26px;
-  display: block;
-  margin-top: 7px;
-  background: linear-gradient(200deg, #ff9900, #ffbe2b, #ffa500);
-}
+/* .app_bottom (sticky "download the app" bar) removed with its markup. */
 </style>
 
 

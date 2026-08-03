@@ -278,7 +278,7 @@ export default {
   font-size: 14px;
   outline: none;
   &:focus {
-    border-color: var(--ix-accent, #00c2a8);
+    border-color: var(--ix-accent, #ff6b00);
   }
 }
 .ix-cmdk-hint {
@@ -312,7 +312,7 @@ export default {
   cursor: pointer;
   &.is-active,
   &:hover {
-    background: rgba(0, 194, 168, 0.12);
+    background: rgba(255, 107, 0, 0.12);
   }
 }
 .ix-cmdk-item-label {

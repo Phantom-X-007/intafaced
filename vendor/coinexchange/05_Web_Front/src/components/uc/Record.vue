@@ -17,7 +17,7 @@
             <Select v-model="symbol" style="width:140px;margin-right:30px;" clearable :placeholder="$t('common.pleaseselect')">
               <Option v-for="item in marketList" :value="item.symbol" :key="item.symbol">{{ item.symbol }}</Option>
             </Select>
-            <Button type="warning" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#00c2a8;border-color:#00c2a8">{{$t('uc.finance.record.search')}}</Button>
+            <Button type="warning" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#ff6b00;border-color:#ff6b00">{{$t('uc.finance.record.search')}}</Button>
           </div>
 
           <div class="order-table">

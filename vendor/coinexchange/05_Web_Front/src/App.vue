@@ -89,36 +89,15 @@
             <div class="header_nav_mobile_triggle" @click="toggleMemu()">
               <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/>
             </div>
-            <!-- The language switcher was here and is deliberately not replaced.
-                 main.js loads ONE locale — `messages: { en }` — and store.js
-                 hard-wires `setlang`/`initLang` to English so no stored
-                 preference can put the product back into Chinese. Choosing
-                 "Chinese" therefore set $i18n.locale to a catalogue that does
-                 not exist and the page redrew in English: a control that looks
-                 like a feature, does nothing, and cannot be told apart from one
-                 that is broken. When a second locale actually ships, the switch
-                 comes back with it.
-
-                 `changelanguage()`, `languageValue` and `lang` below are now
-                 unreachable and are left in place on purpose — the auth lane is
-                 rewriting the methods block around them in a parallel branch,
-                 and a merge conflict there is a worse trade than three dead
-                 members. They go when that lands. -->
-            <div class="rightwrapper">
-              <poptip placement="bottom" width="120" class="appdownload" trigger="hover">
-                <a href="javascript:;" style="font-size:14px;">{{$t("header.appdownlaod")}}
-                  <Icon type="md-arrow-dropdown" size="18" />
-                </a>
-                <div class="api" slot="content">
-                  <div class="ios">
-                    <img src="../src/assets/images/appdownload.png" alt="">
-                    <div class="tips">
-                      <span>{{$t("header.scandownload")}}</span>
-                    </div>
-                  </div>
-                </div>
-              </poptip>
-            </div>
+            <!-- Language switcher removed. The shell ships one catalogue
+                 (src/assets/lang/en.js); there is no zh.js. Selecting "Chinese"
+                 set $i18n.locale='zh' against a locale that does not exist and
+                 every $t() in the app fell through to its raw key, so the whole
+                 UI read "footer.gsmc". A control that can only break the page is
+                 not a feature. English-only is the standing instruction. -->
+            <!-- App-download entry removed. The QR it showed was the upstream
+                 vendor's, and the button behind it fetched an APK that has never
+                 existed in this repo. /app still routes, and now says so. -->
             <div class="rr login-container">
               <!-- check whether signed in -->
               <!-- signed in -->
@@ -242,12 +221,8 @@
                   <MenuItem name="nav_innnovationmanage" class="lang-item" style="padding-left:20px!important;">{{$t("header.innovationmanage")}}</MenuItem>
                 </router-link>
             </Submenu>
-            <div style="height: 1px;width:100%;background:rgb(59, 69, 85);margin-top:10px;margin-bottom:10px;"></div>
-            <!-- The drawer's language submenu is gone with the header's. One
-                 locale is loaded; a picker over a list of one is furniture. -->
-            <router-link to="/app">
-              <MenuItem name="nav-appdownload"style="text-align:left;color:#bdc2ca;">{{$t("header.appdownlaod")}}</MenuItem>
-            </router-link>
+            <!-- No language submenu and no app-download entry on mobile either,
+                 for the same two reasons as the desktop bar above. -->
         </Menu>
     </Drawer>
     <!-- B2 density: marketing footer stays on marketing pages only — on the
@@ -256,73 +231,24 @@
       <div class="footer_content">
         <div class="footer_left">
           <img src="./assets/images/logo-bottom.svg" style="margin:0" ></img>
-          <!-- <h3>Caymanex.Pro</h3> -->
           <p style="letter-spacing:2px;">{{$t("footer.gsmc")}}</p>
-          <p>Copyright © 2019 - INTAFACED.com All rights reserved.&nbsp;&nbsp;</p>
-          <div class="social-list">
-            <ul>
-              <Tooltip content="Wechat" theme="dark" placement="top">
-                <li>
-                  <Icon custom="i-icon iconfont iconweixin" />
-                </li>
-                <div slot="content">
-                    <img style="width: 130px;border-radius: 5px;" src="./assets/images/wechatqrcode.jpg"></img>
-                </div>
-              </Tooltip>
-              <Tooltip content="Biyong" theme="dark" placement="top">
-                <li>
-                  <Icon custom="i-icon iconfont iconbiyonglogo" />
-                </li>
-                <div slot="content">
-                    <img style="width: 130px;border-radius: 5px;" src="./assets/images/biyongqrcode.png"></img>
-                </div>
-              </Tooltip>
-              <Tooltip content="Telegram" theme="dark" placement="top">
-                <li>
-                  <Icon custom="i-icon iconfont icontelegram1" />
-                </li>
-                <div slot="content">
-                    <img style="width: 130px;border-radius: 5px;" src="./assets/images/telegramqrcode.jpg"></img>
-                </div>
-              </Tooltip>
-              <Tooltip content="https://weibo.com/intafaced" theme="dark" placement="top">
-                <li>
-                  <Icon custom="i-icon iconfont iconweibo" />
-                </li>
-              </Tooltip>
-              <Tooltip content="https://twitter.com/INTAFACEDGlobal" theme="dark" placement="top">
-                <li>
-                  <Icon type="logo-twitter" />
-                </li>
-              </Tooltip>
-              <Tooltip content="https://medium.com/@INTAFACED" theme="dark" placement="top">
-                <li>
-                  <Icon custom="i-icon iconfont iconmedium" />
-                </li>
-              </Tooltip>
-              <Tooltip content="https://www.reddit.com/u/intafacedglobal" theme="dark" placement="top">
-                <li>
-                  <Icon custom="i-icon iconfont iconreddit" />
-                </li>
-              </Tooltip>
-              <Tooltip content="coming" theme="dark" placement="top" style="display:none;">
-                <li>
-                  <Icon type="logo-facebook" />
-                </li>
-              </Tooltip>
-
-            </ul>
-          </div>
+          <!-- No year and no rights claim we cannot stand behind. The upstream
+               line said "Copyright © 2019" — that is the vendor's first-publish
+               year, not ours, and stating it is a false provenance claim. -->
+          <p>© INTAFACED</p>
+          <!-- Social row removed rather than rewritten. Every entry was either a
+               China-only platform the upstream vendor used (WeChat, Weibo,
+               Biyong) or a profile URL invented for us that resolves to nothing
+               (twitter.com/INTAFACEDGlobal, medium.com/@INTAFACED,
+               reddit.com/u/intafacedglobal). The three QR images were the
+               vendor's own accounts — a customer scanning one reached a stranger.
+               Same idiom already used on /about-us and /partner. -->
+          <p class="footer-quiet">Social channels not published yet — no invent profile URL.</p>
         </div>
-        <!-- The "friendly links" column stood here: outbound links to
-             Feixiaohao, 8BTC, ChainNode and Jinse Finance. It is a Chinese
-             web convention the upstream project carried, and all four are
-             third-party crypto media sites with no relationship to this
-             product. Sending our own footer traffic to four sites we do not
-             control, from the most trusted block on the page, is not
-             navigation we want — so the column is removed rather than
-             re-pointed. -->
-
+        <!-- "Friendly links" column removed: Feixiaohao, 8BTC, ChainNode and
+             Jinse Finance are Chinese crypto-media partners of the upstream
+             vendor. We have no relationship with any of them, and linking out
+             to four third parties from every page implied that we do. -->
         <div class="footer_right">
           <ul>
             <li class="footer_title">
@@ -337,14 +263,9 @@
             <li>
               <router-link target="_blank" to="/announcement/0">{{$t("footer.notice")}}</router-link>
             </li>
-            <li class="wechatclick">
-              <poptip width="80" trigger="hover" placement="right">
-                <a href="javascript:;" class="wechat">{{$t("footer.apidoc")}}</a>
-                <div slot="content">
-                  <p style="text-align:center;">{{$t("footer.zwkf")}}</p>
-                </div>
-              </poptip>
-            </li>
+            <!-- "Api Doc" was a link to nowhere whose hover text read
+                 "come soon". A menu entry that only ever says it does not exist
+                 is noise; the row returns when there is a document to open. -->
           </ul>
           <ul>
             <li class="footer_title">
@@ -380,42 +301,21 @@
               <router-link target="_blank" to="/helpdetail?cate=5&id=38&cateTitle=Terms of Service">{{$t("footer.fltk")}}</router-link>
             </li>
           </ul>
+          <!-- Contact column. The four addresses that used to sit in these
+               popovers (service@ / support@ / list@ / ceo@) were never
+               provisioned — mail to them goes nowhere, which is worse than
+               publishing no address at all because the sender believes they have
+               been heard. /about-us and /partner were already corrected to this
+               wording; the footer, which renders on every marketing page, was
+               missed. -->
           <ul>
             <li class="footer_title">
               <span>{{$t("footer.lxwm")}}</span>
             </li>
-            <li class="wechatclick">
-              <poptip width="200" trigger="hover" placement="right">
-                <a href="javascript:;" class="wechat">{{$t("footer.kfyx")}}</a>
-                <div slot="content">
-                  <p style="text-align:center;">service@intafaced.com</p>
-                </div>
-              </poptip>
-            </li>
-            <li class="wechatclick">
-              <poptip width="200" trigger="hover" placement="right">
-                <a href="javascript:;" class="wechat">{{$t("footer.swhz")}}</a>
-                <div slot="content">
-                  <p style="text-align:center;">support@intafaced.com</p>
-                </div>
-              </poptip>
-            </li>
-            <li class="wechatclick">
-              <poptip width="200" trigger="hover" placement="right">
-                <a href="javascript:;" class="wechat">{{$t("footer.sbsq")}}</a>
-                <div slot="content">
-                  <p style="text-align:center;">list@intafaced.com</p>
-                </div>
-              </poptip>
-            </li>
-            <li class="wechatclick">
-              <poptip width="200" trigger="hover" placement="right">
-                <a href="javascript:;" class="wechat">{{$t("footer.tsjb")}}</a>
-                <div slot="content">
-                  <p style="text-align:center;">ceo@intafaced.com</p>
-                </div>
-              </poptip>
-            </li>
+            <li class="footer-quiet">{{$t("footer.kfyx")}} — not published yet</li>
+            <li class="footer-quiet">{{$t("footer.swhz")}} — not published yet</li>
+            <li class="footer-quiet">{{$t("footer.sbsq")}} — not published yet</li>
+            <li class="footer-quiet">{{$t("footer.tsjb")}} — not published yet</li>
           </ul>
         </div>
       </div>
@@ -451,8 +351,7 @@ export default {
       time: null,
       content: " ",
       navDrawerModal: false,
-      ixModules: IX_MODULES,
-      wechat: this.$t("footer.wechat")
+      ixModules: IX_MODULES
     };
   },
   watch: {
@@ -483,7 +382,7 @@ export default {
           window.document.title = "Not found" + " - INTAFACED | Sovereign Exchange";
           break;
         default:
-          window.document.title = "INTAFACED | INTAFACED - Global digital asset exchange | Global digital asset exchange";
+          window.document.title = "INTAFACED | Sovereign Exchange";
           break;
       }
     },
@@ -531,13 +430,12 @@ export default {
     member: function() {
       return this.$store.getters.member;
     },
+    /* Kept as the one place the locale is pinned. The switcher is gone, but the
+       store still initialises `lang`, and pinning here means a stale
+       localStorage value cannot leave $i18n on a locale we do not ship. */
     languageValue: function() {
-      var curlang = this.$store.getters.lang;
-      if (curlang == "English") this.$i18n.locale = "en";
-      return curlang;
-    },
-    lang() {
-      return this.$store.state.lang;
+      this.$i18n.locale = "en";
+      return this.$store.getters.lang;
     },
     exchangeSkin() {
       return this.$store.state.exchangeSkin;
@@ -594,15 +492,7 @@ export default {
     goModule(route) {
       if (route && this.$route.path !== route) this.$router.push(route);
     },
-    /**
-     * Mobile drawer: every item name maps to a route.
-     *
-     * The `zh`/`en` branch that used to sit at the top of this method went with
-     * the language submenu, and `nav-whitepaper` went with the /whitepaper
-     * route. Both entries are removed rather than left pointing at nothing: an
-     * unmatched name falls through to `if (map[name])` and the drawer just does
-     * not respond, which reads to a user as a broken tap.
-     */
+    /** Mobile drawer: every item is a route now that the lang items are gone. */
     onMobileSelect(name) {
       var map = {
         "nav-index": "/",
@@ -614,7 +504,6 @@ export default {
         "nav-invite": "/invite",
         "nav-service": "/announcement/0",
         "nav-platform": "/platform",
-        "nav-appdownload": "/app",
         "nav_safe": "/uc/safe",
         "nav_assets": "/uc/money",
         "nav_innnovationmanage": "/uc/innovation/myorders",
@@ -666,31 +555,29 @@ export default {
      * turned would be the wrong failure.
      */
     logout() {
-      var session = this.$store.getters.ixSession;
-      this.$store.commit("clearIxSession");
-
-      if (session && session.refreshToken) {
-        mutate("identity", "auth.logout", { refreshToken: session.refreshToken });
-      }
-
-      this.$Message.success(this.$t("uc.login.signedOut"));
-      setTimeout(() => {
-        location.href = "/";
-      }, 800);
+      this.$http.post(this.host + "/uc/loginout", {}).then(response => {
+        var resp = response.body;
+        if (resp.code == 0) {
+          this.$Message.success(resp.message);
+          this.$store.commit("setMember", null);
+          setTimeout(() => {
+            location.href = "/";
+          }, 1500);
+        } else {
+          this.$Message.error(resp.message);
+        }
+      });
     },
-    changelanguage: function(name) {
-      console.log("change language: " + name);
-      if (name == "en") {
-        this.$store.commit("setlang");
-        this.$i18n.locale = "en";
-        this.reload();
-      }
-      if (name == "zh") {
-        this.$store.commit("setlang");
-        this.$i18n.locale = "zh";
-        this.reload();
-      }
+    checkLogin() {
+      this.$http.post(this.host + "/uc/check/login", {}).then(response => {
+        var result = response.body;
+        if (result.code == 0 && result.data == false) {
+          this.$store.commit("setMember", null);
+        }
+      });
     }
+    /* changelanguage() removed with the switcher. Its "zh" branch set
+       $i18n.locale to a catalogue that does not exist in this repo. */
   }
 };
 </script>
@@ -745,11 +632,11 @@ export default {
     font-size: 14px;
     color: #8a8a8a;
     &:hover {
-      color: #00c2a8;
+      color: #ff6b00;
     }
   }
 .router-link-active.ix-nav-title {
-    color: #00c2a8;
+    color: #ff6b00;
   }
 }
 /* CEX / DEX plane switch — compact pill matching shell chrome, not a new kit.
@@ -773,11 +660,11 @@ export default {
   text-decoration: none;
   white-space: nowrap;
   &:hover {
-    color: var(--accent, #00c2a8);
+    color: var(--accent, #ff6b00);
   }
   &.is-active {
     color: #fff;
-    background: var(--accent, #00c2a8);
+    background: var(--accent, #ff6b00);
   }
 }
 @media screen and (max-width: 1100px) {
@@ -822,11 +709,15 @@ export default {
       z-index: 10;
 .layout-ceiling {
         padding: 5px 20px;
+/* 200px, not 300px: the header gutter is 218px (.layout-ceiling-main
+           margin-left), so a 300px lockup ran under the nav and the wordmark
+           read "INTAFACE". `contain` rather than `100% 100%` so the mark is not
+           stretched to fill a box of the wrong ratio. */
 .layout-logo{
-          width: 300px;
-          height: 48px;
-          background: url(./assets/images/logo.svg) no-repeat;
-          background-size: 100% 100%;
+          width: 200px;
+          height: 37px;
+          background: url(./assets/images/logo.svg) no-repeat left center;
+          background-size: contain;
           float: left;
           position: absolute;
           z-index: 10;
@@ -843,17 +734,17 @@ export default {
                   &:hover {
                     li {
                       background: none;
-                      color: #00c2a8;
+                      color: #ff6b00;
                     }
                   }
                   li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-                    color: #00c2a8;
+                    color: #ff6b00;
                         border-bottom: 3px solid #ffa800;
                   }
                 }
 .router-link-exact-active.router-link-active {
                   li {
-                    color: #00c2a8;
+                    color: #ff6b00;
                   }
                 }
               }
@@ -912,7 +803,7 @@ export default {
                 border-right: 1px solid #292929;
               }
               #register {
-                color: #00c2a8!important;
+                color: #ff6b00!important;
                 &:hover {
                   li {
                     color: #fff;
@@ -1122,10 +1013,10 @@ export default {
 .layout-ceiling {
         padding: 5px 20px;
 .layout-logo {
-          width: 300px;
-          height: 48px;
-          background: url(./assets/images/logo.svg) no-repeat;
-          background-size: 100% 100%;
+          width: 200px;
+          height: 37px;
+          background: url(./assets/images/logo.svg) no-repeat left center;
+          background-size: contain;
           float: left;
           position: absolute;
         }
@@ -1143,11 +1034,11 @@ export default {
                   &:hover {
                     li {
                       background: none;
-                      color: #00c2a8;
+                      color: #ff6b00;
                     }
                   }
                   li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-                    color: #00c2a8;
+                    color: #ff6b00;
                     border-bottom: 3px solid #ffa800;
                   }
                   li {
@@ -1156,7 +1047,7 @@ export default {
                 }
 .router-link-exact-active.router-link-active {
                   li {
-                    color: #00c2a8;
+                    color: #ff6b00;
                   }
                 }
               }
@@ -1214,7 +1105,7 @@ export default {
                 border-right: 1px solid #292929;
               }
               #register {
-                color: #00c2a8!important;
+                color: #ff6b00!important;
                 &:hover {
                   li {
                     color: #fff;
@@ -1379,13 +1270,13 @@ export default {
   color: #ccc;
   &:hover {
     background-color: #141414;
-    color: #1ad4bc;
+    color: #ff8534;
   }
 }
 .ivu-table-filter-list.ivu-table-filter-select-item-selected {
-  color: #1ad4bc;
+  color: #ff8534;
   &:hover {
-    color: #1ad4bc;
+    color: #ff8534;
   }
 }
 
@@ -1412,8 +1303,8 @@ export default {
 }
 /* checkbox */
 .exchange.ivu-checkbox-checked.ivu-checkbox-inner {
-  background-color: #00c2a8;
-  border-color: #00c2a8;
+  background-color: #ff6b00;
+  border-color: #ff6b00;
 }
 /* modal */
 .ivu-modal-confirm-head {
@@ -1433,12 +1324,12 @@ export default {
   }
 }
 .ivu-modal-confirm-footer.ivu-btn-primary {
-  background-color: #00c2a8;
-  border-color: #00c2a8;
+  background-color: #ff6b00;
+  border-color: #ff6b00;
 }
 .ivu-modal-confirm-footer.ivu-btn-text {
   &:hover {
-    color: #00c2a8;
+    color: #ff6b00;
   }
 }
 .ivu-table-wrapper {
@@ -1670,7 +1561,7 @@ body {
     padding: 10px 16px;
     color: #ccc;
     &:hover {
-      color: #1ad4bc;
+      color: #ff8534;
     }
   }
 }
@@ -1692,7 +1583,7 @@ body {
 // }
 .ivu-dropdown-item:hover {
   background-color: #141414;
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-dropdown-item img {
   width: 14px;
@@ -1887,6 +1778,13 @@ body {
   font-size: 13px;
   height: 40px;
 }
+/* Honest-empty rows in the footer: readable, but visibly not a link, so a
+   reader does not click hoping for an address that is not there. */
+.footer-quiet {
+  color: var(--ix-text-faint, #6b7280);
+  font-size: 12px;
+  line-height: 30px;
+}
 
 .ivu-select-selected-value {
   color: #bbbec4;
@@ -1956,18 +1854,18 @@ body {
   border-color: #141414;
 }
 .ivu-page-item-active {
-  // background-color: #1ad4bc;
-  // border-color: #1ad4bc;
+  // background-color: #ff8534;
+  // border-color: #ff8534;
   // color: #fff;
   font-weight:bold;
 }
 .ivu-page-next:hover,
 .ivu-page-prev:hover {
-  border-color: #1ad4bc;
+  border-color: #ff8534;
 }
 .ivu-page-next:hover a,
 .ivu-page-prev:hover a {
-  color: #1ad4bc;
+  color: #ff8534;
 }
 
 .ivu-page-item-jump-prev a,
@@ -1976,16 +1874,16 @@ body {
 }
 .ivu-page-item-jump-prev a:hover,
 .ivu-page-item-jump-next a:hover {
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-page-item:hover {
-  border-color: #1ad4bc;
+  border-color: #ff8534;
 }
 .ivu-page-item:hover a {
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-page-item.ivu-page-item-active a {
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-page-disabled {
   a {
@@ -2082,24 +1980,24 @@ fieldset[disabled].ivu-input {
 .ivu-select-item:hover {
   background-color: #141414;
   // color:#ccc;
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-select-multiple.ivu-select-item-selected {
   background-color: #000000;
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-select-multiple.ivu-select-item-focus,
 .ivu-select-multiple.ivu-select-item-selected:hover {
   background-color: #000000;
 }
 .ivu-select-multiple.ivu-select-item-selected:after {
-  color: #1ad4bc;
+  color: #ff8534;
 }
 
 .ivu-select-item-selected,
 .ivu-select-item-selected:hover {
   background-color: #000000;
-  color: #1ad4bc;
+  color: #ff8534;
 }
 // chexkboxes
 .ivu-checkbox-inner {
@@ -2138,7 +2036,7 @@ fieldset[disabled].ivu-input {
 }
 /* loading reset */
 .ivu-spin-dot {
-  background: #1ad4bc;
+  background: #ff8534;
 }
 .ivu-tabs-bar {
   border-color: #f5f5f5;
@@ -2146,7 +2044,7 @@ fieldset[disabled].ivu-input {
 /* date picker reset */
 .ivu-picker-panel-icon-btn {
   &:hover {
-    color: #1ad4bc;
+    color: #ff8534;
   }
 }
 .ivu-date-picker-focused input {
@@ -2154,11 +2052,11 @@ fieldset[disabled].ivu-input {
   box-shadow: none;
 }
 .ivu-date-picker-cells-focused em {
-  // -moz-box-shadow: 0 0 0 1px #1ad4bc inset;
-  // -webkit-box-shadow: 0 0 0 1px #1ad4bc inset;
-  // box-shadow: 0 0 0 1px #1ad4bc inset;
+  // -moz-box-shadow: 0 0 0 1px #ff8534 inset;
+  // -webkit-box-shadow: 0 0 0 1px #ff8534 inset;
+  // box-shadow: 0 0 0 1px #ff8534 inset;
   box-shadow: none;
-  color: #1ad4bc;
+  color: #ff8534;
   &:after {
     // background: #141414;
   }
@@ -2169,7 +2067,7 @@ fieldset[disabled].ivu-input {
 .ivu-date-picker-cells-cell-selected em,
 .ivu-date-picker-cells-cell-selected:hover em {
   background: #141414;
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-date-picker-cells-cell-today em:after {
   background: #141414;
@@ -2179,7 +2077,7 @@ fieldset[disabled].ivu-input {
 }
 .ivu-date-picker-cells-cell:hover em {
   background: #141414;
-  color: #1ad4bc;
+  color: #ff8534;
 }
 /* button reset */
 
@@ -2187,20 +2085,20 @@ fieldset[disabled].ivu-input {
   border: none;
 }
 .ivu-btn-primary:hover {
-  background: #1ad4bc;
-  border-color: #1ad4bc;
+  background: #ff8534;
+  border-color: #ff8534;
 }
 .ivu-btn.ivu-btn-default {
   background-color: #141414;
   color: #FFF;
   &:hover {
-    color: #00c2a8;
+    color: #ff6b00;
     // background: #141414;
-    // border: 1px solid #00c2a8;
+    // border: 1px solid #ff6b00;
   }
   &:active {
-    color: #00c2a8;
-    // border: 1px solid #00c2a8;
+    color: #ff6b00;
+    // border: 1px solid #ff6b00;
     // background: #141414;
   }
 }
@@ -2210,12 +2108,12 @@ fieldset[disabled].ivu-input {
   border: 1px solid #141414;
 }
 .ivu-btn-primary {
-  background-color: #1ad4bc;
-  border-color: #1ad4bc;
+  background-color: #ff8534;
+  border-color: #ff8534;
 }
 .ivu-btn-text:hover {
   background-color: transparent;
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-input-group-append,
 .ivu-input-group-prepend {
@@ -2236,19 +2134,19 @@ fieldset[disabled].ivu-input {
 
 /* radio reset */
 .ivu-radio-checked.ivu-radio-inner {
-  border-color: #1ad4bc;
+  border-color: #ff8534;
 }
 .ivu-radio-checked:hover {
 .ivu-radio-inner {
-    border-color: #1ad4bc;
+    border-color: #ff8534;
   }
 }
 .ivu-radio-inner:after {
-  background: #1ad4bc;
+  background: #ff8534;
 }
 .ivu-switch-checked {
-  border-color: #1ad4bc;
-  background-color: #1ad4bc;
+  border-color: #ff8534;
+  background-color: #ff8534;
 }
 .ivu-switch:focus {
   box-shadow: none;
@@ -2274,10 +2172,10 @@ fieldset[disabled].ivu-input {
 }
 /* sort arrow reset */
 .ivu-table-sort i.on {
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-table-sort i:hover {
-  color: #1ad4bc;
+  color: #ff8534;
 }
 .ivu-modal-confirm-head-icon {
   font-size: 24px;
@@ -2376,7 +2274,7 @@ fieldset[disabled].ivu-input {
   transition: all 0.5s;
 }
 .swiper-pagination-bullet-active{
-  background: #00c2a8!important;
+  background: #ff6b00!important;
   width:30px;
   opacity: 1;
 }
@@ -2442,7 +2340,7 @@ fieldset[disabled].ivu-input {
 }
 
 .ivu-spin{
-  color:#00c2a8!important;
+  color:#ff6b00!important;
 }
 .ivu-poptip-popper[x-placement^=bottom].ivu-poptip-arrow{
   border-bottom-color: #141414;
@@ -2508,6 +2406,6 @@ fieldset[disabled].ivu-input {
   background:transparent!important;
 }
 .header_nav_mobile.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu){
-  color: #00c2a8;
+  color: #ff6b00;
 }
 </style>

@@ -158,7 +158,7 @@ button.ivu-btn.ivu-btn-primary{
 .uploadimgtip {
   position: relative;
   top: -20px;
-  color: #00c2a8;
+  color: #ff6b00;
 }
 .account-box.account-in.account-item.account-detail {
   padding: 30px 0;
@@ -458,7 +458,7 @@ button.ivu-btn.ivu-btn-primary{
   height: 45px;
   width: 45px;
   border-radius: 50%;
-  background-color: #00c2a8;
+  background-color: #ff6b00;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -554,7 +554,7 @@ button.ivu-btn.ivu-btn-primary{
 }
 
 .user-avatar-public >.user-avatar-in {
-  background: #00c2a8;
+  background: #ff6b00;
   border-radius: 50%;
   height: 42px;
   width: 42px;
@@ -569,21 +569,21 @@ button.ivu-btn.ivu-btn-primary{
 }
 /* router-link-exact-active router-link-active */
 .account-item-in i {
-  color: #00c2a8!important;
+  color: #ff6b00!important;
 }
 .btn {
-  color: #00c2a8;
+  color: #ff6b00;
 }
 .ivu-btn-primary {
-  background-color: #00c2a8;
-  border-color: #00c2a8;
+  background-color: #ff6b00;
+  border-color: #ff6b00;
 }
 </style>
 <style lang="scss">
 li.ivu-upload-list-file.ivu-upload-list-file-finish {
   &:hover {
     span {
-      color: #00c2a8;
+      color: #ff6b00;
     }
   }
 }
@@ -639,15 +639,15 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(0, 194, 168, 0.35);
+  border: 1px solid rgba(255, 107, 0, 0.35);
   border-radius: 6px;
-  background: rgba(0, 194, 168, 0.06);
+  background: rgba(255, 107, 0, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #00c2a8;
+  color: #ff6b00;
   font-weight: 600;
 }
 </style>

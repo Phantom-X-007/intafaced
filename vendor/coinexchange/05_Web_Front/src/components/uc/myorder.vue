@@ -81,7 +81,7 @@
 }
 
 .order_box.active {
-  border-bottom: 2px solid #00c2a8;
+  border-bottom: 2px solid #ff6b00;
 }
 
 .order_box.search {
@@ -106,7 +106,7 @@
             border: none;
             box-shadow: none;
             a {
-              color: #00c2a8;
+              color: #ff6b00;
             }
           }
         }
@@ -116,17 +116,17 @@
 .ivu-tabs-nav-container {
 .ivu-tabs-nav-scroll {
 .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
-              background-color: #00c2a8;
+              background-color: #ff6b00;
             }
 .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
-              color: #00c2a8;
+              color: #ff6b00;
               &:hover {
-                color: #00c2a8;
+                color: #ff6b00;
               }
             }
 .ivu-tabs-tab {
               &:hover {
-                color: #00c2a8;
+                color: #ff6b00;
               }
             }
           }
