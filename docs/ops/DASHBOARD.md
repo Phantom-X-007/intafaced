@@ -1,6 +1,6 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T14:33:30.817Z · tip `635d703a`
+Last report: 2026-08-03T14:43:41.097Z · tip `ed0421f7`
 
 | Report          | Path                                       |
 | --------------- | ------------------------------------------ |
@@ -13,7 +13,7 @@ Last report: 2026-08-03T14:33:30.817Z · tip `635d703a`
 
 - Free product claims: **0**
 - Blocked: **1**
-- Open PRs: **11**
+- Open PRs: **12**
 
 anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).
 
@@ -22,3 +22,8 @@ SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft 
 - Spawn accounting: available=0 · active_spawned=0 · gap=0 · width_target=6-8
 
 Commands: `pnpm swarm:freeze` · `pnpm swarm:status` · `pnpm swarm:report` · `pnpm swarm:next`
+
+## Peace checkpoint
+
+- [R07-PEACE.md](./R07-PEACE.md) — scoreboard not kill switch
+- [NIGHT-ENGINE-2026-08-03.md](./NIGHT-ENGINE-2026-08-03.md)
