@@ -1,80 +1,153 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState, useTransition } from 'react';
 import { Panel, StatBlock } from '@intafaced/ui';
-import { isEnabled, type Drop } from '@intafaced/config';
 import { Chip } from '@/components/chip';
-import { CRITICAL_FLAG_KEY } from '@/lib/flag-state';
-import { freezeLedger, reconcileLedger, unfreezeLedger, type CommandIntent, type ReconcileReport } from '@/lib/operator-commands';
+import type { AuthorityStatus } from '@/lib/console-status';
+import { fetchFreeze, postFreeze, type FreezeResult, type FreezeState } from '@/lib/ledger-freeze-browser';
+import { reconcileLedger, SIMULATED_NOTICE, type ReconcileReport, type SimulatedResult } from '@/lib/operator-commands';
 
 /**
- * LEDGER OPERATIONS — the `admin:treasury` surface of svc-ledger.
+ * LEDGER OPERATIONS — and the difference between a control and a picture of one.
  *
- * The three procedures already exist on `services/svc-ledger/src/router.ts`.
- * Nothing here calls them: svc-ledger is not deployed and the console carries no
- * service credential, so every button records an intent and returns a clearly
- * marked simulated result (`src/lib/operator-commands.ts` holds the stubs and
- * the note on what live wiring replaces).
+ * ── What this screen used to be ─────────────────────────────────────────────
  *
- * Friction is proportional to blast radius:
- *   reconcile — read-only on the book. One click.
- *   unfreeze  — resumes value movement. One acknowledgement.
- *   freeze    — stops the platform. A written reason, a typed confirmation
- *               phrase, and an explicit acknowledgement, all three.
+ * Every button called `src/lib/operator-commands.ts`, whose own header said "They
+ * do NOT call them." Pressing "Freeze ledger" set React state; the posting panel
+ * then read **HALTED**, in the danger colour, with a line in an audit-shaped
+ * log. An operator halting the money plane during an incident got a screen that
+ * was indistinguishable from success and a platform that was still settling.
+ *
+ * Meanwhile `src/app/api/ledger-freeze/route.ts` — a complete BFF onto svc-edge's
+ * `admin:treasury` freeze — had no callers at all.
+ *
+ * Freeze and unfreeze now go through that route. Reconcile does not, because
+ * svc-edge exposes no reconcile route to go through (see `operator-commands.ts`),
+ * and it is labelled at the control rather than in a doc.
+ *
+ * ── Three rules this file holds ─────────────────────────────────────────────
+ *
+ * 1. The posting state is only ever svc-ledger's answer. There is no local
+ *    `postingEnabled` any more. The old component seeded one from the
+ *    `ledger.posting` FLAG, which is a drop-clock default and not the book's
+ *    state — so a console with no credential rendered a confident "ACCEPTING"
+ *    for a ledger it had never spoken to.
+ * 2. A failure is never a success. `ok: false` renders UNKNOWN and the reason,
+ *    never "accepting" and never "halted".
+ * 3. A control that cannot act says so beside itself. Not disabled-and-silent;
+ *    disabled with the variable name that would make it live.
+ *
+ * The view is split from the container on purpose — `renderToStaticMarkup` runs
+ * no effects and dispatches no events, so the only way to assert on the markup
+ * an operator sees AFTER a command is to hand the view that state directly. The
+ * same argument, and the same shape, as `apps/web`'s `MarketPulseView`.
  */
 
 const CONFIRM_PHRASE = 'FREEZE LEDGER';
 const MIN_REASON_LENGTH = 12;
 
+// ── Container ───────────────────────────────────────────────────────────────
+
 export interface LedgerOpsProps {
-  drop: Drop;
-  flagEnv: Record<string, string>;
+  /** Whether this console holds `EDGE_URL` + `ADMIN_TREASURY_TOKEN`. */
+  treasury: AuthorityStatus;
+  /** Server-loaded first paint, so the screen never starts from a guess. */
+  initialFreeze: FreezeResult;
 }
 
-export function LedgerOps({ drop, flagEnv }: LedgerOpsProps) {
-  const postingFlag = useMemo(() => isEnabled(CRITICAL_FLAG_KEY, { drop, env: flagEnv }), [drop, flagEnv]);
-
-  const [postingEnabled, setPostingEnabled] = useState(postingFlag);
-  const [report, setReport] = useState<ReconcileReport | null>(null);
-  const [intents, setIntents] = useState<CommandIntent[]>([]);
+export function LedgerOps({ treasury, initialFreeze }: LedgerOpsProps) {
+  const [freeze, setFreeze] = useState<FreezeResult>(initialFreeze);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [reconcile, setReconcile] = useState<SimulatedResult<ReconcileReport> | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [acknowledged, setAcknowledged] = useState(false);
   const [resumeAcknowledged, setResumeAcknowledged] = useState(false);
 
-  const trimmedReason = reason.trim();
+  function apply(next: boolean, why?: string) {
+    startTransition(async () => {
+      const result = await postFreeze({ frozen: next, reason: why });
+      if (!result.ok) {
+        // The command failed. The displayed state is NOT advanced — it is
+        // re-read, so what the screen shows is what the money plane says and not
+        // what the operator asked for.
+        setActionError(result.detail ?? `ledger freeze refused (${result.status})`);
+        setFreeze(await fetchFreeze());
+        return;
+      }
+      setFreeze(result);
+      setActionError(null);
+      setReason('');
+      setConfirmation('');
+      setAcknowledged(false);
+      setResumeAcknowledged(false);
+    });
+  }
+
+  return (
+    <LedgerOpsView
+      treasury={treasury}
+      freeze={freeze}
+      pending={isPending}
+      actionError={actionError}
+      reconcile={reconcile}
+      reason={reason}
+      confirmation={confirmation}
+      acknowledged={acknowledged}
+      resumeAcknowledged={resumeAcknowledged}
+      onReason={setReason}
+      onConfirmation={setConfirmation}
+      onAcknowledge={setAcknowledged}
+      onResumeAcknowledge={setResumeAcknowledged}
+      onFreeze={() => apply(true, reason.trim())}
+      onUnfreeze={() => apply(false)}
+      onReconcile={() => setReconcile(reconcileLedger())}
+    />
+  );
+}
+
+// ── The view ────────────────────────────────────────────────────────────────
+
+export interface LedgerOpsViewProps {
+  treasury: AuthorityStatus;
+  freeze: FreezeResult;
+  pending: boolean;
+  actionError: string | null;
+  reconcile: SimulatedResult<ReconcileReport> | null;
+  reason: string;
+  confirmation: string;
+  acknowledged: boolean;
+  resumeAcknowledged: boolean;
+  onReason: (value: string) => void;
+  onConfirmation: (value: string) => void;
+  onAcknowledge: (value: boolean) => void;
+  onResumeAcknowledge: (value: boolean) => void;
+  onFreeze: () => void;
+  onUnfreeze: () => void;
+  onReconcile: () => void;
+}
+
+export function LedgerOpsView(props: LedgerOpsViewProps) {
+  const { treasury, freeze, pending, actionError, reconcile } = props;
+
+  // `state` is the ONLY gate on rendering a posting state, and it is non-null
+  // exactly when svc-ledger answered. Unconfigured and unreachable are both "we
+  // do not know", and they must look like it rather than like "accepting".
+  const state = freeze.ok ? freeze.state : null;
+  const known = state !== null;
+  const frozen = state !== null && state.frozen;
+  const blocked = treasury.configured ? null : `Disabled — ${treasury.missing.join(' and ')} not set on this console.`;
+
+  const trimmedReason = props.reason.trim();
   const reasonOk = trimmedReason.length >= MIN_REASON_LENGTH;
-  const phraseOk = confirmation === CONFIRM_PHRASE;
-  const canFreeze = postingEnabled && reasonOk && phraseOk && acknowledged;
-
-  function log(intent: CommandIntent) {
-    setIntents((prev) => [intent, ...prev].slice(0, 50));
-  }
-
-  function onFreeze() {
-    if (!canFreeze) return;
-    const result = freezeLedger({ reason: trimmedReason });
-    log(result.intent);
-    setPostingEnabled(result.simulated.postingEnabled);
-    setReason('');
-    setConfirmation('');
-    setAcknowledged(false);
-  }
-
-  function onUnfreeze() {
-    if (postingEnabled || !resumeAcknowledged) return;
-    const result = unfreezeLedger();
-    log(result.intent);
-    setPostingEnabled(result.simulated.postingEnabled);
-    setResumeAcknowledged(false);
-  }
-
-  function onReconcile() {
-    const result = reconcileLedger();
-    log(result.intent);
-    setReport(result.simulated);
-  }
+  const phraseOk = props.confirmation === CONFIRM_PHRASE;
+  // Every clause must hold. Note `known && !frozen`: a console that cannot read
+  // the freeze state cannot arm the freeze either, because "already halted" and
+  // "we have no idea" are not the same and only one of them is safe to act on.
+  const canFreeze = treasury.configured && known && !frozen && reasonOk && phraseOk && props.acknowledged && !pending;
+  const canUnfreeze = treasury.configured && known && frozen && props.resumeAcknowledged && !pending;
 
   return (
     <>
@@ -88,26 +161,14 @@ export function LedgerOps({ drop, flagEnv }: LedgerOpsProps) {
         </div>
       </div>
 
-      <div className="adm-banner">
-        <Chip tone="warn" dot>
-          Not wired
-        </Chip>
-        svc-ledger is not deployed. Every button below records the operator&rsquo;s intent locally and returns a simulated result. Live
-        wiring is a body-only change in <code>src/lib/operator-commands.ts</code>.
-      </div>
+      <PostingStatusPanel treasury={treasury} freeze={freeze} state={state} />
 
-      <Panel title="Posting status" className={postingEnabled ? undefined : 'adm-panel--danger'} live={postingEnabled}>
-        <div className="adm-statrow">
-          <StatBlock
-            label="Posting (simulated)"
-            value={postingEnabled ? 'ACCEPTING' : 'HALTED'}
-            deltaLabel={postingEnabled ? 'value moves' : 'all value movement stopped'}
-          />
-          <StatBlock label={`${CRITICAL_FLAG_KEY} flag`} value={postingFlag ? 'on' : 'off'} deltaLabel={`resolved at drop ${drop}`} />
-          <StatBlock label="Scope required" value="admin:treasury" />
-          <StatBlock label="Intents recorded" value={intents.length} deltaLabel="none delivered" />
+      {actionError && (
+        <div className="adm-callout" data-tone="danger">
+          <strong>Not applied — the platform did not change</strong>
+          {actionError} The state shown above was re-read from the money plane after the failure; it is not what you asked for.
         </div>
-      </Panel>
+      )}
 
       <div className="adm-split">
         <div className="adm-stack">
@@ -126,10 +187,10 @@ export function LedgerOps({ drop, flagEnv }: LedgerOpsProps) {
                 <textarea
                   id="freeze-reason"
                   className="adm-textarea"
-                  value={reason}
-                  disabled={!postingEnabled}
-                  placeholder="e.g. reconciliation mismatch on IFC — snapshot vs replay diverged at tx 41,220"
-                  onChange={(event) => setReason(event.target.value)}
+                  value={props.reason}
+                  disabled={!treasury.configured || !known || frozen || pending}
+                  placeholder="e.g. reconciliation mismatch on IFC — snapshot vs replay diverged at tx 41220"
+                  onChange={(event) => props.onReason(event.target.value)}
                 />
                 <span className="adm-footnote">
                   {reasonOk ? (
@@ -139,8 +200,8 @@ export function LedgerOps({ drop, flagEnv }: LedgerOpsProps) {
                       {trimmedReason.length} / {MIN_REASON_LENGTH} characters
                     </Chip>
                   )}{' '}
-                  svc-ledger requires a non-empty reason. This console requires one that will still make sense to whoever reads the incident
-                  record.
+                  svc-ledger requires a non-empty reason and the BFF route requires {MIN_REASON_LENGTH}. This console requires one that will
+                  still make sense to whoever reads the incident record.
                 </span>
               </div>
 
@@ -151,20 +212,20 @@ export function LedgerOps({ drop, flagEnv }: LedgerOpsProps) {
                 <input
                   id="freeze-confirm"
                   className="adm-input"
-                  value={confirmation}
-                  disabled={!postingEnabled}
+                  value={props.confirmation}
+                  disabled={!treasury.configured || !known || frozen || pending}
                   autoComplete="off"
                   spellCheck={false}
-                  onChange={(event) => setConfirmation(event.target.value)}
+                  onChange={(event) => props.onConfirmation(event.target.value)}
                 />
               </div>
 
               <label className="adm-check">
                 <input
                   type="checkbox"
-                  checked={acknowledged}
-                  disabled={!postingEnabled}
-                  onChange={(event) => setAcknowledged(event.target.checked)}
+                  checked={props.acknowledged}
+                  disabled={!treasury.configured || !known || frozen || pending}
+                  onChange={(event) => props.onAcknowledge(event.target.checked)}
                 />
                 <span>
                   I understand this halts all value movement platform-wide, immediately, and that resuming requires a separate deliberate
@@ -173,11 +234,19 @@ export function LedgerOps({ drop, flagEnv }: LedgerOpsProps) {
               </label>
 
               <div className="adm-inline">
-                <button type="button" className="adm-btn" data-tone="danger" disabled={!canFreeze} onClick={onFreeze}>
-                  Freeze ledger
+                <button type="button" className="adm-btn" data-tone="danger" disabled={!canFreeze} onClick={props.onFreeze}>
+                  {pending ? 'Sending…' : 'Freeze ledger'}
                 </button>
-                {!postingEnabled && <Chip tone="danger">Already halted</Chip>}
+                {known && frozen && <Chip tone="danger">Already halted</Chip>}
+                {!known && treasury.configured && <Chip tone="warn">Money-plane state unknown</Chip>}
               </div>
+              {blocked && <span className="adm-blocked">{blocked}</span>}
+              {!blocked && !known && (
+                <span className="adm-blocked">
+                  Disabled — this console could not read the ledger freeze state, so it will not send a command whose result it cannot
+                  confirm.
+                </span>
+              )}
             </div>
           </Panel>
 
@@ -191,83 +260,136 @@ export function LedgerOps({ drop, flagEnv }: LedgerOpsProps) {
               <label className="adm-check">
                 <input
                   type="checkbox"
-                  checked={resumeAcknowledged}
-                  disabled={postingEnabled}
-                  onChange={(event) => setResumeAcknowledged(event.target.checked)}
+                  checked={props.resumeAcknowledged}
+                  disabled={!treasury.configured || !known || !frozen || pending}
+                  onChange={(event) => props.onResumeAcknowledge(event.target.checked)}
                 />
                 <span>Reconciliation is clean and the cause of the freeze is resolved.</span>
               </label>
               <div className="adm-inline">
-                <button
-                  type="button"
-                  className="adm-btn"
-                  data-tone="primary"
-                  disabled={postingEnabled || !resumeAcknowledged}
-                  onClick={onUnfreeze}
-                >
-                  Unfreeze ledger
+                <button type="button" className="adm-btn" data-tone="primary" disabled={!canUnfreeze} onClick={props.onUnfreeze}>
+                  {pending ? 'Sending…' : 'Unfreeze ledger'}
                 </button>
-                {postingEnabled && <Chip tone="live">Already accepting</Chip>}
+                {known && !frozen && <Chip tone="live">Already accepting</Chip>}
               </div>
+              {blocked && <span className="adm-blocked">{blocked}</span>}
             </div>
           </Panel>
 
-          {/* ── RECONCILE ────────────────────────────────────────────────── */}
-          <Panel title="Reconcile — snapshot + replay">
+          {/* ── RECONCILE — the one that is still theatre, and says so ────── */}
+          <Panel
+            title="Reconcile — snapshot + replay"
+            className="adm-panel--warn"
+            actions={
+              <Chip tone="warn" dot>
+                Simulated
+              </Chip>
+            }
+          >
             <div className="adm-stack">
+              <div className="adm-callout" data-tone="warn">
+                <strong>This button does not reach the ledger</strong>
+                svc-ledger implements <code>ledger.reconcile</code> under <code>admin:treasury</code>, but svc-edge exposes no route to it —
+                only <code>/admin/kill-switches</code>, <code>/admin/status</code> and the two ledger freeze paths. Pressing this records
+                the request locally and returns zeroes. It is left visible rather than hidden so the gap is on the screen an operator uses,
+                and it is marked rather than dressed up.
+              </div>
               <p className="adm-desc">
-                Read-only on the ledger&rsquo;s side: replays the chain, recomputes balances and compares. A non-ok report is a freeze
-                decision, not a warning.
+                When the route exists this is read-only on the ledger&rsquo;s side: replays the chain, recomputes balances and compares. A
+                non-ok report is a freeze decision, not a warning.
               </p>
               <div className="adm-inline">
-                <button type="button" className="adm-btn" onClick={onReconcile}>
-                  Run reconcile
+                <button type="button" className="adm-btn" onClick={props.onReconcile}>
+                  Run reconcile (simulated)
                 </button>
               </div>
 
-              {report && (
+              {reconcile && (
                 <>
                   <div className="adm-inline">
-                    <Chip tone={report.ok ? 'live' : 'danger'} dot>
-                      {report.ok ? 'Balanced' : 'No result'}
+                    <Chip tone="warn" dot>
+                      Simulated — not the book
                     </Chip>
-                    <Chip tone="warn">Simulated</Chip>
+                    <Chip tone="dark">Nothing was asked</Chip>
                   </div>
                   <dl className="adm-kv">
                     <dt>Accounts checked</dt>
-                    <dd>{report.accountsChecked}</dd>
+                    <dd>{reconcile.simulated.accountsChecked}</dd>
                     <dt>Chain length</dt>
-                    <dd>{report.chainLength}</dd>
+                    <dd>{reconcile.simulated.chainLength}</dd>
                     <dt>Unbalanced assets</dt>
-                    <dd>{report.unbalancedAssets.length === 0 ? 'none' : report.unbalancedAssets.join(', ')}</dd>
+                    <dd>
+                      {reconcile.simulated.unbalancedAssets.length === 0 ? 'not checked' : reconcile.simulated.unbalancedAssets.join(', ')}
+                    </dd>
                   </dl>
-                  <p className="adm-footnote">
-                    Zeroes because nothing was asked. These fields are svc-ledger&rsquo;s real output shape and will carry real counts the
-                    moment the client is wired — the console deliberately shows no invented numbers on a money screen.
-                  </p>
+                  <p className="adm-footnote">{reconcile.simulatedNotice}</p>
                 </>
               )}
             </div>
           </Panel>
         </div>
 
-        {/* ── Intent log ─────────────────────────────────────────────────── */}
-        <Panel title="Operator intent log" className="adm-flush">
-          {intents.length === 0 ? (
-            <p className="adm-empty">No commands issued in this session.</p>
-          ) : (
-            <ul className="adm-log">
-              {intents.map((intent) => (
-                <li key={intent.id} data-kind={intent.kind}>
-                  <time dateTime={intent.at}>{intent.at.slice(11, 19)}</time>
-                  <span>{intent.kind}</span>
-                  <span>{intent.detail}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+        {/* ── Where the freeze actually went ─────────────────────────────── */}
+        <Panel title="Money-plane record">
+          <div className="adm-stack">
+            <p className="adm-footnote">
+              There is no local command log on this screen any more. The freeze is a durable row in svc-ledger with an <code>actor</code>{' '}
+              column written from svc-ledger&rsquo;s own token verification — the record below is that row, not this browser&rsquo;s memory
+              of what was clicked.
+            </p>
+            <dl className="adm-kv">
+              <dt>Frozen</dt>
+              <dd>{state ? (state.frozen ? 'yes' : 'no') : 'unknown'}</dd>
+              <dt>Reason</dt>
+              <dd>{state ? (state.reason ?? '—') : 'unknown'}</dd>
+              <dt>Actor</dt>
+              <dd>{state ? (state.actor ?? '—') : 'unknown'}</dd>
+              <dt>Changed at</dt>
+              <dd>{state ? (state.changedAt ?? '—') : 'unknown'}</dd>
+            </dl>
+            <p className="adm-footnote">Reconcile is the only control on this page that does not reach a service. {SIMULATED_NOTICE}</p>
+          </div>
         </Panel>
       </div>
     </>
+  );
+}
+
+// ── Posting status ──────────────────────────────────────────────────────────
+
+function PostingStatusPanel({ treasury, freeze, state }: { treasury: AuthorityStatus; freeze: FreezeResult; state: FreezeState | null }) {
+  const accepting = state !== null && !state.frozen;
+
+  return (
+    <Panel
+      title={state ? 'Posting status (svc-ledger)' : 'Posting status — UNKNOWN'}
+      className={accepting ? undefined : 'adm-panel--danger'}
+      live={accepting}
+    >
+      <div className="adm-stack">
+        {!state && (
+          <div className="adm-callout" data-tone="danger">
+            <strong>This console does not know whether the book is accepting writes</strong>
+            {freeze.detail ?? 'The ledger freeze state could not be read.'} It is reported as unknown rather than as
+            &ldquo;accepting&rdquo;, because a screen that shows a healthy money plane it has never spoken to is the failure this page was
+            rebuilt to remove.
+          </div>
+        )}
+        <div className="adm-statrow">
+          <StatBlock
+            label="Posting"
+            value={state ? (state.frozen ? 'HALTED' : 'ACCEPTING') : 'UNKNOWN'}
+            deltaLabel={state ? (state.frozen ? 'all value movement stopped' : 'value moves') : 'not read from svc-ledger'}
+          />
+          <StatBlock label="Source" value={state ? 'svc-ledger' : 'none'} deltaLabel="via /api/ledger-freeze to svc-edge" />
+          <StatBlock label="Scope required" value="admin:treasury" deltaLabel={treasury.tokenVar} />
+          <StatBlock
+            label="Credential"
+            value={treasury.configured ? 'configured' : 'MISSING'}
+            deltaLabel={treasury.configured ? 'this console can freeze' : treasury.missing.join(' + ')}
+          />
+        </div>
+      </div>
+    </Panel>
   );
 }

@@ -8,7 +8,11 @@ import { baseEnvSchema, loadEnv, type Drop } from '@intafaced/config';
  * the console reports is whatever `LAUNCH_DROP` says right now, read per request
  * (every page is `force-dynamic`), never baked in at build time.
  *
- * Nothing else in this app reads `process.env`.
+ * The only OTHER reader of `process.env` in this app is
+ * `src/lib/console-status.ts`, which answers a different question — not "what is
+ * this deployment" but "which platform switches can this console actually
+ * reach". Keeping the two apart matters: this one is display, that one decides
+ * whether a control is rendered live or disabled.
  */
 
 export interface OperatorEnv {
