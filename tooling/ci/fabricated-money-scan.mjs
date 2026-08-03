@@ -374,6 +374,26 @@ function isThirdParty(shellRelative) {
   return THIRD_PARTY.some((entry) => shellRelative === entry.path);
 }
 
+/**
+ * Golden tests are where an explicit precision BELONGS.
+ *
+ * `ix-money.golden.js` asserts that a value formats correctly at six places by
+ * passing `scale: 6` into the function under test. That is the fixture stating
+ * the precision the assertion is about — the opposite of production code
+ * defaulting one because a service did not publish it.
+ *
+ * A test file is also not a surface: nothing here is rendered, so no figure in
+ * it can reach a user. The rules below exist to catch money on a rendered
+ * surface, and flagging the tests that PROVE the money rules would train people
+ * to add fixtures to the baseline, which is how a ratchet stops meaning
+ * anything.
+ *
+ * This exempts the fixtures only. The module under test is scanned normally.
+ */
+function isGoldenTest(shellRelative) {
+  return shellRelative.endsWith('.golden.js') || shellRelative.endsWith('.test.js');
+}
+
 function scan(text, rules, key, reported, out) {
   for (const { name, pattern } of rules) {
     for (const match of text.matchAll(pattern)) {
@@ -410,7 +430,7 @@ let scanned = 0;
 for (const shell of shells) {
   for (const file of walk(shell)) {
     const key = relative(shell, file).split(sep).join('/');
-    if (isThirdParty(key)) continue;
+    if (isThirdParty(key) || isGoldenTest(key)) continue;
 
     // Reported at the full path (pasteable), keyed at the shell-relative one
     // (rename-proof, and sayable without naming the upstream).
