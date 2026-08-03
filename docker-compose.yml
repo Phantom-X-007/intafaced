@@ -136,6 +136,20 @@ services:
   # making every developer copy hex out of a terminal. Persisting the chain
   # would break that determinism for no benefit nobody asked for.
   #
+  # ── But every START is genesis, not every RUN ─────────────────────────────
+  #
+  # `restart: unless-stopped` means this container does not start — it runs for
+  # days. So the chain a laptop tests against accumulates every block every
+  # `pnpm verify` has ever produced, while CI's is minutes old. That difference
+  # is invisible until it is not: it timed out svc-pay's live rail suite (a
+  # rescan whose cost is the chain's whole history) and it makes `chain:deploy`
+  # land somewhere other than the addresses named in docker-compose.apps.yml.
+  #
+  # Run `docker compose restart evm` before `chain:deploy`. The TEST suites do
+  # not need it — they derive their own senders and deploy their own factories;
+  # see `services/svc-protocol/scripts/dev-chain.ts` and
+  # `docs/decisions/local-dev-chain.md`.
+  #
   # ── What it does NOT provide ──────────────────────────────────────────────
   #
   # No ERC-4337 EntryPoint (a public singleton we do not own, not in this repo)
