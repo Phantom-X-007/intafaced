@@ -13,15 +13,15 @@
 
 While AFK overnight, loop until human returns:
 
-| Lane | Action | Stop condition |
-| --- | --- | --- |
-| Product freeze | re-freeze; SPAWN_NOW only | none free or blocked-only |
-| Shell residual | invent scan / wire residual | claim + PR |
-| Class N Nitro | merge when CI green | none open green |
-| Partner PRs | babysit comment only | never implement |
-| P-WS | **report only** integrity | no depth UI |
-| TRK-* | research/spec packs under docs/ops/trk/ | not full implement swarms |
-| #425 | rebase/conflict resolve Class N | merged or blocked with reason |
+| Lane           | Action                                  | Stop condition                |
+| -------------- | --------------------------------------- | ----------------------------- |
+| Product freeze | re-freeze; SPAWN_NOW only               | none free or blocked-only     |
+| Shell residual | invent scan / wire residual             | claim + PR                    |
+| Class N Nitro  | merge when CI green                     | none open green               |
+| Partner PRs    | babysit comment only                    | never implement               |
+| P-WS           | **report only** integrity               | no depth UI                   |
+| TRK-*          | research/spec packs under docs/ops/trk/ | not full implement swarms     |
+| #425           | rebase/conflict resolve Class N         | merged or blocked with reason |
 
 Cadence: every ~15–30m re-freeze · PR matrix · merge green · spawn free · write R07.
 
