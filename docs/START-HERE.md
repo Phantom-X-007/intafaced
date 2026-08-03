@@ -67,6 +67,7 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Denon same-day product queue (build this):** [`REGROUP-2026-08-03.md`](REGROUP-2026-08-03.md) — shell money/landing/wire queue + WS integrity blocker.
 - **Insane parallel / swarms (agents):** [`SWARM-ALL-OUT-ORIENT-2026-08-03.md`](SWARM-ALL-OUT-ORIENT-2026-08-03.md) — discovery ritual, free matrix, anti-negatives, GO paste.
 - **Denon hard board (platform/money — not shell craft):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — what Nitro agents leave for Denon while AFK-swarming free shell.
+- **Shehzad blockchain / Protocol Plane board:** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) — on-chain/self-custody runway; not shell craft.
 - **Custody honesty:** some money screens may be **CustodyNotBuilt** until wallet-RPC security review — do not re-paint fake withdraw/recharge UI over that.
 - **Owners:** Nitro = FE/shell · Denon = spine / his open PRs (do not dual-edit) · Shehzad `@shehzad002` = M1–M7 (agents babysit only).
 - **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
