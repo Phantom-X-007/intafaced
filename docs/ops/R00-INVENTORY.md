@@ -1,12 +1,12 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T18:41:53.929Z
+Generated: 2026-08-03T18:50:01.615Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `7d2c4241`                                                        |
-| Tip subject                       | docs(ops): R07 cycle56 freeProduct=0 + tip fc0d18e3 (#599)        |
-| Open PRs                          | 11                                                                |
+| Tip                               | `018ba151`                                                        |
+| Tip subject                       | docs(ops): R01 cycle58 partner babysit tip 8c1ed106 (#602)        |
+| Open PRs                          | 12                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
 | Blocked                           | 1                                                                 |
