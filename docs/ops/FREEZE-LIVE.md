@@ -2,9 +2,9 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `f96ac6b4` — docs(ops): night engine keep-alive law (#474)
-- **Generated:** 2026-08-03T13:17:22.647Z
-- **Open PRs:** 17
+- **Tip:** `e71bb264` — docs(ops): TRK research packs — notifications, i18n, admin (#480)
+- **Generated:** 2026-08-03T13:33:06.926Z
+- **Open PRs:** 15
 - **Free claims:** 42 (product 0) · **Blocked:** 1
 - **Anti-under-spawn:** No free REGROUP/AFK claims (or only OPS).
 - **Proof mode:** NO-FLEET until Docker present — static build + scans; never fake UI done
@@ -66,8 +66,7 @@
 
 ## Open PR snapshot
 
-- #476 @ZenYoda3 · 9 files · MERGEABLE · docs(ops): night TRK research pack 1 — eight free tracker specs
-- #475 @ZenYoda3 · 1 files · MERGEABLE · docs(ops): P-WS integrity report (/ws→/stream + market-ID)
+- #481 @ZenYoda3 · 28 files · MERGEABLE · chore(swarm): harden P1–P6 merge gate, hints, claim authority, mandate
 - #448 @Phantom-X-007 · 7 files · CONFLICTING · feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code
 - #445 @Phantom-X-007 · 20 files · CONFLICTING · fix(test): five money suites could skip on CI and the build went green
 - #441 @Phantom-X-007 · 5 files · CONFLICTING · feat(ci): coverage-check — the gate §25 specified and nobody built
@@ -78,7 +77,6 @@
 - #430 @Phantom-X-007 · 1 files · MERGEABLE · docs(audit): 40 law-specified capabilities have no tracker row — and the gate that was meant to catch that was never built
 - #428 @Phantom-X-007 · 18 files · MERGEABLE · feat(p2p): payment instruments — a buyer finally has somewhere to send money
 - #427 @Phantom-X-007 · 11 files · MERGEABLE · fix(test): nonce too low was two suites sharing one account, not chain age
-- #425 @ZenYoda3 · 4 files · MERGEABLE · chore(ci): rescue shell-i18n-scan from stranded feat/app-i18n-keys
 - #424 @Phantom-X-007 · 6 files · MERGEABLE · fix(edge): no CORS headers at all — the edge was healthy and unreadable
 - #422 @Phantom-X-007 · 5 files · MERGEABLE · fix(scan): 27 balance writes no gate could see — including code no HTTP interceptor can reach
 - #420 @Phantom-X-007 · 2 files · MERGEABLE · docs+fix(tracker): correct the margin-call remedy, and lock the one bank row that was not
