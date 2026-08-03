@@ -16,6 +16,36 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Pack 6 — `docs/trk-research-pack-6` (tip freeze `3e075626`)
+
+Solid long-form specs (`TRK-*.md`) for the free TRK rows listed below. Short
+specs may already exist from packs 3/5/last6; this pack adds stage tables,
+doctrine, and first-PR sizing. Research only — no features.mjs.
+
+| Id                       | Title                                              | Short                                                    | Solid                                                            |
+| ------------------------ | -------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| `agents.scanner`         | Market Scanner — ranked signals by tier            | [agents.scanner.md](./agents.scanner.md)                 | [TRK-agents.scanner.md](./TRK-agents.scanner.md)                 |
+| `blueprint.attestations` | On-chain rank attestations, zero PII (§19)         | [blueprint.attestations.md](./blueprint.attestations.md) | [TRK-blueprint.attestations.md](./TRK-blueprint.attestations.md) |
+| `blueprint.ownership`    | Export + hard delete, cascading                    | [blueprint.ownership.md](./blueprint.ownership.md)       | [TRK-blueprint.ownership.md](./TRK-blueprint.ownership.md)       |
+| `bridge.canonical`       | Canonical IFC bridge + attestations                | [bridge.canonical.md](./bridge.canonical.md)             | [TRK-bridge.canonical.md](./TRK-bridge.canonical.md)             |
+| `indexer.readmodels`     | Chain → Postgres read models                       | [indexer.readmodels.md](./indexer.readmodels.md)         | [TRK-indexer.readmodels.md](./TRK-indexer.readmodels.md)         |
+| `launch.meme-factory`    | One-click meme launch + instant market + LP        | [launch.meme-factory.md](./launch.meme-factory.md)       | [TRK-launch.meme-factory.md](./TRK-launch.meme-factory.md)       |
+| `launch.nft`             | NFT mint / list / auction, on-chain royalties      | [launch.nft.md](./launch.nft.md)                         | [TRK-launch.nft.md](./TRK-launch.nft.md)                         |
+| `mining.pool`            | Stratum share protocol, PPLNS payouts              | [mining.pool.md](./mining.pool.md)                       | [TRK-mining.pool.md](./TRK-mining.pool.md)                       |
+| `market.vendors`         | Vendor lifecycle — apply, vet, list, stake slots   | [market.vendors.md](./market.vendors.md)                 | [TRK-market.vendors.md](./TRK-market.vendors.md)                 |
+| `ops.affiliates`         | Multi-tier affiliate / IB trees, payout automation | [ops.affiliates.md](./ops.affiliates.md)                 | [TRK-ops.affiliates.md](./TRK-ops.affiliates.md)                 |
+| `ops.analytics`          | Warehouse — read replica + cube layer              | [ops.analytics.md](./ops.analytics.md)                   | [TRK-ops.analytics.md](./TRK-ops.analytics.md)                   |
+| `ops.compliance`         | Screening queues, geo-block, VPN/Tor detection     | [ops.compliance.md](./ops.compliance.md)                 | [TRK-ops.compliance.md](./TRK-ops.compliance.md)                 |
+| `p2p.merchants`          | P2P merchant programme — badges, limits, API       | [p2p.merchants.md](./p2p.merchants.md)                   | [TRK-p2p.merchants.md](./TRK-p2p.merchants.md)                   |
+| `trade.forex`            | Fiat pairs on the same engine                      | [trade.forex.md](./trade.forex.md)                       | [TRK-trade.forex.md](./TRK-trade.forex.md)                       |
+| `trade.options`          | European options, cash-settled, full collateral    | [trade.options.md](./trade.options.md)                   | [TRK-trade.options.md](./TRK-trade.options.md)                   |
+
+**Honesty:** blueprint.ownership cascade shipped (#229); indexer residual =
+socket.clob-contracts; trade.options blocked on Shehzad futures M3;
+bridge/meme = design/Shehzad; ops.compliance list content Class X.
+
+---
+
 ## Pack 5 — `docs/trk-research-pack-5` (chain / launch / market)
 
 **Chain / launch / market** rows. Research only — several sit on Shehzad protocol
@@ -51,7 +81,7 @@ Still research only. Not Shehzad M1–M7. No refund ledger invention under this 
 
 ---
 
-## Pack 3 — `docs/trk-research-pack-3` (tip freeze `b3d08931`)
+## Pack 3 — `docs/trk-research-pack-3` (tip freeze `3e075626`)
 
 Next free tracker rows **not** covered by pack 1/2 short specs. Research only —
 no implement swarm.
@@ -109,7 +139,7 @@ prize/pay → ledger recipes + product law (Class M when implemented).
 
 ---
 
-## Pack 2 — `docs/trk-research-pack-2` (tip freeze `c773dafa`)
+## Pack 2 — `docs/trk-research-pack-2` (tip freeze `3e075626`)
 
 Re-verify + **blueprint.card** add. Same free rows as pack 1 where still
 `ready` / unowned, plus Blueprint share-card residual. Prefer these files over

@@ -42,3 +42,5 @@ Not Shehzad. Not Class X content. **Almost residual-thin.**
 sets pointer → erase → identity clears when ids match; redelivered delete does
 not wipe newer blueprint. Then mountain event to `done` if DoD holds. Avoid
 rebuilding erase. Do not edit features.mjs from research-only packs.
+
+**Solid spec:** [TRK-blueprint.ownership.md](./TRK-blueprint.ownership.md)

@@ -40,3 +40,5 @@ Not money invention if tools are read-only. Do not auto-trade from Scanner.
 `book.snapshot` read-only), `scanner.rank` completion path with fixtures,
 tests that (1) refuse when book null, (2) never call place-order tools,
 (3) meter via existing `feeCharge`. UI later. No new ledger recipes.
+
+**Solid spec:** [TRK-agents.scanner.md](./TRK-agents.scanner.md)

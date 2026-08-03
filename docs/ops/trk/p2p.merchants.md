@@ -37,3 +37,5 @@ Doctrine §6.2 fifth table named; migration deliberately deferred to this mounta
 profile; limits applied at trade create; tests for ineligible apply and for
 limit ceiling. API keys / merchant API = second PR. No pay-rail merchant
 conflation.
+
+**Solid spec:** [TRK-p2p.merchants.md](./TRK-p2p.merchants.md)
