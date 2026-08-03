@@ -475,7 +475,10 @@ module.exports = {
         ExchangeNum: 'Amount',
         Change: 'Change',
         OpenPrice: 'Open Price',
-        PriceTrend: 'Price Trend',
+        /* PriceTrend removed with the sparkline column it labelled. The column
+           read a `trend` field no service on this platform produces, and fell
+           back to twenty-five zeros drawn as a flat green line. Nothing is
+           left to label until candles are real. */
         Operate: 'Operate',
         Exchange: 'Exchange',
         trading: "Exchange",
