@@ -448,12 +448,19 @@ export default {
       var p = (this.$route && this.$route.path) || "";
       return p === "/dex" || p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0;
     },
-    /** Desk / protocol paths — no marketing footer, no page-content footer pad. */
+    /**
+     * Full-viewport trading / protocol desks — no marketing footer, no
+     * page-content footer pad. Marketing and account pages keep the footer.
+     * Audit 2026-08-03 (AFK-FOOTER): added C2C + OTC desks; left /uc/* hub,
+     * /platform hub, CMS and auth with footer (not terminal density surfaces).
+     */
     isTerminalRoute() {
       var p = (this.$route && this.$route.path) || "";
       if (p === "/exchange" || p.indexOf("/exchange/") === 0) return true;
       if (p === "/dex" || p.indexOf("/dex/") === 0) return true;
       if (p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0) return true;
+      if (p === "/ctc" || p.indexOf("/ctc/") === 0) return true;
+      if (p === "/otc" || p.indexOf("/otc/") === 0) return true;
       return false;
     },
     showMarketingFooter() {
