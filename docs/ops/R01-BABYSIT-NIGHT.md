@@ -241,3 +241,9 @@ Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4.** Comments: 
 ```
 origin/main @ 87e999d8  (at doc write; partners re-fetch before rebase)
 ```
+
+---
+
+## Refresh cycle35 — 2026-08-03T16:50Z · tip `54795ac8`
+
+Unchanged: Denon ready **#445 #433 #420** (+#430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs.
