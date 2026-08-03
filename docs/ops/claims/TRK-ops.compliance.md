@@ -1,7 +1,7 @@
-# Claim TRK-launch.launchpad
+# Claim TRK-ops.compliance
 
 **status:** residual-own
-**proof:** docs/ops/trk/launch.launchpad.md on tip · research/spec complete · not implement
+**proof:** docs/ops/trk/ops.compliance.md on tip · research/spec complete · not implement
 **tip:** 04f9b1f2
 **updated:** 2026-08-03
 
