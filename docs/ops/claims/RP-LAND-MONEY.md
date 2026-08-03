@@ -6,6 +6,7 @@
 **title:** Open/finish PR from origin/fix/shell-money-on-the-wire
 **track:** LANDER
 **paths:**
+
 - vendor/coinexchange/05_Web_Front/src/assets/js/ix-money.js
 - vendor/coinexchange/05_Web_Front/src/assets/js/book-honesty.js
 

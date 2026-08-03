@@ -6,6 +6,7 @@
 **title:** Open/finish PR from origin/fix/shell-landing-honesty
 **track:** LANDER
 **paths:**
+
 - vendor/coinexchange/05_Web_Front/src/assets/lang/en.js
 
 ## Done bar
