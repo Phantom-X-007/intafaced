@@ -316,7 +316,7 @@ export const SOCKETS = {
             'A service that owns broadcast posts — authorship, publish window, locale and ordering — with a public list procedure behind the edge and a route for it.',
             'A tracker row, before any of that. Nothing in tooling/tracker/features.mjs plans announcements today. The strip is socketed rather than deleted because it promises no money and no entitlement, so the delete rule above does not reach it; it is furniture the shell owns, not a payout nobody can fund.',
             'Until the service exists the strip states this absence and raises nothing. A client must not report a failure the platform never reported — the toast was an assertion about the running system, made from a parse that could not have succeeded.',
-            'Index.vue residual (RP2 sole owner of that file): stop loadDataPage\'s /uc/announcement fetch and the empty $Notice.error toast; render <IxNoSurface socket-key="cms.announcements" :inline="true" /> in the strip instead.'
+            'Index.vue strip uses IxNoSurface cms.announcements inline — no /uc/announcement fetch or empty toast.'
         ]
     }
 };
