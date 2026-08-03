@@ -95,3 +95,9 @@ Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merg
 ## Refresh cycle21 — 2026-08-03T15:20Z · tip `fa3b69a1`
 
 Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs. P-WS still blocked by #433/#432.
+
+---
+
+## Refresh cycle22 — 2026-08-03T15:23Z · tip `4881de21`
+
+Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs. P-WS still blocked by #433/#432.
