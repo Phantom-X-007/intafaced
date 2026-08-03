@@ -28,3 +28,5 @@ emissions recipes only. No pool-held user balances outside ledger.
 
 **L greenfield:** separate service likely; first PR share accounting + ledger
 payout recipe design doc. Not a night implement swarm.
+
+**Solid spec:** [TRK-mining.pool.md](./TRK-mining.pool.md)

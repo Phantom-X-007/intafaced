@@ -28,3 +28,5 @@ are Class M; agents do not invent payoff formulas without Denon product law.
 
 **Research + law only** until futures done. First code PR after law: contract
 specs + refuse path for unsupported Greeks invent.
+
+**Solid spec:** [TRK-trade.options.md](./TRK-trade.options.md)

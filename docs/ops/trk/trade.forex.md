@@ -29,3 +29,5 @@ pay rails for fiat settlement. Money decimal-safe; no dual book.
 
 **Defer** until pay.rails + matching free. Spec-only: pair catalog + settlement
 recipe outline.
+
+**Solid spec:** [TRK-trade.forex.md](./TRK-trade.forex.md)

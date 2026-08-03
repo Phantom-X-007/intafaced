@@ -32,3 +32,5 @@ closed when config/lists missing.
 **S — after Denon config PRs land:** operator queue **schema** + empty queue
 API that reads identity KYC states only. List ingestion is Class X / human.
 No VPN vendor name in user copy.
+
+**Solid spec:** [TRK-ops.compliance.md](./TRK-ops.compliance.md)

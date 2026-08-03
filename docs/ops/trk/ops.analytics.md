@@ -44,3 +44,5 @@ consumers (or CDC contract) in `packages/contracts` / events; thin
 append-only fact tables and exposes one permissioned aggregate. No UI cube.
 No primary-DB joins across service schemas. Proof: hermetic tests that refuse
 write paths and money types as `number`.
+
+**Solid spec:** [TRK-ops.analytics.md](./TRK-ops.analytics.md)

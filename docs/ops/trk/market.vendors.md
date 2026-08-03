@@ -26,3 +26,5 @@ does **not** implement chain/launch money without Denon direction + Class gates.
 ## First PR size (if free)
 
 **Research → law → contracts.** First code only after depends green and LIVE-LANES claim. Prefer protocol/task board over shell invent.
+
+**Solid spec:** [TRK-market.vendors.md](./TRK-market.vendors.md)
