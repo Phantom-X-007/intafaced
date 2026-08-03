@@ -1,12 +1,12 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T14:05:41.123Z
+Generated: 2026-08-03T14:07:35.053Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `94cc463d`                                                        |
-| Tip subject                       | docs(ops): R01 partner babysit refresh @ e91fb244 (#502)          |
-| Open PRs                          | 11                                                                |
+| Tip                               | `7b14d99f`                                                        |
+| Tip subject                       | docs(ops): R07 Coord-OPS cycles 1–6 final board (#503)            |
+| Open PRs                          | 12                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
 | Blocked                           | 1                                                                 |

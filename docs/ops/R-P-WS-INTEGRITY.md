@@ -2,15 +2,27 @@
 
 | Field                | Value                                                                                                                                                                                                                                          |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Claim**            | `P-WS-REPORT` (integrity report only)                                                                                                                                                                                                          |
+| **Claim**            | `P-WS-REPORT` (integrity report only) — **STILL BLOCKED** (no implement craft)                                                                                                                                                                 |
 | **Class**            | N (docs)                                                                                                                                                                                                                                       |
 | **Proof mode**       | **NO-FLEET** — `docker` not available on this host; live counts not re-probed this session                                                                                                                                                     |
-| **Tip when written** | `c773dafa` `docs(ops): R07 night-engine cycle2 — session merge board (#482)` (`origin/main` @ write)                                                                                                                                           |
-| **Upgrade**          | Code citations + tip SHA re-derived 2026-08-03 night AFK; prior merge #475 / dated sibling #478                                                                                                                                                |
+| **Tip when written** | `7b14d99f` `docs(ops): R07 Coord-OPS cycles 1–6 final board (#503)` (`origin/main` @ AFK re-check)                                                                                                                                             |
+| **Upgrade**          | AFK re-check after Denon **#424** (edge CORS, merged 14:02Z) + **#422** (custody/vendor scan, merged 14:01Z) **landed**. Freeze still **blocks** claim on open **#433** matching + **#432** edge. Prior: #475 / #478 / #485. **No depth UI.**  |
 | **Sources**          | Code on tip + prior live probe in [`docs/REGROUP-2026-08-03.md`](../REGROUP-2026-08-03.md) §3 + Denon board [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) **D-P0-WS** |
-| **Dual-edit**        | **None.** This PR is `docs/ops/` only. Did **not** edit `services/svc-matching` or `services/svc-edge` (open Denon paths: #433 matching, #432/#424 edge).                                                                                      |
+| **Dual-edit**        | **None.** This residual is `docs/ops/` only. Did **not** edit matching/edge/ws/nginx. Collisions (do not dual-edit): **#433** `services/svc-matching/**`, **#432** `services/svc-edge/src/env.ts` + `index.ts`.                                |
+| **Landed (cleared)** | **#424** MERGED — edge CORS (`services/svc-edge` cors/* + index) no longer open collision. **#422** MERGED — scan/custody (no P-WS path intersect; noted for tip context).                                                                     |
+| **Still blocking**   | **#433** @Phantom-X-007 matching reconcile (MERGEABLE) · **#432** @Phantom-X-007 screening/edge env (CONFLICTING). Re-freeze after either merges before claiming craft.                                                                        |
 
 **Purpose:** freeze the platform-integrity facts so depth/tape work is not started against a path that cannot work. **Does not** implement nginx, market authority, depth UI, or invent markets.
+
+### AFK status (2026-08-03 post-#424/#422)
+
+| Metric      | Value                                                                  |
+| ----------- | ---------------------------------------------------------------------- |
+| freeProduct | **0**                                                                  |
+| freeTracker | **0** (shell mandate; TRK research is not product spawn)               |
+| P-WS-REPORT | **BLOCKED** — path intersect open Denon PRs only                       |
+| Free OPS    | BABYSIT-MATRIX · REPORTS                                               |
+| Depth UI    | **NOT free** — still not a residual until D-P0-WS path + market-id law |
 
 ---
 
@@ -131,7 +143,7 @@ nginx half is short; it is not the whole blocker (see §2).
 
 ## 2 · Market-ID namespace — edge vs matching vs ws
 
-### Data-plane ownership (from code on tip `c773dafa`)
+### Data-plane ownership (from code on tip `7b14d99f`; citations re-checked NO-FLEET)
 
 | Plane                     | Source of market identity                                                                                  | Shape on the wire                                                                      | Citation                                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -287,7 +299,7 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 - No depth/tape **UI** polish in the same change unless path + namespace already green.
 - No inventing mid/prices/candles to make books look full.
-- No dual-edit of open money PR paths without path-intersect (`#433` matching reconcile, `#432` screening, `#424` edge CORS — different concerns; do not hitch-hike).
+- No dual-edit of open money PR paths without path-intersect (`#433` matching reconcile, `#432` screening/edge env — different concerns; do not hitch-hike). `#424` CORS **landed** — no longer a dual-edit risk.
 
 ### Suggested acceptance checklist (Denon self-audit)
 
@@ -300,14 +312,14 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 ## 4 · Explicitly NOT free
 
-| Item                                                       | Why blocked / reserved                                                                                                                                |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Depth UI / live book port into shell**                   | Blocked on D-P0-WS (§1 + §2). REGROUP §3 + swarm orient: depth/tape **not** free product residual.                                                    |
-| **Tape / public trades channel UI**                        | Same `/stream` path + same market key.                                                                                                                |
-| **Inventing markets, mids, or seed depth for screenshots** | Honesty law; fabricated-money ratchet; NO-FLEET does not authorize fake books.                                                                        |
-| **Implementing inside open Denon PRs**                     | `#433` `services/svc-matching/**` · `#432` edge env/index + screening · `#424` edge CORS — babysit / report only unless Denon handoff says otherwise. |
-| **Treating nginx-only fix as “depth done”**                | Path fix alone leaves ∩ = 0 (or unknown market closes).                                                                                               |
-| **apps/web as product surface**                            | Retired; port targets vendor shell. Depth state machine in apps/web is reference, not the live desk.                                                  |
+| Item                                                       | Why blocked / reserved                                                                                                                    |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Depth UI / live book port into shell**                   | Blocked on D-P0-WS (§1 + §2). REGROUP §3 + swarm orient: depth/tape **not** free product residual.                                        |
+| **Tape / public trades channel UI**                        | Same `/stream` path + same market key.                                                                                                    |
+| **Inventing markets, mids, or seed depth for screenshots** | Honesty law; fabricated-money ratchet; NO-FLEET does not authorize fake books.                                                            |
+| **Implementing inside open Denon PRs**                     | `#433` `services/svc-matching/**` · `#432` edge env/index + screening — babysit / residual report only. `#424` CORS **merged** (cleared). |
+| **Treating nginx-only fix as “depth done”**                | Path fix alone leaves ∩ = 0 (or unknown market closes).                                                                                   |
+| **apps/web as product surface**                            | Retired; port targets vendor shell. Depth state machine in apps/web is reference, not the live desk.                                      |
 
 **Free for Nitro residual (unchanged by this report):** shell money call sites (RP1), landing honesty (RP2), announce (RP3), wire adopt (RP4), AFK residuals — **not** depth.
 
@@ -330,14 +342,16 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 ## 6 · This report’s verification
 
-| Check                               | Result                          |
-| ----------------------------------- | ------------------------------- |
-| Tip SHA stamped                     | `c773dafa`                      |
-| nginx `/ws` + SPA `/` read from tip | Yes (L55–57, L76–83)            |
-| svc-ws `/stream` only               | Yes (`STREAM_PATH`, upgrade)    |
-| trade UUID → matching               | Yes (code L367, L580)           |
-| Live 16/10/∩0 re-probe              | **No** — NO-FLEET; cite REGROUP |
-| Code changes to matching/edge       | **None** (avoid dual-edit)      |
-| Depth UI                            | **Not started** (not free)      |
+| Check                               | Result                                                        |
+| ----------------------------------- | ------------------------------------------------------------- |
+| Tip SHA stamped                     | `7b14d99f`                                                    |
+| Denon #424 / #422                   | **MERGED** (no longer open collisions for this claim)         |
+| Freeze collisions remaining         | **#433** matching · **#432** edge env/index                   |
+| nginx `/ws` + SPA `/` read from tip | Yes (L55–57, L76–83)                                          |
+| svc-ws `/stream` only               | Yes (`STREAM_PATH`, upgrade)                                  |
+| trade UUID → matching               | Yes (code L367, L580)                                         |
+| Live 16/10/∩0 re-probe              | **No** — NO-FLEET; cite REGROUP                               |
+| Code changes to matching/edge/ws    | **None** (avoid dual-edit; claim blocked)                     |
+| Depth UI                            | **Not started** (not free; D-P0-WS handoff §3 still the gate) |
 
-**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts above are code-backed on tip `c773dafa`.
+**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts above are code-backed on tip `7b14d99f`. Claim **P-WS-REPORT** remains **blocked** until #433/#432 clear or drop path intersect — then residual may re-open as report-only refresh, still **no depth UI**.
