@@ -56,17 +56,28 @@ const isRequired = (chain) => !/\.optional\s*\(/.test(chain) && !/\.default\s*\(
  * Pull `KEY: z.string()…` declarations out of a chunk of TypeScript, keeping
  * only the secret-shaped, required ones.
  *
- * A regex rather than a TS parse, and the trade is stated: it can only be
- * fooled by a declaration written across lines in a way nothing in this repo
- * does. The failure mode is a MISSED requirement, never a false alarm — and a
- * missed one is exactly what we have today, so the check is still strictly
- * ahead.
+ * A regex rather than a TS parse, and the trade is stated: the failure mode is a
+ * MISSED requirement, never a false alarm.
+ *
+ * `joinChains` exists because the first draft DID miss one. Prettier wraps long
+ * zod chains onto their own lines:
+ *
+ *     PAY_CRYPTO_HOT_WALLET_KEY: z
+ *       .string()
+ *       .regex(…)
+ *       .optional(),
+ *
+ * and a line-bounded regex sees `z` and stops, so the `.optional()` — or worse,
+ * its absence — is invisible. Re-joining continuation lines first costs one
+ * replace and removes the whole class.
  */
+const joinChains = (source) => source.replace(/\n\s*\./g, '.');
+
 function requiredSecretsIn(source) {
   const found = new Set();
   const re = /([A-Z][A-Z0-9_]*)\s*:\s*(z\.[^,\n]*)/g;
   let m;
-  while ((m = re.exec(source)) !== null) {
+  while ((m = re.exec(joinChains(source))) !== null) {
     const [, key, chain] = m;
     if (!SECRET_VAR.test(key)) continue;
     if (!isRequired(chain)) continue;
@@ -99,7 +110,7 @@ const serviceEnvFiles = execFileSync('git', ['ls-files', 'services/*/src/env.ts'
 const required = new Map();
 for (const rel of serviceEnvFiles) {
   const name = rel.split('/')[1];
-  const src = readFileSync(join(ROOT, rel), 'utf8');
+  const src = joinChains(readFileSync(join(ROOT, rel), 'utf8'));
   const need = new Set();
 
   // Slices this service merges, including ones passed to a bare compose call.

@@ -51,7 +51,7 @@
  * was visible to any gate.
  *
  * Source is scanned, but NOT with the config rules — running the key/value
- * check over 1,854 source files is the "cries wolf" failure this file's own
+ * check over ~1,800 source files is the "cries wolf" failure this file's own
  * comments warn about. Source gets three narrow checks instead:
  *
  *   1. `inline-url-credential` — a `scheme://user:pass@host` literal. Runs on
@@ -539,7 +539,8 @@ for (const rel of tracked()) {
           line: lineNo,
           key,
           reason: `\`${key}\` is assigned a literal value, and ${conv.reason}`,
-          detail: 'Move it to the environment with NO default — `${VAR}` — so the service refuses to start rather than signing with a published seed.',
+          detail:
+            'Move it to the environment with NO default — `${VAR}` — so the service refuses to start rather than signing with a published seed.',
         });
       }
 

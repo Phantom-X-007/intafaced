@@ -345,7 +345,9 @@ const verbose = failed || retiredGaps.length > 0 || process.argv.includes('--ver
 if (verbose) {
   console.log('\n  secret-scan mutation test\n');
   console.log(`  detection       ${killed}/${shouldCatch.length} planted defects caught   (${pct(killed, shouldCatch.length)}%)`);
-  console.log(`  false positives ${falsePositives.length}/${shouldPass.length} correct files rejected   (${pct(clean, shouldPass.length)}% clean)`);
+  console.log(
+    `  false positives ${falsePositives.length}/${shouldPass.length} correct files rejected   (${pct(clean, shouldPass.length)}% clean)`,
+  );
   console.log(`  documented gaps ${knownGaps.length} excluded from the score\n`);
 
   for (const g of knownGaps) {
