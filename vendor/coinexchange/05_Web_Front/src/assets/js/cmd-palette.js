@@ -32,7 +32,8 @@ function filterCmdItems(items, query) {
 }
 
 /**
- * Static navigation catalog (routes only — no invented balances/prices).
+ * Static navigation catalog — paths must exist in config/routes.js.
+ * No invented destinations, balances, or market rows.
  * @returns {CmdItem[]}
  */
 function defaultCmdCatalog() {
@@ -52,14 +53,49 @@ function defaultCmdCatalog() {
       group: 'Trade',
       keywords: 'protocol non-custodial'
     },
+    { id: 'nav-ctc', label: 'C2C Exchange', path: '/ctc', group: 'Trade', keywords: 'otc c2c' },
+    {
+      id: 'nav-otc',
+      label: 'OTC desk',
+      path: '/otc/trade/usdt',
+      group: 'Trade',
+      keywords: 'otc fiat peer'
+    },
     { id: 'nav-login', label: 'Log in', path: '/login', group: 'Account', keywords: 'sign auth' },
-    { id: 'nav-register', label: 'Sign up', path: '/register', group: 'Account', keywords: 'register' },
+    {
+      id: 'nav-register',
+      label: 'Sign up',
+      path: '/register',
+      group: 'Account',
+      keywords: 'register'
+    },
+    {
+      id: 'nav-findpwd',
+      label: 'Reset password',
+      path: '/findPwd',
+      group: 'Account',
+      keywords: 'forgot password recover'
+    },
     {
       id: 'nav-money',
       label: 'Money / balances',
       path: '/uc/money',
       group: 'Account',
       keywords: 'wallet balance dual-book'
+    },
+    {
+      id: 'nav-record',
+      label: 'Trade fills / bill detail',
+      path: '/uc/record',
+      group: 'Account',
+      keywords: 'history fills ledger'
+    },
+    {
+      id: 'nav-recharge',
+      label: 'Deposit',
+      path: '/uc/recharge',
+      group: 'Account',
+      keywords: 'deposit fund custody'
     },
     {
       id: 'nav-withdraw',
@@ -90,24 +126,105 @@ function defaultCmdCatalog() {
       keywords: 'orders history'
     },
     {
+      id: 'nav-entrust-current',
+      label: 'Open orders',
+      path: '/uc/entrust/current',
+      group: 'Account',
+      keywords: 'open orders working'
+    },
+    {
+      id: 'nav-entrust-history',
+      label: 'Order history',
+      path: '/uc/entrust/history',
+      group: 'Account',
+      keywords: 'filled cancelled history'
+    },
+    {
+      id: 'nav-ident',
+      label: 'Verification (KYC)',
+      path: '/identbusiness',
+      group: 'Account',
+      keywords: 'kyc identity verify merchant'
+    },
+    {
       id: 'nav-platform',
       label: 'Platform hub',
       path: '/platform',
       group: 'Platform',
       keywords: 'intafaced modules'
     },
-    { id: 'nav-bank', label: 'Bank', path: '/bank', group: 'Platform', keywords: 'earn' },
+    { id: 'nav-bank', label: 'Bank', path: '/bank', group: 'Platform', keywords: 'earn spaces loans' },
     { id: 'nav-pay', label: 'Pay', path: '/pay', group: 'Platform', keywords: 'payments' },
     { id: 'nav-p2p', label: 'P2P', path: '/p2p', group: 'Platform', keywords: 'peer' },
+    { id: 'nav-token', label: 'Token', path: '/token', group: 'Platform', keywords: 'ifc supply' },
+    { id: 'nav-agents', label: 'Agents', path: '/agents', group: 'Platform', keywords: 'ai agent' },
+    {
+      id: 'nav-blueprint',
+      label: 'Blueprint',
+      path: '/blueprint',
+      group: 'Platform',
+      keywords: 'template design'
+    },
     { id: 'nav-protocol', label: 'Protocol', path: '/protocol', group: 'Platform', keywords: 'defi' },
-    { id: 'nav-ctc', label: 'C2C Exchange', path: '/ctc', group: 'Trade', keywords: 'otc c2c' },
+    { id: 'nav-chain', label: 'Chain', path: '/chain', group: 'Platform', keywords: 'indexer network' },
+    {
+      id: 'nav-academy',
+      label: 'Academy',
+      path: '/academy',
+      group: 'Platform',
+      keywords: 'learn education'
+    },
+    {
+      id: 'nav-launch',
+      label: 'Launch',
+      path: '/launch',
+      group: 'Platform',
+      keywords: 'launchpad factory'
+    },
+    { id: 'nav-invite', label: 'Invite', path: '/invite', group: 'Navigate', keywords: 'referral share' },
+    { id: 'nav-lab', label: 'Lab', path: '/lab', group: 'Navigate', keywords: 'activity lab' },
+    {
+      id: 'nav-partner',
+      label: 'Partner',
+      path: '/partner',
+      group: 'Navigate',
+      keywords: 'partner programme'
+    },
+    {
+      id: 'nav-about',
+      label: 'About us',
+      path: '/about-us',
+      group: 'Help',
+      keywords: 'company about'
+    },
     { id: 'nav-help', label: 'Help', path: '/help', group: 'Help', keywords: 'faq support' },
+    {
+      id: 'nav-helplist',
+      label: 'Help list',
+      path: '/helplist',
+      group: 'Help',
+      keywords: 'articles categories'
+    },
     {
       id: 'nav-announce',
       label: 'Announcements',
       path: '/announcement/0',
       group: 'Help',
       keywords: 'notice news'
+    },
+    {
+      id: 'nav-notice',
+      label: 'Notice board',
+      path: '/notice',
+      group: 'Help',
+      keywords: 'cms notice list'
+    },
+    {
+      id: 'nav-app',
+      label: 'App download',
+      path: '/app',
+      group: 'Navigate',
+      keywords: 'mobile apk store'
     }
   ];
 }
