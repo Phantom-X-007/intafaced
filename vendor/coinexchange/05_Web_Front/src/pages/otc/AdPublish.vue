@@ -41,19 +41,20 @@
         </FormItem>
 
         <FormItem :label="$t('otc.price')">
-          <Input v-model="form.price" style="width:200px" placeholder="0.00">
+          <!-- Empty placeholder: "0.00" invented a two-decimal precision claim. -->
+          <Input v-model="form.price" style="width:200px" placeholder="">
           <span slot="append">{{ form.fiatCurrency || '—' }}</span>
           </Input>
         </FormItem>
 
         <FormItem :label="$t('otc.publishad.minAmount')">
-          <Input v-model="form.minAmount" style="width:200px" placeholder="0.00">
+          <Input v-model="form.minAmount" style="width:200px" placeholder="">
           <span slot="append">{{ form.asset || '—' }}</span>
           </Input>
         </FormItem>
 
         <FormItem :label="$t('otc.publishad.maxAmount')">
-          <Input v-model="form.maxAmount" style="width:200px" placeholder="0.00">
+          <Input v-model="form.maxAmount" style="width:200px" placeholder="">
           <span slot="append">{{ form.asset || '—' }}</span>
           </Input>
         </FormItem>

@@ -759,7 +759,7 @@
                 inputmode="decimal"
                 spellcheck="false"
                 :disabled="orderType === 'MARKET_PRICE'"
-                :placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : '0.00'"
+                :placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : ''"
                 :aria-invalid="ticketPriceAria['aria-invalid']"
                 :aria-describedby="ticketPriceAria['aria-describedby']"
                 v-model="form.price"
@@ -779,7 +779,7 @@
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
-                placeholder="0.00"
+                placeholder=""
                 :aria-invalid="ticketAmountAria['aria-invalid']"
                 :aria-describedby="ticketAmountAria['aria-describedby']"
                 v-model="form.amount"
@@ -976,8 +976,10 @@ export default {
       currentCoin: { base: '', coin: '', symbol: '', close: 0, rose: '', high: 0, low: 0, volume: 0 },
       currentCoinIsFavor: false,
       coinInfo: {},
-      coinScale: 6,
-      baseCoinScale: 6,
+      /* Decimal-place counts come from market.precision only (getSymbolScale).
+         null = instrument has not published yet — fmt/group/clamp refuse invent. */
+      coinScale: null,
+      baseCoinScale: null,
       /* A fee RATE is money-shaped: a decimal string, never a float literal.
          Shown only when feeKnown — the ticket says "unknown", not "free". */
       symbolFee: '0.001',
@@ -2272,7 +2274,10 @@ export default {
       var list = rows || [];
       var g = Math.floor(Number(this.bookGroup) || 1);
       if (g <= 1 || list.length === 0) return list;
-      var scale = this.baseCoinScale || 2;
+      /* Scale is a property of the instrument. No published precision → leave
+         the book ungrouped rather than invent a two-decimal bucket width. */
+      var scale = this.baseCoinScale;
+      if (scale == null || !isFinite(Number(scale))) return list;
       /* The bucket width as a decimal string: g ticks of 10^-scale. */
       var step = ixMoney.multiply(String(g), '1e-' + scale, scale);
       if (step === null || !ixMoney.isPositive(step)) return list;
@@ -2721,7 +2726,9 @@ export default {
      * order at an invented price. Unreadable stays a dash, never "0.00".
      */
     fmt(value, scale) {
-      const text = ixMoney.toFixedString(value, scale == null ? 2 : scale);
+      /* No published scale → absence, not an invented two-decimal format. */
+      if (scale == null) return '—';
+      const text = ixMoney.toFixedString(value, scale);
       return text === null ? '—' : text;
     },
 
@@ -2794,7 +2801,10 @@ export default {
       const first = text.indexOf('.');
       if (first > -1) {
         text = text.slice(0, first + 1) + text.slice(first + 1).replace(/\./g, '');
-        text = text.slice(0, first + 1 + scale);
+        /* Without a published scale, do not invent a digit cap. */
+        if (typeof scale === 'number' && isFinite(scale) && scale >= 0) {
+          text = text.slice(0, first + 1 + scale);
+        }
       }
       return text;
     },

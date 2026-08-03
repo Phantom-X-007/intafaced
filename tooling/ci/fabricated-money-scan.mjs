@@ -130,12 +130,12 @@
  *
  * ── WHY THERE IS A BASELINE ─────────────────────────────────────────────────
  *
- * The shell has twelve of these today across three files, and the nine that
- * matter most sit in files other branches are mid-change on. Same shape of
- * problem as `i18n-bypass-scan.mjs`, same answer: enumerate the debt exactly,
- * freeze it, and let the number only go down. This is not a TODO pointing at
- * "later" (§14.8) — every frozen item is written out below with the exact text
- * it matched, it is enforced on every `pnpm verify`, and it cannot grow.
+ * The shell once had ten of these across three files. Same shape of problem as
+ * `i18n-bypass-scan.mjs`, same answer: enumerate the debt exactly, freeze it,
+ * and let the number only go down. This is not a TODO pointing at "later"
+ * (§14.8) — every frozen item is written out below with the exact text it
+ * matched, it is enforced on every `pnpm verify`, and it cannot grow. The queue
+ * is empty when the surface is clean; it must stay that way.
  *
  * The alternative was registering this `advisory: true` so it could fail loudly
  * and block nothing. A gate that is red on every run is a gate whose red means
@@ -277,7 +277,11 @@ const MARKUP_ARITHMETIC_RULES = [
 
 /**
  * THE FROZEN QUEUE. Every invented figure the shell holds today, by the exact
- * text it matched. Frozen 2026-08-03 at 3 files / 12 findings.
+ * text it matched.
+ *
+ * Cleared 2026-08-03 (was 3 files / 10 findings): placeholders no longer invent
+ * two-decimal precision; coinScale/baseCoinScale start null and only take
+ * market.precision; fmt/groupPlate/kline refuse a default digit count.
  *
  * Keys are relative to the shell root, not the repo root — for the same
  * brand-scan reason `findShellRoots` exists, and with the same benefit: the
@@ -285,42 +289,14 @@ const MARKUP_ARITHMETIC_RULES = [
  * REPORTED at their full repo-relative path, because a path you cannot paste
  * into an editor is not a report.
  *
- * Not fixed here on purpose: `pages/exchange/Exchange.vue` is owned by sibling
- * branches at the time of writing, and editing a file two people are mid-change
- * on costs more than the day it would save. The debt is named so the owner can
- * clear it; delete each string as it goes.
- *
  * A file absent from this map may hold no findings at all. A file present may
  * hold no findings its row does not name. Both directions are enforced, and by
  * multiset — three `0.00` placeholders freeze three rows, so a fourth is still a
- * failure. A row that survives its violation is the same dishonesty this whole
- * scan is about.
- *
- * On the `'0.00'` rows specifically, because they look the most arguable: a
- * placeholder is rendered markup, so the original scan over rendered HTML would
- * have caught them too. And they are not merely cosmetic — `0.00` on a price
- * field tells the user this market quotes to two decimals, which is a precision
- * claim about an instrument whose real scale the shell defaults to 6 elsewhere
- * in the same file. It is the invented-increment bug wearing a hint.
+ * failure. Never add a row here for new debt; fix the surface or render absence.
  *
  * @type {Record<string, string[]>}
  */
-const BASELINE = {
-  'assets/js/market-chart/kline.js': ['priceScale = Math.pow(10, options.scale || 2)'],
-  'pages/exchange/Exchange.vue': [
-    'coinScale: 6,',
-    'baseCoinScale: 6,',
-    /* RP1 removed: symbolFee float literal + tape float product (ix-money now). */
-    'scale = this.baseCoinScale || 2;',
-    'scale == null ? 2 :',
-    // `:placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : '0.00'"`
-    '0.00',
-    // `placeholder="0.00"` on the limit-price input
-    '0.00',
-  ],
-  // Three `placeholder="0.00"` hints — price, minAmount, maxAmount.
-  'pages/otc/AdPublish.vue': ['0.00', '0.00', '0.00'],
-};
+const BASELINE = {};
 
 // ── Extraction ─────────────────────────────────────────────────────────────
 
