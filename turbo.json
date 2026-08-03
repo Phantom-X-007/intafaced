@@ -36,7 +36,8 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"],
-      "cache": false
+      "cache": false,
+      "env": ["INTAFACED_RUN_ID", "INTAFACED_INFRA_JOURNAL", "REQUIRE_PAY_EVM"]
     },
     "test:watch": {
       "cache": false,
