@@ -1,7 +1,7 @@
-# Claim TRK-launch.launchpad
+# Claim TRK-trade.ccxt-api
 
 **status:** residual-own
-**proof:** docs/ops/trk/launch.launchpad.md on tip · research/spec complete · not implement
+**proof:** docs/ops/trk/trade.ccxt-api.md on tip · research/spec complete · not implement
 **tip:** 04f9b1f2
 **updated:** 2026-08-03
 
