@@ -402,9 +402,17 @@ export const fillSettled = defineEvent(
 /**
  * User-visible futures position (svc-trade). Private WS fans this to the owner.
  *
- * Publisher is `trade.futures`. Until that engine exists nothing emits this
- * event — the `/private/stream` positions channel still mounts and stays silent
- * rather than inventing rows (same honesty as REST GET /positions → []).
+ * Published by svc-trade's futures engine: `position-service` on every position
+ * transition and `tick-stores` on liquidation. `/private/stream` fans it to the
+ * owner, and `ws-private-orders-positions` is a live durable consumer.
+ *
+ * THIS DOCSTRING USED TO SAY THE OPPOSITE — "until that engine exists nothing
+ * emits this event". The engine does exist and two call sites had been emitting
+ * for some time. The gate below cannot catch that: `positionUpdated` is wired at
+ * both ends, so `event-wiring` passes and always would have. Only prose can be
+ * wrong in this direction, which is exactly why it was worth correcting — a
+ * catalog read as the map of what is wired is worth nothing if an entry
+ * volunteers that it is dark while it is running.
  */
 export const positionUpdated = defineEvent(
   'trade',
