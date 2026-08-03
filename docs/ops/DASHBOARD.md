@@ -1,6 +1,6 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T23:06:36.580Z · tip `1abfb5ae`
+Last report: 2026-08-03T23:19:07.437Z · tip `be9df6de`
 
 | Report          | Path                                       |
 | --------------- | ------------------------------------------ |
@@ -13,7 +13,7 @@ Last report: 2026-08-03T23:06:36.580Z · tip `1abfb5ae`
 
 - Free product claims: **0**
 - Blocked: **1**
-- Open PRs: **11**
+- Open PRs: **12**
 
 anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).
 
