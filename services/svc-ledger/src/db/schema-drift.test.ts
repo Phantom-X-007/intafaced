@@ -21,8 +21,8 @@ import * as schema from './schema.js';
  * A stale ORM file is normally a nuisance. This one was a loaded gun, because
  * `schema.ts` is an INPUT to a code generator. Diffing the drifted file against
  * a snapshot of the database as it actually is emits 21 statements, of which
- * eleven drop something. The full list is in schema.ts's header; the ones that
- * matter are:
+ * fifteen drop something. All 21 are reproduced in schema.ts's header; the ones
+ * that matter are:
  *
  *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_hold_purposed_ck";
  *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_non_negative_ck";

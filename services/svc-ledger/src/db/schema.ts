@@ -36,26 +36,44 @@ import { amount, createdAt, tstz } from '@intafaced/db';
  * migration wrote, and declared none of the eight CHECK constraints.
  *
  * Diffing the drifted file against a snapshot of the database as it actually is
- * emits 21 statements. Measured, with drizzle-kit 0.30.6 — not estimated:
+ * emits 21 statements, 15 of which drop something. Measured with drizzle-kit
+ * 0.30.6 — not estimated, and reproduced in full rather than summarised,
+ * because a header that rounds its own evidence is not evidence:
  *
- *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_non_negative_ck";
- *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_purpose_len_ck";
- *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_hold_purposed_ck";
- *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_owner_id_space_ck";
- *     ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT "ledger_entries_positive_ck";
- *     ALTER TABLE "ledger"."chain_tip" DROP CONSTRAINT "chain_tip_singleton_ck";
- *     ALTER TABLE "ledger"."posting_freeze" DROP CONSTRAINT "posting_freeze_singleton_ck";
- *     ALTER TABLE "ledger"."posting_freeze" DROP CONSTRAINT "posting_freeze_attributed_ck";
- *     DROP INDEX "ledger"."accounts_identity_purpose_idx";
- *     DROP INDEX "ledger"."accounts_hold_purpose_idx";
- *     ALTER TABLE "ledger"."chain_tip" ALTER COLUMN "seq" SET DATA TYPE bigserial;
- *     CREATE UNIQUE INDEX "accounts_identity_idx" ON "ledger"."accounts" ("owner_type","owner_id","asset_id","kind");
- *     ALTER TABLE "ledger"."accounts" DROP COLUMN "purpose";
+ *      1  ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_non_negative_ck";
+ *      2  ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_purpose_len_ck";
+ *      3  ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_hold_purposed_ck";
+ *      4  ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_owner_id_space_ck";
+ *      5  ALTER TABLE "ledger"."chain_tip" DROP CONSTRAINT "chain_tip_singleton_ck";
+ *      6  ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT "ledger_entries_positive_ck";
+ *      7  ALTER TABLE "ledger"."posting_freeze" DROP CONSTRAINT "posting_freeze_singleton_ck";
+ *      8  ALTER TABLE "ledger"."posting_freeze" DROP CONSTRAINT "posting_freeze_attributed_ck";
+ *      9  ALTER TABLE "ledger"."balance_snapshots" DROP CONSTRAINT "balance_snapshots_account_id_fkey";
+ *     10  ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT "ledger_entries_tx_id_fkey";
+ *     11  ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT "ledger_entries_account_id_fkey";
+ *     12  DROP INDEX "ledger"."accounts_identity_purpose_idx";
+ *     13  DROP INDEX "ledger"."accounts_hold_purpose_idx";
+ *     14  ALTER TABLE "ledger"."accounts" ALTER COLUMN "balance" SET DEFAULT '0';
+ *     15  ALTER TABLE "ledger"."chain_tip" ALTER COLUMN "seq" SET DATA TYPE bigserial;
+ *     16  ALTER TABLE "ledger"."chain_tip" ALTER COLUMN "seq" DROP DEFAULT;
+ *     17  ALTER TABLE "ledger"."balance_snapshots" ADD CONSTRAINT "balance_snapshots_account_id_accounts_id_fk" FOREIGN KEY …;
+ *     18  ALTER TABLE "ledger"."ledger_entries" ADD CONSTRAINT "ledger_entries_tx_id_ledger_tx_id_fk" FOREIGN KEY …;
+ *     19  ALTER TABLE "ledger"."ledger_entries" ADD CONSTRAINT "ledger_entries_account_id_accounts_id_fk" FOREIGN KEY …;
+ *     20  CREATE UNIQUE INDEX "accounts_identity_idx" ON "ledger"."accounts" ("owner_type","owner_id","asset_id","kind");
+ *     21  ALTER TABLE "ledger"."accounts" DROP COLUMN "purpose";
  *
- * All eight of §4.2's database-level money invariants, the identity index that
- * keeps two loans in one asset from unsecuring each other, and the column
- * `assertPurposedHolds` and `accounts_hold_purposed_ck` are both keyed on —
- * removed by someone doing nothing more reckless than regenerating a migration.
+ * Lines 1-8 are all eight of §4.2's database-level money invariants. Line 12 is
+ * the identity index that keeps two holds in one asset from unsecuring each
+ * other, and line 20 puts the pre-0001 four-column version back — which is the
+ * commingled-hold bug, restored. Line 21 drops the column `assertPurposedHolds`
+ * and `accounts_hold_purposed_ck` are both keyed on. All of it removed by
+ * someone doing nothing more reckless than regenerating a migration.
+ *
+ * Lines 9-11 and 17-19 are the same three foreign keys dropped and immediately
+ * re-added under drizzle's default names — no invariant changes, but each
+ * re-add revalidates the whole journal table, so the "harmless rename" half of
+ * this diff is also the half that takes the longest lock. That is why the FKs
+ * below are named explicitly: see the note on `ledger_entries`.
  *
  * HOW CLOSE IS THAT, HONESTLY. Not one command away today: svc-ledger has no
  * `drizzle.config.ts`, no `db:generate` script and no `drizzle/meta/` snapshot,
