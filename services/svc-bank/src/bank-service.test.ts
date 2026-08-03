@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
-import { assertTestDatabase } from '@intafaced/db';
+import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
@@ -38,18 +37,44 @@ import { BankError } from './errors.js';
  * a double-fire bug would hide.
  *
  * The tRPC boundary is exercised at the bottom of this file rather than in a
- * `router.test.ts` of its own. That is not a stylistic preference: svc-bank's
+ * `router.test.ts` of its own. The reason used to be a constraint: svc-bank's
  * SQL is schema-qualified (`bank.spaces`), so `createTestDb`'s per-suite schema
- * cannot isolate it the way it isolates svc-ledger, and two files truncating
- * the shared `bank` schema in parallel `beforeEach` hooks race each other. One
- * file per database is the shape every service here has for that reason.
+ * could not isolate it the way it isolates svc-ledger, and two files truncating
+ * the shared `bank` schema in parallel `beforeEach` hooks raced each other.
+ *
+ * That constraint is gone. `createTestDatabase` isolates by DATABASE, so the
+ * schema keeps its real name and a second file would get its own `bank.spaces`
+ * to truncate. Splitting the router out is now merely a choice nobody has had a
+ * reason to make — not something the harness forbids.
  */
 
-const URL = process.env.TEST_DATABASE_URL_BANK ?? 'postgres://svc_bank:svc_bank@localhost:5433/intafaced_test';
+/**
+ * A PER-RUN DATABASE, created and dropped by this suite.
+ *
+ * bank's SQL is schema-qualified (`bank.…`) on purpose — §2 keeps a service
+ * physically unable to reach outside its own schema. That is exactly why
+ * `createTestDb`'s generated schema (`test_bank_4711_1`) cannot host it, and
+ * why this suite used to share the one real `bank` schema in `intafaced_test`
+ * with every other worktree on the machine — truncating their rows mid-test.
+ *
+ * `createTestDatabase` moves the isolation boundary from the schema to the
+ * DATABASE and creates the schema under its real name inside it. Every
+ * statement below, and every migration, is unchanged.
+ *
+ * The URL is the ADMIN one (`TEST_DATABASE_URL`), not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack. It
+ * must still name a `*_test` database — `assertTestDatabase` refuses anything
+ * else, and asks the server rather than trusting the string.
+ */
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', 'drizzle', '0000_bank_init.sql'), 'utf8');
-const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
-const migrationLoans = readFileSync(join(here, '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
+
+/** Every forward migration, in order — read from disk so a new one is exercised the moment it lands. */
+const drizzle = join(here, '..', 'drizzle');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -57,41 +82,18 @@ const USER_C = '33333333-3333-4333-8333-333333333333';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-async function reachable(): Promise<boolean> {
-  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end({ timeout: 2 });
-  }
-}
-
-const available = await reachable();
+const available = await postgresAvailable(URL);
 
 if (!available) {
   describe.skip('svc-bank (Postgres unavailable — start docker compose)', () => {
     it('skipped', () => undefined);
   });
 } else {
-  const sql = postgres(URL, {
-    max: 8,
-    connection: { search_path: 'bank,public', application_name: 'svc-bank-test' },
-    onnotice: () => undefined,
-  });
-
-  // Owns its database, or does not run. Must precede the first migration.
-  await assertTestDatabase(sql, 'svc-bank');
-
-  await sql.unsafe(migration);
-  await sql.unsafe(migrationPending);
-  // 0002 is applied here so THE SCHEMA GUARD BELOW SEES THE LOAN TABLES. The
-  // loans suite has its own dedicated database (see loans/loans.test.ts and why);
-  // what this file still owns is the money-column allowlist, and a guard that
-  // cannot see half the schema is not guarding it.
-  await sql.unsafe(migrationLoans);
+  // 0002 is in the list so THE SCHEMA GUARD BELOW SEES THE LOAN TABLES: what
+  // this file owns is the money-column allowlist, and a guard that cannot see
+  // half the schema is not guarding it.
+  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: URL, migrations });
+  const sql = db.sql;
 
   let ledger: MemoryLedger;
   let bank: BankServices;
@@ -139,9 +141,15 @@ if (!available) {
     router = createBankRouter(bank);
   });
 
+  /**
+   * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
+   * pool, and when several suite files tear down at the same moment Postgres
+   * serialises the drops. The work still finishes well inside this; the default
+   * was sized for `sql.end()`, which is all this hook used to do.
+   */
   afterAll(async () => {
-    await sql.end({ timeout: 5 });
-  });
+    await db.drop();
+  }, 30_000);
 
   // ══ Spaces ════════════════════════════════════════════════════════════════
 
