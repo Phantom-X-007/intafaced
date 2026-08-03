@@ -2,254 +2,32 @@
   <div class="nav-rights">
     <div class="nav-right col-xs-12 col-md-10 padding-right-clear">
       <div class="bill_box rightarea padding-right-clear">
-        <div class="shaow">
-          <div class="money_table">
-            <p v-if="listError" class="ix-empty ix-empty-error" role="alert">{{ listError }}</p>
-            <p v-else-if="!loading && listReachable && orderList.length === 0" class="ix-empty">No innovation orders yet</p>
-            <Table v-if="!listError" :columns="tableColumns" :data="orderList" :loading="loading" :disabled-hover="true"></Table>
-            <div class="page" v-if="!listError">
-              <Page :total="total" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
-            </div>
-          </div>
-        </div>
+        <IxNoSurface socket-key="launchpad.myorders" />
       </div>
     </div>
   </div>
 </template>
-<script>
-export default {
-  components: {},
-  data() {
-    return {
-      loginmsg: this.$t("common.logintip"),
-      total: 0,
-      pageSize: 10,
-      loading: true,
-      listReachable: false,
-      listError: "",
-      pageNo: 1,
-      orderList: []
-    };
-  },
-  methods: {
-    getMyOrderList() {
-      this.loading = true;
-      this.listReachable = false;
-      this.listError = "";
-      let params = {};
-      params.pageNo = this.pageNo;
-      params.pageSize = this.pageSize;
-      this.$http.post(this.host + this.api.uc.myInnovationOrderList, params).then(response => {
-        var resp = response.body;
-        if (resp && resp.code == 0 && resp.data) {
-          this.orderList = resp.data.content || [];
-          this.total = resp.data.totalElements || this.total;
-          this.listReachable = true;
-        } else {
-          this.orderList = [];
-          this.listError = "Innovation orders did not answer — list is unknown, not empty.";
-          this.$Message.error(this.loginmsg);
-        }
-        this.loading = false;
-      }).catch(() => {
-        this.orderList = [];
-        this.listError = "Innovation service did not respond — list is unknown, not empty.";
-        this.loading = false;
-      });
-    },
-    loadDataPage(data){
-      this.pageNo = data;
-      this.getMyOrderList();
-    }
-  },
-  created() {
-    this.getMyOrderList();
-  },
-  computed: {
-    tableColumns() {
-      let self = this;
-      let columns = [];
-      columns.push({
-        title: this.$t("uc.activity.column1"),
-        key: "activityName",
-        align: "center",
-        width: 300,
-        render: (h,params) => {
-          return h('a',{
-            attrs: {
-                href: this.rootHost + "/lab/detail/" + params.row.activityId,
-                target: "_blank"
-            }
-          }, params.row.activityName);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.activity.column2"),
-        key: "type",
-        align: "center",
-        render(h, params) {
-          let text = "Unknown";
-          if(params.row.type == 1){
-            text = "Launch Sale";
-          }
-          if(params.row.type == 2){
-            text = "Launch Allocation";
-          }
-          if(params.row.type == 3){
-            text = "Holdings Split";
-          }
-          if(params.row.type == 4){
-            text = "Open Subscription";
-          }
-          if(params.row.type == 5){
-            text = "Cloud Miner Subscription";
-          }
-          return h(
-            "span",{}, text
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.activity.column3"),
-        key: "amount",
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.activity.column4"),
-        key: "baseSymbol",
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.activity.column5"),
-        key: "coinSymbol",
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.activity.column6"),
-        key: "state",
-        align: "center",
-        render(h, params) {
-          let text = "Temporary";
-          if(params.row.type == 5) {
-            if(params.row.state == 1) {
-              text = "Not deployed";
-            }
-            if(params.row.state == 2) {
-              text = "Deployed";
-            }
-            if(params.row.state == 3) {
-              text = "Revoked";
-            }
-          }else{
-            if(params.row.state == 1) {
-              text = "Open";
-            }
-            if(params.row.state == 2) {
-              text = "Filled";
-            }
-            if(params.row.state == 3) {
-              text = "Revoked";
-            }
-          }
-          return h(
-            "span",{}, text
-);
-        }
-      });
 
-      columns.push({
-        title: this.$t("uc.activity.column7"),
-        key: "turnover",
-        align: "center",
-        render(h, params) {
-          let text = params.row.turnover + " " + params.row.baseSymbol;
-          return h(
-            "span",{}, text
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.activity.column8"),
-        key: "createTime",
-        align: "center",
-        width: 140
-      });
-      return columns;
-    }
-  }
+<script>
+/**
+ * My launchpad participation — §13 socket.
+ *
+ * Posted to /uc/activity/getmyorders on the retired venue backend, which is not
+ * proxied, so the table loaded forever behind a sign-in error.
+ *
+ * The columns are the reason this cannot be quietly left as an empty table: it
+ * rendered a subscribed amount and a turnover per row. Both are money, both came
+ * from a venue table rather than the ledger, and an empty grid with those
+ * headings still tells a reader "you have participated in nothing" — a claim we
+ * have no basis for, because nothing is recording participation at all.
+ */
+import IxNoSurface from '../intafaced/IxNoSurface.vue';
+
+export default {
+  name: 'UcInnovationOrders',
+  components: { IxNoSurface }
 };
 </script>
-
-<style lang="scss">
-.nav-right {
-.rightarea.bill_box {
-.shaow {
-      padding: 5px;
-    }
-.money_table {
-.search{
-        width: 200px;
-        margin-bottom: 10px;
-      }
-.ivu-table-wrapper {
-.ivu-table-header{
-          background: #141414;
-          th{
-            color: #fff;
-          }
-        }
-.ivu-table-body {
-          td {
-            color: #fff;
-.ivu-table-cell {
-              padding: 10px 10px;
-.ivu-btn {
-                background: transparent;
-                height: 25px;
-                padding: 0 0px;
-                border-radius: 0;
-                span {
-                  display: inline-block;
-                  line-height: 20px;
-                  font-size: 12px;
-                  padding: 0 15px;
-                  letter-spacing: 1px;
-                }
-              }
-.ivu-btn.ivu-btn-info {
-                border: 1px solid #1ad4bc;
-                span {
-                  color: #1ad4bc;
-                }
-              }
-.ivu-btn.ivu-btn-error {
-                border: 1px solid #f15057;
-                span {
-                  color: #f15057;
-                }
-              }
-.ivu-btn.ivu-btn-primary {
-                border: 1px solid #00b275;
-                border: 1px solid #00b275;
-                span {
-                  color: #00b275;
-                }
-              }
-.ivu-btn.ivu-btn-default {
-                border: 1px solid #282828;
-                background: #1f1f1f;
-                span {
-                  color: #464646;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-</style>
 
 <style scoped lang="scss">
 .nav-right {
@@ -261,20 +39,6 @@ export default {
     width: 100%;
     height: auto;
     overflow: hidden;
-  }
-}
-
-.demo-spin-icon-load{
-  animation: ani-demo-spin 1s linear infinite;
-}
-
-.header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #1ad4bc;color: #1ad4bc;
-  margin-left: 20px;
-  &:hover{
-    background: #1ad4bc;
-    color: #000;
-    cursor: pointer;
   }
 }
 </style>

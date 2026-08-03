@@ -106,7 +106,11 @@ export default [
     { path: '/academy', component: resolve=>(require(["../pages/intafaced/Academy"],resolve)) },
     { path: '/launch', component: resolve=>(require(["../pages/intafaced/Launch"],resolve)) },
 
-    { path: '/envelope/:eno', component: resolve=>(require(["../pages/envelope/Envelope"],resolve)) },
+    // `/envelope/:eno` (gift-claim links) was here and is DELETED, not socketed.
+    // See REMOVED in ../config/sockets.js for the reasoning: no tracker row at
+    // any phase, a payout with no ledger recipe, reachable only by an inbound
+    // shared link, and the one screen of the promotions cluster that collected a
+    // phone number from an anonymous visitor and triggered an SMS.
     {
         path: '/otc',
         component: resolve=>(require(["../pages/otc/Main"],resolve)),
@@ -209,11 +213,11 @@ export default [
             {
                 path: 'innovation/myorders',
                 component: resolve=>(require(["../components/uc/InnovationOrders"],resolve))
-            },
-            {
-                path: 'innovation/myminings',
-                component: resolve=>(require(["../components/uc/InnovationMinings"],resolve))
             }
+            // `innovation/myminings` (cloud-mining contracts) was here and is
+            // DELETED, not socketed — see REMOVED in ../config/sockets.js. No
+            // tracker row plans it (mining.pool is Stratum/PPLNS, a different
+            // product), and it quoted a daily return the platform does not pay.
         ]
     },
     // The four below are reachable only as a signed-in party to an OTC order or

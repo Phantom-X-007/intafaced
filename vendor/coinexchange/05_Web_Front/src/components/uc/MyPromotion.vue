@@ -2,181 +2,34 @@
   <div class="nav-rights">
     <div class="nav-right col-xs-12 col-md-10 padding-right-clear">
       <div class="bill_box rightarea padding-right-clear">
-        <div class="shaow">
-          <div class="money_table">
-            <Table :columns="tableColumnsPromotion" :data="promotionList" :loading="loading" :disabled-hover="true"></Table>
-            <div class="page">
-              <Page :total="total" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
-            </div>
-          </div>
-        </div>
+        <IxNoSurface socket-key="affiliate.referrals" />
       </div>
     </div>
   </div>
 </template>
+
 <script>
-import html2canvas from 'html2canvas';
+/**
+ * People you referred — §13 socket.
+ *
+ * This was the only one of the promotions screens that shows no money: a list
+ * of accounts and whether each finished verification. It is still unbuildable,
+ * and the reason is worth stating precisely because "it is only a list" invites
+ * someone to think it is nearly free. svc-identity records no referrer on an
+ * account. There is no edge along which to walk, so the query has no FROM.
+ *
+ * It previously posted to /uc/promotion/record on the retired venue backend,
+ * which nginx does not proxy — the table sat on its loading state and then
+ * printed a sign-in error, which is a misleading thing to tell someone who is
+ * already signed in.
+ */
+import IxNoSurface from '../intafaced/IxNoSurface.vue';
 
 export default {
-  components: {},
-  data() {
-    return {
-      loginmsg: this.$t("common.logintip"),
-      total: 0,
-      pageSize: 10,
-      loading: true,
-      pageNo: 1,
-      promotionList: [],
-      cardNo: "",
-      promotionTitle: "",
-      promotionCode: ""
-    };
-  },
-  methods: {
-    getMyPromotionList() {
-      let params = {};
-      params.pageNo = this.pageNo;
-      params.pageSize = this.pageSize;
-      this.$http.post(this.host + this.api.uc.mypromotionrecord, params).then(response => {
-        var resp = response.body;
-        if (resp.code == 0) {
-          this.promotionList = resp.data;
-        } else {
-          this.$Message.error(this.loginmsg);
-        }
-        this.loading = false;
-      });
-    },
-    loadDataPage(data){
-      this.pageNo = data;
-      this.getMyPromotionList();
-    }
-  },
-  created() {
-    this.getMyPromotionList();
-  },
-  computed: {
-    tableColumnsPromotion() {
-      let self = this;
-      let columns = [];
-      columns.push({
-        title: this.$t("uc.promotion.my_column0"),
-        key: "username",
-        align: "center",
-        render(h, params) {
-          return h(
-            "span",
-            {
-              style:{
-                  letterSpacing: "2px"
-                }
-            },
-            params.row.username
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.promotion.my_column1"),
-        key: "createTime",
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.promotion.my_column2"),
-        key: "realNameStatus",
-        align: "center",
-        render(h, params) {
-          let text = "Unverified";
-          if(params.row.realNameStatus == 2) {
-            text = "Verified";
-            return h(
-              "span",{style:{
-                  color: "#42b983"
-                }}, text
-);
-          }
-          return h(
-            "span",{style:{
-                  color: "#FF0000"
-                }}, text
-);
-        }
-      });
-      return columns;
-    }
-  }
+  name: 'UcMyPromotion',
+  components: { IxNoSurface }
 };
 </script>
-
-<style lang="scss">
-.nav-right {
-.rightarea.bill_box {
-.shaow {
-      padding: 5px;
-    }
-.money_table {
-.search{
-        width: 200px;
-        margin-bottom: 10px;
-      }
-.ivu-table-wrapper {
-.ivu-table-header{
-          background: #141414;
-          th{
-            color: #fff;
-          }
-        }
-.ivu-table-body {
-          td {
-            color: #fff;
-.ivu-table-cell {
-              padding: 10px 10px;
-.ivu-btn {
-                background: transparent;
-                height: 25px;
-                padding: 0 0px;
-                border-radius: 0;
-                span {
-                  display: inline-block;
-                  line-height: 20px;
-                  font-size: 12px;
-                  padding: 0 15px;
-                  letter-spacing: 1px;
-                }
-              }
-.ivu-btn.ivu-btn-info {
-                border: 1px solid #1ad4bc;
-                span {
-                  color: #1ad4bc;
-                }
-              }
-.ivu-btn.ivu-btn-error {
-                border: 1px solid #f15057;
-                span {
-                  color: #f15057;
-                }
-              }
-.ivu-btn.ivu-btn-primary {
-                border: 1px solid #00b275;
-                border: 1px solid #00b275;
-                span {
-                  color: #00b275;
-                }
-              }
-.ivu-btn.ivu-btn-default {
-                border: 1px solid #282828;
-                background: #1f1f1f;
-                span {
-                  color: #464646;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-</style>
 
 <style scoped lang="scss">
 .nav-right {
@@ -188,20 +41,6 @@ export default {
     width: 100%;
     height: auto;
     overflow: hidden;
-  }
-}
-
-.demo-spin-icon-load{
-  animation: ani-demo-spin 1s linear infinite;
-}
-
-.header-btn{
-  float:right;padding: 5px 15px;border: 1px solid #1ad4bc;color: #1ad4bc;
-  margin-left: 20px;
-  &:hover{
-    background: #1ad4bc;
-    color: #000;
-    cursor: pointer;
   }
 }
 </style>
