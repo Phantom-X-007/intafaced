@@ -43,6 +43,14 @@ no implement swarm.
 
 ---
 
+---
+
+## Pack 5 residual — night cycle3 (`ops.compliance`)
+
+| Id               | Title                              | Spec                                     |
+| ---------------- | ---------------------------------- | ---------------------------------------- |
+| `ops.compliance` | Screening queues (lists = Class X) | [ops.compliance.md](./ops.compliance.md) |
+
 ## Pack 4 — `docs/trk-research-pack-4` (tip freeze re-derive at open)
 
 Academy + agent fleet free rows (status `ready`, no owner). Research only —
@@ -118,5 +126,5 @@ useful, do not fork implement plans from conflicting freezes.
 ## Not packed yet (still free, lower priority or heavier blockers)
 
 chain.\*, launch.\*, mining.pool, trade.options/forex, market.\*,
-ops.compliance (counsel list Class X content), bridge.canonical,
+bridge.canonical,
 chain.validators / governance.
