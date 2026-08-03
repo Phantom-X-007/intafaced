@@ -28,7 +28,19 @@
  *
  * Money never becomes a `number` on this path. Decimal strings arrive as
  * strings and are rendered as strings.
+ *
+ * WHAT A 200 IS, AND WHAT IT IS NOT. Until `ix-wire.js` existed, this file
+ * treated `res.ok && body.result` as proof that the payload was the thing the
+ * screen expected, and handed `body.result.data` over unread. A 200 is evidence
+ * that a service answered; it is not evidence about what it said. Every call
+ * here now takes an OPTIONAL `schema` — a validator from `../assets/js/ix-wire.js`
+ * — and a payload that fails it comes back as `INVALID_RESPONSE` naming the
+ * field and the rule, rather than as a float in an order form. Opt-in per call
+ * site on purpose: a call that has not adopted a schema is exactly as safe as
+ * it was before, and visibly not yet better.
  */
+
+import wire from '../assets/js/ix-wire.js';
 
 /** Every prefix svc-edge's route table actually serves. Longest prefix wins there. */
 export const EDGE_BASE = '/api';
@@ -65,6 +77,13 @@ export const REASON = {
      * to add a route to a service that was never written. The honest sentence is
      * that the product does not exist yet, and the socket row names what would
      * have to be built for it to.
+     *
+     * It is also deliberately NOT reached by making a request. Calling a URL we
+     * already know nothing serves, purely to render its 404, would cost a round
+     * trip and would misreport a missing capability as a routing fault.
+     *
+     * Screens that use it MUST pass a reason to `noSurface()` so the page says
+     * WHICH capability is missing and what would have to exist.
      */
     NO_SURFACE: 'no_surface',
     /** No platform session. */
@@ -75,20 +94,6 @@ export const REASON = {
     TIER_REQUIRED: 'tier_required',
     /** Signed in, scoped, and still refused. */
     FORBIDDEN: 'forbidden',
-    /**
-     * NO SERVICE EXISTS. Not "down", not "unrouted" — never built.
-     *
-     * This is the §13 socket reason, and it is deliberately not reached by
-     * making a request. The other failures are answers from a system that
-     * exists; this one is the absence of the system, and the screen knows it
-     * statically. Calling a URL we already know nothing serves, purely to
-     * render its 404, would cost a round trip and would misreport a missing
-     * capability as a routing fault.
-     *
-     * Screens that use it MUST pass `noSurfaceReason` so the page says WHICH
-     * capability is missing and what would have to exist. See `noSurface()`.
-     */
-    NO_SURFACE: 'no_surface',
     /**
      * The venue mounts this route on purpose and will not serve it in this
      * shape — CCXT `NotSupported`, HTTP 501. Distinct from NOT_MOUNTED, which
@@ -102,6 +107,30 @@ export const REASON = {
      * different sentences and only one of them is the reader's problem.
      */
     BAD_SYMBOL: 'bad_symbol',
+    /**
+     * THE SERVICE ANSWERED, AND THE ANSWER IS NOT THE SHAPE WE CONTRACTED FOR.
+     *
+     * Every reason above is a refusal — a system saying no, for a reason that
+     * belongs to it. This one is the opposite: a 200, a body, and a field that
+     * broke a rule the platform depends on. A price as a JSON number, a decimal
+     * carrying a nineteenth place the ledger cannot reconcile, a protocol-plane
+     * service claiming `custodial: true`.
+     *
+     * It is NOT `ERROR`. `ERROR` says the service explained itself and the
+     * screen is quoting it; this says the service did not know it was wrong, so
+     * the sentence has to be written here. `message` therefore names the field
+     * and the rule it broke — `tickers.BTC/USDT.last expected an unsigned
+     * decimal string, got the JSON number 42.5 …` — because the fault is ours
+     * or the service's, never the reader's, and a generic "invalid response"
+     * would send someone to read the whole payload by hand.
+     *
+     * Refusing rather than rendering is the point. The alternative is that the
+     * float reaches the order form (`Exchange.vue` seeds the limit price from
+     * `ticker.last`) or that a broken deployment gets to publish its own custody
+     * claim under our sovereignty copy. Both are the screen telling a lie on
+     * behalf of a service that never said it.
+     */
+    INVALID_RESPONSE: 'invalid_response',
     /** Anything else the service said no to. */
     ERROR: 'error'
 };
@@ -176,10 +205,28 @@ var CCXT_REASON = {
     NotOwner: REASON.FORBIDDEN
 };
 
+/**
+ * The tier the refusal named, if it named one.
+ *
+ * TIER_REQUIRED without the tier is half an answer: "you need to be verified"
+ * leaves the reader with no next step, and "you need `full` and you are `basic`"
+ * is a link to a form. Both wire shapes carry it — svc-trade's CCXT REST puts
+ * `requiredTier` at the top level (`private-rest.ts`), and the tRPC error
+ * formatter puts it in `error.data` (`packages/contracts/src/trpc.ts`) — and
+ * before this, `classify` READ it to pick the reason and then dropped it, so no
+ * screen could ever say which tier.
+ */
+function tierOf(body, data) {
+    if (data && typeof data.requiredTier === 'string' && data.requiredTier) return data.requiredTier;
+    if (body && typeof body.requiredTier === 'string' && body.requiredTier) return body.requiredTier;
+    return null;
+}
+
 function classify(status, body) {
     var data = (body && body.error && body.error.data) || {};
     var code = data.code || '';
     var message = (body && body.error && body.error.message) || 'Request failed';
+    var requiredTier = tierOf(body, data);
 
     if (body && body.code === 'edge.no_route') return { reason: REASON.NOT_ROUTED, message: 'svc-edge has no route for this module' };
     if (body && body.code === 'edge.upstream_unavailable') return { reason: REASON.UNREACHABLE, message: 'The service behind the edge did not answer' };
