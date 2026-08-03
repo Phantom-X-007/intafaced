@@ -1,49 +1,79 @@
 # TRK-academy.curriculum
 
 **Title:** DERIV//DESK library import — 20 playbooks + 3 workbooks  
-**Tracker:** `academy.curriculum` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `academy.lobbies` (done)  
-**Tip freeze:** `origin/main` @ `c773dafa` (re-derive before implement)  
-**Pack type:** research only — no implement; no invent educational IP; no `features.mjs` edit.
+**Tracker:** `academy.curriculum` · module `academy` · phase 5 · status `ready` · owner none  
+**Depends on:** `academy.lobbies`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Learners can list and open the **full** curriculum set (tracker names **20
-playbooks + 3 workbooks**) through the existing academy API, filtered by
-Blueprint path/kind, with real markdown bodies — not placeholders. Content is
-**licensed/owned** material imported under brand rules (no forbidden vendor
-names in user-facing copy). Progress/certs remain out of scope (`academy.certs`).
+## 1 · What “done” means (plain language)
 
-## Path on tip
+Title promise for `academy.curriculum` is product-complete, not “a stub route exists.”  
+**Reality check:** Thin catalog exists; full 20+3 library residual.
 
-| Area    | Location                                                        |
-| ------- | --------------------------------------------------------------- |
-| Service | `services/svc-academy/`                                         |
-| Catalog | `src/curriculum/catalog.ts` — pure in-process **day-one spine** |
-| API     | `curriculum`, `curriculumItem` (`academy:read`)                 |
-| Mount   | edge `/api/academy`                                             |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** thin catalog **ships** (few playbooks/lessons + one workbook
-shell across foundations/markets/builder/sovereign paths). Full DERIV//DESK
-library is **proprietary and not in the monorepo** — README + catalog header
-state full import is residual. No DB table for curriculum; no progress write;
-no NATS.
+| Area       | Reality                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| Service    | `services/svc-academy` — lobbies, host-rights, curriculum catalog, spatial `scene`                            |
+| Curriculum | `curriculum/catalog.ts` thin real catalog; full DERIV//DESK 20+3 residual (see `academy-service.ts` comments) |
+| Edge       | `/api/academy` in `svc-edge`                                                                                  |
+| Flags      | `academy.inviteLobbies`, `academy.tournament`                                                                 |
+| Scopes     | `academy:read` / `academy:write`                                                                              |
+| XP         | `intafaced.identity.xp.earned` named for cert path — consumer wiring residual                                 |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker          | Notes                                                           |
-| ---------------- | --------------------------------------------------------------- |
-| Content / rights | Owner must supply importable library (Class X content / legal)  |
-| Brand (§0.7)     | Import pipeline must strip/rename forbidden third-party strings |
-| Not blocked      | Lobbies API, read path, Blueprint path enum already real        |
+| Law           | Implication                                                  |
+| ------------- | ------------------------------------------------------------ |
+| Brand         | Education content copy vendor-clean                          |
+| Money         | Tournament prizes / ambassador IFC pay → ledger recipes only |
+| Paper trading | Must not spend real ledger balances                          |
+| Events        | XP must not double-award                                     |
 
-Agents must **not** fabricate 20 playbooks of educational IP.
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### Stage 1
 
-**S after content lands:** import script or seed module that loads
-owner-supplied markdown into the catalog shape (or a DB table if volume
-requires), golden tests for count/paths, brand-scan clean. **Without content:**
-only scaffold + empty import format doc (Class N) — do not mark mountain done.
-Optional tiny PR: persist catalog to Postgres for ops edit without redeploy
-(still needs content).
+- [ ] Spec matches code: live vs residual for **this** id
+- [ ] Smallest vertical slice for this title only
+
+### Stage 2
+
+- [ ] Title-level acceptance tests
+- [ ] i18n for new strings
+- [ ] Money paths (if any) Class M audited
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Content licensing for full curriculum import.
+2. Prize pool funding + custody.
+3. Paper market operator controls.
+
+## 6 · Estimated size
+
+| Slice                  | Size          |
+| ---------------------- | ------------- |
+| Catalog/certs progress | **M–L**       |
+| Spatial canvas UI      | **L**         |
+| Tournaments + prizes   | **L** Class M |
+| Ambassadors pay        | **L** Class M |
+
+## 7 · Related docs / code
+
+- `services/svc-academy/src/curriculum/catalog.ts`
+- `services/svc-academy/src/academy-service.ts`
+- `packages/contracts` blueprint curriculumPath
+- `packages/ledger-client` tournament prize notes
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing full 20+3 content without product assets.
+- No real-money paper trading confusion.
+- No `features.mjs` edit.

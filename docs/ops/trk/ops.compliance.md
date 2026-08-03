@@ -1,36 +1,71 @@
 # TRK-ops.compliance
 
 **Title:** Screening queues, geo-block, VPN/Tor detection  
-**Tracker:** `ops.compliance` · phase 5 · module core-ops · status `ready` · owner none  
-**Depends on:** `identity.kyc`
+**Tracker:** `ops.compliance` · module `core-ops` · phase 5 · status `ready` · owner none  
+**Depends on:** `identity.kyc`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Operators can process **screening queues**; the platform can **geo-block** and
-detect VPN/Tor per published policy. **Sanctions list content is Class X**
-(human + counsel) — agents never invent list rows. Enforcement hooks fail
-closed when config/lists missing.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+Access = jurisdiction matrix + screening list + optional network signals with honest status (empty list ≠ screened clean). Staff queues for review. VPN/Tor labeled fail-closed if enabled. Sanctions list **content** Class X.
 
-| Area    | Location                                                           |
-| ------- | ------------------------------------------------------------------ |
-| Related | Identity KYC; edge/env commercial region + sanctions boot guards   |
-| Denon   | Open PRs around screening/region config (#432 etc.) — babysit only |
-| Class X | Sanctions **content** never agent-authored                         |
+## 2 · Current code state (tip `04f9b1f2`)
 
-## Blocked by
+| Area                  | Reality                                                      |
+| --------------------- | ------------------------------------------------------------ |
+| Mechanism             | `packages/config` `screening.ts` + `jurisdiction.ts` + tests |
+| Edge                  | Jurisdiction gates on procedures                             |
+| Admin                 | `/jurisdiction` readout — not full review-queue product      |
+| VPN/Tor product queue | Not completed as titled (re-verify)                          |
+| Open work             | Path-check Denon screening/config PRs before edit            |
 
-| Blocker   | Notes                                           |
-| --------- | ----------------------------------------------- |
-| Class X   | List data + legal posture                       |
-| Product   | Queue UX, appeal path, false-positive handling  |
-| Dual-edit | Do not edit Denon open screening files mid-wave |
+## 3 · Doctrine constraints
 
-## First PR size (if free)
+| Law          | Implication                                 |
+| ------------ | ------------------------------------------- |
+| Fail closed  | Undecidable → refuse money-path access      |
+| Honesty      | Never claim screened when list unconfigured |
+| Class X      | Real list content is counsel                |
+| No dual-edit | Open screening-config PRs                   |
 
-**S — after Denon config PRs land:** operator queue **schema** + empty queue
-API that reads identity KYC states only. List ingestion is Class X / human.
-No VPN vendor name in user copy.
+## 4 · DoD sketch (checkable — staged)
 
-**Solid spec:** [TRK-ops.compliance.md](./TRK-ops.compliance.md)
+### Stage 1
+
+- [ ] Staff queue + reason codes + audit log (who/when/why)
+
+### Stage 2 (optional)
+
+- [ ] VPN/Tor signal socket (§13) or cut from title
+- [ ] Product law: block vs step-up vs flag
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Override authority.
+2. Per-surface VPN policy.
+3. Collision with open config PRs.
+
+## 6 · Estimated size
+
+| Slice               | Size                     |
+| ------------------- | ------------------------ |
+| Queue + audit       | **M**                    |
+| VPN/Tor integration | **M–L** + Class X vendor |
+
+## 7 · Related docs / code
+
+- `packages/config/src/screening.ts`
+- `packages/config/src/jurisdiction.ts`
+- `apps/admin` jurisdiction page
+
+## 8 · Explicit non-goals for this pack
+
+- No shipping real sanctions lists as agent content.
+- No weakening empty-list honesty tests.

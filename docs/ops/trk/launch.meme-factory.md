@@ -1,30 +1,65 @@
 # TRK-launch.meme-factory
 
 **Title:** One-click meme launch + instant market + LP  
-**Tracker:** `launch.meme-factory` · phase 5 · plane P · status `ready` · owner none  
-**Depends on:** launch.token-factory, protocol.amm
+**Tracker:** `launch.meme-factory` · module `launch` · phase 5 · status `ready` · owner none  
+**Depends on:** `launch.token-factory` · `protocol.amm`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Ships only under published product/protocol law. Night engine documents residual;
-does **not** implement chain/launch money without Denon direction + Class gates.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+One-click meme launch + instant market + LP. Depends token-factory + AMM. Protocol.amm may be hard lane.
 
-| Area     | Location                                 |
-| -------- | ---------------------------------------- |
-| Protocol | `services/svc-protocol/` (when on-chain) |
-| Related  | See depends; confirm on tip before claim |
+## 2 · Current code state (tip `04f9b1f2`)
 
-## Blocked by
+| Area               | Reality                                         |
+| ------------------ | ----------------------------------------------- |
+| Token factory base | Partial — see launch.token-factory tracker note |
+| This surface       | **Not complete** as titled                      |
+| Protocol deps      | AMM may be human hard lane                      |
 
-| Blocker           | Notes                                               |
-| ----------------- | --------------------------------------------------- |
-| Direction / plane | Protocol AMM residual                               |
-| Class M/X         | Money, validators, emissions, counsel as applicable |
+## 3 · Doctrine constraints
 
-## First PR size (if free)
+| Law                   | Implication                                |
+| --------------------- | ------------------------------------------ |
+| No invent money/depth | Custody model must be explicit             |
+| Audits                | Honest risk copy                           |
+| Ownership             | Protocol implement often Shehzad — babysit |
 
-**Research → law → contracts.** First code only after depends green and LIVE-LANES claim. Prefer protocol/task board over shell invent.
+## 4 · DoD sketch (checkable — staged)
 
-**Solid spec:** [TRK-launch.meme-factory.md](./TRK-launch.meme-factory.md)
+### DoD checks
+
+- [ ] ADR: custody, fee, LP ownership
+- [ ] Contracts + tests on dev chain
+- [ ] Audit if user funds at risk
+- [ ] UI after refuse paths solid
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. LP ownership / rug disclosure.
+2. AMM readiness ownership.
+
+## 6 · Estimated size
+
+| Slice          | Size     |
+| -------------- | -------- |
+| ADR + refusals | **S–M**  |
+| Full product   | **L–XL** |
+
+## 7 · Related docs / code
+
+- launch.token-factory
+- protocol.amm
+- Shehzad boards
+
+## 8 · Explicit non-goals for this pack
+
+- No Shehzad implement from this pack.
+- No unaudited “safe” marketing.

@@ -1,30 +1,61 @@
 # TRK-launch.nft
 
 **Title:** NFT mint / list / auction, on-chain royalties  
-**Tracker:** `launch.nft` · phase 5 · plane P · status `ready` · owner none  
-**Depends on:** launch.token-factory
+**Tracker:** `launch.nft` · module `launch` · phase 5 · status `ready` · owner none  
+**Depends on:** `launch.token-factory`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Ships only under published product/protocol law. Night engine documents residual;
-does **not** implement chain/launch money without Denon direction + Class gates.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+NFT mint/list/auction with on-chain royalties. Greenfield relative to token factory.
 
-| Area     | Location                                 |
-| -------- | ---------------------------------------- |
-| Protocol | `services/svc-protocol/` (when on-chain) |
-| Related  | See depends; confirm on tip before claim |
+## 2 · Current code state (tip `04f9b1f2`)
 
-## Blocked by
+| Area          | Reality                    |
+| ------------- | -------------------------- |
+| NFT product   | **Not complete** as titled |
+| Token factory | Partial base               |
 
-| Blocker           | Notes                                               |
-| ----------------- | --------------------------------------------------- |
-| Direction / plane | Royalties money path Class M                        |
-| Class M/X         | Money, validators, emissions, counsel as applicable |
+## 3 · Doctrine constraints
 
-## First PR size (if free)
+| Law                   | Implication               |
+| --------------------- | ------------------------- |
+| Custody/royalty model | Explicit + honest         |
+| Audits                | If user funds at risk     |
+| Ownership             | May be protocol hard lane |
 
-**Research → law → contracts.** First code only after depends green and LIVE-LANES claim. Prefer protocol/task board over shell invent.
+## 4 · DoD sketch (checkable — staged)
 
-**Solid spec:** [TRK-launch.nft.md](./TRK-launch.nft.md)
+### DoD checks
+
+- [ ] ADR: standard (721/1155), royalty path, marketplace scope
+- [ ] Contracts + tests
+- [ ] UI after refuse paths solid
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Marketplace vs mint-only v1.
+2. Royalty enforcement path.
+
+## 6 · Estimated size
+
+| Slice          | Size     |
+| -------------- | -------- |
+| ADR + refusals | **S–M**  |
+| Full product   | **L–XL** |
+
+## 7 · Related docs / code
+
+- launch.token-factory
+- Shehzad boards
+
+## 8 · Explicit non-goals for this pack
+
+- No Shehzad implement from this pack.

@@ -193,3 +193,11 @@ useful, do not fork implement plans from conflicting freezes.
 mining.pool, trade.options/forex, market.vendors (upstream of commerce).
 Long-path chain.mainnet / chain.evm / bridge already have **Pack 5** research
 files — not “unpacked,” but still blocked for implement.
+
+---
+
+## Pack drain thorough upgrade — `docs/trk-research-pack-drain`
+
+In-place thorough upgrade of free-tracker short-name specs (DoD · tip state ·
+doctrine · staged DoD · size · non-goals). No dual `TRK-*` filenames; no
+`features.mjs`. Prefer these when planning implement.

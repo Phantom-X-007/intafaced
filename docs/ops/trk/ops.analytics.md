@@ -1,48 +1,72 @@
 # TRK-ops.analytics
 
 **Title:** Warehouse — read replica + cube layer  
-**Tracker:** `ops.analytics` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `ledger.double-entry` (done)
+**Tracker:** `ops.analytics` · module `core-ops` · phase 5 · status `ready` · owner none  
+**Depends on:** `ledger.double-entry`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Operators (and later product analytics surfaces) can answer volume, cohort, and
-funnel questions from a **read-only warehouse** over ledger / domain events —
-never by querying another service’s primary tables as if they were shared SQL.
-Cube/metrics layer is explicit and reproducible. **Zero custody:** analytics
-never holds balances or invents money columns.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+Ops/product answer historical aggregates without ad-hoc OLTP BI dumps. Read replica/warehouse + cube — not a second ledger. Money from ledger truth or labeled provisional. Staff-scoped.
 
-| Area              | Location                                                                  |
-| ----------------- | ------------------------------------------------------------------------- |
-| Doctrine home     | §8.8 / phase 5 — `svc-core-ops` analytics warehouse (not built)           |
-| Service           | **No** `svc-analytics` / `svc-core-ops` warehouse package on tip          |
-| Not this mountain | `svc-bank` **spend analytics** = per-user projection from ledger history  |
-| Not this mountain | Operator “analytics read” via indexer/admin is Protocol-plane read models |
-| Related           | `packages/events` bus is the intended feed; no cube consumer yet          |
+## 2 · Current code state (tip `04f9b1f2`)
 
-Do **not** confuse bank `analytics.spend` (user money view) with the ops
-warehouse mountain. Bank residual (ledger history port) is a separate spine.
+| Area                          | Reality                                               |
+| ----------------------------- | ----------------------------------------------------- |
+| Warehouse / analytics service | **None**                                              |
+| Cube/dbt in monorepo          | **None**                                              |
+| Money SoT                     | `services/svc-ledger` OLTP                            |
+| `svc-indexer`                 | Chain → protocol read models — **not** fiat warehouse |
+| `apps/admin`                  | Control plane, not BI warehouse                       |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker            | Notes                                                            |
-| ------------------ | ---------------------------------------------------------------- |
-| Greenfield service | No warehouse schema, no read-replica wiring, no cube definitions |
-| Product law        | Which metrics are day-one vs phase 5 stretch — Denon direction   |
-| Data plane         | Replica / warehouse host + credentials = Class X ops, not craft  |
-| Dual-edit          | Do not invent cross-service SQL; contracts/events first          |
+| Law           | Implication                                           |
+| ------------- | ----------------------------------------------------- |
+| §0.6          | Warehouse never posts or holds spendable balances     |
+| Dual-book     | Dashboard money must not silently diverge from ledger |
+| PII / Class X | Query rights, retention, residency                    |
 
-Not Shehzad M1–M7. Not blocked by pay card sandbox.
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### Stage 1
 
-**M — contracts + empty warehouse service:** declare metric catalog + event
-consumers (or CDC contract) in `packages/contracts` / events; thin
-`svc-analytics` (or `svc-core-ops` slice) that ingests one domain stream into
-append-only fact tables and exposes one permissioned aggregate. No UI cube.
-No primary-DB joins across service schemas. Proof: hermetic tests that refuse
-write paths and money types as `number`.
+- [ ] Tech choice recorded (managed WH vs PG replica + views)
+- [ ] Allowed source tables documented
+- [ ] Read-only reporting role; BI cannot write OLTP
 
-**Solid spec:** [TRK-ops.analytics.md](./TRK-ops.analytics.md)
+### Stage 2
+
+- [ ] 3–5 certified metrics with tests + freshness SLO
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Warehouse vendor/tech.
+2. Metric ownership.
+3. Cross-border export.
+
+## 6 · Estimated size
+
+| Slice                  | Size          |
+| ---------------------- | ------------- |
+| Replica plumbing       | **M–L** infra |
+| First metrics pack     | **M**         |
+| Full multi-domain cube | **XL**        |
+
+## 7 · Related docs / code
+
+- `services/svc-ledger`
+- `packages/ledger-client`
+- Dual-book CI gates
+
+## 8 · Explicit non-goals for this pack
+
+- No second balance engine in BI.
+- No invented fee income.

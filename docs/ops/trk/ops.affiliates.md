@@ -1,44 +1,69 @@
 # TRK-ops.affiliates
 
 **Title:** Multi-tier affiliate / IB trees, payout automation  
-**Tracker:** `ops.affiliates` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `ledger.double-entry` (done)
+**Tracker:** `ops.affiliates` · module `core-ops` · phase 5 · status `ready` · owner none  
+**Depends on:** `ledger.double-entry`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-An IB/affiliate tree can be configured multi-tier; referred volume accrues
-**commission liability** honestly; payouts run as **ledger recipes** (house fee
-share → affiliate available), never as balances inside an ops table. Trees and
-rates are auditable. User-facing copy never names a third-party promo SaaS.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+Multi-tier referrer/IB tree with clear attribution. Scheduled payouts via ledger recipes only. Operators inspect/freeze/recompute. Rates = product law.
 
-| Area          | Location                                                                    |
-| ------------- | --------------------------------------------------------------------------- |
-| Doctrine      | §8.8 affiliate/IB trees + payout automation via ledger; home `svc-core-ops` |
-| Service       | **None** — no affiliate schema or tRPC on tip                               |
-| Vendor legacy | Invite/promotion controllers in vendored admin/ucenter — **not** monorepo   |
-| Related law   | Volume fee rebate / copy leader pay = revenue share of **house fees**       |
-| Money path    | Must use `packages/ledger-client` recipes; no ops-local balance             |
+## 2 · Current code state (tip `04f9b1f2`)
 
-Vendored promotion UI is inventory only (`docs/VENDORED-OVERLAP-AUDIT.md`).
-Port is a product decision, not a silent SQL lift.
+| Area               | Reality                                           |
+| ------------------ | ------------------------------------------------- |
+| Affiliate service  | **None**                                          |
+| Commission recipes | Re-grep `packages/ledger-client` before implement |
+| Money risk         | **Class M** for payout automation                 |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker           | Notes                                                                       |
-| ----------------- | --------------------------------------------------------------------------- |
-| Money Class M     | Payout automation is real value movement — recipes + failure tests required |
-| Product law       | Tier graph, clawbacks, KYC gates for payout — Denon / counsel               |
-| Greenfield        | No monorepo service yet                                                     |
-| Shehzad collision | Do **not** invent under pay/bank; commission is house-fee share             |
+| Law         | Implication                                |
+| ----------- | ------------------------------------------ |
+| §0.6        | No affiliate-held balances                 |
+| Money types | Decimal strings / bigint — never `number`  |
+| Class M     | Self-audit + adversarial pass before merge |
+| Fail closed | Ambiguous attribution → no auto-payout     |
 
-## First PR size (if free)
+## 4 · DoD sketch (checkable — staged)
 
-**M — tree + accrual without auto-payout:** schema for affiliate nodes +
-referral attribution + accrued commission **as decimal strings / ledger
-intent**, admin read APIs, tests that forbid storing balances. Second PR:
-`feeShare`/`affiliatePayout` recipe + idempotent settlement job. No “instant
-withdraw” without bank/pay rails law. Class M self-audit before merge.
+### Stage 1 — attribution only
 
-**Solid spec:** [TRK-ops.affiliates.md](./TRK-ops.affiliates.md)
+- [ ] Contracts: attach, tree read, attributed-event projection
+- [ ] Cycle/reparent tests
+
+### Stage 2 — payouts
+
+- [ ] Commission recipe(s) + idempotent job
+- [ ] Dry-run → commit; freeze + clawback recipes
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Who sets commission schedules.
+2. Overlap with academy.ambassadors pay (no double-pay).
+3. Tax reporting.
+
+## 6 · Estimated size
+
+| Slice             | Size            |
+| ----------------- | --------------- |
+| Attribution tree  | **M** Class N/P |
+| Payout automation | **L** Class M   |
+
+## 7 · Related docs / code
+
+- `packages/ledger-client` recipes
+- `academy.ambassadors`
+
+## 8 · Explicit non-goals for this pack
+
+- No silent ledger credits.
+- No shadow affiliate wallets.

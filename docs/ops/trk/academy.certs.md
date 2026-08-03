@@ -1,48 +1,79 @@
 # TRK-academy.certs
 
 **Title:** Certifications → XP → real perks  
-**Tracker:** `academy.certs` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `academy.curriculum`, `identity.rank`  
-**Tip freeze:** `origin/main` @ `b3d08931` (re-derive before implement)
+**Tracker:** `academy.certs` · module `academy` · phase 5 · status `ready` · owner none  
+**Depends on:** `academy.curriculum` · `identity.rank`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-A learner completes a curriculum item (or cert path), the platform records
-**progress**, awards **XP** into the rank graph, and rank **perks** that depend
-on that XP actually change (e.g. host rights, fee tiers — whatever the perk
-table already defines). Certs are not theater: no “certificate PNG” without XP
-idempotency and a real rank write. User-facing copy stays brand-clean.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+Title promise for `academy.certs` is product-complete, not “a stub route exists.”  
+**Reality check:** Needs progress + identity.rank XP event; certs not full product.
 
-| Area            | Location                                                                              |
-| --------------- | ------------------------------------------------------------------------------------- |
-| Academy         | `services/svc-academy/` — catalog **read-only**; no progress table                    |
-| Explicit gap    | README: progress / certs / XP “need `academy.certs` + identity rank”                  |
-| Rank write      | `services/svc-identity` — `rank-service.awardXp` + `xp_events` (serviceProcedure)     |
-| Event           | `packages/events` `xpEarned` — **published into the void** (no identity consumer yet) |
-| Planned publish | svc-academy comments: emit `intafaced.identity.xp.earned` on certification            |
-| Perks           | `services/svc-identity/src/rank/thresholds.ts` — `lobbyHostRights` etc.               |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** full pipeline is open. Curriculum spine is thin/read-only;
-identity can award XP only via internal calls; bus consumer for external XP is
-a known honesty gap in the events catalog.
+| Area       | Reality                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| Service    | `services/svc-academy` — lobbies, host-rights, curriculum catalog, spatial `scene`                            |
+| Curriculum | `curriculum/catalog.ts` thin real catalog; full DERIV//DESK 20+3 residual (see `academy-service.ts` comments) |
+| Edge       | `/api/academy` in `svc-edge`                                                                                  |
+| Flags      | `academy.inviteLobbies`, `academy.tournament`                                                                 |
+| Scopes     | `academy:read` / `academy:write`                                                                              |
+| XP         | `intafaced.identity.xp.earned` named for cert path — consumer wiring residual                                 |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker          | Notes                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| Curriculum depth | Full library is residual (`academy.curriculum`); day-one spine may be enough for v1  |
-| XP bus           | Closing `xpEarned` subscriber in identity is likely a **prerequisite** PR (identity) |
-| Product law      | Which actions grant how much XP / which cert ids → perks — Denon direction           |
-| Money            | Certs themselves are not money; do **not** invent paid-cert ledger paths             |
-| Soft             | Progress store design (academy table vs identity) — pick one owner, no dual write    |
+| Law           | Implication                                                  |
+| ------------- | ------------------------------------------------------------ |
+| Brand         | Education content copy vendor-clean                          |
+| Money         | Tournament prizes / ambassador IFC pay → ledger recipes only |
+| Paper trading | Must not spend real ledger balances                          |
+| Events        | XP must not double-award                                     |
 
-## First PR size (if free)
+## 4 · DoD sketch (checkable — staged)
 
-**S (identity first if still open):** durable consumer for `xpEarned` →
-`awardXp` with idempotency keys matching `xp_events` — closes the void publish.
-**S–M (academy):** progress + `cert.complete` procedure (principal-bound),
-publish XP once, tests that double-complete does not double XP. **No** paid
-certificate product. Flip tracker only when complete → XP → perk is demonstrable
-end-to-end on staging.
+### Stage 1
+
+- [ ] Spec matches code: live vs residual for **this** id
+- [ ] Smallest vertical slice for this title only
+
+### Stage 2
+
+- [ ] Title-level acceptance tests
+- [ ] i18n for new strings
+- [ ] Money paths (if any) Class M audited
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Content licensing for full curriculum import.
+2. Prize pool funding + custody.
+3. Paper market operator controls.
+
+## 6 · Estimated size
+
+| Slice                  | Size          |
+| ---------------------- | ------------- |
+| Catalog/certs progress | **M–L**       |
+| Spatial canvas UI      | **L**         |
+| Tournaments + prizes   | **L** Class M |
+| Ambassadors pay        | **L** Class M |
+
+## 7 · Related docs / code
+
+- `services/svc-academy/src/curriculum/catalog.ts`
+- `services/svc-academy/src/academy-service.ts`
+- `packages/contracts` blueprint curriculumPath
+- `packages/ledger-client` tournament prize notes
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing full 20+3 content without product assets.
+- No real-money paper trading confusion.
+- No `features.mjs` edit.

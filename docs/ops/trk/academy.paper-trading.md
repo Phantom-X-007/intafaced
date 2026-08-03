@@ -1,46 +1,79 @@
 # TRK-academy.paper-trading
 
 **Title:** Paper-trading market flag for workbooks  
-**Tracker:** `academy.paper-trading` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `trade.spot` (done)  
-**Tip freeze:** `origin/main` @ `b3d08931` (re-derive before implement)
+**Tracker:** `academy.paper-trading` · module `academy` · phase 5 · status `ready` · owner none  
+**Depends on:** `trade.spot`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Workbooks (and any sim UI) can route orders to markets marked **paper /
-simulated** so learners practice without touching real balances. Paper fills
-never post real ledger money; UI always shows a clear paper badge. Flipping a
-market to paper is an operator/config decision, not a silent client flag.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+Title promise for `academy.paper-trading` is product-complete, not “a stub route exists.”  
+**Reality check:** Needs paper market flag; no real money.
 
-| Area     | Location                                                                                       |
-| -------- | ---------------------------------------------------------------------------------------------- |
-| Doctrine | §8.3: workbooks run against a **paper-trading market flag in svc-trade**                       |
-| Trade    | `services/svc-trade` — `markets` lifecycle `pending/active/halted/delisted`; **no paper flag** |
-| Academy  | `services/svc-academy` curriculum kinds include `workbook`; no trade link                      |
-| Ledger   | Real spot path uses hold→fill; paper must **not** reuse real holds                             |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** flag + enforcement + workbook binding. Spot engine is real;
-paper is a product mode on top (or beside) it.
+| Area       | Reality                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| Service    | `services/svc-academy` — lobbies, host-rights, curriculum catalog, spatial `scene`                            |
+| Curriculum | `curriculum/catalog.ts` thin real catalog; full DERIV//DESK 20+3 residual (see `academy-service.ts` comments) |
+| Edge       | `/api/academy` in `svc-edge`                                                                                  |
+| Flags      | `academy.inviteLobbies`, `academy.tournament`                                                                 |
+| Scopes     | `academy:read` / `academy:write`                                                                              |
+| XP         | `intafaced.identity.xp.earned` named for cert path — consumer wiring residual                                 |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker       | Notes                                                                             |
-| ------------- | --------------------------------------------------------------------------------- |
-| Product law   | Paper = separate venues/accounts vs same book with `paper=true` — **must decide** |
-| Money honesty | Wrong design invents fake balances that look real — Class M review if any ledger  |
-| Soft          | Full curriculum workbooks content (`academy.curriculum`) optional for flag itself |
-| Not blocked   | Trade spot service exists; academy workbook kind exists in catalog enum           |
+| Law           | Implication                                                  |
+| ------------- | ------------------------------------------------------------ |
+| Brand         | Education content copy vendor-clean                          |
+| Money         | Tournament prizes / ambassador IFC pay → ledger recipes only |
+| Paper trading | Must not spend real ledger balances                          |
+| Events        | XP must not double-award                                     |
 
-**Safe default if unstated:** paper markets use a **non-ledger sim book** (or
-dedicated paper ledger space with zero withdrawal) — never mix with real
-available balance without dual-book proof.
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### Stage 1
 
-**S:** add explicit `paper` (or `mode`) on `trade.markets` + list/filter +
-order path **refuses real ledger** when paper (or routes to sim matcher), tests
-that paper order cannot debit real available. **XS follow-up:** academy workbook
-metadata points at paper market ids. Do not claim done until a workbook path
-cannot touch real money under test.
+- [ ] Spec matches code: live vs residual for **this** id
+- [ ] Smallest vertical slice for this title only
+
+### Stage 2
+
+- [ ] Title-level acceptance tests
+- [ ] i18n for new strings
+- [ ] Money paths (if any) Class M audited
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Content licensing for full curriculum import.
+2. Prize pool funding + custody.
+3. Paper market operator controls.
+
+## 6 · Estimated size
+
+| Slice                  | Size          |
+| ---------------------- | ------------- |
+| Catalog/certs progress | **M–L**       |
+| Spatial canvas UI      | **L**         |
+| Tournaments + prizes   | **L** Class M |
+| Ambassadors pay        | **L** Class M |
+
+## 7 · Related docs / code
+
+- `services/svc-academy/src/curriculum/catalog.ts`
+- `services/svc-academy/src/academy-service.ts`
+- `packages/contracts` blueprint curriculumPath
+- `packages/ledger-client` tournament prize notes
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing full 20+3 content without product assets.
+- No real-money paper trading confusion.
+- No `features.mjs` edit.

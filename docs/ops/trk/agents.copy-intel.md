@@ -1,44 +1,78 @@
 # TRK-agents.copy-intel
 
 **Title:** Copy-Intel — writes audited leader stats  
-**Tracker:** `agents.copy-intel` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `agents.gateway` (done), `trade.copy` (**human / shehzad002**)  
-**Tip freeze:** `origin/main` @ `b3d08931` (re-derive before implement)
+**Tracker:** `agents.copy-intel` · module `agents` · phase 5 · status `ready` · owner none  
+**Depends on:** `agents.gateway` · `trade.copy`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Only the **Copy-Intel** job/agent may write **`audited_stats`** on copy leaders.
-Until it runs, UI may show fill-derived stats but must not claim “audited.”
-Writes are idempotent, replay-safe, and never invent performance. Profit-share
-settlement stays on ledger recipes owned by copy trading — this agent audits
-track record, it does not become a second money path.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. Named agent product runs on **`svc-agents` gateway** with task id(s): `copy-intel product (note: `copy.ts` is brand catalogue, not this product)`.
+2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
+3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
+4. Depends trade.copy; stats writes audited; no silent leaderboard fraud.
 
-| Area           | Location                                                                          |
-| -------------- | --------------------------------------------------------------------------------- |
-| Doctrine       | Copy trading: `audited_stats` written **only** by svc-agents Copy-Intel           |
-| Trade          | `trade.copy` — owner **shehzad002** HUMAN M4; schema residual (`copy_leaders`, …) |
-| Trade README   | copy tables listed as not in spot PR                                              |
-| Agents runtime | `services/svc-agents` ready; product agent **not** registered                     |
-| Fleet phase    | Doctrine lists Copy-Intel as **v2** fleet (after Navigator/Support/…)             |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** entire product. No `copy_leaders` / audited_stats writer on tip.
+| Area      | Reality                                                                         |
+| --------- | ------------------------------------------------------------------------------- |
+| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
+| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
+| Depth     | Routing row ≠ full product for every tracker title                              |
+| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
+| Readiness | useful-path / readiness tests prove runnable mock paths                         |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker                  | Notes                                                          |
-| ------------------------ | -------------------------------------------------------------- |
-| **`trade.copy` Shehzad** | Cannot write audited_stats without leader rows and product law |
-| Product law              | Stat schema, audit window, what “audited” means legally        |
-| Money                    | Profit-share is copy/ledger — **do not invent** in this agent  |
-| Soft                     | v2 ordering vs v1 fleet — may wait Navigator/Support first     |
+| Law         | Implication                                       |
+| ----------- | ------------------------------------------------- |
+| §0.7 brand  | No vendor model names in user-facing agent copy   |
+| §0.6        | Agents never `ledger.post`                        |
+| Guardrails  | Refuse out-of-policy tool use                     |
+| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
 
-## First PR size (if free)
+## 4 · DoD sketch (checkable — staged)
 
-**Blocked for implement until trade.copy defines `copy_leaders.audited_stats`
-and fill sources.** After that: **S** — batch job or agent session that
-recomputes stats from fills into audited_stats with version/idempotency, tests
-that non-Copy-Intel writers are refused (DB privilege or API gate). No UI claim
-of audited until job proves. Babysit Shehzad copy PR; do not implement copy
-product in agents.
+### Stage 1
+
+- [ ] Named task in routing + readiness
+- [ ] Guardrail tests for this agent’s tools
+- [ ] Copy keys only from catalogue
+
+### Stage 2
+
+- [ ] Real data tools with typed refusals
+- [ ] Audit log of user-affecting actions
+- [ ] Tier/gating per product law
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. v1 tool allowlist.
+2. Human escalation path.
+3. Metering / cost attribution.
+
+## 6 · Estimated size
+
+| Slice                 | Size    |
+| --------------------- | ------- |
+| Task + tests on mock  | **S–M** |
+| Full grounded product | **M–L** |
+
+## 7 · Related docs / code
+
+- `services/svc-agents/src/gateway/routing.ts`
+- `services/svc-agents/src/fleet/guardrails.ts`
+- `services/svc-agents/src/copy.ts`
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing prices or pay approval rates.
+- No Shehzad implement under merchant agent.
+- No `features.mjs` flip from research.

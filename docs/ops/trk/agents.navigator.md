@@ -1,45 +1,78 @@
 # TRK-agents.navigator
 
 **Title:** Navigator — tool-calling inside user guardrails  
-**Tracker:** `agents.navigator` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `agents.gateway` (done)  
-**Tip freeze:** `origin/main` @ `b3d08931` (re-derive before implement)
+**Tracker:** `agents.navigator` · module `agents` · phase 5 · status `ready` · owner none  
+**Depends on:** `agents.gateway`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-User opens a **Navigator** session; the agent can call **allowed tools** across
-module APIs only inside a **snapshotted guardrail**; every think/act/refuse is
-in `agent_actions` and the user-visible log; spend meters via existing
-`feeCharge`. Write tools that move value require user approval per Agentic Law.
-No silent trades, no balance invention, no vendor names in user copy.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. Named agent product runs on **`svc-agents` gateway** with task id(s): `navigator.plan / navigator.tool_select`.
+2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
+3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
+4. Guardrails bound tools; no money movement from agent.
 
-| Area           | Location                                                               |
-| -------------- | ---------------------------------------------------------------------- |
-| Runtime (done) | `services/svc-agents/` — gateway, runtime, metering, audit, guardrails |
-| Register API   | `runtime.registerAgent` / `agent_definitions` table                    |
-| Product agents | **Not seeded** — README: register guardrails + drive open→think→act    |
-| Doctrine §8.2  | v1 fleet: Navigator = tool-calling over module APIs in user guardrails |
-| Tools residual | Tool drivers (HTTP/tRPC to trade/identity/etc.) **not productized**    |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** product registration + tool adapters + UX. Runtime is ready.
+| Area      | Reality                                                                         |
+| --------- | ------------------------------------------------------------------------------- |
+| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
+| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
+| Depth     | Routing row ≠ full product for every tracker title                              |
+| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
+| Readiness | useful-path / readiness tests prove runnable mock paths                         |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker         | Notes                                                                                      |
-| --------------- | ------------------------------------------------------------------------------------------ |
-| Product law     | Exact tool allowlist (quote-only vs order?) — Denon/Nitro                                  |
-| Provider config | Live inference needs `AGENTS_UPSTREAM_*` (Class X secrets)                                 |
-| Soft            | Shell chat UI; API-only first is valid                                                     |
-| Money           | Use existing metering only; any trade write = user approval + Class M tests if real orders |
+| Law         | Implication                                       |
+| ----------- | ------------------------------------------------- |
+| §0.7 brand  | No vendor model names in user-facing agent copy   |
+| §0.6        | Agents never `ledger.post`                        |
+| Guardrails  | Refuse out-of-policy tool use                     |
+| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
 
-Agents gateway is done; this is **fleet product**, not runtime rebuild.
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### Stage 1
 
-**S:** seed `agentId: navigator` guardrail (read-heavy tools: portfolio summary,
-market list, curriculum read; **no** withdraw/bank write), session open → think
-(mock provider) → refuse disallowed tool tests, `agent.get` returns guardrail.
-**M later:** real tool drivers + approval UX for write tools. Prefer zero
-value-moving tools in first PR.
+- [ ] Named task in routing + readiness
+- [ ] Guardrail tests for this agent’s tools
+- [ ] Copy keys only from catalogue
+
+### Stage 2
+
+- [ ] Real data tools with typed refusals
+- [ ] Audit log of user-affecting actions
+- [ ] Tier/gating per product law
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. v1 tool allowlist.
+2. Human escalation path.
+3. Metering / cost attribution.
+
+## 6 · Estimated size
+
+| Slice                 | Size    |
+| --------------------- | ------- |
+| Task + tests on mock  | **S–M** |
+| Full grounded product | **M–L** |
+
+## 7 · Related docs / code
+
+- `services/svc-agents/src/gateway/routing.ts`
+- `services/svc-agents/src/fleet/guardrails.ts`
+- `services/svc-agents/src/copy.ts`
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing prices or pay approval rates.
+- No Shehzad implement under merchant agent.
+- No `features.mjs` flip from research.

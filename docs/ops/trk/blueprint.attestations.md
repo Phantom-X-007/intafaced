@@ -1,43 +1,67 @@
 # TRK-blueprint.attestations
 
 **Title:** On-chain rank attestations, zero PII (§19)  
-**Tracker:** `blueprint.attestations` · phase 4 · plane B · status `ready` · owner none  
-**Depends on:** `blueprint.onboarding` (done), `protocol.smart-accounts`
+**Tracker:** `blueprint.attestations` · module `blueprint` · phase 4 · status `ready` · owner none  
+**Depends on:** `blueprint.onboarding` · `protocol.smart-accounts`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-A user can prove rank / Blueprint standing **on-chain** via an attestation that
-contains **zero PII** (§19). Fiat-plane identity never leaks into the payload.
-Issuance and revoke paths are explicit; no “silent NFT” of email or legal name.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. Rank/allowed claims **attested on-chain** with **zero PII** (§19).
+2. Third-party verify without identity leak.
+3. Depends smart-accounts / protocol readiness.
 
-| Area           | Location                                                                   |
-| -------------- | -------------------------------------------------------------------------- |
-| Off-chain half | `svc-blueprint` profile + rank live on Fiat plane                          |
-| On-chain half  | **Not built** under this id — README lists attestations as future residual |
-| Protocol dep   | `protocol.smart-accounts` / chain issuance — Protocol Plane                |
-| Doctrine       | §19 portable sovereign identity; Phase 4 Blueprint + attestation issuance  |
+## 2 · Current code state (tip `04f9b1f2`)
 
-No attestation schema or issuer service in monorepo craft for this mountain.
+| Area                | Reality                                  |
+| ------------------- | ---------------------------------------- |
+| Attestation product | **Not complete** as titled               |
+| Blueprint focus     | Onboarding/card/export/erase             |
+| Protocol dep        | smart-accounts residual / hard-lane risk |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker              | Notes                                                                 |
-| -------------------- | --------------------------------------------------------------------- |
-| Protocol / chain law | Smart-account + attestation contract decisions — Denon / Shehzad lane |
-| Product law          | What fields are “standing” vs PII; revoke UX                          |
-| Class X              | Mainnet keys, auditor sign-off for contracts                          |
-| Soft dep             | Rank thresholds exist in identity; binding on-chain is separate       |
+| Law      | Implication                              |
+| -------- | ---------------------------------------- |
+| §19      | Zero PII on-chain                        |
+| Protocol | May be Shehzad babysit for contracts     |
+| Honesty  | Off-chain rank ≠ attestation until wired |
 
-Do **not** implement as agent free craft if it touches Shehzad protocol ownership
-or invents chain product law. Research only until direction says free residual.
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### DoD checks
 
-**M — contracts-first:** attestation payload schema (zero-PII zod) + issuer port
-interface in `packages/contracts`; mock issuer in tests; no mainnet. Second PR
-only after protocol socket owner accepts chain shape. Prefer babysit if M1–M7
-or protocol branch owns issuance.
+- [ ] Claim schema (rank bands only)
+- [ ] Contract + issuer key ops (Class X)
+- [ ] Request/verify API
+- [ ] Explorer/docs path
 
-**Solid spec:** [TRK-blueprint.attestations.md](./TRK-blueprint.attestations.md)
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Who is issuer?
+2. Revocation model.
+
+## 6 · Estimated size
+
+| Slice            | Size                 |
+| ---------------- | -------------------- |
+| Claim schema ADR | **S**                |
+| Full attestation | **L** with chain+ops |
+
+## 7 · Related docs / code
+
+- §19 doctrine
+- protocol.smart-accounts
+- svc-blueprint export
+
+## 8 · Explicit non-goals for this pack
+
+- No PII in calldata.
+- No Shehzad implement from pack.
