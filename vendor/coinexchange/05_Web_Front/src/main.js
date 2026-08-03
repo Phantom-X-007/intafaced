@@ -63,8 +63,63 @@ iView.LoadingBar.config({
     height: 2
 });
 
+/**
+ * Is there a session that a gated screen could actually use?
+ *
+ * Two of them exist, and that is not an accident to be tidied away here: the
+ * vendored exchange has its own ucenter login (`TOKEN` + `MEMBER` in
+ * localStorage, restored into `store.member`) and the INTAFACED platform has an
+ * svc-identity session held in memory only, deliberately never on disk. The
+ * `/uc` and `/otc` screens below are the vendored ones, so the vendored session
+ * is what unlocks them — but a visitor holding only a platform session should
+ * not be told to sign in as though they held nothing, so both count.
+ *
+ * localStorage is read directly rather than through the store because this guard
+ * runs on the very first navigation, BEFORE App.vue's `created()` has had a
+ * chance to call `recoveryMember` — reading `store.getters.isLogin` alone would
+ * bounce every deep link into a signed-in account straight back to /login.
+ */
+function hasSession() {
+    if (store.getters.ixSession) return true;
+    try {
+        return !!(localStorage.getItem('TOKEN') && localStorage.getItem('MEMBER'));
+    } catch (e) {
+        // Private mode / storage disabled. Treat as signed out rather than
+        // throwing inside a navigation guard, which strands the router.
+        return false;
+    }
+}
+
+/**
+ * THE AUTH GATE.
+ *
+ * Before this existed, gating was per-screen and only some screens did it:
+ * MemberCenter checked in `created()`, which means it mounted, painted a
+ * logged-out member centre, and only then pushed to /login. /chat, /checkuser,
+ * /identbusiness and the OTC desk checked nothing at all and simply rendered an
+ * empty frame that never filled — the silent failure the brief is about.
+ *
+ * `to.matched` rather than `to.meta`: meta lives on the record that declared it,
+ * and marking the `/uc` parent has to gate all twenty children.
+ *
+ * `redirect` carries the destination so signing in returns the visitor to what
+ * they asked for instead of dumping them on the home page. Login.vue is owned by
+ * the auth lane; until it reads this, the parameter is inert but correct, and it
+ * is visible in the URL either way.
+ */
 router.beforeEach((to, from, next) => {
     iView.LoadingBar.start();
+
+    var needsAuth = to.matched.some(function(record) {
+        return record.meta && record.meta.requiresAuth;
+    });
+
+    if (needsAuth && !hasSession()) {
+        iView.LoadingBar.finish();
+        next({ path: '/login', query: { redirect: to.fullPath } });
+        return;
+    }
+
     next();
 });
 

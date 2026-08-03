@@ -358,8 +358,9 @@ export default {
         "/uc/withdraw": "2-4",
         "/uc/trade": "2-5",
         "/uc/paydividends": "2-6",
-        "/uc/blc": "2-7",
-        "/uc/bjc": "2-8",
+        // `/uc/blc` and `/uc/bjc` sat here. Neither is a route in
+        // config/routes.js and neither ever has been, so both could only ever
+        // highlight a sidebar entry for a screen that does not exist.
         "/uc/entrust/current": "3-1",
         "/uc/entrust/history": "3-2",
         "/uc/ad": "4-1",
@@ -385,10 +386,16 @@ export default {
       this.$store.commit("navigate", "nav-other");
       this.$store.state.HeaderActiveName = "0";
       this.$store.state.HeaderActiveName = "1-6";
-      if (!localStorage.TOKEN ||!localStorage.MEMBER) {
-        this.$Message.success(this.$t("common.logintip"));
-        this.$router.push("/login");
-      }
+      // The signed-out check that lived here is gone, and moved into the global
+      // guard in config/routes.js + main.js. Two reasons it was wrong here:
+      //
+      //   - It ran in `created()`, so the member centre MOUNTED first. A signed
+      //     out visitor got a full logged-out account page, its child screens
+      //     fired their requests, and only then did the redirect land.
+      //   - It reported a refusal with `$Message.success` — a green tick for
+      //     "you are not allowed in".
+      //
+      // The guard turns the navigation round before any of this renders.
     },
     toggleMemu(){
       this.ucNavDrawerModal =!this.ucNavDrawerModal;

@@ -37,6 +37,25 @@
 //import Partner from '../pages/activity/Partner'
 //import Bzb from '../pages/activity/Bzb'
 
+// ── HOW TO READ THIS FILE ────────────────────────────────────────────────────
+//
+// Two things about it are load-bearing and neither is obvious.
+//
+// 1. THE COMPONENT PATH IS CASE-SENSITIVE IN THE BUILD, AND NOT ON THIS DESK.
+//    `require(["../pages/uc/login"])` finds `Login.vue` on Windows and macOS and
+//    finds nothing in the Linux build container, where it is a hard
+//    `Module not found` and the whole bundle fails. Six paths here were wrong in
+//    exactly that way. Match the filename character for character.
+//
+// 2. `requiresAuth` IS THE ONLY AUTH GATE. It is read by the global
+//    `router.beforeEach` in ../main.js, which sends a signed-out visitor to
+//    /login with a `redirect` back to where they were going. Before that guard
+//    existed, each screen policed itself in `created()` — so the component
+//    mounted, painted an empty logged-out shell, fired a request that 401'd, and
+//    only then bounced. Screens that forgot to police themselves (/chat,
+//    /checkuser, /identbusiness, the whole OTC desk) simply rendered blank.
+//    A route that needs a session says so HERE, once.
+
 export default [
     { path: '/', component: resolve=>(require(["../pages/index/Index"],resolve)) },
     { path: '/index', component: resolve=>(require(["../pages/index/Index"],resolve)) },
@@ -59,7 +78,11 @@ export default [
     { path: '/announcement/:id', component: resolve=>(require(["../pages/cms/NoticeItem"],resolve)), name: "NoticeDetail" },
     { path: '/partner', component: resolve=>(require(["../pages/activity/Partner"],resolve)) },
     { path: '/bzb', component: resolve=>(require(["../pages/activity/Bzb"],resolve)) },
-    { path: '/whitepaper', component: resolve=>(require(["../pages/cms/WhitePaper"],resolve)) },
+    // `/whitepaper` is deliberately absent. It rendered `<embed>` of
+    // /static/INTAFACEDWhitePaperVer 1.0.pdf and linked a raw.githubusercontent
+    // URL; there is no `static/` directory in this tree, so both 404 and the
+    // page was a grey box under a header nav item. There is no whitepaper to
+    // serve, so there is no route — see the header in ../App.vue.
 
     // ── INTAFACED platform ────────────────────────────────────────────────────
     // The Sovereign OS modules, embedded in this shell rather than served as a
@@ -83,12 +106,20 @@ export default [
     { path: '/academy', component: resolve=>(require(["../pages/intafaced/Academy"],resolve)) },
     { path: '/launch', component: resolve=>(require(["../pages/intafaced/Launch"],resolve)) },
 
-    { path: '*', component: resolve=>(require(["../pages/index/Index"],resolve)) },
     { path: '/envelope/:eno', component: resolve=>(require(["../pages/envelope/Envelope"],resolve)) },
     {
         path: '/otc',
         component: resolve=>(require(["../pages/otc/Main"],resolve)),
+        meta: { requiresAuth: true },
         children: [{
+                // Without this, `/otc` matched the parent and rendered a heading
+                // over an empty <router-view> — a page that looks half-loaded
+                // forever. USDT is the default market the desk itself falls back
+                // to in `activeMenu()`, so this agrees with the screen.
+                path: '',
+                redirect: 'trade/usdt'
+            },
+            {
                 path: 'trade/*',
                 component: resolve=>(require(["../pages/otc/Trade"],resolve))
             }
@@ -97,6 +128,9 @@ export default [
     {
         path: '/uc',
         component: resolve=>(require(["../pages/uc/MemberCenter"],resolve)),
+        // Applies to every child below — vue-router merges parent meta into
+        // `to.matched`, and the guard checks the whole matched chain.
+        meta: { requiresAuth: true },
         children: [{
                 path: '',
                 component: resolve=>(require(["../components/uc/Safe"],resolve))
@@ -182,78 +216,55 @@ export default [
             }
         ]
     },
+    // The four below are reachable only as a signed-in party to an OTC order or
+    // a merchant application. Signed out they used to render an empty frame and
+    // sit there; now the guard turns them round at the door.
     {
         name: 'tradeInfo',
         path: '/otc/tradeInfo',
-        component: resolve=>(require(["../pages/otc/TradeInfo"],resolve))
+        component: resolve=>(require(["../pages/otc/TradeInfo"],resolve)),
+        meta: { requiresAuth: true }
     },
     {
         path: '/checkuser',
-        component: resolve=>(require(["../pages/otc/CheckUser"],resolve))
+        component: resolve=>(require(["../pages/otc/CheckUser"],resolve)),
+        meta: { requiresAuth: true }
     },
     {
         path: '/chat',
-        component: resolve=>(require(["../pages/otc/Chat"],resolve))
+        component: resolve=>(require(["../pages/otc/Chat"],resolve)),
+        meta: { requiresAuth: true }
     },
     {
         path: '/identbusiness',
-        component: resolve=>(require(["../pages/uc/IdentBusiness"],resolve))
+        component: resolve=>(require(["../pages/uc/IdentBusiness"],resolve)),
+        meta: { requiresAuth: true }
     },
-    // {
-    // path: '/newhelp',
-    // component: newhelp,
-    // children: [{
-    // path: '',
-    // component: noticeindex
-    // },
-    // {
-    // path: 'index',
-    // component: noticeindex
-    // },
-    // {
-    // path: 'account',
-    // component: account
-    // },
-    // ]
-    // },
-    // {
-    // path: '/question',
-    // component: question
-    // },
-    // {
-    // path: '/agreement',
-    // component: agreement
-    // },
-    // {
-    // path: '/rate',
-    // component: rate
-    // },
-    // {
-    // path: '/about-rule',
-    // component: exchargerule
-    // },
-    // {
-    // path: '/about-protocol',
-    // component: userprotocol
-    // },
-    // {
-    // path: '/about-fee',
-    // component: feenote
-    // },
-    // {
-    // path: '/about-notice',
-    // component: homenotice
-    // },
+    // Ten commented-out routes stood here — /newhelp, /question, /agreement,
+    // /rate, /about-rule, /about-protocol, /about-fee, /about-notice, /join-us,
+    // /about-merchant. Every component they named (newhelp, question, agreement,
+    // rate, exchargerule, userprotocol, feenote, homenotice, joinus,
+    // merchantprotocol) is absent from this tree; none can be uncommented into
+    // anything. They read as a backlog and are a fiction, so they are gone.
+    // `noticeindex` — the only one of those components that did exist — is gone
+    // with them: it pushed to /noticeDetail?id=123, a route that has never been
+    // in this table, off a Table full of mock rows.
     {
         path: '/about-us',
         component: resolve=>(require(["../pages/cms/AboutUs"],resolve))
     },
-    // {
-    // path: '/join-us',
-    // component: joinus
-    // },
-    // {
-    // path: '/about-merchant',
-    // component: merchantprotocol
-    // }
+
+    // ── LAST, AND IT MUST STAY LAST ─────────────────────────────────────────
+    //
+    // vue-router hoists `*` to the end of its own path list regardless of where
+    // it appears, so the previous position (line 86, above thirty live routes)
+    // was not actually breaking them. It read as though it were, which is worse
+    // than a bug you can see: every future editor has to re-derive that.
+    //
+    // The component changed too. This used to be the HOME PAGE, so a typo, a
+    // stale bookmark or a link to a route we deleted showed a working site and
+    // said nothing — indistinguishable from success, and it is why nobody could
+    // tell which of these routes were real. It now says the address is not one
+    // of ours and offers the way back.
+    { path: '*', component: resolve=>(require(["../pages/NotFound"],resolve)) }
 ];
