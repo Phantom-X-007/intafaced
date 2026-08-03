@@ -75,7 +75,11 @@ The Java stack cannot be evaluated while it is down, and it is down for **three 
 
 These are now blocking work rather than untidy.
 
-**`custody-scan` walks `.ts`/`.tsx` only — it has never read a line of Java.** Adopting Java money code while that is true means the doctrine is unenforceable exactly where the money is. This closes alongside, not after.
+~~**`custody-scan` walks `.ts`/`.tsx` only — it has never read a line of Java.**~~ **Closed 2026-08-03 — and the framing was corrected on the way.**
+
+The premise was right: adopting Java money code while nothing gates it makes the doctrine unenforceable exactly where the money is. The instruction it implied was wrong. `custody-scan` is a **Protocol Plane** gate, and the custodial services sit outside it on purpose. Java dual-book belongs to `vendor-java-money-scan.mjs` and `dual-book-door-scan.mjs`, which already walk all 882 Java files and already run in CI and the DoD gate. Spec DB-4 says "custody-scan **or successor**"; the successor is where this landed. Full reasoning: the 2026-08-03 correction block in the [2026-07-28 ADR](2026-07-28-vendored-exchange-integration.md).
+
+What the widening found bears directly on ADOPT AND ADAPT above. The DAO route and the HTTP-door route were **already shut**. A third route was open and gated by nothing: mutating a managed `MemberWallet` entity, which Hibernate flushes to `member_wallet` at commit without emitting an `UPDATE` anyone could grep for. **27 sites.** Seven are held off only by a `= null` line, and three of those live in a Kafka consumer and two Spring event listeners — **code no HTTP interceptor can reach.** All 63 known write sites now sit on a counted ratchet in `vendor-java-money-scan.mjs`, each with a written reason; that list is the work queue for the seam described above.
 
 ---
 
