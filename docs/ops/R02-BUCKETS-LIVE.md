@@ -1,7 +1,8 @@
 # Free product buckets — tip after shell merge cluster
 
-**Tip:** re-derive `git log -1 --oneline origin/main`  
+**Tip:** re-derive `git log -1 --oneline origin/main` (last freeze: `f96ac6b4`)  
 **SPAWN_NOW:** none  
+**freeProduct:** 0 · **blocked:** P-WS-REPORT  
 **Proof:** NO-FLEET · :8090 foreign
 
 | id                                        | bucket       | proof                         |
