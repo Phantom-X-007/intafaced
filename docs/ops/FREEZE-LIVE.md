@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `6d4551e1` — docs(ops): R01 cycle42 partner babysit — ready=4 tip 3e94426f (#568)
-- **Generated:** 2026-08-03T17:20:45.551Z
+- **Tip:** `ae17c80f` — docs(ops): invent re-scan cycle43 tip ada0764e (#570)
+- **Generated:** 2026-08-03T17:27:39.666Z
 - **Open PRs:** 12
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
@@ -28,7 +28,7 @@
 
 ## Open PR snapshot
 
-- #569 @ZenYoda3 · 10 files · CONFLICTING · docs(ops): R07 cycle42 freeProduct=0 + tip 3e94426f
+- #571 @ZenYoda3 · 10 files · CONFLICTING · docs(ops): R07 cycle43 freeProduct=0 + tip ada0764e
 - #448 @Phantom-X-007 · 7 files · CONFLICTING · feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code
 - #445 @Phantom-X-007 · 18 files · MERGEABLE · fix(test): five money suites could skip on CI and the build went green
 - #441 @Phantom-X-007 · 5 files · CONFLICTING · feat(ci): coverage-check — the gate §25 specified and nobody built
