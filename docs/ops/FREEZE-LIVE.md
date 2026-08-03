@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `1f28bc66` — docs(ops): R-AFK-RESCAN invent cycle96 residual 0 (#683)
-- **Generated:** 2026-08-03T22:31:05.862Z
+- **Tip:** `28fde7a2` — docs(ops): R01 babysit cycle98 — partner matrix ready=4 (#687)
+- **Generated:** 2026-08-03T22:37:49.251Z
 - **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
