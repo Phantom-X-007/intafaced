@@ -118,6 +118,10 @@ Invent-money scan · PR risk rank · branch-ahead audit · design critique → *
 
 ---
 
+### G0 · RP1 fabricated-money trap (agents — mandatory)
+
+→ [`docs/ops/RP1-FABRICATED-MONEY-RATCHET-TRAP.md`](ops/RP1-FABRICATED-MONEY-RATCHET-TRAP.md)
+
 ### G · Denon hard board (not free agent implement)
 
 While Nitro agents swarm free shell residual, **platform integrity, money Class M under open Denon PRs, product law, and Denon's CONFLICTING integrity pile** are tracked here — agents babysit only, do not dual-edit:

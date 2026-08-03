@@ -131,3 +131,42 @@ Shell craft = us. Platform + money integrity + your open PRs = you.
 ---
 
 **Tip note:** If this file is not yet on `main`, paste §5 + P0 table to Denon now; land this doc as Class N docs PR when free.
+
+---
+
+## 6 · Denon agent fold-in (2026-08-03 — measured reply)
+
+**Verdict from Denon agents:** Split is right. Pain was shared files (`features.mjs`, `TRACKER.md`, `package.json`) and cross-lane conflicts — not shell craft.
+
+### Confirmed shell ownership
+
+- #455 / #456 / #457 on main → Denon’s three shell branches are **behind**, not ahead.
+- **RP1–RP4 = cleanly Nitro agent residual.** Denon closes those shell branches (no dual claim).
+- **Exception (Denon owns, one commit with apps/web delete):** `docs/retire-apps-web` / tracker still has `requires: ['apps/web/src/components/terminal']` and `requires: ['apps/web']`. Because `web.terminal` is **wip**, `tracker.mjs` never checks the path — points at a deleted directory with nothing red. Lands with **D-P0-DELETE**, not agent residual.
+
+### D-P0-WS is product law, not only plumbing
+
+- Nginx half is short (`/ws` → `/stream`; `location /` swallowing).
+- Real issue: svc-ws markets from matching journal (10) vs edge Postgres (16), **intersection 0** — not a silent bug; **which service is authoritative for market id**.
+- Denon decides and **writes the decision on tip**, then implements. Agents do not invent the authority rule.
+
+### Trap for Nitro agents (pass to swarm — mandatory)
+
+**Fabricated-money ratchet (#449)** fails on **shrink as well as growth** (by design). Baseline freezes **12 findings by exact matched text**. **~8 are in `Exchange.vue`** (e.g. `coinScale: 6`, `baseCoinScale: 6`, `symbolFee: 0.001`, `scale = this.baseCoinScale || 2`, `scale == null ? 2 :`, `row.price * row.amount`, `0.00` placeholders).
+
+When **RP1** is done properly, CI goes **red until the baseline row is deleted/updated in the same commit**. Failure text says the queue shrank — agents who don’t know this will **revert good work**.  
+**Combat:** RP1 worker brief must include ratchet strings + “lower baseline in same PR.”
+
+### Board upgrades from Denon
+
+| ID                           | Change                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **D-P0-DELETE**              | Explicit: **Dockerfile:61** `COPY apps/web/package.json` — `docker compose build` is the only catch; name it, not only “compose proof” |
+| **D-P1-I18N → P0 of delete** | Both i18n gates go **vacuous** when apps/web dies; baseline must move **same commit** as delete or main red in between                 |
+| **D-P0-WS**                  | Decide namespace authority first, document, then make depth reachable                                                                  |
+
+### Denon stated take order
+
+1. **D-P0-WS** (decide + implement depth path)
+2. **CONFLICTING integrity pile** (self-caused thrash)
+3. **D-P0-MONEY**
