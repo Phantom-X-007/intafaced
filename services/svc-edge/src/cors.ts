@@ -126,8 +126,28 @@ export const CORS_ENFORCED_ENVS = ['staging', 'prod'] as const;
  *          Next routes today, but a developer poking the edge directly from that
  *          origin should not meet an invisible wall. `/admin/*` on the edge stays
  *          closed to browsers regardless; this covers `/api/*` and `/ready`.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * DELETE THE :3000 PAIR WITH `apps/web`. Not before, and not later.
+ *
+ * Those two entries exist for exactly one caller, and that caller is scheduled to
+ * be removed: once `apps/web` is gone, `http://localhost:3000` is a cross-origin
+ * grant to whatever a developer happens to start on the most commonly squatted
+ * port on a workstation. That is a small hole, but it is a hole nobody chose, and
+ * the reason it would survive is that nobody remembers the port belonged to a
+ * deleted app.
+ *
+ * They are still live TODAY: `apps/web` is present in the tree and still bound to
+ * `3000:3000` in `docker-compose.apps.yml`, so removing them now would break the
+ * dev loop of an app that still runs, to tidy configuration that is not yet dead.
+ * A control that arrives before the thing it protects against is just a bug.
+ *
+ * So this is left for the deletion commit to take. Grep `DELETE THE :3000 PAIR`:
+ * here, the `EDGE_ALLOWED_ORIGINS` block in `.env.example`, and the CORS section
+ * of this service's README are the whole job.
  */
 export const DEV_ORIGINS: readonly string[] = [
+  // ↓ DELETE THE :3000 PAIR — dies with `apps/web`; see the note above.
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:3100',
