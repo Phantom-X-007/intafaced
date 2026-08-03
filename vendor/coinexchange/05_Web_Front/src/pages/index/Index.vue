@@ -113,6 +113,16 @@
           </ul>
         </div>
         <div class="ptjy">
+          <!-- Provenance, and the refusal to call this feed live. The table is
+               one REST read taken on load: startWebsock is gone and this shell
+               has no websocket. Where every listed market is untraded, the
+               table of "Not traded" cells gets the one sentence that explains
+               why, so it reads as a venue that has not printed rather than a
+               page that failed to load. -->
+          <p class="ix-provenance" v-if="!loading && !marketsDown">
+            {{ $t('intafaced.trade.snapshotSource') }}
+            <span v-if="noneTradedYet"> · {{ $t('intafaced.trade.noneTraded') }}</span>
+          </p>
           <Table v-if="choseBtn==0" :columns="favorColumns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
           <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
 <!--
@@ -172,9 +182,11 @@
  * WHAT A READER SEES TODAY, AND WHY IT IS NOT A BUG. Our ticker reports `null`
  * for every 24h rollup — high, low, volume, change — because no windowed
  * aggregation job exists, and `null` for last price on a market that has never
- * traded. Those columns print a dash. A market list showing a column of green
- * +0.00% would state that sixteen markets are flat, which is a claim about
- * price movement we have no data to make.
+ * traded. Last price prints `intafaced.trade.notTraded` (not the string
+ * "null", not a green up-arrow). Change / high / low / volume print an
+ * em-dash. PRICE TREND is gone — no candle series, so no sparkline of zeros.
+ * Provenance: `intafaced.trade.snapshotSource`. When every listed market is
+ * untraded, `intafaced.trade.noneTraded` sits above the table.
  *
  * The table is a snapshot taken on load and does not tick; the live feed is a
  * separate service and is not wired here. See the note where startWebsock was.
@@ -182,13 +194,82 @@
 var moment = require("moment");
 import { rest } from "@/config/intafaced.js";
 import ixTrade from "@js/ix-trade.js";
-import SvgLine from "@components/exchange/SvgLine.vue";
 import $ from "@js/jquery.min.js";
 
 import Swiper from 'swiper';
 
+/* A figure the venue did not publish prints an em dash — the same mark the
+   desk uses (Exchange.vue marketNum/marketStat). Never a blank cell, which
+   reads as a value that failed to load, and never the string "null". */
+function isAbsent(value) {
+  return value === null || value === undefined || value === "" || value === "null";
+}
+function dash(value) {
+  return isAbsent(value) ? "—" : String(value);
+}
+
+/**
+ * THE PRICE CELL, AND THE ARROW THAT USED TO POINT UP ON EVERYTHING.
+ *
+ * `close` is null on a market that has never traded. The vendor's two copies
+ * of this cell rendered that null straight out: the favourites table drew a
+ * blank, the coins table drew the literal string "null" (it appended `+ ""`).
+ * Both read as a price that failed to load rather than a market with no price,
+ * so an untraded market now says so in words (`intafaced.trade.notTraded`).
+ *
+ * The arrow is now bound to a real move. It was `rose < 0 ? down : up`, and
+ * `rose` is null on every market this venue lists — `parseFloat(null) < 0` is
+ * false, so every single row printed a green up-arrow. That is sixteen markets
+ * claiming a rise on a platform that publishes no 24h window to compute one
+ * from. No move, no arrow. A flat 0% gets no arrow either.
+ *
+ * PRICE TREND is deleted (both column sets). It read `row.trend.length` while
+ * ix-trade never emits `trend`, then fell back to a 25-zero sparkline — a fake
+ * history for markets that have never printed. No series, no column.
+ */
+function renderPriceCell(h, self, row) {
+  var price = !isAbsent(row.price) ? row.price : row.close;
+  if (isAbsent(price)) {
+    return h("div", { attrs: { class: "price-td" } }, [
+      h("span", { attrs: { class: "ix-muted" } }, self.$t("intafaced.trade.notTraded"))
+    ]);
+  }
+  var move = parseFloat(row.rose);
+  var children = [h("span", {}, String(price))];
+  if (isFinite(move) && move !== 0) {
+    children.push(
+      h("Icon", {
+        props: { type: move < 0 ? "arrow-down-c" : "arrow-up-c" },
+        style: { fontSize: "16px", marginLeft: "5px", verticalAlign: "middle" },
+        class: { red: move < 0, green: move > 0 }
+      })
+    );
+  }
+  return h("div", { attrs: { class: "price-td" } }, children);
+}
+
+/* The 24h change column, null on every market — and not for the same reason
+   the price is. No windowed rollup exists to compute a move over, which the
+   hover says in full. Colour follows the sign of a real move only. */
+function renderChangeCell(h, self, row) {
+  var move = parseFloat(row.rose);
+  if (isAbsent(row.rose) || !isFinite(move)) {
+    return h(
+      "span",
+      {
+        attrs: {
+          class: "ix-muted",
+          title: self.$t("intafaced.trade.noChangeWindow")
+        }
+      },
+      "—"
+    );
+  }
+  var className = move < 0 ? "red" : move > 0 ? "green" : "ix-muted";
+  return h("span", { attrs: { class: className } }, row.rose);
+}
+
 export default {
-  components: { SvgLine },
   data() {
     let self = this;
     return {
@@ -273,53 +354,7 @@ export default {
             // every row printed a CNY price computed at an invented 6.5 rate
             // and rendered it in the same cell as the real one. A reader had no
             // way to tell the two apart. Doctrine: never invent a number.
-            const isgreen =
-              parseFloat(params.row.rose) < 0? "none": "inline-block";
-            const nogreen =
-              parseFloat(params.row.rose) < 0? "inline-block": "none";
-            return h("div", {
-                  attrs: {
-                    class: "price-td"
-                  }
-            },[
-              h("span", {}, params.row.price),
-              h(
-                "Icon",
-                {
-                  props: {
-                    type: "arrow-up-c"
-                  },
-                  style: {
-                    display: isgreen,
-                    fontSize: "16px",
-                    marginLeft: "5px",
-                    verticalAlign: "middle"
-                  },
-                  class: {
-                    green: true
-                  }
-                },
-                "↑"
-),
-              h(
-                "Icon",
-                {
-                  props: {
-                    type: "arrow-down-c"
-                  },
-                  style: {
-                    display: nogreen,
-                    fontSize: "16px",
-                    marginLeft: "5px",
-                    verticalAlign: "middle"
-                  },
-                  class: {
-                    red: true
-                  }
-                },
-                "↓"
-)
-            ]);
+            return renderPriceCell(h, self, params.row);
           }
         },
         {
@@ -329,8 +364,8 @@ export default {
           minWidth:50,
           sortable: true,
           sortMethod: function(a, b, type) {
-            let a1 = a.replace(/[^\d|.|-]/g, "") - 0;
-            let b1 = b.replace(/[^\d|.|-]/g, "") - 0;
+            let a1 = String(a || "").replace(/[^\d|.|-]/g, "") - 0;
+            let b1 = String(b || "").replace(/[^\d|.|-]/g, "") - 0;
             if (type == "asc") {
               return a1 - b1;
             } else {
@@ -338,17 +373,7 @@ export default {
             }
           },
           render: (h, params) => {
-            const row = params.row;
-            const className = parseFloat(row.rose) < 0? "red": "green";
-            return h(
-              "span",
-              {
-                attrs: {
-                  class: className
-                }
-              },
-              row.rose
-);
+            return renderChangeCell(h, self, params.row);
           }
         },
         {
@@ -356,15 +381,15 @@ export default {
           align: "center",
           key: "high",
           render: (h, params) => {
-            return h("div", {}, params.row.high);
+            return h("div", {}, dash(params.row.high));
           }
         },
         {
           title: self.$t("service.low"),
           align: "center",
-          key: "high",
+          key: "low",
           render: (h, params) => {
-            return h("div", {}, params.row.low);
+            return h("div", {}, dash(params.row.low));
           }
         },
         {
@@ -381,6 +406,9 @@ export default {
             } else {
               return b1 - a1;
             }
+          },
+          render: (h, params) => {
+            return h("div", {}, dash(params.row.volume));
           }
         },
         // {
@@ -400,52 +428,21 @@ export default {
         // }
         // },
 
-        {
-          title: self.$t("service.PriceTrend"),
-          align: "center",
-          render: function(h, params) {
-            let valus = null;
-            let len = params.row.trend.length;
-            valus =
-              len > 0
-? params.row.trend
-: [
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0
-                  ];
-            return h(SvgLine, {
-              props: {
-                values: valus,
-                rose: params.row.rose,
-                width: 100,
-                height: 25
-              }
-            });
-          }
-        },
+        /* REMOVED: the PRICE TREND sparkline, from both column sets.
+
+           It read `params.row.trend`, a field the vendor's dead
+           `/market/symbol-thumb-trend` used to send and that nothing on this
+           platform produces — `toMarketRow` has no `trend` key, so the column
+           threw on every row it drew. Its own fallback is why it could not
+           simply be repointed: twenty-five literal zeros, fed to SvgLine and
+           coloured green because `rose` is null, drew a flat green line under
+           every market. That is a price history, and we do not have one. A
+           trend needs candles, candles are aggregated from real fills, and no
+           market here has traded.
+
+           Not replaced by an empty cell either. A column head reading PRICE
+           TREND above sixteen blanks still promises a series that does not
+           exist. When candles are real, the column comes back with them. */
         {
             title: self.$t("service.Operate"),
             align: "center",
@@ -564,54 +561,10 @@ export default {
               // Same removal as the favourites table above. This copy was worse:
               // it computed a guarded local `CNYRate` and then multiplied by the
               // unguarded `self.CNYRate`, so it printed NaN as often as it
-              // printed a fabricated rate.
-              const isgreen =
-                parseFloat(params.row.rose) < 0? "none": "inline-block";
-              const nogreen =
-                parseFloat(params.row.rose) < 0? "inline-block": "none";
-              return h("div", {
-                attrs: {
-                    class: "price-td"
-                  }
-              }, [
-                h("span", {}, params.row.price + ""),
-                h(
-                  "Icon",
-                  {
-                    props: {
-                      type: "arrow-up-c"
-                    },
-                    style: {
-                      display: isgreen,
-                      fontSize: "16px",
-                      marginLeft: "5px",
-                      verticalAlign: "middle"
-                    },
-                    class: {
-                      green: true
-                    }
-                  },
-                  "↑"
-),
-                h(
-                  "Icon",
-                  {
-                    props: {
-                      type: "arrow-down-c"
-                    },
-                    style: {
-                      display: nogreen,
-                      fontSize: "16px",
-                      marginLeft: "5px",
-                      verticalAlign: "middle"
-                    },
-                    class: {
-                      red: true
-                    }
-                  },
-                  "↓"
-)
-              ]);
+              // printed a fabricated rate. It was also the copy that appended
+              // `+ ""` to the price, which is what turned a null last price
+              // into the literal word "null" in the cell.
+              return renderPriceCell(h, self, params.row);
             }
           },
           {
@@ -621,8 +574,8 @@ export default {
             minWidth: 50,
             sortable: true,
             sortMethod: function(a, b, type) {
-              let a1 = a.replace(/[^\d|.|-]/g, "") - 0;
-              let b1 = b.replace(/[^\d|.|-]/g, "") - 0;
+              let a1 = String(a || "").replace(/[^\d|.|-]/g, "") - 0;
+              let b1 = String(b || "").replace(/[^\d|.|-]/g, "") - 0;
               if (type == "asc") {
                 return a1 - b1;
               } else {
@@ -630,17 +583,7 @@ export default {
               }
             },
             render: (h, params) => {
-              const row = params.row;
-              const className = parseFloat(row.rose) < 0? "red": "green";
-              return h(
-                "span",
-                {
-                  attrs: {
-                    class: className
-                  }
-                },
-                row.rose
-);
+              return renderChangeCell(h, self, params.row);
             }
           },
           {
@@ -648,15 +591,15 @@ export default {
             align: "center",
             key: "high",
             render: (h, params) => {
-              return h("div", {}, params.row.high);
+              return h("div", {}, dash(params.row.high));
             }
           },
           {
             title: self.$t("service.low"),
             align: "center",
-            key: "high",
+            key: "low",
             render: (h, params) => {
-              return h("div", {}, params.row.low);
+              return h("div", {}, dash(params.row.low));
             }
           },
           {
@@ -673,54 +616,12 @@ export default {
               } else {
                 return b1 - a1;
               }
+            },
+            render: (h, params) => {
+              return h("div", {}, dash(params.row.volume));
             }
           },
-          {
-            title: self.$t("service.PriceTrend"),
-            align: "center",
-            render: function(h, params) {
-              let valus = null;
-              let len = params.row.trend.length;
-              valus =
-                len > 0
-? params.row.trend
-: [
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0
-                    ];
-              return h(SvgLine, {
-                props: {
-                  values: valus,
-                  rose: params.row.rose,
-                  width: 100,
-                  height: 25
-                }
-              });
-            }
-          },
+          /* PRICE TREND removed here too — see the note in favorColumns. */
           {
             title: self.$t("service.Operate"),
             align: "center",
@@ -802,6 +703,21 @@ export default {
         return this.$t("common.marketsUnavailable");
       }
       return this.$t("common.nodata");
+    },
+    /* True when the venue lists markets and not one of them has ever printed.
+       Read across the whole listing, not the open tab — the sentence it gates
+       is a claim about every listed market. */
+    noneTradedYet: function() {
+      if (this.loading || this.marketsDown) return false;
+      var map = this.coins._map || {};
+      var symbols = Object.keys(map);
+      if (symbols.length === 0) return false;
+      for (var i = 0; i < symbols.length; i++) {
+        var row = map[symbols[i]];
+        var price = !isAbsent(row.price) ? row.price : row.close;
+        if (!isAbsent(price)) return false;
+      }
+      return true;
     }
   },
   watch: {
@@ -867,8 +783,7 @@ export default {
       this.coins.columns[4].title = this.$t("service.high");
       this.coins.columns[5].title = this.$t("service.low");
       this.coins.columns[6].title = this.$t("service.ExchangeNum");
-      this.coins.columns[7].title = this.$t("service.PriceTrend");
-      this.coins.columns[8].title = this.$t("service.Operate");
+      this.coins.columns[7].title = this.$t("service.Operate");
 
       this.favorColumns[0].title = this.$t("service.favor");
       this.favorColumns[1].title = this.$t("service.COIN");
@@ -877,8 +792,7 @@ export default {
       this.favorColumns[4].title = this.$t("service.high");
       this.favorColumns[5].title = this.$t("service.low");
       this.favorColumns[6].title = this.$t("service.ExchangeNum");
-      this.favorColumns[7].title = this.$t("service.PriceTrend");
-      this.favorColumns[8].title = this.$t("service.Operate");
+      this.favorColumns[7].title = this.$t("service.Operate");
     },
     init() {
       this.$store.commit("navigate", "nav-index");
@@ -1034,8 +948,8 @@ export default {
         }
 
         // Tickers may fail on their own. The listing is still true, so the
-        // markets are shown with no price rather than hidden — and a missing
-        // price prints as a dash, never as 0.
+        // markets are shown with no price rather than hidden — a missing last
+        // price prints "Not traded" (never 0, never the string "null").
         var tickers = tickersRes.ok && tickersRes.data ? tickersRes.data : {};
         var rows = ixTrade.toMarketRows(marketsRes.data, tickers);
 
@@ -1441,6 +1355,12 @@ export default {
 .ptjy {
     height: 100%;
     min-width: 864px;
+.ix-provenance {
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 18px;
+      color: #6b7a90;
+    }
 .tables {
       border: none;
       -moz-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
@@ -1629,6 +1549,13 @@ export default {
 
 .red {
   color: #f15057!important;
+}
+
+/* Absence. Sits with .green/.red and not in the scoped block because the
+   table cells are rendered by iview's own component and never carry this
+   file's scope attribute — the same reason those two are here. */
+.ix-muted {
+  color: #6b7a90!important;
 }
 
 .brclearfix:after {
