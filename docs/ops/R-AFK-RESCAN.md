@@ -244,3 +244,10 @@ EXIT=0
 
 **Mode:** NO-FLEET · freeProduct=0 pivot  
 **Verdict:** live invent residual **0** (honesty comments only).
+
+---
+
+## Re-scan cycle26 — 2026-08-03T15:43Z · tip `89f1b614`
+
+**Mode:** NO-FLEET · freeProduct=0 pivot  
+**Verdict:** live invent residual **0** (honesty comments only).
