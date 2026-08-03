@@ -57,3 +57,15 @@ node tooling/scripts/swarm.mjs freeze
 node tooling/scripts/swarm.mjs report
 gh pr list --state open
 ```
+
+---
+
+## Cycle3 keep-alive (2026-08-03T13:50Z)
+
+| Item            | Result                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| freeProduct     | **0** · SPAWN_NOW none · **not session kill**                      |
+| Overlap         | packs 3–4 + #492 already covered most free TRK rows mid-cycle      |
+| Unique residual | `docs/ops/trk/ops.compliance.md` (+ invent reaffirm if not on tip) |
+| Partner         | babysit comments #433 #427 #424 #420 #448 #346 — no dual-edit      |
+| Nitro merge     | #491 after Docs green                                              |

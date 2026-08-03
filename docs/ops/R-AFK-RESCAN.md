@@ -141,3 +141,22 @@ fabricated_money_findings: 10 (all frozen baseline)
 invent_fix_pr: none
 apps_web_terminal_tick_lot_defaults: present (L87-88)
 ```
+
+---
+
+## Re-scan cycle3 — 2026-08-03T13:40Z · tip `c773dafa` (#482)
+
+**Mode:** NO-FLEET · static `rg` only  
+**Trigger:** night keep-alive freeProduct=0 pivot (not session kill)
+
+| pattern                        |                         vendor front | verdict                                      |
+| ------------------------------ | -----------------------------------: | -------------------------------------------- |
+| `invent` (ci)                  |                               **87** | doctrine / honesty comments only             |
+| `\bfake\b`                     |                                **8** | comments + anti-fraud copy                   |
+| `PriceTrend` / `priceTrend`    |                                **1** | historical note in `en.js`                   |
+| `Math.random` (non-min vendor) | captcha `gt.js` + vendored bignumber | not market invent                            |
+| live `dataFanyong` rows        |                                **0** | only honesty comment in `Invite.vue`         |
+| live `CNYRate \|\| 6.5`        |                                **0** | only REMOVED/comment notes in Index/Exchange |
+| `mockTicker`                   |                                **0** | still gone                                   |
+
+**No new invent residual.** Shell wave honesty holds on tip. Next re-scan after next vendor-touch PR or 2h idle.
