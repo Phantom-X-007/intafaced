@@ -5,8 +5,8 @@
 | **Claim**            | `P-WS-REPORT` (integrity report only) — **STILL BLOCKED** (no implement craft)                                                                                                                                                                                                                                                                |
 | **Class**            | N (docs)                                                                                                                                                                                                                                                                                                                                      |
 | **Proof mode**       | **NO-FLEET** — `docker` not available on this host; live counts not re-probed this session                                                                                                                                                                                                                                                    |
-| **Tip when written** | `2f009f54` `docs(ops): R07 cycle81 freeProduct=0 + tip fa367739 (#651)` (`origin/main` @ AFK cycle82 2026-08-03T21:09Z)                                                                                                                                                                                                                       |
-| **Upgrade**          | AFK integrity **cycle82** on tip `2f009f54`. Freeze **still true**: open **#433** matching + **#432** edge (re-verified OPEN). **#424** / **#422** remain MERGED. Prior stamps: `fa367739` (cycle81 tip), `6ae7c658` (cycle80 / #649), `d36b2823` (#649 base), `25f73927` (cycle79 / #647). **NO implement** / **NO-FLEET**. **No depth UI.** |
+| **Tip when written** | `949b3b99` `docs(ops): invent re-scan cycle84 tip 1c1f67fb (#657)` (`origin/main` @ AFK cycle85 2026-08-03T21:28Z)                                                                                                                                                                                                                            |
+| **Upgrade**          | AFK integrity **cycle85** on tip `949b3b99`. Freeze **still true**: open **#433** matching + **#432** edge (re-verified OPEN). **#424** / **#422** remain MERGED. Prior stamps: `2f009f54` (cycle82 / #652), `d180104e` (#652 land), `1c1f67fb` (cycle83 tip), `a1f3bf1a` (cycle84 / #656). **NO implement** / **NO-FLEET**. **No depth UI.** |
 | **Sources**          | Code on tip + prior live probe in [`docs/REGROUP-2026-08-03.md`](../REGROUP-2026-08-03.md) §3 + Denon board [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) **D-P0-WS**                                                                                                |
 | **Dual-edit**        | **None.** This residual is `docs/ops/` only. Did **not** edit matching/edge/ws/nginx. Collisions (do not dual-edit): **#433** `services/svc-matching/**`, **#432** `services/svc-edge/src/env.ts` + `index.ts`.                                                                                                                               |
 | **Landed (cleared)** | **#424** MERGED — edge CORS (`services/svc-edge` cors/* + index) no longer open collision. **#422** MERGED — scan/custody (no P-WS path intersect; noted for tip context).                                                                                                                                                                    |
@@ -14,7 +14,7 @@
 
 **Purpose:** freeze the platform-integrity facts so depth/tape work is not started against a path that cannot work. **Does not** implement nginx, market authority, depth UI, or invent markets.
 
-### AFK status (2026-08-03T21:09Z — tip `2f009f54` · cycle82)
+### AFK status (2026-08-03T21:28Z — tip `949b3b99` · cycle85)
 
 | Metric      | Value                                                                                           |
 | ----------- | ----------------------------------------------------------------------------------------------- |
@@ -345,7 +345,7 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 | Check                            | Result                                                                            |
 | -------------------------------- | --------------------------------------------------------------------------------- |
-| Tip SHA stamped                  | `2f009f54` (`origin/main` @ 2026-08-03T21:09Z · cycle82)                          |
+| Tip SHA stamped                  | `949b3b99` (`origin/main` @ 2026-08-03T21:28Z · cycle85)                          |
 | Denon #424 / #422                | **MERGED** (no longer open collisions for this claim)                             |
 | Freeze collisions remaining      | **#433** matching (OPEN, MERGEABLE) · **#432** edge env/index (OPEN, CONFLICTING) |
 | nginx `/ws` + SPA `/`            | Unchanged structural fact (prior stamp; NO-FLEET, no re-probe)                    |
@@ -356,4 +356,4 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 | freeProduct                      | **0** — shell drained; no implement craft this residual                           |
 | Depth UI                         | **Not started** (not free; D-P0-WS handoff §3 still the gate)                     |
 
-**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts remain code-backed (prior stamp on tip history through `2f009f54`). Claim **P-WS-REPORT** remains **blocked** — **NO-FLEET**, **NO implement** until **#433** (matching) and **#432** (edge) land or close without path intersect — then residual may re-open as report-only refresh, still **no depth UI**. Cycle82 re-confirmed both PRs still open (no implement craft).
+**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts remain code-backed (prior stamp on tip history through `949b3b99`). Claim **P-WS-REPORT** remains **blocked** — **NO-FLEET**, **NO implement** until **#433** (matching) and **#432** (edge) land or close without path intersect — then residual may re-open as report-only refresh, still **no depth UI**. Cycle85 re-confirmed both PRs still open (no implement craft).
