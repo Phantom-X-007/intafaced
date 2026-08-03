@@ -1,9 +1,10 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03 ~14:15Z (AFK refresh)  
-**Tip at run:** `67e121fd` (`origin/main`) — docs(ops): P-WS residual still blocked after #424/#422 + REPORTS re-freeze (#507)  
+**When:** 2026-08-03 ~14:16Z (AFK cycle9)  
+**Tip at run:** `02d8f19c` (`origin/main`) — docs(ops): R01 partner matrix + R07 living board @ e4836982 (#508)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
-**Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day night babysit already on every open CONFLICTING partner PR)
+**Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day night babysit already on every open CONFLICTING partner PR)  
+**Open list delta:** **none** — same 11 PRs as cycle8 / #508 matrix
 
 ## Policy
 
@@ -25,7 +26,7 @@ None. Avoid spam — prior night-engine / AFK babysit comments already on every 
 | [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | commented 13:39Z                                          |
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 
-## Full partner PR matrix (snapshot 14:15Z · tip `67e121fd`)
+## Full partner PR matrix (snapshot 14:16Z · tip `02d8f19c`)
 
 | PR                                                          | Author  | Mergeable          | Failing / pending checks           | Action                                        |
 | ----------------------------------------------------------- | ------- | ------------------ | ---------------------------------- | --------------------------------------------- |
@@ -43,7 +44,7 @@ None. Avoid spam — prior night-engine / AFK babysit comments already on every 
 
 **Open count:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
 
-**Merged since prior R01 snapshot (`e91fb244` / #502):** #499 (TRK pack 6 solids), #501 (TRK residual claim locks), #502 (prior R01), #503 (R07 board), #504 (TRK short-name research), #505 (R07 cycle7 keep-alive), #507 (P-WS residual re-freeze).
+**Merged since prior R01 snapshot (`67e121fd` / #507):** #508 (R01 partner matrix + R07 living board).
 
 ## P-WS (report only — no dual-edit)
 
@@ -57,7 +58,7 @@ Agents: docs/report only. No implement on matching or edge while those PRs stay 
 ## Rebase tip (for partners)
 
 ```
-origin/main @ 67e121fd  (at doc write; re-fetch before rebase)
+origin/main @ 02d8f19c  (at doc write; re-fetch before rebase)
 ```
 
 ## Agent stance
