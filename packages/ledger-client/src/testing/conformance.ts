@@ -363,6 +363,76 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
       it('reports zero for an account that has never been touched', async () => {
         expect(await balanceOf(USER_B, 'DOGE')).toBe('0');
       });
+
+      /**
+       * READS DO NOT WRITE.
+       *
+       * This suite already asked "does an untouched account read as zero?", and
+       * both engines said yes — while one of them was creating the account in
+       * order to answer. `MemoryLedger.balance` called `ensureAccount`, so a
+       * read minted a row; `PostgresLedger.balance` was a plain SELECT. The two
+       * engines disagreed about whether a read is a write, in the one direction
+       * the assertion above cannot see, and the suite whose entire job is to
+       * forbid that divergence never asked. Fixed in #415; asked here.
+       *
+       * It is not a tidiness point. "Does this owner already have an account?"
+       * is the question that decides whether an adapter is about to open a
+       * second book for one human (0005). An engine that answers by creating the
+       * account makes the answer yes, permanently, for everyone who asked.
+       */
+      it('reading a balance creates nothing', async () => {
+        const before = (await ledger.balances('user', USER_B)).length;
+
+        const read = await ledger.balance(userAvailable(USER_B, 'DOGE'));
+        expect(formatAmount(read.amount)).toBe('0');
+        // No row exists, so there is no id to report. An engine that minted one
+        // would have a uuid to hand back here.
+        expect(read.accountId).toBe('');
+
+        await ledger.balance(userHold(USER_B, 'DOGE', 'order:never-placed'));
+        await ledger.balance(userEscrow(USER_B, 'DOGE', 'trade:never-opened'));
+
+        // The projection is what an operator and the reconciliation job read.
+        // If any read above created something, it surfaces here.
+        expect(await ledger.balances('user', USER_B)).toHaveLength(before);
+      });
+
+      /**
+       * The same property for the transaction lookups: a miss is a miss, and
+       * `getTx` / `getTxByKey` must agree on `null` rather than one throwing and
+       * the other returning. Idempotency is built on this answer — a caller that
+       * gets an exception where it expected `null` retries a post it should not.
+       */
+      it('looking up a transaction that does not exist returns null', async () => {
+        expect(await ledger.getTx('00000000-0000-4000-8000-000000000000')).toBeNull();
+        expect(await ledger.getTxByKey('no-such-idempotency-key-conformance')).toBeNull();
+      });
+
+      /**
+       * `purpose` is part of identity, not a label on a shared row (P0-3). Two
+       * holds in one asset must be two accounts with two ids — an engine that
+       * kept one bucket per (user, asset) and stored the purpose beside it would
+       * pass every per-purpose read in this file by handing back the same row
+       * twice, and would be exactly the commingled-hold bug 0001 exists to kill.
+       */
+      it('two purposes in one asset are two distinct accounts', async () => {
+        await fund(USER_A, 'USDT', '100');
+        await ledger.post(recipes.orderHold({ orderId: 'c-id-1', userId: USER_A, assetId: 'USDT', amount: amt('30') }));
+        await ledger.post(recipes.orderHold({ orderId: 'c-id-2', userId: USER_A, assetId: 'USDT', amount: amt('20') }));
+
+        const one = await ledger.balance(userHold(USER_A, 'USDT', 'order:c-id-1'));
+        const two = await ledger.balance(userHold(USER_A, 'USDT', 'order:c-id-2'));
+
+        expect(formatAmount(one.amount)).toBe('30');
+        expect(formatAmount(two.amount)).toBe('20');
+        expect(one.accountId).not.toBe(two.accountId);
+        expect(one.accountId).not.toBe('');
+
+        // And the purpose survives the round trip, so a caller listing balances
+        // can tell an order's reservation from a withdrawal's.
+        const holds = (await ledger.balances('user', USER_A)).filter((b) => b.account.kind === 'hold');
+        expect(new Set(holds.map((b) => b.account.purpose))).toEqual(new Set(['order:c-id-1', 'order:c-id-2']));
+      });
     });
 
     // ── Optional capabilities ─────────────────────────────────────────────────
