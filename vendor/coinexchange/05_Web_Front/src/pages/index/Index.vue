@@ -1347,9 +1347,6 @@ export default {
             color: #ff6b00;
           }
         }
-.list-opBHB {
-          text-align: left;
-        }
 .text {
           text-align: left;
           word-break: break-all;
