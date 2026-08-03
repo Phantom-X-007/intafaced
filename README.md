@@ -112,14 +112,29 @@ Scopes (note: there is no `ledger:write` — balances never move on a user token
 
 ### `tooling/ci` — the doctrines, enforced
 
-| Gate                | Doctrine | What it does                                                                                                    |
-| ------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
-| `pnpm scan:brand`   | §0.7     | Fails the build if a vendor name reaches user-facing copy                                                       |
-| `pnpm scan:custody` | §16.10   | Fails if a Protocol Plane service imports a ledger write recipe, or a contract grants platform withdrawal power |
-| `pnpm db:check`     | §14      | Every migration has a reversal; destructive statements must be declared                                         |
-| `pnpm gate`         | §14      | The full Definition of Done, per service                                                                        |
+`pnpm gates` runs all fourteen in about two seconds, from **one list — `tooling/ci/gates.mjs` — that `pnpm verify` and CI's `gates` job both consume.** One list is the point: they were previously maintained separately and drifted, so two gates ran in CI and nowhere local.
 
-All four are verified against deliberate violations, not just against a clean tree.
+| Gate                             | Doctrine  | What it does                                                                                                    |
+| -------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `pnpm scan:brand`                | §0.7      | Fails the build if a vendor name reaches user-facing copy                                                       |
+| `pnpm scan:custody`              | §16.10    | Fails if a Protocol Plane service imports a ledger write recipe, or a contract grants platform withdrawal power |
+| `pnpm scan:secrets`              | §16       | Fails on a credential-shaped assignment that is not a declared placeholder                                      |
+| `pnpm scan:vendor-shell`         | vendor    | Mass-credit endpoints and `CORS *` inherited from the vendored shell                                            |
+| `pnpm scan:vendor-java-money`    | dual-book | A Java money mutator is a second book, and there is only one book                                               |
+| `pnpm scan:dual-book-door`       | A1        | The door-kill interceptor is registered on every vendored app                                                   |
+| `pnpm scan:dual-book-door-paths` | A1        | Proves the door-kill path fragments block what they claim, without a JVM                                        |
+| `pnpm scan:test-db`              | isolation | Every Postgres-capable suite is on a `*_test` database, never the shared one                                    |
+| `pnpm db:check`                  | §14       | Every migration has a reversal; destructive statements must be declared                                         |
+| _killswitch reachability_        | §14.6     | Every route killable, enforced at the door, failing closed, reachable from `apps/admin`                         |
+| `pnpm scan:workspace`            | fleet     | No service that builds but never reaches the image or the fleet                                                 |
+| `pnpm tracker:check`             | honesty   | `docs/TRACKER.md` matches the code; nothing claims `done` without the service existing                          |
+| `pnpm scan:agent-autoload`       | multi-dev | Coordination law stays in the files a cold agent auto-loads                                                     |
+| `pnpm scan:i18n`                 | §9        | Reports hardcoded user-facing strings. **Advisory** — runs and prints, does not fail                            |
+| `pnpm gate`                      | §14       | The full Definition of Done, per service. Runs separately, after build and test                                 |
+
+They are verified against deliberate violations, not just against a clean tree.
+
+**`scan:custody` is narrower than its name suggests** — it walks four named Protocol Plane services (three exist today) and `svc-protocol`'s Solidity, 97 files. It covers no Java and no other service. The header of `tooling/ci/custody-scan.mjs` states the coverage exactly; read it before citing the gate.
 
 ---
 

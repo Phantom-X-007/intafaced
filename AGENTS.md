@@ -186,7 +186,14 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 ## Before you say you are done
 
 ```bash
-pnpm verify    # build · typecheck · test · DoD gate
+pnpm verify    # doctrine gates · format · build · typecheck · test · DoD gate
+```
+
+`verify` runs the **same doctrine gate list CI runs** — `tooling/ci/gates.mjs`, one list both consume, so a gate can no longer be in CI and missing locally. Those gates run **first** and take about two seconds, so brand / custody / secrets / dual-book / migration feedback arrives before the build rather than behind it.
+
+```bash
+pnpm gates     # the 14 doctrine gates alone (~2s) — the fast pre-flight
+pnpm gate      # the per-service §14 Definition of Done alone
 ```
 
 Report what it actually printed. If tests fail, say so with the output.

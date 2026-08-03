@@ -32,38 +32,32 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # These run first and independently: a branding leak or a custody
-      # violation is not something to discover after a ten-minute test run.
-      - name: Brand scan (Doctrine §0.7)
-        run: pnpm scan:brand
-      - name: Custody scan (Doctrine §16.10)
-        run: pnpm scan:custody
-      - name: Vendor shell residue (mass-credit / CORS *)
-        run: pnpm scan:vendor-shell
-      - name: Vendor Java money mutators (dual-book Option B)
-        run: pnpm scan:vendor-java-money
-      - name: Dual-book door-kill registration (Architect A1)
-        run: pnpm scan:dual-book-door
-      - name: Dual-book door path unit (no JVM)
-        run: pnpm scan:dual-book-door-paths
-      # Cheap, needs no database, and catches at review time the mistake that
-      # otherwise only shows up as someone else's `main` going red.
-      - name: Test DB isolation scan
-        run: pnpm scan:test-db
-      - name: Workspace sync
-        run: pnpm scan:workspace
-      - name: Migration check (§14)
-        run: pnpm db:check
-
-      # A tracker that drifts from the code is worse than no tracker. This
-      # fails if docs/TRACKER.md is stale, or if a feature claims "done" while
-      # the service it lives in does not exist.
-      - name: Tracker is honest
-        run: pnpm tracker:check
-      # Multi-dev law must stay in auto-loaded agent entry files (AGENTS/CLAUDE/
-      # protocol). No Nitro paste required. Does not force features.mjs every PR.
-      - name: Agent auto-load chain
-        run: pnpm scan:agent-autoload
+      # ONE STEP, ON PURPOSE — and this is the point of the change.
+      #
+      # This was eleven hand-written steps. `pnpm verify` kept its own separate
+      # list in package.json, and the two were maintained by nobody in
+      # particular. They drifted: `scan:dual-book-door-paths` and `scan:test-db`
+      # ran here and nowhere local, so an engineer could run `pnpm verify`
+      # green, push, and land red on a gate they had no local way of running.
+      # AGENTS.md tells every human and every agent that verify is the
+      # pre-flight check. That promise only holds if verify runs what this job
+      # runs, and the only way to guarantee that is one list.
+      #
+      # `tooling/ci/gates.mjs` is that list. It fails if this workflow stops
+      # calling it, and it fails if a scan appears in tooling/ci/ that neither
+      # the gate list nor the documented exclusions claim — which is how
+      # i18n-scan.mjs sat wired to nothing for weeks. Individual scans keep
+      # their `pnpm scan:*` scripts for running one at a time.
+      #
+      # It also de-duplicates: six of these scans used to run twice per CI run,
+      # once here and again inside dod-gate.mjs in the `dod` job below.
+      #
+      # Still first, still its own job: a branding leak or a custody violation
+      # is not something to discover after a ten-minute test run. The runner
+      # does not stop at the first failure, so every broken gate shows up in one
+      # run rather than one per push.
+      - name: Doctrine gates (the same list `pnpm verify` runs)
+        run: pnpm gates
 
   build:
     name: Typecheck & build
