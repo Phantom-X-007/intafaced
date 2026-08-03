@@ -5,7 +5,7 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING assignment for **crypto + on-chain + Protocol Plane** work
 
-**Why this board exists:** Nitro agents are AFK-swarming **Bizzan shell honesty/craft** and free residual. Denon owns **platform integrity** (WS market-id law, open integrity PR pile, many Class M holds). You get an **insane runway on blockchain / self-custody / contracts / chain path** — your strength — without dual-building shell or Denon’s open branches.
+**Why this board exists:** Nitro agents are AFK-swarming **vendor shell honesty/craft** and free residual. Denon owns **platform integrity** (WS market-id law, open integrity PR pile, many Class M holds). You get an **insane runway on blockchain / self-custody / contracts / chain path** — your strength — without dual-building shell or Denon’s open branches.
 
 **Master law (read first):**
 
@@ -20,14 +20,14 @@
 
 ## 0 · Collision wall (do not touch)
 
-| Owned by others right now                                                                   | Why                                                                                                                      |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **Vendor shell `:8090` / Bizzan craft** (Index, Exchange honesty, AFK residual, RP1–RP5 UI) | Nitro swarm — dual-build destroys free parallel                                                                          |
-| **Denon open integrity PRs** (file sets live on `gh pr list`)                               | Dual-edit ban                                                                                                            |
-| **Platform WS market-id authority + nginx depth path** (Denon D-P0-WS)                      | Product law he is deciding                                                                                               |
-| **Custodial pay card / #346 open branch**                                                   | Until tip reclaim handoff is explicit — prefer **on-chain pay acceptance contracts** below, not competing on his open PR |
-| **apps/web product resurrection**                                                           | Retired surface                                                                                                          |
-| **Class X** (prod keys, mainnet go-live yes, sanctions content)                             | Nitro human                                                                                                              |
+| Owned by others right now                                                                  | Why                                                                                                                      |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| **Vendor shell `:8090` / shell craft** (Index, Exchange honesty, AFK residual, RP1–RP5 UI) | Nitro swarm — dual-build destroys free parallel                                                                          |
+| **Denon open integrity PRs** (file sets live on `gh pr list`)                              | Dual-edit ban                                                                                                            |
+| **Platform WS market-id authority + nginx depth path** (Denon D-P0-WS)                     | Product law he is deciding                                                                                               |
+| **Custodial pay card / #346 open branch**                                                  | Until tip reclaim handoff is explicit — prefer **on-chain pay acceptance contracts** below, not competing on his open PR |
+| **apps/web product resurrection**                                                          | Retired surface                                                                                                          |
+| **Class X** (prod keys, mainnet go-live yes, sanctions content)                            | Nitro human                                                                                                              |
 
 **You may:** open new branches from tip · own `services/svc-protocol/**` contracts · forge/scripts · audit packages · indexer **venue contract** side · launch factory · on-chain escrow · research ADRs on tip.
 
@@ -39,7 +39,7 @@
 | --------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | **Fiat / custodial**        | Trade, bank ledger, pay gateway, cards that hold balances                                | **Not primary** — Nitro/Denon residual; you only touch **adapters that move value on-chain** |
 | **Protocol / self-custody** | Smart accounts, AMM, lending, escrow, merchant contracts, launch factory, INTACHAIN path | **Primary — this board**                                                                     |
-| **Shell**                   | Bizzan Vue                                                                               | Nitro wires UI after your APIs/events                                                        |
+| **Shell**                   | Vendor Vue shell                                                                         | Nitro wires UI after your APIs/events                                                        |
 
 Definitive build promise: **sovereignty by architecture** — non-custodial plane never pretends to be custodial. Hyperliquid-class **honest sequencing**: contracts on proven EVM rails first, native chain later.
 
@@ -183,7 +183,7 @@ Parallel: 2–4 worktrees inside **protocol/contracts only** is fine.
 | Blockchain senior not micro-managed          | You spec PR DAGs                                   |
 | Plan complete, no silent gaps                | Tiers A–K named; expand freely inside crypto plane |
 | Denon not dual-built                         | Collision wall §0                                  |
-| Bizzan is UI, not “skip chain”               | Protocol plane still full product                  |
+| Vendor shell is UI, not “skip chain”         | Protocol plane still full product                  |
 | Quality of elite chain engineer              | Audit packages, fail closed, no vapor              |
 
 ---
@@ -207,7 +207,7 @@ Ship: PR with proof commands (forge/anvil tests, audit package path)
 ```
 Shehzad — blockchain / Protocol Plane board is yours.
 
-Nitro agents: Bizzan shell honesty only. Denon: platform WS + his open integrity pile.
+Nitro agents: vendor shell honesty only. Denon: platform WS + his open integrity pile.
 You: insane runway on-chain — smart accounts audit package, AMM honesty, escrow, lending, router, merchant contracts, launch factory, venue contracts for indexer, sovereign card JIT contracts, IFC-on-chain, bridge/INTACHAIN phased specs, attestations, launchpad/NFT, mining epoch API, dex self-custody, audit factory.
 
 Law: INTAFACED_DEFINITIVE_BUILD.md §16–25 + docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md on tip.
