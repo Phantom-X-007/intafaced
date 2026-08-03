@@ -2,12 +2,12 @@
 
 **Proof:** NO-FLEET · Docker no · :8090 foreign worktree  
 **Tip (re-derive):** `git fetch && git log -1 --oneline origin/main`  
-**Last coord cycle:** 2026-08-03T21:35Z · tip=`410c0d32` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11
+**Last coord cycle:** 2026-08-03T21:41Z · tip=`705034e4` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11
 **Mandate:** freeProduct=0 is shell craft drained — **not** session kill.
 
 ## Living board (one paragraph)
 
-Shell product drained (freeProduct=0); freeTracker=0; tip `410c0d32` after **#661** P-WS cycle85 (on #658 R07 cycle85 + #657 invent cycle84); partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0** (fabricated-money-scan EXIT=0 · 0 findings / 0 baseline · 93 shell files); SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N open** (this cycle ships R07 cycle86 keep-alive).
+Shell product drained (freeProduct=0); freeTracker=0; tip `705034e4` after **#664** R01 cycle86b (on #662 R07 cycle86 + #661 P-WS cycle85); partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0** (fabricated-money-scan EXIT=0 · 0 findings / 0 baseline · 93 shell files); SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N open** (this cycle ships R07 cycle87 keep-alive).
 
 ## Merged Class N (shell wave)
 
@@ -390,6 +390,10 @@ fabricated-money-scan **EXIT=0** · 0 findings / 0 baseline · 93 shell files ·
 ## Invent re-scan (cycle86)
 
 fabricated-money-scan **EXIT=0** · 0 findings / 0 baseline · 93 shell files · vendor invent hits honesty/doctrine comments only · **NEW hard invent residual 0** · tip `410c0d32` · #661 P-WS cycle85 on main · freeProduct=0 ≠ kill.
+
+## Invent re-scan (cycle87)
+
+fabricated-money-scan **EXIT=0** · 0 findings / 0 baseline · 93 shell files · vendor invent hits honesty/doctrine comments only · **NEW hard invent residual 0** · tip `705034e4` · #664 R01 cycle86b + #662 R07 cycle86 on main · freeProduct=0 ≠ kill.
 
 ## Coord actions this session
 
