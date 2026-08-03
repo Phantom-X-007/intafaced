@@ -49,6 +49,31 @@
  *
  * Money note: nothing in this file carries an amount, because none of these
  * screens has an amount to carry. That is the point of them.
+ *
+ * ── AMENDMENT 2026-08-03 · A SECOND KIND OF GAP ─────────────────────────────
+ *
+ * `token.rights` and `token.governance` were added by the svc-token honesty
+ * pass, and they are not the same shape as the eight above. Those eight were
+ * screens pointed at a retired backend: the capability was absent and the
+ * screen went looking for it. The Bzb / "BZB ECO" page called nothing at all.
+ * It was static marketing prose asserting rights — fixed supply, revenue share,
+ * super nodes, governance weight, a development allocation — that no service
+ * implements and no tracker row plans, and it rendered every one of them as
+ * settled fact to any visitor who found the route.
+ *
+ * A screen that hangs on a dead path at least looks broken. A screen that
+ * confidently states an entitlement the platform does not provide looks
+ * finished, and is read as a promise. That is the worse failure, so it is
+ * socketed on the same terms as the rest: what is missing, what would have to
+ * be built, and which tracker row is accountable.
+ *
+ * `deadPath` is therefore "none" on both, rather than blank or invented. The
+ * field means "what this screen used to call"; the honest answer here is that
+ * it never called anything, and that is itself the finding.
+ *
+ * Both tracker rows were `done` when this was written and were corrected to
+ * `socket` in the same pass — see tooling/tracker/features.mjs. A socket
+ * pointing at a row that claims the thing already ships would be its own lie.
  */
 
 /**
@@ -172,18 +197,60 @@ export const SOCKETS = {
     },
 
     'token.dividends': {
-        capability: 'Holder distributions — your share of real yield from platform fees.',
+        capability: 'Holder distributions — your share of platform fee revenue.',
         deadPath: '/uc/bonus/user/page',
         tracker: 'token.yield',
         missing: [
-            'This one is closer than the rest, and the difference is worth being exact about. svc-token DOES distribute real yield: token.distributeRevenue is live and posts through the ledger.',
-            'What is missing is the READ. distributeRevenue carries admin:treasury — it is an operator action. There is no token:read procedure that returns one account distribution history, so a holder has no way to see what they were paid.',
+            'This one is closer than the rest, and the difference is worth being exact about. The PAYOUT maths and the ledger recipes are real: token.distributeRevenue sweeps fee sources and pays stakers pro-rata by stake and lock multiplier, one resumable ledger transaction per recipient, and it is tested.',
+            'It is not a scheduled distribution. §4.3 calls for a weekly job that aggregates the house fee accounts; that job does not exist. distributeRevenue has no caller anywhere outside its own tests — no cron, no bus subscriber, no admin form — so it pays out only when a person holding admin:treasury invokes it by hand, and otherwise never.',
+            'The amounts it distributes are typed by that person. The sources on the wire are checked for decimal shape and nothing more; no code compares them against the houseFees balance they claim to sweep. So the figure paid is an operator assertion, not a reading of what the platform earned.',
+            'And there is still no READ. No token:read procedure returns one account distribution history, so a holder who genuinely was paid has no way to see it and this screen could not show it if they had been.',
             'The retired screen also put a distribution total through new Number(...).toFixed(8). Money in a JS number is prohibited outright, and at eight decimal places against numeric(38,18) it silently truncates.'
         ],
         needed: [
+            'The §4.3 aggregation job: read the house fee accounts per asset for a window, and claim that window in a row before posting, so a run is resumable and a window cannot be settled twice on typed input.',
             'A token:read procedure returning the caller distribution history and total, sourced from the ledger postings distributeRevenue already writes.',
             'Amounts as decimal strings end to end. No toFixed, no Number, no float arithmetic in the browser.',
-            'Nothing else — the money path underneath this is already built and already correct. This is a missing window onto it, not a missing product.'
+            'Until the job exists, any copy here says "distributions are settled by the operator", never "you earn yield automatically". Correct maths behind a manual action is not a flywheel.'
+        ]
+    },
+
+    'token.rights': {
+        capability: 'What holding IFC entitles you to — supply, distributions and node rights.',
+        deadPath: 'none — this page never called a backend. It was static marketing text.',
+        tracker: 'token.yield',
+        missing: [
+            'The page this replaced asserted, in hardcoded English with nothing behind it: a fixed supply that is never inflated; that holders share in trading-fee revenue and listing distributions; that you may stake toward a super node; that node operators carry governance weight, early visibility on listings, listing priority and a claim on future distributions; that early participants receive a development allocation. It also offered a whitepaper PDF that is not in this repository.',
+            'Supply is not fixed in the sense that sentence means. svc-token mints on an emission schedule with a halving interval and a cap held in token_params — new IFC is created every epoch, and the auto-tick can do it unattended. A cap is not the absence of inflation.',
+            'No revenue share is automatic. See the token.dividends socket on the distributions screen: the payout path is real, the job that would run it is not.',
+            'There is no super node, no node operator, no listing priority, no early-visibility right and no development allocation. Nothing in any of the seventeen services implements any of them, and no tracker row plans them.',
+            'THESE WERE NOT OUR CLAIMS TO MAKE. Rights attached to a token — revenue share, allocations, node economics — are owner decisions (DIRECTION-2026-07-31 §8.10), and every promise above arrived with the vendored tree describing a different platform. They are gone rather than restated with our numbers in them.',
+            'One thing worth saying plainly on a page about the token: IFC is a ledger asset, not a coin. No contract in this repository mentions it, there is no chain and no deposit or withdrawal path. Supply is rows in Postgres and balances in svc-ledger. The burn account is an ordinary internal account we control, so "burned" means we agreed not to move it again, not that anything makes it unmovable. You cannot self-custody IFC or verify its supply independently of us.'
+        ],
+        needed: [
+            'An owner decision on what IFC actually entitles a holder to, expressed as mechanisms rather than a page: which revenue, at what share, to whom, in which jurisdictions.',
+            'For each right kept: the service that implements it and the ledger recipe that pays it. A right with no recipe is a sentence.',
+            'A distribution table and a supply statement generated from token_params and the ledger, not typed into a template — the figures on a token page must be the ones the system is actually running.'
+        ]
+    },
+
+    'token.governance': {
+        capability: 'IFC-weighted governance — proposing, voting, and the outcome of a vote.',
+        deadPath: 'none — this page showed a governance icon and never called anything.',
+        tracker: 'token.governance',
+        missing: [
+            'Ballots are real and this is the part worth being exact about. svc-token records proposals and votes, voting weight is your active stake snapshotted inside the same transaction as the ballot so a later unstake cannot erase it and a later stake cannot amplify it, zero-stake accounts are refused, and one account casts one ballot per proposal by unique index.',
+            'The OUTCOME does not exist. A proposal can be passed, rejected, executed or cancelled according to its own status column, and no code in this repository writes any of those four values. There is no quorum, no pass threshold, no job that closes a vote when its window ends, and no executor that does the thing a passed proposal asked for.',
+            'So every proposal ever opened is still open. A vote can be counted — the detail read recomputes a tally — and then nothing consumes the count. Votes are recorded and are not, at present, decisions.',
+            'A proposal opened with a start date in the future is worse off again: it is created as a draft, nothing can move it to open, and voting requires open. It can never be voted on at all.',
+            'What is missing is not a screen. Pointing a voting UI at these procedures would work, and would be the dishonest outcome: people would cast weighted ballots in the belief that a majority does something.'
+        ],
+        needed: [
+            'Quorum and pass threshold, set by the owner. An agent must not pick the numbers that decide what a majority means.',
+            'A close job that ends a vote on its window and an open job that starts a scheduled one, so a proposal state is a function of time rather than of who last called an API.',
+            'An executor per proposal kind, each of which crosses a boundary this service does not own: listing reaches svc-trade, curriculum reaches svc-academy, fee_param writes token_params. Those are contract-first changes, not local ones.',
+            'For grant: a ledger recipe, because funding a grant moves value and Doctrine §0.6 puts that write in packages/ledger-client and nowhere else. Recipes are an owner carve-out (DIRECTION §3).',
+            'Not a status flip. A mutation that marked a proposal passed without enacting it would look to a voter exactly like governance and be none — which is why the gap is stated here instead of being closed cheaply.'
         ]
     }
 };
