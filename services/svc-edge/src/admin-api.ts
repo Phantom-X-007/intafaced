@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { AuthError, bearerToken, requireMfa, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
 import { MODULE_IDS, isModuleId, type ModuleId } from '@intafaced/config';
 import type { KillSwitchAuditEntry, KillSwitchState } from './kill-switch.js';
+import { ENFORCEABLE_MODULES, OUTSIDE_THE_DOOR } from './routes.js';
 
 /**
  * THE OPERATOR CONTROL SURFACE (§14.6) — what `apps/admin` reaches.
@@ -53,8 +54,47 @@ import type { KillSwitchAuditEntry, KillSwitchState } from './kill-switch.js';
  * The token names a user, so every flip is attributable.
  */
 
+/**
+ * Why this module cannot be armed from here, or null if it can.
+ *
+ * ── The bug this closes ─────────────────────────────────────────────────────
+ *
+ * The refinement below used to be `isModuleId` alone: every one of the 23
+ * `MODULE_IDS` was accepted, while the edge can only enforce the 13 that have a
+ * prefix in the route table. The other ten were armable and unenforceable — a
+ * halt that returned 200, showed up in `disabledModules`, appeared in the audit
+ * trail as a real event, and refused nothing.
+ *
+ * `ws` was the one that mattered: svc-ws is deployed, publishes 4014, and the
+ * browser talks to it directly. An operator halting the market data socket
+ * during an incident got a green console and a live socket.
+ *
+ * A kill-switch the operator can arm but the platform cannot enforce is worse
+ * than an absent one, for the same reason a check that fails open is: the
+ * failure is invisible precisely when it is being relied on. So the control
+ * plane now refuses, and says which control to reach for instead.
+ */
+function unenforceable(module: ModuleId): string | null {
+  if (ENFORCEABLE_MODULES.has(module)) return null;
+  const known = OUTSIDE_THE_DOOR[module];
+  if (known) return known;
+  // A module in the registry with no service behind this edge yet. Refused
+  // rather than accepted, so an operator is never told a phase-5 surface was
+  // halted when there is nothing there to halt.
+  return `no route on this edge forwards to "${module}", so halting it would refuse nothing`;
+}
+
 const toggleSchema = z.object({
-  module: z.string().refine(isModuleId, { message: `module must be one of: ${MODULE_IDS.join(', ')}` }),
+  module: z
+    .string()
+    .refine(isModuleId, { message: `module must be one of: ${MODULE_IDS.join(', ')}` })
+    // Carries the SPECIFIC reason rather than a generic rejection — which control
+    // to reach for instead is the half an operator at 3am actually needs.
+    .superRefine((m, ctx) => {
+      if (!isModuleId(m)) return; // already reported above
+      const why = unenforceable(m);
+      if (why) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `"${m}" cannot be halted at this edge: ${why}` });
+    }),
   disabled: z.boolean(),
   /**
    * Required, and required to be useful.
@@ -169,7 +209,19 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
     read: snapshot,
 
     apply(body, operator) {
-      const input = toggleSchema.parse(body);
+      /**
+       * Zod's own `.message` is a JSON dump of the issue array, and
+       * `control-plane.ts` puts `err.message` straight on the wire. An operator
+       * refused mid-incident should read WHY in a sentence, not un-escape a
+       * nested array to find it.
+       */
+      let input;
+      try {
+        input = toggleSchema.parse(body);
+      } catch (err) {
+        if (err instanceof z.ZodError) throw new Error(err.issues.map((i) => i.message).join('; '));
+        throw err;
+      }
       const before = state.isKilled(input.module as ModuleId);
 
       /**
