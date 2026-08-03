@@ -1,6 +1,6 @@
 # R02 free claims (generated)
 
-Tip `f96ac6b4` · 2026-08-03T13:17:22.647Z
+Tip `f868296e` · 2026-08-03T13:55:29.049Z
 
 ## Free
 
@@ -21,18 +21,11 @@ Tip `f96ac6b4` · 2026-08-03T13:17:22.647Z
 - **TRK-blueprint.card** [TRACKER] Share card render (1080×1350, 1200×630)
 - **TRK-blueprint.ownership** [TRACKER] Export + hard delete, cascading
 - **TRK-bridge.canonical** [TRACKER] Canonical IFC bridge + attestations
-- **TRK-chain.evm** [TRACKER] INTAEVM sharing validator set + state
-- **TRK-chain.governance** [TRACKER] Governance parameter handover
-- **TRK-chain.mainnet** [TRACKER] INTACHAIN — CometBFT + native CLOB module
-- **TRK-chain.validators** [TRACKER] Validator set opening, published schedule
 - **TRK-dex.quote-router** [TRACKER] Live cross-venue quote — real prices or a typed refusal
 - **TRK-indexer.readmodels** [TRACKER] Chain → Postgres read models
 - **TRK-infra.i18n** [TRACKER] 100+ languages — keyed from day one (§9)
-- **TRK-launch.launchpad** [TRACKER] Presale / fair launch, vesting, staked allocation tiers
 - **TRK-launch.meme-factory** [TRACKER] One-click meme launch + instant market + LP
 - **TRK-launch.nft** [TRACKER] NFT mint / list / auction, on-chain royalties
-- **TRK-launch.token-factory** [TRACKER] ERC-20 deploy from audited templates
-- **TRK-market.commerce** [TRACKER] Listings, subscriptions, purchases, house commission
 - **TRK-market.vendors** [TRACKER] Vendor lifecycle — apply, vet, list, stake-gated slots
 - **TRK-mining.pool** [TRACKER] Stratum share protocol, PPLNS payouts
 - **TRK-ops.admin** [TRACKER] apps/admin — listings, fee params, treasury, kill-switches
@@ -45,7 +38,6 @@ Tip `f96ac6b4` · 2026-08-03T13:17:22.647Z
 - **TRK-trade.ccxt-api** [TRACKER] CCXT-compatible public API (bots + terminals connect)
 - **TRK-trade.forex** [TRACKER] Fiat pairs on the same engine
 - **TRK-trade.options** [TRACKER] European options, cash-settled, full collateral in v1
-- **TRK-venue.aggregation** [TRACKER] External venue adapters via CCXT (cross-venue)
 
 ## Blocked
 

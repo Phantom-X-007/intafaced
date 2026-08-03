@@ -1,6 +1,6 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T13:17:22.647Z · tip `f96ac6b4`
+Last report: 2026-08-03T13:55:29.049Z · tip `f868296e`
 
 | Report          | Path                                       |
 | --------------- | ------------------------------------------ |
@@ -13,8 +13,12 @@ Last report: 2026-08-03T13:17:22.647Z · tip `f96ac6b4`
 
 - Free product claims: **0**
 - Blocked: **1**
-- Open PRs: **17**
+- Open PRs: **18**
 
-No free REGROUP/AFK claims (or only OPS).
+anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).
+
+SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.
+
+- Spawn accounting: available=0 · active_spawned=0 · gap=0 · width_target=6-8
 
 Commands: `pnpm swarm:freeze` · `pnpm swarm:status` · `pnpm swarm:report` · `pnpm swarm:next`
