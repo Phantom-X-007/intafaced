@@ -31,6 +31,19 @@ type ChartState =
   | { readonly status: 'live'; readonly rows: readonly OhlcvRow[] }
   | { readonly status: 'failed'; readonly failure: Failure };
 
+/**
+ * Decimal string → float, for CANDLE GEOMETRY ONLY.
+ *
+ * `lib/money.ts` states the rule and names the two floats it allows (a depth-bar
+ * width and a bps count); this is the third, and it is marked here so it is not
+ * mistaken for a money path. Every output of this function reaches the DOM as an
+ * SVG `x`, `y` or `height` and nothing else — the price a user actually READS
+ * (the last close, below the chart) renders the service's decimal string
+ * verbatim and never passes through here.
+ *
+ * A candle body is a few pixels tall. Float error is nine orders of magnitude
+ * below one pixel; the same error in a price column would be a wrong price.
+ */
 function parseDec(s: string): number | null {
   const n = Number(s);
   return Number.isFinite(n) ? n : null;

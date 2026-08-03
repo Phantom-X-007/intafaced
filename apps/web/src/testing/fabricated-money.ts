@@ -88,3 +88,86 @@ export function describeMoneyShapes(hits: readonly MoneyHit[]): string {
     'See apps/web/src/app/page.tsx for what this rule cost the last time it was broken.',
   ].join('\n');
 }
+
+/**
+ * ── THE SECOND CLASS: INVENTED INCREMENTS ───────────────────────────────────
+ *
+ * Everything above scans RENDERED MARKUP, and that is the right shape for a
+ * fabricated *price*, because a fabricated price is a figure a user reads.
+ *
+ * It cannot see the bug this half exists for. `terminal.tsx` shipped:
+ *
+ *     tickSize={selected?.tickSize ?? '0.01'}
+ *     lotSize={selected?.lotSize ?? '0.00000001'}
+ *
+ * Neither literal is ever rendered. They are fed to `decimalsOf`, which turns
+ * `'0.01'` into the number 2, and that 2 decides how many digits get truncated
+ * off every price on the depth ladder. The output is a *correctly formatted*
+ * price at a precision nobody published — so it passes a markup scan, it passes
+ * review, and it looks right on screen. That is what makes it worse than a fake
+ * price rather than better: a fake price is obvious to anyone who knows the
+ * market, and a wrong tick is invisible until an order fills at the wrong size.
+ *
+ * So this half scans SOURCE. The rule it enforces is narrow and absolute: a
+ * money-increment identifier may not be given a literal default. Not a decimal
+ * string, not a decimal-place count. If the instrument did not say, the surface
+ * refuses — see `LiveOrderBook` and `OrderTicket`, which both do.
+ */
+
+/** Identifiers whose value is an increment, a precision, or a floor. */
+const INCREMENT_FIELDS = String.raw`tick[Ss]ize|lot[Ss]ize|step[Ss]ize|min[QN]|minQty|minNotional|maxQty|precision|decimals|priceDp|sizeDp|pip[Ss]ize|contractSize`;
+
+export interface IncrementHit {
+  readonly rule: string;
+  readonly text: string;
+  readonly line: number;
+}
+
+const INCREMENT_RULES: readonly MoneyShape[] = [
+  {
+    // `tickSize ?? '0.01'` · `lotSize || "1e-8"` — a decimal-string default.
+    name: 'increment defaulted to a literal decimal string',
+    pattern: new RegExp(String.raw`(?:${INCREMENT_FIELDS})[^\n]{0,40}?(?:\?\?|\|\|)\s*['"\`]\s*[\d.]`, 'g'),
+  },
+  {
+    // `market ? decimalsOf(m.tickSize) : 2` — a decimal-PLACE-count default.
+    name: 'precision defaulted to a literal digit count',
+    pattern: new RegExp(String.raw`(?:${INCREMENT_FIELDS})[^\n]{0,60}?(?::|\?\?|\|\|)\s*\d+\s*[;,)\n]`, 'g'),
+  },
+  {
+    // `const TICK = '0.01'` — a module-level increment nobody fetched.
+    name: 'increment bound to a hardcoded decimal constant',
+    pattern: new RegExp(String.raw`(?:const|let|var)\s+\w*(?:${INCREMENT_FIELDS})\w*\s*(?::[^=\n]+)?=\s*['"\`]\s*[\d.]`, 'gi'),
+  },
+];
+
+/**
+ * Every invented-increment shape in `source`, with the line it sits on.
+ *
+ * Pass real component source (read it with `node:fs`), not markup. A `null`
+ * default is deliberately NOT a hit — `?? null` is how a surface says "the
+ * instrument did not tell me", which is the outcome this rule wants.
+ */
+export function findInventedIncrements(source: string): readonly IncrementHit[] {
+  const hits: IncrementHit[] = [];
+  for (const { name, pattern } of INCREMENT_RULES) {
+    for (const match of source.matchAll(pattern)) {
+      const line = source.slice(0, match.index).split('\n').length;
+      hits.push({ rule: name, text: match[0].trim().replace(/\s+/g, ' '), line });
+    }
+  }
+  return hits;
+}
+
+export function describeInventedIncrements(hits: readonly IncrementHit[]): string {
+  const lines = hits.map((h) => `  · line ${h.line}: "${h.text}"  (${h.rule})`);
+  return [
+    `Source contains ${hits.length} invented increment(s):`,
+    ...lines,
+    '',
+    'A tick size, lot size or precision is a property of the INSTRUMENT. A default',
+    'here mis-rounds a real order — the user asks for one size and the venue gets',
+    'another — and unlike a fabricated price it renders as something plausible.',
+    'If the instrument did not publish it, refuse and say so. Never substitute.',
+  ].join('\n');
+}

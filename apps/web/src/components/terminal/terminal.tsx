@@ -82,10 +82,16 @@ export function Terminal() {
       ) : (
         <div className={styles.grid}>
           <div className={styles.bookColumn}>
+            {/*
+              The increments come from the instrument or they do not come at all.
+              There were defaults here — `'0.01'` and `'0.00000001'` — and they
+              were invented. Passing `null` makes the absence visible to the
+              panel, which withholds the ladder and says so.
+            */}
             <LiveOrderBook
               marketId={selected?.id ?? null}
-              tickSize={selected?.tickSize ?? '0.01'}
-              lotSize={selected?.lotSize ?? '0.00000001'}
+              tickSize={selected?.tickSize ?? null}
+              lotSize={selected?.lotSize ?? null}
             />
             <MarketsPanel state={state} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           </div>

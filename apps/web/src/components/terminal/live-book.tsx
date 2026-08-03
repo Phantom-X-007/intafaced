@@ -34,6 +34,8 @@ const copy = {
   resnapshotting: 'Book withheld — resnapshotting after a sequence gap',
   noBook: 'Book is empty on both sides',
   socketTitle: 'Order book · live depth',
+  noIncrements: 'Book withheld — this market did not publish a tick size and a lot size, so no price or size here could be rounded to the grid the engine enforces',
+  noIncrementsBlockedBy: 'svc-trade · markets.list tickSize + lotSize',
 } as const;
 
 /** Rows for the ladder. Every string here came out of a bigint. */
@@ -55,7 +57,26 @@ function toLevels(book: DepthBook, side: 'bids' | 'asks', priceDp: number, sizeD
   return side === 'asks' ? levels.reverse() : levels;
 }
 
-export function LiveOrderBook({ marketId, tickSize, lotSize }: { marketId: string | null; tickSize: string; lotSize: string }) {
+/**
+ * The increments are NULLABLE, and that is the point.
+ *
+ * A ladder is rendered at the precision the market quotes at, and that precision
+ * is a property of the instrument — never of this renderer. There was a default
+ * here (`'0.01'` / `'0.00000001'`, supplied by the caller) and it was removed:
+ * a guessed tick draws a price column at the wrong precision, which is not a
+ * cosmetic error on a book, it is a book that disagrees with the engine about
+ * where the grid is. `null` means "the instrument did not say", and the only
+ * honest response to that is to withhold the ladder and name what is missing.
+ */
+export function LiveOrderBook({
+  marketId,
+  tickSize,
+  lotSize,
+}: {
+  marketId: string | null;
+  tickSize: string | null;
+  lotSize: string | null;
+}) {
   const depthOrigin = useDepthOrigin();
   const availability = useMemo(() => resolveDepthTransport(depthOrigin), [depthOrigin]);
   const [state, setState] = useState<DepthState>({ status: 'idle' });
@@ -75,6 +96,13 @@ export function LiveOrderBook({ marketId, tickSize, lotSize }: { marketId: strin
 
   if (!availability.available) {
     return <SocketPanel title={copy.socketTitle} reason={availability.reason} blockedBy={availability.blockedBy} />;
+  }
+
+  // Before the transport state, because no depth state is renderable without a
+  // grid to render it on. A market may legitimately be unselected (both null);
+  // it may never be quoted at an invented precision.
+  if (tickSize === null || lotSize === null) {
+    return <SocketPanel title={copy.socketTitle} reason={copy.noIncrements} blockedBy={copy.noIncrementsBlockedBy} />;
   }
 
   const priceDp = decimalsOf(tickSize);
