@@ -393,6 +393,70 @@ describe('who can actually reach the switch', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// A switch that cannot be enforced must not be armable
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('the console cannot arm a kill the edge cannot enforce', () => {
+  const WHY = 'incident drill, attempting to halt a module outside the edge';
+
+  /**
+   * THE BUG THIS FIXES, IN ONE TEST.
+   *
+   * `toggleSchema` accepted every one of the 23 `MODULE_IDS`, while the edge can
+   * only refuse the 13 with a prefix in the route table. `ws` is the one that
+   * mattered: svc-ws is deployed, publishes 4014, and the browser connects to it
+   * directly. Halting it returned 200, wrote a real audit entry, showed up in
+   * `disabledModules` — and refused nothing.
+   */
+  it('refuses to halt `ws`, because svc-ws does not sit behind this edge', async () => {
+    const h = await edge();
+    const res = await flip(h, 'ws', true, WHY);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('edge.invalid_kill_switch');
+    // The operator is told WHICH control is missing, not merely refused.
+    expect(res.json().error).toContain('not through this edge');
+    // And nothing was recorded as halted.
+    expect(h.state.isKilled('ws')).toBe(false);
+  });
+
+  it('does not write an audit entry for a halt it refused to arm', async () => {
+    const h = await edge();
+    await flip(h, 'ws', true, WHY);
+
+    const read = await h.app.inject({ method: 'GET', url: '/admin/kill-switches', headers: { authorization: await asOperator() } });
+    expect(read.json().audit).toEqual([]);
+    expect(read.json().disabledModules).toEqual([]);
+  });
+
+  /** The money plane has a stronger, durable control — this one must not shadow it. */
+  it('points the operator at the ledger freeze instead of a module flag', async () => {
+    const h = await edge();
+    const res = await flip(h, 'ledger', true, WHY);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('/admin/ledger/freeze');
+  });
+
+  it('still arms every module the edge CAN enforce', async () => {
+    const h = await edge();
+    // One from each shape: tRPC-only, the dual-contract trade module, protocol.
+    for (const module of ['identity', 'trade', 'protocol', 'pay', 'academy']) {
+      const res = await flip(h, module, true, `drill halt of ${module} during the reachability audit`);
+      expect(res.statusCode, module).toBe(200);
+    }
+  });
+
+  /** The refusal must read as a sentence, not as a nested JSON dump. */
+  it('gives a reason an operator can read at 3am', async () => {
+    const h = await edge();
+    const error = (await flip(h, 'ws', true, WHY)).json().error as string;
+    expect(error).not.toContain('"code"'); // not a serialised zod issue array
+    expect(error).toContain('"ws" cannot be halted at this edge');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // The audit trail
 // ─────────────────────────────────────────────────────────────────────────────
 
