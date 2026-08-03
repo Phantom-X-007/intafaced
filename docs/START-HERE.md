@@ -61,9 +61,11 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 
 - **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists. Shell deployable on **:8090** (Dockerfile + compose). Major shell rewire waves landed (#412 deploy, #418 OTC/identity, #419 nav, #421 trading edge, #426 promo honesty — re-check `gh` for newer).
 - **Not a live money product:** rails/sandbox, chain feed propped — see trust floor.
-- **Do not rebuild** services already on main. **Do not rebuild vendored exchange kit screens from scratch** — rewire / honesty / i18n / brand only ([`VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md`](VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md)).
+- **Do not rebuild** services already on main. **Do not rebuild vendored exchange kit screens from scratch** — rewire / honesty / i18n / brand only ([`VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md`](VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md)).
 - **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · what “proper cleanup” means: [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md)
-- **Product UI (law):** vendored exchange shell → http://localhost:8090 (`vendor/<exchange-tree>/05_Web_Front`). **`apps/web` is not the product** (retire as product; optional pattern port only — [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md)).
+- **Product UI (law):** vendored exchange shell → http://localhost:8090 (`vendor/coinexchange/05_Web_Front`). **`apps/web` is not the product** (retire ADR: [`adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`](adr/2026-08-03-retire-apps-web-port-to-vue-shell.md); port map: [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md)).
+- **Denon same-day product queue (build this):** [`REGROUP-2026-08-03.md`](REGROUP-2026-08-03.md) — shell money/landing/wire queue + WS integrity blocker.
+- **Insane parallel / swarms (agents):** [`SWARM-ALL-OUT-ORIENT-2026-08-03.md`](SWARM-ALL-OUT-ORIENT-2026-08-03.md) — discovery ritual, free matrix, anti-negatives, GO paste.
 - **Custody honesty:** some money screens may be **CustodyNotBuilt** until wallet-RPC security review — do not re-paint fake withdraw/recharge UI over that.
 - **Owners:** Nitro = FE/shell · Denon = spine / his open PRs (do not dual-edit) · Shehzad `@shehzad002` = M1–M7 (agents babysit only).
 - **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
