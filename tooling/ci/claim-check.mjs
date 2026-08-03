@@ -37,6 +37,8 @@
  * failure mode we are removing is not overlap, it is *unknowing* overlap.
  */
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+import { join } from 'node:path';
 
 const args = process.argv.slice(2);
 
@@ -101,6 +103,68 @@ if (prs.__error) {
   process.exit(2);
 }
 
+/**
+ * HUMAN-CLAIMED MOUNTAINS — the question this tool did NOT answer, and should.
+ *
+ * On 2026-08-03 five agents were dispatched into features locked to a named
+ * human. `claim:check` reported `✓ clear` for every one of them, and that is
+ * what produced the confidence to dispatch.
+ *
+ * It was not wrong — it answered "is this file open in someone's PR right now",
+ * which was all it was built to do. But an UNSTARTED human mountain has no open
+ * PR by definition, so the emptier the lane, the greener the check. Exactly
+ * backwards for the question people were actually asking it.
+ *
+ * Three of the five agents caught the lock themselves by reading
+ * `tooling/tracker/features.mjs`. A tool that a careful reader has to
+ * second-guess is worse than no tool, so it reads that file now.
+ */
+let ownershipError = null;
+
+async function ownedPaths() {
+  try {
+    const mod = await import(pathToFileURL(join(process.cwd(), 'tooling/tracker/features.mjs')).href);
+    const out = [];
+    for (const f of mod.FEATURES ?? []) {
+      if (!f.owner) continue;
+
+      // Declared paths, where a feature bothers to list them.
+      for (const req of f.requires ?? []) out.push({ path: req, owner: f.owner, id: f.id ?? '' });
+
+      // And the module itself. This is the load-bearing half: 21 of the 27
+      // owner-locked features declare NO `requires` at all — including
+      // trade.otc, trade.algo, bank.earn and pay.fraud, which are exactly the
+      // ones agents were wrongly dispatched into. A path-only check could
+      // never have caught them, and reported `clear` every time.
+      //
+      // `services/svc-<module>` is the convention throughout this repo, so a
+      // locked module locks its service directory.
+      if (f.module) out.push({ path: `services/svc-${f.module}`, owner: f.owner, id: f.id ?? '' });
+    }
+    return out;
+  } catch (error) {
+    // Cannot read = cannot claim clear on this axis. Surfaced, never swallowed:
+    // a silent failure here reproduces the exact bug this check was added for.
+    ownershipError = error.message;
+    return null;
+  }
+}
+
+const owned = await ownedPaths();
+const lockHits = [];
+if (owned === null) {
+  console.error('  claim-check — CANNOT ANSWER: tracker ownership could not be read.');
+  console.error(`      ${ownershipError}`);
+  console.error('      The human-mountain check did NOT run. Not reporting clear.');
+  process.exit(2);
+} else {
+  for (const o of owned) {
+    if (mine.some((m) => touches(m, o.path))) {
+      if (!lockHits.some((h) => h.path === o.path && h.owner === o.owner)) lockHits.push(o);
+    }
+  }
+}
+
 const self = git(['rev-parse', '--abbrev-ref', 'HEAD']);
 const collisions = [];
 
@@ -112,8 +176,22 @@ for (const pr of prs) {
 
 console.log(`  claim-check — ${mine.length} path(s) from ${source}, against ${prs.length} open PR(s)\n`);
 
+if (lockHits.length > 0) {
+  console.error(`  ✖ ${lockHits.length} path(s) belong to a HUMAN-CLAIMED mountain:`);
+  for (const h of lockHits) {
+    console.error(`      ${h.path} — owner @${h.owner}${h.id ? ` (${h.id})` : ''}`);
+  }
+  console.error('');
+  console.error('  An agent must NOT implement here. The documented unlock is the owner');
+  console.error('  commenting `agents free on <path>`, or a PR moving the `owner` field in');
+  console.error('  tooling/tracker/features.mjs and the ownership docs.');
+  console.error('');
+  console.error('  Reading it, babysitting CI, and reporting findings are all still fine.');
+  process.exit(1);
+}
+
 if (collisions.length === 0) {
-  console.log('  ✓ clear — no open PR touches these paths');
+  console.log('  ✓ clear — no open PR touches these paths, and none is human-claimed');
   process.exit(0);
 }
 
