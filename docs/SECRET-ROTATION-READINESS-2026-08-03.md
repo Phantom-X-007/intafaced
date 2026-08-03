@@ -50,7 +50,23 @@ Sources: `.env.example`, `docker-compose.apps.yml`, `packages/config/src/env.ts`
 
 Roughly forty variables, all documented and commented out at the foot of `.env.example`, all with **no default in the properties files** so an unset one stops the service. The live ones are enumerated in A1.4 §2 and reproduced in the owner action list below.
 
-**One is a `:-` default and should not be:** `COINEX_REDIS_PASSWORD:-coinex_dev_only` in the vendored exchange compose file guards the store holding exchange HTTP sessions, published on `0.0.0.0:6381`. A1.4 flagged it as P3; it is still there. A weak default on a session store is the §1 hazard in its purest form.
+**One is a `:-` default and should not be:** `COINEX_REDIS_PASSWORD:-coinex_dev_only` in the vendored exchange compose file guards the store holding exchange HTTP sessions, published on `0.0.0.0:6381`. A1.4 flagged it as P3; it is still there. A weak default on a session store is the §1.5 hazard in its purest form.
+
+### 1.5 · The dangerous kind — everything that can run on a value you already know
+
+A missing secret is a small problem: the service refuses to start and somebody fixes it in five minutes. **A secret with a working default is the large problem**, because the deployment comes up, passes every health check, serves real traffic, and is protected by a value that ships in the repository.
+
+The complete list for this platform, and it is short because the design is mostly right:
+
+| Value                                                                    | Where it can take effect                                            | Risk                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COINEX_REDIS_PASSWORD:-coinex_dev_only`                                 | vendored exchange compose, **applies silently if the var is unset** | **Highest.** A published session store. Stealing a session is stealing an account. This is the only true `:-` default on a credential in the tree. → **OWNER-7**                                                 |
+| `spring.datasource.password=coinex_dev_only` (8 vendored modules)        | the exchange MySQL, published on `0.0.0.0:5506`                     | High, but a **perimeter** problem — A1.4 deliberately left the matched dev pair alone rather than break half of it for a scanner. The fix is closing the port, not editing the literal. → A1.4 P2                |
+| `dev-only-*` in `.env.example` (edge, internal, JWT, both `PAY_*` hooks) | any deployment where `.env` was copied and never edited             | **The quiet one.** These are not schema defaults — the schema has none — but they are working 32+ character values sitting in the repo. Nothing stops a deployment running on them, and nothing would report it. |
+
+**No TypeScript service has a credential default in its schema.** Every required secret in §1.1 and §1.2 is declared without one, so absence is fatal rather than silently substituted. That property is load-bearing and this branch does not touch it.
+
+The residual risk is therefore entirely the third row: a deployment that copied `.env.example` and never replaced the placeholders. There is no mechanical check for that here, because a value is only "the example value" relative to a file the deployment does not have to keep. **The owner should confirm directly that no staging or production deployment has ever run on a `dev-only-*` value** — and if one has, treat all five as disclosed and follow §2.3. That is **OWNER-8**.
 
 ---
 
@@ -81,6 +97,17 @@ Deliberately **not** holding these, and each absence is load-bearing rather than
 | `JWT_ACCESS_SECRET`       | Rotate svc-identity alone: every login succeeds and every subsequent request is anonymous — _"logged in but nothing works"_, with **no error in any log**. Rotate svc-edge alone: all existing sessions 401. | Users, confusingly. Operators, not at all.                                               |
 
 `INTERNAL_SERVICE_SECRET` is the dangerous one: **a healthy-looking platform that cannot move money.** Any procedure for it must include a money-path probe, not a health check.
+
+**The four `JWT_ACCESS_SECRET` holders do not fail the same way**, and knowing which is which is the difference between diagnosing a partial rotation in a minute and in a day:
+
+| Left behind    | What it does with the token         | Symptom if it alone keeps the old value                                                                                                                               |
+| -------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `svc-identity` | **mints**                           | New logins issue tokens nothing else accepts — everyone is anonymous after logging in.                                                                                |
+| `svc-edge`     | **verifies**, front door            | Every request 401s. Total, obvious outage.                                                                                                                            |
+| `svc-ledger`   | verifies, **operator surface only** | Users unaffected. The **operator console** stops authenticating — you lose your tooling in the middle of the rotation, which is the worst possible moment to lose it. |
+| `svc-ws`       | verifies, **optional**              | Public market data keeps working. `/private/stream` silently refuses upgrades, so live order/fill updates stop while the screen still shows prices.                   |
+
+The svc-ledger and svc-ws rows are the ones that get missed, because neither presents as "login is broken."
 
 ### 2.3 · Rotation procedures
 
