@@ -42,37 +42,28 @@ import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principa
  */
 
 /**
- * A DEDICATED database, not the shared dev one.
+ * A PER-RUN DATABASE, created and dropped by this suite.
  *
  * This test applies every forward migration, which means it MUTATES THE SCHEMA
  * of whatever it points at. Pointed at the shared `intafaced` database it
  * applied an unmerged branch's migration there, and `main`'s own svc-trade
- * tests — which apply only the first migration and call `listMarket` without
- * the column that migration made mandatory — began failing on a branch that had
- * never touched them. A test that changes shared state is not a test, it is a
- * deployment.
- *
- * Create it once:
- *   psql -U intafaced -c "CREATE DATABASE intafaced_test OWNER intafaced"
- *   psql -U intafaced -d intafaced_test -c "CREATE SCHEMA trade AUTHORIZATION svc_trade"
- */
-/**
- * A PER-RUN DATABASE, created and dropped by this suite.
+ * tests began failing on a branch that had never touched them. A test that
+ * changes shared state is not a test, it is a deployment. #211 moved it to
+ * `intafaced_test`, which fixed that and left the smaller version of it:
+ * `intafaced_test` is shared across worktrees too, so two agents running THIS
+ * FILE still truncated each other's `trade.orders` mid-test.
  *
  * trade's SQL is schema-qualified (`trade.…`) on purpose — §2 keeps a service
  * physically unable to reach outside its own schema. That is exactly why
- * `createTestDb`'s generated schema (`test_trade_4711_1`) cannot host it, and
- * why this suite used to share the one real `trade` schema in `intafaced_test`
- * with every other worktree on the machine — truncating their rows mid-test.
+ * `createTestDb`'s generated schema (`test_trade_4711_1`) cannot host it, the
+ * way it hosts svc-ledger. `createTestDatabase` moves the isolation boundary
+ * from the schema to the DATABASE and creates `trade` under its real name
+ * inside it. Every statement below, and every migration, is unchanged.
  *
- * `createTestDatabase` moves the isolation boundary from the schema to the
- * DATABASE and creates the schema under its real name inside it. Every
- * statement below, and every migration, is unchanged.
- *
- * The URL is the ADMIN one (`TEST_DATABASE_URL`), not `TEST_DATABASE_URL_TRADE`: creating a
- * database needs CREATEDB, which the per-service roles deliberately lack. It
- * must still name a `*_test` database — `assertTestDatabase` refuses anything
- * else, and asks the server rather than trusting the string.
+ * The URL is the ADMIN one (`TEST_DATABASE_URL`), not `TEST_DATABASE_URL_TRADE`:
+ * creating a database needs CREATEDB, which the per-service roles deliberately
+ * lack. It must still name a `*_test` database — `assertTestDatabase` refuses
+ * anything else, and asks the server rather than trusting the string.
  */
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -190,9 +181,15 @@ if (!available) {
     });
   });
 
+  /**
+   * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
+   * pool, and when several suite files tear down at the same moment Postgres
+   * serialises the drops. The work still finishes well inside this; the default
+   * was sized for `sql.end()`, which is all this hook used to do.
+   */
   afterAll(async () => {
     await db.drop();
-  });
+  }, 30_000);
 
   // ── The happy path ────────────────────────────────────────────────────────
 

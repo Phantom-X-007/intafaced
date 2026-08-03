@@ -297,11 +297,18 @@ export async function createTestDatabase(options: TestDatabaseOptions): Promise<
       await sql.unsafe(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
     },
     drop: async () => {
-      await sql.end({ timeout: 5 }).catch(() => undefined);
+      /**
+       * `timeout: 0` closes the pool immediately instead of waiting up to five
+       * seconds for a graceful drain. There is nothing to drain gracefully into
+       * — the next statement destroys the database these connections point at,
+       * and FORCE would terminate them anyway. Those five seconds were most of
+       * a vitest `afterAll` budget spent waiting to throw work away.
+       */
+      await sql.end({ timeout: 0 }).catch(() => undefined);
       // FORCE terminates leftover backends; without it a straggler connection
       // makes DROP fail and the database leaks until the sweeper catches it.
       await admin.unsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`).catch(() => undefined);
-      await admin.end({ timeout: 5 }).catch(() => undefined);
+      await admin.end({ timeout: 0 }).catch(() => undefined);
     },
   };
 }

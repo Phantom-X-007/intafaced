@@ -97,9 +97,15 @@ if (!available) {
     );
   });
 
+  /**
+   * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
+   * pool, and when several suite files tear down at the same moment Postgres
+   * serialises the drops. The work still finishes well inside this; the default
+   * was sized for `sql.end()`, which is all this hook used to do.
+   */
   afterAll(async () => {
     await db.drop();
-  });
+  }, 30_000);
 
   it('open locks margin and listOpen returns the row', async () => {
     const pos = await positions.open({

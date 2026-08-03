@@ -43,37 +43,27 @@ import { MemoryChain } from './rails/chain-port.js';
  */
 
 /**
- * `intafaced_test`, NOT `intafaced`.
- *
- * This suite APPLIES A MIGRATION and TRUNCATES TABLES. Pointed at the shared
- * `intafaced` database it does both to the schema and the rows every other
- * worktree and the running docker stack are using — which is how a branch broke
- * `main`'s tests from a different checkout. It was pointed there by default
- * until now, and `pay.deposits`/`pay.withdrawals` on the running stack had live
- * rows in them.
- *
- * `intafaced_test` is stood up by `tooling/infra/postgres-init/02-intafaced-test-db.sh`
- * with a `pay` schema owned by `svc_pay`. Same convention as
- * `TEST_DATABASE_URL_TRADE`, and `turbo.json` already passes the variable
- * through, so an override is honoured everywhere.
- */
-/**
  * A PER-RUN DATABASE, created and dropped by this suite.
+ *
+ * This suite APPLIES MIGRATIONS and TRUNCATES TABLES. Pointed at the shared
+ * `intafaced` database it did both to the schema and the rows every other
+ * worktree and the running docker stack were using — which is how a branch
+ * broke `main`'s tests from a different checkout, with live rows in
+ * `pay.deposits` / `pay.withdrawals`. #211 moved it to `intafaced_test`, which
+ * fixed that and left a smaller version of it: `intafaced_test` is shared too,
+ * so two worktrees running THIS FILE still truncated each other.
  *
  * pay's SQL is schema-qualified (`pay.…`) on purpose — §2 keeps a service
  * physically unable to reach outside its own schema. That is exactly why
- * `createTestDb`'s generated schema (`test_pay_4711_1`) cannot host it, and
- * why this suite used to share the one real `pay` schema in `intafaced_test`
- * with every other worktree on the machine — truncating their rows mid-test.
+ * `createTestDb`'s generated schema (`test_pay_4711_1`) cannot host it, the way
+ * it hosts svc-ledger. `createTestDatabase` moves the isolation boundary from
+ * the schema to the DATABASE and creates `pay` under its real name inside it.
+ * Every statement below, and every migration, is unchanged.
  *
- * `createTestDatabase` moves the isolation boundary from the schema to the
- * DATABASE and creates the schema under its real name inside it. Every
- * statement below, and every migration, is unchanged.
- *
- * The URL is the ADMIN one (`TEST_DATABASE_URL`), not `TEST_DATABASE_URL_PAY`: creating a
- * database needs CREATEDB, which the per-service roles deliberately lack. It
- * must still name a `*_test` database — `assertTestDatabase` refuses anything
- * else, and asks the server rather than trusting the string.
+ * The URL is the ADMIN one (`TEST_DATABASE_URL`), not `TEST_DATABASE_URL_PAY`:
+ * creating a database needs CREATEDB, which the per-service roles deliberately
+ * lack. It must still name a `*_test` database — `assertTestDatabase` refuses
+ * anything else, and asks the server rather than trusting the string.
  */
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -128,9 +118,15 @@ if (!available) {
     money = new UserMoneyService(sql, ledger, rails, { operatorCreditRails: ['card-sandbox'] });
   });
 
+  /**
+   * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
+   * pool, and when several suite files tear down at the same moment Postgres
+   * serialises the drops. The work still finishes well inside this; the default
+   * was sized for `sql.end()`, which is all this hook used to do.
+   */
   afterAll(async () => {
     await db.drop();
-  });
+  }, 30_000);
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
