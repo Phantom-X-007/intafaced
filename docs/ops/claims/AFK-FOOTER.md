@@ -6,6 +6,7 @@
 **title:** Terminal footer hide consistency
 **track:** AFK
 **paths:**
+
 - vendor/coinexchange/05_Web_Front/src/App.vue
 
 ## Done bar
