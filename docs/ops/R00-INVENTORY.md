@@ -1,11 +1,11 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T18:19:11.083Z
+Generated: 2026-08-03T18:25:13.588Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `432f6e73`                                                        |
-| Tip subject                       | docs(ops): R07 cycle52 freeProduct=0 + tip 1a824fb8 (#591)        |
+| Tip                               | `f3544259`                                                        |
+| Tip subject                       | docs(ops): P-WS still blocked tip 432f6e73 (cycle53) (#593)       |
 | Open PRs                          | 11                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
