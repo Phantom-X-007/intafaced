@@ -2,12 +2,12 @@
 
 **Proof:** NO-FLEET · Docker no · :8090 foreign worktree  
 **Tip (re-derive):** `git fetch && git log -1 --oneline origin/main`  
-**Last coord cycle:** 2026-08-03T22:26Z · tip=`53dec119` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11
+**Last coord cycle:** 2026-08-03T22:31Z · tip=`1f28bc66` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11
 **Mandate:** freeProduct=0 is shell craft drained — **not** session kill.
 
 ## Living board (one paragraph)
 
-Shell product drained (freeProduct=0); freeTracker=0; tip `53dec119` after **#682** R07 cycle95 (on #681 R01 cycle95 + #679/#680 cycle94); partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0** (fabricated-money-scan EXIT=0 · 0 findings / 0 baseline · 93 shell files); SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N open** (this cycle ships R07 cycle96 keep-alive).
+Shell product drained (freeProduct=0); freeTracker=0; tip `1f28bc66` after **#684** R07 cycle96 + **#683** invent cycle96 (on #682 R07 cycle95); partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0** (fabricated-money-scan EXIT=0 · 0 findings / 0 baseline · 93 shell files); SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N open** (this cycle ships R07 cycle97 keep-alive).
 
 ## Merged Class N (shell wave)
 
@@ -166,6 +166,7 @@ Buckets: [R02-BUCKETS-LIVE.md](./R02-BUCKETS-LIVE.md) · Night law: [NIGHT-ENGIN
 | 94 | →0e371837 | 0 | #679 R07 cycle94 land (on #678 cycle93 + #677 invent); freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 95 | →6c4638b0 | 0 | #681 R01 cycle95 + #679/#680 cycle94 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 96 | →53dec119 | 0 | #682 R07 cycle95 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
+| 97 | →1f28bc66 | 0 | #684 R07 cycle96 + #683 invent cycle96 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 
 ## Invent re-scan (cycle20)
 
@@ -442,6 +443,10 @@ fabricated-money-scan **EXIT=0** · 0 findings / 0 baseline · 93 shell files ·
 ## Invent re-scan (cycle96)
 
 fabricated-money-scan **EXIT=0** · 0 findings / 0 baseline · 93 shell files · vendor invent hits honesty/doctrine comments only · **NEW hard invent residual 0** · tip `53dec119` · #682 R07 cycle95 on main · freeProduct=0 ≠ kill.
+
+## Invent re-scan (cycle97)
+
+fabricated-money-scan **EXIT=0** · 0 findings / 0 baseline · 93 shell files · vendor invent hits honesty/doctrine comments only · **NEW hard invent residual 0** · tip `1f28bc66` · #684 R07 cycle96 + #683 invent cycle96 on main · freeProduct=0 ≠ kill.
 
 ## Coord actions this session
 
