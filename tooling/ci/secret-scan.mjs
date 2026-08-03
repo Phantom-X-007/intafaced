@@ -400,7 +400,19 @@ const KNOWN_DISCLOSED = [
 ];
 
 const registerKey = (v) => `${v.file.replace(/\\/g, '/')}:${v.line}:${v.check}`;
-const REGISTER = new Map(KNOWN_DISCLOSED.map((e) => [registerKey(e), e]));
+/**
+ * `SECRET_SCAN_NO_REGISTER=1` empties the register, so every known-disclosed
+ * finding becomes a hard failure. `secret-scan.mutation.mjs` sets it because it
+ * runs the scan against a synthetic repo where none of the registered files
+ * exist, and the staleness rule would otherwise fire on every one of them.
+ *
+ * An env flag is safe here because it can only make the gate STRICTER. Setting
+ * it in CI turns the build red, never green — so it is not a bypass and cannot
+ * decay into one.
+ */
+const REGISTER_DISABLED = process.env.SECRET_SCAN_NO_REGISTER === '1';
+const REGISTERED = REGISTER_DISABLED ? [] : KNOWN_DISCLOSED;
+const REGISTER = new Map(REGISTERED.map((e) => [registerKey(e), e]));
 
 function tracked() {
   const out = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -468,6 +480,9 @@ for (const rel of tracked()) {
   else sourceFilesScanned++;
   const isTest = TEST_FILE.test(rel);
   const inWalletTree = WALLET_SIGNING_TREE.test(rel);
+  // Shell is source by extension but config by shape — `export KEY=value` is an
+  // assignment, not a declaration, so it gets the config rule as well.
+  const isShell = /\.(?:sh|bash)$/i.test(rel);
   const lines = content.split(/\r?\n/);
 
   /**
@@ -499,9 +514,16 @@ for (const rel of tracked()) {
 
     // ── credential-shaped key = literal value ────────────────────────────────
     // Handles `key=value`, `key: value` and `- key: value`.
-    // CONFIG FILES ONLY. Running this over source is the noise catastrophe the
-    // header describes; source gets the three narrow checks further down.
-    const assignment = isConfig ? /^[-\s]*["']?([A-Za-z0-9_.\-[\]]+)["']?\s*[:=]\s*(.*)$/.exec(trimmed) : null;
+    // CONFIG FILES AND SHELL. Running this over Java/TS is the noise catastrophe
+    // the header describes; those get the three narrow checks further down.
+    //
+    // The leading-keyword strip is what makes `ENV API_KEY=…` in a Dockerfile
+    // and `export API_KEY=…` in a deploy script visible: both are `key=value`
+    // wearing a prefix, and the mutation test scored them as survivors until
+    // this line existed. Measured cost across the repo: zero new hits — the
+    // only ENV/export lines here set PATH, NODE_ENV and a port.
+    const declLine = isConfig || isShell ? trimmed.replace(/^(?:ENV|ARG|export|declare\s+-x|set\s+-x)\s+/i, '') : null;
+    const assignment = declLine === null ? null : /^[-\s]*["']?([A-Za-z0-9_.\-[\]]+)["']?\s*[:=]\s*(.*)$/.exec(declLine);
     if (assignment) {
       const [, key, rawValue] = assignment;
       const value = rawValue.replace(/\s+#.*$/, '').replace(/^['"]|['"]$/g, '');
@@ -639,7 +661,7 @@ for (const v of violations) {
 }
 
 // Rule 2: an entry that no longer describes a real finding is itself a failure.
-const staleRegisterEntries = KNOWN_DISCLOSED.filter((e) => !seenRegisterKeys.has(registerKey(e)));
+const staleRegisterEntries = REGISTERED.filter((e) => !seenRegisterKeys.has(registerKey(e)));
 
 const ROTATION_DOC = 'docs/SECRET-ROTATION-READINESS-2026-08-03.md';
 
