@@ -158,8 +158,62 @@ useful, do not fork implement plans from conflicting freezes.
 
 ---
 
-## Not packed yet (still free, lower priority or heavier blockers)
+## Not packed yet (short-stub residual)
 
-mining.pool, trade.options/forex, market.vendors (upstream of commerce).
-Long-path chain.mainnet / chain.evm / bridge already have **Pack 5** research
-files — not “unpacked,” but still blocked for implement.
+Prefer long-form `TRK-*.md` (pack drain) when both exist. Short unprefixed stubs
+may still lag for some ids. Re-derive freeTracker with `pnpm swarm:status` before
+claiming implement. Sanctions **list content** remains Class X.
+
+---
+
+## Pack drain — `docs/trk-research-pack-drain` (tip freeze `d5324893`)
+
+Long-form **`TRK-*.md`** research for tracker rows that lacked thorough specs
+(claim locks may already exist). Complements short stubs (unprefixed) and
+ops-packs long-forms. **Research only** — no `features.mjs`, no Shehzad implement.
+
+| Id                       | Spec                                                             |
+| ------------------------ | ---------------------------------------------------------------- |
+| `academy.ambassadors`    | [TRK-academy.ambassadors.md](./TRK-academy.ambassadors.md)       |
+| `academy.certs`          | [TRK-academy.certs.md](./TRK-academy.certs.md)                   |
+| `academy.curriculum`     | [TRK-academy.curriculum.md](./TRK-academy.curriculum.md)         |
+| `academy.paper-trading`  | [TRK-academy.paper-trading.md](./TRK-academy.paper-trading.md)   |
+| `academy.spatial`        | [TRK-academy.spatial.md](./TRK-academy.spatial.md)               |
+| `academy.tournaments`    | [TRK-academy.tournaments.md](./TRK-academy.tournaments.md)       |
+| `agents.copy-intel`      | [TRK-agents.copy-intel.md](./TRK-agents.copy-intel.md)           |
+| `agents.merchant`        | [TRK-agents.merchant.md](./TRK-agents.merchant.md)               |
+| `agents.navigator`       | [TRK-agents.navigator.md](./TRK-agents.navigator.md)             |
+| `agents.scanner`         | [TRK-agents.scanner.md](./TRK-agents.scanner.md)                 |
+| `agents.support`         | [TRK-agents.support.md](./TRK-agents.support.md)                 |
+| `blueprint.attestations` | [TRK-blueprint.attestations.md](./TRK-blueprint.attestations.md) |
+| `blueprint.card`         | [TRK-blueprint.card.md](./TRK-blueprint.card.md)                 |
+| `blueprint.ownership`    | [TRK-blueprint.ownership.md](./TRK-blueprint.ownership.md)       |
+| `bridge.canonical`       | [TRK-bridge.canonical.md](./TRK-bridge.canonical.md)             |
+| `chain.evm`              | [TRK-chain.evm.md](./TRK-chain.evm.md)                           |
+| `chain.governance`       | [TRK-chain.governance.md](./TRK-chain.governance.md)             |
+| `chain.mainnet`          | [TRK-chain.mainnet.md](./TRK-chain.mainnet.md)                   |
+| `chain.validators`       | [TRK-chain.validators.md](./TRK-chain.validators.md)             |
+| `dex.quote-router`       | [TRK-dex.quote-router.md](./TRK-dex.quote-router.md)             |
+| `indexer.readmodels`     | [TRK-indexer.readmodels.md](./TRK-indexer.readmodels.md)         |
+| `infra.i18n`             | [TRK-infra.i18n.md](./TRK-infra.i18n.md)                         |
+| `launch.launchpad`       | [TRK-launch.launchpad.md](./TRK-launch.launchpad.md)             |
+| `launch.meme-factory`    | [TRK-launch.meme-factory.md](./TRK-launch.meme-factory.md)       |
+| `launch.nft`             | [TRK-launch.nft.md](./TRK-launch.nft.md)                         |
+| `launch.token-factory`   | [TRK-launch.token-factory.md](./TRK-launch.token-factory.md)     |
+| `market.commerce`        | [TRK-market.commerce.md](./TRK-market.commerce.md)               |
+| `market.vendors`         | [TRK-market.vendors.md](./TRK-market.vendors.md)                 |
+| `mining.pool`            | [TRK-mining.pool.md](./TRK-mining.pool.md)                       |
+| `ops.admin`              | [TRK-ops.admin.md](./TRK-ops.admin.md)                           |
+| `ops.affiliates`         | [TRK-ops.affiliates.md](./TRK-ops.affiliates.md)                 |
+| `ops.analytics`          | [TRK-ops.analytics.md](./TRK-ops.analytics.md)                   |
+| `ops.compliance`         | [TRK-ops.compliance.md](./TRK-ops.compliance.md)                 |
+| `ops.notifications`      | [TRK-ops.notifications.md](./TRK-ops.notifications.md)           |
+| `ops.support`            | [TRK-ops.support.md](./TRK-ops.support.md)                       |
+| `p2p.merchants`          | [TRK-p2p.merchants.md](./TRK-p2p.merchants.md)                   |
+| `trade.ccxt-api`         | [TRK-trade.ccxt-api.md](./TRK-trade.ccxt-api.md)                 |
+| `trade.forex`            | [TRK-trade.forex.md](./TRK-trade.forex.md)                       |
+| `trade.options`          | [TRK-trade.options.md](./TRK-trade.options.md)                   |
+| `venue.aggregation`      | [TRK-venue.aggregation.md](./TRK-venue.aggregation.md)           |
+
+**Note:** freeTracker may be 0 because `docs/ops/claims/TRK-*.md` locks exist;
+these files still unstick research so implement is planned, not invented mid-PR.
