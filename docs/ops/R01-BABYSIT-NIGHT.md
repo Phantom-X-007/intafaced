@@ -1,7 +1,7 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03T18:59Z (AFK R01 cycle60 tip stamp)  
-**Tip at run:** `bf8c3bb4` (`origin/main`) — docs(ops): R07 cycle59 freeProduct=0 + tip 9f7dbd2f (#605)  
+**When:** 2026-08-03T19:03Z (AFK R01 cycle61 tip stamp)  
+**Tip at run:** `f9aeff55` (`origin/main`) — docs(ops): P-WS still blocked tip bf8c3bb4 (cycle60) (#606)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
 **Comment budget:** **0** this cycle (instruction) — used 0  
 **Open list delta:** **none** — same 11 partner PRs; ready list unchanged
@@ -24,7 +24,7 @@
 
 **Ready count: 4** — agents do **not** merge these.
 
-## CONFLICTING — needs rebase to tip `8c1ed106`
+## CONFLICTING — needs rebase to tip `f9aeff55`
 
 | PR                                                          | Author  | Mergeable         | Failing / notes          | Action                                        |
 | ----------------------------------------------------------- | ------- | ----------------- | ------------------------ | --------------------------------------------- |
@@ -55,14 +55,14 @@ None. Comment budget **0**. Prior night-engine / AFK babysit comments already on
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 | [#428](https://github.com/Phantom-X-007/intafaced/pull/428) | Denon   | prior red CI comment — not NEW red                        |
 
-## Snapshot counts (2026-08-03T18:46Z · tip `8c1ed106`)
+## Snapshot counts (2026-08-03T19:03Z · tip `f9aeff55`)
 
 - **Open partner:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
 - **Ready for Denon self-merge:** **4** (#445 #433 #430 #420) — full green re-checked this cycle
 - **CONFLICTING (rebase):** 5 Denon + #346 Shehzad
 - **MERGEABLE red CI:** 1 (#428 Prettier+Typecheck)
 
-**Merged since tip `5fd900f9` / #596:** #597 invent · #598 R07 c55 · #599 R07 c56 · #600 P-WS · #601 R07 c57 on main (tip now `8c1ed106`).
+**Merged since tip `bf8c3bb4` / #605:** #607 R07 cycle60 · #606 P-WS cycle60 on main (tip now `f9aeff55`).
 
 ## P-WS (report only — no dual-edit)
 
@@ -76,7 +76,7 @@ Agents: docs/report only. No implement on matching or edge while those PRs stay 
 ## Rebase tip (for partners)
 
 ```
-origin/main @ 8c1ed106  (at doc write; partners re-fetch before rebase)
+origin/main @ f9aeff55  (at doc write; partners re-fetch before rebase)
 ```
 
 ---
@@ -732,4 +732,23 @@ Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4** (#445 #433 
 
 ```
 origin/main @ bf8c3bb4  (at doc write; partners re-fetch before rebase)
+```
+
+---
+
+## Refresh cycle61 (R01) — 2026-08-03T19:03Z · tip `f9aeff55`
+
+R01 partner recheck (gh) after #607 R07 cycle60 + #606 P-WS land. Same open list **448 445 441 438 436 433 432 430 428 420 346** @ tip `f9aeff55`:
+
+| Bucket                 | PRs                                                                                                  | Action         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
+| Ready Denon self-merge | **#445** full green · **#433** full green (P-WS path) · **#430** docs Prettier · **#420** full green | his merge only |
+| MERGEABLE red          | **#428** Prettier+Typecheck                                                                          | owner fix      |
+| CONFLICTING rebase     | Denon **#448** (gates FAIL) **#441** **#438** **#436** **#432** (P-WS edge) + Shehzad **#346** M1    | babysit only   |
+| Nitro Class N open     | **0** (R07 cycle61 keep-alive this PR)                                                               | Class N only   |
+
+Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4** (#445 #433 #430 #420). Comments: **0** (budget 0). P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**. invent live **0**. Agents do **not** merge partner PRs.
+
+```
+origin/main @ f9aeff55  (at doc write; partners re-fetch before rebase)
 ```
