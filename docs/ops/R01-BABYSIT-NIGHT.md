@@ -1,6 +1,6 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03 ~16:10Z (AFK R01 cycle32 tip stamp)  
+**When:** 2026-08-03 ~16:11Z (AFK R01 cycle32 tip stamp)  
 **Tip at run:** `e2b71165` (`origin/main`) — docs(ops): R07 cycle31 freeProduct=0 + tip 741d6371 (#544)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
 **Comment budget:** **0** this cycle (instruction) — used 0  
@@ -55,14 +55,14 @@ None. Comment budget **0**. Prior night-engine / AFK babysit comments already on
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 | [#428](https://github.com/Phantom-X-007/intafaced/pull/428) | Denon   | prior red CI comment — not NEW red                        |
 
-## Snapshot counts (16:10Z · tip `e2b71165`)
+## Snapshot counts (16:11Z · tip `e2b71165`)
 
 - **Open partner:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
 - **Ready for Denon self-merge:** **4** (#445 #433 #430 #420) — full green re-checked this cycle
 - **CONFLICTING (rebase):** 5 Denon + #346 Shehzad
 - **MERGEABLE red CI:** 1 (#428 Prettier+Typecheck)
 
-**Merged since tip `f752b924` / cycle30:** #542 #544 #545 R07 cycles on main (tip now R07 cycle31).
+**Merged since tip `f752b924` / cycle30:** #542 #544 #545 R07 + #546 R01 cycle32 on main (tip was `e2b71165` at freeze; re-derive).
 
 ## P-WS (report only — no dual-edit)
 
@@ -189,14 +189,14 @@ origin/main @ f752b924  (at doc write; partners re-fetch before rebase)
 
 ## Refresh cycle32 — 2026-08-03T16:10Z · tip `e2b71165`
 
-Re-checked via `gh` all open partner PRs: **448 445 441 438 436 433 432 430 428 420 346** @ tip after #544 R07 cycle31 land (`e2b71165`):
+Re-checked via `gh` all open partner PRs (not ZenYoda3): **448 445 441 438 436 433 432 430 428 420 346** @ tip after #544 R07 cycle31 + #546 R01 cycle32 (`e2b71165`→`1bc6d888`):
 
 | Bucket                 | PRs                                                                                                  | Action         |
 | ---------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
 | Ready Denon self-merge | **#445** full green · **#433** full green (P-WS path) · **#430** docs Prettier · **#420** full green | his merge only |
 | MERGEABLE red          | **#428** Prettier+Typecheck                                                                          | owner fix      |
 | CONFLICTING rebase     | Denon **#448** (gates FAIL) **#441** **#438** **#436** **#432** (P-WS edge) + Shehzad **#346** M1    | babysit only   |
-| Nitro Class N open     | **0**                                                                                                | —              |
+| Nitro Class N open     | **0** (R07 cycle32 keep-alive this PR)                                                               | Class N only   |
 
 Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4.** Comments: **0** this cycle (budget 0; prior babysit already on every CONFLICTING; no NEW red). P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**. invent live **0**. Agents do **not** merge partner PRs.
 
