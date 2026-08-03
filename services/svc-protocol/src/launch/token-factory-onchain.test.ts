@@ -6,24 +6,21 @@ import { deployedCodeMatches, loadArtifact } from '../chain/artifacts.js';
 // .ts helper under scripts/, deliberately outside the service build — it is the
 // only file in this repository holding a private key, and it is a public one.
 import {
-  assertDisposableChain,
   deployTokenFactory,
-  devChainClients,
   devChainReachable,
   devChainRequired,
   devRpcUrl,
-  DEV_CHAIN_ID,
+  devSuiteClients,
+  type DevChainClients,
 } from '../../scripts/dev-chain.js';
 
 /**
- * Vitest runs test files in parallel workers, each deploying its own factory,
- * so each live-chain file takes a DIFFERENT one of anvil's ten funded accounts.
- * Two workers on one account race the same nonce and one fails with
- * `nonce too low` on a chain behaving perfectly. Index 0 belongs to
- * `deploy-dev.ts`, 1 to `create2-onchain.test.ts`, 2 to
- * `router.live-chain.test.ts`.
+ * This file sends from an account derived from its own path, funded on demand —
+ * see the per-suite sender banner in `scripts/dev-chain.ts`. It used to name a
+ * hand-picked anvil index here, and `pool-factory-onchain.test.ts` had picked
+ * the same one; the two raced that account's nonce and whichever lost failed
+ * with `nonce too low`.
  */
-const DEPLOYER_INDEX = 3;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -105,12 +102,11 @@ const PARAM_SETS: TokenParams[] = [
 
 describe.skipIf(!reachable)('CREATE2 — the TypeScript derivation against the deployed TokenFactory', () => {
   let factory: Address;
-  let clients: ReturnType<typeof devChainClients>;
+  let clients: DevChainClients;
   let abi: ReturnType<typeof loadArtifact>['abi'];
 
   beforeAll(async () => {
-    clients = devChainClients(rpcUrl, DEV_CHAIN_ID, DEPLOYER_INDEX);
-    await assertDisposableChain(clients.publicClient);
+    clients = await devSuiteClients(import.meta.url, rpcUrl);
     ({ factory } = await deployTokenFactory(clients));
     abi = loadArtifact('TokenFactory').abi;
   }, 60_000);
@@ -183,12 +179,12 @@ describe.skipIf(!reachable)('CREATE2 — the TypeScript derivation against the d
 
 describe.skipIf(!reachable)('the predicted address is where the token actually lands', () => {
   let factory: Address;
-  let clients: ReturnType<typeof devChainClients>;
+  let clients: DevChainClients;
   let abi: ReturnType<typeof loadArtifact>['abi'];
   const tokenAbi = loadArtifact('SovereignToken').abi;
 
   beforeAll(async () => {
-    clients = devChainClients(rpcUrl, DEV_CHAIN_ID, DEPLOYER_INDEX);
+    clients = await devSuiteClients(import.meta.url, rpcUrl);
     ({ factory } = await deployTokenFactory(clients));
     abi = loadArtifact('TokenFactory').abi;
   }, 60_000);

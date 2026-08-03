@@ -7,13 +7,13 @@ import { AccountRegistry, MemoryAccountStore } from '../accounts/registry.js';
 import { SessionRelay } from '../session/relay.js';
 import { templateArtifact } from './address.js';
 import {
-  assertDisposableChain,
   deployTokenFactory,
-  devChainClients,
   devChainReachable,
   devChainRequired,
   devRpcUrl,
+  devSuiteClients,
   DEV_CHAIN_ID,
+  type DevChainClients,
 } from '../../scripts/dev-chain.js';
 
 /**
@@ -50,9 +50,12 @@ if (!reachable && devChainRequired()) {
   );
 }
 
-/** Index 4 — every live-chain file takes its own anvil account. See dev-chain.ts. */
-const DEPLOYER_INDEX = 4;
-
+/**
+ * Sends from an account derived from this file's own path, funded on demand —
+ * see the per-suite sender banner in `scripts/dev-chain.ts`. It used to name a
+ * hand-picked anvil index here, and `amm/mint-swap-onchain.test.ts` had picked
+ * the same one.
+ */
 const ENTRYPOINT: Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 const ZERO: Address = '0x0000000000000000000000000000000000000000';
 
@@ -63,13 +66,12 @@ const anonymous = () =>
   });
 
 describe.skipIf(!reachable)('launch through the router, on a real chain', () => {
-  let clients: ReturnType<typeof devChainClients>;
+  let clients: DevChainClients;
   let tokenFactory: Address;
   let caller: ReturnType<ReturnType<typeof createProtocolRouter>['createCaller']>;
 
   beforeAll(async () => {
-    clients = devChainClients(rpcUrl, DEV_CHAIN_ID, DEPLOYER_INDEX);
-    await assertDisposableChain(clients.publicClient);
+    clients = await devSuiteClients(import.meta.url, rpcUrl);
     ({ factory: tokenFactory } = await deployTokenFactory(clients));
 
     const chain = new ProtocolChain({

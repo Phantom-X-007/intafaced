@@ -5,11 +5,15 @@
  * Skips when no anvil unless REQUIRE_EVM_CHAIN=1 (CI).
  * Skips collect when local install cannot resolve viem (incomplete laptop node_modules).
  *
- * Uses anvil account index 3 so it does not race deploy-dev (0) or other
- * on-chain suites (1–2) on shared nonces.
+ * Sends from an account derived from this file's own path, funded on demand —
+ * see the per-suite sender banner in `scripts/dev-chain.ts`. It used to name
+ * anvil index 3, which `launch/token-factory-onchain.test.ts` had also picked;
+ * the two raced that account's nonce under `pnpm verify` and whichever lost
+ * failed with `nonce too low`.
  */
 import { describe, expect, it, beforeAll } from 'vitest';
 import { loadArtifact } from '../chain/artifacts.js';
+import type { DevChainClients } from '../../scripts/dev-chain.js';
 
 type Address = `0x${string}`;
 
@@ -35,14 +39,15 @@ const describeOnChain = !devChainMod || (!chainUp && !devChainMod.devChainRequir
 describeOnChain('PoolFactory onchain (protocol.amm)', () => {
   if (!devChainMod) return;
 
-  const clients = devChainMod.devChainClients(devChainMod.devRpcUrl(), devChainMod.DEV_CHAIN_ID, 3);
+  let clients: DevChainClients;
   let factory: Address;
 
   beforeAll(async () => {
     if (!chainUp && devChainMod.devChainRequired()) {
       throw new Error('REQUIRE_EVM_CHAIN=1 but no RPC at ' + devChainMod.devRpcUrl());
     }
-    await devChainMod.assertDisposableChain(clients.publicClient, devChainMod.DEV_CHAIN_ID);
+    // Asserts the chain is disposable before it writes anything to it.
+    clients = await devChainMod.devSuiteClients(import.meta.url);
     const deployed = await devChainMod.deployPoolFactory(clients);
     factory = deployed.factory;
   });
