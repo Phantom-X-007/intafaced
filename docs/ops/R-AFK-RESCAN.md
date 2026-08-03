@@ -1,6 +1,6 @@
 # R-AFK-RESCAN — invent-pattern scan (Coord-OPS)
 
-**When:** 2026-08-03 · tip `81771578` (`fix(format): main was red on Prettier…` #473)  
+**When:** 2026-08-03 · tip `f96ac6b4` (#474 keep-alive · scan base shell wave #462-#473)  
 **Mode:** NO-FLEET · static `rg` only (no visual)  
 **Scope:** `vendor/coinexchange/05_Web_Front` primary · `apps/web` + `apps/admin` honesty cross-check  
 **Claim:** AFK-RESCAN residual-own  
@@ -29,7 +29,7 @@ rg -n -i invent|fake|stub|PriceTrend|Math\.random  vendor/coinexchange/05_Web_Fr
 
 ## Findings
 
-### Hit counts (static `rg`, tip `81771578`)
+### Hit counts (static `rg`, tip `f96ac6b4`)
 
 | pattern                         | vendor front lines | verdict                                      |
 | ------------------------------- | ------------------ | -------------------------------------------- |
@@ -93,7 +93,7 @@ Invite fake leaderboard (`dataFanyong`), Activity invented completion %, AppDown
 proof_missing: fleet-blocked
 scan: static-rg only
 scope: vendor/coinexchange/05_Web_Front + apps/web + apps/admin cross-check
-tip: 81771578
+tip: f96ac6b4
 shell_wave: #462-#472 (+ tip #473)
 invent_line_hits: 87 (all honesty/doctrine)
 new_hard_invent_residual: 0
