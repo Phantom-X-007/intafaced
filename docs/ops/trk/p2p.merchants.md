@@ -1,41 +1,66 @@
 # TRK-p2p.merchants
 
 **Title:** P2P merchant programme — badges, limits, API  
-**Tracker:** `p2p.merchants` · phase 3 · plane F · status `ready` · owner none  
-**Depends on:** `p2p.reputation` (done)
+**Tracker:** `p2p.merchants` · module `p2p` · phase 3 · status `ready` · owner none  
+**Depends on:** `p2p.reputation`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Qualified P2P counterparties can earn a **merchant** badge, higher limits, and
-programmatic API access under explicit rules. Reputation stays computed from
-real trade outcomes (no borrowed trust). Programme tables are first-class —
-not a boolean hack on users.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. Merchant **programme**: badges, raised limits, API beyond base reputation.
+2. Badges from **checkable** rules (seeded in reputation module).
+3. Limits consistent across P2P (and rank perks where tied).
 
-| Area               | Location                                                               |
-| ------------------ | ---------------------------------------------------------------------- |
-| P2P core (done)    | `services/svc-p2p` — trades, escrow, disputes, reputation              |
-| Merchant programme | **Not built** — README: `p2p_merchants` is this feature; no half table |
-| Copy keys          | `p2p.merchant.badge` / `p2p.merchant.trades` in i18n (UI strings only) |
-| Not this mountain  | Pay **acquiring** merchants (`pay:read` scopes, clearing recipes)      |
+## 2 · Current code state (tip `04f9b1f2`)
 
-Doctrine §6.2 fifth table named; migration deliberately deferred to this mountain.
+| Area                | Reality                                        |
+| ------------------- | ---------------------------------------------- |
+| Service             | `services/svc-p2p` spine exists                |
+| Badges              | `reputation.ts` computes badges from snapshots |
+| Programme packaging | Beyond organic badges — residual               |
+| Open PRs            | Path-check Denon p2p work                      |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker        | Notes                                                                   |
-| -------------- | ----------------------------------------------------------------------- |
-| Product law    | Qualification thresholds, limit matrix, API surface — Denon/Nitro       |
-| Soft dep       | Reputation counters already enforce “no flawless fresh account” honesty |
-| Money          | Limit raises must not bypass escrow/ledger integrity                    |
-| Open Denon P2P | Re-check open PRs path-intersect before implement                       |
+| Law           | Implication                 |
+| ------------- | --------------------------- |
+| Escrow money  | Ledger only                 |
+| Badge honesty | Revoke when conditions fail |
+| No dual-edit  | Open p2p PRs                |
 
-## First PR size (if free)
+## 4 · DoD sketch (checkable — staged)
 
-**S–M:** migration `p2p_merchants` + apply/approve state machine + badge read on
-profile; limits applied at trade create; tests for ineligible apply and for
-limit ceiling. API keys / merchant API = second PR. No pay-rail merchant
-conflation.
+### DoD checks
 
-**Solid spec:** [TRK-p2p.merchants.md](./TRK-p2p.merchants.md)
+- [ ] Define programme tiers vs organic badges
+- [ ] API keys / higher limits law
+- [ ] Badge grant/revoke tests
+- [ ] Operator freeze tools
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Same table vs separate programme entity.
+2. KYC tier gates for API.
+
+## 6 · Estimated size
+
+| Slice                       | Size    |
+| --------------------------- | ------- |
+| Badge→limit mapping + tests | **S–M** |
+| Full programme              | **M–L** |
+
+## 7 · Related docs / code
+
+- `services/svc-p2p/src/reputation.ts`
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing escrow recipes.
+- No fake merchant badges.

@@ -1,44 +1,78 @@
 # TRK-agents.scanner
 
 **Title:** Market Scanner — ranked signals by tier  
-**Tracker:** `agents.scanner` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `agents.gateway` (done), `trade.spot` (done)
+**Tracker:** `agents.scanner` · module `agents` · phase 5 · status `ready` · owner none  
+**Depends on:** `agents.gateway` · `trade.spot`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-A user (by rank/tier) can open a Market Scanner agent session that returns
-**ranked market signals** under a snapshotted guardrail; every completion is
-metered and audited; signals never place orders or move money. Missing market
-data or model upstream produces a **typed refuse**, not invent numbers.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. Named agent product runs on **`svc-agents` gateway** with task id(s): `scanner.rank`.
+2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
+3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
+4. Signals must not invent prices; rank by tier honestly.
 
-| Area              | Location                                                               |
-| ----------------- | ---------------------------------------------------------------------- |
-| Runtime (done)    | `services/svc-agents/` — sessions, guardrails, metering, audit         |
-| Task route (done) | `scanner.rank` in `src/gateway/routing.ts` (model alias + price table) |
-| Product agent     | **Not registered** — README: Scanner is separate work on the runtime   |
-| Market data       | Trade/public book contracts — no CCXT; no invented mid                 |
-| UI                | No dedicated Scanner product surface claimed under this id             |
+## 2 · Current code state (tip `04f9b1f2`)
 
-Gateway useful-path is completion-only; product fleet registration is residual.
+| Area      | Reality                                                                         |
+| --------- | ------------------------------------------------------------------------------- |
+| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
+| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
+| Depth     | Routing row ≠ full product for every tracker title                              |
+| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
+| Readiness | useful-path / readiness tests prove runnable mock paths                         |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker         | Notes                                                                 |
-| --------------- | --------------------------------------------------------------------- |
-| Product law     | What a “signal” is, tier gating, liability copy — Denon direction     |
-| Data honesty    | Must bind tools to live books/marks or refuse — no synthetic rankings |
-| Provider config | Live inference = Class X upstream secrets                             |
-| Soft block      | Rank tier product (`identity.rank`) for gating may need clear matrix  |
+| Law         | Implication                                       |
+| ----------- | ------------------------------------------------- |
+| §0.7 brand  | No vendor model names in user-facing agent copy   |
+| §0.6        | Agents never `ledger.post`                        |
+| Guardrails  | Refuse out-of-policy tool use                     |
+| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
 
-Not money invention if tools are read-only. Do not auto-trade from Scanner.
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### Stage 1
 
-**S:** register `agentId=scanner` + guardrail (tools: `markets.list`,
-`book.snapshot` read-only), `scanner.rank` completion path with fixtures,
-tests that (1) refuse when book null, (2) never call place-order tools,
-(3) meter via existing `feeCharge`. UI later. No new ledger recipes.
+- [ ] Named task in routing + readiness
+- [ ] Guardrail tests for this agent’s tools
+- [ ] Copy keys only from catalogue
 
-**Solid spec:** [TRK-agents.scanner.md](./TRK-agents.scanner.md)
+### Stage 2
+
+- [ ] Real data tools with typed refusals
+- [ ] Audit log of user-affecting actions
+- [ ] Tier/gating per product law
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. v1 tool allowlist.
+2. Human escalation path.
+3. Metering / cost attribution.
+
+## 6 · Estimated size
+
+| Slice                 | Size    |
+| --------------------- | ------- |
+| Task + tests on mock  | **S–M** |
+| Full grounded product | **M–L** |
+
+## 7 · Related docs / code
+
+- `services/svc-agents/src/gateway/routing.ts`
+- `services/svc-agents/src/fleet/guardrails.ts`
+- `services/svc-agents/src/copy.ts`
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing prices or pay approval rates.
+- No Shehzad implement under merchant agent.
+- No `features.mjs` flip from research.

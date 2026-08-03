@@ -1,46 +1,64 @@
 # TRK-blueprint.ownership
 
 **Title:** Export + hard delete, cascading  
-**Tracker:** `blueprint.ownership` · phase 4 · plane F · status `ready` · owner none  
-**Depends on:** `blueprint.onboarding` (done) · **requires:** `services/svc-blueprint`
+**Tracker:** `blueprint.ownership` · module `blueprint` · phase 4 · status `ready` · owner none  
+**Depends on:** `blueprint.onboarding`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-A user can **export** everything this platform holds about their Blueprint
-(JSON + card per §7.2) and **hard-erase** it so no Blueprint row remains and
-`profiles.blueprint_id` does not dangle. Cascade is real end-to-end across
-services — not only inside svc-blueprint’s schema.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. User can **export** and **hard delete** blueprint data.
+2. Delete **cascades**: blueprint rows gone **and** identity `profiles.blueprint_id` cleared.
+3. Title = cascade — blueprint half alone is not `done`.
 
-| Area                         | Location                                                                  |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| Export / erase (done)        | `services/svc-blueprint` — `export`, `erase` tRPC; hard delete in one txn |
-| Events (done)                | `blueprintCreated` / `blueprintDeleted` in `packages/events`              |
-| Identity consumer (**done**) | `svc-identity` `subscribeBlueprintProfileEvents` at boot — **wired**      |
-| Tests                        | Identity unit + bus tests; blueprint still has stand-in consumer in suite |
-| Stale tracker note           | features.mjs still claims “no service subscribes” — **false on tip**      |
+## 2 · Current code state (tip `04f9b1f2`)
 
-Re-derive: tip `b3d08931` identity index subscribes durable
-`identity-blueprint-created` / `identity-blueprint-deleted`. Match-guarded clear
-on delete. Export schemaVersion 2 includes card; mentoringOthers privacy rules
-documented in service README.
+| Area                | Reality                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| Erase in blueprint  | Implemented + tests; publishes `blueprintDeleted`                                        |
+| Identity subscriber | Re-derive on tip — pack notes disagree historically; verify `blueprintDeleted` consumers |
+| §2                  | Blueprint must not write identity tables                                                 |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker             | Notes                                                                    |
-| ------------------- | ------------------------------------------------------------------------ |
-| Honesty / proof gap | Prefer one cross-service e2e (erase → identity pointer null) in CI fleet |
-| Tracker note stale  | Mountain event to `done` only after proof + note rewrite (not this pack) |
-| Downstream caches   | Other consumers of profile pointer must drop on delete (catalog law)     |
+| Law         | Implication                                     |
+| ----------- | ----------------------------------------------- |
+| Events      | identity consumes `blueprintDeleted`            |
+| Hard delete | Mentor shortlists etc. tested on blueprint side |
+| PII         | Export contents per privacy law                 |
 
-Not Shehzad. Not Class X content. **Almost residual-thin.**
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### DoD checks
 
-**S — proof, not product:** fleet or compose test: create blueprint → identity
-sets pointer → erase → identity clears when ids match; redelivered delete does
-not wipe newer blueprint. Then mountain event to `done` if DoD holds. Avoid
-rebuilding erase. Do not edit features.mjs from research-only packs.
+- [ ] Confirm or add `svc-identity` consumer clearing `blueprint_id`
+- [ ] Cross-service integration test
+- [ ] Post-erase state is onboarding-fresh
 
-**Solid spec:** [TRK-blueprint.ownership.md](./TRK-blueprint.ownership.md)
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Other FKs holding blueprint ids?
+2. Legal hold exceptions.
+
+## 6 · Estimated size
+
+| Slice                     | Size    |
+| ------------------------- | ------- |
+| Identity consumer + tests | **S–M** |
+
+## 7 · Related docs / code
+
+- `services/svc-blueprint` erase tests
+- `packages/events`
+- tracker note
+
+## 8 · Explicit non-goals for this pack
+
+- No cross-service SQL from blueprint into identity.

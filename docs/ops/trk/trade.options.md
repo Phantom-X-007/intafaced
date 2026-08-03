@@ -1,32 +1,67 @@
 # TRK-trade.options
 
 **Title:** European options, cash-settled, full collateral in v1  
-**Tracker:** `trade.options` · phase 2 · plane F · status `ready` · owner none  
-**Depends on:** `trade.futures`
+**Tracker:** `trade.options` · module `trade` · phase 2 · status `ready` · owner none  
+**Depends on:** `trade.futures`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-European cash-settled options with full collateral in v1. Risk and money paths
-are Class M; agents do not invent payoff formulas without Denon product law.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. European, cash-settled options with **full collateral in v1**.
+2. Settlement/risk under trade/futures dependency order.
+3. Premium/settlement only via ledger recipes.
 
-| Area     | Location               |
-| -------- | ---------------------- |
-| Trade    | futures residual first |
-| Matching | engine residual        |
+## 2 · Current code state (tip `04f9b1f2`)
 
-## Blocked by
+| Area            | Reality                                         |
+| --------------- | ----------------------------------------------- |
+| Options product | **Not built** as titled                         |
+| Dependency      | `trade.futures` must be honest first            |
+| Risk            | Futures risk is Shehzad hard mountain — babysit |
 
-| Blocker       | Notes                                |
-| ------------- | ------------------------------------ |
-| trade.futures | Prerequisite mountain                |
-| Product law   | Denon hard — payoff, margin, expiry  |
-| Class M       | Full collateral + settlement recipes |
+## 3 · Doctrine constraints
 
-## First PR size (if free)
+| Law                | Implication                      |
+| ------------------ | -------------------------------- |
+| Full collateral v1 | Refuse under-collateral          |
+| Class M            | All money recipes audited        |
+| Product law        | Do not invent options parameters |
 
-**Research + law only** until futures done. First code PR after law: contract
-specs + refuse path for unsupported Greeks invent.
+## 4 · DoD sketch (checkable — staged)
 
-**Solid spec:** [TRK-trade.options.md](./TRK-trade.options.md)
+### DoD checks
+
+- [ ] ADR: underlyings, expiry, settlement asset
+- [ ] Contracts + risk + recipes
+- [ ] Matching/assignment
+- [ ] Admin risk kills
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Mark/oracle source.
+2. Implement ownership (Shehzad vs residual).
+
+## 6 · Estimated size
+
+| Slice                  | Size                       |
+| ---------------------- | -------------------------- |
+| ADR + refusal skeleton | **S**                      |
+| Full program           | **XL** after futures solid |
+
+## 7 · Related docs / code
+
+- `trade.futures`
+- risk docs
+- Denon/Shehzad boards
+
+## 8 · Explicit non-goals for this pack
+
+- No naked demo options.
+- No agent futures-risk implement under this id.

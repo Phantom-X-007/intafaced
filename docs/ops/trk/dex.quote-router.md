@@ -1,47 +1,69 @@
 # TRK-dex.quote-router
 
 **Title:** Live cross-venue quote — real prices or a typed refusal  
-**Tracker:** `dex.quote-router` · phase 5 · plane P · status `ready` · owner none  
-**Depends on:** `indexer.readmodels` · **requires:** `services/svc-dex` quote path  
-**Related socket:** `socket.dex-venue-set` (decision blocker, not code)  
-**Tip freeze:** `origin/main` @ `c773dafa` (re-derive before implement)  
-**Pack type:** research only — no invent mid; no `features.mjs` edit.
+**Tracker:** `dex.quote-router` · module `dex` · phase 5 · status `ready` · owner none  
+**Depends on:** `indexer.readmodels`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-A public (jurisdiction-gated) caller gets either a **live** best-execution style
-quote assembled from real venue books, or a **typed refusal** naming why no
-venue could price — never a cached last-known or invented mid. Response flags
-`degraded` / `singleVenue` / `unavailable` so clients cannot present one survivor
-as multi-venue best execution. No third-party CCXT lib in the money path (§27).
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. `quote` returns a **live** best-execution quote from real sources **or** a **typed refusal** — never stale cache as live.
+2. Age bound (`QUOTE_MAX_AGE_MS`) vs **this process’s read completion**.
+3. `routePreview` never rendered as a price.
+4. Non-custodial: custody-scan clean; no ledger writes.
 
-| Area           | Location                                                                          |
-| -------------- | --------------------------------------------------------------------------------- |
-| Service        | `services/svc-dex/` (non-custodial protocol plane)                                |
-| Quote assembly | `src/quote/` — adapters: intachain-clob, internal-book, external                  |
-| Config         | `DEX_EXTERNAL_VENUES` (default **[]**), indexer/matching URLs, `QUOTE_MAX_AGE_MS` |
-| Related        | `packages/venue-adapter`, `services/svc-indexer`, `svc-matching`                  |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** **code finished**; default config live-probe **503**
-`dex.quote.no_venue_available` (venues unreachable / unset). With one reachable
-external venue configured, probe returned real 200 + route + honesty flags.
-Done bar is ops/product venue decision (`socket.dex-venue-set`), not rewrite.
+| Area     | Reality                                                                  |
+| -------- | ------------------------------------------------------------------------ |
+| Service  | `services/svc-dex` + `src/quote/*`                                       |
+| README   | Live quote vs routePreview split documented                              |
+| Tracker  | Code finished **and** cannot serve quote without live venues — both true |
+| Residual | Mostly **ops/connectivity/config**, not greenfield router                |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker        | Notes                                                                        |
-| -------------- | ---------------------------------------------------------------------------- |
-| Product/ops    | **Which venue this platform quotes** — not decided in accepted ADRs          |
-| Protocol depth | intachain-clob needs real CLOB contracts (`socket.clob-contracts` / Shehzad) |
-| Internal book  | Matching empty until journal/MM seed — ops, not router rewrite               |
-| Not code       | Router itself is not the blocker for “one live venue”                        |
+| Law                  | Implication               |
+| -------------------- | ------------------------- |
+| No fabricated prices | Refuse > invent           |
+| Non-custodial        | No `ledger.post`          |
+| §17.5                | DEX = protocol front door |
 
-## First PR size (if free)
+## 4 · DoD sketch (checkable — staged)
 
-**XS ops/docs:** document compose/env matrix for one external venue + prove
-quote 200 in non-prod (script or README probe). **S craft (optional):** tighten
-client contract tests for refusal codes only. Do **not** invent mid when venues
-down. Tracker stays `ready` until a real deployment has at least one non-degraded
-path accepted by product — or product accepts degraded-single as done (explicit).
+### DoD checks
+
+- [ ] Staging probe succeeds or refuses with stable codes
+- [ ] Tests lock max-age / no-cache
+- [ ] UI never treats routePreview as quote
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Required venues for production “done.”
+2. Interaction with venue.aggregation trading half.
+
+## 6 · Estimated size
+
+| Slice                      | Size    |
+| -------------------------- | ------- |
+| Env + venue wiring + probe | **S–M** |
+| New venue source           | **M**   |
+
+## 7 · Related docs / code
+
+- `services/svc-dex/README.md`
+- `services/svc-dex/src/quote/quote-service.ts`
+- `packages/venue-adapter`
+- Tracker long note
+
+## 8 · Explicit non-goals for this pack
+
+- No fake prices for demos.
+- No custodial shortcuts.

@@ -1,45 +1,78 @@
 # TRK-agents.support
 
 **Title:** Support agent — KB + account-state grounded  
-**Tracker:** `agents.support` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `agents.gateway` (done)  
-**Tip freeze:** `origin/main` @ `c773dafa` (re-derive before implement)  
-**Pack type:** research only — no implement; no money invention; no `features.mjs` edit.
+**Tracker:** `agents.support` · module `agents` · phase 5 · status `ready` · owner none  
+**Depends on:** `agents.gateway`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-A user starts a Support agent session; the agent answers only from allowed tools
-(KB + account-state reads) under a **snapshotted guardrail**; every action is
-audited; spend meters through ledger `feeCharge` only. It never places trades,
-moves balances, or invents account numbers. If KB/account tools are unavailable,
-it refuses honestly rather than freelancing.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. Named agent product runs on **`svc-agents` gateway** with task id(s): `support.reply / support.classify`.
+2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
+3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
+4. Needs `ops.support` KB + read-only account projections before production grounding.
 
-| Area           | Location                                                                                  |
-| -------------- | ----------------------------------------------------------------------------------------- |
-| Runtime (done) | `services/svc-agents/` — gateway, sessions, guardrails, metering, audit                   |
-| Product agent  | **Not registered** — process ships with **no** product agents                             |
-| Explicit law   | README + `index.ts` + `useful-path.ts`: Navigator/Support/Scanner/… are **separate work** |
-| KB dependency  | Overlaps `ops.support` — may need KB store first                                          |
-| Account state  | Read via identity / ledger **projection** contracts — no local balance                    |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** runtime complete (`openSession → think → act → settle`).
-Support is product registration + tool drivers, not a second gateway.
+| Area      | Reality                                                                         |
+| --------- | ------------------------------------------------------------------------------- |
+| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
+| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
+| Depth     | Routing row ≠ full product for every tracker title                              |
+| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
+| Readiness | useful-path / readiness tests prove runnable mock paths                         |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker         | Notes                                                                   |
-| --------------- | ----------------------------------------------------------------------- |
-| Soft block      | `ops.support` KB empty → agent has nothing grounded to cite             |
-| Provider config | `AGENTS_UPSTREAM_*` vault — Class X secrets for live models             |
-| Product law     | Which tools Support may call (refund? cancel order?) — Denon/Nitro      |
-| Money           | Metering path exists; **no new money invention** — use existing recipes |
+| Law         | Implication                                       |
+| ----------- | ------------------------------------------------- |
+| §0.7 brand  | No vendor model names in user-facing agent copy   |
+| §0.6        | Agents never `ledger.post`                        |
+| Guardrails  | Refuse out-of-policy tool use                     |
+| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
 
-## First PR size (if free)
+## 4 · DoD sketch (checkable — staged)
 
-**S:** register Support `agentId` + guardrail (read-only tools: `kb.search`,
-`account.summary` stubs that return typed empty/unavailable), session open →
-think → refuse-on-missing-tool tests, no UI. Block any tool surface that can
-move value until explicit law. Prefer after at least a seed KB or explicit
-“ungrounded refuse” DoD acceptance.
+### Stage 1
+
+- [ ] Named task in routing + readiness
+- [ ] Guardrail tests for this agent’s tools
+- [ ] Copy keys only from catalogue
+
+### Stage 2
+
+- [ ] Real data tools with typed refusals
+- [ ] Audit log of user-affecting actions
+- [ ] Tier/gating per product law
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. v1 tool allowlist.
+2. Human escalation path.
+3. Metering / cost attribution.
+
+## 6 · Estimated size
+
+| Slice                 | Size    |
+| --------------------- | ------- |
+| Task + tests on mock  | **S–M** |
+| Full grounded product | **M–L** |
+
+## 7 · Related docs / code
+
+- `services/svc-agents/src/gateway/routing.ts`
+- `services/svc-agents/src/fleet/guardrails.ts`
+- `services/svc-agents/src/copy.ts`
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing prices or pay approval rates.
+- No Shehzad implement under merchant agent.
+- No `features.mjs` flip from research.

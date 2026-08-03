@@ -1,54 +1,70 @@
 # TRK-trade.ccxt-api
 
 **Title:** CCXT-compatible public API (bots + terminals connect)  
-**Tracker:** `trade.ccxt-api` · phase 2 · plane F · status `ready` · owner none  
-**Depends on:** `trade.spot` (done)  
-**Tip freeze:** `origin/main` @ `c773dafa` (re-derive before implement)  
-**Pack type:** research only — no invent candles/books; no futures product law; no `features.mjs` edit.
+**Tracker:** `trade.ccxt-api` · module `trade` · phase 2 · status `ready` · owner none  
+**Depends on:** `trade.spot`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-External bots using a CCXT-shaped REST surface can discover markets, read
-orderbook/ticker/trades/OHLCV, place/cancel orders, and read self balances/fills
-without inventing empty markets as “exchange down.” Private REST is
-edge-signed principal, fail-closed. Futures leverage/margin mode endpoints are
-either **real** or **typed unsupported** — never stub success. OHLCV is real
-fills or honest empty.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. Bots use a **CCXT-shaped** REST surface (public data + private trading) against this venue.
+2. Errors map via `ccxt-errors.ts`.
+3. Unsupported toggles are **typed unsupported**, not silent missing routes.
+4. OHLCV never invents candles.
 
-| Area         | Location                                                                       |
-| ------------ | ------------------------------------------------------------------------------ |
-| REST surface | `services/svc-trade` `public-rest.ts` + `private-rest.ts`                      |
-| OHLCV        | Live SQL aggregation from **non-seeded** taker fills; optional materialize job |
-| Candles job  | `TRADE_CANDLE_JOBS_*` default **OFF** (`candle-jobs.ts`)                       |
-| Matching     | Books empty until journal has orders or MM seeds                               |
-| Private WS   | `ws.gateway` — not this REST mountain                                          |
-| Venue note   | Not “via CCXT package” — we **are** the compatibility layer (§27)              |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual (refresh vs older notes):** large public + private surface already
-partial (markets, book, ticker, trades, ohlcv, orders, balances, fees, positions
-read/close with required `exitPrice`). `POST …/positions/leverage` and
-`…/margin-mode` are **mounted as** `derivativesNotSupported` /
-`trade.leverage_unsupported` / `trade.margin_mode_unsupported` — not silent
-stubs. Empty book is honest `[]` (not 502). OHLCV empty until real fills exist.
+| Area       | Reality                                                                     |
+| ---------- | --------------------------------------------------------------------------- |
+| Public     | `public-rest.ts` — markets, book, tickers, trades, ohlcv                    |
+| Private    | `private-rest.ts` — orders + placeOrder money path                          |
+| Errors     | `ccxt-errors.ts`                                                            |
+| Tracker    | **partial** — candle materialize job default OFF; futures typed unsupported |
+| npm `ccxt` | **Forbidden** in money path by design (§27)                                 |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker             | Notes                                                                 |
-| ------------------- | --------------------------------------------------------------------- |
-| Soft                | Live depth needs MM seed or organic flow (`trade.mm-bot` Nitro)       |
-| Futures product law | Real leverage/margin mode — **Shehzad / human M3** territory; babysit |
-| Candle ops          | Enabling job is ops flag + markets with fills — never invent candles  |
+| Law          | Implication                                               |
+| ------------ | --------------------------------------------------------- |
+| Money path   | Private place stays existing recipes / Class M discipline |
+| Honesty      | No invented OHLCV                                         |
+| Jurisdiction | Private routes enforce principal + matrix                 |
 
-Public spot REST residual is agent-accessible. Implementing **real** setLeverage
-is **not** free craft under hard ownership.
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### DoD checks
 
-**S:** ops enable path + tests for OHLCV materialize on one market with fixture
-fills (job still default OFF in compose; document ops enable). **Or** bot
-onboarding docs (endpoints table + empty-book honesty) as Class N. **Do not**
-implement real setLeverage without human futures law. No tracker `done` while
-product still expects full CCXT derivatives subset **unless** product carves
-DoD to “spot-only + typed unsupported” explicitly in tracker note.
+- [ ] Supported-methods matrix vs residual
+- [ ] Candle job product decision
+- [ ] Futures/margin remain typed unsupported until law says otherwise
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Is partial REST enough for tracker `done`?
+2. WS parity scope (likely separate).
+
+## 6 · Estimated size
+
+| Slice                        | Size    |
+| ---------------------------- | ------- |
+| Docs matrix + residual flags | **S**   |
+| Candle job default/prod      | **S–M** |
+| Full CCXT method parity      | **L+**  |
+
+## 7 · Related docs / code
+
+- `services/svc-trade/src/public-rest.ts`
+- `private-rest.ts`
+- `ccxt-errors.ts`
+
+## 8 · Explicit non-goals for this pack
+
+- No adding npm `ccxt` to money path.
+- No inventing candles.

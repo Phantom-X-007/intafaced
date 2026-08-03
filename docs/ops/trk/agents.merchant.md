@@ -1,42 +1,78 @@
 # TRK-agents.merchant
 
 **Title:** Merchant agent — approval-rate watch  
-**Tracker:** `agents.merchant` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `agents.gateway` (done), `pay.routing` (**human / shehzad002**)  
-**Tip freeze:** `origin/main` @ `b3d08931` (re-derive before implement)
+**Tracker:** `agents.merchant` · module `agents` · phase 5 · status `ready` · owner none  
+**Depends on:** `agents.gateway` · `pay.routing`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-A merchant (or ops principal) runs a **Merchant** agent that watches **rail
-approval rates** and proposes routing changes under guardrails — never silently
-rewires production rails. Proposals are audited; any apply path is
-approval-gated. No fabricates rates when pay routing data is missing — refuse
-honestly.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+1. Named agent product runs on **`svc-agents` gateway** with task id(s): `merchant.watch`.
+2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
+3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
+4. Depends pay.routing — babysit Shehzad pay law; research only here.
 
-| Area           | Location                                                                                |
-| -------------- | --------------------------------------------------------------------------------------- |
-| Runtime (done) | `services/svc-agents/` — same fleet runtime as Navigator                                |
-| Pay routing    | `pay.routing` in tracker — **owner shehzad002**, HUMAN M1 expand                        |
-| Pay today      | `services/svc-pay` preference-list routing; approval-rate engine **not** this residual  |
-| Doctrine       | §8.2 v1 fleet includes Merchant Agent; smart routing table ties agent to routing engine |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** agent registration + tools over **routing metrics APIs that
-do not exist yet** as the smart router.
+| Area      | Reality                                                                         |
+| --------- | ------------------------------------------------------------------------------- |
+| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
+| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
+| Depth     | Routing row ≠ full product for every tracker title                              |
+| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
+| Readiness | useful-path / readiness tests prove runnable mock paths                         |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker                   | Notes                                                        |
-| ------------------------- | ------------------------------------------------------------ |
-| **`pay.routing` Shehzad** | Hard dependency — agents babysit only on M1 expand           |
-| Product law               | Who may run Merchant agent (merchant principal vs staff)     |
-| Class X                   | Live rail credentials already Class X in pay                 |
-| Money                     | Agent must not settle payouts; proposals only until law says |
+| Law         | Implication                                       |
+| ----------- | ------------------------------------------------- |
+| §0.7 brand  | No vendor model names in user-facing agent copy   |
+| §0.6        | Agents never `ledger.post`                        |
+| Guardrails  | Refuse out-of-policy tool use                     |
+| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
 
-## First PR size (if free)
+## 4 · DoD sketch (checkable — staged)
 
-**Blocked for implement until `pay.routing` exposes readable approval-rate /
-candidate-route data.** After that: **S** — register `merchant` guardrail
-(tools: `pay.routing.stats` read, `pay.routing.propose` write+approval), mock
-stats fixture tests, no auto-apply. Do **not** dual-build routing inside agents.
+### Stage 1
+
+- [ ] Named task in routing + readiness
+- [ ] Guardrail tests for this agent’s tools
+- [ ] Copy keys only from catalogue
+
+### Stage 2
+
+- [ ] Real data tools with typed refusals
+- [ ] Audit log of user-affecting actions
+- [ ] Tier/gating per product law
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. v1 tool allowlist.
+2. Human escalation path.
+3. Metering / cost attribution.
+
+## 6 · Estimated size
+
+| Slice                 | Size    |
+| --------------------- | ------- |
+| Task + tests on mock  | **S–M** |
+| Full grounded product | **M–L** |
+
+## 7 · Related docs / code
+
+- `services/svc-agents/src/gateway/routing.ts`
+- `services/svc-agents/src/fleet/guardrails.ts`
+- `services/svc-agents/src/copy.ts`
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing prices or pay approval rates.
+- No Shehzad implement under merchant agent.
+- No `features.mjs` flip from research.

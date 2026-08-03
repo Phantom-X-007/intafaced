@@ -1,47 +1,79 @@
 # TRK-academy.ambassadors
 
 **Title:** Residencies, IFC pay, revenue share  
-**Tracker:** `academy.ambassadors` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `academy.lobbies` (done), `token.staking` (done)  
-**Tip freeze:** `origin/main` @ `b3d08931` (re-derive before implement)
+**Tracker:** `academy.ambassadors` · module `academy` · phase 5 · status `ready` · owner none  
+**Depends on:** `academy.lobbies` · `token.staking`  
+**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
+**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
-## DoD (plain language)
+---
 
-Named **residencies** (ambassador programs) can host lobbies under clear terms;
-**per-session IFC pay** and **sub revenue share** settle through **ledger
-recipes** (not academy-held balances). Displayed ambassador rank/status is
-honest. Until recipes exist, no green “paid” UI. Non-pay residency roster
-alone is not the full title — product may split rows later.
+## 1 · What “done” means (plain language)
 
-## Path on tip
+Title promise for `academy.ambassadors` is product-complete, not “a stub route exists.”  
+**Reality check:** Host/ambassador concepts in code; pay is Class M.
 
-| Area          | Location                                                                         |
-| ------------- | -------------------------------------------------------------------------------- |
-| Service       | `services/svc-academy/` — **custodial: false**, no `LEDGER_URL`                  |
-| Hosting today | Rank perk `lobbyHostRights` via svc-identity — operators/ambassadors host        |
-| Stake gate    | Staked rooms use `min_stake` threshold vs svc-token `stakeOf`                    |
-| Explicit gap  | README: ambassador residencies + per-session IFC pay = **money**; recipes absent |
-| Doctrine §8.3 | “per-session IFC pay + sub revenue share (ledger recipes)”                       |
+## 2 · Current code state (tip `04f9b1f2`)
 
-**Tip residual:** lobby hosting + stake gates ship; **pay and revenue share do
-not**. Any stub that credits IFC inside academy would violate §0.6.
+| Area       | Reality                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| Service    | `services/svc-academy` — lobbies, host-rights, curriculum catalog, spatial `scene`                            |
+| Curriculum | `curriculum/catalog.ts` thin real catalog; full DERIV//DESK 20+3 residual (see `academy-service.ts` comments) |
+| Edge       | `/api/academy` in `svc-edge`                                                                                  |
+| Flags      | `academy.inviteLobbies`, `academy.tournament`                                                                 |
+| Scopes     | `academy:read` / `academy:write`                                                                              |
+| XP         | `intafaced.identity.xp.earned` named for cert path — consumer wiring residual                                 |
 
-## Blocked by
+## 3 · Doctrine constraints
 
-| Blocker         | Notes                                                                 |
-| --------------- | --------------------------------------------------------------------- |
-| **Money spine** | Ledger recipes for session pay + sub share — Class M when implemented |
-| Product law     | Residency contract shape, rates, who funds house vs sub — Denon/Nitro |
-| Class X         | Production payout eligibility, tax/jurisdiction if real compensation  |
-| Not blocked     | Hosting perk, rooms, sessions for non-pay residency **ops** slice     |
+| Law           | Implication                                                  |
+| ------------- | ------------------------------------------------------------ |
+| Brand         | Education content copy vendor-clean                          |
+| Money         | Tournament prizes / ambassador IFC pay → ledger recipes only |
+| Paper trading | Must not spend real ledger balances                          |
+| Events        | XP must not double-award                                     |
 
-**Do not invent money.** Research only until recipe + LEDGER_URL PR is explicit.
+## 4 · DoD sketch (checkable — staged)
 
-## First PR size (if free)
+### Stage 1
 
-**XS–S (non-money):** residency / ambassador **roster + room linkage** (metadata
-only, no pay) if product wants that split. **M+ Class M (money):**
-`packages/ledger-client` recipes first, then academy job that **commands**
-settle (never holds balance), dual-book tests, freeze-safe. Prefer two PRs:
-recipes/contracts → academy caller. Skip green “paid” badges until ledger posts
-succeed.
+- [ ] Spec matches code: live vs residual for **this** id
+- [ ] Smallest vertical slice for this title only
+
+### Stage 2
+
+- [ ] Title-level acceptance tests
+- [ ] i18n for new strings
+- [ ] Money paths (if any) Class M audited
+
+### Tracker `done` bar
+
+Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+
+## 5 · Open questions
+
+1. Content licensing for full curriculum import.
+2. Prize pool funding + custody.
+3. Paper market operator controls.
+
+## 6 · Estimated size
+
+| Slice                  | Size          |
+| ---------------------- | ------------- |
+| Catalog/certs progress | **M–L**       |
+| Spatial canvas UI      | **L**         |
+| Tournaments + prizes   | **L** Class M |
+| Ambassadors pay        | **L** Class M |
+
+## 7 · Related docs / code
+
+- `services/svc-academy/src/curriculum/catalog.ts`
+- `services/svc-academy/src/academy-service.ts`
+- `packages/contracts` blueprint curriculumPath
+- `packages/ledger-client` tournament prize notes
+
+## 8 · Explicit non-goals for this pack
+
+- No inventing full 20+3 content without product assets.
+- No real-money paper trading confusion.
+- No `features.mjs` edit.
