@@ -25,34 +25,34 @@
 
 ### 2.1 Package (`packages/i18n`)
 
-| Fact | Value (tip README + source) |
-| --- | --- |
-| Locales **declared** | **28** (`locales.ts`) — en, major EU/APAC, ar/he/fa/ur (RTL), sw/ha, etc. |
-| Locales with **catalog** | **1** — English only (`catalogs.ts` / `CATALOGS`) |
-| English message keys | ~**118** (`catalog.ts`) |
-| Runtime consumers | **`svc-notify` only** (out-of-app email/SMS/push render) |
-| Customer surfaces through package | **0** — `apps/web` does not import it for UI |
-| React binding | **None** — no provider, no `useT()`, no Next locale negotiation |
-| API | `createTranslator`, `negotiateLocale`, `parseAcceptLanguage`, `formatMoney` / number / percent / date, `localeCoverage()` |
+| Fact                              | Value (tip README + source)                                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Locales **declared**              | **28** (`locales.ts`) — en, major EU/APAC, ar/he/fa/ur (RTL), sw/ha, etc.                                                 |
+| Locales with **catalog**          | **1** — English only (`catalogs.ts` / `CATALOGS`)                                                                         |
+| English message keys              | ~**118** (`catalog.ts`)                                                                                                   |
+| Runtime consumers                 | **`svc-notify` only** (out-of-app email/SMS/push render)                                                                  |
+| Customer surfaces through package | **0** — `apps/web` does not import it for UI                                                                              |
+| React binding                     | **None** — no provider, no `useT()`, no Next locale negotiation                                                           |
+| API                               | `createTranslator`, `negotiateLocale`, `parseAcceptLanguage`, `formatMoney` / number / percent / date, `localeCoverage()` |
 
 **Policy already coded:** requesting a declared-but-empty locale serves English; `dir` and `renderedLocale` follow the **actual** text language, not the requested empty catalog (so RTL is not applied around LTR English by mistake).
 
 ### 2.2 Apps / shell hardcoding
 
-| Surface | State |
-| --- | --- |
-| `apps/web` | Local `const copy = { … }` in **15 files / 164 strings** (frozen baseline 2026-08-03). Comment still says i18n “in a separate worktree.” |
-| `apps/admin` | English operator copy; **allowlisted** in `i18n-scan` as internal tooling |
-| Vendored Vue shell | Separate tree under `vendor/**/05_Web_Front` (shape-found); customer-facing shell product |
+| Surface            | State                                                                                                                                    |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`         | Local `const copy = { … }` in **15 files / 164 strings** (frozen baseline 2026-08-03). Comment still says i18n “in a separate worktree.” |
+| `apps/admin`       | English operator copy; **allowlisted** in `i18n-scan` as internal tooling                                                                |
+| Vendored Vue shell | Separate tree under `vendor/**/05_Web_Front` (shape-found); customer-facing shell product                                                |
 
 ### 2.3 Gates / scanners
 
-| Tool | Script | CI posture |
-| --- | --- | --- |
-| JSX heuristic (apps) | `pnpm scan:i18n` → `tooling/ci/i18n-scan.mjs` | **Advisory** (exit 0); `--strict` local |
-| `copy = {}` ratchet | `pnpm scan:i18n-bypass` → `i18n-bypass-scan.mjs` | **Blocking** on verify — queue may shrink, not grow |
-| Shell (Vue) scan | `tooling/ci/shell-i18n-scan.mjs` | On open rescue PR **#425** (`chore/rescue-shell-i18n-keys`) — **blocking** intent for finished shell; **not necessarily on main yet** — re-derive `git show` / PR state before claiming gate lives on tip |
-| Types | `MessageKey` / param types in package | Compile-time: no unknown keys, no missing params |
+| Tool                 | Script                                           | CI posture                                                                                                                                                                                                |
+| -------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JSX heuristic (apps) | `pnpm scan:i18n` → `tooling/ci/i18n-scan.mjs`    | **Advisory** (exit 0); `--strict` local                                                                                                                                                                   |
+| `copy = {}` ratchet  | `pnpm scan:i18n-bypass` → `i18n-bypass-scan.mjs` | **Blocking** on verify — queue may shrink, not grow                                                                                                                                                       |
+| Shell (Vue) scan     | `tooling/ci/shell-i18n-scan.mjs`                 | On open rescue PR **#425** (`chore/rescue-shell-i18n-keys`) — **blocking** intent for finished shell; **not necessarily on main yet** — re-derive `git show` / PR state before claiming gate lives on tip |
+| Types                | `MessageKey` / param types in package            | Compile-time: no unknown keys, no missing params                                                                                                                                                          |
 
 **Implication of bypass gate:** full “migrate 164 strings tomorrow” is deliberately **not** the default next step. Adoption layer (provider + locale choice) is missing; English-only product law means migration buys users nothing until catalogs exist.
 
@@ -64,14 +64,14 @@ Tracker note (2026-07-28): package imported by zero external files; apps/web har
 
 ## 3 · Doctrine constraints
 
-| Law | Implication |
-| --- | --- |
-| §9 | Key from day one; 100+ langs = files not refactors |
-| §14.4 | Every user-facing string keyed; brand-scan still separate (§0.7) |
-| §0.7 brand | Catalog copy: only allowed product names (Identity Blueprint, Sovereign Intelligence, Neural Engine) — never partner/model vendors |
-| Money | No `Number`/`parseFloat` on money format path; display precision from fiat registry |
-| Class / content | Non-English money copy is **owner content + review**, not agent MT. Mistranslated “confirm withdraw” is a loss event |
-| Agent thrift | Per-surface keying PRs; never “bulk-MT 100 catalogs” as one PR |
+| Law             | Implication                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| §9              | Key from day one; 100+ langs = files not refactors                                                                                 |
+| §14.4           | Every user-facing string keyed; brand-scan still separate (§0.7)                                                                   |
+| §0.7 brand      | Catalog copy: only allowed product names (Identity Blueprint, Sovereign Intelligence, Neural Engine) — never partner/model vendors |
+| Money           | No `Number`/`parseFloat` on money format path; display precision from fiat registry                                                |
+| Class / content | Non-English money copy is **owner content + review**, not agent MT. Mistranslated “confirm withdraw” is a loss event               |
+| Agent thrift    | Per-surface keying PRs; never “bulk-MT 100 catalogs” as one PR                                                                     |
 
 ---
 
@@ -109,14 +109,14 @@ Tracker note (2026-07-28): package imported by zero external files; apps/web har
 
 ## 6 · Estimated size
 
-| Slice | Size | Notes |
-| --- | --- | --- |
-| Land / verify shell-i18n-scan on tip | **XS–S** | Rescue PR may already exist |
-| App binding design + one surface keying (e.g. app-shell or landing) | **S–M** | Shrink bypass baseline only for touched files |
-| Order ticket / protocol plane keying | **M each** | Money-adjacent — wording fidelity |
-| Full apps/web 164-string migration | **L** | Needs binding + product review; not one night |
-| First non-en catalog (all keys) | **M content** | Human write + review, not code bulk |
-| 100+ catalogs | **Multi-quarter content** | Not an engineering sprint |
+| Slice                                                               | Size                      | Notes                                         |
+| ------------------------------------------------------------------- | ------------------------- | --------------------------------------------- |
+| Land / verify shell-i18n-scan on tip                                | **XS–S**                  | Rescue PR may already exist                   |
+| App binding design + one surface keying (e.g. app-shell or landing) | **S–M**                   | Shrink bypass baseline only for touched files |
+| Order ticket / protocol plane keying                                | **M each**                | Money-adjacent — wording fidelity             |
+| Full apps/web 164-string migration                                  | **L**                     | Needs binding + product review; not one night |
+| First non-en catalog (all keys)                                     | **M content**             | Human write + review, not code bulk           |
+| 100+ catalogs                                                       | **Multi-quarter content** | Not an engineering sprint                     |
 
 **First implement PR (when free):** **S** — add minimal app translator entry + key **one** low-risk shell surface; delete its `copy` object; lower BASELINE row; test import of `@intafaced/i18n`. **Do not** claim 100+ languages. **Do not** auto-MT catalogs.
 

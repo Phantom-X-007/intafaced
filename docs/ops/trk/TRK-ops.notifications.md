@@ -29,39 +29,39 @@
 
 ### 2.1 Service spine
 
-| Area | Path / fact |
-| --- | --- |
-| Service | `services/svc-notify/` · port **4015** · schema `notify` · role `svc_notify` |
-| Migrations | `0000_notify_init` · `0001_notify_channels` · `0002_notify_delivery_accepted` (`accepted_at`, not `delivered_at`) |
-| Core | `notify-service.ts`, `dispatch.ts`, `store.ts`, `channel-store.ts` |
-| Channels | `src/channels/` — `NotificationChannel` interface + email / push / SMS + `gateway.ts` wire tests against a real HTTP server |
-| Bus | `events.ts` → durable consumers (see below) |
-| Edge | `GET /api/notify/trpc/<procedure>` → svc-notify `/trpc/*` (`NOTIFY_URL`) |
-| Copy | Out-of-app render via `@intafaced/i18n` (`render.ts`); inbox title/body are **keys**, client renders |
-| Owner runbook | `docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md` |
+| Area          | Path / fact                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Service       | `services/svc-notify/` · port **4015** · schema `notify` · role `svc_notify`                                                |
+| Migrations    | `0000_notify_init` · `0001_notify_channels` · `0002_notify_delivery_accepted` (`accepted_at`, not `delivered_at`)           |
+| Core          | `notify-service.ts`, `dispatch.ts`, `store.ts`, `channel-store.ts`                                                          |
+| Channels      | `src/channels/` — `NotificationChannel` interface + email / push / SMS + `gateway.ts` wire tests against a real HTTP server |
+| Bus           | `events.ts` → durable consumers (see below)                                                                                 |
+| Edge          | `GET /api/notify/trpc/<procedure>` → svc-notify `/trpc/*` (`NOTIFY_URL`)                                                    |
+| Copy          | Out-of-app render via `@intafaced/i18n` (`render.ts`); inbox title/body are **keys**, client renders                        |
+| Owner runbook | `docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`                                                                                     |
 
 ### 2.2 API (self-only via `principal.userId`)
 
-| Procedure | Scope | Role |
-| --- | --- | --- |
-| `notify.list` / `unreadCount` / `markRead` / `markAllRead` | `notify:read` / `write` | In-app inbox |
-| `notify.channels` | `notify:read` | Availability + missing env names |
-| `notify.targets` / `registerTarget` / `verifyTarget` / `removeTarget` | read/write | Confirmed channel addresses |
-| `notify.deliveries` | `notify:read` | Per-channel attempt + outcome (user-visible on purpose) |
-| `health` | public | `{ ok, service, fanoutEnabled }` |
+| Procedure                                                             | Scope                   | Role                                                    |
+| --------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------- |
+| `notify.list` / `unreadCount` / `markRead` / `markAllRead`            | `notify:read` / `write` | In-app inbox                                            |
+| `notify.channels`                                                     | `notify:read`           | Availability + missing env names                        |
+| `notify.targets` / `registerTarget` / `verifyTarget` / `removeTarget` | read/write              | Confirmed channel addresses                             |
+| `notify.deliveries`                                                   | `notify:read`           | Per-channel attempt + outcome (user-visible on purpose) |
+| `health`                                                              | public                  | `{ ok, service, fanoutEnabled }`                        |
 
 ### 2.3 Bus consumers (durable names)
 
-| Event key | Subject (catalog) | Effect |
-| --- | --- | --- |
-| `fillSettled` | `intafaced.trade.fill.settled` | Inbox for fill owner |
-| `p2pEscrowLocked` | `intafaced.p2p.escrow.locked` | Seller + buyer |
-| `p2pEscrowReleased` / `Refunded` | p2p escrow subjects | Party rows |
-| `p2pTradeDisputed` | disputed | **Opener only** (payload has no counterparty) |
-| `kycApproved` | identity KYC | Tier granted |
-| `rankUpdated` | identity rank | Rank change |
-| `stakeCreated` | token stake | Stake locked |
-| `bankMarginCalled` | `intafaced.bank.margin_call.created` | **Critical** + fan-out; stream may still be **pending** until svc-bank publishes (`ownedStreams: ['bank']`) |
+| Event key                        | Subject (catalog)                    | Effect                                                                                                      |
+| -------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `fillSettled`                    | `intafaced.trade.fill.settled`       | Inbox for fill owner                                                                                        |
+| `p2pEscrowLocked`                | `intafaced.p2p.escrow.locked`        | Seller + buyer                                                                                              |
+| `p2pEscrowReleased` / `Refunded` | p2p escrow subjects                  | Party rows                                                                                                  |
+| `p2pTradeDisputed`               | disputed                             | **Opener only** (payload has no counterparty)                                                               |
+| `kycApproved`                    | identity KYC                         | Tier granted                                                                                                |
+| `rankUpdated`                    | identity rank                        | Rank change                                                                                                 |
+| `stakeCreated`                   | token stake                          | Stake locked                                                                                                |
+| `bankMarginCalled`               | `intafaced.bank.margin_call.created` | **Critical** + fan-out; stream may still be **pending** until svc-bank publishes (`ownedStreams: ['bank']`) |
 
 **Deliberately not fanned:** some P2P resolve subjects name moderator/system only — documented in `packages/events` catalog + notify wiring comments.
 
@@ -75,27 +75,27 @@
 
 ### 2.5 Honest residual vs tracker
 
-| Claim | Tip truth |
-| --- | --- |
-| In-app inbox | **Shipped** and tested |
-| Multi-channel adapter + delivery rows | **Shipped**; gateway contract stable |
-| Real email/push/SMS to humans | **Blocked on Class X secrets** — unconfigured channels refuse `channel.not_configured` |
-| `ops.notifications` tracker `done` | **Must not flip** while all out-of-app channels refuse in every real deploy |
-| Tracker note age | Note is largely **accurate** (multi-channel exists; credentials missing). Prefer this pack + service README over older scoreboard lines that only say “inbox ready.” |
+| Claim                                 | Tip truth                                                                                                                                                            |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| In-app inbox                          | **Shipped** and tested                                                                                                                                               |
+| Multi-channel adapter + delivery rows | **Shipped**; gateway contract stable                                                                                                                                 |
+| Real email/push/SMS to humans         | **Blocked on Class X secrets** — unconfigured channels refuse `channel.not_configured`                                                                               |
+| `ops.notifications` tracker `done`    | **Must not flip** while all out-of-app channels refuse in every real deploy                                                                                          |
+| Tracker note age                      | Note is largely **accurate** (multi-channel exists; credentials missing). Prefer this pack + service README over older scoreboard lines that only say “inbox ready.” |
 
 ---
 
 ## 3 · Doctrine constraints
 
-| Law | Implication |
-| --- | --- |
-| §0.4 single interface | Channels share one adapter shape; no one-off “just email” path |
-| §0.6 / §0.7 | No balances in notify; no vendor names in user copy or service branding |
-| §2 service boundaries | **Must not** read `identity.users.email` — login email ≠ consent to message; own `notify.channel_targets` |
-| §9 i18n | Out-of-app copy rendered server-side from keys; clients render inbox from same catalog |
-| Money / margin | `accepted` ≠ “borrower knows.” svc-bank `notified_at` / grace clocks must not silently treat gateway 2xx as human receipt without product law |
-| Agent protocol | One service per PR; no money invent; gateway provider choice is **owner**, not agent |
-| Class X | ESP / APNS-FCM style / SMS aggregator accounts + contracts + jurisdiction |
+| Law                   | Implication                                                                                                                                   |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| §0.4 single interface | Channels share one adapter shape; no one-off “just email” path                                                                                |
+| §0.6 / §0.7           | No balances in notify; no vendor names in user copy or service branding                                                                       |
+| §2 service boundaries | **Must not** read `identity.users.email` — login email ≠ consent to message; own `notify.channel_targets`                                     |
+| §9 i18n               | Out-of-app copy rendered server-side from keys; clients render inbox from same catalog                                                        |
+| Money / margin        | `accepted` ≠ “borrower knows.” svc-bank `notified_at` / grace clocks must not silently treat gateway 2xx as human receipt without product law |
+| Agent protocol        | One service per PR; no money invent; gateway provider choice is **owner**, not agent                                                          |
+| Class X               | ESP / APNS-FCM style / SMS aggregator accounts + contracts + jurisdiction                                                                     |
 
 ---
 
@@ -124,13 +124,13 @@
 
 ## 6 · Estimated size (if free to implement later)
 
-| Slice | Size | Notes |
-| --- | --- | --- |
-| Owner credentials + `NOTIFY_REQUIRED_CHANNELS` in one non-prod | **XS** ops | No code; Class X |
-| Prove one channel end-to-end in staging + delivery-row proof | **S** | Tests against real gateway or recorded forwarder |
-| Extra bus consumers (new catalog events only) | **S each** | Catalog/events PR first if new subjects |
-| Alerts / watchlists product | **L+** | Separate program; depends on this fan-out |
-| Delivery receipts / webhooks | **M** | Schema + product wording; do not rename `accepted` lightly |
+| Slice                                                          | Size       | Notes                                                      |
+| -------------------------------------------------------------- | ---------- | ---------------------------------------------------------- |
+| Owner credentials + `NOTIFY_REQUIRED_CHANNELS` in one non-prod | **XS** ops | No code; Class X                                           |
+| Prove one channel end-to-end in staging + delivery-row proof   | **S**      | Tests against real gateway or recorded forwarder           |
+| Extra bus consumers (new catalog events only)                  | **S each** | Catalog/events PR first if new subjects                    |
+| Alerts / watchlists product                                    | **L+**     | Separate program; depends on this fan-out                  |
+| Delivery receipts / webhooks                                   | **M**      | Schema + product wording; do not rename `accepted` lightly |
 
 **First implement PR (when free):** after secrets exist — one channel live in non-prod + proof test; **without secrets** only Class N docs/runbook or additional **non-delivery** consumers. Do not fake accepted rows.
 

@@ -25,32 +25,32 @@
 
 ### 2.1 Two admin surfaces (do not conflate)
 
-| Surface | Path | Role |
-| --- | --- | --- |
-| **INTAFACED operator console** | `apps/admin` (Next 15, port **3100**) | §14.6 kill-switch, launch drops, jurisdiction, ledger freeze |
-| **Vendored staff admin** | `vendor/**/04_Web_Admin` (Vue 2 / iView) | Legacy members, withdraw examine, fee manage, OTC, CMS, etc. |
+| Surface                        | Path                                     | Role                                                         |
+| ------------------------------ | ---------------------------------------- | ------------------------------------------------------------ |
+| **INTAFACED operator console** | `apps/admin` (Next 15, port **3100**)    | §14.6 kill-switch, launch drops, jurisdiction, ledger freeze |
+| **Vendored staff admin**       | `vendor/**/04_Web_Admin` (Vue 2 / iView) | Legacy members, withdraw examine, fee manage, OTC, CMS, etc. |
 
 Inventory law: `docs/ADMIN-0-INVENTORY-VENDOR-VS-APPS-2026-08-02.md`.  
 **Product rule:** monorepo admin never grows venue SQL or holds balances.
 
 ### 2.2 `apps/admin` routes (tip)
 
-| Route | What | Live? |
-| --- | --- | --- |
-| `/` | Module kill-switches + control-plane status | **Yes** when `EDGE_URL` + `ADMIN_OPERATOR_TOKEN` — GET/POST `/api/kill-switch` → edge `/admin/kill-switches` |
-| `/launch` | §11 drop table + resolve-at-drop | Local config resolution (honest for launch matrix) |
-| `/jurisdiction` | Matrix + live `checkAccess()` readout | Config-backed, not edge money |
-| `/ledger` | Freeze / unfreeze / reconcile UI | Freeze/unfreeze via `/api/ledger-freeze` → edge → ledger; **reconcile still simulated** |
+| Route           | What                                        | Live?                                                                                                        |
+| --------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `/`             | Module kill-switches + control-plane status | **Yes** when `EDGE_URL` + `ADMIN_OPERATOR_TOKEN` — GET/POST `/api/kill-switch` → edge `/admin/kill-switches` |
+| `/launch`       | §11 drop table + resolve-at-drop            | Local config resolution (honest for launch matrix)                                                           |
+| `/jurisdiction` | Matrix + live `checkAccess()` readout       | Config-backed, not edge money                                                                                |
+| `/ledger`       | Freeze / unfreeze / reconcile UI            | Freeze/unfreeze via `/api/ledger-freeze` → edge → ledger; **reconcile still simulated**                      |
 
 BFF routes keep tokens **server-side**. Optional `ADMIN_BFF_SHARED_SECRET` + header `x-intafaced-admin-bff`.
 
 ### 2.3 Edge control plane (`services/svc-edge`)
 
-| Path | Scope | Effect |
-| --- | --- | --- |
-| `/admin/kill-switches` | `admin:write` + MFA | Module disable/enable + audit; only **edge-enforceable** modules armable |
-| `/admin/status` | same | Operator summary |
-| `/admin/ledger/freeze` · `unfreeze` | `admin:treasury` (+ interactive MFA) | Money-plane posting freeze |
+| Path                                | Scope                                | Effect                                                                   |
+| ----------------------------------- | ------------------------------------ | ------------------------------------------------------------------------ |
+| `/admin/kill-switches`              | `admin:write` + MFA                  | Module disable/enable + audit; only **edge-enforceable** modules armable |
+| `/admin/status`                     | same                                 | Operator summary                                                         |
+| `/admin/ledger/freeze` · `unfreeze` | `admin:treasury` (+ interactive MFA) | Money-plane posting freeze                                               |
 
 **Honesty already fixed in code comments:** cannot arm modules the edge cannot enforce (e.g. `ws` direct) — refuse with reason, not green theatre.  
 Kill guard: new commitments 503; **exit paths** (cancel, futures close) still pass; control plane outside kill guard.  
@@ -79,16 +79,16 @@ Denon/config work has historically touched kill-switch board / vitest (e.g. regr
 
 ## 3 · Doctrine constraints
 
-| Law | Implication |
-| --- | --- |
-| §14.6 | Admin controls: kill-switch + config surface in `apps/admin` |
-| §0.6 | No value movement outside ledger recipes; admin issues **commands**, does not post entries itself |
-| No fabricated money | Simulated reconcile must stay labeled; zeros only until real route |
-| Fail closed | Kill undecidable → refuse new work; freeze friction proportional to blast radius |
-| Scopes | `admin:write` ≠ `admin:treasury`; never mint admin scopes on normal sessions |
-| Agent protocol | Edge vs admin vs ledger = **separate PRs** when wiring new routes (reconcile needs edge route first) |
-| Class X | Production SSO, token issuance, who may hold `admin:treasury` |
-| Shehzad / money mountains | Fee/treasury product law and bank/pay money paths are not free craft under this research |
+| Law                       | Implication                                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| §14.6                     | Admin controls: kill-switch + config surface in `apps/admin`                                         |
+| §0.6                      | No value movement outside ledger recipes; admin issues **commands**, does not post entries itself    |
+| No fabricated money       | Simulated reconcile must stay labeled; zeros only until real route                                   |
+| Fail closed               | Kill undecidable → refuse new work; freeze friction proportional to blast radius                     |
+| Scopes                    | `admin:write` ≠ `admin:treasury`; never mint admin scopes on normal sessions                         |
+| Agent protocol            | Edge vs admin vs ledger = **separate PRs** when wiring new routes (reconcile needs edge route first) |
+| Class X                   | Production SSO, token issuance, who may hold `admin:treasury`                                        |
+| Shehzad / money mountains | Fee/treasury product law and bank/pay money paths are not free craft under this research             |
 
 ---
 
@@ -129,14 +129,14 @@ Flip only when Stage 1 is production-safe **and** product accepts Stage 2 scope 
 
 ## 6 · Estimated size
 
-| Slice | Size | Notes |
-| --- | --- | --- |
-| Docs/runbook + console honesty polish | **XS** Class N | Already largely written |
-| Edge `ledger.reconcile` proxy + admin BFF + unstub | **S–M** | Two services if strict one-service-per-PR: edge first, then admin |
-| Durable flag store + board | **M** | §13 product |
-| Operator SSO | **M–L** | Class X / infra |
-| Port one vendor finance screen to monorepo | **L** | Class M if money; contracts first |
-| Full fee + listings + treasury product | **XL** | Multi-PR program; Denon direction for product law |
+| Slice                                              | Size           | Notes                                                             |
+| -------------------------------------------------- | -------------- | ----------------------------------------------------------------- |
+| Docs/runbook + console honesty polish              | **XS** Class N | Already largely written                                           |
+| Edge `ledger.reconcile` proxy + admin BFF + unstub | **S–M**        | Two services if strict one-service-per-PR: edge first, then admin |
+| Durable flag store + board                         | **M**          | §13 product                                                       |
+| Operator SSO                                       | **M–L**        | Class X / infra                                                   |
+| Port one vendor finance screen to monorepo         | **L**          | Class M if money; contracts first                                 |
+| Full fee + listings + treasury product             | **XL**         | Multi-PR program; Denon direction for product law                 |
 
 **First implement PR (when free):** **S** — edge reconcile route **or** admin-only residual that cannot invent money (e.g. freeze UI already live; ban any path that reintroduces fake freeze). Prefer **reconcile wire** only with green money tests. **No** FeeManage port without SoT decision.
 
