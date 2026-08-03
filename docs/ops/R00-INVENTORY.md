@@ -1,12 +1,12 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T20:49:21.523Z
+Generated: 2026-08-03T21:06:04.948Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `d36b2823`                                                        |
-| Tip subject                       | docs(ops): R07 cycle79 freeProduct=0 + tip 25f73927 (#647)        |
-| Open PRs                          | 11                                                                |
+| Tip                               | `fa367739`                                                        |
+| Tip subject                       | docs(ops): fix R-AFK-RESCAN cycle80 conflict markers (#650)       |
+| Open PRs                          | 12                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
 | Blocked                           | 1                                                                 |
