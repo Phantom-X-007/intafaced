@@ -2,9 +2,9 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `eea3b850` — docs(ops): R01 cycle64 partner babysit — ready=4 tip f210687b (#615)
-- **Generated:** 2026-08-03T19:23:39.226Z
-- **Open PRs:** 12
+- **Tip:** `5da067fb` — docs(ops): R07 cycle64 freeProduct=0 + tip f210687b (#616)
+- **Generated:** 2026-08-03T19:26:39.357Z
+- **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
 - **Anti-under-spawn:** anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).
@@ -28,7 +28,6 @@
 
 ## Open PR snapshot
 
-- #616 @ZenYoda3 · 8 files · CONFLICTING · docs(ops): R07 cycle64 freeProduct=0 + tip f210687b
 - #448 @Phantom-X-007 · 7 files · CONFLICTING · feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code
 - #445 @Phantom-X-007 · 18 files · MERGEABLE · fix(test): five money suites could skip on CI and the build went green
 - #441 @Phantom-X-007 · 5 files · CONFLICTING · feat(ci): coverage-check — the gate §25 specified and nobody built
