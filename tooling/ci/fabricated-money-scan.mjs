@@ -310,10 +310,9 @@ const BASELINE = {
   'pages/exchange/Exchange.vue': [
     'coinScale: 6,',
     'baseCoinScale: 6,',
-    'symbolFee: 0.001,',
+    /* RP1 removed: symbolFee float literal + tape float product (ix-money now). */
     'scale = this.baseCoinScale || 2;',
     'scale == null ? 2 :',
-    'row.price * row.amount',
     // `:placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : '0.00'"`
     '0.00',
     // `placeholder="0.00"` on the limit-price input

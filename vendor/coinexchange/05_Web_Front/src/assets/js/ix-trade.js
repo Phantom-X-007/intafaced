@@ -17,7 +17,8 @@
  *    does parse some of them for pixel arithmetic (bar widths, percent sizing)
  *    and that is display, not money — but the value that goes back out to
  *    `POST /api/v1/orders` is the string the user typed, never a round-tripped
- *    float.
+ *    float. (Order-ticket float paths are owned by ix-money.js — see that
+ *    file's header.)
  *
  * 2. ABSENT IS NOT ZERO. Our ticker publishes `null` for every 24h rollup
  *    because no windowed aggregation job exists, and `null` for last price when
@@ -32,10 +33,57 @@
  *    respond". The books are empty today and that is the true state of the
  *    market. The callers set `reachable = true` on an empty array on purpose.
  *
+ * 4. SHAPE BEFORE ADAPT. Call sites that read a live REST body run `accept()`
+ *    with a schema from `ix-wire.js` BEFORE any `toDesk*` / `toPlate*` /
+ *    `toMarket*` adapter. A float price, a 19dp amount or a custodial:true
+ *    health answer becomes `invalid_response` naming the field — it never
+ *    reaches a form, a ladder or a sovereignty badge.
+ *
  * CommonJS so the golden tests can require() it without a bundler, matching
  * book-honesty.js and desk-prefs.js beside it.
  */
 'use strict';
+
+var wire = require('./ix-wire.js');
+
+/**
+ * The schemas the desk's REST reads actually contract for.
+ * Screens pass these to `accept()` — never invent ad-hoc shapes.
+ */
+var schemas = {
+  markets: wire.markets,
+  tickers: wire.tickers,
+  orderBook: wire.orderBook,
+  trades: wire.trades,
+  ohlcv: wire.ohlcv,
+  order: wire.order,
+  orders: wire.orders,
+  balances: wire.balances
+};
+
+/**
+ * Gate a raw wire payload before any adapter reads it.
+ *
+ * Same result shape as `config/intafaced.js` rest()/query() so a screen can
+ * branch on `ok` / `reason` / `message` identically for transport failures and
+ * shape failures. Missing schema is a pass (opt-in), matching wire.validate.
+ *
+ * @param {function|null|undefined} schema  from `schemas` / ix-wire
+ * @param {*} data  already-unwrapped body (the `data` field of a rest result)
+ * @returns {{ ok: boolean, reason: string, message: string|null, data: * }}
+ */
+function accept(schema, data) {
+  var r = wire.validate(schema, data);
+  if (!r || r.ok) {
+    return { ok: true, reason: 'ok', message: null, data: data };
+  }
+  return {
+    ok: false,
+    reason: 'invalid_response',
+    message: wire.describe(r),
+    data: null
+  };
+}
 
 /** CCXT order side → the desk's BUY/SELL vocabulary. */
 function toDeskSide(side) {
@@ -504,6 +552,11 @@ function sectionEmptyLabel(section, emptyText) {
 }
 
 module.exports = {
+  /* wire gate — run before every toDesk* / toPlate* / toMarket* on live reads */
+  accept: accept,
+  schemas: schemas,
+  wire: wire,
+
   toDeskSide: toDeskSide,
   toWireSide: toWireSide,
   toDeskType: toDeskType,
