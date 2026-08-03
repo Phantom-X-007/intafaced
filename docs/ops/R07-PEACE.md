@@ -2,12 +2,12 @@
 
 **Proof:** NO-FLEET · Docker no · :8090 foreign worktree  
 **Tip (re-derive):** `git fetch && git log -1 --oneline origin/main`  
-**Last coord cycle:** 2026-08-03T14:59Z · tip=`c06a4782` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11  
+**Last coord cycle:** 2026-08-03T15:03Z · tip=`4fce39a5` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11  
 **Mandate:** freeProduct=0 is shell craft drained — **not** session kill.
 
 ## Living board (one paragraph)
 
-Shell product drained (freeProduct=0); freeTracker=0; tip `c06a4782` after #519 cycle16 land; partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0**; SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N green to merge**.
+Shell product drained (freeProduct=0); freeTracker=0; tip `4fce39a5` after #520 cycle17 land; partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0**; SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N green to merge**.
 
 ## Merged Class N (shell wave)
 
@@ -86,8 +86,9 @@ Buckets: [R02-BUCKETS-LIVE.md](./R02-BUCKETS-LIVE.md) · Night law: [NIGHT-ENGIN
 | 15    | →cb522a6c         | 0           | freeze+report @ tip; open Nitro=0; freeProduct=0 freeTracker=0; P-WS #433/#432 no dual-edit; invent 0                                              |
 | 16    | →26d42dfd         | 0           | #518 cycle15 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 17    | →c06a4782         | 0           | #519 cycle16 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
+| 18    | →4fce39a5         | 0           | #520 cycle17 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 
-## Invent re-scan (cycle17)
+## Invent re-scan (cycle18)
 
 Static `rg` on vendor front: live `dataFanyong` / `CNYRate || 6.5` hits are **comment-only** (Index.vue / Invite.vue honesty notes) · live invent **0** · **no new invent residual**.
 
