@@ -1,12 +1,12 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T17:46:44.181Z
+Generated: 2026-08-03T17:49:37.162Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `2d4b1957`                                                        |
-| Tip subject                       | docs(ops): invent re-scan cycle46 tip cf900011 (#577)             |
-| Open PRs                          | 12                                                                |
+| Tip                               | `e013d1ee`                                                        |
+| Tip subject                       | docs(ops): R07 cycle46 freeProduct=0 + tip 2d4b1957 (#578)        |
+| Open PRs                          | 11                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
 | Blocked                           | 1                                                                 |
