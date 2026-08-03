@@ -57,7 +57,7 @@
 .isclick {
             width: 6px;
             height: 6px;
-            background-color: #1ad4bc;
+            background-color: #ff8534;
             display: inline-block;
             border-radius: 50%;
             margin-top: 16px;
@@ -72,9 +72,9 @@
         }
 .ivu-menu {
           li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-            color: #1ad4bc;
+            color: #ff8534;
             a {
-              color: #1ad4bc;
+              color: #ff8534;
             }
           }
           li.ivu-menu-item {
@@ -150,7 +150,7 @@
     padding-left: 20px!important;
 }
 .uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu) a{
-  color: #00c2a8!important;
+  color: #ff6b00!important;
 }
 .uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item:not(.ivu-menu-submenu){
     text-align: left;

@@ -629,7 +629,7 @@ export default {
 .account-box.account-in.account-item.account-item-in.btn {
     padding: 8px 10px;
     cursor: pointer;
-    color: #00c2a8;
+    color: #ff6b00;
 }
 
 .tips-g {
@@ -676,7 +676,7 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #00c2a8;
+    color: #ff6b00;
     transition: all.2s ease-in-out;
     cursor: pointer;
 }
@@ -689,7 +689,7 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #00c2a8;
+    color: #ff6b00;
     transition: all.2s ease-in-out;
     cursor: pointer;
 }
@@ -761,7 +761,7 @@ p.describe {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #00c2a8;
+    background: #ff6b00;
 }
 
 .bill_box {
@@ -924,7 +924,7 @@ p.describe {
 }
 
 .order_box.active {
-    border-bottom: 2px solid #00c2a8;
+    border-bottom: 2px solid #ff6b00;
 }
 
 .order_box.search {
@@ -937,8 +937,8 @@ p.describe {
     /* border: #cccccc solid 1px; */
 }
 .ivu-btn-primary{
-    background-color: #00c2a8;
-    border-color: #00c2a8;
+    background-color: #ff6b00;
+    border-color: #ff6b00;
 }
 
 @media screen and (max-width:768px){
@@ -969,15 +969,15 @@ p.describe {
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(0, 194, 168, 0.35);
+  border: 1px solid rgba(255, 107, 0, 0.35);
   border-radius: 6px;
-  background: rgba(0, 194, 168, 0.06);
+  background: rgba(255, 107, 0, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #00c2a8;
+  color: #ff6b00;
   font-weight: 600;
 }
 </style>

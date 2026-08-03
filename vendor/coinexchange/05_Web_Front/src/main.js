@@ -9,9 +9,19 @@ import vueResource from 'vue-resource';
 import VueI18n from 'vue-i18n';
 import iView from 'iview';
 import 'iview/dist/styles/iview.css';
+// iView 3 ships zh-CN as its BUILT-IN default. Every component string the
+// app does not override came out Chinese: an empty table read 暫无数据, the
+// pager read 共 n 条, Select read 无匹配数据, DatePicker named the months.
+// The 977-string purge could not have caught these — they are inside the
+// library, not in our templates — which is why they survived it.
+import iViewEnUS from 'iview/dist/locale/en-US';
 import util from './assets/js/util.js';
 import 'swiper/dist/css/swiper.css';
-import './assets/icons/iconfont.css';
+// iconfont removed. The webfont shipped exactly seven glyphs — WeChat, Weibo,
+// Biyong, Telegram, Medium, Reddit and an upload arrow — every one of them
+// only ever used by the footer social row and the app-download page, both of
+// which are gone. Five of the seven are China-only platforms. That is ~200 KB
+// of font files across five formats, downloaded on first paint, for nothing.
 // Loaded last so the design layer wins on equal specificity against iView and
 // the vendor sheets above it.
 import './assets/css/intafaced.css';
@@ -20,7 +30,7 @@ import Api from './config/api';
 import $ from '@js/jquery.min.js';
 var moment = require('moment');
 
-Vue.use(iView);
+Vue.use(iView, { locale: iViewEnUS });
 Vue.use(VueClipboard);
 Vue.use(VueRouter);
 Vue.use(vueResource);

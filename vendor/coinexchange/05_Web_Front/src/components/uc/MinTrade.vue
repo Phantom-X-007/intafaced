@@ -27,7 +27,7 @@
                         <!--<Select v-model="recordValue" clearable style="width:200px">-->
                         <!--<Option v-for="item in recordType" :value="item.value" :key="item.value">{{ item.label }}</Option>-->
                         <!--</Select>-->
-                        <Button type="primary" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#00c2a8;border-color:#00c2a8">{{$t('uc.finance.trade.search')}}</Button>
+                        <Button type="primary" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#ff6b00;border-color:#ff6b00">{{$t('uc.finance.trade.search')}}</Button>
                     </div>
                     <!-- <div class="datedaitl">
                         <span style="color: #eb6f6c">{{$t('uc.finance.trade.start_end')}}: </span>&nbsp;&nbsp;<span>{{$t('uc.finance.trade.chargetime')}}</span>
@@ -48,7 +48,12 @@
     </div>
 </template>
 <script>
-// import expandRow from './TradeExpand';
+// The expand-row component this once imported (TradeExpand.vue) is DELETED.
+// It was dead — the import had been commented out, so webpack never bundled
+// it — and it rendered per-row columns keyed on the upstream venue's own token
+// symbol, plus three $t() keys that do not exist in en.js. A dead component is
+// how a purged name returns: the next person to want an expandable row finds a
+// file that already looks official and wires it back up.
 export default {
   components: {
     // expandRow,
@@ -549,7 +554,7 @@ export default {
 }
 
 .order_box.active {
-  border-bottom: 2px solid #00c2a8;
+  border-bottom: 2px solid #ff6b00;
 }
 
 .order_box.search {

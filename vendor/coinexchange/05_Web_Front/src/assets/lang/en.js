@@ -438,7 +438,7 @@ module.exports = {
     },
     progress: {
         already: "Have to dig",
-        total: "Amount of excavable ore 6 billion BHB"
+        total: "Total supply not published"
     },
     service: {
         USDT: 'USDT',
@@ -569,7 +569,7 @@ module.exports = {
         time: "Trade Date",
         tip: "Notice",
         notice: "Notice",
-        notice1: "1. The legal currency trading area is an asset transaction between users and acceptors. The funds are not transferred to a platform, and the platform does not accept RMB recharge/remittance; ",
+        notice1: "1. The legal currency trading area is an asset transaction between users and acceptors. The funds are not transferred to a platform, and the platform does not accept fiat recharge or remittance; ",
         notice2: "2. The acceptors of legal currency transactions have passed real-name certification, offering transaction margins, and the tokens are hosted by the platform, so you can be assured that they can be converted; ",
         notice3: "3. The service time of the acceptor is 09:00-21:00 per day. The acceptance is completed within 30 minutes after the acceptance of the order, and the two-hour uncompleted transaction is cancelled; ",
         notice4: "4. In order to support bank cards in the legal currency trading area, it is necessary to transfer funds using an account that you have authenticated by your real name; ",
@@ -580,7 +580,7 @@ module.exports = {
         verifyset: "RealName/Asset Password",
         payset: "Payment Settings",
         trade: " Exchange",
-        input50tips: "Please enter a number between 50 and 50,000",
+        inputamounttips: "Enter an amount",
         bank: "Bank Card",
         alipay: "Alipay",
         wechatpay: "Wechat",
@@ -1039,8 +1039,8 @@ module.exports = {
                 totalassets: "Estimated Total Value of Assets: "
             },
             trade: {
-                accumulative_return: 'Mining fees have been repaid (BHB): ',
-                accumulat_return: 'Mining fees should be repaid(BHB): ',
+                accumulative_return: 'Mining fees have been repaid: ',
+                accumulat_return: 'Mining fees should be repaid: ',
                 start_end: 'Start-End',
                 account_date: 'Time for receiving the capital',
                 to: 'To',
@@ -1075,7 +1075,7 @@ module.exports = {
                 havedeal: 'Have done a deal',
                 poundageAmount: 'Service Charge ',
                 exchangeOrderId: "The order ID",
-                mineAmount: "Dig a currency (BHB)",
+                mineAmount: "Amount mined",
                 buy: "BUY",
                 sell: "SELL",
                 limit: "LIMIT",
@@ -1514,7 +1514,7 @@ module.exports = {
             title1: 'Promotion links',
             title2: 'Promotion friends',
             title3: 'My commission',
-            linkdesc: 'The following URL is your address for promotion to the outside world. You can promote it through friends, QQ, Wechat, Weibo, blogs, forums or your own website. All people who have accessed through this address will be your users after registration., And when these users submit strategies in this site, you can earn commissions, and detailed promotion can be viewed in the access record.',
+            linkdesc: 'This is your promotion address. Anyone who registers after arriving through it becomes your referred user, and commission on their activity is credited to you. Referral activity is listed in the access record.',
             linktitle: 'Your romotion links',
             copy: 'Copy',
             copy_msg1: 'Copy Success!',
@@ -1525,7 +1525,7 @@ module.exports = {
             createdtime: 'Registration time',
             currcommission: 'Current commission',
             managerfee: 'management fee',
-            yuan: 'yuan(RMB)',
+            yuan: 'unit',
             symbol: 'COIN',
             amount: 'Amount',
             remark: 'Remark',
@@ -1652,11 +1652,7 @@ module.exports = {
         apply: "Board Apply",
         coop: "Cooperation",
         community: "INTAFACED Community",
-        wechat: "Wechat",
-        addwechat: "Add 'intafaced01' as Wechat friends and then enter Wechat community",
-        weibo: "Weibo",
         twitter: "Twitter",
-        biyong: "Biyong",
         telegram: "Telegram",
         medium: "Medium",
         reddit: "Reddit"
@@ -1680,14 +1676,11 @@ module.exports = {
         desc8: ""
     },
     footer: {
-        wechatkefu: "wechat service",
         notice: 'Announcement',
         gsmc: 'Exchange The Best Cryptocurrency',
-        bah: 'No. 13026899 -3, Shanghai ICP',
         gsjj: 'Profile',
         gywm: 'About Us',
         jrwm: 'Join Us',
-        biyong: 'BiYong',
         lxwm: 'Contact us',
         yqlj: 'Links',
         bzzx: 'Help',
@@ -1698,7 +1691,6 @@ module.exports = {
         fysm: 'Fees',
         fwtk: 'Service Policy',
         fltk: 'legal Policy',
-        wechat: "Wechat Customer Service",
         xszn: "Beginner's Guide",
         cjwt: "FAQ",
         mztk: "Disclaimer",
@@ -1714,50 +1706,13 @@ module.exports = {
         apidoc: "Api Doc",
         zwkf: "come soon"
     },
-    index: {
-        circulation: 'Safety and development fund circulation',
-        hourEth: 'Cumulative revenue to be distributed in today',
-        yesterdayEth: 'Cumulative revenue to be distributed in yesterday',
-        yesterday: 'Mining output of the previous day:',
-        bhbTotal: "BHB Total flux",
-        bhbSecond: "BHB Two level market circulation",
-        checkMineprinciple: "View the principle of mining",
-        checkFlowVolum: 'Inspection of circulation',
-        checkLockPosition: 'Check the lock situation',
-        BHBregister: "INTAFACED account registration",
-        tibi: "The time and limit of the payment of the money to the bill",
-        line_plane: "Announcement on BHB's on-line plan, circulation and service fee return",
-        fenpeijizhi: 'A description of the INTAFACED income distribution mechanism',
-        jiangli_jihua: "Inviting the mining Award Scheme",
-        friend_fanhuan: "Invite friends, earn extra fee and return"
-    },
-    plate: {
-        title: "Platform income distribution scheme (BHB Holder's equity)",
-        content1: "Platform fee allocation and token economics are defined by operator policy and the definitive build — this shell does not invent fixed 80/20 revenue splits.",
-        content2: "The distribution of income takes days as a distribution cycle, and June 6, 2018 as the first distribution day. Every day after that, the total income to be distributed on the previous day will be allocated to BHB holders in proportion.",
-        content3: " (notice: 1. the BHB here only refers to the BHB that has been released / circulated. See also[",
-        content3_1: 'Note on the ratio of BHB circulation / participation in income distribution',
-        content3_2: "2. the hourly (whole point) snapshot is calculated once and the income distribution is executed once a day.",
-        hourFenpei: "Distribution of income today",
-        hourTotal: "Total income of today's platform",
-        xiangqing: "Details of today's income distribution",
-        yesterdaytit: "Distribution of income yesterday",
-        yesterdaytotal: "Total income of yesterday's platform",
-        yesterdayxiangqing: "Details of yesterday's income distribution",
-        yesterday: {
-            total: "Total Revenues",
-            allocated: "Undistributed Revenues",
-        }
-    },
-    feereturn: {
-        ruletitle: "Note",
-        rulecontent: 'Our White Paper has a detailed explanation of Reimbursement of Transaction Fees. Overall, 51% of the platform' + 's total BHB base (referred to as "community reward portion" from now on) will be reimbursed to users over time via our "Trans-Fee Mining" mechanism. However once this 51% of the total BHBs has been fully released via reimbursement, the "Trans-Fee Mining" mechanism will automatically end. ',
-        recordtitle: 'List',
-        recordcontent: 'Everyday (UTC+8, same as below) BHB will reimburse 100% of the users' + 'transaction fees incurred from the previous day in the form of BHB. This will be done by using the average BHB price of the previous day (this average price is calculated as total value transacted/total volume transacted). We will complete this reimbursement of transaction fees from the previous day in the form of BHBs, at 11am everyday.',
-        time: "Date",
-        todaycharge: "Average price (ETH)",
-        totalChange: 'Total (ETH)',
-        returnCharge: "Trans-Fee Mining reimbursement(BHB)",
-        todayChargeReturn: "Incentive Program for FCoin reimbursement (BHB)"
-    }
+    /* REMOVED: the `index`, `plate` and `feereturn` catalogues (37 keys).
+       They were the copy for the upstream venue's trans-fee-mining and
+       revenue-distribution screens: daily 'income distribution', a holder's
+       equity scheme, and a reimbursement programme quoting the upstream
+       token symbol and another exchange by name. Those screens were deleted
+       with the promo cluster, so nothing rendered these — but a dead
+       translation string is how a purged name comes back, the next time
+       somebody wires a screen to a key that already exists and looks
+       official. Deleted rather than kept. */
 }

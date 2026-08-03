@@ -32,7 +32,7 @@
   text-align: center;
 }
 .table.ivu-table-cell-expand {
-  color: #00c2a8;
+  color: #ff6b00;
 }
 </style>
 

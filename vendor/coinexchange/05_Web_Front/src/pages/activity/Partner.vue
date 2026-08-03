@@ -96,16 +96,16 @@
 .ix-dualbook.ix-partner-note {
   margin: 0 0 16px;
   padding: 10px 12px;
-  border: 1px solid rgba(0, 194, 168, 0.35);
+  border: 1px solid rgba(255, 107, 0, 0.35);
   border-radius: 6px;
-  background: rgba(0, 194, 168, 0.06);
+  background: rgba(255, 107, 0, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
   text-indent: 0;
 }
 .ix-dualbook.ix-partner-note strong {
-  color: #00c2a8;
+  color: #ff6b00;
   font-weight: 600;
 }
 
@@ -138,10 +138,15 @@
           <li>
             <img src="../../assets/images/feature_safe.png" alt="" />
             <h5>Platform dividends</h5>
+            <!-- "80% of net profit" was the upstream vendor's number and
+                 contradicted our own copy two files away, which already said
+                 this shell does not invent a revenue split. Removed rather than
+                 adjusted: any percentage here is a figure nobody has set. -->
             <span
-              >After operating costs, 80% of net profit is distributed to platform partners. Markets
-              are not predictable and no level of profit is promised — a partner shares the downside
-              as well as the upside.</span
+              >Where a partner dividend runs, it is paid from net profit after operating costs. The
+              share is set by operator policy and is not published here. Markets are not predictable
+              and no level of profit is promised — a partner shares the downside as well as the
+              upside.</span
             >
           </li>
           <li>

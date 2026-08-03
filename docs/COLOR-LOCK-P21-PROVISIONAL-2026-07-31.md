@@ -1,10 +1,38 @@
-# Color lock — P21 (provisional)
+# Color lock — P21 (provisional) → **superseded 2026-08-02**
 
-**Status:** provisional operator pick · 2026-07-31  
+**Status:** **SUPERSEDED.** Reverted to black + orange on 2026-08-02 on the
+owner's standing direction, exercising exactly the reversibility this document
+promised. Kept rather than deleted because it is the record of why the shell was
+teal for two days.  
 **Scope:** Stream A shell (`vendor/*/05_Web_Front` on `:8090`)  
 **Board:** `docs/styleboard/VIEW-COLOR-PALETTES.html` → **P21 Deep neutral · teal**
 
-## Verdict
+## Current lock (2026-08-02)
+
+| Role      | Hex                            |
+| --------- | ------------------------------ |
+| accent    | `#ff6b00`                      |
+| light     | `#ff8534`                      |
+| dark      | `#cc5500`                      |
+| hover     | `#ff9d5c`                      |
+| on-accent | `#1a0a00`                      |
+| surfaces  | unchanged from the table below |
+| up / dn   | unchanged — trader meaning     |
+
+**What the swap actually cost:** one token block plus **402 hex literals across
+65 files**. That is the point worth remembering — the token block alone reaches
+a minority of the shell, because the inherited template hard-codes its colours.
+The pass is scripted and repeatable at
+`vendor/*/05_Web_Front/accent-remap.mjs`; point its `MAP` at the next pair of
+scales and re-run. Same shape as `../retheme.mjs`, which did the original
+navy→black pass.
+
+A half-applied swap (tokens only) is **worse than either colour** — it leaves a
+product that is visibly two brands. `index.html` was living proof: splash dot 1
+was teal while dots 2–7 were still on the previous orange ramp, and it shipped
+that way on every page load.
+
+## Verdict (as written 2026-07-31)
 
 Nitro locked **P21** for now. This is **not** a forever brand tattoo.
 

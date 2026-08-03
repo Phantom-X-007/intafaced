@@ -249,7 +249,7 @@
 
 .trade-right-box.trade-operation.price-box.show-price span {
   font-size: 18px;
-  color: #1ad4bc;
+  color: #ff8534;
   font-weight: bolder;
 }
 
@@ -258,7 +258,7 @@
   border: 0;
   color: white;
   padding: 14px 20px;
-  background-color: #1ad4bc;
+  background-color: #ff8534;
   cursor: pointer;
   width: 20%;
   text-align: center;
@@ -383,7 +383,7 @@
   -webkit-box-align: center;
   -ms-flex-align: center;
   align-items: center;
-  background: #00c2a8;
+  background: #ff6b00;
   height: 60px;
   width: 60px;
   color: #fff;

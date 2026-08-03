@@ -254,7 +254,7 @@
   font-size: 14px;
 }
 .order-info p a{
-  color: #00c2a8;
+  color: #ff6b00;
 }
 .icons.alipay {
   background-image: url(../../assets/img/alipay.png);
@@ -332,7 +332,7 @@
   margin-left: 6px;
 }
 .chat-in-box.chat-in.chat-right.chat-right-in h6 a{
-  color: #00c2a8;
+  color: #ff6b00;
 }
 .chat-in-box.chat-in.chat-right.chat-right-in p {
   color: #ccc;

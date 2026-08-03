@@ -91,14 +91,14 @@
 
 .sc_filter span.active,
 .sc_filter i.active {
-    border-bottom: 2px solid #00c2a8;
+    border-bottom: 2px solid #ff6b00;
 }
 
 .day .sc_filter span.active,
 .day .sc_filter i.active {
     background-color: #fff;
     /* border-right: 1px solid #ccc; */
-    color: #00c2a8;
+    color: #ff6b00;
 }
 
 .coin-menu .ivu-table td.coin-menu-symbol {
@@ -107,7 +107,7 @@
 }
 
 .coin-menu .coin-menu-symbol .ivu-icon {
-    color: #00c2a8;
+    color: #ff6b00;
     margin-right: 10px;
 }
 
@@ -391,7 +391,7 @@ p.math_price {
 }
 
 .exchange .order .ivu-table-cell-expand {
-    color: #00c2a8;
+    color: #ff6b00;
 }
 
 .exchange .ivu-table th {
@@ -689,7 +689,7 @@ iframe {
 
 .exchange .order .linkmore {
     float: right;
-    color: #00c2a8;
+    color: #ff6b00;
     font-size: 14px;
     line-height: 40px;
     margin-right: 20px;

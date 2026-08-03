@@ -69,14 +69,14 @@
 .ivu-form-item-content {
 .login_btn.ivu-btn {
             width: 100%;
-            background-color: var(--ix-orange, #00c2a8);
+            background-color: var(--ix-orange, #ff6b00);
             outline: none;
-            border-color: var(--ix-orange, #00c2a8);
-            color: var(--ix-on-accent, #041210);
+            border-color: var(--ix-orange, #ff6b00);
+            color: var(--ix-on-accent, #1A0A00);
             font-size: 18px;
             border-radius: 5px;
             &:focus-visible {
-              outline: 2px solid var(--ix-orange-light, #1ad4bc);
+              outline: 2px solid var(--ix-orange-light, #ff8534);
               outline-offset: 2px;
             }
           }
@@ -93,7 +93,7 @@
     }
     a {
       float: right;
-      color: var(--ix-orange, #00c2a8);
+      color: var(--ix-orange, #ff6b00);
     }
   }
 }
@@ -122,8 +122,8 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--ix-text-dim, #8a909c);
-  border-left: 2px solid var(--ix-orange, #00c2a8);
-  background: rgba(0, 194, 168, 0.06);
+  border-left: 2px solid var(--ix-orange, #ff6b00);
+  background: rgba(255, 107, 0, 0.06);
 }
 .ix-login-error {
   margin: 0 0 10px;

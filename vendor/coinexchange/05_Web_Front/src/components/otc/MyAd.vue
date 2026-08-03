@@ -66,10 +66,10 @@
 .add_ad {
       margin-bottom: 20px;
 .ivu-btn {
-        background: #00c2a8;
+        background: #ff6b00;
         color: #fff;
         &:hover {
-          border-color: #00c2a8;
+          border-color: #ff6b00;
         }
       }
     }
@@ -111,10 +111,10 @@
               }
             }
             button.ivu-btn.ivu-btn-primary {
-              border:1px solid #1ad4bc;
+              border:1px solid #ff8534;
               background-color: transparent;
               span {
-                color: #1ad4bc;
+                color: #ff8534;
               }
             }
             button.ivu-btn.ivu-btn-error {

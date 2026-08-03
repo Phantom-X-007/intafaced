@@ -38,14 +38,16 @@
             width: .6em;
             height: .6em;
             margin: .19em;
-            background: #00c2a8;
+            background: #ff6b00;
             border-radius: .6em;
             -webkit-animation: loading 1s infinite alternate;
             animation: loading 1s infinite alternate;
         }
 
         /* One accent, fading out along the row — the dots read as a single
-           brand mark rather than seven unrelated colours. */
+           brand mark rather than seven unrelated colours. Dot 1 was left teal
+           when the ramp below was already orange, so the splash visibly clashed
+           on every page load; the accent remap closes that. */
         .loading span:nth-of-type(2) { background: #f26400; animation-delay: 0.2s; -webkit-animation-delay: 0.2s; }
         .loading span:nth-of-type(3) { background: #e45d00; animation-delay: 0.4s; -webkit-animation-delay: 0.4s; }
         .loading span:nth-of-type(4) { background: #d65600; animation-delay: 0.6s; -webkit-animation-delay: 0.6s; }
@@ -74,7 +76,7 @@
             }
         }
         .loading-text {
-            color: #00c2a8;
+            color: #ff6b00;
             margin: 0;
             font: .8em verdana;
             text-transform: uppercase;
