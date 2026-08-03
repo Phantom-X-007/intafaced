@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { assertScreeningConfigured } from '@intafaced/config';
 import { createAdminApi, httpLedgerOperator } from './admin-api.js';
 import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
+import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
 import { env } from './env.js';
 import { KillSwitchState } from './kill-switch.js';
 import { exchangePrincipal } from './principal-exchange.js';
@@ -41,6 +42,40 @@ app.log[screening.configured ? 'info' : 'warn'](
   screening.summary,
 );
 
+/**
+ * Which browser origins may call this edge (see `cors.ts`).
+ *
+ * Read before anything is registered, because a malformed list throws here — a
+ * list that does not say what its author meant is a boot failure, in the same
+ * spirit as the screening list above. An ABSENT list is not: it is a closed door
+ * that this log line and `/ready` make visible, and `cors.ts` argues at length
+ * why the two cases differ.
+ *
+ * ERROR, not `warn`, when an enforced environment has nothing configured. That
+ * state means every front-end this deployment serves is being refused by the
+ * browser, and it presents to users as the platform being down — which is
+ * exactly the failure that went unnoticed for weeks before this file had a CORS
+ * layer at all.
+ */
+const cors = edgeOriginAllowlist();
+const corsEnforced = (CORS_ENFORCED_ENVS as readonly string[]).includes(env.APP_ENV);
+app.log[cors.configured ? 'info' : corsEnforced ? 'error' : 'warn'](
+  { appEnv: env.APP_ENV, configured: cors.configured, allowedOrigins: cors.origins.length, source: cors.source },
+  cors.summary,
+);
+
+/**
+ * FIRST — before every route and before the kill-switch guard.
+ *
+ * The ordering is the control, not a tidiness preference. Registered here, the
+ * preflight is answered without the kill-switch ever being consulted (so an
+ * unauthenticated `OPTIONS` cannot report which modules an operator has halted),
+ * and the allow-origin header is on the reply before any later hook or handler
+ * sends a 404, a 503 or a 502 — so the browser can read our refusals instead of
+ * reporting them all as the same opaque CORS error.
+ */
+registerCors(app, cors);
+
 const upstreamUrl = (envVar: string, devUrl: string): string => (process.env[envVar] ?? devUrl).replace(/\/$/, '');
 
 const tokenConfig = {
@@ -74,6 +109,12 @@ app.get('/ready', async () => ({
   // the codes. An operator needs to see the control is on; an unauthenticated
   // caller does not need our exact configuration read back to them.
   screening: { configured: screening.configured, blockedRegions: screening.blockedRegions.length },
+  // Same shape, same reason: whether a browser allowlist was SUPPLIED, and how
+  // many origins it holds — a count, never the origins themselves. "Zero because
+  // nobody configured one" and "zero because the list is short" are different
+  // facts, and a probe that renders both as `0` cannot tell an operator which
+  // one is why the front-end says the platform is unreachable.
+  cors: { configured: cors.configured, allowedOrigins: cors.origins.length },
   // Readiness is about the process, never about the switches: a killed module is
   // an operator's decision, and taking the edge out of the load balancer because
   // of it would remove the surface that serves cancels and reads.
