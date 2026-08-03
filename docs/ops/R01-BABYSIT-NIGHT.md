@@ -1,7 +1,7 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03T16:41Z (AFK R01 cycle35 tip stamp)  
-**Tip at run:** `68edb9db` (`origin/main`) — docs(ops): P-WS still blocked tip 54795ac8 (#553)  
+**When:** 2026-08-03T16:45Z (AFK R01 cycle36 tip stamp)  
+**Tip at run:** `2004d68f` (`origin/main`) — docs(ops): R07 cycle35 freeProduct=0 + tip 68edb9db (#555)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
 **Comment budget:** **0** this cycle (instruction) — used 0  
 **Open list delta:** **none** — same 11 partner PRs; ready list unchanged
@@ -24,7 +24,7 @@
 
 **Ready count: 4** — agents do **not** merge these.
 
-## CONFLICTING — needs rebase to tip `68edb9db`
+## CONFLICTING — needs rebase to tip `2004d68f`
 
 | PR                                                          | Author  | Mergeable         | Failing / notes          | Action                                        |
 | ----------------------------------------------------------- | ------- | ----------------- | ------------------------ | --------------------------------------------- |
@@ -259,4 +259,23 @@ Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4.** Comments: 
 
 ```
 origin/main @ 68edb9db  (at doc write; partners re-fetch before rebase)
+```
+
+---
+
+## Refresh cycle36 — 2026-08-03T16:45Z · tip `2004d68f`
+
+Re-checked via `gh` all open partner PRs (not ZenYoda3): **448 445 441 438 436 433 432 430 428 420 346** @ tip after #555 R07 cycle35 land (`2004d68f`):
+
+| Bucket                 | PRs                                                                                                  | Action         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
+| Ready Denon self-merge | **#445** full green · **#433** full green (P-WS path) · **#430** docs Prettier · **#420** full green | his merge only |
+| MERGEABLE red          | **#428** Prettier+Typecheck                                                                          | owner fix      |
+| CONFLICTING rebase     | Denon **#448** (gates FAIL) **#441** **#438** **#436** **#432** (P-WS edge) + Shehzad **#346** M1    | babysit only   |
+| Nitro Class N open     | **0**                                                                                                | Class N only   |
+
+Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4.** Comments: **0** this cycle (budget 0; prior babysit already on every CONFLICTING; no NEW red). P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**. invent live **0**. Agents do **not** merge partner PRs.
+
+```
+origin/main @ 2004d68f  (at doc write; partners re-fetch before rebase)
 ```
