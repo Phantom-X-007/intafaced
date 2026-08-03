@@ -1,0 +1,801 @@
+import type { Sql } from 'postgres';
+import { isSupportedFiat } from '@intafaced/config';
+import {
+  ANY_COUNTRY,
+  InstrumentError,
+  fingerprintDetails,
+  normaliseCountry,
+  normaliseMethodId,
+  parseFieldSpecs,
+  pickSchema,
+  validateDetails,
+  type FieldSpec,
+  type InstrumentDetails,
+  type MethodSchema,
+} from './instruments.js';
+import { withSpan } from './tracing.js';
+
+/**
+ * PAYMENT INSTRUMENTS — storage, disclosure, and the record of both.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE ONE THING THIS FILE IS FOR
+ *
+ * A seller's account details are visible to exactly one person, for exactly as
+ * long as that person has to pay them, and every look is on the record.
+ *
+ * Stated as the invariant the code actually implements:
+ *
+ *     An instrument is disclosed only while the escrow it is attached to is
+ *     HELD — and a disclosure that is not logged cannot happen.
+ *
+ * "While the escrow is held" is `ESCROW_HOLDING_STATUSES` — `escrowed`,
+ * `fiat_sent`, `disputed`. It is a better boundary than "while the trade
+ * exists" in both directions:
+ *
+ *   · not at `created`, so a taker cannot harvest a seller's bank details in
+ *     the two-minute window before the lock is even known to have posted;
+ *   · not at `released` / `cancelled`, so a completed trade is not a permanent
+ *     licence to read the account of someone you dealt with once.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * HOW "NOT LOGGED" IS MADE IMPOSSIBLE
+ *
+ * Not by discipline. The reveal is ONE statement, in which the SELECT of the
+ * details is cross-joined to a data-modifying CTE that writes the access log.
+ * The details row is only produced when the log row was produced. There is no
+ * ordering of a crash, no early return, and no future edit to this file that
+ * reads the details and forgets the log, because they are the same statement.
+ *
+ * The database holds up the other end: `instrument_access_log` has a BEFORE
+ * UPDATE OR DELETE trigger that raises. The log cannot be tidied afterwards.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY THERE ARE TWO COPIES OF THE DETAILS
+ *
+ * `payment_instruments.details` is the live one the owner maintains.
+ * `trade_payment_instruments.details` is a snapshot frozen when the trade was
+ * opened. The duplication is deliberate and it buys two things:
+ *
+ *   · the owner may edit or remove the live one at any time without breaking a
+ *     trade whose buyer is halfway through a bank transfer;
+ *   · **the destination cannot change mid-trade.** Show account A, let the
+ *     buyer start paying, switch to account B, then truthfully report that
+ *     nothing arrived — that is a scam that leaves a clean audit trail, and a
+ *     live pointer instead of a snapshot is what makes it possible.
+ *
+ * The snapshot is not permanent: `purgeExpiredSnapshots()` wipes the values off
+ * closed trades past the retention window and keeps the fingerprint, so an
+ * appeal can still ask "was this the account the buyer was shown" without us
+ * still holding the account.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Doctrine §0.6: there is no money in this file. An instrument is a
+ * destination; the value is in svc-ledger and moves only through recipes.
+ */
+
+export interface InstrumentServiceOptions {
+  /**
+   * How long a closed trade keeps the account details it showed the buyer.
+   *
+   * An operator number, not an engineering one — it trades the ability to
+   * adjudicate a late appeal against holding personal data we no longer need.
+   * The default outlasts the 7-day dispute SLA by a wide margin; where a market
+   * imposes its own retention rule, that rule wins and this is where it is set.
+   */
+  retentionDays?: number;
+}
+
+export const DEFAULT_INSTRUMENT_RETENTION_DAYS = 90;
+
+/** Who was looking. Recorded on every access-log row, allowed or refused. */
+export type ViewerRole = 'owner' | 'counterparty' | 'moderator' | 'other';
+
+/** What a list endpoint may return: everything EXCEPT the field values. */
+export interface InstrumentHeader {
+  id: string;
+  ownerId: string;
+  methodId: string;
+  country: string;
+  fiatCurrency: string;
+  label: string;
+  fingerprint: string;
+  status: 'active' | 'removed';
+  createdAt: Date;
+  updatedAt: Date;
+  removedAt: Date | null;
+}
+
+/** The header PLUS the values. Only ever produced by a logged read. */
+export interface RevealedInstrument extends InstrumentHeader {
+  details: InstrumentDetails;
+  /** The instant the access-log row was written — the same statement. */
+  loggedAt: Date;
+}
+
+/** What the payer sees on a live trade. Frozen at take. */
+export interface TradeInstrumentView {
+  tradeId: string;
+  instrumentId: string;
+  ownerId: string;
+  methodId: string;
+  country: string;
+  fiatCurrency: string;
+  label: string;
+  details: InstrumentDetails;
+  fingerprint: string;
+  attachedAt: Date;
+  loggedAt: Date;
+}
+
+export interface AccessLogEntry {
+  id: string;
+  instrumentId: string | null;
+  ownerId: string | null;
+  viewerId: string;
+  viewerRole: ViewerRole;
+  tradeId: string | null;
+  outcome: 'revealed' | 'denied';
+  denyReason: string | null;
+  at: Date;
+}
+
+interface InstrumentRow {
+  id: string;
+  owner_id: string;
+  method_id: string;
+  country: string;
+  fiat_currency: string;
+  label: string;
+  details: Record<string, string>;
+  fingerprint: string;
+  status: 'active' | 'removed';
+  created_at: Date;
+  updated_at: Date;
+  removed_at: Date | null;
+}
+
+interface SchemaRow {
+  method_id: string;
+  country: string;
+  label: string;
+  fields: unknown;
+  enabled: boolean;
+}
+
+/**
+ * The statuses in which a trade's payment instrument may be disclosed.
+ *
+ * Identical to `ESCROW_HOLDING_STATUSES` in `state.ts` and repeated as a SQL
+ * literal because it is applied inside the reveal statement's WHERE clause —
+ * the check has to be part of the same statement that writes the log, or a
+ * trade that terminated a millisecond ago could still be read.
+ */
+const DISCLOSABLE_STATUSES = ['escrowed', 'fiat_sent', 'disputed'] as const;
+
+export class InstrumentService {
+  private readonly retentionDays: number;
+
+  constructor(
+    private readonly sql: Sql,
+    options: InstrumentServiceOptions = {},
+  ) {
+    this.retentionDays = options.retentionDays ?? DEFAULT_INSTRUMENT_RETENTION_DAYS;
+  }
+
+  // ── The operator's registry (§6.2 "any payment method", as data) ───────────
+
+  /**
+   * Register or replace what a method requires in a country.
+   *
+   * `admin:compliance` at the router, because this is the record of what a
+   * market's rails actually need — the same class of content as a sanctions
+   * list, and equally not something a service should be guessing at.
+   */
+  async registerMethodSchema(input: {
+    methodId: string;
+    country: string;
+    label: string;
+    fields: unknown;
+    enabled?: boolean;
+  }): Promise<MethodSchema> {
+    const methodId = normaliseMethodId(input.methodId);
+    const country = normaliseCountry(input.country);
+    const label = input.label.trim();
+    if (label.length === 0) {
+      throw new InstrumentError('A method schema needs a display label', 'p2p.instrument_schema_invalid');
+    }
+    const fields = parseFieldSpecs(input.fields);
+
+    const rows = await this.sql<SchemaRow[]>`
+      INSERT INTO p2p.payment_method_schemas (method_id, country, label, fields, enabled)
+      VALUES (${methodId}, ${country}, ${label}, ${this.sql.json(fields as never)}, ${input.enabled ?? true})
+      ON CONFLICT (method_id, country) DO UPDATE SET
+        label = EXCLUDED.label,
+        fields = EXCLUDED.fields,
+        enabled = EXCLUDED.enabled,
+        updated_at = now()
+      RETURNING *
+    `;
+    return toSchema(rows[0]!);
+  }
+
+  /**
+   * The registry, for the "add a payment method" screen.
+   *
+   * Carries field specs — labels, formats, help text — and no instrument data
+   * of any kind. It is the one instrument-adjacent surface a browsing user may
+   * read, and it is about methods, not about people.
+   */
+  async listMethodSchemas(filter: { country?: string; methodId?: string; includeDisabled?: boolean } = {}): Promise<MethodSchema[]> {
+    const country = filter.country ? normaliseCountry(filter.country) : null;
+    const methodId = filter.methodId ? normaliseMethodId(filter.methodId) : null;
+
+    const rows = await this.sql<SchemaRow[]>`
+      SELECT * FROM p2p.payment_method_schemas
+       WHERE (${filter.includeDisabled === true}::boolean OR enabled = true)
+         AND (${methodId}::text IS NULL OR method_id = ${methodId})
+         AND (${country}::text IS NULL OR country IN (${country ?? ANY_COUNTRY}, ${ANY_COUNTRY}))
+       ORDER BY method_id ASC, country ASC
+    `;
+    return rows.map(toSchema);
+  }
+
+  async setMethodSchemaEnabled(methodId: string, country: string, enabled: boolean): Promise<MethodSchema> {
+    const rows = await this.sql<SchemaRow[]>`
+      UPDATE p2p.payment_method_schemas SET enabled = ${enabled}, updated_at = now()
+       WHERE method_id = ${normaliseMethodId(methodId)} AND country = ${normaliseCountry(country)}
+      RETURNING *
+    `;
+    if (!rows[0]) throw new InstrumentError(`No schema for "${methodId}" in ${country}`, 'p2p.instrument_method_unknown');
+    return toSchema(rows[0]);
+  }
+
+  /** The applicable schema, exact country beating the wildcard. */
+  private async schemaFor(methodId: string, country: string): Promise<MethodSchema> {
+    const rows = await this.sql<SchemaRow[]>`
+      SELECT * FROM p2p.payment_method_schemas
+       WHERE method_id = ${methodId} AND country IN (${country}, ${ANY_COUNTRY})
+    `;
+    const all = rows.map(toSchema);
+    const schema = pickSchema(all, methodId, country);
+
+    if (!schema) {
+      // The honest refusal. We do not know what this market needs, so we cannot
+      // accept a destination for it — rather than accept a plausible-looking one
+      // that turns out to be unpayable when a buyer tries.
+      throw new InstrumentError(
+        `No payment method "${methodId}" is registered for ${country} — an operator must register its field requirements first`,
+        'p2p.instrument_method_unknown',
+      );
+    }
+    if (!schema.enabled) {
+      throw new InstrumentError(`Payment method "${methodId}" is not currently accepted in ${country}`, 'p2p.instrument_method_disabled');
+    }
+    return schema;
+  }
+
+  // ── The owner's instruments ────────────────────────────────────────────────
+
+  async createInstrument(input: {
+    ownerId: string;
+    methodId: string;
+    country: string;
+    fiatCurrency: string;
+    label?: string;
+    details: unknown;
+    instrumentId?: string;
+  }): Promise<InstrumentHeader> {
+    const methodId = normaliseMethodId(input.methodId);
+    const country = normaliseCountry(input.country);
+    if (country === ANY_COUNTRY) {
+      // The wildcard is a property of a SCHEMA ("this method works the same
+      // everywhere"), never of an instrument. A real account is in a country.
+      throw new InstrumentError('An instrument must name a real country', 'p2p.instrument_country_invalid');
+    }
+
+    const fiatCurrency = input.fiatCurrency.trim().toUpperCase();
+    if (!isSupportedFiat(fiatCurrency)) {
+      throw new InstrumentError(`Fiat currency "${fiatCurrency}" is not enabled`, 'p2p.instrument_field_invalid', 'fiatCurrency');
+    }
+
+    const schema = await this.schemaFor(methodId, country);
+    const details = validateDetails(schema, input.details);
+    const fingerprint = fingerprintDetails(methodId, country, details);
+
+    try {
+      const rows = await this.sql<InstrumentRow[]>`
+        INSERT INTO p2p.payment_instruments (id, owner_id, method_id, country, fiat_currency, label, details, fingerprint, status)
+        VALUES (
+          ${input.instrumentId ?? crypto.randomUUID()}, ${input.ownerId}, ${methodId}, ${country}, ${fiatCurrency},
+          ${(input.label ?? '').trim().slice(0, 120)}, ${this.sql.json(details as never)}, ${fingerprint}, 'active'
+        )
+        RETURNING *
+      `;
+      return toHeader(rows[0]!);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new InstrumentError(
+          `You already have an active ${methodId} destination for ${fiatCurrency} — remove it before adding another`,
+          'p2p.instrument_slot_taken',
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Edit an instrument.
+   *
+   * Deliberately does NOT touch any trade already holding a snapshot of it. A
+   * buyer copying an account number out of the screen must not have it change
+   * under them, and a seller must not be able to redirect a payment already in
+   * flight (see the file header).
+   */
+  async updateInstrument(input: { instrumentId: string; ownerId: string; label?: string; details?: unknown }): Promise<InstrumentHeader> {
+    const current = await this.ownedInstrument(input.instrumentId, input.ownerId);
+
+    let details: InstrumentDetails | null = null;
+    let fingerprint = current.fingerprint;
+
+    if (input.details !== undefined) {
+      const schema = await this.schemaFor(current.method_id, current.country);
+      details = validateDetails(schema, input.details);
+      fingerprint = fingerprintDetails(current.method_id, current.country, details);
+    }
+
+    const rows = await this.sql<InstrumentRow[]>`
+      UPDATE p2p.payment_instruments
+         SET label = ${input.label === undefined ? current.label : input.label.trim().slice(0, 120)},
+             details = ${details === null ? this.sql.json(current.details as never) : this.sql.json(details as never)},
+             fingerprint = ${fingerprint},
+             updated_at = now()
+       WHERE id = ${input.instrumentId} AND owner_id = ${input.ownerId} AND status = 'active'
+      RETURNING *
+    `;
+    if (!rows[0]) throw notFound(input.instrumentId);
+    return toHeader(rows[0]);
+  }
+
+  /**
+   * Remove an instrument.
+   *
+   * A state change, never a DELETE. Three things still need the row after the
+   * owner is done with it: an in-flight trade's snapshot points at it, the
+   * access log points at it, and an appeal months later may ask which
+   * destination a trade used. A DELETE would break the first and orphan the
+   * other two — and "the seller deleted their account details" is exactly the
+   * moment the log becomes worth having.
+   */
+  async removeInstrument(input: { instrumentId: string; ownerId: string }): Promise<InstrumentHeader> {
+    const rows = await this.sql<InstrumentRow[]>`
+      UPDATE p2p.payment_instruments
+         SET status = 'removed', removed_at = now(), updated_at = now()
+       WHERE id = ${input.instrumentId} AND owner_id = ${input.ownerId} AND status = 'active'
+      RETURNING *
+    `;
+    if (!rows[0]) throw notFound(input.instrumentId);
+    return toHeader(rows[0]);
+  }
+
+  /**
+   * The owner's own list. **Headers only — no field values, ever.**
+   *
+   * There is no "masked last four" here on purpose. A mask is still the data,
+   * it is served on a path that is not access-logged, and it is one refactor
+   * away from being the whole value. The owner tells two destinations apart by
+   * the label they chose; seeing the numbers is `reveal`, and `reveal` is
+   * logged like every other read.
+   */
+  async listInstruments(ownerId: string, includeRemoved = false): Promise<InstrumentHeader[]> {
+    const rows = await this.sql<InstrumentRow[]>`
+      SELECT * FROM p2p.payment_instruments
+       WHERE owner_id = ${ownerId}
+         AND (${includeRemoved}::boolean OR status = 'active')
+       ORDER BY created_at DESC
+       LIMIT 200
+    `;
+    return rows.map(toHeader);
+  }
+
+  /**
+   * The owner reads their own details. Logged like everyone else's read.
+   *
+   * The owner is not exempt, because an account takeover reads exactly like an
+   * owner: it holds the session. A log with a hole shaped like "the owner" is a
+   * log that says nothing about the one attack it most needs to describe.
+   */
+  async revealOwn(input: { instrumentId: string; viewerId: string }): Promise<RevealedInstrument> {
+    return withSpan('p2p.instrument.revealOwn', async () => {
+      const rows = await this.sql<Array<InstrumentRow & { logged_at: Date }>>`
+        WITH src AS (
+          SELECT * FROM p2p.payment_instruments
+           WHERE id = ${input.instrumentId} AND owner_id = ${input.viewerId} AND status = 'active'
+        ),
+        logged AS (
+          INSERT INTO p2p.instrument_access_log (instrument_id, owner_id, viewer_id, viewer_role, trade_id, outcome)
+          SELECT src.id, src.owner_id, ${input.viewerId}, 'owner', NULL, 'revealed' FROM src
+          RETURNING id, at
+        )
+        SELECT src.*, logged.at AS logged_at FROM src, logged
+      `;
+
+      const row = rows[0];
+      if (!row) {
+        await this.logDenied({ viewerId: input.viewerId, viewerRole: 'other', reason: 'not_the_owner' });
+        throw notFound(input.instrumentId);
+      }
+      return { ...toHeader(row), details: Object.freeze({ ...row.details }), loggedAt: row.logged_at };
+    });
+  }
+
+  /** "Who has looked at my account details, and when." Owner-scoped. */
+  async accessLogFor(ownerId: string, limit = 100): Promise<AccessLogEntry[]> {
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        instrument_id: string | null;
+        owner_id: string | null;
+        viewer_id: string;
+        viewer_role: ViewerRole;
+        trade_id: string | null;
+        outcome: 'revealed' | 'denied';
+        deny_reason: string | null;
+        at: Date;
+      }>
+    >`
+      SELECT * FROM p2p.instrument_access_log
+       WHERE owner_id = ${ownerId}
+       ORDER BY at DESC
+       LIMIT ${Math.min(Math.max(limit, 1), 500)}
+    `;
+    return rows.map((r) => ({
+      id: r.id,
+      instrumentId: r.instrument_id,
+      ownerId: r.owner_id,
+      viewerId: r.viewer_id,
+      viewerRole: r.viewer_role,
+      tradeId: r.trade_id,
+      outcome: r.outcome,
+      denyReason: r.deny_reason,
+      at: r.at,
+    }));
+  }
+
+  // ── Attaching a destination to a trade ─────────────────────────────────────
+
+  /**
+   * Freeze the seller's destination onto a trade, inside the caller's
+   * transaction.
+   *
+   * Called from `reserveTrade` — BEFORE any lock, alongside every other reason
+   * a take can be refused. A seller who cannot be paid should not have their
+   * asset escrowed against a payment the buyer has nowhere to send: that trade
+   * can only end in a timeout or a dispute, and both of those cost the seller
+   * fifteen minutes of locked balance to discover something knowable up front.
+   *
+   * Same transaction as the trade row, so a trade with no destination is not a
+   * state that can be committed.
+   */
+  async attachToTrade(
+    tx: Sql,
+    input: { tradeId: string; sellerId: string; methodId: string; fiatCurrency: string },
+  ): Promise<{ instrumentId: string; fingerprint: string }> {
+    const rows = await tx<InstrumentRow[]>`
+      SELECT * FROM p2p.payment_instruments
+       WHERE owner_id = ${input.sellerId}
+         AND method_id = ${input.methodId}
+         AND fiat_currency = ${input.fiatCurrency}
+         AND status = 'active'
+    `;
+
+    const instrument = rows[0];
+    if (!instrument) {
+      throw new InstrumentError(
+        `The seller has no active "${input.methodId}" destination for ${input.fiatCurrency}, so the buyer would have nowhere to pay`,
+        'p2p.no_payment_instrument',
+      );
+    }
+
+    await tx`
+      INSERT INTO p2p.trade_payment_instruments (
+        trade_id, instrument_id, owner_id, method_id, country, fiat_currency, label, details, fingerprint
+      )
+      VALUES (
+        ${input.tradeId}, ${instrument.id}, ${instrument.owner_id}, ${instrument.method_id}, ${instrument.country},
+        ${instrument.fiat_currency}, ${instrument.label}, ${tx.json(instrument.details as never)}, ${instrument.fingerprint}
+      )
+      ON CONFLICT (trade_id) DO NOTHING
+    `;
+
+    return { instrumentId: instrument.id, fingerprint: instrument.fingerprint };
+  }
+
+  /**
+   * THE DISCLOSURE. One statement, and it writes the log as it reads.
+   *
+   * `WITH src AS (SELECT … WHERE the escrow is held), logged AS (INSERT …
+   * SELECT FROM src RETURNING …) SELECT src.*, logged.at FROM src, logged`
+   *
+   * The cross join is the point: `src` alone would return the details whether
+   * or not the INSERT produced anything, so the join is what makes an unlogged
+   * disclosure not merely discouraged but unrepresentable. And the status test
+   * lives inside `src` rather than in a check above, so a trade that terminated
+   * between the authorisation read and this statement discloses nothing.
+   *
+   * Everything this refuses is refused as NOT_FOUND. "This trade exists but you
+   * may not see its payment details" tells a stranger that a trade with that id
+   * exists and has a seller with a bank account; there is no version of that
+   * sentence a legitimate caller needs.
+   */
+  async revealForTrade(input: { tradeId: string; viewerId: string; isModerator?: boolean }): Promise<TradeInstrumentView> {
+    return withSpan('p2p.instrument.revealForTrade', async () => {
+      // 1 · Authorisation, from the trade and the snapshot HEADER. This read
+      //     deliberately does not select `details`.
+      const context = await this.sql<
+        Array<{
+          trade_id: string;
+          instrument_id: string;
+          owner_id: string;
+          status: string;
+          seller_id: string;
+          buyer_id: string;
+          purged_at: Date | null;
+          dispute_status: string | null;
+        }>
+      >`
+        SELECT tpi.trade_id, tpi.instrument_id, tpi.owner_id, tpi.purged_at,
+               t.status, t.seller_id, t.buyer_id, d.status AS dispute_status
+          FROM p2p.trade_payment_instruments tpi
+          JOIN p2p.p2p_trades t ON t.id = tpi.trade_id
+          LEFT JOIN p2p.p2p_disputes d ON d.trade_id = tpi.trade_id
+         WHERE tpi.trade_id = ${input.tradeId}
+      `;
+
+      const ctx = context[0];
+      if (!ctx) {
+        // No trade, or no destination on it. Nothing to attribute a denial to
+        // beyond the attempt itself.
+        await this.logDenied({
+          viewerId: input.viewerId,
+          viewerRole: 'other',
+          tradeId: null,
+          reason: 'no_instrument_on_trade',
+        });
+        throw notFound(input.tradeId);
+      }
+
+      const decision = decideRole(ctx, input.viewerId, input.isModerator === true);
+
+      if (decision.role === null) {
+        await this.logDenied({
+          instrumentId: ctx.instrument_id,
+          ownerId: ctx.owner_id,
+          viewerId: input.viewerId,
+          viewerRole: 'other',
+          tradeId: ctx.trade_id,
+          reason: decision.reason,
+        });
+        throw notFound(input.tradeId);
+      }
+
+      // 2 · The disclosure. Read and log, or neither.
+      const rows = await this.sql<
+        Array<{
+          trade_id: string;
+          instrument_id: string;
+          owner_id: string;
+          method_id: string;
+          country: string;
+          fiat_currency: string;
+          label: string;
+          details: Record<string, string>;
+          fingerprint: string;
+          attached_at: Date;
+          logged_at: Date;
+        }>
+      >`
+        WITH src AS (
+          SELECT tpi.trade_id, tpi.instrument_id, tpi.owner_id, tpi.method_id, tpi.country,
+                 tpi.fiat_currency, tpi.label, tpi.details, tpi.fingerprint, tpi.attached_at
+            FROM p2p.trade_payment_instruments tpi
+            JOIN p2p.p2p_trades t ON t.id = tpi.trade_id
+           WHERE tpi.trade_id = ${input.tradeId}
+             AND tpi.details IS NOT NULL
+             AND t.status IN ('escrowed', 'fiat_sent', 'disputed')
+        ),
+        logged AS (
+          INSERT INTO p2p.instrument_access_log (instrument_id, owner_id, viewer_id, viewer_role, trade_id, outcome)
+          SELECT src.instrument_id, src.owner_id, ${input.viewerId}, ${decision.role}, src.trade_id, 'revealed' FROM src
+          RETURNING id, at
+        )
+        SELECT src.*, logged.at AS logged_at FROM src, logged
+      `;
+
+      const row = rows[0];
+      if (!row) {
+        // The trade terminated (or was purged) between the two statements.
+        await this.logDenied({
+          instrumentId: ctx.instrument_id,
+          ownerId: ctx.owner_id,
+          viewerId: input.viewerId,
+          viewerRole: decision.role,
+          tradeId: ctx.trade_id,
+          reason: 'escrow_not_held',
+        });
+        throw notFound(input.tradeId);
+      }
+
+      return {
+        tradeId: row.trade_id,
+        instrumentId: row.instrument_id,
+        ownerId: row.owner_id,
+        methodId: row.method_id,
+        country: row.country,
+        fiatCurrency: row.fiat_currency,
+        label: row.label,
+        details: Object.freeze({ ...row.details }),
+        fingerprint: row.fingerprint,
+        attachedAt: row.attached_at,
+        loggedAt: row.logged_at,
+      };
+    });
+  }
+
+  // ── Retention ──────────────────────────────────────────────────────────────
+
+  /**
+   * Wipe the account details off closed trades past the retention window.
+   *
+   * The API already refuses to disclose a terminal trade's snapshot, so this is
+   * not an access control — it is the other half of the same promise. "You
+   * cannot read it" and "we no longer have it" are different statements, and
+   * only the second one survives a database being copied.
+   *
+   * The fingerprint stays, so an appeal can still be told whether the account a
+   * seller now names is the one the buyer was shown, without us holding the
+   * account to say so.
+   */
+  async purgeExpiredSnapshots(limit = 500): Promise<{ purged: number }> {
+    const rows = await this.sql<Array<{ trade_id: string }>>`
+      UPDATE p2p.trade_payment_instruments
+         SET details = NULL, purged_at = now()
+       WHERE trade_id IN (
+         SELECT tp.trade_id
+           FROM p2p.trade_payment_instruments tp
+           JOIN p2p.p2p_trades t ON t.id = tp.trade_id
+          WHERE tp.purged_at IS NULL
+            AND t.resolution IS NOT NULL
+            AND t.resolved_at < now() - ${`${this.retentionDays} days`}::interval
+          ORDER BY tp.attached_at ASC
+          LIMIT ${Math.min(Math.max(limit, 1), 5_000)}
+       )
+      RETURNING trade_id
+    `;
+    return { purged: rows.length };
+  }
+
+  // ── internals ──────────────────────────────────────────────────────────────
+
+  private async ownedInstrument(instrumentId: string, ownerId: string): Promise<InstrumentRow> {
+    const rows = await this.sql<InstrumentRow[]>`
+      SELECT * FROM p2p.payment_instruments WHERE id = ${instrumentId} AND owner_id = ${ownerId} AND status = 'active'
+    `;
+    if (!rows[0]) throw notFound(instrumentId);
+    return rows[0];
+  }
+
+  /**
+   * A refused attempt is a log line too.
+   *
+   * Written on its own rather than inside the reveal statement, because there
+   * is nothing to read and therefore nothing to join to. It is best-effort by
+   * design: a failure to record a refusal must not turn a refusal into an
+   * error the caller can distinguish from "no such trade".
+   */
+  private async logDenied(input: {
+    instrumentId?: string;
+    ownerId?: string;
+    viewerId: string;
+    viewerRole: ViewerRole;
+    tradeId?: string | null;
+    reason: string;
+  }): Promise<void> {
+    try {
+      await this.sql`
+        INSERT INTO p2p.instrument_access_log (instrument_id, owner_id, viewer_id, viewer_role, trade_id, outcome, deny_reason)
+        VALUES (
+          ${input.instrumentId ?? null}, ${input.ownerId ?? null}, ${input.viewerId}, ${input.viewerRole},
+          ${input.tradeId ?? null}, 'denied', ${input.reason}
+        )
+      `;
+    } catch {
+      // Swallowed on purpose — see the doc comment.
+    }
+  }
+}
+
+// ── Authorisation, as a pure decision ────────────────────────────────────────
+
+/**
+ * WHO MAY SEE A TRADE'S PAYMENT DESTINATION.
+ *
+ *   the seller  — it is their own account, on their own trade
+ *   the buyer   — they are the one who has to pay it
+ *   a moderator — ONLY while a dispute on this trade is open
+ *   everyone else — no, and the refusal is `NOT_FOUND`
+ *
+ * The moderator case is the one judgement call in this file, and it is made
+ * deliberately. §A2 requires a human to resolve a disputed release and requires
+ * both sides to see the same evidence set; a human asked to rule on "I paid" /
+ * "nothing arrived" without being able to see the account the payment was
+ * supposed to reach is being asked to guess. It is bounded to an OPEN dispute
+ * on this specific trade, it is logged with `viewer_role = 'moderator'`, and it
+ * is visible to the owner in their own access log. Compliance access that
+ * nobody can see afterwards would be the thing to object to.
+ */
+function decideRole(
+  ctx: { status: string; seller_id: string; buyer_id: string; dispute_status: string | null; purged_at: Date | null },
+  viewerId: string,
+  isModerator: boolean,
+): { role: ViewerRole; reason?: undefined } | { role: null; reason: string } {
+  const live = (DISCLOSABLE_STATUSES as readonly string[]).includes(ctx.status);
+
+  if (ctx.seller_id === viewerId) {
+    return live ? { role: 'owner' } : { role: null, reason: 'escrow_not_held' };
+  }
+  if (ctx.buyer_id === viewerId) {
+    return live ? { role: 'counterparty' } : { role: null, reason: 'escrow_not_held' };
+  }
+  if (isModerator) {
+    if (ctx.status === 'disputed' && ctx.dispute_status === 'open') return { role: 'moderator' };
+    return { role: null, reason: 'moderator_without_open_dispute' };
+  }
+  return { role: null, reason: 'not_a_party' };
+}
+
+// ── Row mapping ──────────────────────────────────────────────────────────────
+
+function toHeader(row: InstrumentRow): InstrumentHeader {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    methodId: row.method_id,
+    country: row.country,
+    fiatCurrency: row.fiat_currency,
+    label: row.label,
+    fingerprint: row.fingerprint,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    removedAt: row.removed_at,
+  };
+}
+
+function toSchema(row: SchemaRow): MethodSchema {
+  return {
+    methodId: row.method_id,
+    country: row.country,
+    label: row.label,
+    fields: (Array.isArray(row.fields) ? row.fields : []) as readonly FieldSpec[],
+    enabled: row.enabled,
+  };
+}
+
+/**
+ * One refusal for every "you may not see this".
+ *
+ * NOT_FOUND rather than FORBIDDEN, everywhere, and the message never varies by
+ * cause: the difference between "no such instrument" and "not yours" is itself
+ * information about someone else's account.
+ */
+function notFound(id: string): InstrumentError {
+  return new InstrumentError(`No payment instrument is available for ${id}`, 'p2p.instrument_not_found');
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
+}
+
+export { InstrumentError };
+export type { InstrumentDetails, MethodSchema, FieldSpec };

@@ -11,6 +11,8 @@ import {
   type DisputeRecord,
   type P2pService,
 } from './p2p-service.js';
+import { InstrumentError } from './instruments.js';
+import type { InstrumentService } from './instrument-service.js';
 
 /**
  * svc-p2p's API (§6.2).
@@ -133,6 +135,21 @@ type TradeOut = z.infer<typeof tradeOutput>;
  * timed-out call needs to be able to tell those apart.
  */
 function toTrpcError(err: unknown): TRPCError {
+  if (err instanceof InstrumentError) {
+    switch (err.code) {
+      case 'p2p.instrument_not_found':
+        // EVERY refusal to disclose lands here, whatever the real reason.
+        // "This exists but is not yours" tells a stranger that a trade with
+        // that id exists and that its seller has an account on file, which is
+        // the first half of the thing they were trying to learn.
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'p2p.instrument_slot_taken':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      default:
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
+  }
+
   if (err instanceof TradeStateError) {
     return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
   }
@@ -179,7 +196,79 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export function createP2pRouter(p2p: P2pService) {
+/**
+ * A method's field requirements, as the "add a payment method" screen needs
+ * them. About METHODS, never about people — the one instrument-adjacent surface
+ * a browsing user may read.
+ */
+const fieldSpecOutput = z.object({
+  key: z.string(),
+  label: z.string(),
+  required: z.boolean(),
+  pattern: z.string().optional(),
+  minLength: z.number().int().optional(),
+  maxLength: z.number().int().optional(),
+  /** A hint for the input control. Not an access-control decision. */
+  sensitive: z.boolean().optional(),
+  help: z.string().optional(),
+});
+
+const methodSchemaOutput = z.object({
+  methodId: z.string(),
+  country: z.string(),
+  label: z.string(),
+  fields: z.array(fieldSpecOutput),
+  enabled: z.boolean(),
+});
+
+/**
+ * AN INSTRUMENT WITHOUT ITS VALUES. The only shape any list returns.
+ *
+ * There is deliberately no masked hint, no last-four, no partial anything. A
+ * mask is still the data, it rides a path that is not access-logged, and it is
+ * one helpful refactor away from being the whole value. The owner tells two
+ * destinations apart by the label they chose.
+ *
+ * `fingerprint` is deliberately absent too: it is a hash of the account
+ * details, and a hash handed to a caller is an oracle against which a guessed
+ * account number can be checked. It stays server-side, where the audit trail
+ * needs it and nobody can query it.
+ */
+const instrumentHeaderOutput = z.object({
+  id: z.string().uuid(),
+  methodId: z.string(),
+  country: z.string(),
+  fiatCurrency: z.string(),
+  label: z.string(),
+  status: z.enum(['active', 'removed']),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  removedAt: z.string().nullable(),
+});
+
+/** The values. Only ever produced by a call that wrote an access-log row. */
+const instrumentDetailsOutput = z.record(z.string(), z.string());
+
+export function createP2pRouter(p2p: P2pService, instruments: InstrumentService) {
+  /**
+   * The owner's own instruments, mapped for the wire.
+   *
+   * A named function rather than an inline object literal at each call site,
+   * because "which fields does a list return" is exactly the decision that
+   * decays when it is written out four times.
+   */
+  const toHeaderOut = (i: Awaited<ReturnType<InstrumentService['createInstrument']>>) => ({
+    id: i.id,
+    methodId: i.methodId,
+    country: i.country,
+    fiatCurrency: i.fiatCurrency,
+    label: i.label,
+    status: i.status,
+    createdAt: i.createdAt.toISOString(),
+    updatedAt: i.updatedAt.toISOString(),
+    removedAt: i.removedAt?.toISOString() ?? null,
+  });
+
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-p2p') }))
@@ -322,6 +411,272 @@ export function createP2pRouter(p2p: P2pService) {
         .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
         .output(z.array(tradeOutput))
         .query(async ({ ctx, input }) => guard(async () => (await p2p.listTrades(ctx.principal.userId, input?.limit)).map(toTradeOut))),
+
+      /**
+       * WHERE TO SEND THE MONEY. The only path to a seller's account details.
+       *
+       * Deliberately its own procedure rather than a field on `trades.get`.
+       * Three things follow from that, and each one is a bug that cannot now
+       * happen:
+       *
+       *   · `trades.get` and `trades.list` cannot leak an instrument, because
+       *     they never load one. A routine trade read is not a disclosure.
+       *   · every disclosure is an explicit call, so the access log has one
+       *     row per intent rather than one row per screen refresh.
+       *   · the authorisation for reading account details is written in one
+       *     place instead of being a clause inside a trade serialiser.
+       *
+       * `p2p:read` and not `p2p:write`, because a moderator adjudicating a
+       * dispute holds `admin:compliance` + `p2p:read` and never `p2p:write` —
+       * the same pairing `disputes.get` above already relies on. The scope is
+       * not what protects this; being a party to a live trade is.
+       */
+      paymentInstrument: scopedProcedure('p2p:read', { module: 'p2p' })
+        .input(z.object({ tradeId: z.string().uuid() }))
+        .output(
+          z.object({
+            tradeId: z.string().uuid(),
+            methodId: z.string(),
+            country: z.string(),
+            fiatCurrency: z.string(),
+            label: z.string(),
+            details: instrumentDetailsOutput,
+            attachedAt: z.string(),
+          }),
+        )
+        .query(async ({ ctx, input }) =>
+          guard(async () => {
+            const view = await instruments.revealForTrade({
+              tradeId: input.tradeId,
+              viewerId: ctx.principal.userId,
+              isModerator: ctx.principal.scopes.includes('admin:compliance'),
+            });
+            return {
+              tradeId: view.tradeId,
+              methodId: view.methodId,
+              country: view.country,
+              fiatCurrency: view.fiatCurrency,
+              label: view.label,
+              details: { ...view.details },
+              attachedAt: view.attachedAt.toISOString(),
+            };
+          }),
+        ),
+    }),
+
+    /**
+     * PAYMENT INSTRUMENTS (§6.2 "any payment method").
+     *
+     * Who can see a seller's account details, stated once:
+     *
+     *   nobody, except the owner and the counterparty of a trade whose escrow
+     *   is currently HELD — plus a moderator, and only while a dispute on that
+     *   trade is open. Never on an offer, never to a browsing user, never after
+     *   the trade closes. Every one of those reads is logged, including the
+     *   owner's own and including the refusals.
+     *
+     * Nothing in this branch returns a field value except `reveal`, and
+     * `reveal` cannot return one without having written an access-log row in
+     * the same SQL statement (see `instrument-service.ts`).
+     */
+    instruments: router({
+      methods: router({
+        /**
+         * The registry — what each method needs, per country.
+         *
+         * Ships empty. What a payer needs in order to send money differs by
+         * method and by country, and it is not this repo's knowledge to invent;
+         * an operator registers what a market actually requires and until they
+         * do, that market refuses instruments. A seeded guess would be a wrong
+         * answer that looks like a right one.
+         */
+        list: scopedProcedure('p2p:read', { module: 'p2p' })
+          .input(z.object({ country: z.string().length(2).optional(), methodId: z.string().max(64).optional() }).optional())
+          .output(z.array(methodSchemaOutput))
+          .query(async ({ input }) =>
+            guard(async () =>
+              (
+                await instruments.listMethodSchemas({
+                  ...(input?.country ? { country: input.country } : {}),
+                  ...(input?.methodId ? { methodId: input.methodId } : {}),
+                })
+              ).map((s) => ({ ...s, fields: [...s.fields] })),
+            ),
+          ),
+
+        /**
+         * OPERATOR ONLY. `admin:compliance`, not `admin:write`.
+         *
+         * What a market's payment rails require is the same class of content as
+         * a sanctions list: it is researched, it is jurisdictional, and getting
+         * it wrong produces instruments that look complete and cannot be paid.
+         */
+        register: scopedProcedure('admin:compliance', { module: 'p2p' })
+          .input(
+            z.object({
+              methodId: z.string().min(1).max(64),
+              /** ISO 3166-1 alpha-2, or `*` for "the same everywhere". */
+              country: z.string().min(1).max(2),
+              label: z.string().min(1).max(120),
+              fields: z.array(z.unknown()).min(1),
+              enabled: z.boolean().optional(),
+            }),
+          )
+          .output(methodSchemaOutput)
+          .mutation(async ({ input }) =>
+            guard(async () => {
+              const schema = await instruments.registerMethodSchema({
+                methodId: input.methodId,
+                country: input.country,
+                label: input.label,
+                fields: input.fields,
+                ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+              });
+              return { ...schema, fields: [...schema.fields] };
+            }),
+          ),
+
+        setEnabled: scopedProcedure('admin:compliance', { module: 'p2p' })
+          .input(z.object({ methodId: z.string().min(1).max(64), country: z.string().min(1).max(2), enabled: z.boolean() }))
+          .output(methodSchemaOutput)
+          .mutation(async ({ input }) =>
+            guard(async () => {
+              const schema = await instruments.setMethodSchemaEnabled(input.methodId, input.country, input.enabled);
+              return { ...schema, fields: [...schema.fields] };
+            }),
+          ),
+      }),
+
+      create: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(
+          z.object({
+            methodId: z.string().min(1).max(64),
+            country: z.string().length(2),
+            fiatCurrency: z.string().length(3),
+            label: z.string().max(120).optional(),
+            /** Exactly the fields the method schema declared. An extra key is refused. */
+            details: z.record(z.string(), z.string()),
+          }),
+        )
+        .output(instrumentHeaderOutput)
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            toHeaderOut(
+              await instruments.createInstrument({
+                ownerId: ctx.principal.userId,
+                methodId: input.methodId,
+                country: input.country,
+                fiatCurrency: input.fiatCurrency,
+                ...(input.label === undefined ? {} : { label: input.label }),
+                details: input.details,
+              }),
+            ),
+          ),
+        ),
+
+      /**
+       * Edit. Does NOT reach any trade already holding a snapshot — that is the
+       * point of the snapshot, not a limitation of this call.
+       */
+      update: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(
+          z.object({
+            instrumentId: z.string().uuid(),
+            label: z.string().max(120).optional(),
+            details: z.record(z.string(), z.string()).optional(),
+          }),
+        )
+        .output(instrumentHeaderOutput)
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            toHeaderOut(
+              await instruments.updateInstrument({
+                instrumentId: input.instrumentId,
+                ownerId: ctx.principal.userId,
+                ...(input.label === undefined ? {} : { label: input.label }),
+                ...(input.details === undefined ? {} : { details: input.details }),
+              }),
+            ),
+          ),
+        ),
+
+      /** Removal is a state change. An in-flight trade keeps working. */
+      remove: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(z.object({ instrumentId: z.string().uuid() }))
+        .output(instrumentHeaderOutput)
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            toHeaderOut(await instruments.removeInstrument({ instrumentId: input.instrumentId, ownerId: ctx.principal.userId })),
+          ),
+        ),
+
+      /** The caller's own instruments. Headers only — no field values, ever. */
+      list: scopedProcedure('p2p:read', { module: 'p2p' })
+        .input(z.object({ includeRemoved: z.boolean().optional() }).optional())
+        .output(z.array(instrumentHeaderOutput))
+        .query(async ({ ctx, input }) =>
+          guard(async () => (await instruments.listInstruments(ctx.principal.userId, input?.includeRemoved === true)).map(toHeaderOut)),
+        ),
+
+      /**
+       * The owner reads their own account details — and it is logged like
+       * anyone else's read.
+       *
+       * The owner is not exempt because an account takeover reads exactly like
+       * an owner: it holds the session. A log with a hole shaped like "the
+       * owner" says nothing about the one attack it most needs to describe.
+       *
+       * `p2p:write` rather than `p2p:read`: this is the only procedure whose
+       * scope IS the whole gate, so making it the stronger one costs nothing
+       * and stops a read-only API key dumping a user's stored bank details.
+       */
+      reveal: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(z.object({ instrumentId: z.string().uuid() }))
+        .output(instrumentHeaderOutput.extend({ details: instrumentDetailsOutput }))
+        .mutation(async ({ ctx, input }) =>
+          guard(async () => {
+            const revealed = await instruments.revealOwn({ instrumentId: input.instrumentId, viewerId: ctx.principal.userId });
+            return { ...toHeaderOut(revealed), details: { ...revealed.details } };
+          }),
+        ),
+
+      /**
+       * "Who has looked at my account details, and when."
+       *
+       * Exposed to the owner on purpose. A log only compliance can read is a
+       * log the person whose data it is cannot use — and they are the one who
+       * knows whether a look was expected.
+       */
+      accessLog: scopedProcedure('p2p:read', { module: 'p2p' })
+        .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
+        .output(
+          z.array(
+            z.object({
+              id: z.string().uuid(),
+              instrumentId: z.string().uuid().nullable(),
+              viewerId: z.string(),
+              viewerRole: z.enum(['owner', 'counterparty', 'moderator', 'other']),
+              tradeId: z.string().uuid().nullable(),
+              outcome: z.enum(['revealed', 'denied']),
+              denyReason: z.string().nullable(),
+              at: z.string(),
+            }),
+          ),
+        )
+        .query(async ({ ctx, input }) =>
+          guard(async () =>
+            (await instruments.accessLogFor(ctx.principal.userId, input?.limit)).map((e) => ({
+              id: e.id,
+              instrumentId: e.instrumentId,
+              viewerId: e.viewerId,
+              viewerRole: e.viewerRole,
+              tradeId: e.tradeId,
+              outcome: e.outcome,
+              denyReason: e.denyReason,
+              at: e.at.toISOString(),
+            })),
+          ),
+        ),
     }),
 
     disputes: router({

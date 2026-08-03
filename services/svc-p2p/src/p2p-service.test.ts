@@ -7,6 +7,8 @@ import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
 import { P2pService, P2pError } from './p2p-service.js';
+import { InstrumentService } from './instrument-service.js';
+import { ANY_COUNTRY } from './instruments.js';
 import { TradeStateError } from './state.js';
 import type { ReferencePriceSource } from './pricing.js';
 
@@ -27,6 +29,7 @@ import type { ReferencePriceSource } from './pricing.js';
 const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'), 'utf8');
+const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -34,6 +37,9 @@ const OTHER = '33333333-3333-4333-8333-333333333333';
 const MODERATOR = '44444444-4444-4444-8444-444444444444';
 
 const ASSET = 'USDT';
+
+/** Shared by every svc-p2p suite that brings the schema up. Any constant, as long as it is the same one. */
+const P2P_MIGRATION_LOCK = 8_140_702;
 
 /**
  * The Postgres probe comes from `@intafaced/db` on purpose.
@@ -65,7 +71,24 @@ if (!available) {
   // Owns its database, or does not run. Must precede the first migration.
   await assertTestDatabase(sql, 'svc-p2p');
 
-  await sql.unsafe(migration);
+  // Under an advisory lock, and the same constant the instrument suite uses.
+  // Both migrations re-assert their CHECK constraints with DROP ... IF EXISTS
+  // first, so two suites bringing the same schema up at once take the same
+  // table locks in opposite orders and Postgres kills one with a deadlock.
+  // `vitest.config.ts` already serialises the two FILES; this covers the case
+  // it cannot — a second checkout of this repo pointed at the same test
+  // database, which is exactly how the shared-database incident happened.
+  await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${P2P_MIGRATION_LOCK})`;
+    await tx.unsafe(migration);
+    await tx.unsafe(instrumentsMigration);
+  });
+
+  /**
+   * Stateless apart from the connection, so it is built once. The tables it
+   * owns are truncated per test like every other table here.
+   */
+  const instruments = new InstrumentService(sql);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -80,6 +103,7 @@ if (!available) {
   };
 
   const options = {
+    instruments,
     feeBps: 100, // 1% — large enough that a mis-split is visible in a balance
     referencePrices,
     deadlines: {
@@ -90,6 +114,40 @@ if (!available) {
       escalationRecheckSeconds: 3_600,
     },
   };
+
+  /**
+   * A take now requires the SELLER to have somewhere the buyer can pay, and is
+   * refused before any lock otherwise (`p2p.no_payment_instrument`). So every
+   * account that ends up on the sell side of a trade in this file needs a
+   * destination, in the currency that trade is priced in.
+   *
+   * The schema below is a FIXTURE, not a claim about any real payment scheme.
+   * The registry ships empty precisely because what a market's rails require is
+   * not this repo's knowledge to invent — a single opaque "account reference"
+   * field is enough to exercise the escrow paths and asserts nothing about how
+   * anyone's bank actually works.
+   */
+  async function seedPaymentRails() {
+    await instruments.registerMethodSchema({
+      methodId: 'sepa',
+      country: ANY_COUNTRY,
+      label: 'Bank transfer (test fixture)',
+      fields: [{ key: 'account_reference', label: 'Account reference', required: true }],
+    });
+
+    for (const ownerId of [MAKER, TAKER, OTHER, MODERATOR]) {
+      for (const fiatCurrency of ['USD', 'EUR']) {
+        await instruments.createInstrument({
+          ownerId,
+          methodId: 'sepa',
+          country: 'DE',
+          fiatCurrency,
+          label: `${fiatCurrency} destination`,
+          details: { account_reference: `ref-${ownerId}-${fiatCurrency}` },
+        });
+      }
+    }
+  }
 
   /** Put real value in a user's available balance so an escrow has something behind it. */
   async function fund(userId: string, amount: string) {
@@ -149,11 +207,16 @@ if (!available) {
   }
 
   beforeEach(async () => {
-    await sql`TRUNCATE p2p.p2p_disputes, p2p.p2p_trades, p2p.offers, p2p.p2p_reputation RESTART IDENTITY CASCADE`;
+    await sql`
+      TRUNCATE p2p.instrument_access_log, p2p.trade_payment_instruments, p2p.payment_instruments,
+               p2p.payment_method_schemas, p2p.p2p_disputes, p2p.p2p_trades, p2p.offers, p2p.p2p_reputation
+      RESTART IDENTITY CASCADE
+    `;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-p2p');
     reference = { price: '1' };
     p2p = new P2pService(sql, ledger, bus, options);
+    await seedPaymentRails();
   });
 
   afterAll(async () => {

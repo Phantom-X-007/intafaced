@@ -1,0 +1,788 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import postgres from 'postgres';
+import { assertTestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { MemoryEventBus } from '@intafaced/events';
+import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { P2pService } from './p2p-service.js';
+import { InstrumentService } from './instrument-service.js';
+import { ANY_COUNTRY } from './instruments.js';
+import { createP2pRouter } from './router.js';
+
+/**
+ * PAYMENT INSTRUMENTS — disclosure, refusal, and the record of both.
+ *
+ * Postgres is real, because every property this file asserts is enforced in
+ * SQL: the reveal is one statement that cannot read without logging, the log is
+ * append-only by trigger, and the "one active destination per slot" rule is a
+ * partial unique index. A mocked database would assert the shape of the code
+ * rather than the behaviour of the system.
+ *
+ * The tests are driven through the **tRPC router with real signed edge
+ * principals**, not by calling the service directly, wherever the question is
+ * "can this person see it". Authorisation that is only ever tested one layer
+ * below the door is authorisation nobody has checked the door for.
+ *
+ * The standing device is a CANARY: the seller's account details contain a
+ * string that appears nowhere else in the system. "It does not leak" is then a
+ * mechanical question — call everything, scan every response.
+ */
+
+const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
+const here = dirname(fileURLToPath(import.meta.url));
+const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'), 'utf8');
+const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
+
+const SELLER = '11111111-1111-4111-8111-111111111111';
+const BUYER = '22222222-2222-4222-8222-222222222222';
+const STRANGER = '33333333-3333-4333-8333-333333333333';
+const MODERATOR = '44444444-4444-4444-8444-444444444444';
+
+const ASSET = 'USDT';
+const METHOD = 'test-transfer';
+
+/**
+ * The value that must never appear anywhere it is not explicitly allowed.
+ *
+ * Deliberately not a plausible account number: if this string turns up in a
+ * response, a log or an event payload, there is exactly one way it got there.
+ */
+const CANARY = 'CANARY-a1b2c3d4-do-not-disclose';
+
+const EDGE_SECRET = 'a-p2p-instrument-test-edge-secret-long-enough';
+
+/** Shared by every svc-p2p suite that brings the schema up. Any constant, as long as it is the same one. */
+const P2P_MIGRATION_LOCK = 8_140_702;
+
+async function reachable(): Promise<boolean> {
+  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
+  try {
+    await probe`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await probe.end({ timeout: 2 });
+  }
+}
+
+const available = await reachable();
+
+if (!available) {
+  describe.skip('svc-p2p payment instruments (Postgres unavailable — start docker compose)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  const sql = postgres(URL, {
+    max: 12,
+    connection: { search_path: 'p2p,public', application_name: 'svc-p2p-instrument-test' },
+    onnotice: () => undefined,
+  });
+
+  // Owns its database, or does not run.
+  await assertTestDatabase(sql, 'svc-p2p');
+
+  // Same advisory lock as the escrow suite — see the note there.
+  await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${P2P_MIGRATION_LOCK})`;
+    await tx.unsafe(migration);
+    await tx.unsafe(instrumentsMigration);
+  });
+
+  const instruments = new InstrumentService(sql);
+  const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-p2p' });
+
+  let ledger: MemoryLedger;
+  let bus: MemoryEventBus;
+  let p2p: P2pService;
+  let api: ReturnType<typeof createP2pRouter>;
+
+  /** A principal the edge really vouched for, for a given user. */
+  function callerFor(userId: string, scopes: string[] = ['p2p:read', 'p2p:write']) {
+    const principal = {
+      sub: userId,
+      userId,
+      sid: '99999999-9999-4999-8999-999999999999',
+      scopes,
+      tier: 'basic',
+      mfa: false,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as unknown as Principal;
+
+    const raw = encodePrincipal(principal);
+    return api.createCaller(
+      edgeContext({
+        headers: {
+          'x-intafaced-principal': raw,
+          'x-intafaced-principal-sig': signPrincipalHeader(raw, EDGE_SECRET, 'DE'),
+          'x-intafaced-region': 'DE',
+        },
+        id: `req-${userId}`,
+      }),
+    );
+  }
+
+  async function fund(userId: string, amount: string) {
+    await ledger.post(
+      recipes.deposit({
+        userId,
+        assetId: ASSET,
+        amount: amt(amount),
+        rail: 'test',
+        railRef: `${userId}:${amount}:${crypto.randomUUID()}`,
+      }),
+    );
+  }
+
+  /**
+   * The operator's registry entry.
+   *
+   * A FIXTURE, not a claim about any real payment scheme. The registry ships
+   * empty precisely because what a market's rails require is not this repo's
+   * knowledge to invent, so the fields here are deliberately generic.
+   */
+  async function registerMethod(overrides: Partial<Parameters<InstrumentService['registerMethodSchema']>[0]> = {}) {
+    return instruments.registerMethodSchema({
+      methodId: METHOD,
+      country: ANY_COUNTRY,
+      label: 'Test transfer',
+      fields: [
+        { key: 'account_reference', label: 'Account reference', required: true },
+        { key: 'holder_name', label: 'Account holder', required: true, maxLength: 80 },
+        { key: 'note', label: 'Reference note', required: false },
+      ],
+      ...overrides,
+    });
+  }
+
+  async function sellerInstrument(overrides: { fiatCurrency?: string; ownerId?: string; details?: Record<string, string> } = {}) {
+    return instruments.createInstrument({
+      ownerId: overrides.ownerId ?? SELLER,
+      methodId: METHOD,
+      country: 'DE',
+      fiatCurrency: overrides.fiatCurrency ?? 'USD',
+      label: 'Main account',
+      details: overrides.details ?? { account_reference: CANARY, holder_name: 'A Seller' },
+    });
+  }
+
+  /** A funded seller, an offer, and a taken trade sitting in `escrowed`. */
+  async function liveTrade(amount = '100') {
+    await fund(SELLER, '1000');
+    const offer = await p2p.createOffer({
+      makerId: SELLER,
+      side: 'sell',
+      asset: ASSET,
+      fiatCurrency: 'USD',
+      priceType: 'fixed',
+      price: amt('1'),
+      minAmt: amt('10'),
+      maxAmt: amt('500'),
+      totalAmt: amt('500'),
+      methods: [METHOD],
+    });
+    const trade = await p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt(amount), method: METHOD });
+    return { offer, trade };
+  }
+
+  beforeEach(async () => {
+    await sql`
+      TRUNCATE p2p.instrument_access_log, p2p.trade_payment_instruments, p2p.payment_instruments,
+               p2p.payment_method_schemas, p2p.p2p_disputes, p2p.p2p_trades, p2p.offers, p2p.p2p_reputation
+      RESTART IDENTITY CASCADE
+    `;
+    ledger = new MemoryLedger();
+    bus = new MemoryEventBus('svc-p2p');
+    p2p = new P2pService(sql, ledger, bus, {
+      instruments,
+      feeBps: 0,
+      deadlines: { escrowSeconds: 120, paymentSeconds: 900, releaseSeconds: 1800, disputeSeconds: 604_800 },
+    });
+    api = createP2pRouter(p2p, instruments);
+    await registerMethod();
+  });
+
+  afterAll(async () => {
+    await sql.end({ timeout: 5 });
+  });
+
+  // ── The registry: we do not invent a market's requirements ─────────────────
+
+  describe('the method registry', () => {
+    it('ships empty, so an unregistered market refuses rather than guesses', async () => {
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+      expect(await instruments.listMethodSchemas()).toEqual([]);
+
+      // The honest failure. The alternative is a seeded guess at what this
+      // market needs, which produces an instrument that looks complete and
+      // cannot be paid — discovered by a buyer, after escrow is locked.
+      await expect(sellerInstrument()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+    });
+
+    it('rejects a field the operator never declared instead of dropping it', async () => {
+      // Silently ignoring unknown keys would let a client push arbitrary
+      // personal data into a blob nobody designed, nobody validates, and
+      // everybody then has to protect and eventually delete.
+      await expect(
+        sellerInstrument({ details: { account_reference: 'x', holder_name: 'y', national_id: '123456' } }),
+      ).rejects.toMatchObject({ code: 'p2p.instrument_field_undeclared', field: 'national_id' });
+    });
+
+    it('rejects a required field that is present but blank', async () => {
+      await expect(sellerInstrument({ details: { account_reference: '   ', holder_name: 'y' } })).rejects.toMatchObject({
+        code: 'p2p.instrument_field_missing',
+        field: 'account_reference',
+      });
+    });
+
+    it('lets an exact country override the wildcard, and does not fall back past it', async () => {
+      await registerMethod({
+        country: 'NG',
+        label: 'Test transfer (NG)',
+        fields: [{ key: 'wallet_handle', label: 'Handle', required: true }],
+      });
+
+      // The NG entry says "this market is different". Falling back to the
+      // generic field list here would accept a destination that market cannot
+      // actually receive at.
+      await expect(
+        instruments.createInstrument({
+          ownerId: SELLER,
+          methodId: METHOD,
+          country: 'NG',
+          fiatCurrency: 'NGN',
+          details: { account_reference: 'x', holder_name: 'y' },
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.instrument_field_undeclared' });
+
+      const ok = await instruments.createInstrument({
+        ownerId: SELLER,
+        methodId: METHOD,
+        country: 'NG',
+        fiatCurrency: 'NGN',
+        details: { wallet_handle: 'h' },
+      });
+      expect(ok.country).toBe('NG');
+    });
+
+    it('refuses a second active destination for the same method and currency', async () => {
+      await sellerInstrument();
+      // One answer to "which account does the buyer pay?", by construction. A
+      // lookup that could return two rows would pick one by an ordering nobody
+      // designed, on the one field where the wrong choice sends a stranger's
+      // money to the wrong bank.
+      await expect(sellerInstrument({ details: { account_reference: 'other', holder_name: 'A Seller' } })).rejects.toMatchObject({
+        code: 'p2p.instrument_slot_taken',
+      });
+
+      const first = (await instruments.listInstruments(SELLER))[0]!;
+      await instruments.removeInstrument({ instrumentId: first.id, ownerId: SELLER });
+      // Rotation is sequential, and it works.
+      await expect(sellerInstrument({ details: { account_reference: 'other', holder_name: 'A Seller' } })).resolves.toMatchObject({
+        status: 'active',
+      });
+    });
+  });
+
+  // ── A trade cannot open with nowhere to pay ───────────────────────────────
+
+  describe('taking an offer', () => {
+    it('refuses before any lock when the seller has nowhere to be paid', async () => {
+      await fund(SELLER, '1000');
+      // A USD destination exists; the offer is priced in GBP.
+      await sellerInstrument({ fiatCurrency: 'USD' });
+
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'GBP',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        totalAmt: amt('500'),
+        methods: [METHOD],
+      });
+
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+        code: 'p2p.no_payment_instrument',
+      });
+
+      // BEFORE ANY LOCK, and the transaction rolled back with it: no trade row,
+      // no reserved inventory, nothing in escrow. The alternative is escrowing
+      // the seller's asset against a payment nobody can make and letting them
+      // discover it fifteen minutes later via a timeout.
+      expect(await sql`SELECT id FROM p2p.p2p_trades`).toHaveLength(0);
+      expect(await sql`SELECT trade_id FROM p2p.trade_payment_instruments`).toHaveLength(0);
+      expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
+      const after = await p2p.getOffer(offer.id);
+      expect(after.remainingAmt).toBe(amt('500'));
+    });
+
+    it('freezes the destination onto the trade in the same transaction', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      const rows = await sql<Array<{ trade_id: string; owner_id: string; fingerprint: string }>>`
+        SELECT trade_id, owner_id, fingerprint FROM p2p.trade_payment_instruments WHERE trade_id = ${trade.id}
+      `;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.owner_id).toBe(SELLER);
+    });
+  });
+
+  // ── THE HEADLINE: who can see it, and when ────────────────────────────────
+
+  describe('disclosure', () => {
+    it('shows the buyer the destination while the escrow is held', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      const view = await callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id });
+      expect(view.details).toEqual({ account_reference: CANARY, holder_name: 'A Seller' });
+      expect(view.methodId).toBe(METHOD);
+      expect(view.fiatCurrency).toBe('USD');
+
+      // And still after the buyer says they have paid — the seller has not
+      // confirmed yet and the buyer may need to quote the account in a dispute.
+      await p2p.markFiatSent(trade.id, BUYER);
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
+        details: { account_reference: CANARY },
+      });
+    });
+
+    it('shows the seller their own destination on their own trade', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+      await expect(callerFor(SELLER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
+        details: { account_reference: CANARY },
+      });
+    });
+
+    it('refuses a non-counterparty, and refuses it as NOT_FOUND', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      // FORBIDDEN would confirm that a trade with this id exists and that its
+      // seller has an account on file — the first half of what the caller was
+      // trying to learn.
+      await expect(callerFor(STRANGER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+
+    it('refuses before the escrow is locked', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      // The two-minute `created` window is not reachable through the API (a
+      // take escrows or fails), so it is set up directly. It matters because it
+      // is the window in which a taker has committed nothing: if it disclosed,
+      // opening and abandoning takes would be a free harvest.
+      await sql`UPDATE p2p.p2p_trades SET status = 'created' WHERE id = ${trade.id}`;
+
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('stops showing it the moment the trade closes', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toBeTruthy();
+
+      await p2p.markFiatSent(trade.id, BUYER);
+      await p2p.confirmFiatReceived(trade.id, SELLER);
+
+      // A completed trade is not a permanent licence to read the account of
+      // someone you dealt with once.
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(callerFor(SELLER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('stops showing it on a refunded trade too', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+      await p2p.cancelTrade(trade.id, SELLER, 'changed_mind');
+
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('lets a moderator see it only while a dispute on that trade is open', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+      const moderator = () => callerFor(MODERATOR, ['p2p:read', 'admin:compliance']);
+
+      // No dispute: `admin:compliance` is not a skeleton key.
+      await expect(moderator().trades.paymentInstrument({ tradeId: trade.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      await p2p.markFiatSent(trade.id, BUYER);
+      await p2p.openDispute({ tradeId: trade.id, openedBy: BUYER, reason: 'paid, not released' });
+
+      // §A2: a disputed release needs a human, and both sides see the same
+      // evidence. A human asked to rule on "I paid" / "nothing arrived" without
+      // seeing the account the payment was meant to reach is being asked to
+      // guess.
+      await expect(moderator().trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
+        details: { account_reference: CANARY },
+      });
+
+      await p2p.resolveDispute({ tradeId: trade.id, moderatorId: MODERATOR, resolution: 'release' });
+      await expect(moderator().trades.paymentInstrument({ tradeId: trade.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
+
+  // ── THE LEAK SWEEP ────────────────────────────────────────────────────────
+
+  describe('no leak through any other path', () => {
+    /**
+     * Every procedure in the router, called as a stranger against the REAL ids
+     * of a live trade, with every successful response scanned for the canary.
+     *
+     * The map is exhaustive by construction: a procedure the router exposes and
+     * this map does not name fails the test. That is the point — the risk this
+     * guards is not the endpoints that exist today, it is the next list
+     * endpoint someone adds that happens to select the whole row.
+     */
+    it('never returns the account details to a stranger from any procedure', async () => {
+      await sellerInstrument();
+      const { offer, trade } = await liveTrade();
+
+      const inputs: Record<string, unknown> = {
+        health: undefined,
+        'fiat.list': undefined,
+        'offers.list': {},
+        'offers.get': { offerId: offer.id },
+        'offers.create': {
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: '1',
+          minAmount: '10',
+          maxAmount: '100',
+        },
+        'offers.close': { offerId: offer.id },
+        // A random offer id on purpose: a stranger who TAKES an offer becomes a
+        // counterparty, which is the product working, not a leak.
+        'trades.take': { offerId: crypto.randomUUID(), amount: '10', method: METHOD },
+        'trades.markFiatSent': { tradeId: trade.id },
+        'trades.confirmReceived': { tradeId: trade.id },
+        'trades.cancel': { tradeId: trade.id },
+        'trades.get': { tradeId: trade.id },
+        'trades.list': {},
+        'trades.paymentInstrument': { tradeId: trade.id },
+        'disputes.open': { tradeId: trade.id, reason: 'probing' },
+        'disputes.get': { tradeId: trade.id },
+        'disputes.resolve': { tradeId: trade.id, resolution: 'release' },
+        'reputation.get': { userId: SELLER },
+        'instruments.methods.list': {},
+        'instruments.methods.register': { methodId: 'probe', country: 'DE', label: 'p', fields: [{ key: 'a', label: 'A' }] },
+        'instruments.methods.setEnabled': { methodId: METHOD, country: ANY_COUNTRY, enabled: false },
+        'instruments.create': {
+          methodId: METHOD,
+          country: 'DE',
+          fiatCurrency: 'EUR',
+          details: { account_reference: 'own', holder_name: 'S' },
+        },
+        'instruments.list': {},
+        'instruments.accessLog': {},
+        'instruments.update': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id, label: 'mine now' },
+        'instruments.remove': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
+        'instruments.reveal': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
+      };
+
+      const paths = Object.keys((api as unknown as { _def: { procedures: Record<string, unknown> } })._def.procedures);
+      const unmapped = paths.filter((p) => !(p in inputs));
+      // A new procedure has to be considered here before it can ship. Adding it
+      // to the map is the act of deciding it cannot leak an instrument.
+      expect(unmapped, 'new router procedure — add it to the leak sweep').toEqual([]);
+
+      const stranger = callerFor(STRANGER) as unknown as Record<string, unknown>;
+      const responses: unknown[] = [];
+      const succeeded: string[] = [];
+
+      for (const path of paths) {
+        const fn = path.split('.').reduce<unknown>((node, key) => (node as Record<string, unknown>)?.[key], stranger);
+        try {
+          responses.push(await (fn as (i: unknown) => Promise<unknown>)(inputs[path]));
+          succeeded.push(path);
+        } catch {
+          // A refusal is a pass. What matters is what came back when one did not.
+        }
+      }
+
+      // Sanity: if everything refused, the scan below would prove nothing.
+      expect(succeeded.length).toBeGreaterThan(3);
+      expect(JSON.stringify(responses)).not.toContain(CANARY);
+      expect(succeeded).not.toContain('trades.paymentInstrument');
+    });
+
+    it('never returns the account details through the counterparty’s ordinary reads', async () => {
+      await sellerInstrument();
+      const { offer, trade } = await liveTrade();
+      const buyer = callerFor(BUYER);
+
+      // The buyer IS entitled to the details — through `trades.paymentInstrument`
+      // and nowhere else, so that a disclosure is always a deliberate, logged
+      // act rather than a side effect of rendering a screen.
+      const ordinary = [
+        await buyer.trades.get({ tradeId: trade.id }),
+        await buyer.trades.list({}),
+        await buyer.offers.get({ offerId: offer.id }),
+        await buyer.offers.list({}),
+        await buyer.instruments.list({}),
+        await buyer.instruments.methods.list({}),
+        await buyer.reputation.get({ userId: SELLER }),
+      ];
+      expect(JSON.stringify(ordinary)).not.toContain(CANARY);
+
+      await expect(buyer.trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
+        details: { account_reference: CANARY },
+      });
+    });
+
+    it('never returns the values on the owner’s own list', async () => {
+      await sellerInstrument();
+      const list = await callerFor(SELLER).instruments.list({});
+      expect(list).toHaveLength(1);
+      expect(JSON.stringify(list)).not.toContain(CANARY);
+      // No masked hint either: a mask is still the data, on a path that is not
+      // access-logged, one helpful refactor from being the whole value.
+      expect(Object.keys(list[0]!)).not.toContain('details');
+      expect(Object.keys(list[0]!)).not.toContain('fingerprint');
+    });
+
+    it('never puts the values on an offer or on a published event', async () => {
+      await sellerInstrument();
+      const { offer, trade } = await liveTrade();
+
+      const published = bus.emitted('p2pOfferCreated').concat(bus.emitted('p2pEscrowLocked') as never);
+      expect(JSON.stringify(published)).not.toContain(CANARY);
+
+      // The offer carries method IDS — what a maker accepts — and never a
+      // destination. That distinction is the whole reason a public board is
+      // safe to publish.
+      const board = await callerFor(STRANGER).offers.list({});
+      expect(JSON.stringify(board)).not.toContain(CANARY);
+      expect(board.find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
+      expect(trade.id).toBeTruthy();
+    });
+  });
+
+  // ── Removal and editing, against a trade that is already running ──────────
+
+  describe('an in-flight trade', () => {
+    it('keeps working after the owner removes the instrument', async () => {
+      const created = await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toBeTruthy();
+
+      await callerFor(SELLER).instruments.remove({ instrumentId: created.id });
+
+      // The buyer is mid-payment. A removal must not blank the screen they are
+      // copying an account number out of.
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
+        details: { account_reference: CANARY, holder_name: 'A Seller' },
+      });
+
+      // And it is gone for everything that has not started yet.
+      expect(await callerFor(SELLER).instruments.list({})).toEqual([]);
+      await expect(p2p.takeOffer({ offerId: trade.offerId, takerId: BUYER, amount: amt('50'), method: METHOD })).rejects.toMatchObject({
+        code: 'p2p.no_payment_instrument',
+      });
+    });
+
+    it('does not let the seller redirect a payment already in flight', async () => {
+      const created = await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      await callerFor(SELLER).instruments.update({
+        instrumentId: created.id,
+        details: { account_reference: 'SWITCHED-ACCOUNT', holder_name: 'A Seller' },
+      });
+
+      // THE SCAM THIS PREVENTS: show account A, wait for the buyer to start the
+      // transfer, switch to account B, then truthfully report that nothing
+      // arrived at B. A live pointer instead of a snapshot is what makes it
+      // work; the frozen row is what makes it evidence.
+      const view = await callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id });
+      expect(view.details).toEqual({ account_reference: CANARY, holder_name: 'A Seller' });
+
+      // The owner's own copy did change — the edit was legitimate, it just does
+      // not reach backwards.
+      const own = await callerFor(SELLER).instruments.reveal({ instrumentId: created.id });
+      expect(own.details).toEqual({ account_reference: 'SWITCHED-ACCOUNT', holder_name: 'A Seller' });
+    });
+  });
+
+  // ── The access log ────────────────────────────────────────────────────────
+
+  describe('the access log', () => {
+    it('records who saw whose details, on which trade', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      await callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id });
+
+      const log = await instruments.accessLogFor(SELLER);
+      expect(log).toHaveLength(1);
+      expect(log[0]).toMatchObject({ viewerId: BUYER, viewerRole: 'counterparty', outcome: 'revealed', tradeId: trade.id });
+      expect(log[0]!.at).toBeInstanceOf(Date);
+    });
+
+    it('records the owner’s own reads too', async () => {
+      const created = await sellerInstrument();
+      await callerFor(SELLER).instruments.reveal({ instrumentId: created.id });
+
+      // The owner is not exempt: an account takeover reads exactly like an
+      // owner, because it holds the session. A log with a hole shaped like "the
+      // owner" says nothing about the one attack it most needs to describe.
+      const log = await instruments.accessLogFor(SELLER);
+      expect(log).toHaveLength(1);
+      expect(log[0]).toMatchObject({ viewerId: SELLER, viewerRole: 'owner', outcome: 'revealed', tradeId: null });
+    });
+
+    it('records refusals, which is the half that shows harvesting', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      await expect(callerFor(STRANGER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toThrow();
+      await expect(
+        callerFor(MODERATOR, ['p2p:read', 'admin:compliance']).trades.paymentInstrument({ tradeId: trade.id }),
+      ).rejects.toThrow();
+
+      const log = await instruments.accessLogFor(SELLER);
+      expect(log).toHaveLength(2);
+      expect(log.map((e) => [e.viewerId, e.outcome, e.denyReason]).sort()).toEqual(
+        [
+          [MODERATOR, 'denied', 'moderator_without_open_dispute'],
+          [STRANGER, 'denied', 'not_a_party'],
+        ].sort(),
+      );
+    });
+
+    it('is the owner’s to read, and shows them a look they did not expect', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+      await expect(callerFor(STRANGER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toThrow();
+
+      const mine = await callerFor(SELLER).instruments.accessLog({});
+      expect(mine).toHaveLength(1);
+      expect(mine[0]).toMatchObject({ viewerId: STRANGER, outcome: 'denied' });
+
+      // And it is not anyone else's to read.
+      expect(await callerFor(STRANGER).instruments.accessLog({})).toEqual([]);
+    });
+
+    it('cannot be edited or deleted, even behind the service’s back', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+      await callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id });
+
+      // Raw SQL, bypassing every line of application code. A log the service
+      // could tidy is a log whose value depends on the service not having been
+      // the thing that was compromised.
+      await expect(sql`UPDATE p2p.instrument_access_log SET viewer_id = 'someone-else'`).rejects.toThrow(/append-only/i);
+      await expect(sql`DELETE FROM p2p.instrument_access_log`).rejects.toThrow(/append-only/i);
+
+      expect(await instruments.accessLogFor(SELLER)).toHaveLength(1);
+    });
+
+    it('cannot be avoided: no disclosure exists without a row', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      const before = await sql<Array<{ n: string }>>`SELECT count(*) AS n FROM p2p.instrument_access_log WHERE outcome = 'revealed'`;
+      expect(Number(before[0]!.n)).toBe(0);
+
+      for (let i = 0; i < 3; i++) await callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id });
+
+      // One row per disclosure, not one per session. The reveal is a single SQL
+      // statement in which the SELECT of the details is cross-joined to the
+      // INSERT of this row, so the count cannot fall behind the reads.
+      const after = await sql<Array<{ n: string }>>`SELECT count(*) AS n FROM p2p.instrument_access_log WHERE outcome = 'revealed'`;
+      expect(Number(after[0]!.n)).toBe(3);
+    });
+  });
+
+  // ── Retention ─────────────────────────────────────────────────────────────
+
+  describe('retention', () => {
+    it('wipes the details off a closed trade past the window and keeps the fingerprint', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+      await p2p.markFiatSent(trade.id, BUYER);
+      await p2p.confirmFiatReceived(trade.id, SELLER);
+
+      const short = new InstrumentService(sql, { retentionDays: 30 });
+      // Nothing is due yet — a purge that ran early would destroy evidence an
+      // open appeal still needs.
+      expect(await short.purgeExpiredSnapshots()).toEqual({ purged: 0 });
+
+      await sql`UPDATE p2p.p2p_trades SET resolved_at = now() - interval '45 days' WHERE id = ${trade.id}`;
+      expect(await short.purgeExpiredSnapshots()).toEqual({ purged: 1 });
+
+      const rows = await sql<Array<{ details: unknown; fingerprint: string; purged_at: Date | null }>>`
+        SELECT details, fingerprint, purged_at FROM p2p.trade_payment_instruments WHERE trade_id = ${trade.id}
+      `;
+      expect(rows[0]!.details).toBeNull();
+      expect(rows[0]!.purged_at).toBeInstanceOf(Date);
+      // The fingerprint outlives the values: an appeal can still be told whether
+      // the account a seller now names is the one the buyer was shown, without
+      // us holding the account in order to say so.
+      expect(rows[0]!.fingerprint).toHaveLength(64);
+
+      expect(await sql`SELECT trade_id FROM p2p.trade_payment_instruments WHERE details::text LIKE ${'%' + CANARY + '%'}`).toHaveLength(0);
+    });
+
+    it('never touches a trade that is still live', async () => {
+      await sellerInstrument();
+      const { trade } = await liveTrade();
+      await sql`UPDATE p2p.trade_payment_instruments SET attached_at = now() - interval '400 days' WHERE trade_id = ${trade.id}`;
+
+      const short = new InstrumentService(sql, { retentionDays: 30 });
+      expect(await short.purgeExpiredSnapshots()).toEqual({ purged: 0 });
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toBeTruthy();
+    });
+  });
+
+  // ── Ownership ─────────────────────────────────────────────────────────────
+
+  describe('ownership', () => {
+    it('refuses every owner operation to someone who is not the owner', async () => {
+      const created = await sellerInstrument();
+      const stranger = callerFor(STRANGER);
+
+      for (const call of [
+        () => stranger.instruments.reveal({ instrumentId: created.id }),
+        () => stranger.instruments.update({ instrumentId: created.id, label: 'mine' }),
+        () => stranger.instruments.remove({ instrumentId: created.id }),
+      ]) {
+        await expect(call()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      }
+
+      const untouched = await instruments.revealOwn({ instrumentId: created.id, viewerId: SELLER });
+      expect(untouched.label).toBe('Main account');
+      expect(untouched.details).toEqual({ account_reference: CANARY, holder_name: 'A Seller' });
+    });
+
+    it('logs the refused attempt against the attempt, not the owner', async () => {
+      const created = await sellerInstrument();
+      await expect(callerFor(STRANGER).instruments.reveal({ instrumentId: created.id })).rejects.toThrow();
+
+      // Nothing resolved, so nothing is attributed to the owner — but the
+      // attempt itself is on the record, under the viewer who made it.
+      expect(await instruments.accessLogFor(SELLER)).toEqual([]);
+      const attempts = await sql<Array<{ viewer_id: string; outcome: string; deny_reason: string }>>`
+        SELECT viewer_id, outcome, deny_reason FROM p2p.instrument_access_log WHERE viewer_id = ${STRANGER}
+      `;
+      expect(attempts).toEqual([{ viewer_id: STRANGER, outcome: 'denied', deny_reason: 'not_the_owner' }]);
+    });
+  });
+}

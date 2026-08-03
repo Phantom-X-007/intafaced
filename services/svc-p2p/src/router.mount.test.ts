@@ -3,6 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createP2pRouter } from './router.js';
 import type { P2pService } from './p2p-service.js';
+import type { InstrumentService } from './instrument-service.js';
 
 /**
  * THE MOUNT BOUNDARY, for svc-p2p (docs/decisions/mount-boundary.md).
@@ -75,6 +76,31 @@ function stubP2p(overrides: Partial<Record<string, unknown>> = {}) {
   } as unknown as P2pService;
 }
 
+/**
+ * The instrument half of the router.
+ *
+ * Every method throws, deliberately: this file is about whether a caller gets
+ * PAST the mount at all, and a stub that quietly returned `[]` would let a test
+ * pass while the router happily disclosed payment details to an anonymous
+ * caller. If anything here is ever reached by an unauthorised request, the test
+ * that reached it fails loudly rather than assertively passing.
+ */
+function stubInstruments(overrides: Partial<Record<string, unknown>> = {}) {
+  const refuse = async () => {
+    throw new Error('the mount let an unauthorised caller reach a payment instrument');
+  };
+  return {
+    listMethodSchemas: refuse,
+    listInstruments: refuse,
+    revealOwn: refuse,
+    revealForTrade: refuse,
+    accessLogFor: refuse,
+    ...overrides,
+  } as unknown as InstrumentService;
+}
+
+const routerFor = (p2p: P2pService, instruments: InstrumentService = stubInstruments()) => createP2pRouter(p2p, instruments);
+
 describe('svc-p2p mount — authorisation', () => {
   it('refuses an anonymous caller on a scoped procedure, and reads nothing', async () => {
     // Shaped like the ledger's: it does not assert on a message, it asserts the
@@ -87,7 +113,7 @@ describe('svc-p2p mount — authorisation', () => {
       },
     });
 
-    await expect(createP2pRouter(p2p).createCaller(anonymous()).offers.list({})).rejects.toMatchObject({
+    await expect(routerFor(p2p).createCaller(anonymous()).offers.list({})).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     expect(read).toBe(false);
@@ -104,7 +130,7 @@ describe('svc-p2p mount — authorisation', () => {
     const ctx = forged(principal({ scopes: ['p2p:read', 'p2p:write', 'admin:treasury'], tier: 'full', mfa: true }));
     expect(ctx.principal).toBeNull();
 
-    await expect(createP2pRouter(stubP2p()).createCaller(ctx).offers.list({})).rejects.toMatchObject({
+    await expect(routerFor(stubP2p()).createCaller(ctx).offers.list({})).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -112,7 +138,41 @@ describe('svc-p2p mount — authorisation', () => {
   it('accepts a principal the edge signed', async () => {
     // Without this the UNAUTHORIZED assertions above would also pass on a
     // router that refuses everyone.
-    await expect(createP2pRouter(stubP2p()).createCaller(signed()).offers.list({})).resolves.toEqual([]);
+    await expect(routerFor(stubP2p()).createCaller(signed()).offers.list({})).resolves.toEqual([]);
+  });
+
+  /**
+   * The payment-instrument surface, at the mount.
+   *
+   * `instrument-service.test.ts` proves that a non-counterparty is refused.
+   * This proves the layer in front of it: a caller with no credentials at all
+   * never reaches the code that would make that decision. The stub throws on
+   * every method, so "the service was never asked" is asserted by the absence
+   * of that error rather than by a flag.
+   */
+  it('refuses an anonymous caller on every payment-instrument path', async () => {
+    const caller = routerFor(stubP2p()).createCaller(anonymous());
+
+    await expect(caller.instruments.list({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.instruments.methods.list({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.instruments.accessLog({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.instruments.reveal({ instrumentId: USER })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.trades.paymentInstrument({ tradeId: USER })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  /**
+   * A session may not register what a market's payment rails require.
+   *
+   * `admin:compliance` guards the registry because a wrong field list produces
+   * instruments that look complete and cannot be paid — the same class of
+   * content as a sanctions list, and equally not a user's to write.
+   */
+  it('refuses a normal session on the operator method registry', async () => {
+    const caller = routerFor(stubP2p()).createCaller(signed(principal({ scopes: ['p2p:read', 'p2p:write'] })));
+
+    await expect(
+      caller.instruments.methods.register({ methodId: 'anything', country: 'DE', label: 'x', fields: [{}] }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
@@ -229,7 +289,7 @@ describe('svc-p2p mount — the moderator queue', () => {
 
 describe('svc-p2p mount — the public surface', () => {
   it('serves health to an anonymous caller', async () => {
-    await expect(createP2pRouter(stubP2p()).createCaller(anonymous()).health()).resolves.toEqual({
+    await expect(routerFor(stubP2p()).createCaller(anonymous()).health()).resolves.toEqual({
       ok: true,
       service: 'svc-p2p',
     });
@@ -237,6 +297,6 @@ describe('svc-p2p mount — the public surface', () => {
 
   it('serves health even when a forged principal was presented', async () => {
     // A rejected principal makes the caller anonymous, not rejected outright.
-    await expect(createP2pRouter(stubP2p()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
+    await expect(routerFor(stubP2p()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
   });
 });

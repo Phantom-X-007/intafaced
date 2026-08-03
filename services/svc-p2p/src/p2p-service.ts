@@ -108,7 +108,31 @@ export class P2pError extends Error {
   }
 }
 
+/**
+ * The half of `InstrumentService` this file is allowed to know about.
+ *
+ * Narrow on purpose. svc-p2p's escrow paths need exactly one thing from payment
+ * instruments — "freeze the seller's destination onto this trade, or refuse the
+ * take" — and nothing here should be able to reach a disclosure path by
+ * accident. The reveal rules live in `instrument-service.ts`, behind an
+ * interface this file cannot call.
+ */
+export interface TradeInstrumentAttacher {
+  attachToTrade(
+    tx: Sql,
+    input: { tradeId: string; sellerId: string; methodId: string; fiatCurrency: string },
+  ): Promise<{ instrumentId: string; fingerprint: string }>;
+}
+
 export interface P2pServiceOptions {
+  /**
+   * Where the buyer will be told to send the fiat.
+   *
+   * NOT optional, and the compiler enforcing that is the point: a P2pService
+   * built without one would take offers, lock escrow, and leave every buyer
+   * with nowhere to pay — the exact hole this collaborator exists to close.
+   */
+  instruments: TradeInstrumentAttacher;
   /** Platform fee taken off the escrowed amount at release. */
   feeBps?: number;
   deadlines?: DeadlinePolicy;
@@ -365,14 +389,16 @@ export class P2pService {
   private readonly deadlines: DeadlinePolicy;
   private readonly xpPolicy: XpPolicy;
   private readonly referencePrices: ReferencePriceSource | undefined;
+  private readonly instruments: TradeInstrumentAttacher;
   private tradingEnabled: boolean;
 
   constructor(
     private readonly sql: Sql,
     private readonly ledger: LedgerClient,
     private readonly bus: EventBus,
-    options: P2pServiceOptions = {},
+    options: P2pServiceOptions,
   ) {
+    this.instruments = options.instruments;
     this.feeBps = options.feeBps ?? 0;
     this.deadlines = options.deadlines ?? DEFAULT_DEADLINES;
     this.xpPolicy = options.xp ?? DEFAULT_XP_POLICY;
@@ -644,6 +670,25 @@ export class P2pService {
           // rather than let the decrement above stand.
           throw new P2pError(`Trade ${input.tradeId} already exists`, 'p2p.trade_exists');
         }
+
+        // WHERE THE BUYER WILL SEND THE MONEY, frozen onto the trade in the same
+        // transaction that created it. Two things follow from it being here:
+        //
+        //   · a trade with no destination is not a state that can be committed,
+        //     so the buyer is never shown a payment step with nothing in it;
+        //   · a seller with no destination is refused BEFORE any lock, with the
+        //     rest of phase A. The alternative is escrowing their asset against
+        //     a payment nobody can make and letting them find out fifteen
+        //     minutes later, via a timeout, that it was knowable up front.
+        //
+        // The snapshot is taken now and never re-read, which is also what stops
+        // a seller swapping the destination once the buyer has started paying.
+        await this.instruments.attachToTrade(tx, {
+          tradeId: input.tradeId,
+          sellerId,
+          methodId: input.method,
+          fiatCurrency: offer.fiatCurrency,
+        });
 
         return toTrade(inserted[0]);
       },
