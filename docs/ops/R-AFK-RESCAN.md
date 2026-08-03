@@ -1325,3 +1325,11 @@ EXIT=0
 ```
 
 **Verdict:** invent honesty holds · live invent residual **0** · fabricated-money findings **0**.
+
+---
+
+## Re-scan cycle103 — 2026-08-03T23:08Z · tip `1abfb5ae`
+
+**Mode:** NO-FLEET · fabricated-money-scan  
+**Trigger:** AFK keep-alive freeProduct=0 ≠ kill  
+**Verdict:** fabricated-money EXIT=0 · live invent residual **0** · P-WS still blocked by #433/#432.
