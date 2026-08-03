@@ -7,15 +7,19 @@ Copy **only** the block below into a new agent session opened on this repo (work
 ```
 Project: INTAFACED Sovereign OS — Phantom-X-007/intafaced (this workspace).
 
-PRE-FLIGHT (first 30s — anti-drift)
-1. git fetch origin main && git rev-parse --short origin/main
-2. gh pr list --state open
-3. Product UI = vendor/exchange-tree/05_Web_Front @ http://localhost:8090 — NOT apps/web.
+PRE-FLIGHT (first 60s — anti-drift + free-work discovery)
+1. git fetch origin && git log -1 --oneline origin/main
+2. gh pr list --state open  (then path-intersect before any claim: gh pr view N --json files)
+3. Product UI = vendor/coinexchange/05_Web_Front @ http://localhost:8090 — NOT apps/web.
 4. Never implement on main checkout — worktree only.
-5. Read if present: docs/START-HERE.md · docs/VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md · docs/WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md
-6. Owners: Nitro=FE/shell · Denon=spine + his open PRs (no dual-edit) · Shehzad @shehzad002=M1–M7 (babysit only, never implement).
-7. Do not rebuild vendored exchange kit screens from scratch. Do not re-lie custody screens that are CustodyNotBuilt.
-8. Chat memory is not high water. Tip + open PRs + docs on main are.
+5. Swarm / free work (mandatory when go all-out / AFK / parallel): docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md
+6. Denon product queue (tip): docs/REGROUP-2026-08-03.md · retire ADR: docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md
+7. FE residual: docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md · tooling/frontend/residual-register.json · pnpm frontend:residual
+8. Also if present: docs/START-HERE.md · docs/VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md · docs/WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md · docs/REDUNDANT-VS-PORT-2026-08-03.md
+9. Owners: Nitro=FE/shell · Denon=spine + his open PRs (no dual-edit) · Shehzad @shehzad002=M1–M7 (babysit only).
+10. Specs live on main AND on open PRs AND on branches without PRs (e.g. origin/fix/shell-*) — fetch branches; prefer finish over re-implement.
+11. Board Clear SCOREBOARD is AGENT-COMPLETE — do not re-open agent Done bars; free = REGROUP + residual craft + hygiene + babysit + reports.
+12. Chat memory is not high water. Tip + open PRs + docs/branches are.
 
 WHO I AM
 - Non-technical director / vibe coder. Infer unspoken needs. Plain language only; I verify outcomes, not diffs.
@@ -29,7 +33,7 @@ WHAT THIS IS
 - Board: docs/TRACKER.md · README status band · `pnpm tracker ready`.
 - **Truth layers (FINISHED law — do not collapse):** docs/COORDINATION-TRUTH-LAYERS.md · finish audit docs/COORDINATION-FINISH-AUDIT-2026-08-02.md — product free/owner/done = features.mjs; campaign next = BOARD-CLEAR-NEXT; session dual-build = LIVE-LANES + open PRs; code = git. Tracker touch = mountain events only (not every craft PR). No new Approve gates / PR caps / CI tax. Agents re-audit via finish-audit checklist; Nitro never updates boards by hand.
 - **ACTIVE CAMPAIGN — BOARD CLEAR (finish product table; full autonomy):** docs/BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-ENGINEERING-STANDARD.md · docs/BOARD-CLEAR-SUBAGENT-PROTOCOL.md · docs/BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md · docs/BOARD-CLEAR-GO-READINESS.md · docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md · docs/BOARD-CLEAR-PROCESS-LOOPS.md · docs/BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md · docs/BOARD-CLEAR-SCOREBOARD.md · docs/BOARD-CLEAR-NEXT.md · docs/BOARD-CLEAR-DECISION-LOG.md · **paste GO:** docs/BOARD-CLEAR-AUTONOMOUS-RUN.md. Anti-slop + evidence-before-claims. UI = vendor :8090. #289 rebase. Locked B. Done/Cut only; no continue; no residual theater.
-- Plain map: docs/START-HERE.md · Anti-drift: docs/VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md · docs/ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md · Ownership: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Older residual mode: docs/NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md (superseded when Board Clear docs present) · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Security: docs/SECURITY-WHEN-PLAIN.md · Collab: CONTRIBUTING.md.
+- Plain map: docs/START-HERE.md · **All-out swarms:** docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md · **Denon queue:** docs/REGROUP-2026-08-03.md · Anti-drift: docs/VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md · docs/ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md · Ownership: docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md · Lanes: docs/LIVE-LANES.md · Trust: docs/PEACE-OF-MIND-AUDIT-CURRENT.md · Collab: CONTRIBUTING.md.
 - Stream A / UI: docs/NITRO-STREAM-A-CLAIM.md · #83 · docs/FRONTEND-STATE-OF-TRUTH-2026-07-31.md under Board Clear web.terminal Done bar · apps/web not product (docs/REDUNDANT-VS-PORT-2026-08-03.md).
 - **Stream A AFK drain (vendor :8090 honesty/craft):** docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md · AOS · residual-register.json (`afk_safe`) · GO-READY · paste AFK block below when leaving laptop.
 - History boards (not live law): docs/DENON-NITRO-PARALLEL-BOARD-2026-07-30.md · docs/POST-MERGE-RESIDUAL-AFTER-86.md.
@@ -108,6 +112,17 @@ Historical Denon↔Nitro board (file territory era): `docs/DENON-NITRO-PARALLEL-
 
 ---
 
+## All-out swarms GO (paste when you want insane parallel)
+
+```
+Go all-out swarms. Law: docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md + docs/REGROUP-2026-08-03.md + residual-register + ownership matrix + LIVE-LANES.
+PRE-FLIGHT discovery §1 of swarm orient. Specs = main docs + open PRs + branches (git fetch). Spawn all path-clean free claims in parallel: REGROUP RP1–RP5, shell branch landers, AFK residual writers, reports R00–R07, babysit partners, research readers.
+No dual-edit Denon open PR files. No Shehzad implement. No invent money/depth. No depth UI until WS integrity free. Worktrees. pnpm verify. Tokens unlimited for productive width+depth+reports.
+I am AFK. Peace scoreboard when free residual empty or blocked-only.
+```
+
+---
+
 ## Why this prompt is shaped this way
 
 | Piece                    | Unspoken need it covers                                     |
@@ -122,3 +137,6 @@ Historical Denon↔Nitro board (file territory era): `docs/DENON-NITRO-PARALLEL-
 | Hard bans in the prompt  | Cold agents still hit the money bar                         |
 | CI thrift line           | Cut waste without capping parallel ship speed               |
 | AFK-ACTIVE + afk_safe    | Leave laptop without continue-loops or auth-stalls          |
+| SWARM orient + REGROUP   | Cold agents find Denon queue + free work on GitHub          |
+| Branch + PR discovery    | Specs not only on main — fetch branches too                 |
+| Anti-swarm negatives     | Claim / worktree / collision so insane N does not thrash    |
