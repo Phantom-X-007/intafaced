@@ -27,28 +27,19 @@ export default {
         myInnovationOrderList: "/uc/activity/getmyorders", // launchpad order list
         myInnovationMinings: "/uc/miningorder/my-minings" // fetch my miners
     },
-    market: { //spot market endpoints
-        ws: '/market/market-ws',
-        thumb: '/market/symbol-thumb',
-        thumbTrend: '/market/symbol-thumb-trend',
-        plate: '/market/exchange-plate', //order-book snapshot
-        platemini: '/market/exchange-plate-mini', //10 levels
-        platefull: '/market/exchange-plate-full', //all levels
-        trade: '/market/latest-trade', //recent-trades snapshot
-        symbolInfo: '/market/symbol-info',
-        coinInfo: '/market/coin-info',
-        indexData: "/market/index_info"
-    },
-    exchange: { //spot order endpoints
-        orderAdd: '/exchange/order/add', //place order
-        current: '/exchange/order/current', //open orders
-        history: '/exchange/order/history', //order history
-        detail: '/exchange/order/detail/', //order detail
-        favorFind: '/exchange/favor/find', //list favourites
-        favorAdd: '/exchange/favor/add', //add favourite
-        favorDelete: '/exchange/favor/delete', //remove favourite
-        orderCancel: '/exchange/order/cancel' //cancel order
-    },
+    // REMOVED: the `market` and `exchange` groups.
+    //
+    // Every one of them addressed the retired Java market and exchange services
+    // (ADR 2026-08-02, Option B). Nothing references them any more: market data
+    // comes from `GET /api/v1/markets|tickers|orderbook|trades|ohlcv` and orders
+    // from `/api/v1/orders*`, all through svc-edge — see `config/intafaced.js`.
+    //
+    // They are deleted rather than left as an unused table because a constant
+    // named `orderAdd` is an invitation. The next person wiring an order form
+    // finds it, uses it, and ships a Buy button that posts into a dead host —
+    // which is exactly how these screens came to be pointed at a retired
+    // backend in the first place. The remaining groups below are still live for
+    // the OTC, CMS and account screens that have not been moved yet.
     otc: {
         coin: '/otc/coin/all', //supported coins
         advertise: '/otc/advertise/page-by-unit', //fetch ads

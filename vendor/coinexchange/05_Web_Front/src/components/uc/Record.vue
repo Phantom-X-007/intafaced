@@ -10,34 +10,40 @@
         <div class="rightarea-con">
           <div class="form-group">
             <span>
-              {{$t('uc.finance.record.start_end')}}: 
+              {{$t('uc.finance.record.start_end')}}:
             </span>
-            <DatePicker v-model="rangeDate" @on-change="changedate" format="yyyy-MM-dd" type="daterange" style="width: 200px;margin-right:30px;" @on-clear="clear"></DatePicker>
-            <!--<DatePicker v-model="startDate" type="date"></DatePicker>-->
-            <!--<span>-->
-            <!--{{$t('uc.finance.record.to')}}-->
-            <!--</span>-->
-            <!--<DatePicker v-model="endDate" type="date"></DatePicker>-->
+            <DatePicker v-model="rangeDate" format="yyyy-MM-dd" type="daterange" style="width: 200px;margin-right:30px;" @on-clear="clear"></DatePicker>
             <span>{{$t('uc.finance.record.symbol')}}: </span>
-            <Select v-model="coinType" style="width:100px;margin-right:30px;" @on-change="getAddrList" clearable:placeholder="$t('common.pleaseselect')">
-              <Option v-for="item in coinList" :value="item.unit" :key="item.unit">{{ item.unit }}</Option>
-            </Select>
-            <span>
-              {{$t('uc.finance.record.operatetype')}}: 
-            </span>
-            <Select v-model="recordValue" clearable style="width:200px" @on-change="getType" :placeholder="$t('common.pleaseselect')">
-              <Option v-for="item in recordType" :value="item.value" :key="item.value">{{ item.label }}</Option>
+            <Select v-model="symbol" style="width:140px;margin-right:30px;" clearable :placeholder="$t('common.pleaseselect')">
+              <Option v-for="item in marketList" :value="item.symbol" :key="item.symbol">{{ item.symbol }}</Option>
             </Select>
             <Button type="warning" @click="queryOrder" style="padding: 6px 30px;margin-left:10px;background-color:#00c2a8;border-color:#00c2a8">{{$t('uc.finance.record.search')}}</Button>
           </div>
+
           <div class="order-table">
-            <p class="ix-empty" role="note" style="padding: 4px 0 8px; margin: 0;">
-              Venue exchange wallet ledger only — not the platform TypeScript ledger books.
-            </p>
-            <p v-if="listError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ listError }}</p>
-            <p v-else-if="!loading && listReachable && tableRecord.length === 0" class="ix-empty">No transactions yet</p>
-            <Table v-if="!listError" :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="tableRecord" :disabled-hover="true" :loading="loading"></Table>
-            <div style="margin: 10px;overflow: hidden" v-if="!listError">
+            <p class="ix-source">{{ $t('intafaced.trade.source') }} · <code>GET /api/v1/account/trades</code></p>
+
+            <!--
+              WHAT THIS SCREEN CAN AND CANNOT SHOW, SAID UP FRONT.
+
+              The vendor's version listed seventeen kinds of balance movement —
+              deposits, withdrawals, transfers, referral awards, dividends, red
+              envelopes. Sixteen of them describe flows this platform does not
+              have, and the one that remains (trade) is the only one with a real
+              record behind it. Rather than keep a type filter whose options all
+              return nothing, the screen shows the record that exists and names
+              the one that does not.
+            -->
+            <div class="ix-note" style="margin-bottom:12px;">
+              <strong>{{ $t('intafaced.trade.recordScopeTitle') }}</strong>
+              <div style="margin-top:6px;">{{ $t('intafaced.trade.recordScopeBody') }}</div>
+            </div>
+
+            <p v-if="listError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" ref="listError">{{ listError }}</p>
+            <p v-else-if="loading" class="ix-empty ix-empty-loading">Loading fills…</p>
+            <p v-else-if="listReachable && tableRecord.length === 0" class="ix-empty">{{ $t('intafaced.trade.noMyTrades') }}</p>
+            <Table v-if="!listError && !loading && tableRecord.length" :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="pagedRecord" :disabled-hover="true"></Table>
+            <div style="margin: 10px;overflow: hidden" v-if="!listError && tableRecord.length > pageSize">
               <div style="float: right;">
                 <Page :total="total" :pageSize="pageSize" show-total :current="page" @on-change="changePage" id="record_pages"></Page>
               </div>
@@ -49,6 +55,29 @@
   </div>
 </template>
 <script>
+/**
+ * MY FILLS — `GET /api/v1/account/trades` on svc-trade through svc-edge.
+ *
+ * Was `POST /uc/asset/transaction/all` on the retired Java ucenter (ADR
+ * 2026-08-02, Option B), which read a seventeen-type balance-movement log.
+ *
+ * WHY THE SCREEN NARROWED RATHER THAN BROKE. Sixteen of those seventeen types
+ * — deposit, withdrawal, transfer, referral award, dividend, vote, red envelope
+ * — describe flows that do not exist on this platform. There is no endpoint to
+ * repoint them at and nothing behind them to report. The honest move is to
+ * serve the one record that is real (your fills, from `trade.fills`) and say
+ * plainly which record is missing, rather than keep a type dropdown whose every
+ * option resolves to an empty table that reads like "you have no deposits"
+ * instead of "deposits do not exist here".
+ *
+ * `symbol` and `since` are REAL server-side filters on this route. The range end
+ * is not a parameter and is applied to the rows we hold.
+ *
+ * Every amount and fee is a decimal string and is printed as one.
+ */
+import { rest, REASON } from "@/config/intafaced.js";
+import ixTrade from "@js/ix-trade.js";
+
 export default {
   components: {},
   data() {
@@ -56,83 +85,9 @@ export default {
       loading: true,
       listReachable: false,
       listError: "",
-      ordKeyword: "",
       rangeDate: "",
-      startTime: "",
-      endTime: "",
-      recordValue: "",
-      recordType: [
-        {
-          value: 0,
-          label: this.$t("uc.finance.record.charge")
-        },
-        {
-          value: 1,
-          label: this.$t("uc.finance.record.pickup")
-        },
-        {
-          value: 2,
-          label: this.$t("uc.finance.record.transaccount")
-        },
-        {
-          value: 3,
-          label: this.$t("uc.finance.record.exchange")
-        },
-        {
-          value: 4,
-          label: this.$t("uc.finance.record.otcbuy")
-        },
-        {
-          value: 5,
-          label: this.$t("uc.finance.record.otcsell")
-        },
-        {
-          value: 6,
-          label: this.$t("uc.finance.record.activityaward")
-        },
-        {
-          value: 7,
-          label: this.$t("uc.finance.record.promotionaward")
-        },
-        {
-          value: 8,
-          label: this.$t("uc.finance.record.dividend")
-        },
-        {
-          value: 9,
-          label: this.$t("uc.finance.record.vote")
-        },
-        {
-          value: 10,
-          label: this.$t("uc.finance.record.handrecharge")
-        },
-        {
-          value: 11,
-          label: this.$t("uc.finance.record.match")
-        },
-        {
-          value: 12,
-          label: this.$t("uc.finance.record.activitybuy")
-        },
-        {
-          value: 13,
-          label: this.$t("uc.finance.record.ctcbuy")
-        },
-        {
-          value: 14,
-          label: this.$t("uc.finance.record.ctcsell")
-        },
-        {
-          value: 15,
-          label: this.$t("uc.finance.record.redout")
-        },
-        {
-          value: 16,
-          label: this.$t("uc.finance.record.redin")
-        }
-      ],
-      coinList: [],
-      coinType: "",
+      symbol: "",
+      marketList: [],
       pageSize: 10,
       page: 1,
       total: 0,
@@ -140,265 +95,190 @@ export default {
     };
   },
   created: function() {
-    this.getList(this.page);
-    this.getAddrList();
+    this.getList();
+    this.getMarkets();
+  },
+  computed: {
+    /** The PLATFORM session token. Not the vendored shell login. */
+    ixToken() {
+      return this.$store.getters.ixToken;
+    },
+    /** Paging is local — the service answered with one page of fills. */
+    pagedRecord() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.tableRecord.slice(start, start + this.pageSize);
+    },
+    tableColumnsRecord() {
+      const that = this;
+      return [
+        {
+          title: this.$t("uc.finance.record.chargetime"),
+          align: "center",
+          width: 170,
+          render(h, params) {
+            return h("span", {}, that.dateform(params.row.time));
+          }
+        },
+        {
+          title: this.$t("uc.finance.record.symbol"),
+          align: "center",
+          key: "symbol"
+        },
+        {
+          title: this.$t("exchange.direction"),
+          align: "center",
+          width: 80,
+          render(h, params) {
+            const row = params.row;
+            return h(
+              "span",
+              { attrs: { class: row.direction.toLowerCase() } },
+              row.direction === "BUY" ? that.$t("exchange.buyin") : that.$t("exchange.sellout")
+            );
+          }
+        },
+        {
+          /* Maker or taker. It decides which fee rate applied, so hiding it
+             would leave the fee column unexplainable. */
+          title: this.$t("intafaced.trade.liquidityColumn"),
+          align: "center",
+          width: 90,
+          render(h, params) {
+            return h("span", {}, params.row.liquidity || "—");
+          }
+        },
+        {
+          title: this.$t("exchange.price"),
+          align: "center",
+          render(h, params) {
+            return h("span", { attrs: { title: params.row.price } }, that.decimal(params.row.price));
+          }
+        },
+        {
+          title: this.$t("uc.finance.record.num"),
+          align: "center",
+          render(h, params) {
+            return h("span", { attrs: { title: params.row.amount } }, that.decimal(params.row.amount));
+          }
+        },
+        {
+          title: this.$t("uc.finance.trade.turnover"),
+          align: "center",
+          render(h, params) {
+            return h("span", { attrs: { title: params.row.turnover } }, that.decimal(params.row.turnover));
+          }
+        },
+        {
+          /* ONE fee column, not three. The vendor showed "fee due", "fee
+             discount" and "fee charged"; our fill record carries the fee that
+             was actually charged and the asset it was charged in. Deriving the
+             other two from it would be arithmetic we made up. */
+          title: this.$t("uc.finance.record.realfee"),
+          align: "center",
+          render(h, params) {
+            const row = params.row;
+            const fee = that.decimal(row.fee);
+            return h(
+              "span",
+              { attrs: { title: row.fee } },
+              fee === "—" ? fee : fee + (row.feeAsset ? " " + row.feeAsset : "")
+            );
+          }
+        }
+      ];
+    }
   },
   methods: {
-    changedate() {
-      if (this.rangeDate[0]) {
-        this.startTime = this.dateform(this.rangeDate[0]);
-        this.endTime = this.dateform(this.rangeDate[1]);
-      }
+    /** A decimal string, verbatim. Null/absent is unknown and prints as a dash. */
+    decimal(value) {
+      if (value === null || value === undefined || value === "") return "—";
+      return String(value);
     },
     changePage(pageindex) {
-      this.page=pageindex;
-      this.getList(this.page);
+      this.page = pageindex;
     },
     queryOrder() {
-      if (this.rangeDate.length == 0) {
-        this.$Message.error("Select a date range");
-        return;
-      } else {
-        try {
-          this.page=1;
-          this.getList(this.page);
-        } catch (ex) {
-          this.$Message.error("Select a date range");
-          return;
-        }
-      }
+      this.page = 1;
+      this.getList();
     },
-    getAddrList() {
-      this.$http
-        .post(this.host + "/uc/withdraw/support/coin/info")
-        .then(response => {
-          var resp = response.body;
-          if (resp && resp.code == 0 && resp.data && resp.data.length > 0) {
-            this.coinList = resp.data;
-            if (this.coinType) {
-              this.coinType = this.coinType;
-            }
-          } else if (resp && resp.message) {
-            this.$Message.error(resp.message);
-          }
-        })
-        .catch(() => {
-          /* Coin filter is optional; do not invent options. */
-        });
-    },
-    getType() {
-      // console.log(this.recordValue);
+    clear() {
+      this.rangeDate = "";
     },
     dateform(time) {
-      var date = new Date(time);
-      var y = date.getFullYear();
-      var m = date.getMonth() + 1;
-      m = m < 10? "0" + m: m;
-      var d = date.getDate();
-      d = d < 10? "0" + d: d;
-      var h = date.getHours();
-      h = h < 10? "0" + h: h;
-      var minute = date.getMinutes();
-      var second = date.getSeconds();
-      minute = minute < 10? "0" + minute: minute;
-      second = second < 10? "0" + second: second;
-      return y + "-" + m + "-" + d + " " + h + ":" + minute + ":" + second;
+      if (time === null || time === undefined || time === "") return "—";
+      const date = new Date(Number(time));
+      if (isNaN(date.getTime())) return "—";
+      const pad = n => (n < 10 ? "0" + n : String(n));
+      return (
+        date.getFullYear() +
+        "-" + pad(date.getMonth() + 1) +
+        "-" + pad(date.getDate()) +
+        " " + pad(date.getHours()) +
+        ":" + pad(date.getMinutes()) +
+        ":" + pad(date.getSeconds())
+      );
     },
-    getList(pageNo) {
-      // tableWithdraw
-      let memberId = 0;
-!this.$store.getters.isLogin && this.$router.push("/login");
-      this.$store.getters.isLogin && (memberId = this.$store.getters.member.id);
-      let startTime = "";
-      let endTime = "";
-      let symbol = "";
-      let type = "";
-      this.startTime && (startTime = this.startTime);
-      this.endTime && (endTime = this.endTime);
-      this.coinType && (symbol = this.coinType);
-      if(this.recordValue == 0 || this.recordValue){
-        type = this.recordValue;
-      }
-      // this.recordValue!="" || this.recordValue!=undefined && (type = this.recordValue);
+
+    /** The symbol filter is populated from the venue's own listing table. */
+    getMarkets() {
+      rest("/markets").then(res => {
+        if (!res.ok || !Array.isArray(res.data)) return;
+        this.marketList = res.data.map(m => ({ symbol: m.symbol }));
+      });
+    },
+
+    getList() {
       this.loading = true;
       this.listReachable = false;
       this.listError = "";
-      let params = {
-        pageNo: pageNo,
-        pageSize: this.pageSize,
-        startTime,
-        endTime,
-        memberId,
-        symbol,
-        type
-      };
-      this.$http
-        .post(this.host + "/uc/asset/transaction/all", params)
-        .then(response => {
-          var resp = response.body;
-          if (resp && resp.code == 0) {
-            if (resp.data) {
-              let trueData = resp.data;
-              this.total = trueData.totalElements || 0;
-              this.tableRecord = trueData.content || [];
-            } else {
-              this.total = 0;
-              this.tableRecord = [];
-            }
-            this.listReachable = true;
-            this.loading = false;
-          } else {
-            /* Failed fetch must not look like an empty history. */
-            this.listError =
-              "Transaction history did not answer — list is unknown, not empty.";
-            this.loading = false;
-            if (resp && resp.message) this.$Message.error(resp.message);
-          }
-        })
-        .catch(() => {
-          this.listError =
-            "Transaction history service did not respond — list is unknown, not empty.";
-          this.loading = false;
-        });
+      this.tableRecord = [];
+
+      const start = this.rangeDate && this.rangeDate[0] ? new Date(this.rangeDate[0]).getTime() : NaN;
+      const query = { limit: 500 };
+      if (this.symbol) query.symbol = this.symbol;
+      if (!isNaN(start)) query.since = start;
+
+      rest("/account/trades", { token: this.ixToken, query: query }).then(res => {
+        this.loading = false;
+        if (!res.ok) {
+          this.listError = this.refusalCopy(res);
+          this.$nextTick(() => {
+            const el = this.$refs.listError;
+            if (el && typeof el.focus === "function") el.focus();
+          });
+          return;
+        }
+        // A 200 with [] is the venue saying "you have none" — a real answer.
+        this.listReachable = true;
+        this.tableRecord = this.applyEndFilter(ixTrade.toDeskFills(res.data));
+        this.total = this.tableRecord.length;
+        const maxPage = Math.max(1, Math.ceil(this.total / this.pageSize));
+        if (this.page > maxPage) this.page = maxPage;
+      });
     },
-    clear() {
-      this.startTime = "";
-      this.endTime = "";
-    }
-  },
-  computed: {
-    tableColumnsRecord() {
-      let columns = [];
-      var that = this;
-      columns.push({
-        title: this.$t("uc.finance.record.chargetime"),
-        align: "center",
-        width: 160,
-        key:"createTime"
-      });
-      columns.push({
-        title: this.$t("uc.finance.record.type"),
-        render: function(h, params) {
-          let str = "";
-          let type = params.row.type;
-          if (type == 0) {
-            str = that.$t("uc.finance.record.charge");
-          } else if (type == 1) {
-            str = that.$t("uc.finance.record.pickup");
-          } else if (type == 2) {
-            str = that.$t("uc.finance.record.transaccount");
-          } else if (type == 3) {
-            str = that.$t("uc.finance.record.exchange");
-          } else if (type == 4) {
-            str = that.$t("uc.finance.record.otcbuy");
-          } else if (type == 5) {
-            str = that.$t("uc.finance.record.otcsell");
-          } else if (type == 6) {
-            str = that.$t("uc.finance.record.activityaward");
-          } else if (type == 7) {
-            str = that.$t("uc.finance.record.promotionaward");
-          } else if (type == 8) {
-            str = that.$t("uc.finance.record.dividend");
-          } else if (type == 9) {
-            str = that.$t("uc.finance.record.vote");
-          } else if (type == 10) {
-            str = that.$t("uc.finance.record.handrecharge");
-          } else if (type == 11) {
-            str = that.$t("uc.finance.record.match");
-          } else if (type == 12) {
-            str = that.$t("uc.finance.record.activitybuy");
-          } else if (type == 13) {
-            str = that.$t("uc.finance.record.ctcbuy");
-          } else if (type == 14) {
-            str = that.$t("uc.finance.record.ctcsell");
-          } else if (type == 15) {
-            str = that.$t("uc.finance.record.redout");
-          } else if (type == 16) {
-            str = that.$t("uc.finance.record.redin");
-          }else {
-            str = "Deposit";
-          }
-          return h("div", str, "");
-        }
-      });
-      columns.push({
-        title: this.$t("uc.finance.record.symbol"),
-        align: "center",
-        key:"symbol"
-        // render: (h, param) => {
-        // return h("div", {}, param.row._source.symbol);
-        // }
-      });
-      columns.push({
-        // title: this.$t("uc.finance.record.num"),
-        title: this.$t("uc.finance.record.num"), //Credited amount
-        align: "center",
-        render(h, params) {
-          return h(
-            "span",
-            {
-              attrs: {
-                title: params.row.amount
-              }
-            },
-            that.toFloor(params.row.amount || "0")
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.finance.record.shouldfee"), //"Fee due"
-        align: "center",
-        render(h, params) {
-          return h(
-            "span",
-            {
-              attrs: {
-                title: params.row.fee
-              }
-            },
-            that.toFloor(params.row.fee || "0")
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.finance.record.discountfee"), //"Fee discount"
-        align: "center",
-        render(h, params) {
-          return h(
-            "span",
-            {
-              attrs: {
-                title: params.row.discountFee
-              }
-            },
-            that.toFloor(params.row.discountFee || "0")
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.finance.record.realfee"), //"Fee charged"
-        align: "center",
-        render(h, params) {
-          return h(
-            "span",
-            {
-              attrs: {
-                title: params.row.realFee
-              }
-            },
-            that.toFloor(params.row.realFee || "0")
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.finance.record.status"),
-        // key: "status",
-        align: "center",
-        render: (h, params) => {
-          return h("div", that.$t("uc.finance.record.finish"), "");
-        }
-      });
-      return columns;
+
+    /** The range end is not a parameter on this route, so it applies here. */
+    applyEndFilter(rows) {
+      const end = this.rangeDate && this.rangeDate[1] ? new Date(this.rangeDate[1]).getTime() : NaN;
+      if (isNaN(end)) return rows;
+      return rows.filter(row => Number(row.time) <= end + 86399999);
+    },
+
+    /** Name the refusal. Never collapse a 403 into an empty table. */
+    refusalCopy(res) {
+      if (res.reason === REASON.UNAUTHORIZED) {
+        return "Not signed in to the platform session — your fills are unknown, not empty.";
+      }
+      if (res.reason === REASON.SCOPE_DENIED) {
+        return "This session does not carry the trade:read scope — fills are unknown, not empty.";
+      }
+      if (res.reason === REASON.UNREACHABLE) {
+        return "The venue did not answer — fills are unknown, not empty.";
+      }
+      if (res.reason === REASON.BAD_SYMBOL) {
+        return "That market is not listed on this venue.";
+      }
+      return (res.message || "The venue refused the request.") + " — fills are unknown, not empty.";
     }
   }
 };

@@ -66,18 +66,39 @@
       </FormItem>
     </Form>
     <div class="table">
+      <p class="ix-source">{{ $t('intafaced.trade.source') }} · <code>GET /api/v1/orders/open</code></p>
       <p v-if="ordersError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ ordersError }}</p>
-      <p v-else-if="!loading && ordersReachable && orders.length === 0" class="ix-empty">No open orders</p>
-      <Table v-if="!ordersError" :no-data-text="$t('common.nodata')" :columns="columns " :data="orders" :loading="loading"></Table>
-      <div class="page" v-if="!ordersError">
+      <p v-else-if="loading" class="ix-empty ix-empty-loading">Loading open orders…</p>
+      <p v-else-if="ordersReachable && orders.length === 0" class="ix-empty">{{ $t('intafaced.trade.noOpenOrders') }}</p>
+      <Table v-if="!ordersError && !loading && orders.length" :no-data-text="$t('common.nodata')" :columns="columns " :data="pagedOrders"></Table>
+      <div class="page" v-if="!ordersError && orders.length > pageSize">
         <Page :total="total" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
       </div>
     </div>
   </div>
 </template>
 <script>
+/**
+ * OPEN ORDERS — `GET /api/v1/orders/open` on svc-trade through svc-edge.
+ *
+ * Was `POST /exchange/order/personal/current` on the retired Java exchange
+ * (ADR 2026-08-02, Option B). Presentation is unchanged; only the wire moved.
+ *
+ * FILTERING IS CLIENT-SIDE, AND THAT IS THE HONEST CHOICE HERE. `/orders/open`
+ * takes only `?symbol=` — it has no `since`, no type and no side parameter,
+ * because an open-order set is small by definition and the service returns all
+ * of it. So the date/type/direction controls filter the rows we already hold.
+ * The alternative was to keep sending parameters the service ignores, which
+ * would show a filtered-looking table that was never filtered.
+ *
+ * The session that matters here is the PLATFORM session (`ixToken`), not the
+ * vendored shell login. They are different sessions and this screen says so
+ * rather than showing an empty table to someone who is signed in to the shell.
+ */
 var moment = require("moment");
 import expandRow from "@components/exchange/expand.vue";
+import { rest, REASON } from "@/config/intafaced.js";
+import ixTrade from "@js/ix-trade.js";
 
 export default {
   components: { expandRow },
@@ -155,18 +176,16 @@ export default {
           }
         },
         {
+          /* A market order has no price. Rendering it through toFloor() would
+             print "0", which reads as a real limit price of zero. */
           title: self.$t("exchange.price"),
           key: "price",
           render(h, params) {
-            return h(
-              "span",
-              {
-                attrs: {
-                  title: params.row.price
-                }
-              },
-              self.toFloor(params.row.price)
-);
+            const row = params.row;
+            if (row.type === "MARKET_PRICE") {
+              return h("span", {}, self.$t("exchange.marketprice"));
+            }
+            return h("span", { attrs: { title: row.price } }, self.decimal(row.price));
           }
         },
         {
@@ -175,13 +194,9 @@ export default {
           render(h, params) {
             return h(
               "span",
-              {
-                attrs: {
-                  title: params.row.amount
-                }
-              },
-              self.toFloor(params.row.amount)
-);
+              { attrs: { title: params.row.amount } },
+              self.decimal(params.row.amount)
+            );
           }
         },
         {
@@ -190,28 +205,22 @@ export default {
           render(h, params) {
             return h(
               "span",
-              {
-                attrs: {
-                  title: params.row.tradedAmount
-                }
-              },
-              self.toFloor(params.row.tradedAmount)
-);
+              { attrs: { title: params.row.tradedAmount } },
+              self.decimal(params.row.tradedAmount)
+            );
           }
         },
         {
+          /* `cost` is null when the venue cannot say what quote actually moved.
+             Null prints as a dash — "unknown" is not "nothing". */
           title: self.$t("uc.finance.trade.turnover"),
           key: "turnover",
           render(h, params) {
             return h(
               "span",
-              {
-                attrs: {
-                  title: params.row.turnover
-                }
-              },
-              self.toFloor(params.row.turnover)
-);
+              { attrs: { title: params.row.turnover } },
+              self.decimal(params.row.turnover)
+            );
           }
         },
         {
@@ -249,6 +258,15 @@ export default {
   computed:{
     lang: function() {
       return this.$store.state.lang;
+    },
+    /** The PLATFORM session token. Not the vendored shell login. */
+    ixToken: function() {
+      return this.$store.getters.ixToken;
+    },
+    /** Client-side page over rows we already hold in full. */
+    pagedOrders: function() {
+      var start = (this.pageNo - 1) * this.pageSize;
+      return this.orders.slice(start, start + this.pageSize);
     }
   },
   watch: {
@@ -267,9 +285,9 @@ export default {
     timeFormat: function(tick) {
       return moment(tick).format("HH:mm:ss");
     },
+    /* Paging is local — the service returned every open order in one answer. */
     loadDataPage(data) {
       this.pageNo = data;
-      this.getHistoryOrder();
     },
     handleSubmit() {
       this.pageNo = 1;
@@ -283,72 +301,89 @@ export default {
         date: ""
       };
     },
+    /** A decimal string, verbatim. Null/absent is unknown and prints as a dash. */
+    decimal(value) {
+      if (value === null || value === undefined || value === "") return "—";
+      return String(value);
+    },
+
     getHistoryOrder() {
-      // Open orders — fail must not look like "no open orders"
+      // An unreachable venue must never look like "no open orders".
       this.loading = true;
       this.ordersReachable = false;
       this.ordersError = "";
-      const { symbol, type, direction, date: rangeDate } = this.formItem,
-        startTime = new Date(rangeDate[0]).getTime() || "",
-        endTime = new Date(rangeDate[1]).getTime() || "";
-      let params = {};
-      if (symbol) params.symbol = symbol;
-      if (direction) params.direction = direction;
-      if (type) params.type = type;
-      if (startTime) params.startTime = startTime;
-      if (endTime) params.endTime = endTime;
-      params.pageNo = this.pageNo;
-      params.pageSize = this.pageSize;
-      var that = this;
       this.orders = [];
-      this.$http
-.post(this.host + "/exchange/order/personal/current", params)
-.then(response => {
-          var resp = response.body;
-          let rows = [];
-          if (resp && Array.isArray(resp.content)) {
-            this.total = resp.totalElements || 0;
-            if (resp.content.length > 0) {
-              for (var i = 0; i < resp.content.length; i++) {
-                var row = resp.content[i];
-                row.price =
-                  row.type == "MARKET_PRICE"
-? that.$t("exchange.marketprice")
-: row.price;
-                rows.push(row);
-              }
-            }
-            this.orders = rows;
-            this.ordersReachable = true;
-            this.loading = false;
-          } else {
-            this.ordersError =
-              "Order service did not answer — open orders are unknown, not empty.";
-            this.loading = false;
-          }
-        })
-        .catch(() => {
-          this.ordersError =
-            "Order service did not respond — open orders are unknown, not empty.";
-          this.loading = false;
-        });
+
+      const symbol = this.formItem.symbol;
+      rest("/orders/open", {
+        token: this.ixToken,
+        query: symbol ? { symbol: symbol } : null
+      }).then(res => {
+        this.loading = false;
+        if (!res.ok) {
+          this.ordersError = this.refusalCopy(res);
+          return;
+        }
+        // A 200 with [] is the venue saying "you have none" — a real answer.
+        this.ordersReachable = true;
+        this.orders = this.applyFilters(ixTrade.toDeskOrders(res.data));
+        this.total = this.orders.length;
+        const maxPage = Math.max(1, Math.ceil(this.total / this.pageSize));
+        if (this.pageNo > maxPage) this.pageNo = maxPage;
+      });
     },
+
+    /**
+     * The controls `/orders/open` cannot express, applied to rows we hold in
+     * full. Filtering here rather than pretending the service did it.
+     */
+    applyFilters(rows) {
+      const { type, direction, date: rangeDate } = this.formItem;
+      const start = rangeDate && rangeDate[0] ? new Date(rangeDate[0]).getTime() : NaN;
+      const end = rangeDate && rangeDate[1] ? new Date(rangeDate[1]).getTime() : NaN;
+      const wantSide = direction === "0" ? "BUY" : direction === "1" ? "SELL" : "";
+      return rows.filter(row => {
+        if (type && row.type !== type) return false;
+        if (wantSide && row.direction !== wantSide) return false;
+        if (!isNaN(start) && Number(row.time) < start) return false;
+        // The picker gives midnight; include the whole end day.
+        if (!isNaN(end) && Number(row.time) > end + 86399999) return false;
+        return true;
+      });
+    },
+
+    /** Name the refusal. Never collapse a 403 into an empty table. */
+    refusalCopy(res) {
+      if (res.reason === REASON.UNAUTHORIZED) {
+        return "Not signed in to the platform session — your open orders are unknown, not empty.";
+      }
+      if (res.reason === REASON.SCOPE_DENIED) {
+        return "This session does not carry the trade:read scope — open orders are unknown, not empty.";
+      }
+      if (res.reason === REASON.UNREACHABLE) {
+        return "The venue did not answer — open orders are unknown, not empty.";
+      }
+      if (res.reason === REASON.BAD_SYMBOL) {
+        return "That market is not listed on this venue.";
+      }
+      return (res.message || "The venue refused the request.") +
+        " — open orders are unknown, not empty.";
+    },
+
+    /** Symbols come from the venue's own listing table. */
     getSymbol() {
-      this.$http
-        .post(this.host + this.api.market.thumb, {})
-        .then(response => {
-          var resp = response.body;
-          if (resp && resp.length > 0) {
-            this.symbol = resp;
-          }
-        })
-        .catch(() => {
-          // Market list unknown — leave prior symbols; do not invent pairs.
+      rest("/markets").then(res => {
+        if (!res.ok || !Array.isArray(res.data)) {
+          // Leave prior symbols; never invent pairs.
           if (!this.symbol || !this.symbol.length) {
             this.$Message.error("Market list unavailable — symbols unknown, not empty.");
           }
-        });
+          return;
+        }
+        this.symbol = res.data.map(m => ({ symbol: m.symbol }));
+      });
     },
+
     cancel(orderId) {
       if (this.cancellingId) return;
       this.$Modal.confirm({
@@ -356,27 +391,24 @@ export default {
         onOk: () => {
           if (this.cancellingId) return;
           this.cancellingId = orderId;
-          this.$http
-            .post(this.host + this.api.exchange.orderCancel + "/" + orderId, {})
-            .then(response => {
-              this.cancellingId = null;
-              var resp = response.body;
-              if (resp && resp.code == 0) {
-                this.getHistoryOrder();
-              } else {
-                this.$Notice.error({
-                  title: this.$t("exchange.tip"),
-                  desc: (resp && resp.message) || "Cancel failed"
-                });
-              }
-            })
-            .catch(() => {
-              this.cancellingId = null;
-              this.$Notice.error({
+          rest("/orders/" + encodeURIComponent(orderId), {
+            method: "DELETE",
+            token: this.ixToken
+          }).then(res => {
+            this.cancellingId = null;
+            if (res.ok) {
+              this.$Notice.success({
                 title: this.$t("exchange.tip"),
-                desc: "Venue did not respond — order not cancelled."
+                desc: this.$t("intafaced.trade.cancelled")
               });
+              this.getHistoryOrder();
+              return;
+            }
+            this.$Notice.error({
+              title: this.$t("exchange.tip"),
+              desc: ixTrade.orderFailureMessage(res, "cancel")
             });
+          });
         }
       });
     },

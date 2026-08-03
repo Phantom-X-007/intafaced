@@ -67,17 +67,31 @@
       </FormItem>
     </Form>
     <div class="table">
+      <p class="ix-source">{{ $t('intafaced.trade.source') }} · <code>GET /api/v1/orders/closed</code></p>
       <p v-if="ordersError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ ordersError }}</p>
-      <p v-else-if="!loading && ordersReachable && orders.length === 0" class="ix-empty">No order history</p>
-      <Table v-if="!ordersError" :no-data-text="$t('common.nodata')" :columns="columns" :data="orders" :loading="loading"></Table>
-      <div class="page" v-if="!ordersError">
+      <p v-else-if="loading" class="ix-empty ix-empty-loading">Loading order history…</p>
+      <p v-else-if="ordersReachable && orders.length === 0" class="ix-empty">{{ $t('intafaced.trade.noOrderHistory') }}</p>
+      <Table v-if="!ordersError && !loading && orders.length" :no-data-text="$t('common.nodata')" :columns="columns" :data="pagedOrders"></Table>
+      <div class="page" v-if="!ordersError && orders.length > pageSize">
         <Page :total="total" :pageSize="pageSize" :current="pageNo" @on-change="loadDataPage"></Page>
       </div>
     </div>
   </div>
 </template>
 <script>
+/**
+ * ORDER HISTORY — `GET /api/v1/orders/closed` on svc-trade through svc-edge.
+ *
+ * Was `POST /exchange/order/personal/history` on the retired Java exchange
+ * (ADR 2026-08-02, Option B). Presentation unchanged; only the wire moved.
+ *
+ * The session that matters is the PLATFORM session (`ixToken`), not the
+ * vendored shell login — they are different sessions, and a reader signed in to
+ * one gets a named refusal rather than a blank table.
+ */
 var moment = require("moment");
+import { rest, REASON } from "@/config/intafaced.js";
+import ixTrade from "@js/ix-trade.js";
 import expandRow from "@components/exchange/expand.vue";
 
 export default {
@@ -155,18 +169,16 @@ export default {
           }
         },
         {
+          /* A market order has no price. toFloor() would print "0", which
+             reads as a real limit price of zero. */
           title: self.$t("exchange.price"),
           key: "price",
           render(h, params) {
-            return h(
-              "span",
-              {
-                attrs: {
-                  title: params.row.price
-                }
-              },
-              self.toFloor(params.row.price)
-);
+            const row = params.row;
+            if (row.type === "MARKET_PRICE") {
+              return h("span", {}, self.$t("exchange.marketprice"));
+            }
+            return h("span", { attrs: { title: row.price } }, self.decimal(row.price));
           }
         },
         {
@@ -175,13 +187,9 @@ export default {
           render(h, params) {
             return h(
               "span",
-              {
-                attrs: {
-                  title: params.row.amount
-                }
-              },
-              self.toFloor(params.row.amount)
-);
+              { attrs: { title: params.row.amount } },
+              self.decimal(params.row.amount)
+            );
           }
         },
         {
@@ -190,27 +198,20 @@ export default {
           render(h, params) {
             return h(
               "span",
-              {
-                attrs: {
-                  title: params.row.tradedAmount
-                }
-              },
-              self.toFloor(params.row.tradedAmount)
-);
+              { attrs: { title: params.row.tradedAmount } },
+              self.decimal(params.row.tradedAmount)
+            );
           }
         },
         {
+          /* Null cost = the venue cannot say what quote moved. Dash, not zero. */
           title: self.$t("uc.finance.trade.turnover"),
           key: "turnover",
           render(h, params) {
             return h(
               "span",
-              {
-                attrs: {
-                  title: params.row.turnover
-                }
-              },
-              self.toFloor(params.row.turnover)
+              { attrs: { title: params.row.turnover } },
+              self.decimal(params.row.turnover)
 );
           }
         },
@@ -221,25 +222,18 @@ export default {
           render: (h, params) => {
             const status = params.row.status;
             if (status == "COMPLETED") {
-              return h(
-                "span",
-                {
-                  style: {
-                    color: "#00c2a8"
-                  }
-                },
-                self.$t("exchange.finished")
-);
+              return h("span", { style: { color: "#00c2a8" } }, self.$t("exchange.finished"));
             } else if (status == "CANCELED") {
-              return h(
-                "span",
-                {
-                  style: {
-                    color: "#00c2a8"
-                  }
-                },
-                self.$t("exchange.canceled")
-);
+              return h("span", { style: { color: "#00c2a8" } }, self.$t("exchange.canceled"));
+            } else if (status == "REJECTED") {
+              /* The venue refused this order. Showing "--" (or folding it into
+                 "cancelled") hides a refusal behind a word that implies the
+                 user did it. */
+              return h("span", { style: { color: "#f0ad4e" } }, "Rejected");
+            } else if (status == "EXPIRED") {
+              return h("span", {}, "Expired");
+            } else if (status) {
+              return h("span", {}, String(status));
             } else {
               return h("span", {}, "--");
             }
@@ -252,6 +246,14 @@ export default {
   computed:{
     lang: function() {
       return this.$store.state.lang;
+    },
+    /** The PLATFORM session token. Not the vendored shell login. */
+    ixToken: function() {
+      return this.$store.getters.ixToken;
+    },
+    pagedOrders: function() {
+      var start = (this.pageNo - 1) * this.pageSize;
+      return this.orders.slice(start, start + this.pageSize);
     }
   },
   watch: {
@@ -267,9 +269,14 @@ export default {
     dateFormat: function(tick) {
       return moment(tick).format("YYYY-MM-DD HH:mm:ss");
     },
+    /** A decimal string, verbatim. Null/absent is unknown and prints as a dash. */
+    decimal(value) {
+      if (value === null || value === undefined || value === "") return "—";
+      return String(value);
+    },
+    /* Paging is local — the service answered with one page of history. */
     loadDataPage(data) {
       this.pageNo = data;
-      this.getHistoryOrder();
     },
     handleSubmit() {
       this.pageNo = 1;
@@ -284,69 +291,79 @@ export default {
       };
     },
     getHistoryOrder() {
-      // Order history — fail must not look like "no history"
+      // An unreachable venue must never look like "no history".
       this.loading = true;
       this.ordersReachable = false;
       this.ordersError = "";
-      const { symbol, type, direction, date: rangeDate } = this.formItem,
-        startTime = new Date(rangeDate[0]).getTime() || "",
-        endTime = new Date(rangeDate[1]).getTime() || "";
-      let params = {};
-      if (symbol) params.symbol = symbol;
-      if (direction) params.direction = direction;
-      if (type) params.type = type;
-      if (startTime) params.startTime = startTime;
-      if (endTime) params.endTime = endTime;
-      params.pageNo = this.pageNo;
-      params.pageSize = this.pageSize;
-      var that = this;
       this.orders = [];
-      this.$http
-.post(this.host + "/exchange/order/personal/history", params)
-.then(response => {
-          var resp = response.body;
-          let rows = [];
-          if (resp && Array.isArray(resp.content)) {
-            this.total = resp.totalElements || 0;
-            if (resp.content.length > 0) {
-              for (var i = 0; i < resp.content.length; i++) {
-                var row = resp.content[i];
-                row.price =
-                  row.type == "MARKET_PRICE"
-? that.$t("exchange.marketprice")
-: row.price;
-                rows.push(row);
-              }
-            }
-            this.orders = rows;
-            this.ordersReachable = true;
-            this.loading = false;
-          } else {
-            this.ordersError =
-              "Order service did not answer — order history is unknown, not empty.";
-            this.loading = false;
-          }
-        })
-        .catch(() => {
-          this.ordersError =
-            "Order service did not respond — order history is unknown, not empty.";
-          this.loading = false;
-        });
+
+      const { symbol, date: rangeDate } = this.formItem;
+      // `since` IS served by /orders/closed, so the range start is a real
+      // server-side filter. The range end, type and side are not parameters on
+      // this route and are applied to the rows below rather than sent and
+      // ignored.
+      const start = rangeDate && rangeDate[0] ? new Date(rangeDate[0]).getTime() : NaN;
+      const query = { limit: 500 };
+      if (symbol) query.symbol = symbol;
+      if (!isNaN(start)) query.since = start;
+
+      rest("/orders/closed", { token: this.ixToken, query: query }).then(res => {
+        this.loading = false;
+        if (!res.ok) {
+          this.ordersError = this.refusalCopy(res);
+          return;
+        }
+        // A 200 with [] is the venue saying "you have none" — a real answer.
+        this.ordersReachable = true;
+        this.orders = this.applyFilters(ixTrade.toDeskOrders(res.data));
+        this.total = this.orders.length;
+        const maxPage = Math.max(1, Math.ceil(this.total / this.pageSize));
+        if (this.pageNo > maxPage) this.pageNo = maxPage;
+      });
     },
+
+    /** The controls `/orders/closed` cannot express, applied to rows we hold. */
+    applyFilters(rows) {
+      const { type, direction, date: rangeDate } = this.formItem;
+      const end = rangeDate && rangeDate[1] ? new Date(rangeDate[1]).getTime() : NaN;
+      const wantSide = direction === "0" ? "BUY" : direction === "1" ? "SELL" : "";
+      return rows.filter(row => {
+        if (type && row.type !== type) return false;
+        if (wantSide && row.direction !== wantSide) return false;
+        if (!isNaN(end) && Number(row.time) > end + 86399999) return false;
+        return true;
+      });
+    },
+
+    /** Name the refusal. Never collapse a 403 into an empty table. */
+    refusalCopy(res) {
+      if (res.reason === REASON.UNAUTHORIZED) {
+        return "Not signed in to the platform session — your order history is unknown, not empty.";
+      }
+      if (res.reason === REASON.SCOPE_DENIED) {
+        return "This session does not carry the trade:read scope — order history is unknown, not empty.";
+      }
+      if (res.reason === REASON.UNREACHABLE) {
+        return "The venue did not answer — order history is unknown, not empty.";
+      }
+      if (res.reason === REASON.BAD_SYMBOL) {
+        return "That market is not listed on this venue.";
+      }
+      return (res.message || "The venue refused the request.") +
+        " — order history is unknown, not empty.";
+    },
+
+    /** Symbols come from the venue's own listing table. */
     getSymbol() {
-      this.$http
-        .post(this.host + this.api.market.thumb, {})
-        .then(response => {
-          var resp = response.body;
-          if (resp && resp.length > 0) {
-            this.symbol = resp;
-          }
-        })
-        .catch(() => {
+      rest("/markets").then(res => {
+        if (!res.ok || !Array.isArray(res.data)) {
           if (!this.symbol || !this.symbol.length) {
             this.$Message.error("Market list unavailable — symbols unknown, not empty.");
           }
-        });
+          return;
+        }
+        this.symbol = res.data.map(m => ({ symbol: m.symbol }));
+      });
     },
     updateLangData(){
       this.columns[1].title = this.$t("exchange.time");

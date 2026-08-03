@@ -2,9 +2,29 @@
    INTAFACED — lawful market chart (lightweight-charts, Apache-2.0)
    ----------------------------------------------------------------------------
    Replaces the unlicensed Charting Library that arrived with the vendored
-   shell. History and live bars use the same /market/history + STOMP topics
-   the terminal already serves; empty backend → empty chart frame, not a
-   red error dialog.
+   shell.
+
+   HISTORY NOW COMES FROM `GET /api/v1/ohlcv/:symbol` on svc-trade, not from
+   `/market/history` on the retired Java market service (ADR 2026-08-02).
+
+   THE WIRE FORMAT DID NOT CHANGE, and that is worth stating: both surfaces
+   publish `[timestampMs, open, high, low, close, volume]`, so this file swapped
+   a URL and a query, not a parser.
+
+   WHAT DID CHANGE IS THE MEANING OF "NO BARS". `_loadHistory` used to resolve
+   the same value for an empty series and a failed request — the comment even
+   said "empty frame is success" — so a chart whose data source was down looked
+   exactly like a market that had never traded. Those are opposite facts. It now
+   resolves one of three states and the desk renders a different sentence for
+   each:
+
+     'ok'      bars were returned and drawn
+     'empty'   the venue answered, and this market has never traded
+     'failed'  the venue did not answer, so we do not know
+
+   Our candles are aggregated from the real taker fill tape. A bucket with no
+   fills is absent rather than zero-filled, so a gap in the series is a genuine
+   gap and never a fabricated print at price 0.
    ========================================================================== */
 
 var $ = require('jquery');
@@ -23,9 +43,28 @@ var RES_TO_SECONDS = {
   '1M': 2592000
 };
 
+/**
+ * The desk's resolution ids → the timeframes `timeframeSchema` accepts.
+ * An id with no mapping is not charted at all rather than silently charted at a
+ * different timeframe — a chart labelled 1W drawn from 1m candles is worse than
+ * no chart, because nothing on screen reveals the mismatch.
+ */
+var RES_TO_TIMEFRAME = {
+  '1': '1m',
+  '5': '5m',
+  '15': '15m',
+  '30': '30m',
+  '60': '1h',
+  '1D': '1d',
+  '1W': '1w'
+};
+
+var MAX_CANDLES = 500;
+
 function KlineChart(options) {
   this.hostEl = options.hostEl;
-  this.baseUrl = options.baseUrl; // e.g. host + '/market'
+  /* Base of the CCXT REST surface, e.g. '/api/v1'. */
+  this.baseUrl = options.baseUrl;
   this.symbol = options.symbol;
   this.resolution = options.resolution || '60';
   this.stompClient = options.stompClient || null;
@@ -38,9 +77,10 @@ function KlineChart(options) {
   this._lastBar = null;
 }
 
+/** Resolves 'ok' | 'empty' | 'failed'. See _loadHistory. */
 KlineChart.prototype.mount = function () {
   if (!this.hostEl || this._disposed) {
-    return Promise.resolve(false);
+    return Promise.resolve('failed');
   }
   this.hostEl.innerHTML = '';
   this._chart = createChart(this.hostEl, {
@@ -78,10 +118,10 @@ KlineChart.prototype.mount = function () {
   };
   window.addEventListener('resize', this._onResize);
 
-  return this._loadHistory().then(function (ok) {
-    if (self._disposed) return false;
+  return this._loadHistory().then(function (status) {
+    if (self._disposed) return 'failed';
     self._subscribeLive();
-    return ok;
+    return status;
   });
 };
 
@@ -128,44 +168,65 @@ KlineChart.prototype.dispose = function () {
   this._lastBar = null;
 };
 
+/**
+ * Load candle history. Resolves 'ok' | 'empty' | 'failed' — never a boolean,
+ * because two of those three used to share one value and they are not the same
+ * fact. See the header.
+ */
 KlineChart.prototype._loadHistory = function () {
   var self = this;
-  if (!this._series) return Promise.resolve(false);
+  if (!this._series) return Promise.resolve('failed');
+
+  var timeframe = RES_TO_TIMEFRAME[this.resolution];
+  if (!timeframe) {
+    // The venue does not serve this timeframe. Draw nothing and say so rather
+    // than substituting one it does serve.
+    this._series.setData([]);
+    this._lastBar = null;
+    return Promise.resolve('failed');
+  }
 
   var to = Date.now();
-  var spanSec = (RES_TO_SECONDS[this.resolution] || 3600) * 400;
+  var spanSec = (RES_TO_SECONDS[this.resolution] || 3600) * MAX_CANDLES;
   var from = to - spanSec * 1000;
 
   return new Promise(function (resolve) {
     $.ajax({
       type: 'GET',
-      url: self.baseUrl + '/history',
+      // The slash in a unified symbol must be encoded or it becomes a path
+      // separator and reaches a route that does not exist.
+      url: self.baseUrl + '/ohlcv/' + encodeURIComponent(self.symbol),
       dataType: 'json',
       data: {
-        symbol: self.symbol,
-        from: from,
-        to: to,
-        resolution: self.resolution
+        timeframe: timeframe,
+        since: from,
+        limit: MAX_CANDLES
       }
     })
       .done(function (response) {
         if (self._disposed || !self._series) {
-          resolve(false);
+          resolve('failed');
           return;
         }
-        var data = response || [];
+        var data = Array.isArray(response) ? response : [];
         var bars = [];
         for (var i = 0; i < data.length; i++) {
           var item = data[i];
-          // API: [timeMs, open, high, low, close, volume]
+          if (!item || item.length < 5) continue;
+          // Wire: [timestampMs, open, high, low, close, volume]. The timestamp
+          // is the bucket's OPEN time (CCXT convention) — labelling a candle
+          // with its close time shifts the whole series by one bar.
           var t = item[0];
           if (t > 1e12) t = Math.floor(t / 1000);
+          // OHLC arrive as decimal strings. lightweight-charts is a pixel
+          // renderer and needs numbers; this is the last possible moment and
+          // the value is never sent back anywhere.
           bars.push({
             time: t,
-            open: item[1],
-            high: item[2],
-            low: item[3],
-            close: item[4]
+            open: parseFloat(item[1]),
+            high: parseFloat(item[2]),
+            low: parseFloat(item[3]),
+            close: parseFloat(item[4])
           });
         }
         bars.sort(function (a, b) {
@@ -182,12 +243,14 @@ KlineChart.prototype._loadHistory = function () {
         self._series.setData(deduped);
         self._lastBar = deduped.length ? deduped[deduped.length - 1] : null;
         if (self._chart) self._chart.timeScale().fitContent();
-        resolve(true);
+        // An empty series is a true answer: this market has never traded.
+        resolve(deduped.length ? 'ok' : 'empty');
       })
       .fail(function () {
+        // We do NOT know that there are no candles — we know we did not hear.
         if (self._series) self._series.setData([]);
         self._lastBar = null;
-        resolve(true); // empty frame is success
+        resolve('failed');
       });
   });
 };

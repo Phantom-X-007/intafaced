@@ -179,9 +179,24 @@
   </div>
 </template>
 <script>
-var Stomp = require("stompjs");
-var SockJS = require("sockjs-client");
+/**
+ * THE MARKET LIST — `GET /api/v1/markets` + `GET /api/v1/tickers` on svc-trade
+ * through svc-edge. Was `POST /market/symbol-thumb-trend` plus a SockJS/STOMP
+ * feed on the retired Java market service (ADR 2026-08-02, Option B).
+ *
+ * WHAT A READER SEES TODAY, AND WHY IT IS NOT A BUG. Our ticker reports `null`
+ * for every 24h rollup — high, low, volume, change — because no windowed
+ * aggregation job exists, and `null` for last price on a market that has never
+ * traded. Those columns print a dash. A market list showing a column of green
+ * +0.00% would state that sixteen markets are flat, which is a claim about
+ * price movement we have no data to make.
+ *
+ * The table is a snapshot taken on load and does not tick; the live feed is a
+ * separate service and is not wired here. See the note where startWebsock was.
+ */
 var moment = require("moment");
+import { rest } from "@/config/intafaced.js";
+import ixTrade from "@js/ix-trade.js";
 import SvgLine from "@components/exchange/SvgLine.vue";
 import $ from "@js/jquery.min.js";
 
@@ -762,20 +777,20 @@ export default {
           }
         ]
       },
+      /* Rebuilt from the real listing once /markets answers — see rebuildTabs.
+         Starts with the watchlist alone rather than three hardcoded quote tabs,
+         so nothing claims a USDT/BTC/ETH market exists before the venue says so. */
       indexBtn: [
         {
-          text: this.$t("service.CUSTOM")
-        },
-        {
-          text: this.$t("service.USDT")
-        },
-        {
-          text: this.$t("service.BTC")
-        },
-        {
-          text: this.$t("service.ETH")
+          text: this.$t("intafaced.trade.watchlistTab")
         }
       ],
+      /** Quote assets the venue actually lists, in listing order. */
+      quoteTabs: [],
+      /** Watchlist symbols, local to this browser. Not account state. */
+      localFavorites: [],
+      /** Verbatim refusal text from the venue, when the listing could not load. */
+      marketsMessage: "",
       choseBtn: 0,
       valueCal: 0,
       showArrow: "never",
@@ -821,22 +836,24 @@ export default {
     }
   },
   mounted: function() {
-    this.getCNYRate();
+    this.loadFavorites();
     this.getSymbol();
     //this.initSwiper();
   },
   methods: {
     seachInputChange(){
       this.searchKey = this.searchKey.toUpperCase();
-      if(this.choseBtn == 0){
-          this.dataIndex = this.coins.favor.filter(item => item["symbol"].indexOf(this.searchKey) == 0);
-      }else if(this.choseBtn == 1){
-          this.dataIndex = this.coins.USDT.filter(item => item["symbol"].indexOf(this.searchKey) == 0);
-      }else if(this.choseBtn == 2){
-          this.dataIndex = this.coins.BTC.filter(item => item["symbol"].indexOf(this.searchKey) == 0);
-      }else if(this.choseBtn == 3){
-          this.dataIndex = this.coins.ETH.filter(item => item["symbol"].indexOf(this.searchKey) == 0);
+      var source;
+      if (this.choseBtn === 0) {
+        source = this.coins.favor;
+      } else {
+        var quote = this.quoteTabs[this.choseBtn - 1];
+        source = quote ? this.coins[quote] || [] : [];
       }
+      var key = this.searchKey;
+      this.dataIndex = key
+        ? source.filter(function (item) { return item.symbol.indexOf(key) === 0; })
+        : source;
     },
     initSwiper(){
       var ss = new Swiper ('.swiper-container', {
@@ -865,20 +882,9 @@ export default {
       return str.length > 18? str.slice(0, 18) + "...": str;
     },
     updateLangData() {
-      this.indexBtn = [
-        {
-          text: this.$t("service.CUSTOM")
-        },
-        {
-          text: this.$t("service.USDT")
-        },
-        {
-          text: this.$t("service.BTC")
-        },
-        {
-          text: this.$t("service.ETH")
-        }
-      ];
+      /* Quote-tab labels are asset codes and are not translated; only the
+         watchlist tab has copy, so rebuildTabs() is the whole job here. */
+      this.rebuildTabs();
 
       this.coins.columns[0].title = this.$t("service.favor");
       this.coins.columns[1].title = this.$t("service.COIN");
@@ -946,14 +952,12 @@ export default {
             }
           });
     },
-    getCNYRate() {
-      this.$http
-.post(this.host + "/market/exchange-rate/usd-cny")
-.then(response => {
-          var resp = response.body;
-          this.CNYRate = resp.data;
-        });
-    },
+    /* REMOVED: getCNYRate(). It read `/market/exchange-rate/usd-cny` on the
+       retired Java market service to convert prices into CNY. This platform
+       publishes no FX rate source, so there is nothing to repoint it at — and a
+       fiat conversion computed from a rate we invented is a price, not a
+       decoration. `CNYRate` stays null and every place that used it already
+       guards on it. */
     donwload(type) {
       const title = this.$t("common.tip");
       const content = "<p>" + this.$t("common.expect") + "</p>";
@@ -986,34 +990,16 @@ export default {
     getCoin(symbol) {
       return this.coins._map[symbol];
     },
-    startWebsock() {
-      var stompClient = null;
-      var that = this;
-      var socket = new SockJS(that.host + that.api.market.ws);
-      stompClient = Stomp.over(socket);
-      stompClient.debug = false;
-      stompClient.connect({}, function(frame) {
-        stompClient.subscribe("/topic/market/thumb", function(msg) {
-          var resp = JSON.parse(msg.body);
-          var coin = that.getCoin(resp.symbol);
-          if (coin!= null) {
-            // coin.price = resp.close.toFixed(2);
-            coin.price = resp.close;
-            coin.rose =
-              resp.chg > 0
-? "+" + (resp.chg * 100).toFixed(2) + "%"
-: (resp.chg * 100).toFixed(2) + "%";
-            // coin.close = resp.close.toFixed(2);
-            // coin.high = resp.high.toFixed(2);
-            // coin.low = resp.low.toFixed(2);
-            coin.close = resp.close;
-            coin.high = resp.high;
-            coin.low = resp.low;
-            coin.turnover = parseInt(resp.volume);
-          }
-        });
-      });
-    },
+    /* REMOVED: startWebsock(). It opened a SockJS/STOMP connection to
+       `/market/market-ws` on the retired Java market service and pushed live
+       thumb updates into the table.
+
+       Not repointed, because our live feed is a different protocol on a
+       different service (svc-ws) and wiring it is a piece of work in its own
+       right, not a URL swap. What matters for honesty is what the absence
+       costs: the table is a REST snapshot taken on load and it does not tick.
+       It is not stale-but-live; it is simply a snapshot, and every figure in it
+       was true when the page loaded. Nothing here pretends to stream. */
     round(v, e) {
       var t = 1;
       for (; e > 0; t *= 10, e--);
@@ -1038,129 +1024,145 @@ export default {
     },
     addClass(index) {
       this.choseBtn = index;
-      if (index == 0) {
+      if (index === 0) {
         this.dataIndex = this.coins.favor;
-      } else if (index == 1) {
-        this.dataIndex = this.coins.USDT;
-        this.dataIndex2 = this.coins.USDT2;
-      } else if (index == 2) {
-        this.dataIndex = this.coins.BTC;
-        this.dataIndex2 = this.coins.BTC2;
-      } else if (index == 3) {
-        this.dataIndex = this.coins.ETH;
-        this.dataIndex2 = this.coins.ETH2;
+        return;
       }
+      var quote = this.quoteTabs[index - 1];
+      this.dataIndex = quote ? this.coins[quote] || [] : [];
     },
+
+    /**
+     * The market list — `GET /api/v1/markets` + `GET /api/v1/tickers`.
+     *
+     * Was `POST /market/symbol-thumb-trend` on the retired Java market service.
+     *
+     * TABS ARE BUILT FROM THE LISTING, NOT HARDCODED. The vendor shipped three
+     * fixed tabs (USDT, BTC, ETH). This venue also lists FX — EUR/USD, USD/JPY,
+     * NATGAS/USD — and under fixed tabs those markets are listed, tradable and
+     * invisible, which misrepresents what the venue offers. The quote assets
+     * now come from whatever `/markets` actually returns.
+     */
     getSymbol() {
       this.loading = true;
       this.marketsDown = false;
-      this.$http
-.post(this.host + this.api.market.thumbTrend, {})
-.then(response => {
-          var resp = response.body;
-          if (!Array.isArray(resp)) {
-            this.marketsDown = true;
-            this.loading = false;
-            return;
-          }
-          for (var i = 0; i < resp.length; i++) {
-            var coin = resp[i];
-            coin.price = resp[i].close;
-            coin.rose =
-              resp[i].chg > 0
-? "+" + (resp[i].chg * 100).toFixed(2) + "%"
-: (resp[i].chg * 100).toFixed(2) + "%";
-            coin.coin = resp[i].symbol.split("/")[0];
-            coin.base = resp[i].symbol.split("/")[1];
-            coin.href = (coin.coin + "_" + coin.base).toLowerCase();
-            coin.isFavor = false;
-            this.coins._map[coin.symbol] = coin;
-            if(coin.zone == 0) {
-              this.coins[coin.base].push(coin); // Main
-            }else{
-              this.coins[coin.base+"2"].push(coin); // Launchpad
-            }
-          }
-          if (this.isLogin) {
-            this.getFavor();
-          }
-          this.startWebsock();
-          this.loading = false;
-        }, () => {
+
+      Promise.all([rest("/markets"), rest("/tickers")]).then(results => {
+        var marketsRes = results[0];
+        var tickersRes = results[1];
+        this.loading = false;
+
+        if (!marketsRes.ok || !Array.isArray(marketsRes.data)) {
+          // Unreachable listing ≠ a venue with no markets.
           this.marketsDown = true;
-          this.loading = false;
-        });
-    },
-    // getFavor() {
-    // //list favourites
-    // this.$http
-    //.post(this.host + this.api.exchange.favorFind, {})
-    //.then(response => {
-    // var resp = response.body;
-    // for (var i = 0; i < resp.length; i++) {
-    // var coin = this.getCoin(resp[i].symbol);
-    // this.coins.favor.push(coin);
-    // }
-    // });
-    // },
-    getFavor() {
-      // list favourites()
-      this.$http
-.post(this.host + this.api.exchange.favorFind, {})
-.then(response => {
-          var resp = response.body;
-          this.coins.favor = [];
-          for (var i = 0; i < resp.length; i++) {
-            var coin = this.getCoin(resp[i].symbol);
-            if (coin!= null) {
-              coin.isFavor = true;
-              this.coins.favor.push(coin);
-            }
+          this.marketsMessage = marketsRes.message || "";
+          return;
+        }
+
+        // Tickers may fail on their own. The listing is still true, so the
+        // markets are shown with no price rather than hidden — and a missing
+        // price prints as a dash, never as 0.
+        var tickers = tickersRes.ok && tickersRes.data ? tickersRes.data : {};
+        var rows = ixTrade.toMarketRows(marketsRes.data, tickers);
+
+        var buckets = {};
+        var quotes = [];
+        var map = {};
+        for (var i = 0; i < rows.length; i++) {
+          var row = rows[i];
+          row.price = row.close;
+          row.isFavor = this.localFavorites.indexOf(row.symbol) >= 0;
+          map[row.symbol] = row;
+          if (!buckets[row.base]) {
+            buckets[row.base] = [];
+            quotes.push(row.base);
           }
-        });
+          buckets[row.base].push(row);
+        }
+        quotes.sort();
+
+        this.coins._map = map;
+        for (var q = 0; q < quotes.length; q++) {
+          this.$set(this.coins, quotes[q], buckets[quotes[q]]);
+        }
+        this.quoteTabs = quotes;
+        this.coins.favor = rows.filter(function (r) { return r.isFavor; });
+        this.rebuildTabs();
+        this.addClass(this.choseBtn);
+      });
+    },
+
+    /** Tab labels follow the listing. "Watchlist" stays first and is local. */
+    rebuildTabs() {
+      var tabs = [{ text: this.$t("intafaced.trade.watchlistTab") }];
+      for (var i = 0; i < this.quoteTabs.length; i++) {
+        tabs.push({ text: this.quoteTabs[i] });
+      }
+      this.indexBtn = tabs;
+    },
+    /**
+     * FAVOURITES ARE LOCAL TO THIS BROWSER, AND THE SCREEN SAYS SO.
+     *
+     * The vendor stored them server-side via `/exchange/favor/*` on the retired
+     * Java exchange. Our surface has no favourites endpoint — it is a CCXT
+     * contract, and a watchlist is not part of it.
+     *
+     * localStorage is the honest substitute BECAUSE a watchlist is a display
+     * preference and not money or account state, so losing it on another device
+     * costs nothing and misleads nobody. The label calls it a watchlist rather
+     * than implying it follows the account. Inventing a server round trip that
+     * silently did nothing would have been the alternative, and a star that
+     * un-sets itself on reload is exactly the kind of small lie that teaches a
+     * user not to trust the rest of the screen.
+     */
+    favoritesKey() {
+      return "ix.watchlist.v1";
+    },
+    loadFavorites() {
+      try {
+        var raw = window.localStorage.getItem(this.favoritesKey());
+        var list = raw ? JSON.parse(raw) : [];
+        this.localFavorites = Array.isArray(list) ? list.filter(function (s) { return typeof s === "string"; }) : [];
+      } catch (e) {
+        this.localFavorites = [];
+      }
+    },
+    saveFavorites() {
+      try {
+        window.localStorage.setItem(this.favoritesKey(), JSON.stringify(this.localFavorites));
+      } catch (e) {
+        /* private mode / quota — the watchlist is not worth an error toast */
+      }
     },
     collect(index, row) {
-      if (!this.isLogin) {
-        this.$Message.info(this.$t("common.logintip"));
-        return;
+      if (this.localFavorites.indexOf(row.symbol) < 0) {
+        this.localFavorites.push(row.symbol);
+        this.saveFavorites();
       }
-      var params = {};
-      params["symbol"] = row.symbol;
-      this.$http
-.post(this.host + this.api.exchange.favorAdd, params)
-.then(response => {
-          var resp = response.body;
-          if (resp.code == 0) {
-            this.$Message.info(this.$t("exchange.do_favorite"));
-            this.getCoin(row.symbol).isFavor = true;
-            row.isFavor = true;
-            this.coins.favor.push(row);
-          }
-        });
+      var coin = this.getCoin(row.symbol);
+      if (coin) coin.isFavor = true;
+      row.isFavor = true;
+      if (!this.coins.favor.some(function (r) { return r.symbol === row.symbol; })) {
+        this.coins.favor.push(coin || row);
+      }
+      this.$Message.info(this.$t("exchange.do_favorite"));
     },
     cancelCollect(index, row) {
-      if (!this.isLogin) {
-        this.$Message.info(this.$t("common.logintip"));
-        return;
+      var at = this.localFavorites.indexOf(row.symbol);
+      if (at >= 0) {
+        this.localFavorites.splice(at, 1);
+        this.saveFavorites();
       }
-      var params = {};
-      params["symbol"] = row.symbol;
-      this.$http
-.post(this.host + this.api.exchange.favorDelete, params)
-.then(response => {
-          var resp = response.body;
-          if (resp.code == 0) {
-            this.$Message.info(this.$t("exchange.cancel_favorite"));
-            this.getCoin(row.symbol).isFavor = false;
-            for (var i = 0; i < this.coins.favor.length; i++) {
-              var favorCoin = this.coins.favor[i];
-              if (favorCoin.symbol == row.symbol) {
-                this.coins.favor.splice(i, 1);
-                break;
-              }
-            }
-          }
-        });
+      var coin = this.getCoin(row.symbol);
+      if (coin) coin.isFavor = false;
+      row.isFavor = false;
+      for (var i = 0; i < this.coins.favor.length; i++) {
+        if (this.coins.favor[i].symbol === row.symbol) {
+          this.coins.favor.splice(i, 1);
+          break;
+        }
+      }
+      this.$Message.info(this.$t("exchange.cancel_favorite"));
     }
   }
 };

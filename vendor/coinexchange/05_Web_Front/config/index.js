@@ -152,7 +152,20 @@ module.exports = {
         // Paths
         assetsRoot: path.resolve(__dirname, '../dist'),
         assetsSubDirectory: 'assets',
-        assetsPublicPath: '/static/',
+
+        // '/' AND NOT '/static/'. These two settings have to agree with each
+        // other and with how the built `dist` is served, and they did not:
+        //
+        //   assetsSubDirectory 'assets'  →  files land in  dist/assets/js/…
+        //   assetsPublicPath  '/static/' →  index.html asks for /static/assets/js/…
+        //
+        // nginx serves `dist` at the root, so every script tag 404'd and the
+        // app never booted. `curl /` still returned 200 the whole time, because
+        // index.html is served no matter what — which is exactly why a build
+        // that has never rendered could be declared deployable.
+        //
+        // With '/' the tags read /assets/js/… and resolve against dist/assets/js/….
+        assetsPublicPath: '/',
 
         /**
          * Source Maps

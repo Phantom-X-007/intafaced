@@ -7,18 +7,20 @@
           <header class="ix-money-head">
             <div class="ix-money-totals">
               <span class="ix-money-label">{{$t('uc.finance.money.totalassets')}}</span>
-              <!-- Design bar: empty ≠ zero. Only show $ totals when wallet answered. -->
-              <span v-if="loading" class="ix-empty-loading">Loading…</span>
-              <template v-else-if="walletReachable">
-                <span class="ix-num ix-money-total">${{totalUSDT}}</span>
-                <span class="ix-num ix-money-fiat">≈ ¥{{totalCny}}</span>
-              </template>
-              <span v-else class="ix-dim">— unknown</span>
+              <!--
+                NO FIAT TOTAL. Summing assets into one $ figure needs a price
+                for each of them, and this platform publishes no rate source —
+                our own ticker reports null for every 24h rollup. A total built
+                from prices we invented would be the most confident number on
+                the page and the only fabricated one.
+              -->
+              <span class="ix-dim">{{ $t('intafaced.trade.noTotalValue') }}</span>
             </div>
             <Input class="search ix-money-search" search :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
           </header>
+          <p class="ix-source">{{ $t('intafaced.trade.source') }} · <code>GET /api/v1/account/balance</code></p>
           <p class="ix-dualbook" role="note">
-            <strong>Two books.</strong> Venue exchange wallet only — not the platform ledger books.
+            <strong>{{ $t('intafaced.trade.ledgerNote') }}</strong>
           </p>
           <p
             v-if="walletError"
@@ -27,86 +29,109 @@
             tabindex="-1"
             ref="walletError"
           >{{ walletError }}</p>
-          <p v-else-if="!loading && walletReachable && tableMoneyShow.length === 0" class="ix-empty">No balances yet</p>
+          <p v-else-if="loading" class="ix-empty ix-empty-loading">Loading balances…</p>
+          <p v-else-if="walletReachable && tableMoneyShow.length === 0" class="ix-empty">{{ $t('intafaced.trade.noBalances') }}</p>
           <Table
-            v-if="!walletError"
+            v-if="!walletError && !loading && tableMoneyShow.length"
             class="ix-money-table"
             :columns="tableColumnsMoney"
             :data="tableMoneyShow"
-            :loading="loading"
             :disabled-hover="true"
           ></Table>
         </div>
       </div>
     </div>
-    <Modal v-model="modal" :title="$t('uc.finance.money.match')" @on-ok="matchGCC">
-      <P style="font-weight: bold;padding: 10px 0;">{{$t('uc.finance.money.matchtip1')}}: {{GCCMatchAmount}}</p>
-      <p>
-        <span>{{$t('uc.finance.money.matchtip2')}}: </span>
-        <InputNumber style="width: 150px;" type="text" v-model="matchAmount" :placeholder="$t('uc.finance.money.matchtip2')"></InputNumber>
-      </p>
-    </Modal>
-    <Modal v-model="modal_msg" :title="$t('uc.finance.money.match')">
-      <p>{{match_msg}}</p>
-    </Modal>
+    <!-- The two "match" modals are gone with the flow behind them: they POSTed
+         to `/uc/asset/wallet/match` on the retired ucenter and MOVED VALUE.
+         Only ledger-client moves value (Doctrine §0.6). -->
   </div>
 </template>
 <script>
+/**
+ * BALANCES — `GET /api/v1/account/balance` on svc-trade through svc-edge.
+ *
+ * Was `POST /uc/asset/wallet` on the retired Java ucenter, which read the
+ * `member_wallet` table. Under ADR 2026-08-02 that table becomes a read-only
+ * projection and `ledger.*` is the single book, so this screen now reads the
+ * ledger — via svc-trade's self-only projection, which resolves the owner from
+ * the edge-signed principal and never from anything the browser sends.
+ *
+ * THREE THINGS THIS SCREEN NO LONGER DOES, EACH ON PURPOSE:
+ *
+ *   - No fiat total. Summing assets needs a price per asset and we publish no
+ *     rate source; the old $/¥ headline multiplied balances by `coin.usdRate`
+ *     from the vendor payload, which no longer exists and which we cannot
+ *     honestly replace.
+ *   - No deposit / withdraw buttons. There is no chain custody behind them.
+ *   - No "match" flow. It moved value through ucenter, and value only moves
+ *     through ledger-client (Doctrine §0.6).
+ *
+ * Amounts are decimal strings from the ledger and are printed as strings.
+ * Nothing here parses one into a JS number.
+ */
+import { rest, REASON } from "@/config/intafaced.js";
+import ixTrade from "@js/ix-trade.js";
+
 export default {
   components: {},
   data() {
     return {
-      GCCMatchAmount: 0,
-      matchAmount: 0,
-      modal: false,
-      loginmsg: this.$t("common.logintip"),
       loading: true,
       walletReachable: false,
       walletError: "",
-      ordKeyword: "",
       tableMoney: [],
       tableMoneyShow: [],
-      canMatch: true,
-      modal_msg: false,
-      match_msg: "",
       searchKey: ""
     };
   },
   methods: {
     seachInputChange(){
-      this.tableMoneyShow = this.tableMoney.filter(item => item["coinType"].indexOf(this.searchKey) == 0);
+      this.tableMoneyShow = this.tableMoney.filter(item => item["coinType"].indexOf(this.searchKey.toUpperCase()) == 0);
+    },
+    /** A decimal string, verbatim. Null/absent is unknown and prints as a dash. */
+    decimal(value) {
+      if (value === null || value === undefined || value === "") return "—";
+      return String(value);
     },
     getMoney() {
       this.loading = true;
       this.walletReachable = false;
       this.walletError = "";
-      this.$http
-        .post(this.host + "/uc/asset/wallet")
-        .then(response => {
-          var resp = response.body;
-          if (resp && resp.code == 0) {
-            this.tableMoney = resp.data || [];
-            for (let i = 0; i < this.tableMoney.length; i++) {
-              this.tableMoney[i]["coinType"] = this.tableMoney[i].coin.unit;
-            }
-            this.walletReachable = true;
-            this.tableMoneyShow = this.tableMoney;
-            this.loading = false;
-          } else {
-            /* Failed fetch must not look like $0 — design bar non-negotiable. */
-            this.walletError =
-              "Wallet did not answer — totals are unknown, not zero.";
-            this.loading = false;
-            this.$Message.error(this.loginmsg);
-            this.focusWalletError();
-          }
-        })
-        .catch(() => {
-          this.walletError =
-            "Wallet service did not respond — totals are unknown, not zero.";
-          this.loading = false;
+      rest("/account/balance", { token: this.ixToken }).then(res => {
+        this.loading = false;
+        if (!res.ok) {
+          /* A failed read must never look like $0 — that is the one thing a
+             balance screen can do that costs a user real money. */
+          this.walletError = this.refusalCopy(res);
           this.focusWalletError();
-        });
+          return;
+        }
+        this.walletReachable = true;
+        /* `balances: {}` → no rows. That is the ledger saying this account
+           holds nothing, not a fabricated table of every asset at 0.00. */
+        this.tableMoney = ixTrade.toBalanceRows(res.data).map(row => ({
+          coinType: row.unit,
+          balance: row.free,
+          frozenBalance: row.used,
+          total: row.total
+        }));
+        this.tableMoneyShow = this.tableMoney;
+      });
+    },
+
+    /** Name the refusal. "Unknown" and "zero" are different facts. */
+    refusalCopy(res) {
+      if (res.reason === REASON.UNAUTHORIZED) {
+        return "Not signed in to the platform session — your ledger balances are unknown, not zero.";
+      }
+      if (res.reason === REASON.SCOPE_DENIED) {
+        return "This session does not carry the trade:read scope — balances are unknown, not zero.";
+      }
+      if (res.reason === REASON.UNREACHABLE) {
+        return "The ledger did not answer — balances are unknown, not zero.";
+      }
+      return (res.message || "The service refused the request.") +
+        " — balances are unknown, not zero.";
     },
     focusWalletError() {
       this.$nextTick(() => {
@@ -114,293 +139,68 @@ export default {
         if (el && typeof el.focus === "function") el.focus();
       });
     },
-    getGCCMatchAmount() {
-      this.$http
-.post(this.host + "/uc/asset/wallet/match-check")
-.then(response => {
-          var resp = response.body;
-          if (resp.code == 0) {
-            this.canMatch = true;
-            this.GCCMatchAmount = resp.data;
-          } else {
-            this.canMatch = false;
-            this.match_msg = resp.message;
-            // this.$Message.error(this.loginmsg);
-          }
-          this.showMatchDailog();
-        });
-    },
-    showMatchDailog() {
-      if (this.canMatch) this.modal = true;
-      else this.modal_msg = true;
-    },
-    matchGCC() {
-      if (this.matchAmount <= 0) {
-        this.$Message.warning(this.$t("uc.finance.money.matcherr1"));
-      } else if (this.matchAmount > this.GCCMatchAmount) {
-        this.$Message.warning(this.$t("uc.finance.money.matcherr2"));
-      } else {
-        let params = {};
-        params["amount"] = this.matchAmount;
-        this.$http
-          .post(this.host + "/uc/asset/wallet/match", params)
-          .then(response => {
-            var resp = response.body;
-            if (resp.code == 0) {
-              this.$Message.success(this.$t("uc.finance.money.matchsuccess"));
-              this.GCCMatchAmount = this.GCCMatchAmount - this.matchAmount;
-            } else {
-              this.$Message.error(resp.message);
-            }
-          })
-          .catch(() => {
-            this.$Message.error("Match request failed — network error. Funds not moved.");
-          });
-      }
-    },
-    resetAddress(unit) {
-      this.$Spin.show({
-          render: (h) => {
-              return h('div', [
-                  h('Icon', {
-                      'class': 'demo-spin-icon-load',
-                      props: {
-                          type: 'ios-loading',
-                          size: 18
-                      }
-                  }),
-                  h('div', {style:{
-                      fontSize: "12px",
-                      marginTop: "8px"
-                    }}, this.$t('uc.finance.recharge.gettingaddress'))
-              ])
-          }
-      });
-      var self = this;
-      let params = {};
-      params["unit"] = unit;
-      this.$http
-        .post(this.host + "/uc/asset/wallet/reset-address", params)
-        .then(response => {
-          var resp = response.body;
-          if (resp.code == 0) {
-            setTimeout(function() {
-              self.$Spin.hide();
-              self.$router.push(
-                "/uc/recharge?name=" + unit
-              );
-            }, 3000);
-          } else {
-            this.$Message.error(resp.message);
-            this.$Spin.hide();
-          }
-        })
-        .catch(() => {
-          this.$Message.error("Address reset failed — network error.");
-          this.$Spin.hide();
-        });
-    }
+    /* REMOVED: getGCCMatchAmount / showMatchDailog / matchGCC / resetAddress.
+       Each was a POST to `/uc/asset/wallet/*` on the retired Java ucenter, and
+       three of the four MOVED VALUE. Repointing them was not an option: no
+       endpoint on our surface does what they did, and Doctrine §0.6 puts every
+       balance write behind ledger-client. Leaving buttons that call a dead host
+       would have been worse than removing them — a "Match" that silently does
+       nothing is indistinguishable from one that worked. Deposits and
+       withdrawals are addressed honestly on their own screens. */
   },
   created() {
     this.getMoney();
   },
   computed: {
-    totalUSDT() {
-      let usdtTotal = 0;
-      for (let i = 0; i < this.tableMoney.length; i++) {
-        usdtTotal += (this.tableMoney[i].balance + this.tableMoney[i].frozenBalance) * this.tableMoney[i].coin.usdRate;
-      }
-      return usdtTotal.toFixed(2);
-    },
-    totalCny(){
-      let cnyTotal = 0;
-      for (let i = 0; i < this.tableMoney.length; i++) {
-        cnyTotal += (this.tableMoney[i].balance + this.tableMoney[i].frozenBalance) * this.tableMoney[i].coin.cnyRate;
-      }
-      return cnyTotal.toFixed(2);
+    /** The PLATFORM session token. Not the vendored shell login. */
+    ixToken() {
+      return this.$store.getters.ixToken;
     },
     tableColumnsMoney() {
-      let self = this;
-      let columns = [];
-      columns.push({
-        title: this.$t("uc.finance.money.cointype"),
-        key: "coinType",
-        width: 100,
-        align: "center"
-      });
-      columns.push({
-        title: this.$t("uc.finance.money.balance"),
-        key: "balance",
-        align: "center",
-        render(h, params) {
-          return h(
-            "span",
-            {
-              attrs: {
-                title: params.row.balance
-              }
-            },
-            self.toFloor(params.row.balance || "0")
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.finance.money.frozen"),
-        key: "frozenBalance",
-        align: "center",
-        render(h, params) {
-          return h(
-            "span",
-            {
-              attrs: {
-                title: params.row.frozenBalance
-              }
-            },
-            self.toFloor(params.row.frozenBalance || "0")
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.finance.money.needreleased"),
-        align: "center",
-        render(h, params) {
-          return h(
-            "span",
-            {
-              attrs: {
-                title: params.row.toReleased
-              }
-            },
-            self.toFloor(params.row.toReleased || "0")
-);
-        }
-      });
-      columns.push({
-        title: this.$t("uc.finance.money.operate"),
-        key: "price1",
-        align: "center",
-        render: function(h, params) {
-          var actions = [];
-          if (params.row.coin.canRecharge == 1) {
-            if ( (params.row.address!= null && params.row.address!= "") || (params.row.coin.accountType == 1)) {
-              actions.push(
-                h(
-                  "Button",
-                  {
-                    // ;
-                    props: {
-                      type: "info",
-                      size: "small"
-                    },
-                    on: {
-                      click: function() {
-                        self.$router.push(
-                          "/uc/recharge?name=" + params.row.coin.unit
-);
-                      }
-                    },
-                    style: {
-                      marginRight: "8px"
-                    }
-                  },
-                  self.$t("uc.finance.money.charge")
-)
-);
-            } else {
-              // ;
-              actions.push(
-                h(
-                  "Button",
-                  {
-                    props: {
-                      type: "info",
-                      size: "small"
-                    },
-                    on: {
-                      click: function() {
-                        self.resetAddress(params.row.coin.unit);
-                      }
-                    },
-                    style: {
-                      marginRight: "8px"
-                    }
-                  },
-                  self.$t("uc.finance.money.charge")
-)
-);
-            }
-          }else{
-            actions.push(
-              h(
-                "Button",
-                {
-                  props: {
-                    size: "small",
-                    disabled: true
-                  },
-                  on: {
-                    click: function() {
-
-                    }
-                  },
-                  style: {
-                    marginRight: "8px"
-                  }
-                },
-                self.$t("uc.finance.money.charge")
-)
-);
+      const self = this;
+      return [
+        {
+          title: this.$t('uc.finance.money.cointype'),
+          key: 'coinType',
+          width: 120,
+          align: 'center'
+        },
+        {
+          /* free — spendable right now. */
+          title: this.$t('uc.finance.money.balance'),
+          key: 'balance',
+          align: 'center',
+          render(h, params) {
+            return h('span', { attrs: { title: params.row.balance } }, self.decimal(params.row.balance));
           }
-          if (params.row.coin.canWithdraw == 1) {
-            // ;
-            actions.push(
-              h(
-                "Button",
-                {
-                  props: {
-                    type: "error",
-                    size: "small"
-                  },
-                  on: {
-                    click: function() {
-                      self.$router.push(
-                        "/uc/withdraw?name=" + params.row.coin.unit
-);
-                    }
-                  },
-                  style: {
-                    marginRight: "8px"
-                  }
-                },
-                self.$t("uc.finance.money.pickup")
-)
-);
-          }else{
-            actions.push(
-              h(
-                "Button",
-                {
-                  props: {
-                    size: "small",
-                    disabled: true
-                  },
-                  on: {
-                    click: function() {
-
-                    }
-                  },
-                  style: {
-                    marginRight: "8px"
-                  }
-                },
-                self.$t("uc.finance.money.pickup")
-)
-);
+        },
+        {
+          /* used — hold + escrow + stake + collateral, summed by the service. */
+          title: this.$t('uc.finance.money.frozen'),
+          key: 'frozenBalance',
+          align: 'center',
+          render(h, params) {
+            return h('span', { attrs: { title: params.row.frozenBalance } }, self.decimal(params.row.frozenBalance));
           }
-          return h("p", actions);
+        },
+        {
+          /* free + used. Computed by svc-trade from the ledger rows, not here —
+             adding two decimal strings in JavaScript is exactly the float bug
+             Doctrine §0.3 exists to prevent. */
+          title: self.$t('intafaced.trade.totalColumn'),
+          key: 'total',
+          align: 'center',
+          render(h, params) {
+            return h('span', { attrs: { title: params.row.total } }, self.decimal(params.row.total));
+          }
         }
-      });
-      return columns;
+        /* NO DEPOSIT / WITHDRAW COLUMN. Both routed to Java ucenter endpoints
+           that are retired, and this platform has no chain custody to replace
+           them with (ADR 2026-08-02: wallet RPC adoption is gated on a security
+           review nobody has done). A disabled button implies soon; a button
+           that navigates to a screen which then says nothing works is worse.
+           The deposit and withdrawal screens now state it plainly instead. */
+      ];
     }
   }
 };
