@@ -16,6 +16,29 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Pack 4 — `docs/trk-research-pack-4` (tip freeze re-derive at open)
+
+Academy + agent fleet free rows (status `ready`, no owner). Research only —
+**no** `features.mjs` edit; **no** money invention. Shehzad deps noted as
+babysit blockers, not agent craft.
+
+| Id                      | Title                                       | Spec                                                   |
+| ----------------------- | ------------------------------------------- | ------------------------------------------------------ |
+| `academy.spatial`       | 2D navigable room canvas, VR-ready scene    | [academy.spatial.md](./academy.spatial.md)             |
+| `academy.certs`         | Certifications → XP → real perks            | [academy.certs.md](./academy.certs.md)                 |
+| `academy.ambassadors`   | Residencies, IFC pay, revenue share         | [academy.ambassadors.md](./academy.ambassadors.md)     |
+| `academy.tournaments`   | Seasonal ladders, IFC prize pools           | [academy.tournaments.md](./academy.tournaments.md)     |
+| `academy.paper-trading` | Paper-trading market flag for workbooks     | [academy.paper-trading.md](./academy.paper-trading.md) |
+| `agents.navigator`      | Navigator — tool-calling in user guardrails | [agents.navigator.md](./agents.navigator.md)           |
+| `agents.merchant`       | Merchant agent — approval-rate watch        | [agents.merchant.md](./agents.merchant.md)             |
+| `agents.copy-intel`     | Copy-Intel — writes audited leader stats    | [agents.copy-intel.md](./agents.copy-intel.md)         |
+
+**Hard blockers called in specs:** `agents.merchant` → `pay.routing` (shehzad
+M1); `agents.copy-intel` → `trade.copy` (shehzad M4); ambassadors/tournaments
+prize/pay → ledger recipes + product law (Class M when implemented).
+
+---
+
 ## Pack 2 — `docs/trk-research-pack-2` (tip freeze `c773dafa`)
 
 Re-verify + **blueprint.card** add. Same free rows as pack 1 where still
@@ -70,5 +93,4 @@ useful, do not fork implement plans from conflicting freezes.
 chain.\*, launch.\*, mining.pool, trade.options/forex, ops.affiliates (payout
 money), ops.analytics warehouse, blueprint.attestations / blueprint.ownership
 cascade half, market.\*, agents.scanner product law, venue.aggregation trading
-half, p2p.merchants, ops.compliance (counsel list Class X content),
-agents.navigator / merchant / copy-intel product registration.
+half, p2p.merchants, ops.compliance (counsel list Class X content).
