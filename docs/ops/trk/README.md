@@ -50,6 +50,8 @@ bridge/meme design/Shehzad; compliance list content Class X.
 
 **Chain / launch / market** rows. Research only — several sit on Shehzad protocol
 runway (babysit implement). `venue.aggregation` also in pack 3; one spec file.
+**Deepened 2026-08-04** (`docs/trk-deepen-chain-market`, tip freeze `c7af0849`): all
+eight short packs expanded to long-form code-grounded research (≥120 lines each).
 
 | Id                     | Title                                                | Spec                                                 | Implement note                                       |
 | ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
