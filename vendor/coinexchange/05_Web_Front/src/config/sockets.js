@@ -74,6 +74,22 @@
  * Both tracker rows were `done` when this was written and were corrected to
  * `socket` in the same pass — see tooling/tracker/features.mjs. A socket
  * pointing at a row that claims the thing already ships would be its own lie.
+ *
+ * ── AMENDMENT 2026-08-03 · A THIRD KIND OF GAP: THE ASSERTED ERROR ──────────
+ *
+ * `cms.announcements` was added for the landing announcement strip, and it fails
+ * in a third way again. The eight original screens hung on a dead path. The two
+ * token screens stated rights nobody implements. This one CLAIMS A FAILURE THAT
+ * NEVER HAPPENED: the caller reads an HTML body as if it were the API envelope,
+ * finds no `code`, and raises a red error toast whose body is `resp.message` —
+ * a field that does not exist on an HTML string. The reader gets an error
+ * notification with a title and nothing in it.
+ *
+ * That is worse than the spinner. A spinner says "still working". An empty error
+ * toast asserts that something went wrong and then refuses to say what, which
+ * reads as a fault in the platform the reader is looking at rather than a
+ * capability nobody has built. The socket exists to replace an untrue error with
+ * a true absence.
  */
 
 /**
@@ -85,6 +101,18 @@
  * @property {string|null} tracker Tracker row id planning this, or null.
  * @property {string[]} missing   What does not exist behind svc-edge today.
  * @property {string[]} needed    What would have to be built to turn this on.
+ * @property {string} [strip]     Optional one-line form for a host with no room
+ *                                for the panel (`IxNoSurface` inline). Omitted
+ *                                on every row that has no such host.
+ *
+ * `strip` is the one place this file allows a second phrasing, and it is fenced
+ * for a reason. It must be a STRICT COMPRESSION of `missing[0]` — the same claim,
+ * fewer words — never a softer one. A row states an absence; a one-line form that
+ * quietly became a description of the product would put the two-stories drift
+ * this file exists to prevent into the smallest, most-read surface we have.
+ *
+ * Without it the inline form falls back to `capability`, which names the feature
+ * rather than its absence — true, but read as a heading, not as a gap.
  */
 
 /** @type {Record<string, SocketEntry>} */
@@ -251,6 +279,27 @@ export const SOCKETS = {
             'An executor per proposal kind, each of which crosses a boundary this service does not own: listing reaches svc-trade, curriculum reaches svc-academy, fee_param writes token_params. Those are contract-first changes, not local ones.',
             'For grant: a ledger recipe, because funding a grant moves value and Doctrine §0.6 puts that write in packages/ledger-client and nowhere else. Recipes are an owner carve-out (DIRECTION §3).',
             'Not a status flip. A mutation that marked a proposal passed without enacting it would look to a voter exactly like governance and be none — which is why the gap is stated here instead of being closed cheaply.'
+        ]
+    },
+
+    'cms.announcements': {
+        capability: 'Platform announcements — operator-authored posts, and the three most recent on the landing strip.',
+        deadPath: '/uc/announcement/page · /uc/announcement/more',
+        tracker: null,
+        /* Same claim as missing[0], one line for IxNoSurface inline (landing strip).
+           Matches cms.noticePage.announcementsStrip in en.js — one statement, two homes. */
+        strip: 'No announcements — nothing behind the front door publishes them.',
+        missing: [
+            'No service authors, stores or serves broadcast content. The edge route table (services/svc-edge/src/routes.ts) carries fifteen prefixes and none of them returns an article, so there is no announcement to list.',
+            'The path is not even reached. nginx.conf proxies exactly two prefixes — /api/ to svc-edge and /ws to svc-ws — and everything else falls to `try_files $uri $uri/ /index.html`. `/uc/announcement/page` therefore answers 200 with the shell\'s own HTML document.',
+            'THAT IS WHAT PRODUCED THE EMPTY ERROR TOAST. The caller tests `resp.code == 0` against that HTML string, which is never true, and takes the failure branch — which raises a red notification whose body is `resp.message`, a field an HTML string does not have. The reader is shown an error with a title and no reason.',
+            'svc-notify is the nearest live thing and it is not this one. `notify.list` is a per-user inbox written by services; an announcement board is addressed to everyone and written by an operator. pages/cms/Notice.vue already shows the two as two things rather than renaming one into the other.'
+        ],
+        needed: [
+            'A service that owns broadcast posts — authorship, publish window, locale and ordering — with a public list procedure behind the edge and a route for it.',
+            'A tracker row, before any of that. Nothing in tooling/tracker/features.mjs plans announcements today. The strip is socketed rather than deleted because it promises no money and no entitlement, so the delete rule above does not reach it; it is furniture the shell owns, not a payout nobody can fund.',
+            'Until the service exists the strip states this absence and raises nothing. A client must not report a failure the platform never reported — the toast was an assertion about the running system, made from a parse that could not have succeeded.',
+            'Index.vue residual (RP2 sole owner of that file): stop loadDataPage\'s /uc/announcement fetch and the empty $Notice.error toast; render <IxNoSurface socket-key="cms.announcements" :inline="true" /> in the strip instead.'
         ]
     }
 };
