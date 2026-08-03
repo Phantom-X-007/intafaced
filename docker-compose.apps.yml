@@ -510,7 +510,17 @@ services:
       svc-ledger:
         condition: service_healthy
 
-  # In-app inbox only. No ledger. Push / email / SMS are §13 sockets.
+  # In-app inbox always; email / push / SMS whenever the owner supplies a gateway.
+  #
+  # The six gateway variables below have NO DEFAULT AND NO PLACEHOLDER, which is
+  # the point. Unset, the channel refuses every message by name and the refusal
+  # lands on the delivery row — users still get everything in the inbox. Invented
+  # here, the same channel would fail sends against a URL nobody runs, and the
+  # difference between "not wired" and "broken" would be lost.
+  #
+  # NOTIFY_REQUIRED_CHANNELS is what turns a refusal into a boot failure: in
+  # APP_ENV=staging|prod it must be set, and every channel it lists must have its
+  # pair. See .env.example and docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md.
   svc-notify:
     <<: *app
     container_name: intafaced-svc-notify
@@ -521,6 +531,17 @@ services:
       HTTP_PORT: '4015'
       DATABASE_URL: postgres://svc_notify:svc_notify@postgres:5432/intafaced
       NOTIFY_FANOUT_ENABLED: ${NOTIFY_FANOUT_ENABLED:-true}
+      NOTIFY_OUT_OF_APP_ENABLED: ${NOTIFY_OUT_OF_APP_ENABLED:-true}
+      NOTIFY_EMAIL_GATEWAY_URL: ${NOTIFY_EMAIL_GATEWAY_URL:-}
+      NOTIFY_EMAIL_GATEWAY_TOKEN: ${NOTIFY_EMAIL_GATEWAY_TOKEN:-}
+      NOTIFY_PUSH_GATEWAY_URL: ${NOTIFY_PUSH_GATEWAY_URL:-}
+      NOTIFY_PUSH_GATEWAY_TOKEN: ${NOTIFY_PUSH_GATEWAY_TOKEN:-}
+      NOTIFY_SMS_GATEWAY_URL: ${NOTIFY_SMS_GATEWAY_URL:-}
+      NOTIFY_SMS_GATEWAY_TOKEN: ${NOTIFY_SMS_GATEWAY_TOKEN:-}
+      NOTIFY_REQUIRED_CHANNELS: ${NOTIFY_REQUIRED_CHANNELS:-}
+      NOTIFY_MAX_DELIVERY_ATTEMPTS: ${NOTIFY_MAX_DELIVERY_ATTEMPTS:-3}
+      NOTIFY_GATEWAY_TIMEOUT_MS: ${NOTIFY_GATEWAY_TIMEOUT_MS:-5000}
+      NOTIFY_SMS_MAX_CHARS: ${NOTIFY_SMS_MAX_CHARS:-480}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4015']
     healthcheck: *healthcheck

@@ -6,7 +6,8 @@ import { MemoryDeliveryStore, MemoryTargetStore } from './channel-store.js';
 import { NotifyService } from './notify-service.js';
 import { NotificationDispatcher } from './dispatch.js';
 import { ChannelRegistry, channelsFromEnv } from './channels/registry.js';
-import { GatewayChannel, InAppChannel, UnconfiguredChannel } from './channels/gateway.js';
+import { InAppChannel, UnconfiguredChannel } from './channels/gateway.js';
+import { EmailChannel } from './channels/adapters.js';
 import { ChannelDeliveryError, type NotificationChannel, type OutboundMessage } from './channels/channel.js';
 import { normaliseLocale, renderNotification, renderVerification } from './channels/render.js';
 import { subscribeNotificationEvents } from './events.js';
@@ -18,7 +19,7 @@ import { subscribeNotificationEvents } from './events.js';
  *
  *   · an unconfigured channel reporting success
  *   · a redelivered event sending twice
- *   · a delivery row that says "delivered" when nothing was delivered
+ *   · a delivery row that says "accepted" when nothing accepted it
  *   · a margin call whose failure to reach anybody leaves no record
  *   · copy that ships a key nobody has translated
  */
@@ -135,7 +136,7 @@ describe('channel registry — a channel with no credentials refuses, it does no
       NOTIFY_EMAIL_GATEWAY_URL: 'https://gateway.internal/send',
       NOTIFY_EMAIL_GATEWAY_TOKEN: 'a-token-long-enough-to-pass',
     });
-    expect(reg.get('email')).toBeInstanceOf(GatewayChannel);
+    expect(reg.get('email')).toBeInstanceOf(EmailChannel);
     expect(reg.availableChannels()).toEqual(['inapp', 'email']);
   });
 
@@ -165,7 +166,7 @@ describe('an unconfigured channel never reports success', () => {
     const rows = await h.deliveries.listForNotification(result.notification!.id);
     const emailRow = rows.find((r) => r.channel === 'email')!;
     expect(emailRow.status).toBe('refused');
-    expect(emailRow.deliveredAt).toBeNull();
+    expect(emailRow.acceptedAt).toBeNull();
     // Nothing was attempted, so nothing may claim it was.
     expect(emailRow.attemptedAt).toBeNull();
     expect(emailRow.refusalCode).toBe('channel.not_configured');
@@ -182,7 +183,7 @@ describe('an unconfigured channel never reports success', () => {
       sourceIdempotencyKey: 'fill-1',
     });
 
-    expect(result.dispatch!.outcomes.find((o) => o.channel === 'inapp')).toMatchObject({ status: 'delivered' });
+    expect(result.dispatch!.outcomes.find((o) => o.channel === 'inapp')).toMatchObject({ status: 'accepted' });
     expect(result.dispatch!.retry).toBe(false);
     expect(await h.notify.unreadCount(USER)).toBe(1);
   });
@@ -211,7 +212,7 @@ describe('at-least-once must not mean twice', () => {
     expect(second.inserted).toBe(false);
     expect(email.sent).toHaveLength(1);
     // The redelivery still ran fan-out; the claim is what stopped the second send.
-    expect(second.dispatch!.outcomes.find((o) => o.channel === 'email')).toMatchObject({ status: 'already_delivered' });
+    expect(second.dispatch!.outcomes.find((o) => o.channel === 'email')).toMatchObject({ status: 'already_accepted' });
   });
 
   it('recovers a send lost to a crash between the insert and the transport', async () => {
@@ -260,7 +261,7 @@ describe('retry policy — transient yes, permanent no', () => {
     expect(row.status).toBe('failed');
     // We tried; nobody received it. Both facts, separately.
     expect(row.attemptedAt).not.toBeNull();
-    expect(row.deliveredAt).toBeNull();
+    expect(row.acceptedAt).toBeNull();
   });
 
   it('does not ask for a retry on a 422 — a permanently broken address must not burn the budget', async () => {
@@ -279,7 +280,7 @@ describe('retry policy — transient yes, permanent no', () => {
     expect(result.dispatch!.retry).toBe(false);
     const row = (await h.deliveries.listForNotification(result.notification!.id)).find((r) => r.channel === 'email')!;
     expect(row.status).toBe('abandoned');
-    expect(row.deliveredAt).toBeNull();
+    expect(row.acceptedAt).toBeNull();
   });
 
   it('abandons after the configured attempts rather than retrying forever', async () => {
@@ -328,7 +329,7 @@ describe('a critical notification that reached nobody says so', () => {
     for (const row of rows.filter((r) => r.channel !== 'inapp')) {
       expect(row.status).toBe('refused');
       expect(row.refusalCode).toBe('channel.no_target');
-      expect(row.deliveredAt).toBeNull();
+      expect(row.acceptedAt).toBeNull();
     }
   });
 
@@ -601,72 +602,5 @@ describe('consumers whose producer has not created a stream are reported, not hi
     });
     // Every other consumer still attached — the inbox is not held hostage.
     expect(report.subscriptions).toHaveLength(8);
-  });
-});
-
-describe('the gateway adapter', () => {
-  it('posts an authenticated, idempotency-keyed request and never names a provider', async () => {
-    const calls: Array<{ url: string; init: RequestInit }> = [];
-    const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      calls.push({ url: String(url), init: init ?? {} });
-      return new Response(JSON.stringify({ id: 'gw-1' }), { status: 202 });
-    }) as unknown as typeof fetch;
-
-    const gateway = new GatewayChannel(
-      'email',
-      { url: 'https://gateway.internal/send', token: 'secret-token-value', timeoutMs: 1_000 },
-      fakeFetch,
-    );
-
-    const receipt = await gateway.deliver({
-      notificationId: 'n1',
-      userId: USER,
-      channel: 'email',
-      kind: 'bank.margin_call',
-      severity: 'critical',
-      titleKey: 'notify.bank.margin_call.title',
-      bodyKey: 'notify.bank.margin_call.body',
-      title: 'Margin call on your loan',
-      body: 'Add 0.0415 BTC.',
-      href: '/bank/loans/x',
-      locale: 'en',
-      address: 'borrower@example.com',
-      idempotencyKey: 'n1:email',
-    });
-
-    expect(receipt.reference).toBe('gw-1');
-    const headers = calls[0]!.init.headers as Record<string, string>;
-    expect(headers.authorization).toBe('Bearer secret-token-value');
-    expect(headers['idempotency-key']).toBe('n1:email');
-    expect(JSON.parse(String(calls[0]!.init.body))).toMatchObject({ to: 'borrower@example.com', channel: 'email' });
-  });
-
-  it('treats 5xx as retryable and 4xx as not', async () => {
-    const status = (code: number) =>
-      new GatewayChannel(
-        'sms',
-        { url: 'https://gateway.internal/send', token: 'secret-token-value', timeoutMs: 1_000 },
-        (async () => new Response('nope', { status: code })) as unknown as typeof fetch,
-      );
-
-    const message: OutboundMessage = {
-      notificationId: 'n1',
-      userId: USER,
-      channel: 'sms',
-      kind: 'trade.fill',
-      severity: 'info',
-      titleKey: 'notify.trade.fill.title',
-      bodyKey: 'notify.trade.fill.body',
-      title: 'Order filled',
-      body: 'buy 1 at 2',
-      href: null,
-      locale: 'en',
-      address: '+447700900000',
-      idempotencyKey: 'n1:sms',
-    };
-
-    await expect(status(503).deliver(message)).rejects.toMatchObject({ retryable: true });
-    await expect(status(429).deliver(message)).rejects.toMatchObject({ retryable: true });
-    await expect(status(422).deliver(message)).rejects.toMatchObject({ retryable: false });
   });
 });

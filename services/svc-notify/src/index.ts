@@ -24,7 +24,8 @@ import { subscribeNotificationEvents } from './events.js';
  * `/ready` reports two things that are easy to get wrong and expensive to
  * discover late:
  *
- *   channels          which transports have credentials, and the env vars each
+ *   channels          which transports have credentials, which ones this
+ *                     deployment declared it DEPENDS ON, and the env vars each
  *                     missing one needs. A channel with none is not "off" — it
  *                     refuses every message with a code that lands on the
  *                     delivery record.
@@ -33,6 +34,13 @@ import { subscribeNotificationEvents } from './events.js';
  *                     lost — the durable consumer attaches on a later boot and
  *                     JetStream replays the stream from the start — but it is
  *                     stated rather than left to be noticed.
+ *
+ * WHAT AN OPERATOR WILL NEVER READ HERE
+ *
+ * A required channel that is not wired. `env.ts` refuses to load in that state,
+ * so this file is not reached — see NOTIFY_REQUIRED_CHANNELS. The unavailable
+ * warnings below are therefore only ever about channels the operator chose not
+ * to depend on.
  */
 
 const sql = postgres(env.DATABASE_URL, {

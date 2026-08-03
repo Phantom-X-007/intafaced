@@ -45,12 +45,12 @@ const notificationOutput = z.object({
 
 const deliveryOutput = z.object({
   channel: channelSchema,
-  status: z.enum(['pending', 'delivered', 'refused', 'failed', 'abandoned']),
+  status: z.enum(['pending', 'accepted', 'refused', 'failed', 'abandoned']),
   attempts: z.number().int().nonnegative(),
   /** Non-null means a send was attempted. */
   attemptedAt: z.string().nullable(),
   /** Non-null means a transport accepted it. Two different facts, two columns. */
-  deliveredAt: z.string().nullable(),
+  acceptedAt: z.string().nullable(),
   /** A code, never a sentence — the client renders copy from `@intafaced/i18n`. */
   refusalCode: z.string().nullable(),
 });
@@ -111,7 +111,7 @@ function deliveryToWire(d: DeliveryRecord) {
     status: d.status,
     attempts: d.attempts,
     attemptedAt: d.attemptedAt?.toISOString() ?? null,
-    deliveredAt: d.deliveredAt?.toISOString() ?? null,
+    acceptedAt: d.acceptedAt?.toISOString() ?? null,
     refusalCode: d.refusalCode,
   };
 }

@@ -53,10 +53,10 @@ export const channelTargets = schema.table(
 /**
  * One row per (notification, channel) — the attempt AND the outcome.
  *
- * `attempted_at` and `delivered_at` are separate columns on purpose, and this is
+ * `attempted_at` and `accepted_at` are separate columns on purpose, and this is
  * the single most important line in the schema. "We tried and the gateway was
- * down" (attempted, not delivered) and "we never had an address" (neither) and
- * "the user was told" (both) are three different facts about a margin call, and
+ * down" (attempted, not accepted) and "we never had an address" (neither) and
+ * "a transport took it" (both) are three different facts about a margin call, and
  * a borrower disputing a liquidation is entitled to know which one applies.
  * svc-bank keeps `notified_at` apart from `called_at` for the same reason; this
  * is that discipline one layer out.
@@ -73,10 +73,10 @@ export const deliveries = schema.table(
       .notNull()
       .references(() => notifications.id, { onDelete: 'cascade' }),
     channel: text('channel').$type<'inapp' | 'email' | 'push' | 'sms'>().notNull(),
-    status: text('status').$type<'pending' | 'delivered' | 'refused' | 'failed' | 'abandoned'>().notNull().default('pending'),
+    status: text('status').$type<'pending' | 'accepted' | 'refused' | 'failed' | 'abandoned'>().notNull().default('pending'),
     attempts: integer('attempts').notNull().default(0),
     attemptedAt: timestamp('attempted_at', { withTimezone: true, mode: 'date' }),
-    deliveredAt: timestamp('delivered_at', { withTimezone: true, mode: 'date' }),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true, mode: 'date' }),
     refusalCode: text('refusal_code'),
     detail: text('detail'),
     reference: text('reference'),

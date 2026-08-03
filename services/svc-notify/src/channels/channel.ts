@@ -9,20 +9,35 @@
  *
  * THE THREE OUTCOMES, AND WHY THEY ARE THREE
  *
- *   delivered  The adapter handed the message to its transport and the
- *              transport accepted it. This is the ONLY outcome that may read as
- *              "the user was told", and even it means "accepted for delivery",
- *              which is what we say.
+ *   accepted   The adapter handed the message to its transport and the transport
+ *              ACCEPTED IT FOR DELIVERY. That is the whole claim. It is not
+ *              "received", it is not "read", and no channel in this service ever
+ *              learns either of those — see WHAT "ACCEPTED" DOES NOT MEAN below.
  *   refused    The adapter declined BEFORE attempting anything: no credentials,
- *              no address on file, address never confirmed. Terminal, and the
- *              reason is recorded. A refusal is never a silent drop — the code
- *              is on the delivery row and readable through the API.
+ *              no address on file, address never confirmed, address not routable
+ *              on this channel. Terminal, and the reason is recorded. A refusal
+ *              is never a silent drop — the code is on the delivery row and
+ *              readable through the API.
  *   failed     It was attempted and it did not work. Retryable or not.
  *
- * A design where "refused" and "delivered" are both `void` is how an undelivered
+ * A design where "refused" and "accepted" are both `void` is how an undelivered
  * margin call comes to look like a delivered one. svc-bank already keeps
  * `notifiedAt` separate from `calledAt` for exactly this reason; this is the
  * same discipline one layer out.
+ *
+ * WHAT "ACCEPTED" DOES NOT MEAN — READ THIS BEFORE BUILDING A CLOCK ON IT
+ *
+ * A gateway answering 2xx has taken custody of the message. It has not said the
+ * mail server accepted it, that the handset was reachable, or that a human saw
+ * it. We do not receive delivery receipts and we do not model them, so the
+ * strongest true statement this service can make is "a transport accepted it",
+ * and that is exactly what the status and the column are named.
+ *
+ * The reason this is spelled out rather than assumed: svc-bank stamps a margin
+ * call `notified_at` and starts the liquidation grace clock from it. A clock
+ * that gates somebody's collateral must never be started by a word that means
+ * less than the reader thinks it means. `accepted` is the weakest true word
+ * available, deliberately.
  *
  * PROVIDER NAMES LIVE IN CONFIGURATION, NOT HERE (§0.7). No adapter in this
  * directory names a vendor, and none ever should — the transport is a URL and a
@@ -56,6 +71,16 @@ export type RefusalCode =
   | 'channel.no_target'
   /** An address is registered but was never confirmed. We do not send to unconfirmed addresses. */
   | 'channel.target_unverified'
+  /**
+   * An address is registered and confirmed, but this channel cannot route it —
+   * a phone number that is not E.164, a mailbox with no domain, a device token
+   * of an impossible length.
+   *
+   * Terminal, and separate from `no_target` on purpose: "we have nowhere to send
+   * this" and "what we hold is unusable" are different facts about the same user,
+   * and only the second one is something the user can fix.
+   */
+  | 'channel.target_unroutable'
   /** Out-of-app sending is switched off by the operator. The inbox still fills. */
   | 'channel.disabled'
   /** Attempted the configured maximum times and never succeeded. Terminal by policy. */
