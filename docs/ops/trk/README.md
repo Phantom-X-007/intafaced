@@ -16,6 +16,36 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Pack 6 — solid layer (tip freeze `04f9b1f2`)
+
+Long-form `TRK-*.md` research for free tracker rows that already have short
+specs. Same pattern as `TRK-ops.admin` / `TRK-infra.i18n` / `TRK-ops.notifications`.
+Does **not** replace shorts. Research only — no features.mjs.
+
+| Id                       | Solid                                                            |
+| ------------------------ | ---------------------------------------------------------------- |
+| `agents.scanner`         | [TRK-agents.scanner.md](./TRK-agents.scanner.md)                 |
+| `blueprint.attestations` | [TRK-blueprint.attestations.md](./TRK-blueprint.attestations.md) |
+| `blueprint.ownership`    | [TRK-blueprint.ownership.md](./TRK-blueprint.ownership.md)       |
+| `bridge.canonical`       | [TRK-bridge.canonical.md](./TRK-bridge.canonical.md)             |
+| `indexer.readmodels`     | [TRK-indexer.readmodels.md](./TRK-indexer.readmodels.md)         |
+| `launch.meme-factory`    | [TRK-launch.meme-factory.md](./TRK-launch.meme-factory.md)       |
+| `launch.nft`             | [TRK-launch.nft.md](./TRK-launch.nft.md)                         |
+| `mining.pool`            | [TRK-mining.pool.md](./TRK-mining.pool.md)                       |
+| `market.vendors`         | [TRK-market.vendors.md](./TRK-market.vendors.md)                 |
+| `ops.affiliates`         | [TRK-ops.affiliates.md](./TRK-ops.affiliates.md)                 |
+| `ops.analytics`          | [TRK-ops.analytics.md](./TRK-ops.analytics.md)                   |
+| `ops.compliance`         | [TRK-ops.compliance.md](./TRK-ops.compliance.md)                 |
+| `p2p.merchants`          | [TRK-p2p.merchants.md](./TRK-p2p.merchants.md)                   |
+| `trade.forex`            | [TRK-trade.forex.md](./TRK-trade.forex.md)                       |
+| `trade.options`          | [TRK-trade.options.md](./TRK-trade.options.md)                   |
+
+**Honesty:** `blueprint.ownership` cascade shipped (#229); indexer residual =
+`socket.clob-contracts`; `trade.options` blocked on Shehzad futures M3;
+bridge/meme design/Shehzad; compliance list content Class X.
+
+---
+
 ## Pack 5 — `docs/trk-research-pack-5` (chain / launch / market)
 
 **Chain / launch / market** rows. Research only — several sit on Shehzad protocol

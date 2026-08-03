@@ -40,3 +40,5 @@ referral attribution + accrued commission **as decimal strings / ledger
 intent**, admin read APIs, tests that forbid storing balances. Second PR:
 `feeShare`/`affiliatePayout` recipe + idempotent settlement job. No “instant
 withdraw” without bank/pay rails law. Class M self-audit before merge.
+
+**Solid spec:** [TRK-ops.affiliates.md](./TRK-ops.affiliates.md)

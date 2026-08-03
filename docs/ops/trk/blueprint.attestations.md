@@ -39,3 +39,5 @@ or invents chain product law. Research only until direction says free residual.
 interface in `packages/contracts`; mock issuer in tests; no mainnet. Second PR
 only after protocol socket owner accepts chain shape. Prefer babysit if M1–M7
 or protocol branch owns issuance.
+
+**Solid spec:** [TRK-blueprint.attestations.md](./TRK-blueprint.attestations.md)

@@ -40,3 +40,5 @@ Do **not** mark `done` because tests pass against DevVenue alone.
 or **S docs/ops:** residual register honesty if note drifts. If protocol ships
 venue ABI: **S** swap ABI + fixture address + reorg tests against that bytecode.
 Agents babysit protocol lanes; do not invent chain product law here.
+
+**Solid spec:** [TRK-indexer.readmodels.md](./TRK-indexer.readmodels.md)
