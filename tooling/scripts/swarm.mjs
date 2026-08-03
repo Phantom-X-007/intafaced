@@ -278,11 +278,12 @@ function buildModel() {
     // AFK-INDEX blocked if RP2 free (prefer REGROUP landing owner)
     const rp2Free = claims.find((c) => c.id === 'RP2' && c.status === 'free');
     let status = hits.length > 0 ? 'blocked' : productLocks.has(i.id) ? 'claimed' : 'free';
-    let collisions = hits.length > 0
-      ? hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`)
-      : productLocks.has(i.id)
-        ? ['claim file docs/ops/claims/' + i.id + '.md']
-        : [];
+    let collisions =
+      hits.length > 0
+        ? hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`)
+        : productLocks.has(i.id)
+          ? ['claim file docs/ops/claims/' + i.id + '.md']
+          : [];
     let note = i.next_action || i.blocker || '';
     if (i.id === 'AFK-INDEX' && rp2Free) {
       status = 'blocked';
