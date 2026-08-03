@@ -151,3 +151,15 @@ mining.pool, trade.options/forex, market.vendors (upstream of commerce),
 launch.meme-factory / launch.nft (after token-factory), bridge.canonical,
 chain.rust-core (**socket**). `ops.compliance` has a research file on tip —
 counsel Class X content remains human.
+
+## Pack 6 — residual free tracker (Coord-OPS)
+
+| Id                    | Spec                                               |
+| --------------------- | -------------------------------------------------- |
+| `bridge.canonical`    | [bridge.canonical.md](./bridge.canonical.md)       |
+| `launch.meme-factory` | [launch.meme-factory.md](./launch.meme-factory.md) |
+| `launch.nft`          | [launch.nft.md](./launch.nft.md)                   |
+| `market.vendors`      | [market.vendors.md](./market.vendors.md)           |
+| `mining.pool`         | [mining.pool.md](./mining.pool.md)                 |
+| `trade.forex`         | [trade.forex.md](./trade.forex.md)                 |
+| `trade.options`       | [trade.options.md](./trade.options.md)             |
