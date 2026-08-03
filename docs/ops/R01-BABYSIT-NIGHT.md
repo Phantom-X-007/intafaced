@@ -1,10 +1,10 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03 ~15:03Z (AFK R07 cycle18 tip stamp)  
-**Tip at run:** `4fce39a5` (`origin/main`) — docs(ops): R07 cycle17 freeProduct=0 + tip c06a4782 (#520)  
+**When:** 2026-08-03 ~15:33Z (AFK R01 cycle24 tip stamp)  
+**Tip at run:** `555ea76a` (`origin/main`) — docs(ops): R07 cycle23 freeProduct=0 + tip c04a072a (#528)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
-**Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day babysit already on every open CONFLICTING partner PR)  
-**Open list delta:** **none** — same 11 partner PRs; ready list unchanged
+**Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day babysit already on every open CONFLICTING partner PR; no NEW issue)  
+**Open list delta:** **none** — same 11 partner PRs; ready list unchanged vs prior cycles
 
 ## Policy
 
@@ -15,16 +15,16 @@
 
 ## Ready for Denon self-merge (MERGEABLE + green)
 
-| PR                                                          | Author | Mergeable       | Checks              | Action                                                   |
-| ----------------------------------------------------------- | ------ | --------------- | ------------------- | -------------------------------------------------------- |
-| [#445](https://github.com/Phantom-X-007/intafaced/pull/445) | Denon  | MERGEABLE CLEAN | full CI green       | **ready for Denon self-merge**                           |
-| [#433](https://github.com/Phantom-X-007/intafaced/pull/433) | Denon  | MERGEABLE CLEAN | full CI green       | **ready for Denon self-merge** · **P-WS path collision** |
-| [#430](https://github.com/Phantom-X-007/intafaced/pull/430) | Denon  | MERGEABLE CLEAN | docs Prettier green | **ready for Denon self-merge**                           |
-| [#420](https://github.com/Phantom-X-007/intafaced/pull/420) | Denon  | MERGEABLE CLEAN | full CI green       | **ready for Denon self-merge**                           |
+| PR                                                          | Author | Mergeable       | Checks               | Action                                                   |
+| ----------------------------------------------------------- | ------ | --------------- | -------------------- | -------------------------------------------------------- |
+| [#445](https://github.com/Phantom-X-007/intafaced/pull/445) | Denon  | MERGEABLE CLEAN | full CI green        | **ready for Denon self-merge**                           |
+| [#433](https://github.com/Phantom-X-007/intafaced/pull/433) | Denon  | MERGEABLE CLEAN | full CI + CX-8 green | **ready for Denon self-merge** · **P-WS path collision** |
+| [#430](https://github.com/Phantom-X-007/intafaced/pull/430) | Denon  | MERGEABLE CLEAN | docs Prettier green  | **ready for Denon self-merge**                           |
+| [#420](https://github.com/Phantom-X-007/intafaced/pull/420) | Denon  | MERGEABLE CLEAN | full CI green        | **ready for Denon self-merge**                           |
 
 **Ready count: 4** — agents do **not** merge these.
 
-## CONFLICTING — needs rebase to tip `4fce39a5`
+## CONFLICTING — needs rebase to tip `555ea76a`
 
 | PR                                                          | Author  | Mergeable         | Failing / notes          | Action                                        |
 | ----------------------------------------------------------- | ------- | ----------------- | ------------------------ | --------------------------------------------- |
@@ -35,7 +35,7 @@
 | [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | CONFLICTING DIRTY | last CI was green        | needs rebase; **P-WS edge collision**         |
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | CONFLICTING DIRTY | last CI green 2026-08-01 | H-PAY / M1 — human rebase; no agent dual-edit |
 
-## MERGEABLE but not green
+## MERGEABLE but not green (red list)
 
 | PR                                                          | Author | Mergeable          | Failing checks                     | Action                             |
 | ----------------------------------------------------------- | ------ | ------------------ | ---------------------------------- | ---------------------------------- |
@@ -43,7 +43,7 @@
 
 ## Comments posted this run
 
-None. Avoid spam — prior night-engine / AFK babysit comments already on every open CONFLICTING Denon PR and Shehzad #346.
+None. Comment budget **used 0**. Avoid spam — prior night-engine / AFK babysit comments already on every open CONFLICTING Denon PR and Shehzad #346.
 
 | PR                                                          | Author  | Why skipped this run                                      |
 | ----------------------------------------------------------- | ------- | --------------------------------------------------------- |
@@ -54,14 +54,15 @@ None. Avoid spam — prior night-engine / AFK babysit comments already on every 
 | [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | commented 13:39Z                                          |
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 
-## Snapshot counts (15:03Z · tip `4fce39a5`)
+## Snapshot counts (15:33Z · tip `555ea76a`)
 
 - **Open partner:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
 - **Ready for Denon self-merge:** **4** (#445 #433 #430 #420) — full green re-checked this cycle
 - **CONFLICTING (rebase):** 5 Denon + #346 Shehzad
 - **MERGEABLE red CI:** 1 (#428 Prettier+Typecheck)
+- **Also red + CONFLICTING:** #448 (Doctrine gates) — listed under CONFLICTING
 
-**Merged since tip `c06a4782` / #519:** #520 (R07 cycle17).
+**Merged since tip `4fce39a5` / cycle18:** #521–#528 (R07 keep-alives + P-WS integrity + invent re-scan) — partner open set unchanged.
 
 ## P-WS (report only — no dual-edit)
 
@@ -75,35 +76,19 @@ Agents: docs/report only. No implement on matching or edge while those PRs stay 
 ## Rebase tip (for partners)
 
 ```
-origin/main @ 4fce39a5  (at doc write; re-fetch before rebase)
+origin/main @ 555ea76a  (at doc write; re-fetch before rebase)
 ```
 
 ---
 
-## Refresh cycle19 — 2026-08-03T15:12Z · tip `3d477ef0`
+## Prior cycle notes (abbrev)
 
-Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs.
-
----
-
-## Refresh cycle20 — 2026-08-03T15:15Z · tip `97085936`
-
-Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs. P-WS still blocked by #433/#432.
-
----
-
-## Refresh cycle21 — 2026-08-03T15:20Z · tip `fa3b69a1`
-
-Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs. P-WS still blocked by #433/#432.
-
----
-
-## Refresh cycle22 — 2026-08-03T15:23Z · tip `4881de21`
-
-Unchanged partner matrix: Denon ready **#445 #433 #420** (+ #430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs. P-WS still blocked by #433/#432.
-
----
-
-## Refresh cycle23 — 2026-08-03T15:28Z · tip `c04a072a`
-
-Re-checked via `gh`: Denon ready **#445 #433 #430 #420** (MERGEABLE + green / docs Prettier) self-merge only; #428 MERGEABLE red Prettier+Typecheck owner fix; CONFLICTING #448 #441 #438 #436 #432 + Shehzad #346 babysit. No Nitro Class N open. Agents do **not** merge partner PRs. P-WS still blocked by #433/#432.
+| Cycle  | UTC        | tip            | Matrix                                        |
+| ------ | ---------- | -------------- | --------------------------------------------- |
+| 18     | 15:03Z     | `4fce39a5`     | ready 4; conflict 6; red #428                 |
+| 19     | 15:12Z     | `3d477ef0`     | unchanged                                     |
+| 20     | 15:15Z     | `97085936`     | unchanged                                     |
+| 21     | 15:20Z     | `fa3b69a1`     | unchanged                                     |
+| 22     | —          | `1f7575e4`     | (R07 keepalive; matrix same)                  |
+| 23     | —          | `555ea76a`     | (R07 keepalive #528; matrix same)             |
+| **24** | **15:33Z** | **`555ea76a`** | **ready 4; conflict 6; red #428; comments 0** |
