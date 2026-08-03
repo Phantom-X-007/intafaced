@@ -1696,3 +1696,22 @@ Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4** (#445 #433 
 ```
 origin/main @ 47f3c85c  (at doc write; partners re-fetch before rebase)
 ```
+
+---
+
+## Refresh cycle106 (R07+R01) — 2026-08-03T23:26Z · tip `54317448`
+
+R07 keep-alive + R01 partner recheck (gh) after **#705** R07 cycle105 land. Same open list **448 445 441 438 436 433 432 430 428 420 346** @ tip `54317448`:
+
+| Bucket                 | PRs                                                                                                  | Action         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
+| Ready Denon self-merge | **#445** full green · **#433** full green (P-WS path) · **#430** docs Prettier · **#420** full green | his merge only |
+| MERGEABLE red          | **#428** Prettier+Typecheck                                                                          | owner fix      |
+| CONFLICTING rebase     | Denon **#448** (gates FAIL) **#441** **#438** **#436** **#432** (P-WS edge) + Shehzad **#346** M1    | babysit only   |
+| Nitro Class N open     | **0** (R07 cycle106 keep-alive this PR)                                                              | Class N only   |
+
+Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4** (#445 #433 #430 #420). Comments: **0** (budget 0). P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**. invent live **0**. Agents do **not** merge partner PRs. freeProduct=0 ≠ kill.
+
+```
+origin/main @ 54317448  (at doc write; partners re-fetch before rebase)
+```
