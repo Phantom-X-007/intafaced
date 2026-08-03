@@ -1,11 +1,11 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T21:06:04.948Z
+Generated: 2026-08-03T21:14:04.748Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `fa367739`                                                        |
-| Tip subject                       | docs(ops): fix R-AFK-RESCAN cycle80 conflict markers (#650)       |
+| Tip                               | `d180104e`                                                        |
+| Tip subject                       | docs(ops): P-WS still blocked tip 2f009f54 (cycle82) (#652)       |
 | Open PRs                          | 12                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |

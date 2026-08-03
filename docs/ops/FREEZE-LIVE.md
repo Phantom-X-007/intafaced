@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `fa367739` — docs(ops): fix R-AFK-RESCAN cycle80 conflict markers (#650)
-- **Generated:** 2026-08-03T21:06:04.948Z
+- **Tip:** `d180104e` — docs(ops): P-WS still blocked tip 2f009f54 (cycle82) (#652)
+- **Generated:** 2026-08-03T21:14:04.748Z
 - **Open PRs:** 12
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
@@ -28,7 +28,7 @@
 
 ## Open PR snapshot
 
-- #651 @ZenYoda3 · 10 files · MERGEABLE · docs(ops): R07 cycle81 freeProduct=0 + tip 6ae7c658
+- #653 @ZenYoda3 · 10 files · CONFLICTING · docs(ops): R07 cycle82 freeProduct=0 + tip 2f009f54
 - #448 @Phantom-X-007 · 7 files · CONFLICTING · feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code
 - #445 @Phantom-X-007 · 18 files · MERGEABLE · fix(test): five money suites could skip on CI and the build went green
 - #441 @Phantom-X-007 · 5 files · CONFLICTING · feat(ci): coverage-check — the gate §25 specified and nobody built
