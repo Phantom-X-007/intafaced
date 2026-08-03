@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `68edb9db` — docs(ops): P-WS still blocked tip 54795ac8 (#553)
-- **Generated:** 2026-08-03T16:41:09.082Z
+- **Tip:** `b6dc674f` — docs(ops): R01 babysit cycle36 tip 2004d68f ready=4 (#556)
+- **Generated:** 2026-08-03T16:48:45.518Z
 - **Open PRs:** 12
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
@@ -28,7 +28,7 @@
 
 ## Open PR snapshot
 
-- #554 @ZenYoda3 · 8 files · CONFLICTING · docs(ops): R07 cycle35 freeProduct=0 + tip 54795ac8
+- #557 @ZenYoda3 · 8 files · CONFLICTING · docs(ops): R07 cycle36 freeProduct=0 + tip 2004d68f
 - #448 @Phantom-X-007 · 7 files · CONFLICTING · feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code
 - #445 @Phantom-X-007 · 18 files · MERGEABLE · fix(test): five money suites could skip on CI and the build went green
 - #441 @Phantom-X-007 · 5 files · CONFLICTING · feat(ci): coverage-check — the gate §25 specified and nobody built
