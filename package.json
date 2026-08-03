@@ -50,6 +50,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,mjs,js,md,json,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,mjs,js,md,json,yml,yaml}\"",
     "scan:workspace": "node tooling/ci/workspace-sync.mjs",
+    "scan:events": "node tooling/ci/event-wiring.mjs",
     "ui:boot": "node tooling/uiproof/boot.mjs",
     "ui:proof": "node tooling/uiproof/boot.mjs && playwright test -c tooling/uiproof/playwright.config.mjs tooling/uiproof/proof.spec.mjs && node tooling/uiproof/report.mjs",
     "ui:proof:auth": "node tooling/uiproof/boot.mjs && playwright test -c tooling/uiproof/playwright.config.mjs tooling/uiproof/auth.spec.mjs",

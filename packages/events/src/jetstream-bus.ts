@@ -4,8 +4,8 @@ import { EVENT_CATALOG, type EventDef, type EventName } from './catalog.js';
 import { streamName, wildcard } from './subject.js';
 import { decodeEnvelope, encodeEnvelope, type Envelope } from './envelope.js';
 import {
+  acceptEnvelope,
   buildEnvelope,
-  validatePayload,
   type EventBus,
   type Handler,
   type Payload,
@@ -86,7 +86,11 @@ export class JetStreamEventBus implements EventBus {
         if (stopped) break;
         try {
           const env = decodeEnvelope(msg.data);
-          const validated = validatePayload(name, env.payload);
+          // Version, schema, and drift. A message carrying a field this build
+          // cannot name is NAK'd rather than delivered with the field removed —
+          // see `EventSchemaDriftError`. The stream retains it for 90 days, so
+          // a rebuild is all that stands between the refusal and delivery.
+          const validated = acceptEnvelope(name, env);
           await handler(validated, env as Envelope<Payload<K>>);
           msg.ack();
         } catch (err) {

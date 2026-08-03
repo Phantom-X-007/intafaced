@@ -8,6 +8,7 @@ import {
   p2pTradeDisputed,
   rankUpdated,
   stakeCreated,
+  wiringSocketReason,
   type EventBus,
   type EventName,
   type Handler,
@@ -43,12 +44,46 @@ import type { CreateResult, NotifyService } from './notify-service.js';
  * p2pTradeDisputed notifies openedBy only — the counterparty is not on the payload.
  */
 
-/** A consumer that could not be created, and the honest reason. */
+/**
+ * A consumer that could not be created, and the honest reason.
+ *
+ * DECLARED SOCKET, OR DEFECT — NEVER BOTH
+ *
+ * This used to be one flat list that produced one WARN per entry on every boot.
+ * `bankMarginCalled` has been in it since svc-notify shipped, so the warning has
+ * fired at every start for its whole life, and no boot has ever been free of it.
+ *
+ * A warning that is always there is not a warning. It is a permanent feature of
+ * the log that teaches whoever reads it to skim past warnings — including the
+ * next one, which will be about something that just broke.
+ *
+ * So a pending consumer is now one of exactly two things:
+ *
+ *   `socket` non-null   Somebody wrote down that this subject has no publisher
+ *                       yet, in `WIRING_SOCKETS`, with a reason. Known, reviewed
+ *                       and enforced by `pnpm scan:events`. Logged at INFO with
+ *                       the recorded reason. Quiet, because it is accounted for.
+ *
+ *   `socket` null       Nothing in the repo admits this consumer cannot attach.
+ *                       That is a defect. Logged at ERROR, counted on /ready, and
+ *                       CI is already red on it — `scan:events` fails on an
+ *                       undeclared orphan, so this state cannot reach `main`.
+ *
+ * Boot does not refuse either way, and that is deliberate: svc-notify's inbox is
+ * healthy without any one consumer, and taking the whole inbox down over a single
+ * dark subject would turn a wiring gap into an outage. The loudness lives where
+ * it costs nothing — the gate, at the commit.
+ */
 export interface PendingConsumer {
   readonly event: EventName;
   readonly subject: string;
   readonly durable: string;
   readonly reason: string;
+  /**
+   * The reason recorded in `WIRING_SOCKETS` for this subject having no
+   * publisher, or null when nothing has been written down. Null is the defect.
+   */
+  readonly socket: string | null;
 }
 
 export interface SubscriptionReport {
@@ -59,7 +94,7 @@ export interface SubscriptionReport {
    * Reported rather than thrown, because svc-notify's inbox API is perfectly
    * healthy without them; reported rather than swallowed, because "margin-call
    * notifications are not running" has to be visible from outside the process.
-   * Surfaced on `/ready`.
+   * Surfaced on `/ready`, split by `socket` into declared and undeclared.
    */
   readonly pending: readonly PendingConsumer[];
 }
@@ -107,7 +142,16 @@ async function attach<K extends EventName>(
   } catch (err) {
     return {
       subscription: null,
-      pending: { event, subject, durable, reason: err instanceof Error ? err.message : String(err) },
+      pending: {
+        event,
+        subject,
+        durable,
+        reason: err instanceof Error ? err.message : String(err),
+        // The catalog is the single place a missing publisher is recorded, so
+        // the boot log and `pnpm scan:events` cannot disagree about which
+        // subjects are known-dark. One list, two readers.
+        socket: wiringSocketReason(event, 'publisher'),
+      },
     };
   }
 }
