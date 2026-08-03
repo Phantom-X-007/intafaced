@@ -40,11 +40,23 @@ const recovered = engine.recover();
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL } });
 
+/**
+ * `restingOrders` is on here because "the engine came back up" and "the engine
+ * came back up still working N orders that may have nothing funding them" read
+ * identically on every other field.
+ *
+ * The journal outlives a database reset. On the dev fleet on 2026-08-03 this
+ * engine was holding books for 10 market ids, not one of which still existed in
+ * `trade.markets`. Nobody could see that without a shell in the container. The
+ * count of orders the engine believes are live is the number an operator needs
+ * before anything is allowed to trade against them.
+ */
 app.get('/health', async () => ({
   ok: true,
   service: env.SERVICE_NAME,
   enabled: engine.isEnabled,
   markets: engine.markets.length,
+  restingOrders: engine.restingOrderCount,
   journalRecords: journal.length,
 }));
 
@@ -62,7 +74,33 @@ app.get('/ready', async (_req, reply) => {
 registerRoutes(app, engine, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERNAL_SERVICE_BODY_BIND });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, ...recovered }, 'svc-matching ready — books replayed from journal');
+
+// The boot line carries the resting count too. Recovery previously reported
+// records and markets, which say how much was replayed and not what is now
+// standing — and what is now standing is the part another system has to agree
+// with.
+//
+// BOOT CHECK, NOT BOOT REPAIR — deliberately. This service cannot reconcile by
+// itself: it has no `DATABASE_URL` (`env.ts` says so, and why), so it does not
+// know whether anyone is holding funds against these orders. Comparing requires
+// the counterpart's view, which arrives over `POST /reconcile`. What boot CAN
+// do honestly is refuse to be quiet about the condition, and that is this.
+//
+// It does not exit non-zero. An engine that replayed orders is still the only
+// thing that can cancel them, and a process that dies on the way up cannot be
+// asked anything — including "what are you holding".
+const restingAtBoot = engine.restingOrderCount;
+app.log.info({ port: env.HTTP_PORT, ...recovered, restingOrders: restingAtBoot }, 'svc-matching ready — books replayed from journal');
+
+if (restingAtBoot > 0) {
+  app.log.warn(
+    { restingOrders: restingAtBoot, markets: engine.markets.length },
+    'engine replayed live orders from the journal — nothing here has checked that anyone still holds funds for them. ' +
+      'The journal survives a database reset, so these books can outlive the orders that justified them. ' +
+      'Compare before trusting them: GET /markets/:marketId/orders for this side, POST /reconcile with the ' +
+      "order owner's view for both (service credentials required; see services/svc-matching/README.md).",
+  );
+}
 
 // Drain rather than drop: an in-flight submission finishes, its events publish,
 // and the journal file descriptor closes cleanly before the process exits.
