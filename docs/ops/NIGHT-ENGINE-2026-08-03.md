@@ -158,3 +158,13 @@ Do **not** stop the loop solely because freeProduct=0 — continue Class N merge
 | Invent      | reaffirm clean (live invent residual 0)                                  |
 | Partner     | Denon #445/#433/#430/#420 ready — his merge; #428 red; conflicts babysit |
 | P-WS        | still blocked #433+#432 — report only · no dual-edit                     |
+
+### Cycle 25 — 2026-08-03 ~15:50Z
+
+| Item        | Result                                                       |
+| ----------- | ------------------------------------------------------------ |
+| Tip         | `00fdd51e` #529 cycle24                                      |
+| freeProduct | **0** · freeTracker **0** · SPAWN_NOW none                   |
+| Nitro       | unstuck #530 R01 babysit rebase onto tip                     |
+| Invent      | live residual **0**                                          |
+| Partner     | Denon #445/#433/#420 green — his merge; P-WS still #433+#432 |
