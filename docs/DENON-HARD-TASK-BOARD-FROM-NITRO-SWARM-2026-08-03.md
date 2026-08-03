@@ -115,7 +115,7 @@ Ranked for **unblock agents + real money integrity**, not volume theater.
 ## 5 · One-breath message you can paste to Denon
 
 ```
-Bro — Nitro agents are AFK-swarming free shell residual (Bizzan :8090): money call sites, Index honesty, wire adopt, AFK craft. They will not dual-edit your open PRs or touch Shehzad.
+Bro — Nitro agents are AFK-swarming free shell residual (vendor shell :8090): money call sites, Index honesty, wire adopt, AFK craft. They will not dual-edit your open PRs or touch Shehzad.
 
 Need you on the hard stuff agents thrash on:
 1) WS/market-ID + nginx so depth can ever work (REGROUP blocker)
