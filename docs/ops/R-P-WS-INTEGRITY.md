@@ -5,24 +5,25 @@
 | **Claim**            | `P-WS-REPORT` (integrity report only) — **STILL BLOCKED** (no implement craft)                                                                                                                                                                 |
 | **Class**            | N (docs)                                                                                                                                                                                                                                       |
 | **Proof mode**       | **NO-FLEET** — `docker` not available on this host; live counts not re-probed this session                                                                                                                                                     |
-| **Tip when written** | `7b14d99f` `docs(ops): R07 Coord-OPS cycles 1–6 final board (#503)` (`origin/main` @ AFK re-check)                                                                                                                                             |
-| **Upgrade**          | AFK re-check after Denon **#424** (edge CORS, merged 14:02Z) + **#422** (custody/vendor scan, merged 14:01Z) **landed**. Freeze still **blocks** claim on open **#433** matching + **#432** edge. Prior: #475 / #478 / #485. **No depth UI.**  |
+| **Tip when written** | `1f7575e4` `docs(ops): R07 cycle22 freeProduct=0 + tip 4881de21 (#525)` (`origin/main` @ AFK re-check 2026-08-03T15:26Z)                                                                                                                       |
+| **Upgrade**          | AFK integrity refresh on tip `1f7575e4`. Freeze **still true**: open **#433** matching + **#432** edge. **#424** / **#422** remain MERGED. Prior stamps: `7b14d99f` (#503 era). **NO implement** / **NO-FLEET**. **No depth UI.**              |
 | **Sources**          | Code on tip + prior live probe in [`docs/REGROUP-2026-08-03.md`](../REGROUP-2026-08-03.md) §3 + Denon board [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) **D-P0-WS** |
 | **Dual-edit**        | **None.** This residual is `docs/ops/` only. Did **not** edit matching/edge/ws/nginx. Collisions (do not dual-edit): **#433** `services/svc-matching/**`, **#432** `services/svc-edge/src/env.ts` + `index.ts`.                                |
 | **Landed (cleared)** | **#424** MERGED — edge CORS (`services/svc-edge` cors/* + index) no longer open collision. **#422** MERGED — scan/custody (no P-WS path intersect; noted for tip context).                                                                     |
-| **Still blocking**   | **#433** @Phantom-X-007 matching reconcile (MERGEABLE) · **#432** @Phantom-X-007 screening/edge env (CONFLICTING). Re-freeze after either merges before claiming craft.                                                                        |
+| **Still blocking**   | **#433** @Phantom-X-007 matching reconcile (OPEN, MERGEABLE, CI green) · **#432** @Phantom-X-007 screening/edge env (OPEN, CONFLICTING, CI green). Re-freeze after either merges or closes before claiming craft.                              |
 
 **Purpose:** freeze the platform-integrity facts so depth/tape work is not started against a path that cannot work. **Does not** implement nginx, market authority, depth UI, or invent markets.
 
-### AFK status (2026-08-03 post-#424/#422)
+### AFK status (2026-08-03T15:26Z — tip `1f7575e4`)
 
-| Metric      | Value                                                                  |
-| ----------- | ---------------------------------------------------------------------- |
-| freeProduct | **0**                                                                  |
-| freeTracker | **0** (shell mandate; TRK research is not product spawn)               |
-| P-WS-REPORT | **BLOCKED** — path intersect open Denon PRs only                       |
-| Free OPS    | BABYSIT-MATRIX · REPORTS                                               |
-| Depth UI    | **NOT free** — still not a residual until D-P0-WS path + market-id law |
+| Metric      | Value                                                                                           |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| freeProduct | **0** — shell drained; this residual is **report-only OPS**, not product spawn                  |
+| freeTracker | **0** (shell mandate; TRK research is not product spawn)                                        |
+| P-WS-REPORT | **BLOCKED** — path intersect open Denon **#433** (matching) + **#432** (edge); **NO implement** |
+| Free OPS    | BABYSIT-MATRIX · REPORTS only                                                                   |
+| NO-FLEET    | **Yes** — no live re-probe; structural facts only                                               |
+| Depth UI    | **NOT free** — still not a residual until D-P0-WS path + market-id law                          |
 
 ---
 
@@ -143,7 +144,7 @@ nginx half is short; it is not the whole blocker (see §2).
 
 ## 2 · Market-ID namespace — edge vs matching vs ws
 
-### Data-plane ownership (from code on tip `7b14d99f`; citations re-checked NO-FLEET)
+### Data-plane ownership (from code on tip `1f7575e4`; structural citations from prior stamp, NO-FLEET — no service re-edit)
 
 | Plane                     | Source of market identity                                                                                  | Shape on the wire                                                                      | Citation                                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -342,16 +343,17 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 ## 6 · This report’s verification
 
-| Check                               | Result                                                        |
-| ----------------------------------- | ------------------------------------------------------------- |
-| Tip SHA stamped                     | `7b14d99f`                                                    |
-| Denon #424 / #422                   | **MERGED** (no longer open collisions for this claim)         |
-| Freeze collisions remaining         | **#433** matching · **#432** edge env/index                   |
-| nginx `/ws` + SPA `/` read from tip | Yes (L55–57, L76–83)                                          |
-| svc-ws `/stream` only               | Yes (`STREAM_PATH`, upgrade)                                  |
-| trade UUID → matching               | Yes (code L367, L580)                                         |
-| Live 16/10/∩0 re-probe              | **No** — NO-FLEET; cite REGROUP                               |
-| Code changes to matching/edge/ws    | **None** (avoid dual-edit; claim blocked)                     |
-| Depth UI                            | **Not started** (not free; D-P0-WS handoff §3 still the gate) |
+| Check                            | Result                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------- |
+| Tip SHA stamped                  | `1f7575e4` (`origin/main` @ 2026-08-03T15:26Z)                                    |
+| Denon #424 / #422                | **MERGED** (no longer open collisions for this claim)                             |
+| Freeze collisions remaining      | **#433** matching (OPEN, MERGEABLE) · **#432** edge env/index (OPEN, CONFLICTING) |
+| nginx `/ws` + SPA `/`            | Unchanged structural fact (prior stamp; NO-FLEET, no re-probe)                    |
+| svc-ws `/stream` only            | Unchanged structural fact                                                         |
+| trade UUID → matching            | Unchanged structural fact                                                         |
+| Live 16/10/∩0 re-probe           | **No** — NO-FLEET; cite REGROUP                                                   |
+| Code changes to matching/edge/ws | **None** (dual-edit ban; claim blocked; report-only OPS)                          |
+| freeProduct                      | **0** — shell drained; no implement craft this residual                           |
+| Depth UI                         | **Not started** (not free; D-P0-WS handoff §3 still the gate)                     |
 
-**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts above are code-backed on tip `7b14d99f`. Claim **P-WS-REPORT** remains **blocked** until #433/#432 clear or drop path intersect — then residual may re-open as report-only refresh, still **no depth UI**.
+**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts remain code-backed (prior stamp on tip history through `1f7575e4`). Claim **P-WS-REPORT** remains **blocked** — **NO-FLEET**, **NO implement** until **#433** (matching) and **#432** (edge) land or close without path intersect — then residual may re-open as report-only refresh, still **no depth UI**.
