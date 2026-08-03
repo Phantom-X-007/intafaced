@@ -2,7 +2,10 @@
 
 **Title:** Event-driven fan-out: in-app, push, email, SMS  
 **Tracker:** `ops.notifications` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `infra.events` (done) · requires `services/svc-notify`
+**Depends on:** `infra.events` (done) · **requires:** `services/svc-notify`  
+**Sibling sockets:** `socket.notify-email` · `socket.notify-push` · `socket.notify-sms`  
+**Tip freeze:** `origin/main` @ `c773dafa` (re-derive before implement)  
+**Pack type:** research only — no implement; no fake delivery; no `features.mjs` edit.
 
 ## DoD (plain language)
 
@@ -15,24 +18,26 @@ configured for a deployment make readiness fail if those gateways are down.
 
 ## Path on tip
 
-| Area          | Location                                                              |
-| ------------- | --------------------------------------------------------------------- |
-| Service       | `services/svc-notify/`                                                |
-| Channels      | `src/channels/` — adapter interface + email/push/SMS                  |
-| Bus consumers | fillSettled, P2P escrow events, kyc, rank, stake, bankMarginCalled, … |
-| Mount         | edge `/api/notify` (re-derive compose)                                |
+| Area          | Location                                                          |
+| ------------- | ----------------------------------------------------------------- |
+| Service       | `services/svc-notify/` (port **4015**, schema `notify`)           |
+| Channels      | `src/channels/` — adapter + email/push/SMS + real HTTP wire tests |
+| Bus consumers | fillSettled, P2P escrow, kyc, rank, stake, bankMarginCalled, …    |
+| Mount         | edge `/api/notify`                                                |
+| Owner runbook | `docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`                           |
+| Copy          | Out-of-app via `@intafaced/i18n`                                  |
 
 **Tip residual:** multi-channel fan-out **code exists**; real delivery needs
 **owner-supplied gateway credentials**. Without them, out-of-app refuses with
 `channel.not_configured`. In-app is live. Outcome column is `accepted_at`, not
-`delivered_at`.
+`delivered_at` (migration 0002).
 
 ## Blocked by
 
-| Blocker               | Notes                                                                          |
-| --------------------- | ------------------------------------------------------------------------------ |
-| Class X / ops secrets | ESP, push, SMS credentials — Nitro human / ops                                 |
-| Optional product      | Alerts/watchlists (§ doctrine alerts) = extension, not this mountain’s min DoD |
+| Blocker               | Notes                                                      |
+| --------------------- | ---------------------------------------------------------- |
+| Class X / ops secrets | ESP, push, SMS credentials — Nitro human / ops             |
+| Optional product      | Alerts/watchlists = extension, not this mountain’s min DoD |
 
 Not blocked by Shehzad. Not blocked by Denon for credential-wiring docs +
 readiness. Code residual is small vs secrets residual.
