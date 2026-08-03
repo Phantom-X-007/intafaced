@@ -1,5 +1,20 @@
 # R-AFK-RESCAN — invent-pattern scan (Coord-OPS)
 
+## AFK invent re-scan cycle81 (2026-08-03T21:06Z · tip `fa367739`)
+
+| check                                | result                                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| tip                                  | `fa367739` · #650 invent fix + #648 invent c80 + #649 R07 cycle80 on main                 |
+| fabricated-money-scan                | **EXIT=0** · 0 findings / 0 baseline · 93 shell files                                     |
+| invent (vendor front)                | honesty/doctrine comments only (`dataFanyong` / `CNYRate \|\| 6.5` are **comment** lines) |
+| NEW hard invent residual             | **0**                                                                                     |
+| shell product delta since invent c80 | **empty** (docs/ops only)                                                                 |
+| freeProduct                          | **0** — re-scan is OPS pivot, not product spawn                                           |
+
+**Verdict:** no new invent residual · no invent-fix PR · freeProduct=0 ≠ kill.
+
+---
+
 ## AFK invent re-scan cycle80 (2026-08-03T20:50Z · tip `d36b2823`)
 
 | check                                | result                                                                                    |
