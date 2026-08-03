@@ -1,5 +1,20 @@
 # R-AFK-RESCAN — invent-pattern scan (Coord-OPS)
 
+## AFK invent re-scan cycle79 (2026-08-03T20:46Z · tip `25f73927`)
+
+| check                                       | result                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| tip                                         | `25f73927` · #645 R01 + #644 R07 cycle78 on main                                          |
+| fabricated-money-scan                       | **EXIT=0** · 0 findings / 0 baseline · 93 shell files                                     |
+| invent (vendor front)                       | honesty/doctrine comments only (`dataFanyong` / `CNYRate \|\| 6.5` are **comment** lines) |
+| NEW hard invent residual                    | **0**                                                                                     |
+| shell product delta since invent c77 (#642) | **empty** (docs/ops only)                                                                 |
+| freeProduct                                 | **0** — re-scan is OPS pivot, not product spawn                                           |
+
+**Verdict:** no new invent residual · no invent-fix PR · freeProduct=0 ≠ kill.
+
+---
+
 **When:** 2026-08-03 · tip `c773dafa` (#482 · post shell wave + post prior rescan #477)  
 **Mode:** NO-FLEET · static `rg` + `tooling/ci/fabricated-money-scan.mjs` (no visual)  
 **Scope:** `vendor/coinexchange/05_Web_Front` primary · `apps/web` + `apps/admin` honesty cross-check  

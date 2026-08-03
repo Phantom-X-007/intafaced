@@ -1,6 +1,6 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T20:38:24.069Z · tip `fd413845`
+Last report: 2026-08-03T20:45:42.206Z · tip `25f73927`
 
 | Report          | Path                                       |
 | --------------- | ------------------------------------------ |
@@ -13,11 +13,11 @@ Last report: 2026-08-03T20:38:24.069Z · tip `fd413845`
 
 - Free product claims: **0**
 - Blocked: **1**
-- Open PRs: **11**
+- Open PRs: **12**
 
 anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).
 
-SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-\* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.
+SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.
 
 - Spawn accounting: available=0 · active_spawned=0 · gap=0 · width_target=6-8
 

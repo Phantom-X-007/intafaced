@@ -1,10 +1,10 @@
 # R01 PR matrix (generated)
 
-Tip `f94bb7b9` · 2026-08-03T20:14:10.382Z
+Tip `25f73927` · 2026-08-03T20:45:42.206Z
 
 |   # | author         | files | mergeable   | title                                                                                                                      | action                              |
 | --: | -------------- | ----: | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| 634 | @ZenYoda3      |     8 | CONFLICTING | docs(ops): R07 cycle73 freeProduct=0 + tip 702cb621                                                                        | own — rebase/merge if Class N green |
+| 646 | @ZenYoda3      |     8 | CONFLICTING | docs(ops): R07 cycle79 freeProduct=0 + tip 766df158                                                                        | own — rebase/merge if Class N green |
 | 448 | @Phantom-X-007 |     7 | CONFLICTING | feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code                               | no dual-edit files                  |
 | 445 | @Phantom-X-007 |    18 | MERGEABLE   | fix(test): five money suites could skip on CI and the build went green                                                     | no dual-edit files                  |
 | 441 | @Phantom-X-007 |     5 | CONFLICTING | feat(ci): coverage-check — the gate §25 specified and nobody built                                                         | no dual-edit files                  |
