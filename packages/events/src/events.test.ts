@@ -247,9 +247,7 @@ describe('schema drift: the bus refuses rather than strips', () => {
   });
 
   it('refuses the payload instead, naming the dropped field and the producer', () => {
-    expect(() => validatePayload('orderFilled', fill({ settlementAccountId: 'acct-1' }), 'svc-matching')).toThrow(
-      EventSchemaDriftError,
-    );
+    expect(() => validatePayload('orderFilled', fill({ settlementAccountId: 'acct-1' }), 'svc-matching')).toThrow(EventSchemaDriftError);
 
     try {
       validatePayload('orderFilled', fill({ settlementAccountId: 'acct-1' }), 'svc-matching');
@@ -307,19 +305,21 @@ describe('schema drift: the bus refuses rather than strips', () => {
     // An explicit `undefined` is not a field the wire ever carried.
     expect(() => validatePayload('orderFilled', fill({ makerAccountId: undefined }))).not.toThrow();
     // A nullable field that is null.
-    expect(() => validatePayload('orderUpdated', {
-      orderId: crypto.randomUUID(),
-      userId: crypto.randomUUID(),
-      marketId: 'btc-usdt',
-      status: 'open',
-      side: 'buy',
-      type: 'limit',
-      qty: '1',
-      filledQty: '0',
-      price: null,
-      clientOrderId: null,
-      ts: new Date().toISOString(),
-    })).not.toThrow();
+    expect(() =>
+      validatePayload('orderUpdated', {
+        orderId: crypto.randomUUID(),
+        userId: crypto.randomUUID(),
+        marketId: 'btc-usdt',
+        status: 'open',
+        side: 'buy',
+        type: 'limit',
+        qty: '1',
+        filledQty: '0',
+        price: null,
+        clientOrderId: null,
+        ts: new Date().toISOString(),
+      }),
+    ).not.toThrow();
     // `z.record(z.unknown())` is a declared open bag — its keys are not drift.
     expect(() =>
       validatePayload('xpEarned', {
@@ -337,9 +337,7 @@ describe('schema drift: the bus refuses rather than strips', () => {
     const handler = vi.fn();
     await bus.subscribe('orderFilled', handler, { durable: 'drift-test' });
 
-    await expect(bus.publish('orderFilled', fill({ settlementAccountId: 'acct-1' }) as never)).rejects.toThrow(
-      EventSchemaDriftError,
-    );
+    await expect(bus.publish('orderFilled', fill({ settlementAccountId: 'acct-1' }) as never)).rejects.toThrow(EventSchemaDriftError);
     // Refused at the producer, so nothing was delivered half-formed either.
     expect(handler).not.toHaveBeenCalled();
   });

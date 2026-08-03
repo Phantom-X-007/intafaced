@@ -56,9 +56,14 @@
  *     newlines kept, so every line number reported is the real one;
  *   · `*.test.ts` / `*.spec.ts` are not wiring. A subject that only a test
  *     publishes has no publisher;
- *   · every regex here is a REGEX LITERAL. `\s` inside a template literal is the
- *     letter s, which has silently broken two gates in this repo in two days
- *     (see workspace-sync checks 3b and 7);
+ *   · NO regex here is built from a template literal. `\s` inside one is the
+ *     letter s, which has silently broken three gates in this repo in three
+ *     days (see workspace-sync checks 3b and 7). The two regexes that must be
+ *     assembled are composed from `RegExp.source` of regex literals, so the
+ *     escaping is written once, by the engine, in a context that cannot eat a
+ *     backslash. A mutation that reintroduced the trap here SURVIVED — the
+ *     pattern still matched by luck — which is why the dynamic regex it lived
+ *     in was removed outright rather than corrected;
  *   · anything it cannot resolve is reported as unresolvable rather than guessed
  *     at in either direction. A gate that quietly assumes "wired" hides the bug
  *     it exists to find; one that quietly assumes "orphan" is the wolf.
@@ -180,19 +185,60 @@ const isEvent = (name) => EVENTS.includes(name);
 const socketsBlock = /export const WIRING_SOCKETS = \[([\s\S]*?)\n\] satisfies/.exec(blankComments(catalogRaw));
 const sockets = [];
 if (socketsBlock === null) {
-  fail(catalogPath, 'no "export const WIRING_SOCKETS = [ … ] satisfies readonly WiringSocket[];" — every unwired event would have nowhere to be declared, which is the silence this gate exists to forbid');
+  fail(
+    catalogPath,
+    'no "export const WIRING_SOCKETS = [ … ] satisfies readonly WiringSocket[];" — every unwired event would have nowhere to be declared, which is the silence this gate exists to forbid',
+  );
 } else {
-  const entry = /event:\s*'([A-Za-z_$][\w$]*)'\s*,\s*missing:\s*'(publisher|subscriber)'\s*,\s*reason:\s*((?:'(?:[^'\\]|\\.)*'\s*\+?\s*)+)/g;
+  /**
+   * BOTH QUOTE STYLES, because prettier picks the quote — not the author.
+   *
+   * This matched single-quoted strings only, which is how the reasons were
+   * written. Then `pnpm format` ran: prettier rewrites a single-quoted string
+   * containing an apostrophe into a DOUBLE-quoted one to avoid the escape, and
+   * nine of eighteen reasons changed quote character without a word of their
+   * text changing. The gate promptly reported nine orphans that were declared
+   * on the screen in front of me.
+   *
+   * That is the wolf, arriving from a formatter rather than from a code change,
+   * and no amount of reading the regex would have found it — only running the
+   * formatter did. Any parser of source text has to assume the formatter will
+   * reach it.
+   */
+  const STRING = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/;
+  const entry = new RegExp(
+    'event:\\s*(' +
+      STRING.source +
+      ')\\s*,\\s*missing:\\s*(' +
+      STRING.source +
+      ')\\s*,\\s*reason:\\s*((?:(?:' +
+      STRING.source +
+      ')\\s*\\+?\\s*)+)',
+    'g',
+  );
+  const unquote = (s) => s.slice(1, -1).replace(/\\(.)/g, '$1');
+
   for (const m of socketsBlock[1].matchAll(entry)) {
-    const [, event, missing, reasonSrc] = m;
-    const reason = [...reasonSrc.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map(([, s]) => s).join('');
-    sockets.push({ event, missing, reason, line: lineOf(catalogRaw, socketsBlock.index + m.index) });
+    const [, eventSrc, missingSrc, reasonSrc] = m;
+    const reason = [...reasonSrc.matchAll(new RegExp(STRING.source, 'g'))].map(([s]) => unquote(s)).join('');
+    sockets.push({
+      event: unquote(eventSrc),
+      missing: unquote(missingSrc),
+      reason,
+      line: lineOf(catalogRaw, socketsBlock.index + m.index),
+    });
   }
 }
 
 for (const s of sockets) {
+  if (s.missing !== 'publisher' && s.missing !== 'subscriber') {
+    fail(catalogPath, `the socket for "${s.event}" declares missing: "${s.missing}" — it must be exactly "publisher" or "subscriber"`);
+  }
   if (!isEvent(s.event)) {
-    fail(catalogPath, `WIRING_SOCKETS declares a socket for "${s.event}", which is not in EVENT_CATALOG — a socket cannot outlive the event it excuses`);
+    fail(
+      catalogPath,
+      `WIRING_SOCKETS declares a socket for "${s.event}", which is not in EVENT_CATALOG — a socket cannot outlive the event it excuses`,
+    );
   }
   if (s.reason.trim().length < MIN_REASON) {
     fail(
@@ -204,7 +250,11 @@ for (const s of sockets) {
 const seenSockets = new Set();
 for (const s of sockets) {
   const key = `${s.event}::${s.missing}`;
-  if (seenSockets.has(key)) fail(catalogPath, `WIRING_SOCKETS declares the ${s.missing} socket for "${s.event}" twice — two reasons for one gap means one of them is stale`);
+  if (seenSockets.has(key))
+    fail(
+      catalogPath,
+      `WIRING_SOCKETS declares the ${s.missing} socket for "${s.event}" twice — two reasons for one gap means one of them is stale`,
+    );
   seenSockets.add(key);
 }
 const socketFor = (event, missing) => sockets.find((s) => s.event === event && s.missing === missing) ?? null;
@@ -310,7 +360,10 @@ for (const file of files) {
     if (literal) {
       // A literal that is not a catalog key is some other publish/subscribe
       // (a hub, a store). Not this gate's business.
-      if (isEvent(literal[2])) sideFor(direction).get(literal[2]).push(`${file.rel}:${lineOf(file.src, call.index)}`);
+      if (isEvent(literal[2]))
+        sideFor(direction)
+          .get(literal[2])
+          .push(`${file.rel}:${lineOf(file.src, call.index)}`);
       continue;
     }
 
@@ -320,7 +373,9 @@ for (const file of files) {
 
     const enclosing = enclosingFunction(file.src, call.index);
     if (enclosing === null) {
-      unresolved.push(`${file.rel}:${lineOf(file.src, call.index)} — .${direction}() on a computed name with no enclosing function to resolve it through`);
+      unresolved.push(
+        `${file.rel}:${lineOf(file.src, call.index)} — .${direction}() on a computed name with no enclosing function to resolve it through`,
+      );
       continue;
     }
     // Captured from an outer scope rather than forwarded: this gate cannot say
@@ -401,14 +456,18 @@ for (const file of files) {
     if (named === undefined) continue;
 
     relaysUsed.add(`${file.rel}::${call[1]}`);
-    sideFor(direction).get(named).push(`${file.rel}:${lineOf(file.src, call.index)} (via ${call[1]}())`);
+    sideFor(direction)
+      .get(named)
+      .push(`${file.rel}:${lineOf(file.src, call.index)} (via ${call[1]}())`);
   }
 }
 
 for (const [key, direction] of relays) {
   if (relaysUsed.has(key)) continue;
   const [relayFile, fn] = key.split('::');
-  unresolved.push(`${relayFile} — ${fn}() ${direction}es a computed event name and is never called with a catalog event, so what it wires cannot be determined`);
+  unresolved.push(
+    `${relayFile} — ${fn}() ${direction}es a computed event name and is never called with a catalog event, so what it wires cannot be determined`,
+  );
 }
 
 // ── 3 · every declared event is wired at both ends, or recorded ─────────────

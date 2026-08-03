@@ -806,13 +806,13 @@ export const WIRING_SOCKETS = [
     event: 'xpEarned',
     missing: 'subscriber',
     reason:
-      'PUBLISHED INTO THE VOID, and this entry is the record of it. svc-p2p and svc-trade both publish, both saying in comments that svc-identity is the way into rank_state — and svc-identity subscribes only to blueprintCreated/blueprintDeleted. rank_state is written exclusively by rank-service.awardXp, called from svc-identity\'s own auth flows and its serviceProcedure, so P2P and trade XP is retained by JetStream and read by nobody. The idempotency keys are even shaped to match identity.xp_events.idempotency_key, a handshake with a consumer that does not exist. Closing it is a svc-identity consumer, not a catalog change.',
+      "PUBLISHED INTO THE VOID, and this entry is the record of it. svc-p2p and svc-trade both publish, both saying in comments that svc-identity is the way into rank_state — and svc-identity subscribes only to blueprintCreated/blueprintDeleted. rank_state is written exclusively by rank-service.awardXp, called from svc-identity's own auth flows and its serviceProcedure, so P2P and trade XP is retained by JetStream and read by nobody. The idempotency keys are even shaped to match identity.xp_events.idempotency_key, a handshake with a consumer that does not exist. Closing it is a svc-identity consumer, not a catalog change.",
   },
   {
     event: 'userCreated',
     missing: 'subscriber',
     reason:
-      'svc-identity announces that a sovereign account exists; no service reacts to the announcement today. Every module that needs a user resolves it through packages/contracts under the caller\'s own authority instead, so nothing is missing a fact it needs — the stream is a durable record ahead of its first reader.',
+      "svc-identity announces that a sovereign account exists; no service reacts to the announcement today. Every module that needs a user resolves it through packages/contracts under the caller's own authority instead, so nothing is missing a fact it needs — the stream is a durable record ahead of its first reader.",
   },
   {
     event: 'ledgerTxPosted',
@@ -836,7 +836,7 @@ export const WIRING_SOCKETS = [
     event: 'buybackExecuted',
     missing: 'subscriber',
     reason:
-      'svc-token publishes each structural buyback-and-burn run. The flywheel it describes is settled by svc-token through the ledger before the event is published, so no consumer is load-bearing; the subject exists so the public burn record (§17.3) can be built from the stream rather than from a query against another service\'s tables.',
+      "svc-token publishes each structural buyback-and-burn run. The flywheel it describes is settled by svc-token through the ledger before the event is published, so no consumer is load-bearing; the subject exists so the public burn record (§17.3) can be built from the stream rather than from a query against another service's tables.",
   },
   {
     event: 'crewMemberCreated',
@@ -848,13 +848,13 @@ export const WIRING_SOCKETS = [
     event: 'orderAccepted',
     missing: 'subscriber',
     reason:
-      'svc-matching announces admission to the book; svc-trade consumes only orderFilled and orderCancelled, because acceptance moves no money and releases no hold, and svc-trade already knows it submitted the order. svc-ws publishes book depth from the engine\'s own snapshots rather than by replaying acceptances. Genuinely nothing to do with it today.',
+      "svc-matching announces admission to the book; svc-trade consumes only orderFilled and orderCancelled, because acceptance moves no money and releases no hold, and svc-trade already knows it submitted the order. svc-ws publishes book depth from the engine's own snapshots rather than by replaying acceptances. Genuinely nothing to do with it today.",
   },
   {
     event: 'protocolAccountCreated',
     missing: 'subscriber',
     reason:
-      'Protocol Plane events are OBSERVATIONS of chain state (§17.4) — the account exists on chain whether or not anything here reads the announcement, and the platform holds no key to it either way. svc-identity links an account through packages/contracts under the user\'s own authority, not off this stream. Unconsumed by design, not by omission.',
+      "Protocol Plane events are OBSERVATIONS of chain state (§17.4) — the account exists on chain whether or not anything here reads the announcement, and the platform holds no key to it either way. svc-identity links an account through packages/contracts under the user's own authority, not off this stream. Unconsumed by design, not by omission.",
   },
   {
     event: 'protocolSessionKeyCreated',
@@ -872,7 +872,7 @@ export const WIRING_SOCKETS = [
     event: 'agentActionCompleted',
     missing: 'subscriber',
     reason:
-      'svc-agents publishes the public half of the Agentic Law (§8.2). The private half — the detail — is a query against agent_actions under the caller\'s own authorisation, which is where every surface in this repo reads it from today. The stream is the durable, replayable record for a compliance consumer that has not been built.',
+      "svc-agents publishes the public half of the Agentic Law (§8.2). The private half — the detail — is a query against agent_actions under the caller's own authorisation, which is where every surface in this repo reads it from today. The stream is the durable, replayable record for a compliance consumer that has not been built.",
   },
   {
     event: 'agentActionRejected',
@@ -890,19 +890,19 @@ export const WIRING_SOCKETS = [
     event: 'p2pOfferCreated',
     missing: 'subscriber',
     reason:
-      'The offer book is served from svc-p2p\'s own tables through packages/contracts; a consumer would be a second copy of a list its owner already answers for. The subject exists so a future search or feed index can be built from the stream instead of reading svc-p2p\'s tables directly (§2).',
+      "The offer book is served from svc-p2p's own tables through packages/contracts; a consumer would be a second copy of a list its owner already answers for. The subject exists so a future search or feed index can be built from the stream instead of reading svc-p2p's tables directly (§2).",
   },
   {
     event: 'p2pDisputeResolved',
     missing: 'subscriber',
     reason:
-      'Deliberately NOT fanned out: svc-notify\'s wiring notes that this payload carries a moderatorId (which may be the system principal `system:p2p-backstop`) and no party ids, so there is no user to notify without inventing one. The escrow movement itself is published separately as p2pEscrowReleased / p2pEscrowRefunded, which do name both sides and ARE consumed.',
+      "Deliberately NOT fanned out: svc-notify's wiring notes that this payload carries a moderatorId (which may be the system principal `system:p2p-backstop`) and no party ids, so there is no user to notify without inventing one. The escrow movement itself is published separately as p2pEscrowReleased / p2pEscrowRefunded, which do name both sides and ARE consumed.",
   },
   {
     event: 'p2pTradeExpired',
     missing: 'subscriber',
     reason:
-      'Same reason as p2pDisputeResolved and recorded in svc-notify\'s wiring comment: the payload names a trade and an outcome, not a user, so nothing can address a notification from it. The outcome it reports is also published on a subject that does carry both parties, so no user-visible fact depends on a consumer here.',
+      "Same reason as p2pDisputeResolved and recorded in svc-notify's wiring comment: the payload names a trade and an outcome, not a user, so nothing can address a notification from it. The outcome it reports is also published on a subject that does carry both parties, so no user-visible fact depends on a consumer here.",
   },
 ] satisfies readonly WiringSocket[];
 
