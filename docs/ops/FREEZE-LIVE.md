@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `f3544259` — docs(ops): P-WS still blocked tip 432f6e73 (cycle53) (#593)
-- **Generated:** 2026-08-03T18:25:14.892Z
+- **Tip:** `5fd900f9` — docs(ops): R01 cycle54 partner babysit tip 3b1024fd (#596)
+- **Generated:** 2026-08-03T18:33:22.801Z
 - **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
