@@ -10,6 +10,7 @@
 [`ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md`](ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md) ·  
 [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md) ·  
 [`DENON-CALL-EXTRACT-2026-08-03.md`](DENON-CALL-EXTRACT-2026-08-03.md).  
+**Local tip hygiene (agents, not Nitro):** `node tooling/scripts/worktree-gc.mjs` dry-run · `--apply` removes clean cherry-empty ghosts · never code on main checkout · after merge `pnpm wt:rm`.
 Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md).
 
 ---
