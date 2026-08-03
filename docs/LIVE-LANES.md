@@ -25,7 +25,9 @@
 2. **AFK residual** `afk_safe` open/partial — `pnpm frontend:residual`
 3. **Babysit** #346 + Denon open PRs (comment/CI only on partner code)
 4. **Reports** under `docs/ops/` per swarm orient
-5. **Not free:** Shehzad M1–M7 implement · invent futures risk · depth UI before WS integrity · dual-edit Denon open PR files · apps/web product
+5. **Denon hard board (platform/money):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — agents do not implement those rows.
+
+**Not free:** Shehzad M1–M7 implement · invent futures risk · depth UI before WS integrity · dual-edit Denon open PR files · apps/web product
 
 ## Last board update
 
