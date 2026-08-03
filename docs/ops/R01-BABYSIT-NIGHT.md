@@ -1,7 +1,7 @@
 # R01 — AFK night partner babysit
 
-**When:** 2026-08-03 ~14:59Z (AFK R07 cycle17 tip stamp)  
-**Tip at run:** `c06a4782` (`origin/main`) — docs(ops): R07 cycle16 freeProduct=0 + tip 26d42dfd (#519)  
+**When:** 2026-08-03 ~15:03Z (AFK R07 cycle18 tip stamp)  
+**Tip at run:** `4fce39a5` (`origin/main`) — docs(ops): R07 cycle17 freeProduct=0 + tip c06a4782 (#520)  
 **Mode:** babysit only — **no code edits** on Denon / Shehzad branches  
 **Comment budget:** max 3 CONFLICTING Denon this run — **used 0** (same-day babysit already on every open CONFLICTING partner PR)  
 **Open list delta:** **none** — same 11 partner PRs; ready list unchanged
@@ -24,7 +24,7 @@
 
 **Ready count: 4** — agents do **not** merge these.
 
-## CONFLICTING — needs rebase to tip `c06a4782`
+## CONFLICTING — needs rebase to tip `4fce39a5`
 
 | PR                                                          | Author  | Mergeable         | Failing / notes          | Action                                        |
 | ----------------------------------------------------------- | ------- | ----------------- | ------------------------ | --------------------------------------------- |
@@ -54,14 +54,14 @@ None. Avoid spam — prior night-engine / AFK babysit comments already on every 
 | [#432](https://github.com/Phantom-X-007/intafaced/pull/432) | Denon   | commented 13:39Z                                          |
 | [#346](https://github.com/Phantom-X-007/intafaced/pull/346) | Shehzad | commented 13:15Z / 13:43Z / 13:44Z — human M1 rebase only |
 
-## Snapshot counts (14:59Z · tip `c06a4782`)
+## Snapshot counts (15:03Z · tip `4fce39a5`)
 
 - **Open partner:** 11 (10 Denon · 1 Shehzad). **ZenYoda3 open:** 0.
 - **Ready for Denon self-merge:** **4** (#445 #433 #430 #420) — full green re-checked this cycle
 - **CONFLICTING (rebase):** 5 Denon + #346 Shehzad
 - **MERGEABLE red CI:** 1 (#428 Prettier+Typecheck)
 
-**Merged since tip `26d42dfd` / #518:** #519 (R07 cycle16).
+**Merged since tip `c06a4782` / #519:** #520 (R07 cycle17).
 
 ## P-WS (report only — no dual-edit)
 
@@ -75,5 +75,5 @@ Agents: docs/report only. No implement on matching or edge while those PRs stay 
 ## Rebase tip (for partners)
 
 ```
-origin/main @ c06a4782  (at doc write; re-fetch before rebase)
+origin/main @ 4fce39a5  (at doc write; re-fetch before rebase)
 ```
