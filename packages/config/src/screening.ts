@@ -13,13 +13,40 @@
  * and cleared you. Every call site, every test and every log line saw the same
  * `allowed`. The mechanism was green because it was empty.
  *
- * This file makes the two states different things:
+ * This file makes the states different things:
  *
- *   `configured: false` → NO list was consulted. Not "clean", *unknown*.
- *   `configured: true`  → a list exists, and this region is not on it.
+ *   `unset`          → NO list was consulted. Not "clean", *unknown*.
+ *   `listed`         → a list exists, and this region is not on it.
+ *   `reviewed-empty` → somebody with standing reviewed it and recorded that no
+ *                      region is screened out. A decision, not a default.
  *
  * and `assertScreeningConfigured` (jurisdiction.ts) refuses to let a
  * production-like process boot in the first state.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THIS FILE IS ONE AUTHORITY. THE JURISDICTION MATRIX IS A DIFFERENT ONE.
+ *
+ * A `ScreeningList` is COUNSEL-SUPPLIED CONTENT: who may not be served, for
+ * legal reasons, under a named governance record.
+ *
+ * A `JURISDICTION_MATRIX` entry is BUSINESS CONFIGURATION: which markets we have
+ * decided to open, at what tier, with what limits — edited by ordinary
+ * contributors in ordinary PRs, for licensing, commercial or product reasons.
+ *
+ * They used to share this type. `JURISDICTION_MATRIX` blocks were folded into a
+ * `ScreeningList` and merged with the env list, so ONE commercially-blocked
+ * region flipped the production boot guard from "refuse to start" to
+ * "satisfied" while the sanctions list was still empty and nobody in counsel had
+ * supplied anything. That is exactly what the pay spec forbids — "nobody can
+ * loosen a sanctions check while tuning something else" — arriving through the
+ * jurisdiction matrix instead of through fraud.
+ *
+ * So: nothing in this file may be constructed from the matrix. A matrix block is
+ * a `BusinessBlock` (jurisdiction.ts), it still refuses the region, and it
+ * cannot satisfy this authority's guard. Where the two cannot be told apart —
+ * a `blocked: true` entry whose reason nobody wrote down — the ambiguous case
+ * REFUSES in both directions: the region stays blocked, and the boot guard stays
+ * unsatisfied.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WHAT THIS FILE DELIBERATELY DOES NOT CONTAIN
@@ -31,12 +58,16 @@
  * engineering; the CONTENTS are a compliance decision with a named owner.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THE CONFIGURED SHAPE
+ * THE CONFIGURED SHAPE — one variable, three answers
  *
  *   INTAFACED_SANCTIONS_REGIONS
- *     Comma-separated. Each item is an ISO-3166 alpha-2 code, optionally
- *     followed by `:` and the reason an operator (or a refused user) should
- *     see. Whitespace around items is ignored; codes are case-insensitive.
+ *     Unset or blank      → `unset`. Nobody has done this. Boot guard refuses.
+ *     `none`              → `reviewed-empty`. See below; requires attribution.
+ *     A list of codes     → `listed`.
+ *
+ *     A list is comma-separated. Each item is an ISO-3166 alpha-2 code,
+ *     optionally followed by `:` and the reason an operator (or a refused user)
+ *     should see. Whitespace around items is ignored; codes are case-insensitive.
  *
  *       INTAFACED_SANCTIONS_REGIONS="AA:UNSC resolution ref,BB:programme ref"
  *
@@ -44,55 +75,113 @@
  *     what the audit log carries, and what tells the next operator whether an
  *     entry is still current or a leftover from a lifted programme.
  *
+ *     ONE VARIABLE, NOT TWO, on purpose: "reviewed and deliberately empty" is an
+ *     answer to the same question a list answers, so it lives in the same place.
+ *     A second variable would create a state where both are set and contradict
+ *     each other, and there is no honest way to resolve that.
+ *
  *   INTAFACED_SANCTIONS_LIST_SOURCE
- *     Free-text provenance for the list above — the governance record, ticket,
+ *     Free-text provenance for the answer above — the governance record, ticket,
  *     or published list revision it came from. Recorded on every screening
  *     decision so "who decided this, and when" is answerable from a log line
  *     rather than from someone's memory.
  *
  *       INTAFACED_SANCTIONS_LIST_SOURCE="counsel-memo-2026-08-01"
  *
- * A region can also be blocked by adding `blocked: true` to its
- * `JURISDICTION_MATRIX` entry. Both sources are honoured and both count as
- * "a list was consulted"; the env var exists so that supplying the list is a
- * config change at deploy time rather than a code change, a review and a
- * release. When counsel answers, nobody should have to open an editor.
+ *     OPTIONAL for a list, MANDATORY for `none`. Not an inconsistency: a
+ *     populated list is self-evidencing — someone typed region codes and reasons,
+ *     and the content itself is the act. `none` has no content. Attribution is
+ *     then the ONLY evidence that a review happened rather than somebody
+ *     silencing a boot failure, so without it there is nothing to distinguish
+ *     the two and the parser refuses.
  */
 
-/** Env var holding the blocklist. See the header for the shape. */
+/** Env var holding the screening answer. See the header for the three shapes. */
 export const SANCTIONS_REGIONS_ENV = 'INTAFACED_SANCTIONS_REGIONS';
 
-/** Env var holding the list's provenance. */
+/** Env var holding the answer's provenance. */
 export const SANCTIONS_SOURCE_ENV = 'INTAFACED_SANCTIONS_LIST_SOURCE';
 
-/** Provenance string used when the blocklist comes from the matrix itself. */
-export const MATRIX_SOURCE = 'JURISDICTION_MATRIX';
+/**
+ * The one value of `SANCTIONS_REGIONS_ENV` that means "reviewed, and no region
+ * is screened out". Case-insensitive, and it must be the whole value.
+ *
+ * It is a four-letter word rather than a two-letter one so it can never collide
+ * with an ISO-3166 alpha-2 code, and so a half-typed list cannot land on it.
+ */
+export const SCREENING_REVIEWED_EMPTY = 'none';
+
+/**
+ * WHO refused a region.
+ *
+ * Carried so an auditor reading a refusal can tell a legal control from a
+ * commercial one. They are not interchangeable, and a decision that cannot say
+ * which one it was is a decision nobody can review.
+ */
+export type BlockAuthority =
+  /** Counsel-supplied screening content. This file. */
+  | 'screening'
+  /** `JURISDICTION_MATRIX` business configuration. jurisdiction.ts. */
+  | 'business';
+
+/**
+ * What the screening authority has said, if anything.
+ *
+ * `unset` and `reviewed-empty` both screen zero regions and are NOT the same
+ * thing. Conflating them is how "nobody has done this yet" gets read as a clean
+ * bill of health.
+ */
+export type ScreeningDeclaration =
+  /** Nobody has supplied anything. The boot guard refuses on this, and only this. */
+  | 'unset'
+  /** A list was supplied and names at least one region. */
+  | 'listed'
+  /** Reviewed, and deliberately empty, on a named authority. */
+  | 'reviewed-empty';
 
 export interface ScreenedRegion {
   /** ISO-3166 alpha-2, upper-cased. */
   readonly region: string;
   /** Shown on refusal and carried in the audit log. */
   readonly reason: string;
-  /** Where this entry came from — env var name, or `JURISDICTION_MATRIX`. */
+  /** Where this entry came from — the governance record, or the env var name. */
   readonly source: string;
+  /**
+   * Always `'screening'`, and it is a literal type rather than a free field: a
+   * matrix block is a `BusinessBlock`, a different type, so the two cannot be
+   * assigned into each other's collections by accident.
+   */
+  readonly authority: 'screening';
 }
 
 export interface ScreeningList {
   readonly regions: readonly ScreenedRegion[];
+  /** Which of the three states this is. See `ScreeningDeclaration`. */
+  readonly declaration: ScreeningDeclaration;
   /**
-   * Was a real list consulted?
+   * Was a real answer supplied at all?
    *
    * The whole point of this file. `false` means nothing was screened — NOT that
    * the caller's region is clear. Never render this as a green tick.
+   *
+   * Derived from `declaration`, and kept because every existing reader asks this
+   * question. `true` with zero regions is now REACHABLE and meaningful — that is
+   * `reviewed-empty` — so anything rendering a count must read `declaration` too.
    */
   readonly configured: boolean;
   /** Provenance, for logs and the operator dashboard. */
   readonly source: string;
 }
 
-/** The state before anyone supplies anything. Screens nothing, and says so. */
-export const EMPTY_SCREENING_LIST: ScreeningList = {
+/**
+ * The state before anyone supplies anything. Screens nothing, and says so.
+ *
+ * Named `UNSET`, not `EMPTY`: "deliberately empty" is a different, legitimate
+ * state, and the two must not share a word — let alone a value.
+ */
+export const UNSET_SCREENING_LIST: ScreeningList = {
   regions: [],
+  declaration: 'unset',
   configured: false,
   source: 'unconfigured',
 };
@@ -119,9 +208,29 @@ const REGION_CODE = /^[A-Za-z]{2}$/;
  */
 export function parseScreeningList(raw: string | undefined, source?: string): ScreeningList {
   const trimmed = raw?.trim() ?? '';
-  if (trimmed === '') return EMPTY_SCREENING_LIST;
+  if (trimmed === '') return UNSET_SCREENING_LIST;
 
-  const provenance = source?.trim() || `env:${SANCTIONS_REGIONS_ENV}`;
+  const attribution = source?.trim() ?? '';
+
+  // ── "reviewed, and deliberately empty" ───────────────────────────────────
+  // A recorded decision. It satisfies the boot guard, which is precisely why it
+  // must cost something: without attribution it is indistinguishable from
+  // somebody typing four letters to make a startup failure go away, and that is
+  // the failure mode the guard exists to prevent.
+  if (trimmed.toLowerCase() === SCREENING_REVIEWED_EMPTY) {
+    if (attribution === '') {
+      throw new ScreeningListError(`${SANCTIONS_REGIONS_ENV}="${trimmed}" needs an attributable source:`, [
+        `"${SCREENING_REVIEWED_EMPTY}" is the statement "this was reviewed, and no region is screened out". ` +
+          `That is a compliance decision with an owner, not a default.`,
+        `Set ${SANCTIONS_SOURCE_ENV} to the governance record that says so ` + `(e.g. ${SANCTIONS_SOURCE_ENV}="counsel-memo-2026-08-01").`,
+        `If nobody has reviewed this yet, leave ${SANCTIONS_REGIONS_ENV} unset instead. ` +
+          `An unset variable is the honest answer, and the boot guard will say so out loud.`,
+      ]);
+    }
+    return { regions: [], declaration: 'reviewed-empty', configured: true, source: attribution };
+  }
+
+  const provenance = attribution || `env:${SANCTIONS_REGIONS_ENV}`;
   const issues: string[] = [];
   const seen = new Set<string>();
   const regions: ScreenedRegion[] = [];
@@ -150,6 +259,7 @@ export function parseScreeningList(raw: string | undefined, source?: string): Sc
       region: upper,
       reason: reason || `Not served in ${upper} (sanctions screening, §24 Lane A)`,
       source: provenance,
+      authority: 'screening',
     });
   }
 
@@ -158,29 +268,13 @@ export function parseScreeningList(raw: string | undefined, source?: string): Sc
   }
 
   // Reachable when the value is only commas and whitespace. That is somebody
-  // meaning to supply a list and supplying nothing, so it is unconfigured — the
-  // boot guard should treat it exactly like an absent variable.
-  if (regions.length === 0) return EMPTY_SCREENING_LIST;
+  // meaning to supply a list and supplying nothing — which is NOT the same as
+  // deciding there is nothing to supply, and it carries no attribution. So it is
+  // `unset`, and the boot guard treats it exactly like an absent variable.
+  // Somebody who means "deliberately empty" writes `none` and signs it.
+  if (regions.length === 0) return UNSET_SCREENING_LIST;
 
-  return { regions, configured: true, source: provenance };
-}
-
-/**
- * Merge two lists. Used to fold `JURISDICTION_MATRIX` blocks in with the
- * env-supplied ones; `configured` is true if EITHER source supplied anything,
- * because either one means a real list was consulted.
- *
- * On a region present in both, the first list wins — callers pass the
- * env-supplied list first, so a deploy-time correction beats a stale entry
- * baked into the matrix without needing a code change to take effect.
- */
-export function mergeScreeningLists(a: ScreeningList, b: ScreeningList): ScreeningList {
-  if (!b.configured) return a;
-  if (!a.configured) return b;
-
-  const seen = new Set(a.regions.map((r) => r.region));
-  const regions = [...a.regions, ...b.regions.filter((r) => !seen.has(r.region))];
-  return { regions, configured: true, source: `${a.source} + ${b.source}` };
+  return { regions, declaration: 'listed', configured: true, source: provenance };
 }
 
 let cache: { raw: string | undefined; source: string | undefined; list: ScreeningList } | null = null;
