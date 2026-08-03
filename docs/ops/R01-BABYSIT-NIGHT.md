@@ -422,3 +422,9 @@ Open partner still **11** (10 Denon + 1 Shehzad). **Ready count: 4** (#445 #433 
 ```
 origin/main @ 58836e3d  (at doc write; partners re-fetch before rebase)
 ```
+
+---
+
+## Refresh cycle45 — 2026-08-03T17:40Z · tip `4a05436c`
+
+Unchanged: Denon ready **#445 #433 #420** (+#430 docs) self-merge only; #428 red; CONFLICTING #448 #441 #438 #436 #432 #346 babysit. No Nitro Class N open after #573.
