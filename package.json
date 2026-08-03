@@ -62,7 +62,12 @@
     "order-path-cx8": "node tooling/scripts/order-path-cx8-boot.mjs",
     "claim:check": "node tooling/ci/claim-check.mjs",
     "wt:gc": "node tooling/scripts/worktree-gc.mjs",
-    "wt:gc:apply": "node tooling/scripts/worktree-gc.mjs --apply"
+    "wt:gc:apply": "node tooling/scripts/worktree-gc.mjs --apply",
+    "swarm:freeze": "node tooling/scripts/swarm.mjs freeze",
+    "swarm:status": "node tooling/scripts/swarm.mjs status",
+    "swarm:report": "node tooling/scripts/swarm.mjs report",
+    "swarm:next": "node tooling/scripts/swarm.mjs next",
+    "swarm:claim": "node tooling/scripts/swarm.mjs claim"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

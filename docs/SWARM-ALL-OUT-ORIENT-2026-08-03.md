@@ -1,7 +1,7 @@
 # Swarm all-out orient — cold agents (GitHub tip)
 
 **Status:** BINDING for multi-chat / multi-model / insane parallel when Nitro says go all-out / AFK / swarms  
-**Audience:** every agent (Grok, Claude, Fable, Orca) — Nitro does not run git  
+**Audience:** every agent (any coding agent CLI) — Nitro does not run git  
 **Re-derive tip every fire.** Chat memory is never high water.
 
 ---
@@ -25,6 +25,14 @@ Run in order. Do not skip to “vibe implement.”
 export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"  # sandboxed agents
 git fetch origin
 git log -1 --oneline origin/main
+# Machine free board (Wave 1) — residual ∩ REGROUP ∩ open PR files
+pnpm swarm:freeze          # writes docs/ops/FREEZE-LIVE.md
+pnpm swarm:status          # free vs blocked counts
+pnpm swarm:next            # first free claim paste
+pnpm swarm:next --all       # ALL free product pastes (anti-under-spawn)
+pnpm swarm:claim <id>       # atomic lock docs/ops/claims/<id>.md (not LIVE-LANES)
+# Before first edit on claimed paths:
+pnpm claim:check <paths>   # or pnpm claim:check after your branch has diffs
 gh pr list --state open --limit 50
 # product free / human locks
 #   tooling/tracker/features.mjs · docs/BOARD-CLEAR-NEXT.md · docs/BOARD-CLEAR-SCOREBOARD.md
@@ -32,9 +40,13 @@ gh pr list --state open --limit 50
 #   docs/REGROUP-2026-08-03.md
 # FE residual machine SoT:
 #   tooling/frontend/residual-register.json · pnpm frontend:residual
+# Fleet surface for Nitro:
+#   docs/ops/DASHBOARD.md  ·  pnpm swarm:report
 # in-flight shell work (may be branch-only until PRs open):
 #   origin/fix/shell-landing-honesty · origin/fix/shell-money-on-the-wire · origin/fix/shell-wire-validation
 ```
+
+**NO-FLEET proof:** Docker may be absent — honesty ships with `proof_missing: fleet-blocked`, never fake browser done. **:8090:** if `lsof` listener cwd ≠ your worktree, visual proof is invalid.\n\n**Anti-under-spawn:** if `pnpm swarm:status` shows free product claims, the coordinator must spawn or residual-own each — idle free claims = FAIL for an all-out run.
 
 ### What answers which question
 
@@ -156,9 +168,9 @@ Agents write under `docs/ops/` (or update existing) on cadence:
 ## 6 · Worker paste (one claim)
 
 ```
-PRE-FLIGHT: docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md §1.
-You own ONLY claim: <id>
-Allowed paths: <list from REGROUP/residual>
+PRE-FLIGHT: pnpm swarm:freeze · pnpm claim:check · docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md §1.
+You own ONLY claim: <id>   # or use: pnpm swarm:next
+Allowed paths: <list from FREEZE-LIVE / REGROUP>
 Forbidden: Shehzad M1–M7; files in open Denon PRs; invent money/depth; apps/web product; main checkout.
 Worktree from origin/main. Claim LIVE-LANES. pnpm verify. One PR. Stamp residual if FE.
 ```
@@ -166,10 +178,12 @@ Worktree from origin/main. Claim LIVE-LANES. pnpm verify. One PR. Stamp residual
 ## 7 · Coordinator / Nitro GO paste
 
 ```
-Go all-out swarms. Law: docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md + docs/REGROUP-2026-08-03.md + residual-register + ownership matrix.
-Spawn all path-clean free claims in parallel (writers + landers + reports + babysit + research).
+Go all-out swarms. Law: docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md + docs/REGROUP-2026-08-03.md + residual + ownership.
+PRE-FLIGHT: git fetch · pnpm swarm:freeze · pnpm swarm:status · pnpm swarm:report · docs/ops/DASHBOARD.md
+Loop: pnpm swarm:next → spawn worker → re-freeze after merge → until free product empty or blocked-only.
+Anti-under-spawn: every free product claim gets a worker or residual owner.
 No dual-edit Denon open PRs. No Shehzad implement. No invent. No depth UI until integrity free.
-Tokens unlimited for productive width+depth+reports. Worktrees. Verify. Living LIVE-LANES.
+Tokens unlimited for productive width+depth+reports. Worktrees. claim:check. Verify.
 I am AFK. Peace scoreboard when free residual empty or blocked-only.
 ```
 
@@ -177,11 +191,13 @@ I am AFK. Peace scoreboard when free residual empty or blocked-only.
 
 ## 8 · Related tip docs
 
-| Doc                                                        | Role                           |
-| ---------------------------------------------------------- | ------------------------------ |
-| `docs/REGROUP-2026-08-03.md`                               | Denon product queue + blockers |
-| `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md` | One surface law                |
-| `docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md`      | AFK residual drain             |
-| `docs/NITRO-PARALLEL-OPS.md`                               | Multi-agent board ops          |
-| `docs/PERMANENT-TIP-AND-HYGIENE-2026-08-03.md`             | Tip hygiene                    |
-| `docs/NITRO-SESSION-PROMPT.md`                             | Paste PRE-FLIGHT               |
+| Doc                                                        | Role                                     |
+| ---------------------------------------------------------- | ---------------------------------------- |
+| `docs/REGROUP-2026-08-03.md`                               | Denon product queue + blockers           |
+| `docs/ops/DASHBOARD.md`                                    | Fleet surface (`pnpm swarm:report`)      |
+| `docs/ops/FREEZE-LIVE.md`                                  | Machine free board (`pnpm swarm:freeze`) |
+| `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md` | One surface law                          |
+| `docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md`      | AFK residual drain                       |
+| `docs/NITRO-PARALLEL-OPS.md`                               | Multi-agent board ops                    |
+| `docs/PERMANENT-TIP-AND-HYGIENE-2026-08-03.md`             | Tip hygiene                              |
+| `docs/NITRO-SESSION-PROMPT.md`                             | Paste PRE-FLIGHT                         |

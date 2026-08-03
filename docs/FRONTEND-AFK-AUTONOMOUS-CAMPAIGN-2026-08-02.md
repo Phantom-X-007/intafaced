@@ -24,7 +24,7 @@
 
 ## 1 · Standing order (this is the law while AFK)
 
-1. **Do not stop** for “continue.” End-of-turn only when: residual has zero `afk_safe` open/partial **or** kill condition fires.
+1. **Do not stop** for “continue.” End-of-turn only when: residual has zero `afk_safe` open/partial **or** kill condition fires. Prefer `pnpm swarm:freeze` + `pnpm swarm:next` for the free board (companion to residual-print; anti-under-spawn).
 2. **Do not wait** for Nitro for: worktrees, git, PR, CI poll, squash-merge Class N, residual stamps, preflight, brand-scan, goldens.
 3. **Do not invent** money, balances, live books, or “improved” without scorecard row.
 4. **Do not touch** order-route, futures, Stream B services, Denon money branches.
