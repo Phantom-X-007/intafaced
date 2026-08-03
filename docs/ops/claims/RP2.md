@@ -1,4 +1,4 @@
-# Claim RP-LAND-MONEY
+# Claim RP2
 
 **status:** residual-own
 **tip:** c1c233a3

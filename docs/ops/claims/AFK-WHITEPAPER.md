@@ -1,4 +1,4 @@
-# Claim RP-LAND-MONEY
+# Claim AFK-WHITEPAPER
 
 **status:** residual-own
 **tip:** c1c233a3
