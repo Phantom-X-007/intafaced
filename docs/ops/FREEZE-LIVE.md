@@ -2,8 +2,8 @@
 
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
-- **Tip:** `7a02302d` — docs(ops): R01 partner babysit @ bf214291 — 4 ready for Denon self-merge (#511)
-- **Generated:** 2026-08-03T14:24:22.461Z
+- **Tip:** `206aa5e6` — docs(ops): R07 cycle10 freeProduct=0 + tip 7a02302d (#512)
+- **Generated:** 2026-08-03T14:28:46.774Z
 - **Open PRs:** 11
 - **Free claims:** 2 (product 0) · **Blocked:** 1
 - **Spawn accounting:** available=0 · active_spawned_locks=0 · gap=0 · width_target=6-8
