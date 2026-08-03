@@ -30,9 +30,45 @@
 >
 > **Two enforcement gaps must close alongside it, or this is unenforced:**
 >
-> - **`custody-scan` walks `.ts`/`.tsx` only. It has never read a line of Java.**
+> - ~~**`custody-scan` walks `.ts`/`.tsx` only. It has never read a line of
+>   Java.**~~ **Correct as a fact, wrong as an instruction — see the correction
+>   below.**
 > - **`vendor-shell-scan` bans seven exotic mint patterns while permitting the
 >   four mutators every money controller actually calls.** Invert it.
+>
+> ### Correction — 2026-08-03: the first gap named the wrong gate
+>
+> `custody-scan` does walk only `.ts`/`.tsx` and `.sol`, and it never has read a
+> line of Java. Both remain true. But reading that as _"so extend `custody-scan`
+> to Java"_ was a mistake, and it was acted on before it was caught.
+>
+> **`custody-scan` is a PROTOCOL PLANE gate.** It walks the services whose
+> `planes` is exactly `['protocol']` and whose `custodial` is false — three that
+> exist today — asserting that a plane which promises non-custody keeps that
+> promise. It says nothing about `vendor/`, and it should not: the custodial
+> services are outside it **on purpose**, because they hold value by design.
+> Bolting vendor rules onto it would have put two unrelated failure modes behind
+> one exit code, and left the Protocol Plane gate reporting on a tree it has no
+> doctrine about.
+>
+> **The Java dual-book question belongs to `vendor-java-money-scan.mjs` and
+> `dual-book-door-scan.mjs`** — both already in CI and in the DoD gate, both
+> walking all 882 Java files. Spec DB-4's own wording is _"custody-scan **(or
+> successor)** reads Java"_; the successor is `vendor-java-money-scan`. That is
+> where the widening landed.
+>
+> **What was actually still open, once measured.** The DAO route was already
+> shut: all four mutators are `UPDATE member_wallet SET id = id WHERE 1 = 0`,
+> the service stubs throw, and every one of the 36 call sites goes through those
+> stubs. The HTTP route was already shut: 40 URI fragments behind a 410
+> interceptor on all four money-facing apps. **A third route was open and
+> ungated** — `wallet.setBalance(wallet.getBalance().add(x))` on a managed
+> entity, which Hibernate flushes to `member_wallet` at commit with no `UPDATE`
+> to grep for and often no `save()` either. 27 such sites exist. Seven are held
+> off only by a `= null` short-circuit that one line restores, and three of
+> those are in a Kafka consumer and two Spring event listeners — **code no HTTP
+> interceptor can reach.** That shape is now a gate rule, with the 63 known
+> sites on a counted ratchet.
 >
 > **Why the asymmetry decided it.** Rebuilding what already works costs time —
 > bounded, visible, reversible. Adopting a `member_wallet` writer costs the
@@ -129,7 +165,7 @@ Cheapest to stand up and the only option that does not require rewriting one sid
 - Maven build has not completed; nothing has been compiled or run.
 - No service has been started. No claim is made that this platform works.
 - The Vue front-ends and the mobile apps have not been examined.
-- `01_wallet_rpc` handles private keys for BTC/ETH/USDT/EOS. **It has not been read.** Nothing in it should touch a chain holding value until it has been, and `custody-scan` does not cover Java.
+- `01_wallet_rpc` handles private keys for BTC/ETH/USDT/EOS. **It has not been read.** Nothing in it should touch a chain holding value until it has been. (`custody-scan` does not cover Java and is not meant to — `vendor-java-money-scan` walks all 882 Java files, `01_wallet_rpc` included. It gates balance writes, not key handling; the security review is still a precondition and no scan substitutes for it.)
 - No security review of 878 Java files. The two P0s found in our own code this week (`ledger.post` and svc-matching order writes, both unauthenticated) were each _"a guard was written, then bypassed by a second door"_ — the failure mode that is invisible without reading everything.
 
 ---
