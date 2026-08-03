@@ -10,9 +10,9 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **40%** — 43 of 108 features shipped
+`████████░░░░░░░░░░░░` **41%** — 45 of 111 features shipped
 
-Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 6/16 · **3P** 1/8 · **4** 2/5 · **4P** 0/3 · **5** 4/32 · **5P** 0/2
+Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 6/16 · **3P** 1/8 · **4** 2/5 · **4P** 0/3 · **5** 6/35 · **5P** 0/2
 
 **In progress:** Perps: cross/isolated margin, funding, liquidation ladder (shehzad002) · Pro terminal — depth, charts, hotkeys, sub-accounts (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (shehzad002)
 
