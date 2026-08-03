@@ -1,13 +1,13 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T13:55:29.049Z
+Generated: 2026-08-03T14:05:41.123Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `f868296e`                                                        |
-| Tip subject                       | docs(ops): TRK research pack 5 — chain/launch/market/venue (#493) |
-| Open PRs                          | 18                                                                |
-| Free claims                       | 34                                                                |
+| Tip                               | `94cc463d`                                                        |
+| Tip subject                       | docs(ops): R01 partner babysit refresh @ e91fb244 (#502)          |
+| Open PRs                          | 11                                                                |
+| Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
 | Blocked                           | 1                                                                 |
 | Residual tip_note                 | claim-lock authority · WHITEPAPER retired · AFK shell wave closed |
