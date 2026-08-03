@@ -394,7 +394,33 @@ EXIT=0
 
 ---
 
-## Re-scan cycle40 — 2026-08-03T17:10Z · tip `823a6351`
+## Re-scan cycle40 — 2026-08-03T17:08Z · tip `78ff3b75` (#564)
 
-**Mode:** NO-FLEET · freeProduct=0 pivot  
-**Verdict:** live invent residual **0**.
+**Mode:** NO-FLEET · static `rg` + `tooling/ci/fabricated-money-scan.mjs`  
+**Trigger:** AFK OPS invent re-scan keep-alive (freeProduct=0 shell drain — **not** platform done)  
+**Tip full:** `78ff3b75b2b12f6a91801920c6670163de3b63dc` · main after R07 cycle40 land (#564) · invent scan confirmed post-rebase
+
+| check                         |                                                 result | verdict                                           |
+| ----------------------------- | -----------------------------------------------------: | ------------------------------------------------- |
+| `fabricated-money-scan.mjs`   | **0** finding(s) / **0** frozen baseline rows · EXIT=0 | queue not grown; baseline empty since #489 (10→0) |
+| shell files scanned           |                                                 **93** | gate path green                                   |
+| `invent` (ci) vendor front    |                                                 **91** | doctrine / honesty comments only (was 94 @ c37)   |
+| `\bfake\b`                    |                                                  **8** | comments + anti-fraud copy                        |
+| `PriceTrend` / `priceTrend`   |                                                  **1** | historical note in `en.js`                        |
+| live `dataFanyong` rows       |                                                  **0** | honesty comment only (`Invite.vue`)               |
+| live `CNYRate \|\| 6.5`       |                                                  **0** | REMOVED/comment notes only                        |
+| `mockTicker` / zero-sparkline |                                                  **0** | still gone                                        |
+| `Math.random` product         |                                   captcha `gt.js` only | not market invent                                 |
+| **NEW hard invent residual**  |                                                  **0** | no invent-fix PR from this pass                   |
+
+**freeProduct=0 note:** shell craft queue drained for residual product work — this is **shell-only**, not platform complete (partner pile / Denon+Shehzad PRs / P-WS still open). Keep-alive re-scan only; no invent money UI. freeze @ tip: free=2 freeProduct=0 freeTracker=0 blocked=P-WS-REPORT. Replaces R07 c40 stub with full invent table.
+
+### fabricated-money-scan.mjs (verbatim)
+
+```
+✓ fabricated-money — 93 shell file(s), 0 finding(s), all at the frozen baseline
+  ⚠ 0 invented figure(s) frozen across 0 file(s) — the queue cannot grow. Money on a surface comes from a service response, or the surface renders the absence.
+EXIT=0
+```
+
+**Verdict:** invent honesty holds · live invent residual **0** · fabricated-money findings **0**.
