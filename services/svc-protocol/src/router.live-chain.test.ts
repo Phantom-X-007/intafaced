@@ -12,14 +12,14 @@ import { AccountRegistry, bindingMessage, MemoryAccountStore } from './accounts/
 import { SessionRelay } from './session/relay.js';
 import { DEFAULT_USER_SALT } from './accounts/address.js';
 import {
-  assertDisposableChain,
   deployAccountSuite,
-  devChainClients,
   devChainReachable,
   devChainRequired,
-  devAccount,
   devRpcUrl,
+  devSuiteClients,
+  suiteAccount,
   DEV_CHAIN_ID,
+  type DevChainClients,
 } from '../scripts/dev-chain.js';
 
 /**
@@ -87,22 +87,21 @@ describe.skipIf(!reachable)('svc-protocol against a real chain', () => {
   let factory: Address;
   let implementation: Address;
   let chain: ProtocolChain;
-  let clients: ReturnType<typeof devChainClients>;
+  let clients: DevChainClients;
   let caller: ReturnType<ReturnType<typeof createProtocolRouter>['createCaller']>;
   let anonCaller: ReturnType<ReturnType<typeof createProtocolRouter>['createCaller']>;
 
   /**
    * The owner IS the deployer here, because these tests must sign as the owner
    * (`grantSession` is owner-only, and `claimAccount` needs the owner's
-   * signature). A different index from every other live-chain file: parallel
-   * workers sharing one anvil account race its nonce. Index 0 is reserved for
-   * `deploy-dev.ts`, whose CREATE addresses compose depends on.
+   * signature). `suiteAccount(import.meta.url)` is the same account
+   * `devSuiteClients` puts in the wallet below — derived from this file's path,
+   * so no other suite can be sending from it. See `scripts/dev-chain.ts`.
    */
-  const ownerAccount = devAccount(2);
+  const ownerAccount = suiteAccount(import.meta.url);
 
   beforeAll(async () => {
-    clients = devChainClients(rpcUrl, DEV_CHAIN_ID, 2);
-    await assertDisposableChain(clients.publicClient);
+    clients = await devSuiteClients(import.meta.url, rpcUrl);
     const suite = await deployAccountSuite(clients, ENTRYPOINT);
     factory = suite.factory;
     implementation = suite.implementation;

@@ -1,4 +1,5 @@
-import { createPublicClient, createWalletClient, defineChain, getContract, http } from 'viem';
+import { createHash } from 'node:crypto';
+import { createPublicClient, createWalletClient, defineChain, getContract, http, toHex } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 import type { Address, Hex, HDAccount, PublicClient, WalletClient } from 'viem';
 import { loadArtifact } from '../src/chain/artifacts.js';
@@ -47,14 +48,14 @@ export const PUBLIC_ANVIL_DEV_MNEMONIC = 'test test test test test test test tes
 export const PUBLIC_ANVIL_DEV_ACCOUNT_0_ADDRESS: Address = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 
 /**
- * One of anvil's ten pre-funded accounts.
+ * One of anvil's ten pre-funded accounts (`m/44'/60'/0'/0/{index}`).
  *
- * Test files take DIFFERENT indices on purpose. Vitest runs files in parallel
- * workers, they all deploy their own suite, and a shared deployer means two
- * workers racing the same nonce — which surfaces as `nonce too low` in whichever
- * one loses, intermittently, on a chain that is behaving perfectly. Index 0 is
- * reserved for `deploy-dev.ts`, because the addresses it produces are the ones
- * named in docker-compose.apps.yml and they depend on that account's nonce.
+ * Index 0 is reserved for `deploy-dev.ts`, because the addresses it produces
+ * are the ones named in docker-compose.apps.yml and they depend on that
+ * account's nonce.
+ *
+ * **Test suites must NOT call this.** They call `devSuiteClients()` below —
+ * see the banner there for why a hand-picked index is the wrong tool.
  */
 export function devAccount(index = 0): HDAccount {
   return mnemonicToAccount(PUBLIC_ANVIL_DEV_MNEMONIC, { addressIndex: index });
@@ -112,6 +113,147 @@ export function devChainClients(rpcUrl = devRpcUrl(), chainId = DEV_CHAIN_ID, ac
   const account = devAccount(accountIndex);
   return {
     publicClient: createPublicClient({ chain, transport: http(rpcUrl) }) as PublicClient,
+    walletClient: createWalletClient({ account, chain, transport: http(rpcUrl) }),
+    deployer: account.address,
+    rpcUrl,
+  };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * PER-SUITE SENDERS — WHY A HAND-PICKED ACCOUNT INDEX IS NOT A FIX
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Vitest runs test files in parallel workers, and `pnpm verify` runs packages
+ * in parallel on top of that. Two files that send from the SAME account both
+ * read `eth_getTransactionCount(pending)`, both get N, and both broadcast with
+ * nonce N. One is mined; the other gets `nonce too low` — on a chain that is
+ * behaving perfectly, in a file whose diff contains nothing wrong.
+ *
+ * The previous answer was a comment convention: every live-chain file picked a
+ * different one of anvil's ten pre-funded accounts, and each file's header
+ * recited which index the others had taken. That is a registry maintained by
+ * copy-paste across three services, and it did what registries maintained by
+ * copy-paste do. By the time this was written it had drifted into two silent
+ * collisions — index 3 (`token-factory-onchain` + `pool-factory-onchain`) and
+ * index 4 (`mint-swap-onchain` + `router-launch-live`) — plus a third across
+ * services, svc-pay's live rail suite sending from indices 0 and 1 while
+ * svc-protocol's `deploy-dev` and `create2-onchain` used the same two. It also
+ * had a hard ceiling: ten accounts, and svc-protocol alone wants six.
+ *
+ * So the index is no longer picked. It is DERIVED from the suite's own path:
+ *
+ *   · Distinct files get distinct senders because distinct paths hash apart.
+ *     Nothing to remember, nothing to keep in sync, no ceiling, and a new
+ *     on-chain suite is isolated the moment it is written.
+ *   · The derivation is stable across machines and CI (it keys off the path
+ *     from `services/` down, not the checkout root), so a failure is
+ *     reproducible and the sender is greppable from the address.
+ *   · Two checkouts of the same file DO get the same sender. That is correct:
+ *     they are the same suite, and running one repo twice at once against one
+ *     dev chain is not a thing this promises to support.
+ *
+ * ── Why a whole other HD branch ────────────────────────────────────────────
+ *
+ * anvil's ten pre-funded accounts are `m/44'/60'/0'/0/{0..9}`. Suite senders
+ * live at `m/44'/60'/1'/0/{i}` — a different BIP-44 account, so the subtrees
+ * are disjoint by construction rather than by staying below/above some agreed
+ * number. A derived sender can never BE one of the ten, so `deploy-dev.ts`'s
+ * nonce-0/1/2/3 CREATE addresses (which docker-compose.apps.yml names) stay
+ * exactly as deterministic as they were. It is also disjoint from the deposit
+ * addresses svc-pay derives from this same public mnemonic, which use the
+ * default account branch.
+ *
+ * ── Why funding is a state write, not a transfer ───────────────────────────
+ *
+ * `m/44'/60'/1'/0/{i}` holds nothing at genesis, so it has to be funded. A
+ * faucet TRANSFER would re-introduce exactly the bug being fixed: every suite
+ * would race the faucet's nonce instead of the deployer's. `anvil_setBalance`
+ * writes the balance directly — no transaction, no nonce, no sender, nothing
+ * to race. It is an anvil-only method, which is the point: it cannot silently
+ * work against a real node, and `devSuiteClients` calls
+ * `assertDisposableChain` BEFORE it, so the throwaway-chain check is what
+ * gates the state write rather than something that runs after it.
+ */
+
+/** The BIP-44 account branch reserved for derived test senders. See above. */
+const SUITE_BRANCH_ACCOUNT_INDEX = 1;
+
+/** What each derived sender is topped up to: anvil's own default balance. */
+export const SUITE_FUNDING_WEI = 10_000n * 10n ** 18n;
+
+/**
+ * The suite's identity for derivation purposes: its path from `services/` down,
+ * separators normalised and case-folded. Independent of where the repository is
+ * checked out, so the same suite gets the same sender on a laptop, in a git
+ * worktree, and on CI.
+ */
+export function suiteId(suiteFileUrl: string): string {
+  // Deliberately string surgery rather than `fileURLToPath`: that function is
+  // platform-aware and rejects a POSIX file URL when it runs on Windows, so a
+  // helper built on it would derive fine from `import.meta.url` and throw the
+  // moment anything passed it a path shaped like the other operating system.
+  const withoutScheme = suiteFileUrl.replace(/^file:\/\//, '');
+  const decoded = decodeURIComponent(withoutScheme).replace(/\\/g, '/');
+  const anchor = decoded.lastIndexOf('/services/');
+  return (anchor === -1 ? decoded : decoded.slice(anchor + 1)).toLowerCase();
+}
+
+/**
+ * The HD address index this suite sends from.
+ *
+ * SHA-256 over the suite id, truncated to 31 bits because BIP-32 non-hardened
+ * child indices stop at 2^31 - 1. Two suites collide only if their paths
+ * collide in that space; with the order of ten on-chain suites in this repo
+ * that is around one in 10^7, and `dev-chain.test.ts` checks the actual set
+ * rather than trusting the estimate.
+ */
+export function suiteSenderIndex(suiteFileUrl: string): number {
+  const digest = createHash('sha256').update(suiteId(suiteFileUrl)).digest();
+  return digest.readUInt32BE(0) & 0x7fff_ffff;
+}
+
+/** The account a given suite sends from. Never one of anvil's ten. */
+export function suiteAccount(suiteFileUrl: string): HDAccount {
+  return mnemonicToAccount(PUBLIC_ANVIL_DEV_MNEMONIC, {
+    accountIndex: SUITE_BRANCH_ACCOUNT_INDEX,
+    addressIndex: suiteSenderIndex(suiteFileUrl),
+  });
+}
+
+/**
+ * Give `address` a balance outright.
+ *
+ * anvil-only, deliberately — see the banner above. Callers must have run
+ * `assertDisposableChain` first.
+ */
+export async function fundDevAccount(client: PublicClient, address: Address, wei: bigint = SUITE_FUNDING_WEI): Promise<void> {
+  await client.request({ method: 'anvil_setBalance', params: [address, toHex(wei)] } as never);
+}
+
+/**
+ * Clients for one test file, sending from that file's own derived, funded
+ * account. Pass `import.meta.url` — the caller's identity IS the isolation.
+ *
+ * Replaces `devChainClients(url, id, <hand-picked index>)` +
+ * `assertDisposableChain(...)` in on-chain suites, and does the two in the
+ * order that matters: the disposable-chain refusal runs before anything is
+ * written to the node.
+ */
+export async function devSuiteClients(
+  suiteFileUrl: string,
+  rpcUrl = devRpcUrl(),
+  chainId: number = DEV_CHAIN_ID,
+): Promise<DevChainClients> {
+  const chain = devChain(rpcUrl, chainId);
+  const account = suiteAccount(suiteFileUrl);
+  const publicClient = createPublicClient({ chain, transport: http(rpcUrl) }) as PublicClient;
+
+  await assertDisposableChain(publicClient, chainId);
+  await fundDevAccount(publicClient, account.address);
+
+  return {
+    publicClient,
     walletClient: createWalletClient({ account, chain, transport: http(rpcUrl) }),
     deployer: account.address,
     rpcUrl,

@@ -5,22 +5,19 @@ import { loadArtifact } from '../chain/artifacts.js';
 // .ts helper under scripts/, deliberately outside the service build — it is the
 // only file in this repository holding a private key, and it is a public one.
 import {
-  assertDisposableChain,
-  deployAccountSuite,
-  devChainClients,
   devChainReachable,
   devChainRequired,
   devRpcUrl,
-  DEV_CHAIN_ID,
+  devSuiteClients,
+  deployAccountSuite,
+  type DevChainClients,
 } from '../../scripts/dev-chain.js';
 
 /**
- * Vitest runs test files in parallel workers. Each live-chain file deploys its
- * own suite, so each takes a DIFFERENT one of anvil's ten funded accounts —
- * otherwise two workers race the same nonce and one fails with `nonce too low`
- * on a chain that is behaving perfectly. Index 0 belongs to `deploy-dev.ts`.
+ * This file sends from an account derived from its own path, funded on demand —
+ * see the per-suite sender banner in `scripts/dev-chain.ts`. Nothing here has to
+ * know which account any other suite took.
  */
-const DEPLOYER_INDEX = 1;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -97,8 +94,7 @@ describe.skipIf(!reachable)('CREATE2 — the TypeScript derivation against the d
   let read: (owner: Address, salt: Hex) => Promise<Address>;
 
   beforeAll(async () => {
-    const clients = devChainClients(rpcUrl, DEV_CHAIN_ID, DEPLOYER_INDEX);
-    await assertDisposableChain(clients.publicClient);
+    const clients = await devSuiteClients(import.meta.url, rpcUrl);
 
     const suite = await deployAccountSuite(clients, ENTRYPOINT);
     factory = suite.factory;
@@ -139,10 +135,10 @@ describe.skipIf(!reachable)('CREATE2 — the TypeScript derivation against the d
 describe.skipIf(!reachable)('the predicted address is where the account actually lands', () => {
   let factory: Address;
   let implementation: Address;
-  let clients: ReturnType<typeof devChainClients>;
+  let clients: DevChainClients;
 
   beforeAll(async () => {
-    clients = devChainClients(rpcUrl, DEV_CHAIN_ID, DEPLOYER_INDEX);
+    clients = await devSuiteClients(import.meta.url, rpcUrl);
     const suite = await deployAccountSuite(clients, ENTRYPOINT);
     factory = suite.factory;
     implementation = suite.implementation;

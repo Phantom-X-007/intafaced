@@ -5,10 +5,14 @@
  * Pool: PoolFactory createPool → mint liquidity → swapExactIn.
  *
  * Skips without chain / viem. CI with REQUIRE_EVM_CHAIN=1 must run this.
- * Deployer index 4 — avoid races with deploy-dev (0) and other onchain suites.
+ *
+ * Sends from an account derived from this file's own path, funded on demand —
+ * see the per-suite sender banner in `scripts/dev-chain.ts`. It used to name
+ * anvil index 4, which `launch/router-launch-live.test.ts` had also picked.
  */
 import { describe, expect, it, beforeAll } from 'vitest';
 import { loadArtifact } from '../chain/artifacts.js';
+import type { DevChainClients } from '../../scripts/dev-chain.js';
 import { parseTokenParams } from '../launch/params.js';
 import { computeTokenAddress } from '../launch/address.js';
 
@@ -21,7 +25,6 @@ function salt(byte: number): Hex {
 }
 
 const FEE_BPS = 30;
-const DEPLOYER_INDEX = 4;
 
 const devChainMod = await (async () => {
   try {
@@ -37,7 +40,7 @@ const describeOnChain = !devChainMod || (!chainUp && !devChainMod.devChainRequir
 describeOnChain('AMM mint + swapExactIn onchain', () => {
   if (!devChainMod) return;
 
-  const clients = devChainMod.devChainClients(devChainMod.devRpcUrl(), devChainMod.DEV_CHAIN_ID, DEPLOYER_INDEX);
+  let clients: DevChainClients;
   let poolFactory: Address;
   let tokenFactory: Address;
   let token0: Address;
@@ -48,7 +51,8 @@ describeOnChain('AMM mint + swapExactIn onchain', () => {
     if (!chainUp && devChainMod.devChainRequired()) {
       throw new Error('REQUIRE_EVM_CHAIN=1 but no RPC at ' + devChainMod.devRpcUrl());
     }
-    await devChainMod.assertDisposableChain(clients.publicClient, devChainMod.DEV_CHAIN_ID);
+    // Asserts the chain is disposable before it writes anything to it.
+    clients = await devChainMod.devSuiteClients(import.meta.url);
 
     ({ factory: poolFactory } = await devChainMod.deployPoolFactory(clients));
     ({ factory: tokenFactory } = await devChainMod.deployTokenFactory(clients));

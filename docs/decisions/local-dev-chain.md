@@ -145,3 +145,56 @@ way to pass a command, and the foundry image's entrypoint needs one) and sets
 `REQUIRE_EVM_CHAIN=1`. That mirrors `REQUIRE_POSTGRES`: the suite may skip on a
 laptop with no chain, and must never skip on CI. A silent skip is how "we proved
 CREATE2 agrees" quietly stops being true.
+
+---
+
+## Addendum, 2026-08-03 — "every start is genesis" is not "every run is genesis"
+
+The section above is true, and was read as saying something it does not. The
+`evm` service holds no volume, so every **container start** is genesis. It is
+also `restart: unless-stopped`, so on a developer's machine it does not start —
+it runs for days. Between the two, the chain a laptop tests against has
+thousands of blocks on it and CI's has ten. `pnpm verify` was reliably green on
+CI and could not go green locally, and those two facts have one cause.
+
+Three separate failures came out of that gap. They are worth listing because
+only one of them is the one everybody looked at.
+
+**1. Two suites on one sender.** Each live-chain suite hand-picked one of
+anvil's ten pre-funded accounts and recited the others' indices in its own
+header. Maintained by copy-paste across three services, it had drifted into
+three collisions. Two suites on one account both read the pending nonce, both
+get N, both broadcast, and the loser gets `nonce too low` — a different file
+each run, none of them with anything wrong in its own diff. Four agents lost
+time to it before anybody compared the indices.
+
+This one is **not** actually about chain age. viem reads the pending nonce from
+the node every time, so a high nonce is harmless; the race is between two
+senders and would happen on a fresh chain too. Chain age only moved the odds.
+Fixed by deriving each sender from the suite's own path — see the banner in
+`services/svc-protocol/scripts/dev-chain.ts` and the gate in
+`services/svc-protocol/src/chain/dev-chain-isolation.test.ts`.
+
+**2. A rescan whose cost is the chain's entire history.** svc-pay's live rail
+suite called `resetScan(0n)`, and `EvmLiveChain.refresh()` walks blocks one
+`eth_getBlock` at a time. On CI that is a handful of round trips; against a
+container that has been up for days it is thousands, and it eventually blows the
+5s test timeout. Nothing in the code changed on the day it started failing — the
+container just got older. It now rescans from the block its own deposit landed
+in, which reads the same real blocks and drops only the re-reading of history.
+
+**3. Determinism that only holds shortly after a restart.** `chain:deploy` lands
+the suite at fixed CREATE addresses because the deployer is at nonce 0 — true at
+genesis, not true on day three. That is why anvil's ten pre-funded accounts are
+now reserved: derived suite senders live on the `m/44'/60'/1'` branch and cannot
+move account 0's nonce. Re-running `chain:deploy` against an aged chain still
+lands somewhere other than the addresses compose names; the honest fix is
+`docker compose restart evm` first, and `deploy-dev.ts` already refuses rather
+than letting a wrong address be wired into anything.
+
+**What was rejected.** Making the dev chain ephemeral for test runs: it does not
+fix (1) at all — two suites on one account collide on a fresh chain too — it
+serialises `pnpm verify` on docker, and it throws away the long-lived chain a
+developer's running platform is pointed at. `evm_snapshot`/`evm_revert` per
+suite: it rewinds the whole node, which is the entire reason `evm-reorg` exists
+on 8546; see that service's comment in `docker-compose.yml`.
