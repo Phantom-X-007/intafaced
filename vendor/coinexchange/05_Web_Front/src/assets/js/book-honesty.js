@@ -7,6 +7,8 @@
  */
 'use strict';
 
+var ixMoney = require('./ix-money.js');
+
 /**
  * Side empty-state copy for the order book ladder.
  * @param {{ loading?: boolean, reachable?: boolean, side?: string }} opts
@@ -42,26 +44,42 @@ function tradesEmptyLabel(opts) {
 /**
  * Keep only real book levels. Zero / missing price or amount is not depth.
  * Does not pad to a fixed height — empty ladder is an empty ladder.
+ *
+ * DECIMAL STRINGS, AND THE CUMULATIVE COLUMN IS THE REASON.
+ *
+ * `price` and `amount` come back as the venue's own decimal strings, and
+ * `totalAmount` is a BigNumber running sum rendered as one. This used to take a
+ * `num` callback, coerce both columns to floats and accumulate `total += amount`
+ * — and a depth ladder is nothing but cumulative sums, so every row below the
+ * top one was wrong in its last place. Ten 0.1 levels totalled
+ * 0.9999999999999999. The renderer pads these strings for display; nothing here
+ * hands a float to anything.
+ *
  * @param {Array<{price?: *, amount?: *}>|null|undefined} items
  * @param {number} maxDepth
- * @param {(v: *) => number} num
- * @returns {Array<{price: number, amount: number, totalAmount: number}>}
+ * @returns {Array<{price: string, amount: string, totalAmount: string}>}
  */
-function normalizePlateLevels(items, maxDepth, num) {
+function normalizePlateLevels(items, maxDepth) {
   var list = Array.isArray(items) ? items : [];
   var limit = maxDepth > 0 ? maxDepth : list.length;
   var rows = [];
-  var total = 0;
+  var total = '0';
   for (var i = 0; i < list.length && rows.length < limit; i++) {
     var item = list[i] || {};
-    var price = num(item.price);
-    var amount = num(item.amount);
-    if (!(price > 0) || !(amount > 0)) {
+    if (!ixMoney.isPositive(item.price) || !ixMoney.isPositive(item.amount)) {
       continue;
     }
-    total += amount;
+    var amount = ixMoney.toFixedString(item.amount);
+    var next = ixMoney.add(total, amount);
+    /* isPositive already proved both parse; a null here would mean the module
+       is mis-wired, and a ladder with a hole in its running total is worse than
+       a short ladder. */
+    if (next === null) {
+      continue;
+    }
+    total = next;
     rows.push({
-      price: price,
+      price: ixMoney.toFixedString(item.price),
       amount: amount,
       totalAmount: total
     });
