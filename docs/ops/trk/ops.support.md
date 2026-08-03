@@ -2,7 +2,10 @@
 
 **Title:** Support desk, tickets, KB  
 **Tracker:** `ops.support` · phase 5 · plane F · status `ready` · owner none  
-**Depends on:** `identity.accounts` (done)
+**Depends on:** `identity.accounts` (done)  
+**Tip freeze:** `origin/main` @ `c6d9e89e` (re-derive before implement)  
+**Pack type:** research only — no invent refund money; no `features.mjs` edit.  
+**Ownership:** Core ops Fiat Plane. **Not** Shehzad M1–M7.
 
 ## DoD (plain language)
 
@@ -21,8 +24,9 @@ Agent assist (see `agents.support`) is optional later — human desk works alone
 | UI       | No support desk route in `apps/web` / `apps/admin`                       |
 | Doctrine | Core ops phase 5; admin may host operator queue later                    |
 
-Greenfield relative to monorepo: only incidental “ticket” strings in trading UI
-(order ticket), not support tickets.
+**Tip residual:** Greenfield. Incidental “ticket” strings in trading UI are
+**order tickets**, not support tickets. Re-verified tip `c6d9e89e`: no
+support desk service, schema, or admin queue.
 
 ## Blocked by
 

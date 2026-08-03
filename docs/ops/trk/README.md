@@ -38,6 +38,19 @@ token-factory mounted + dev-proven with `audited:false`; `chain.*` has no
 
 ---
 
+## Pack last6 — ops.support re-freeze (tip `c6d9e89e`)
+
+Five of six “last free heavy” rows landed in **Pack 5** (`chain.*`, `launch.*`,
+`market.commerce`). This pack only re-freezes:
+
+| Id            | Title                     | Spec                               |
+| ------------- | ------------------------- | ---------------------------------- |
+| `ops.support` | Support desk, tickets, KB | [ops.support.md](./ops.support.md) |
+
+Still research only. Not Shehzad M1–M7. No refund ledger invention under this id.
+
+---
+
 ## Pack 3 — `docs/trk-research-pack-3` (tip freeze `b3d08931`)
 
 Next free tracker rows **not** covered by pack 1/2 short specs. Research only —
@@ -145,9 +158,8 @@ useful, do not fork implement plans from conflicting freezes.
 
 ---
 
-## Not packed yet (still free / heavier blockers)
+## Not packed yet (still free, lower priority or heavier blockers)
 
-mining.pool, trade.options/forex, market.vendors (upstream of commerce),
-launch.meme-factory / launch.nft (after token-factory), bridge.canonical,
-chain.rust-core (**socket**). `ops.compliance` has a research file on tip —
-counsel Class X content remains human.
+mining.pool, trade.options/forex, market.vendors (upstream of commerce).
+Long-path chain.mainnet / chain.evm / bridge already have **Pack 5** research
+files — not “unpacked,” but still blocked for implement.
