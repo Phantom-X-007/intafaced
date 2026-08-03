@@ -1,12 +1,10 @@
 # R01 PR matrix (generated)
 
-Tip `5820cdc` · 2026-08-03T11:56:08.181Z
+Tip `8abeb1c` · 2026-08-03T12:11:16.413Z
 
 |   # | author         | files | mergeable   | title                                                                                                                      | action                              |
 | --: | -------------- | ----: | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| 457 | @ZenYoda3      |     2 | MERGEABLE   | feat(shell): ix-wire response schemas (partial — golden + trade adopt residual)                                            | own — rebase/merge if Class N green |
-| 456 | @ZenYoda3      |     1 | MERGEABLE   | feat(shell): landing no-price copy strings (partial — Index.vue wire residual)                                             | own — rebase/merge if Class N green |
-| 455 | @ZenYoda3      |     6 | MERGEABLE   | feat(shell): decimal-safe ix-money module (partial — Exchange call sites residual)                                         | own — rebase/merge if Class N green |
+| 459 | @ZenYoda3      |     1 | MERGEABLE   | docs: Denon hard task board (platform/money — not shell craft)                                                             | own — rebase/merge if Class N green |
 | 448 | @Phantom-X-007 |     7 | MERGEABLE   | feat(ci): secret blast-radius map, a parity gate, and a new disclosure found in running code                               | no dual-edit files                  |
 | 446 | @Phantom-X-007 |    10 | CONFLICTING | fix(events): 17 of 32 events are published into the void, and a stale build silently deleted a field                       | no dual-edit files                  |
 | 445 | @Phantom-X-007 |    20 | CONFLICTING | fix(test): five money suites could skip on CI and the build went green                                                     | no dual-edit files                  |

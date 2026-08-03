@@ -1,6 +1,6 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T11:56:08.181Z · tip `5820cdc`
+Last report: 2026-08-03T12:11:16.413Z · tip `8abeb1c`
 
 | Report          | Path                                       |
 | --------------- | ------------------------------------------ |
@@ -11,9 +11,9 @@ Last report: 2026-08-03T11:56:08.181Z · tip `5820cdc`
 
 ## At a glance
 
-- Free product claims: **14**
-- Blocked: **10**
-- Open PRs: **21**
+- Free product claims: **22**
+- Blocked: **2**
+- Open PRs: **19**
 
 FREE product claims exist — coordinator must spawn or residual-own each (anti-under-spawn).
 
