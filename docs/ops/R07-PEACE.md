@@ -2,12 +2,12 @@
 
 **Proof:** NO-FLEET · Docker no · :8090 foreign worktree  
 **Tip (re-derive):** `git fetch && git log -1 --oneline origin/main`  
-**Last coord cycle:** 2026-08-03T19:55Z · tip=`36600cb0` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11  
+**Last coord cycle:** 2026-08-03T20:00Z · tip=`aaa2bb3b` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11  
 **Mandate:** freeProduct=0 is shell craft drained — **not** session kill.
 
 ## Living board (one paragraph)
 
-Shell product drained (freeProduct=0); freeTracker=0; tip `36600cb0` after **#626** R07 cycle69 + **#627** R01 cycle70 land; partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0** (re-scan c70); SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N open** (this cycle ships R07 cycle70 docs).
+Shell product drained (freeProduct=0); freeTracker=0; tip `aaa2bb3b` after **#628** R07 cycle70 land; partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0** (re-scan c71); SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N open** (this cycle ships R07 cycle71 docs).
 
 ## Merged Class N (shell wave)
 
@@ -140,6 +140,7 @@ Buckets: [R02-BUCKETS-LIVE.md](./R02-BUCKETS-LIVE.md) · Night law: [NIGHT-ENGIN
 | 68 | →c632e173 | 0 | #621 R07 c67 + #622 R01 c67 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 69 | →ebf7b364 | 0 | #624 R07 cycle68 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 70 | →36600cb0 | 0 | #626 R07 cycle69 + #627 R01 cycle70 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
+| 71 | →aaa2bb3b | 0 | #628 R07 cycle70 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 
 ## Invent re-scan (cycle20)
 
@@ -320,6 +321,10 @@ fabricated-money EXIT=0 · live invent residual **0** (honesty comments only) ·
 ## Invent re-scan (cycle70)
 
 fabricated-money EXIT=0 · live invent residual **0** (honesty comments only) · tip `36600cb0` · #626 R07 cycle69 + #627 R01 cycle70 on main · freeProduct=0 ≠ kill.
+
+## Invent re-scan (cycle71)
+
+fabricated-money EXIT=0 · live invent residual **0** (honesty comments only) · tip `aaa2bb3b` · #628 R07 cycle70 on main · freeProduct=0 ≠ kill.
 
 ## Coord actions this session
 

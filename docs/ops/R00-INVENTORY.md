@@ -1,16 +1,16 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T19:56:37.800Z
+Generated: 2026-08-03T20:00:19.072Z
 
-| Field                             | Value                                                              |
-| --------------------------------- | ------------------------------------------------------------------ |
-| Tip                               | `36600cb0`                                                         |
-| Tip subject                       | docs(ops): R01 cycle70 partner babysit ready=4 tip e3b52827 (#627) |
-| Open PRs                          | 12                                                                 |
-| Free claims                       | 2                                                                  |
-| Free product (REGROUP/AFK/LANDER) | 0                                                                  |
-| Blocked                           | 1                                                                  |
-| Residual tip_note                 | claim-lock authority · WHITEPAPER retired · AFK shell wave closed  |
+| Field                             | Value                                                             |
+| --------------------------------- | ----------------------------------------------------------------- |
+| Tip                               | `aaa2bb3b`                                                        |
+| Tip subject                       | docs(ops): R07 cycle70 freeProduct=0 + tip e3b52827 (#628)        |
+| Open PRs                          | 11                                                                |
+| Free claims                       | 2                                                                 |
+| Free product (REGROUP/AFK/LANDER) | 0                                                                 |
+| Blocked                           | 1                                                                 |
+| Residual tip_note                 | claim-lock authority · WHITEPAPER retired · AFK shell wave closed |
 
 anti-under-spawn OK: available=0 active_spawned_locks=0 gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).
 
