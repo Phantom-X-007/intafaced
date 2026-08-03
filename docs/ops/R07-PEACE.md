@@ -1,56 +1,59 @@
-# R07 peace
+# R07 — living night board (do not treat as kill switch)
 
-**Proof:** NO-FLEET · Docker no · :8090 foreign worktree  
-**Tip (re-derive):** `git fetch && git log -1 --oneline origin/main`  
-**Last coord cycle:** 2026-08-03T13:26Z · freeProduct=0 · blocked=P-WS-REPORT
+**Tip:** `c6d9e89e` — docs(ops): TRK research pack 2 — tip re-freeze + blueprint.card (#486)  
+**When:** 2026-08-03T13:43:00Z  
+**freeProduct:** 0 · **freeTracker:** 0 · **blocked:** P-WS-REPORT only  
+**Open PRs:** 15 (Denon **13** · Nitro agents open · Shehzad **1** #346)  
+**Proof:** NO-FLEET · Docker no  
+**Schedulers:** every **30m** + **45m** keep-alive
 
-## Merged Class N (shell wave)
+## Mandate
 
-| PR   | Claim              |
-| ---- | ------------------ |
-| #469 | brand root CI      |
-| #465 | RP2 Index          |
-| #468 | RP1+RP4 money-wire |
-| #467 | RP3 announce       |
-| #462 | AFK-UC             |
-| #463 | AFK-CMDK           |
-| #464 | AFK-FOOTER         |
-| #472 | RP3 residual strip |
+Shell **freeProduct=0** is shell craft drained — **not** whole-platform done. Tracker free is **not** product spawn fuel (research/spec first unless DoD tiny). Night pivots: partner babysit (no dual-edit), integrity report when unblocked, Class N merge of green docs, re-freeze each cycle.
 
-## Night-engine session merges (Coord-OPS)
+## Free Coord-OPS (not product craft)
 
-| PR   | What                                              | Tip note      |
-| ---- | ------------------------------------------------- | ------------- |
-| #470 | Shehzad blockchain / Protocol Plane task board    | Class N docs  |
-| #473 | Denon format-swarm (Prettier main red)            | Denon merge   |
-| #474 | Night engine keep-alive law                       | Class N docs  |
-| #475 | P-WS integrity report (R-P-WS-INTEGRITY)          | Class N docs  |
-| #425 | rescue shell-i18n-scan + NOT_GATES register       | Class N chore |
-| #476 | night TRK research pack 1                         | Class N docs  |
-| #478 | P-WS integrity report 2026-08-03                  | Class N docs  |
-| #479 | night-engine Coord-OPS cycle board (R07 + freeze) | Class N docs  |
-| #480 | TRK research packs — notifications, i18n, admin   | Class N docs  |
+| id                 | action                                                                             |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| **BABYSIT-MATRIX** | Comment/CI only on partner open PRs — Shehzad #346 + Denon wave — **no implement** |
+| **REPORTS**        | `pnpm swarm:freeze` / `swarm:report` → refresh R00–R02 + this board                |
 
-Buckets: [R02-BUCKETS-LIVE.md](./R02-BUCKETS-LIVE.md) · Night law: [NIGHT-ENGINE-2026-08-03.md](./NIGHT-ENGINE-2026-08-03.md) · Dashboard: [DASHBOARD.md](./DASHBOARD.md)
+## Blocked (do not implement)
 
-## Open Nitro
+| id              | why                                                 |
+| --------------- | --------------------------------------------------- |
+| **P-WS-REPORT** | Path collide Denon #433/#432/#424 (matching + edge) |
 
-| PR   | State                                                  |
-| ---- | ------------------------------------------------------ |
-| #481 | rebased onto tip · CI in flight · Class N chore(swarm) |
+## Night PRs #473–#486+ (merged this night)
 
-## Still blocked / babysit
+|    # | title                                                           | state            |
+| ---: | --------------------------------------------------------------- | ---------------- |
+|  473 | fix(format): main was red on Prettier                           | MERGED           |
+|  474 | docs(ops): night engine keep-alive law                          | MERGED           |
+|  475 | docs(ops): P-WS integrity report (/ws→/stream + market-ID)      | MERGED           |
+|  476 | docs(ops): night TRK research pack 1                            | MERGED           |
+|  477 | docs(ops): AFK invent re-scan after shell wave #462-#472        | MERGED           |
+|  478 | docs(ops): P-WS integrity report 2026-08-03                     | MERGED           |
+|  479 | docs(ops): night-engine Coord-OPS cycle — R07 + freeze          | MERGED           |
+|  480 | docs(ops): TRK research packs — notifications, i18n, admin      | MERGED           |
+|  481 | chore(swarm): harden P1–P6 merge gate, hints, claim, mandate    | MERGED           |
+|  482 | docs(ops): R07 night-engine cycle2 — session merge board        | MERGED           |
+|  483 | docs(ops): residual-own R-425 — shell-i18n-scan on main         | MERGED           |
+|  484 | docs(ops): AFK-RESCAN invent re-scan post shell wave            | MERGED           |
+|  485 | docs(ops): upgrade R-P-WS-INTEGRITY (tip SHA + citations)       | MERGED           |
+|  486 | docs(ops): TRK research pack 2 — tip re-freeze + blueprint.card | MERGED (tip)     |
+| 487+ | R01 babysit matrix · TRK pack 4 · this R07 refresh              | OPEN / in flight |
 
-- **P-WS-REPORT** — integrity docs landed (#475/#478); product path still blocked by Denon matching/edge open PRs · **no depth UI**
-- Denon CONFLICTING (babysit comments earlier): #448 #445 #441 #438 #436 #432
-- Denon MERGEABLE (his merge): #433 CLEAN earlier snapshot, #424, #420, #427, #430 — **never dual-edit**
-- Shehzad **#346** CONFLICTING — M1 babysit only
-- **SPAWN_NOW:** none (freeProduct=0)
+## Partner babysit (no dual-edit)
 
-## Coord actions this session
+- **#346** @shehzad002 · `feat/pay-os-m1-gateway` · **CONFLICTING** — one-line status only; owner rebase
+- **Denon open:** 13 PRs (#448 #445 #441 #438 #436 #433 #432 #430 #428 #427 #424 #422 #420) — CI/comment only; he merges on green + self-audit
 
-1. freeze+report every cycle — freeProduct=0
-2. merge Class N green Nitro PRs
-3. Denon babysit comments only
-4. #425 + #481 conflict rebase unstick
-5. prettier-fix red docs PRs before merge
+## Re-derive each cycle
+
+```bash
+git fetch && git log -1 --oneline origin/main
+node tooling/scripts/swarm.mjs freeze
+node tooling/scripts/swarm.mjs report
+gh pr list --state open
+```
