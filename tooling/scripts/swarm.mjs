@@ -251,14 +251,23 @@ function buildModel() {
   const residual = loadResidual();
   const claims = [];
 
+  const productLocks = new Set(listClaimLocks());
   for (const c of REGROUP_CLAIMS) {
     const hits = openFiles.filter((o) => c.paths.some((p) => touches(p, o.path)));
     const blocked = hits.length > 0;
+    const locked = productLocks.has(c.id);
+    let status = blocked ? 'blocked' : locked ? 'claimed' : 'free';
+    const collisions = blocked
+      ? hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`)
+      : locked
+        ? ['claim file docs/ops/claims/' + c.id + '.md']
+        : [];
     claims.push({
       ...c,
-      status: blocked ? 'blocked' : 'free',
-      collisions: hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`),
+      status,
+      collisions,
       priority: c.rank,
+      note: (c.note || '') + (locked && !blocked ? ' · CLAIMED/residual-own' : ''),
     });
   }
 
@@ -268,13 +277,20 @@ function buildModel() {
     const hits = paths.length === 0 ? [] : openFiles.filter((o) => paths.some((p) => touches(p, o.path)));
     // AFK-INDEX blocked if RP2 free (prefer REGROUP landing owner)
     const rp2Free = claims.find((c) => c.id === 'RP2' && c.status === 'free');
-    let status = hits.length > 0 ? 'blocked' : 'free';
-    let collisions = hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`);
+    let status = hits.length > 0 ? 'blocked' : productLocks.has(i.id) ? 'claimed' : 'free';
+    let collisions = hits.length > 0
+      ? hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`)
+      : productLocks.has(i.id)
+        ? ['claim file docs/ops/claims/' + i.id + '.md']
+        : [];
     let note = i.next_action || i.blocker || '';
     if (i.id === 'AFK-INDEX' && rp2Free) {
       status = 'blocked';
       note = 'Blocked while RP2 free (sole Index.vue owner)';
       collisions = ['RP2 owns Index'];
+    }
+    if (productLocks.has(i.id) && status === 'claimed') {
+      note = (note ? note + ' · ' : '') + 'CLAIMED/residual-own';
     }
     claims.push({
       id: i.id,
