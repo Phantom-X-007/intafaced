@@ -2,10 +2,15 @@
  * The message catalog — §9: "all surfaces keyed from day one; 100+ languages =
  * translation files, not refactors".
  *
- * English is the source of truth. Every other language is a `Catalog` derived
- * from it, and the type system enforces that derivation: a translation missing
- * a key is a COMPILE error, not a `undefined` that reaches a user as a blank
- * button. That is the entire reason this package exists before the surfaces do.
+ * English is the source of truth, and as of 2026-08-03 it is the ONLY language
+ * in this repo: there is no second catalog file, and no surface in `apps/web`
+ * renders through this one. §9 is the target this file is shaped for, not a
+ * description of where we are. `catalogs.ts` holds the measured version.
+ *
+ * Every other language is a `Catalog` derived from English, and the type system
+ * enforces that derivation: a translation missing a key is a COMPILE error, not
+ * a `undefined` that reaches a user as a blank button. That is the entire reason
+ * this package exists before the surfaces do.
  *
  * Conventions:
  *  - Keys are dot-namespaced by surface: `<surface>.<area>.<thing>`.
@@ -221,9 +226,13 @@ export function isPluralMessage(message: Message | undefined): message is Plural
 }
 
 /**
- * Translation coverage for a language, as a fraction of the English key set.
- * Used by the language dashboard so "we support 100+ languages" is a measured
- * claim rather than a marketing one.
+ * Translation coverage for ONE language, as a fraction of the English key set.
+ *
+ * For the whole picture use `localeCoverage()` in `catalogs.ts` — it reports a
+ * row per declared locale including the 27 that have no catalog at all, which is
+ * the part a dashboard built on this function alone would silently omit. "We
+ * support 100+ languages" is a §9 target; what these two functions return is the
+ * measurement, and today it is one.
  */
 export function coverage(catalog: PartialCatalog): { translated: number; total: number; missing: MessageKey[] } {
   const missing = MESSAGE_KEYS.filter((key) => catalog[key] === undefined);

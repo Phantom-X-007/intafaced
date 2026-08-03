@@ -8,7 +8,7 @@ import { NotificationDispatcher } from './dispatch.js';
 import { ChannelRegistry, channelsFromEnv } from './channels/registry.js';
 import { GatewayChannel, InAppChannel, UnconfiguredChannel } from './channels/gateway.js';
 import { ChannelDeliveryError, type NotificationChannel, type OutboundMessage } from './channels/channel.js';
-import { renderNotification } from './channels/render.js';
+import { normaliseLocale, renderNotification, renderVerification } from './channels/render.js';
 import { subscribeNotificationEvents } from './events.js';
 
 /**
@@ -486,6 +486,23 @@ describe('out-of-app copy comes from the same catalog as the screen', () => {
     // A raw key reaching a user is the failure this asserts against.
     expect(rendered.body).not.toContain('notify.bank');
     expect(rendered.body).not.toContain('{');
+  });
+
+  it('stamps the message with the language it is actually in, not the one requested', () => {
+    // A target row may carry any of the 28 declared locales. One of them has a
+    // catalog. This used to pass the requested code straight through to the
+    // adapter as `locale:`, so an English margin call went out stamped `ar` —
+    // and a gateway honouring that field mirrors the layout right-to-left around
+    // left-to-right words, on the message we least want hard to read.
+    expect(normaliseLocale('ar')).toBe('en');
+    expect(normaliseLocale('zh-Hans')).toBe('en');
+    expect(normaliseLocale('en')).toBe('en');
+    expect(normaliseLocale(null)).toBe('en');
+    expect(normaliseLocale('not-a-locale')).toBe('en');
+
+    // The copy is English either way — the fix is to the label, not the words.
+    const rendered = renderVerification('ar', '123456', 10);
+    expect(rendered.title).toBe('Confirm this address');
   });
 
   it('has a catalog entry for every title and body key the consumers use', async () => {
