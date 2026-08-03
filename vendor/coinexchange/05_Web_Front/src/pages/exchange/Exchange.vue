@@ -1,7 +1,7 @@
 <template>
   <div class="ix-terminal" @keydown="onDeskKeydown">
     <!-- A-UI-1 / B7+: / markets · Esc clear · B/S buy-sell ticket · T ticket · Enter submit · X cancel last -->
-    <a class="ix-skip-link" href="#ix-ticket">Skip to order ticket</a>
+    <a class="ix-skip-link" href="#ix-ticket">{{ $t("exchange.residual.skipToTicket") }}</a>
     <!-- A-UI-A11Y / B10: LiveAnnouncer-style region (assertive for ticket errors) -->
     <div class="ix-sr-only" aria-live="assertive" aria-atomic="true">{{ liveAnnounce }}</div>
     <!-- ══ pair header ══════════════════════════════════════════════════ -->
@@ -12,8 +12,8 @@
           class="ix-star"
           :class="{ 'is-on': currentCoinIsFavor }"
           @click="toggleFavorite"
-          :title="currentCoinIsFavor ? 'Remove from favourites' : 'Add to favourites'"
-          :aria-label="currentCoinIsFavor ? 'Remove from favourites' : 'Add to favourites'"
+          :title="currentCoinIsFavor ? $t('exchange.terminal.favoriteRemove') : $t('exchange.terminal.favoriteAdd')"
+          :aria-label="currentCoinIsFavor ? $t('exchange.terminal.favoriteRemove') : $t('exchange.terminal.favoriteAdd')"
           :aria-pressed="currentCoinIsFavor ? 'true' : 'false'"
         >
           <Icon :type="currentCoinIsFavor ? 'ios-star' : 'ios-star-outline'" size="18" />
@@ -34,7 +34,7 @@
           <div slot="content">
             <p class="ix-coin-info">{{ coinInfo.information }}</p>
             <p class="ix-coin-link" v-if="coinInfo.infolink">
-              <a :href="coinInfo.infolink" target="_blank" rel="noopener">More detail</a>
+              <a :href="coinInfo.infolink" target="_blank" rel="noopener">{{ $t("exchange.terminal.moreDetail") }}</a>
             </p>
           </div>
         </Poptip>
@@ -46,19 +46,19 @@
       </div>
 
       <dl class="ix-stat">
-        <dt>24h Change</dt>
+        <dt>{{ $t("exchange.terminal.change24h") }}</dt>
         <dd :class="trendClass">{{ marketStat(currentCoin.rose) }}</dd>
       </dl>
       <dl class="ix-stat">
-        <dt>24h High</dt>
+        <dt>{{ $t("exchange.terminal.high24h") }}</dt>
         <dd>{{ marketNum(currentCoin.high, baseCoinScale) }}</dd>
       </dl>
       <dl class="ix-stat">
-        <dt>24h Low</dt>
+        <dt>{{ $t("exchange.terminal.low24h") }}</dt>
         <dd>{{ marketNum(currentCoin.low, baseCoinScale) }}</dd>
       </dl>
       <dl class="ix-stat ix-stat-wide">
-        <dt>24h Volume</dt>
+        <dt>{{ $t("exchange.terminal.volume24h") }}</dt>
         <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || num(currentCoin.volume) > 0">{{ currentCoin.coin }}</em></dd>
       </dl>
 
@@ -67,8 +67,8 @@
         <SubAccountSelector @change="onSubAccountChange" />
       </div>
 
-      <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="feedLive ? 'Market feed connected' : 'Market feed is down — numbers are not live'">
-        <i class="ix-dot"></i>{{ feedLive ? 'Live' : 'No feed · not live prices' }}
+      <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="feedLive ? $t('exchange.terminal.feedConnected') : $t('exchange.terminal.feedDownTitle')">
+        <i class="ix-dot"></i>{{ feedLive ? $t('exchange.terminal.feedLive') : $t('exchange.terminal.feedDown') }}
       </div>
     </header>
 
@@ -81,7 +81,7 @@
           class="ix-resizer ix-resizer-e"
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize markets column"
+          :aria-label="$t('exchange.residual.resizeMarkets')"
           @mousedown.prevent="startPanelResize('markets', $event)"
         ></div>
         <div class="ix-markets-search">
@@ -89,9 +89,9 @@
             ref="marketSearch"
             type="text"
             v-model="searchKey"
-            placeholder="Search market  ·  /"
+            :placeholder="$t('exchange.residual.searchMarketSlash')"
             spellcheck="false"
-            aria-label="Search market"
+            :aria-label="$t('exchange.terminal.searchMarket')"
             autocomplete="off"
           />
         </div>
@@ -101,7 +101,7 @@
             v-if="isLogin"
             :class="{ 'is-active': baseFilter === 'favor' }"
             @click="baseFilter = 'favor'"
-            title="Watchlist (favourites)"
+            :title="$t('exchange.residual.watchlistTitle')"
           >★</button>
           <button
             type="button"
@@ -112,14 +112,14 @@
           >{{ base }}</button>
         </nav>
         <div class="ix-thead ix-thead-markets">
-          <span>Pair</span>
-          <span class="ix-num">Last</span>
-          <span class="ix-num">24h</span>
+          <span>{{ $t('exchange.terminal.colPair') }}</span>
+          <span class="ix-num">{{ $t('exchange.terminal.colLast') }}</span>
+          <span class="ix-num">{{ $t('exchange.terminal.col24h') }}</span>
         </div>
         <div class="ix-scroll">
-          <p class="ix-empty ix-empty-loading" v-if="marketsLoading">Loading markets…</p>
+          <p class="ix-empty ix-empty-loading" v-if="marketsLoading">{{ $t("exchange.residual.loadingMarkets") }}</p>
           <p class="ix-empty ix-empty-error" v-else-if="!marketsReachable">
-            Market list unavailable — not empty
+            {{ $t("exchange.residual.marketsUnavailable") }}
           </p>
           <template v-else>
             <!-- B6 — watchlist rail: favourites pinned above the full list -->
@@ -128,9 +128,9 @@
               v-if="isLogin && baseFilter !== 'favor' && watchlistMarkets.length"
             >
               <div class="ix-watch-rail-hd">
-                <span>Watchlist</span>
+                <span>{{ $t("exchange.residual.watchlist") }}</span>
                 <button type="button" class="ix-linkish" @click="baseFilter = 'favor'">
-                  All ★
+                  {{ $t("exchange.residual.allWatch") }}
                 </button>
               </div>
               <button
@@ -151,7 +151,7 @@
                 <span class="ix-num" :class="roseClass(row.rose)">{{ marketStat(row.rose) }}</span>
               </button>
             </div>
-            <p class="ix-empty" v-if="visibleMarkets.length === 0">No markets</p>
+            <p class="ix-empty" v-if="visibleMarkets.length === 0">{{ $t("exchange.terminal.noMarkets") }}</p>
             <button
               type="button"
               class="ix-market-row"
@@ -225,7 +225,7 @@
               role="status"
               v-if="mainTab === 'chart' && chartStatus === 'failed'"
             >
-              Chart unavailable — the venue did not answer. This is not a blank market.
+              {{ $t("exchange.residual.chartUnavailableHonest") }}
             </p>
             <p
               class="ix-empty ix-empty-abs ix-empty-chart"
@@ -235,9 +235,9 @@
               {{ $t('intafaced.trade.noCandles') }}
             </p>
             <p class="ix-chart-attr" v-show="mainTab === 'chart'" role="contentinfo">
-              Charting by
-              <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a>
-              Lightweight Charts (Apache-2.0)
+              {{ $t("exchange.residual.chartingBy") }}
+              <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">{{ $t("exchange.residual.tradingView") }}</a>
+              {{ $t("exchange.residual.lightweightCharts") }}
             </p>
 
             <div class="ix-depth-host" v-show="mainTab === 'depth'">
@@ -247,9 +247,9 @@
             <div class="ix-book-full" v-show="mainTab === 'book'">
               <div class="ix-book-col">
                 <div class="ix-thead ix-thead-book">
-                  <span class="ix-num">Price ({{ currentCoin.base }})</span>
-                  <span class="ix-num">Amount ({{ currentCoin.coin }})</span>
-                  <span class="ix-num">Total</span>
+                  <span class="ix-num">{{ $t("exchange.terminal.colPriceIn", { unit: currentCoin.base }) }}</span>
+                  <span class="ix-num">{{ $t("exchange.terminal.colAmountIn", { unit: currentCoin.coin }) }}</span>
+                  <span class="ix-num">{{ $t("exchange.terminal.colTotal") }}</span>
                 </div>
                 <div class="ix-scroll">
                   <p
@@ -276,9 +276,9 @@
               </div>
               <div class="ix-book-col">
                 <div class="ix-thead ix-thead-book">
-                  <span class="ix-num">Price ({{ currentCoin.base }})</span>
-                  <span class="ix-num">Amount ({{ currentCoin.coin }})</span>
-                  <span class="ix-num">Total</span>
+                  <span class="ix-num">{{ $t("exchange.terminal.colPriceIn", { unit: currentCoin.base }) }}</span>
+                  <span class="ix-num">{{ $t("exchange.terminal.colAmountIn", { unit: currentCoin.coin }) }}</span>
+                  <span class="ix-num">{{ $t("exchange.terminal.colTotal") }}</span>
                 </div>
                 <div class="ix-scroll">
                   <p
@@ -307,10 +307,10 @@
 
             <div class="ix-trades-full" v-show="mainTab === 'trades'">
               <div class="ix-thead ix-thead-trades-full">
-                <span>Time</span>
-                <span class="ix-num">Price ({{ currentCoin.base }})</span>
-                <span class="ix-num">Amount ({{ currentCoin.coin }})</span>
-                <span class="ix-num">Value</span>
+                <span>{{ $t("exchange.terminal.colTime") }}</span>
+                <span class="ix-num">{{ $t("exchange.terminal.colPriceIn", { unit: currentCoin.base }) }}</span>
+                <span class="ix-num">{{ $t("exchange.terminal.colAmountIn", { unit: currentCoin.coin }) }}</span>
+                <span class="ix-num">{{ $t("exchange.terminal.colValue") }}</span>
               </div>
               <div class="ix-scroll">
                 <p
@@ -353,7 +353,7 @@
             </p>
 
             <p class="ix-empty ix-empty-loading" v-else-if="accountLoading">
-              Loading account…
+              {{ $t("exchange.terminal.accountLoading") }}
             </p>
 
             <p class="ix-empty ix-empty-error" v-else-if="accountError">
@@ -366,7 +366,7 @@
                 {{ $t('intafaced.trade.ledgerNote') }} · <code>GET /api/v1/account/balance</code>
               </p>
               <p class="ix-empty ix-empty-error" v-if="!walletReachable">
-                The ledger did not answer — balances are unknown, not zero.
+                {{ $t("exchange.residual.ledgerUnknownBalances") }}
               </p>
               <!-- A ledger with no rows for this account is an ANSWER. It is not
                    a table of every asset at 0.00, which would claim we hold
@@ -377,10 +377,10 @@
               <table class="ix-table" v-else>
                 <thead>
                   <tr>
-                    <th>Asset</th>
-                    <th class="ix-num">Free</th>
-                    <th class="ix-num">Held</th>
-                    <th class="ix-num">Total</th>
+                    <th>{{ $t('exchange.terminal.colAsset') }}</th>
+                    <th class="ix-num">{{ $t('exchange.residual.free') }}</th>
+                    <th class="ix-num">{{ $t('exchange.residual.held') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colTotal') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -398,17 +398,17 @@
             <!-- Positions -->
             <div v-else-if="accountTab === 'positions'">
               <p class="ix-dualbook" role="note">
-                Spot has no perps positions. Futures would stream here later — empty is honest, not “zero risk”.
+                {{ $t("exchange.residual.spotNoPerps") }}
               </p>
               <p class="ix-empty">
-                Spot markets do not carry positions. Your holdings are under Balances.
+                {{ $t("exchange.terminal.noPositions") }}
               </p>
             </div>
 
             <!-- Open orders -->
             <div v-else-if="accountTab === 'open'">
               <p class="ix-empty ix-empty-error" v-if="!ordersReachable">
-                Order service did not respond — open orders are unknown, not empty.
+                {{ $t("exchange.residual.openOrdersUnknown") }}
               </p>
               <template v-else>
                 <div class="ix-blotter-tools">
@@ -417,20 +417,20 @@
                     class="ix-linkish"
                     :disabled="!openOrders.length"
                     @click="exportOpenOrdersCsv"
-                  >Export CSV</button>
+                  >{{ $t("exchange.residual.exportCsv") }}</button>
                 </div>
-                <p class="ix-empty" v-if="openOrders.length === 0">No open orders</p>
+                <p class="ix-empty" v-if="openOrders.length === 0">{{ $t("exchange.residual.noOpenOrders") }}</p>
                 <table class="ix-table" v-else>
                   <thead>
                     <tr>
-                      <th>Time</th>
-                      <th>Market</th>
-                      <th>Type</th>
-                      <th>Side</th>
-                      <th class="ix-num">Price</th>
-                      <th class="ix-num">Amount</th>
-                      <th class="ix-num">Filled</th>
-                      <th class="ix-num">Value</th>
+                      <th>{{ $t('exchange.terminal.colTime') }}</th>
+                      <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                      <th>{{ $t('exchange.terminal.colType') }}</th>
+                      <th>{{ $t('exchange.terminal.colSide') }}</th>
+                      <th class="ix-num">{{ $t('exchange.terminal.colPrice') }}</th>
+                      <th class="ix-num">{{ $t('exchange.terminal.colAmount') }}</th>
+                      <th class="ix-num">{{ $t('exchange.terminal.colFilled') }}</th>
+                      <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
                       <th class="ix-num"></th>
                     </tr>
                   </thead>
@@ -438,9 +438,9 @@
                     <tr v-for="(row, i) in openOrders" :key="row.orderId || i">
                       <td class="ix-dim">{{ date(row.time) }}</td>
                       <td>{{ row.symbol }}</td>
-                      <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? 'Market' : 'Limit' }}</td>
+                      <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? $t('exchange.terminal.typeMarket') : $t('exchange.terminal.typeLimit') }}</td>
                       <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                        {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
+                        {{ row.direction === 'BUY' ? $t('exchange.terminal.buy') : $t('exchange.terminal.sell') }}
                       </td>
                       <td class="ix-num">{{ priceLabel(row) }}</td>
                       <td class="ix-num">{{ dec(row.amount) }}</td>
@@ -450,7 +450,7 @@
                         <button
                           type="button"
                           class="ix-linkish"
-                          :title="'Copy order id ' + (row.orderId || '')"
+                          :title="$t('exchange.residual.copyOrderId') + ' ' + (row.orderId || '')"
                           @click="copyOrderId(row)"
                         >ID</button>
                         <button
@@ -459,7 +459,7 @@
                           :disabled="!!cancellingId"
                           :aria-label="'Cancel order ' + (row.orderId || '')"
                           @click="cancelOrder(row)"
-                        >{{ cancellingId === row.orderId ? 'Cancelling…' : 'Cancel' }}</button>
+                        >{{ cancellingId === row.orderId ? $t('exchange.residual.cancelling') : $t('exchange.terminal.cancel') }}</button>
                       </td>
                     </tr>
                   </tbody>
@@ -469,19 +469,19 @@
 
             <!-- Trade history (fills) -->
             <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'fills' && !fillsReachable">
-              The venue did not answer — your fills are unknown, not empty.
+              {{ $t("exchange.residual.fillsUnknown") }}
             </p>
             <table class="ix-table" v-else-if="accountTab === 'fills'">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Market</th>
-                  <th>Side</th>
-                  <th>Role</th>
-                  <th class="ix-num">Price</th>
-                  <th class="ix-num">Amount</th>
-                  <th class="ix-num">Value</th>
-                  <th class="ix-num">Fee</th>
+                  <th>{{ $t('exchange.terminal.colTime') }}</th>
+                  <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                  <th>{{ $t('exchange.terminal.colSide') }}</th>
+                  <th>{{ $t('exchange.residual.role') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colPrice') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colAmount') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
+                  <th class="ix-num">{{ $t('exchange.terminal.colFee') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -490,7 +490,7 @@
                   <td class="ix-dim">{{ date(row.time) }}</td>
                   <td>{{ row.symbol }}</td>
                   <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                    {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
+                    {{ row.direction === 'BUY' ? $t('exchange.terminal.buy') : $t('exchange.terminal.sell') }}
                   </td>
                   <td class="ix-dim">{{ row.liquidity || '—' }}</td>
                   <td class="ix-num">{{ dec(row.price) }}</td>
@@ -503,7 +503,7 @@
 
             <!-- Order history -->
             <p class="ix-empty ix-empty-error" v-else-if="accountTab === 'history' && !ordersReachable">
-              Order service did not respond — order history is unknown, not empty.
+              {{ $t("exchange.residual.orderHistoryUnknown") }}
             </p>
             <div v-else-if="accountTab === 'history'">
               <div class="ix-blotter-tools" v-if="ordersReachable && historyOrders.length">
@@ -511,21 +511,21 @@
                   type="button"
                   class="ix-linkish"
                   @click="exportHistoryOrdersCsv"
-                >Export CSV</button>
+                >{{ $t("exchange.residual.exportCsv") }}</button>
               </div>
-              <p class="ix-empty" v-if="!historyOrders.length">No order history</p>
+              <p class="ix-empty" v-if="!historyOrders.length">{{ $t("exchange.residual.noOrderHistory") }}</p>
               <table class="ix-table" v-else>
                 <thead>
                   <tr>
-                    <th>Time</th>
-                    <th>Market</th>
-                    <th>Type</th>
-                    <th>Side</th>
-                    <th class="ix-num">Price</th>
-                    <th class="ix-num">Amount</th>
-                    <th class="ix-num">Filled</th>
-                    <th class="ix-num">Value</th>
-                    <th>Status</th>
+                    <th>{{ $t('exchange.terminal.colTime') }}</th>
+                    <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                    <th>{{ $t('exchange.terminal.colType') }}</th>
+                    <th>{{ $t('exchange.terminal.colSide') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colPrice') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colAmount') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colFilled') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
+                    <th>{{ $t('exchange.terminal.colStatus') }}</th>
                     <th class="ix-num"></th>
                   </tr>
                 </thead>
@@ -533,9 +533,9 @@
                   <tr v-for="(row, i) in historyOrders" :key="row.orderId || 'h' + i">
                     <td class="ix-dim">{{ date(row.time) }}</td>
                     <td>{{ row.symbol }}</td>
-                    <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? 'Market' : 'Limit' }}</td>
+                    <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? $t('exchange.terminal.typeMarket') : $t('exchange.terminal.typeLimit') }}</td>
                     <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
-                      {{ row.direction === 'BUY' ? 'Buy' : 'Sell' }}
+                      {{ row.direction === 'BUY' ? $t('exchange.terminal.buy') : $t('exchange.terminal.sell') }}
                     </td>
                     <td class="ix-num">{{ priceLabel(row) }}</td>
                     <td class="ix-num">{{ dec(row.amount) }}</td>
@@ -546,7 +546,7 @@
                       <button
                         type="button"
                         class="ix-linkish"
-                        :title="'Copy order id ' + (row.orderId || '')"
+                        :title="$t('exchange.residual.copyOrderId') + ' ' + (row.orderId || '')"
                         @click="copyOrderId(row)"
                       >ID</button>
                     </td>
@@ -555,7 +555,7 @@
               </table>
             </div>
 
-            <p class="ix-empty" v-if="isLogin && !accountLoading && !accountError && accountTabEmpty">Nothing here yet</p>
+            <p class="ix-empty" v-if="isLogin && !accountLoading && !accountError && accountTabEmpty">{{ $t("exchange.terminal.nothingYet") }}</p>
           </div>
         </section>
       </main>
@@ -574,12 +574,12 @@
             type="button"
             :class="{ 'is-active': railTab === 'book' }"
             @click="railTab = 'book'"
-          >Order Book</button>
+          >{{ $t("exchange.terminal.tabBook") }}</button>
           <button
             type="button"
             :class="{ 'is-active': railTab === 'trades' }"
             @click="railTab = 'trades'"
-          >Trades</button>
+          >{{ $t("exchange.terminal.tabTrades") }}</button>
           <div class="ix-book-modes" v-show="railTab === 'book'">
             <button
               type="button"
@@ -592,19 +592,19 @@
             <select
               class="ix-book-group"
               v-model.number="bookGroup"
-              title="Price grouping"
+              :title="$t('exchange.residual.priceGrouping')"
               aria-label="Order book price grouping"
             >
-              <option v-for="g in bookGroups" :key="g" :value="g">{{ g === 1 ? '1 tick' : '×' + g }}</option>
+              <option v-for="g in bookGroups" :key="g" :value="g">{{ g === 1 ? $t('exchange.residual.oneTick') : '×' + g }}</option>
             </select>
           </div>
         </nav>
 
         <div class="ix-rail-body" v-show="railTab === 'book'">
           <div class="ix-thead ix-thead-book">
-            <span class="ix-num">Price</span>
-            <span class="ix-num">Amount</span>
-            <span class="ix-num">Total</span>
+            <span class="ix-num">{{ $t("exchange.terminal.colPrice") }}</span>
+            <span class="ix-num">{{ $t("exchange.terminal.colAmount") }}</span>
+            <span class="ix-num">{{ $t("exchange.terminal.colTotal") }}</span>
           </div>
 
           <div class="ix-book-side ix-book-asks" v-show="bookMode !== 'bids'">
@@ -634,7 +634,7 @@
             <span class="ix-book-price" :class="trendClass">{{ lastPriceLabel }}</span>
             <Icon v-if="trend > 0" type="md-arrow-up" class="ix-up" size="14" />
             <Icon v-else-if="trend < 0" type="md-arrow-down" class="ix-down" size="14" />
-            <span class="ix-book-spread" v-if="spread !== null && bookReachable">Spread {{ spread }}</span>
+            <span class="ix-book-spread" v-if="spread !== null && bookReachable">{{ $t("exchange.terminal.spread") }} {{ spread }}</span>
           </div>
 
           <div class="ix-book-side ix-book-bids" v-show="bookMode !== 'asks'">
@@ -663,9 +663,9 @@
 
         <div class="ix-rail-body" v-show="railTab === 'trades'">
           <div class="ix-thead ix-thead-trades">
-            <span>Time</span>
-            <span class="ix-num">Price</span>
-            <span class="ix-num">Amount</span>
+            <span>{{ $t("exchange.terminal.colTime") }}</span>
+            <span class="ix-num">{{ $t("exchange.terminal.colPrice") }}</span>
+            <span class="ix-num">{{ $t("exchange.terminal.colAmount") }}</span>
           </div>
           <div class="ix-scroll">
             <p
@@ -701,13 +701,13 @@
             :class="{ 'is-active': side === 'BUY' }"
             :aria-pressed="side === 'BUY' ? 'true' : 'false'"
             @click="setSide('BUY')"
-          >Buy</button>
+          >{{ $t("exchange.terminal.buy") }}</button>
           <button
             type="button"
             :class="{ 'is-active': side === 'SELL' }"
             :aria-pressed="side === 'SELL' ? 'true' : 'false'"
             @click="setSide('SELL')"
-          >Sell</button>
+          >{{ $t("exchange.terminal.sell") }}</button>
         </div>
 
         <nav class="ix-tabs ix-tabs-sm ix-type-tabs" aria-label="Order type">
@@ -716,13 +716,13 @@
             :class="{ 'is-active': orderType === 'LIMIT_PRICE' }"
             :aria-pressed="orderType === 'LIMIT_PRICE' ? 'true' : 'false'"
             @click="setOrderType('LIMIT_PRICE')"
-          >Limit</button>
+          >{{ $t("exchange.terminal.typeLimit") }}</button>
           <button
             type="button"
             :class="{ 'is-active': orderType === 'MARKET_PRICE' }"
             :aria-pressed="orderType === 'MARKET_PRICE' ? 'true' : 'false'"
             @click="setOrderType('MARKET_PRICE')"
-          >Market</button>
+          >{{ $t("exchange.terminal.typeMarket") }}</button>
         </nav>
 
         <div class="ix-order-body">
@@ -750,7 +750,7 @@
           </div>
 
           <div class="ix-field">
-            <label for="ix-ticket-price">Price</label>
+            <label for="ix-ticket-price">{{ $t("exchange.terminal.fieldPrice") }}</label>
             <div class="ix-input" :class="{ 'is-disabled': orderType === 'MARKET_PRICE' }">
               <input
                 id="ix-ticket-price"
@@ -759,7 +759,7 @@
                 inputmode="decimal"
                 spellcheck="false"
                 :disabled="orderType === 'MARKET_PRICE'"
-                :placeholder="orderType === 'MARKET_PRICE' ? 'Best available' : ''"
+                :placeholder="orderType === 'MARKET_PRICE' ? $t('exchange.terminal.bestAvailable') : ''"
                 :aria-invalid="ticketPriceAria['aria-invalid']"
                 :aria-describedby="ticketPriceAria['aria-describedby']"
                 v-model="form.price"
@@ -814,14 +814,14 @@
 
           <dl class="ix-meta">
             <div>
-              <dt>Available <em class="ix-dim">(ledger)</em></dt>
+              <dt>{{ $t("exchange.terminal.available") }} <em class="ix-dim">(ledger)</em></dt>
               <!-- Three distinct states. `availableBalance` is null when the
                    ledger holds no row for this asset, which is neither "unknown"
                    nor "zero" — it is "you do not hold this". -->
-              <dd v-if="!isLogin" class="ix-dim">— <em>no platform session</em></dd>
-              <dd v-else-if="!walletReachable" class="ix-dim">— <em>unknown · the ledger did not answer</em></dd>
+              <dd v-if="!isLogin" class="ix-dim">— <em>{{ $t("exchange.residual.noPlatformSession") }}</em></dd>
+              <dd v-else-if="!walletReachable" class="ix-dim">— <em>{{ $t("exchange.residual.unknownLedger") }}</em></dd>
               <dd v-else-if="availableBalance === null" class="ix-dim">
-                0 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }} · no ledger row</em>
+                0 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }} {{ $t("exchange.residual.noLedgerRow") }}</em>
               </dd>
               <dd v-else>
                 {{ availableBalance }}
@@ -829,12 +829,12 @@
               </dd>
             </div>
             <div v-if="orderType === 'LIMIT_PRICE'">
-              <dt>Order value</dt>
+              <dt>{{ $t("exchange.terminal.orderValue") }}</dt>
               <dd>{{ fmt(orderValue, baseCoinScale) }} <em>{{ currentCoin.base }}</em></dd>
             </div>
             <div class="ix-fee-row">
               <dt>
-                Fee (est.)
+                {{ $t("exchange.terminal.feeEst") }}
                 <button
                   type="button"
                   class="ix-fee-help"
@@ -851,18 +851,18 @@
                 role="note"
               >
                 <template v-if="feeKnown">
-                  Pair fee from venue symbol-info for
+                  {{ $t("exchange.residual.pairFeeFrom") }}
                   <strong>{{ currentCoin.coin }}/{{ currentCoin.base }}</strong>
-                  — {{ pctOf(symbolFee, 4) }}% schedule rate. Not a free tier.
+                  — {{ pctOf(symbolFee, 4) }}% {{ $t("exchange.residual.scheduleRateNotFree") }}
                 </template>
                 <template v-else>
-                  Market did not return a fee field for this pair. Estimate is
-                  <strong>unknown</strong>, never treated as free. Place only when you accept that risk.
+                  {{ $t("exchange.residual.feeFieldMissing") }}
+                  <strong>unknown</strong>{{ $t("exchange.residual.feeFieldMissingTail") }}
                 </template>
               </p>
             </div>
             <div v-if="orderType === 'MARKET_PRICE' && marketImpactLabel">
-              <dt>Book impact <em class="ix-dim">(est.)</em></dt>
+              <dt>{{ $t("exchange.residual.bookImpact") }} <em class="ix-dim">(est.)</em></dt>
               <dd>{{ marketImpactLabel }}</dd>
             </div>
           </dl>
@@ -875,10 +875,10 @@
             :aria-busy="submitting ? 'true' : 'false'"
             @click="submitOrder"
           >
-            {{ submitting ? 'Placing…' : submitLabel }}
+            {{ submitting ? $t('exchange.terminal.placing') : submitLabel }}
           </button>
-          <p class="ix-order-note ix-dim ix-kbd-hint" title="Keyboard trade shortcuts (desk)">
-            <kbd>/</kbd> markets · <kbd>Esc</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>Enter</kbd> submit · <kbd>X</kbd> cancel last · <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd> go
+          <p class="ix-order-note ix-dim ix-kbd-hint" :title="$t('exchange.residual.keyboardShortcuts')">
+            <kbd>/</kbd> markets · <kbd>{{ $t("shellResidual.esc") }}</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>{{ $t("shellResidual.enter") }}</kbd> submit · <kbd>X</kbd> {{ $t("exchange.residual.cancelLast") }} <kbd>⌘</kbd>/<kbd>{{ $t("exchange.residual.ctrl") }}</kbd>+<kbd>K</kbd> go
           </p>
           <!-- Inline echo kept in sync with summary (GOV.UK: same wording); focus is on summary -->
           <p
@@ -887,15 +887,15 @@
             v-if="orderValidationError"
           >{{ orderValidationError }}</p>
           <p class="ix-order-note" v-if="!isLogin">
-            <router-link to="/login">Sign in</router-link> or
-            <router-link to="/register">register</router-link> to trade.
+            <router-link to="/login">{{ $t("exchange.terminal.signIn") }}</router-link> or
+            <router-link to="/register">{{ $t("exchange.terminal.register") }}</router-link> {{ $t("exchange.terminal.toTrade") }}
           </p>
-          <p class="ix-order-note" v-else-if="exchangeable != 1">This market is halted.</p>
+          <p class="ix-order-note" v-else-if="exchangeable != 1">{{ $t("exchange.terminal.halted") }}</p>
           <p class="ix-order-note" v-else-if="orderType === 'MARKET_PRICE' && !marketAllowed">
-            Market {{ side === 'BUY' ? 'buy' : 'sell' }} is disabled for this pair.
+            {{ $t('exchange.terminal.marketDisabled', { side: side === 'BUY' ? $t('exchange.terminal.buyLower') : $t('exchange.terminal.sellLower') }) }}
           </p>
           <p class="ix-order-note" v-else-if="!feedLive">
-            Market feed is down — double-check size before confirming any order.
+            {{ $t("exchange.terminal.feedDownWarning") }}
           </p>
           <p class="ix-order-note" v-else-if="orderBlockReason">{{ orderBlockReason }}</p>
         </div>
@@ -1329,7 +1329,7 @@ export default {
     /** Structural block (halt/market type / sub routing) — separate from field validation. */
     orderBlockReason() {
       if (!this.isLogin) return '';
-      if (this.exchangeable != 1) return 'This market is halted.';
+      if (this.exchangeable != 1) return '{{ $t("exchange.terminal.halted") }}';
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) {
         return 'Market ' + (this.side === 'BUY' ? 'buy' : 'sell') + ' is disabled for this pair.';
       }
@@ -1567,7 +1567,7 @@ export default {
       }
       const list = this.openOrders || [];
       if (!list.length) {
-        return this.warn('No open orders to cancel.');
+        return this.warn('{{ $t("exchange.residual.noOpenOrders") }} to cancel.');
       }
       let order = list[0];
       for (let i = 1; i < list.length; i++) {
@@ -2106,7 +2106,7 @@ export default {
      * GATED ON THE PLATFORM SESSION, NOT THE SHELL LOGIN. `isLogin` is the
      * vendored ucenter session; `ixToken` is the platform session svc-edge will
      * accept. They are different, and a reader signed in to the first sees a
-     * named "no platform session" refusal rather than an empty blotter that
+     * named "{{ $t("exchange.residual.noPlatformSession") }}" refusal rather than an empty blotter that
      * reads as "you have no orders".
      */
     loadAccount() {
@@ -2505,31 +2505,32 @@ export default {
       const amount = this.num(this.form.amount);
       const price = this.num(this.form.price);
 
-      const side = this.side === 'BUY' ? 'Buy' : 'Sell';
-      const type = this.orderType === 'MARKET_PRICE' ? 'Market' : 'Limit';
+      const side = this.side === 'BUY' ? this.$t('exchange.terminal.buy') : this.$t('exchange.terminal.sell');
+      const type = this.orderType === 'MARKET_PRICE' ? this.$t('exchange.terminal.typeMarket') : this.$t('exchange.terminal.typeLimit');
       const priceLine =
         this.orderType === 'MARKET_PRICE'
-          ? 'Price: best available'
-          : 'Price: ' + this.fmt(price, this.baseCoinScale) + ' ' + (this.currentCoin.base || '');
+          ? this.$t('exchange.terminal.confirmPriceBest')
+          : this.$t('exchange.terminal.confirmPriceLine', { price: this.fmt(price, this.baseCoinScale) + ' ' + (this.currentCoin.base || '') });
       const amountLine =
         this.amountLabel +
         ': ' +
         this.fmt(amount, this.quoteSized ? this.baseCoinScale : this.coinScale) +
         ' ' +
         (this.amountUnit || '');
-      const feeLine = 'Fee (est.): ' + this.feeLabel;
+      const feeLine = this.$t('exchange.terminal.feeEst') + ': ' + this.feeLabel;
       /* Three states, again — an "Available: 0" on a confirmation dialog for a
          balance we could not read is the last place a fabricated number should
          appear, because it is the screen someone reads before committing. */
       const walletLine = !this.walletReachable
-        ? 'Available: unknown — the ledger did not answer.'
+        ? this.$t('exchange.residual.availableUnknown')
         : this.availableBalance === null
-          ? 'Available: the ledger holds no ' + (this.side === 'BUY' ? this.currentCoin.base : this.currentCoin.coin) + ' for this account.'
-          : 'Available (ledger): ' + this.availableBalance;
+          ? this.$t('exchange.residual.availableNoRow', { unit: this.side === 'BUY' ? this.currentCoin.base : this.currentCoin.coin })
+          : this.$t('exchange.residual.availableLedger') + ': ' + this.availableBalance;
       const pair = (this.currentCoin.coin || '') + '/' + (this.currentCoin.base || '');
 
       this.$Modal.confirm({
-        title: 'Confirm ' + side.toLowerCase() + ' order',
+        title: this.$t('exchange.terminal.confirmTitle', { side: side.toLowerCase() }),
+        // i18n-exempt HTML shell; all user copy via $t / dynamic fee/price lines above
         content:
           '<p><strong>' +
           side +
@@ -2545,9 +2546,9 @@ export default {
           feeLine +
           '</p><p>' +
           walletLine +
-          '</p><p style="margin-top:8px;opacity:0.75;">Orders only succeed if the venue accepts them. No response means not placed. The book is empty today, so a limit order will rest rather than fill.</p>',
+          '</p><p style="margin-top:8px;opacity:0.75;">' + this.$t('exchange.residual.confirmDisclaimerVenue') + '</p>',
         okText: side,
-        cancelText: 'Cancel',
+        cancelText: this.$t('exchange.terminal.cancel'),
         /* No arguments: placeOrder reads the decimal STRINGS out of the form.
            `amount` and `price` above are floats parsed for this dialog's copy
            and must not reach the wire. */
@@ -2612,8 +2613,8 @@ export default {
     cancelOrder(order) {
       if (this.cancellingId) return;
       this.$Modal.confirm({
-        title: 'Cancel order',
-        content: 'Cancel this order?',
+        title: this.$t('exchange.terminal.cancelOrderTitle'),
+        content: this.$t('exchange.terminal.cancelOrderConfirm'),
         onOk: () => {
           if (this.cancellingId) return;
           this.cancellingId = order.orderId;
@@ -2848,11 +2849,11 @@ export default {
     copyOrderId(row) {
       const id = row && row.orderId != null ? String(row.orderId) : '';
       if (!id) {
-        this.$Notice.warning({ title: 'No order id', desc: 'This row has no id to copy.' });
+        this.$Notice.warning({ title: this.$t('exchange.residual.noOrderId'), desc: this.$t('exchange.residual.noOrderIdDesc') });
         return;
       }
       const done = () => {
-        this.$Notice.success({ title: 'Copied', desc: 'Order id on clipboard.' });
+        this.$Notice.success({ title: this.$t('exchange.residual.copied'), desc: this.$t('exchange.residual.orderIdClipboard') });
         this.liveAnnounce = 'Order id copied';
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2893,7 +2894,7 @@ export default {
           [
             esc(this.date(row.time)),
             esc(row.symbol),
-            esc(row.type === 'MARKET_PRICE' ? 'Market' : 'Limit'),
+            esc(row.type === 'MARKET_PRICE' ? $t('exchange.terminal.typeMarket') : $t('exchange.terminal.typeLimit')),
             esc(row.direction),
             esc(row.type === 'MARKET_PRICE' ? 'Market' : row.price),
             esc(row.amount),
@@ -2955,7 +2956,7 @@ export default {
           [
             esc(this.date(row.time)),
             esc(row.symbol),
-            esc(row.type === 'MARKET_PRICE' ? 'Market' : 'Limit'),
+            esc(row.type === 'MARKET_PRICE' ? $t('exchange.terminal.typeMarket') : $t('exchange.terminal.typeLimit')),
             esc(row.direction),
             esc(row.type === 'MARKET_PRICE' ? 'Market' : row.price),
             esc(row.amount),

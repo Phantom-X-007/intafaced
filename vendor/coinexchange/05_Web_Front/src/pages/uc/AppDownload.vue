@@ -62,7 +62,7 @@ export default {
     }
   },
   created() {
-    window.document.title = 'App — INTAFACED';
+    window.document.title = this.$t('shellResidual.titleApp');
     this.$store.commit('navigate', 'nav-other');
   }
 };

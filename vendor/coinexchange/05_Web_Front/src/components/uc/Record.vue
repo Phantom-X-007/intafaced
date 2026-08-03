@@ -40,7 +40,7 @@
             </div>
 
             <p v-if="listError" class="ix-empty ix-empty-error" role="alert" tabindex="-1" ref="listError">{{ listError }}</p>
-            <p v-else-if="loading" class="ix-empty ix-empty-loading">Loading fills…</p>
+            <p v-else-if="loading" class="ix-empty ix-empty-loading">{{ $t("shellResidual.loadingFills") }}</p>
             <p v-else-if="listReachable && tableRecord.length === 0" class="ix-empty">{{ $t('intafaced.trade.noMyTrades') }}</p>
             <Table v-if="!listError && !loading && tableRecord.length" :no-data-text="$t('common.nodata')" :columns="tableColumnsRecord" :data="pagedRecord" :disabled-hover="true"></Table>
             <div style="margin: 10px;overflow: hidden" v-if="!listError && tableRecord.length > pageSize">

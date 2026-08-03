@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('uc.identity.title') }}</h1>
       <p>{{ $t('uc.identity.lead') }}</p>
-      <div class="ix-source">svc-identity · /api/identity/trpc</div>
+      <div class="ix-source">{{ $t("shellResidual.svcIdentityPath") }}</div>
     </div>
 
     <!-- ── where you stand ──────────────────────────────────────────────── -->

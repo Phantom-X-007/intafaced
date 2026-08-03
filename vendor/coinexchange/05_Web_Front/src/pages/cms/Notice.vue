@@ -9,7 +9,7 @@
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('cms.noticePage.announcements') }}</h2>
-        <span class="ix-sub">no service</span>
+        <span class="ix-sub">{{ $t("shellResidual.noService") }}</span>
       </div>
       <IxState reason="no_surface" :message="$t('cms.noticePage.announcementsMissing')" />
     </div>

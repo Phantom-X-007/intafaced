@@ -130,8 +130,7 @@
     <div class="wrapper">
       <h2 class="title">{{ $t('cms.features') }}</h2>
       <p class="ix-dualbook ix-about-note" role="note">
-        <strong>About this venue</strong> describes product intent only — feature blurbs are not performance promises.
-        Contact and community routes stay blank until real channels are published (no invent inboxes or social URLs).
+        <strong>{{ $t("shellResidual.aboutTitle") }}</strong> {{ $t("shellResidual.aboutNote") }}
       </p>
       <div class="wrapper_logo">
         <ul>
@@ -171,23 +170,23 @@
           <ul class="ix-contact-list" role="list">
             <li>
               <strong>{{ $t('description.service') }}</strong>
-              <span>Not published yet — no invent inbox.</span>
+              <span>{{ $t("shellResidual.notPublishedInbox") }}</span>
             </li>
             <li>
               <strong>{{ $t('description.support') }}</strong>
-              <span>Not published yet — use signed-in help when available.</span>
+              <span>{{ $t("shellResidual.notPublishedHelp") }}</span>
             </li>
             <li>
               <strong>{{ $t('description.apply') }}</strong>
-              <span>Not published yet — no invent inbox.</span>
+              <span>{{ $t("shellResidual.notPublishedInbox") }}</span>
             </li>
             <li>
               <strong>{{ $t('description.report') }}</strong>
-              <span>Not published yet — no invent inbox.</span>
+              <span>{{ $t("shellResidual.notPublishedInbox") }}</span>
             </li>
             <li>
               <strong>{{ $t('description.coop') }}</strong>
-              <span>Not published yet — no invent inbox.</span>
+              <span>{{ $t("shellResidual.notPublishedInbox") }}</span>
             </li>
           </ul>
         </div>
@@ -200,8 +199,8 @@
                apart. One honest line replaces six. -->
           <ul class="ix-contact-list" role="list">
             <li>
-              <strong>Channels</strong>
-              <span>None published yet — no invent profile URL.</span>
+              <strong>{{ $t("shellResidual.channels") }}</strong>
+              <span>{{ $t("shellResidual.nonePublishedYet") }}</span>
             </li>
           </ul>
         </div>

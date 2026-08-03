@@ -235,7 +235,7 @@
           <!-- No year and no rights claim we cannot stand behind. The upstream
                line said "Copyright © 2019" — that is the vendor's first-publish
                year, not ours, and stating it is a false provenance claim. -->
-          <p>© INTAFACED</p>
+          <p>{{ $t("shellResidual.copyright") }}</p>
           <!-- Social row removed rather than rewritten. Every entry was either a
                China-only platform the upstream vendor used (WeChat, Weibo,
                Biyong) or a profile URL invented for us that resolves to nothing
@@ -243,7 +243,7 @@
                reddit.com/u/intafacedglobal). The three QR images were the
                vendor's own accounts — a customer scanning one reached a stranger.
                Same idiom already used on /about-us and /partner. -->
-          <p class="footer-quiet">Social channels not published yet — no invent profile URL.</p>
+          <p class="footer-quiet">{{ $t("shellResidual.socialNotPublished") }}</p>
         </div>
         <!-- "Friendly links" column removed: Feixiaohao, 8BTC, ChainNode and
              Jinse Finance are Chinese crypto-media partners of the upstream
@@ -312,10 +312,10 @@
             <li class="footer_title">
               <span>{{$t("footer.lxwm")}}</span>
             </li>
-            <li class="footer-quiet">{{$t("footer.kfyx")}} — not published yet</li>
-            <li class="footer-quiet">{{$t("footer.swhz")}} — not published yet</li>
-            <li class="footer-quiet">{{$t("footer.sbsq")}} — not published yet</li>
-            <li class="footer-quiet">{{$t("footer.tsjb")}} — not published yet</li>
+            <li class="footer-quiet">{{$t("footer.kfyx")}} {{ $t("shellResidual.notPublishedYet") }}</li>
+            <li class="footer-quiet">{{$t("footer.swhz")}} {{ $t("shellResidual.notPublishedYet") }}</li>
+            <li class="footer-quiet">{{$t("footer.sbsq")}} {{ $t("shellResidual.notPublishedYet") }}</li>
+            <li class="footer-quiet">{{$t("footer.tsjb")}} {{ $t("shellResidual.notPublishedYet") }}</li>
           </ul>
         </div>
       </div>
@@ -358,31 +358,31 @@ export default {
     activeNav: function() {
       switch (this.activeNav) {
         case "nav-exchange":
-          window.document.title = "Exchange" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("shellResidual.titleExchange") + " - " + this.$t("shellResidual.titleDefault");
           break;
         case "nav-service":
-          window.document.title = "Announcement" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("shellResidual.titleAnnouncement") + " - " + this.$t("shellResidual.titleDefault");
           break;
         case "nav-about":
-          window.document.title = "About" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("shellResidual.titleAbout") + " - " + this.$t("shellResidual.titleDefault");
           break;
         case "nav-lab":
-          window.document.title = "Lab" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("shellResidual.titleLab") + " - " + this.$t("shellResidual.titleDefault");
           break;
         case "nav-invite":
-          window.document.title = "Promotion" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("shellResidual.titlePromotion") + " - " + this.$t("shellResidual.titleDefault");
           break;
         case "nav-platform":
-          window.document.title = "Platform" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("shellResidual.titlePlatform") + " - " + this.$t("shellResidual.titleDefault");
           break;
         // Set by pages/NotFound.vue. The tab title is the only part of a 404
         // that survives into history and bookmarks, so it should not read as
         // the front page.
         case "nav-notfound":
-          window.document.title = "Not found" + " - INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("shellResidual.titleNotFound") + " - " + this.$t("shellResidual.titleDefault");
           break;
         default:
-          window.document.title = "INTAFACED | Sovereign Exchange";
+          window.document.title = this.$t("shellResidual.titleDefault");
           break;
       }
     },

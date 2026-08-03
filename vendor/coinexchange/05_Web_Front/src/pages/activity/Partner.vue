@@ -127,35 +127,25 @@
 <template>
   <div class="about_us_container">
     <div class="wrapper">
-      <h2 class="title">Partner benefits</h2>
+      <h2 class="title">{{ $t("shellResidual.partnerTitle") }}</h2>
       <p class="ix-dualbook ix-partner-note" role="note">
-        <strong>Partner terms</strong> describe the program structure only — profit share and airdrop
-        language is not a guaranteed yield. Contact routes stay blank until real inboxes are published
-        (never placeholder addresses).
+        <strong>{{ $t("shellResidual.partnerTermsLead") }}</strong> {{ $t("shellResidual.partnerTermsNote") }}
       </p>
       <div class="wrapper_logo">
         <ul>
           <li>
             <img src="../../assets/images/feature_safe.png" alt="" />
-            <h5>Platform dividends</h5>
+            <h5>{{ $t("shellResidual.partnerDiv") }}</h5>
             <!-- "80% of net profit" was the upstream vendor's number and
                  contradicted our own copy two files away, which already said
                  this shell does not invent a revenue split. Removed rather than
                  adjusted: any percentage here is a figure nobody has set. -->
-            <span
-              >Where a partner dividend runs, it is paid from net profit after operating costs. The
-              share is set by operator policy and is not published here. Markets are not predictable
-              and no level of profit is promised — a partner shares the downside as well as the
-              upside.</span
-            >
+            <span>{{ $t("shellResidual.partnerDivBody") }}</span>
           </li>
           <li>
             <img src="../../assets/images/feature_fast.png" alt="" />
-            <h5>Airdrop rewards</h5>
-            <span
-              >Where a listing project supplies marketing or campaign allocations, a share is
-              negotiated on partners' behalf and distributed to them first.</span
-            >
+            <h5>{{ $t("shellResidual.partnerAir") }}</h5>
+            <span>{{ $t("shellResidual.partnerAirBody") }}</span>
           </li>
           <li>
             <img src="../../assets/images/feature_global.png" alt="" />
@@ -182,20 +172,20 @@
           <h5>{{ $t('cms.contactus') }}</h5>
           <ul class="ix-contact-list" role="list">
             <li>
-              <strong>Business</strong>
-              <span>Not published yet — route opens when partner ops is live.</span>
+              <strong>{{ $t("shellResidual.business") }}</strong>
+              <span>{{ $t("shellResidual.partnerBusinessRoute") }}</span>
             </li>
             <li>
-              <strong>Support</strong>
-              <span>Not published yet — use signed-in help when available.</span>
+              <strong>{{ $t("shellResidual.support") }}</strong>
+              <span>{{ $t("shellResidual.notPublishedHelp") }}</span>
             </li>
             <li>
-              <strong>Listings</strong>
-              <span>Not published yet — no invent inbox.</span>
+              <strong>{{ $t("shellResidual.listings") }}</strong>
+              <span>{{ $t("shellResidual.notPublishedInbox") }}</span>
             </li>
             <li>
-              <strong>Media</strong>
-              <span>Not published yet — no invent inbox.</span>
+              <strong>{{ $t("shellResidual.media") }}</strong>
+              <span>{{ $t("shellResidual.notPublishedInbox") }}</span>
             </li>
           </ul>
         </div>
