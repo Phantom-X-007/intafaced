@@ -4,17 +4,9 @@
       <div id="pagetips" style="border-bottom:1px solid rgb(28, 39, 58);">
         <div class="topnav">
           <div class="carl">
-            <div class="notice-list">
-              <div class="notice-item" v-for="(item,index) in FAQList">
-                <div class="cal_content">
-                  <span></span>
-                  <router-link target="_blank" :to="{path: '/announcement/' + item.id}">[ {{item.createTime}} ] {{strde(item.title)}}</router-link>
-                </div>
-              </div>
-            </div>
-            <div class="more">
-              <router-link to="/announcement/0" target="_blank">{{$t('common.more')}}</router-link>
-            </div>
+            <!-- No /uc/announcement fetch: that Java route is dead (405). The strip
+                 states the socket reason via IxNoSurface instead of an empty toast. -->
+            <IxNoSurface socket-key="cms.announcements" :inline="true" />
           </div>
         </div>
       </div>
@@ -195,6 +187,7 @@ var moment = require("moment");
 import { rest } from "@/config/intafaced.js";
 import ixTrade from "@js/ix-trade.js";
 import $ from "@js/jquery.min.js";
+import IxNoSurface from "../../components/intafaced/IxNoSurface.vue";
 
 import Swiper from 'swiper';
 
@@ -270,6 +263,7 @@ function renderChangeCell(h, self, row) {
 }
 
 export default {
+  components: { IxNoSurface },
   data() {
     let self = this;
     return {
@@ -277,14 +271,8 @@ export default {
       /* True only when market thumb failed — empty table is not "no markets". */
       marketsDown: false,
       percent: 0,
-      pageNo: 1,
-      pageSize: 6,
-      totalNum: 0,
-      FAQList: [],
       yesDayCashDividensBonusETH: 0,
       dataIndex: [],
-      pageNo: 1,
-      totalNum: 0,
       searchKey: "",
       favorColumns: [
         {
@@ -800,7 +788,7 @@ export default {
       this.loadPicData();
       this.addClass(1);
       // this.getmoneyData();
-      this.loadDataPage(this.pageNo);
+      /* Announcement strip: IxNoSurface cms.announcements (no /uc fetch/toast). */
     },
     getStyle(obj, attr) {
       if (obj.currentStyle) {
@@ -808,37 +796,6 @@ export default {
       } else {
         return getComputedStyle(obj, false)[attr];
       }
-    },
-    loadDataPage(pageIndex) {
-      var param = {};
-      (param["pageNo"] = pageIndex),
-        (param["pageSize"] = this.pageSize),
-        (param["lang"] = this.langPram),
-        this.$http
-.post(this.host + this.api.uc.announcement, param)
-.then(response => {
-            var resp = response.body;
-            if (resp.code == 0) {
-              if (resp.data.content.length == 0) return;
-
-              this.totalNum = resp.data.totalElements;
-
-              let FAQListtem = resp.data.content;
-              if(this.totalNum > 3){
-                this.FAQList = FAQListtem.slice(0, 3);
-              }else{
-                this.FAQList = FAQListtem;
-              }
-              this.FAQList.forEach(function(item){
-                item.createTime = item.createTime.substring(5, 10);
-              });
-            } else {
-              this.$Notice.error({
-                title: this.$t("common.tip"),
-                desc: resp.message
-              });
-            }
-          });
     },
     /* REMOVED: getCNYRate(). It read `/market/exchange-rate/usd-cny` on the
        retired Java market service to convert prices into CNY. This platform
