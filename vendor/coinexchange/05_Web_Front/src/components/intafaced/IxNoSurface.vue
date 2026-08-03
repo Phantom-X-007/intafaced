@@ -1,35 +1,47 @@
 <template>
-  <div class="ix-note ix-nosurface" role="note">
+  <div
+    class="ix-note ix-nosurface"
+    :class="{ 'ix-nosurface-inline': inline }"
+    role="note"
+  >
     <div class="ix-nosurface-badge">{{ $t('intafaced.socket.badge') }}</div>
 
-    <strong>{{ entry.capability }}</strong>
+    <strong>{{ headline }}</strong>
 
-    <div class="ix-nosurface-block">
-      <div class="ix-nosurface-h">{{ $t('intafaced.socket.missing') }}</div>
-      <ul>
-        <li v-for="(line, i) in entry.missing" :key="'m' + i">{{ line }}</li>
-      </ul>
-    </div>
+    <router-link
+      v-if="inline"
+      class="ix-nosurface-more"
+      :to="moreTo"
+    >{{ $t('common.more') }}</router-link>
 
-    <div class="ix-nosurface-block">
-      <div class="ix-nosurface-h">{{ $t('intafaced.socket.needed') }}</div>
-      <ul>
-        <li v-for="(line, i) in entry.needed" :key="'n' + i">{{ line }}</li>
-      </ul>
-    </div>
-
-    <div class="ix-nosurface-foot">
-      <div>
-        <span class="ix-nosurface-k">{{ $t('intafaced.socket.tracker') }}</span>
-        <code v-if="entry.tracker">{{ entry.tracker }}</code>
-        <span v-else class="ix-nosurface-none">{{ $t('intafaced.socket.noTracker') }}</span>
+    <template v-if="!inline">
+      <div class="ix-nosurface-block">
+        <div class="ix-nosurface-h">{{ $t('intafaced.socket.missing') }}</div>
+        <ul>
+          <li v-for="(line, i) in entry.missing" :key="'m' + i">{{ line }}</li>
+        </ul>
       </div>
-      <div>
-        <span class="ix-nosurface-k">{{ $t('intafaced.socket.wasCalling') }}</span>
-        <code>{{ entry.deadPath }}</code>
+
+      <div class="ix-nosurface-block">
+        <div class="ix-nosurface-h">{{ $t('intafaced.socket.needed') }}</div>
+        <ul>
+          <li v-for="(line, i) in entry.needed" :key="'n' + i">{{ line }}</li>
+        </ul>
       </div>
-      <p class="ix-nosurface-why">{{ $t('intafaced.socket.deadPathNote') }}</p>
-    </div>
+
+      <div class="ix-nosurface-foot">
+        <div>
+          <span class="ix-nosurface-k">{{ $t('intafaced.socket.tracker') }}</span>
+          <code v-if="entry.tracker">{{ entry.tracker }}</code>
+          <span v-else class="ix-nosurface-none">{{ $t('intafaced.socket.noTracker') }}</span>
+        </div>
+        <div>
+          <span class="ix-nosurface-k">{{ $t('intafaced.socket.wasCalling') }}</span>
+          <code>{{ entry.deadPath }}</code>
+        </div>
+        <p class="ix-nosurface-why">{{ $t('intafaced.socket.deadPathNote') }}</p>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -52,6 +64,27 @@
  * screen and the registry cannot drift into disagreeing about what is missing.
  * Only the chrome is i18n-keyed; the socket facts are engineering statements
  * and live beside the client with the module manifest.
+ *
+ * ── `inline`: THE SAME STATEMENT WHERE THERE IS ONE LINE OF ROOM ────────────
+ *
+ * Some sockets are not a page — the landing announcement strip is a single row
+ * inside a navigation bar. The full panel cannot go there, and the alternative
+ * that was actually shipped is worse than either: an empty red error toast, from
+ * a caller parsing the SPA's own HTML as an API envelope (see the cms.announcements
+ * row). A host with no room for the panel was silently choosing between hanging
+ * and lying.
+ *
+ * `inline` renders the badge, one sentence, and a "more" link into the full
+ * socket page. The sentence is `entry.strip` when the row defines one (same
+ * claim as missing[0], shorter), otherwise the capability. Lists and footer
+ * drop because they do not fit — not because they stopped applying. A screen
+ * with room should use the full panel.
+ *
+ * ── `socketEntry`: AN INLINE ROW WITHOUT A REGISTRY KEY ─────────────────────
+ *
+ * The registry is the default. A host that already holds a SocketEntry (or a
+ * one-off that is not worth a permanent key) may pass it as `socketEntry`.
+ * Either `socketKey` or `socketEntry` is required; both set → entry wins.
  */
 import { socketByKey } from '../../config/sockets.js';
 import { REASON } from '../../config/intafaced.js';
@@ -59,8 +92,20 @@ import { REASON } from '../../config/intafaced.js';
 export default {
   name: 'IxNoSurface',
   props: {
-    /** A key in config/sockets.js. */
-    socketKey: { type: String, required: true }
+    /** A key in config/sockets.js. Required unless socketEntry is set. */
+    socketKey: { type: String, default: null },
+    /**
+     * Inline SocketEntry. When set, used instead of registry lookup.
+     * @type {import('../../config/sockets.js').SocketEntry|null}
+     */
+    socketEntry: { type: Object, default: null },
+    /**
+     * Compact one-line form for bars that cannot hold the full panel
+     * (landing announcement strip).
+     */
+    inline: { type: Boolean, default: false },
+    /** Destination for the inline "more" link. Default /notice (full §13). */
+    moreTo: { type: String, default: '/notice' }
   },
   computed: {
     /** The reason this panel represents. Exposed so a parent can branch on it. */
@@ -74,10 +119,13 @@ export default {
      * rendering an empty panel that looks like a deliberate blank.
      */
     entry() {
-      var row = socketByKey(this.socketKey);
+      if (this.socketEntry) {
+        return this.socketEntry;
+      }
+      var row = this.socketKey ? socketByKey(this.socketKey) : null;
       if (!row) {
         return {
-          capability: this.socketKey,
+          capability: this.socketKey || '(no socket)',
           deadPath: '—',
           tracker: null,
           missing: [this.$t('intafaced.socket.unknownKey')],
@@ -85,6 +133,16 @@ export default {
         };
       }
       return row;
+    },
+    /**
+     * One sentence for the reader. Inline prefers the strip line when present
+     * so a 40px bar states the absence rather than the product name.
+     */
+    headline() {
+      if (this.inline && this.entry.strip) {
+        return this.entry.strip;
+      }
+      return this.entry.capability;
     }
   }
 };
@@ -156,5 +214,44 @@ export default {
   margin: 10px 0 0;
   color: var(--ix-text-faint, #8a8a8a);
   line-height: 1.6;
+}
+
+/* ── inline: one row for a strip that is ~40px tall ──────────────────────────
+   Flex row: badge · sentence · more. Truncates the sentence rather than
+   wrapping into a second line the host bar cannot hold. */
+.ix-nosurface-inline {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  min-height: 0;
+  background: transparent;
+  border: 0;
+}
+.ix-nosurface-inline .ix-nosurface-badge {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+.ix-nosurface-inline strong {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+.ix-nosurface-more {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--ix-orange, #00c2a8);
+  text-decoration: none;
+}
+.ix-nosurface-more:hover {
+  text-decoration: underline;
 }
 </style>
