@@ -1,5 +1,5 @@
 import type { EventBus, Handler, PublishOptions, SubscribeOptions, Subscription, Payload } from './bus.js';
-import { buildEnvelope, validatePayload } from './bus.js';
+import { acceptEnvelope, buildEnvelope } from './bus.js';
 import { EVENT_CATALOG, type EventName, type EventDef } from './catalog.js';
 import type { Envelope } from './envelope.js';
 
@@ -22,8 +22,10 @@ export class MemoryEventBus implements EventBus {
 
     const def = EVENT_CATALOG[name] as EventDef;
     for (const { fn } of this.handlers.get(def.subject) ?? []) {
-      // Re-validate on delivery, exactly as the JetStream consumer does.
-      const validated = validatePayload(name, env.payload);
+      // Re-validate on delivery, exactly as the JetStream consumer does —
+      // version, schema and drift, through the same `acceptEnvelope`. A test bus
+      // that skipped a check the real one performs would certify the wrong thing.
+      const validated = acceptEnvelope(name, env as Envelope);
       await (fn as unknown as Handler<K>)(validated, env);
     }
     return env;

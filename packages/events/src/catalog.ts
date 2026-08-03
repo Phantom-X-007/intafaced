@@ -402,9 +402,17 @@ export const fillSettled = defineEvent(
 /**
  * User-visible futures position (svc-trade). Private WS fans this to the owner.
  *
- * Publisher is `trade.futures`. Until that engine exists nothing emits this
- * event — the `/private/stream` positions channel still mounts and stays silent
- * rather than inventing rows (same honesty as REST GET /positions → []).
+ * Published by svc-trade's futures engine: `position-service` on every position
+ * transition and `tick-stores` on liquidation. `/private/stream` fans it to the
+ * owner, and `ws-private-orders-positions` is a live durable consumer.
+ *
+ * THIS DOCSTRING USED TO SAY THE OPPOSITE — "until that engine exists nothing
+ * emits this event". The engine does exist and two call sites had been emitting
+ * for some time. The gate below cannot catch that: `positionUpdated` is wired at
+ * both ends, so `event-wiring` passes and always would have. Only prose can be
+ * wrong in this direction, which is exactly why it was worth correcting — a
+ * catalog read as the map of what is wired is worth nothing if an entry
+ * volunteers that it is dark while it is running.
  */
 export const positionUpdated = defineEvent(
   'trade',
@@ -744,4 +752,169 @@ export const ALL_EVENTS: readonly EventDef[] = Object.values(EVENT_CATALOG);
 
 export function eventBySubject(s: string): EventDef | undefined {
   return ALL_EVENTS.find((e) => e.subject === s);
+}
+
+// ── Declared wiring sockets ──────────────────────────────────────────────────
+
+/**
+ * AN EVENT WITH NO PUBLISHER, OR NO SUBSCRIBER — SAID OUT LOUD.
+ *
+ * The bus could not tell anyone that a declared subject had no producer, no
+ * consumer, or a schema neither side agreed on. Three separate audits arrived
+ * at the same shape from three directions, and every one of them found it by
+ * accident:
+ *
+ *   · `bankMarginCalled` is a complete, correct event with a complete, correct
+ *     consumer and NOTHING THAT PUBLISHES IT. svc-notify has therefore logged a
+ *     warning about a consumer it cannot attach on every boot since it shipped.
+ *   · `xpEarned` is published by two services and read by none. The tracker
+ *     called `p2p.reputation` done on the strength of it "feeding the same XP
+ *     graph"; the graph is fed by a direct call and this stream is discarded.
+ *   · `orderFilled` lost account ids to a stale build, because `z.object()`
+ *     strips unknown keys and says nothing.
+ *
+ * `tooling/ci/event-wiring.mjs` now reads the code and this list together, and
+ * fails when they disagree. So the only two states an unwired event can be in
+ * are: RECORDED HERE, with a reason a human wrote — or RED.
+ *
+ * THE RULES, because a socket list rots into a suppression list otherwise:
+ *
+ *   1. A reason names WHAT is missing and WHY it is acceptable today. "TODO",
+ *      "later" and "not yet" are not reasons; the gate rejects a reason under
+ *      40 characters for exactly that.
+ *   2. Deleting the event is never how an entry leaves this list. An orphan is
+ *      a finding — sometimes a deliberate socket waiting for its publisher, as
+ *      `bankMarginCalled` is. Wiring it is how it leaves.
+ *   3. `satisfies` below is load-bearing: an entry naming an event that does
+ *      not exist is a compile error, so this list cannot outlive its catalog.
+ *
+ * Recorded here does NOT mean healthy — it means known, attributed, and
+ * reviewable in one place. Read it as the bus's list of things it cannot do yet.
+ */
+export interface WiringSocket {
+  /** The catalog key. Checked against `EventName` by `satisfies`. */
+  readonly event: EventName;
+  /** Which end is missing. */
+  readonly missing: 'publisher' | 'subscriber';
+  /** Why that is acceptable today, and what would close it. */
+  readonly reason: string;
+}
+
+export const WIRING_SOCKETS = [
+  // ── no publisher ───────────────────────────────────────────────────────────
+  {
+    event: 'bankMarginCalled',
+    missing: 'publisher',
+    reason:
+      'svc-bank raises the call durably (a loan_margin_calls row whose grace clock gates liquidation) but depends on neither @intafaced/events nor nats, and no service lists "bank" in ownedStreams — so INTAFACED_BANK has never existed and this subject has never been published. svc-notify\'s consumer is complete and parks on it at every boot. Deliberate socket: the publish belongs in svc-bank, which is a human-claimed money mountain, and the catalog docstring above already specifies the split it has to implement.',
+  },
+
+  // ── no subscriber ──────────────────────────────────────────────────────────
+  {
+    event: 'xpEarned',
+    missing: 'subscriber',
+    reason:
+      "PUBLISHED INTO THE VOID, and this entry is the record of it. svc-p2p and svc-trade both publish, both saying in comments that svc-identity is the way into rank_state — and svc-identity subscribes only to blueprintCreated/blueprintDeleted. rank_state is written exclusively by rank-service.awardXp, called from svc-identity's own auth flows and its serviceProcedure, so P2P and trade XP is retained by JetStream and read by nobody. The idempotency keys are even shaped to match identity.xp_events.idempotency_key, a handshake with a consumer that does not exist. Closing it is a svc-identity consumer, not a catalog change.",
+  },
+  {
+    event: 'userCreated',
+    missing: 'subscriber',
+    reason:
+      "svc-identity announces that a sovereign account exists; no service reacts to the announcement today. Every module that needs a user resolves it through packages/contracts under the caller's own authority instead, so nothing is missing a fact it needs — the stream is a durable record ahead of its first reader.",
+  },
+  {
+    event: 'ledgerTxPosted',
+    missing: 'subscriber',
+    reason:
+      'THE money event, published by svc-ledger on every value movement, with no consumer in this repo. §10 asks for it to exist and be replayable, and it is: the stream retains 90 days and carries the hash chain, so an audit or read-model consumer can be built later and replay from the start. Nothing today derives state from it, and nothing claims to.',
+  },
+  {
+    event: 'ledgerReconciliationFailed',
+    missing: 'subscriber',
+    reason:
+      'svc-ledger publishes when snapshot and replay disagree, but the freeze it triggers is performed by svc-ledger itself in-process — the event is the external announcement, not the mechanism. It stays unconsumed until the alerting path (§4.2 "pages the operator") is built, and the freeze does not depend on that path existing.',
+  },
+  {
+    event: 'ledgerFreezeUpdated',
+    missing: 'subscriber',
+    reason:
+      'Freeze state is DURABLE, not a process signal: every replica reads the same row, which is precisely why nothing has to subscribe to stay correct. The event exists so an operator console can react without polling. apps/admin does not yet make a network call of any kind (see tracker ops.admin-console), so there is no consumer to attach.',
+  },
+  {
+    event: 'buybackExecuted',
+    missing: 'subscriber',
+    reason:
+      "svc-token publishes each structural buyback-and-burn run. The flywheel it describes is settled by svc-token through the ledger before the event is published, so no consumer is load-bearing; the subject exists so the public burn record (§17.3) can be built from the stream rather than from a query against another service's tables.",
+  },
+  {
+    event: 'crewMemberCreated',
+    missing: 'subscriber',
+    reason:
+      'The description above names two consumers — "svc-academy routes the lobby, svc-agents opens the crew channel" — and NEITHER EXISTS. svc-academy does not depend on @intafaced/events at all, and svc-agents only publishes. Recorded rather than reworded: the description is the specification those two services owe, and softening it to match today\'s code would delete the requirement instead of tracking it.',
+  },
+  {
+    event: 'orderAccepted',
+    missing: 'subscriber',
+    reason:
+      "svc-matching announces admission to the book; svc-trade consumes only orderFilled and orderCancelled, because acceptance moves no money and releases no hold, and svc-trade already knows it submitted the order. svc-ws publishes book depth from the engine's own snapshots rather than by replaying acceptances. Genuinely nothing to do with it today.",
+  },
+  {
+    event: 'protocolAccountCreated',
+    missing: 'subscriber',
+    reason:
+      "Protocol Plane events are OBSERVATIONS of chain state (§17.4) — the account exists on chain whether or not anything here reads the announcement, and the platform holds no key to it either way. svc-identity links an account through packages/contracts under the user's own authority, not off this stream. Unconsumed by design, not by omission.",
+  },
+  {
+    event: 'protocolSessionKeyCreated',
+    missing: 'subscriber',
+    reason:
+      'Same shape as protocolAccountCreated: an observation of a grant that is already enforced by the smart account itself. Nothing here may act on it, because a consumer that cached session-key scope would be a second, weaker copy of an authority that lives on chain (§16.10).',
+  },
+  {
+    event: 'protocolSessionKeyCancelled',
+    missing: 'subscriber',
+    reason:
+      'The revocation is effective on chain the moment it is mined; a consumer would only ever be catching up with a fact that is already binding. It stays unconsumed until there is an agent-routing surface that needs to stop sending — and that surface must re-read the chain anyway rather than trust this stream.',
+  },
+  {
+    event: 'agentActionCompleted',
+    missing: 'subscriber',
+    reason:
+      "svc-agents publishes the public half of the Agentic Law (§8.2). The private half — the detail — is a query against agent_actions under the caller's own authorisation, which is where every surface in this repo reads it from today. The stream is the durable, replayable record for a compliance consumer that has not been built.",
+  },
+  {
+    event: 'agentActionRejected',
+    missing: 'subscriber',
+    reason:
+      'The guardrail refused the action before it ran, inside svc-agents, and recorded the refusal — so the event carries no obligation that would go unmet without a consumer. Named alongside agentActionCompleted for the same unbuilt compliance consumer.',
+  },
+  {
+    event: 'agentUsageSettled',
+    missing: 'subscriber',
+    reason:
+      'The ledger post has already happened when this is published, and it carries the chargeKey precisely so reconciliation can be done against the ledger rather than by accumulating this stream. A consumer that added up these amounts would be a balance outside packages/ledger-client (§0.6), so the absence here is deliberate.',
+  },
+  {
+    event: 'p2pOfferCreated',
+    missing: 'subscriber',
+    reason:
+      "The offer book is served from svc-p2p's own tables through packages/contracts; a consumer would be a second copy of a list its owner already answers for. The subject exists so a future search or feed index can be built from the stream instead of reading svc-p2p's tables directly (§2).",
+  },
+  {
+    event: 'p2pDisputeResolved',
+    missing: 'subscriber',
+    reason:
+      "Deliberately NOT fanned out: svc-notify's wiring notes that this payload carries a moderatorId (which may be the system principal `system:p2p-backstop`) and no party ids, so there is no user to notify without inventing one. The escrow movement itself is published separately as p2pEscrowReleased / p2pEscrowRefunded, which do name both sides and ARE consumed.",
+  },
+  {
+    event: 'p2pTradeExpired',
+    missing: 'subscriber',
+    reason:
+      "Same reason as p2pDisputeResolved and recorded in svc-notify's wiring comment: the payload names a trade and an outcome, not a user, so nothing can address a notification from it. The outcome it reports is also published on a subject that does carry both parties, so no user-visible fact depends on a consumer here.",
+  },
+] satisfies readonly WiringSocket[];
+
+/** The recorded reason a given end of an event is unwired, or null if none. */
+export function wiringSocketReason(event: EventName, missing: 'publisher' | 'subscriber'): string | null {
+  return WIRING_SOCKETS.find((s) => s.event === event && s.missing === missing)?.reason ?? null;
 }
