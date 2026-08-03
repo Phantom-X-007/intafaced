@@ -17,28 +17,28 @@ rg -n -i invent|fake|stub|PriceTrend|Math\.random  vendor/coinexchange/05_Web_Fr
 
 ## Shell wave on tip (context)
 
-| PR    | claim / surface                         | invent relevance                         |
-| ----- | --------------------------------------- | ---------------------------------------- |
-| #462  | AFK-UC-COMP · MinTrade socket           | fee-rebate mining invent removed         |
-| #463  | AFK-CMDK-ROUTES · ⌘K catalog            | no invented routes/markets               |
-| #464  | AFK-FOOTER · marketing footer hide      | no invent social URLs (prior honesty)    |
-| #465  | RP2 · Index landing honesty             | no null/green▲/fake trend                |
-| #467  | RP3 · announce strip reason             | sockets / IxNoSurface (not invent strip) |
-| #468  | RP1+RP4 · money-on-wire + ix-wire       | no invent fees/balances on wire          |
-| #472  | RP3 residual · Index announce IxNoSurface | announce honesty                         |
+| PR   | claim / surface                           | invent relevance                         |
+| ---- | ----------------------------------------- | ---------------------------------------- |
+| #462 | AFK-UC-COMP · MinTrade socket             | fee-rebate mining invent removed         |
+| #463 | AFK-CMDK-ROUTES · ⌘K catalog              | no invented routes/markets               |
+| #464 | AFK-FOOTER · marketing footer hide        | no invent social URLs (prior honesty)    |
+| #465 | RP2 · Index landing honesty               | no null/green▲/fake trend                |
+| #467 | RP3 · announce strip reason               | sockets / IxNoSurface (not invent strip) |
+| #468 | RP1+RP4 · money-on-wire + ix-wire         | no invent fees/balances on wire          |
+| #472 | RP3 residual · Index announce IxNoSurface | announce honesty                         |
 
 ## Findings
 
 ### Hit counts (static `rg`, tip `f96ac6b4`)
 
-| pattern                         | vendor front lines | verdict                                      |
-| ------------------------------- | ------------------ | -------------------------------------------- |
-| `invent` (case-insensitive)     | **87**             | **all doctrine / honesty comments** (good)   |
-| `\bfake\b`                      | **8**              | comments + anti-fraud copy word “fake”       |
-| `PriceTrend` / `priceTrend`     | **1**              | historical note in `en.js` (column removed)  |
-| `Math.random` (excl. jquery/charts) | **1** (`gt.js`) | captcha id — not market invent               |
-| live `dataFanyong` / `CNYRate \|\| 6.5` / `mockTicker` | **0** | prior removals still gone                  |
-| **NEW hard invent residual**    | **0**              | no invent-fix code PR from this pass         |
+| pattern                                                | vendor front lines | verdict                                     |
+| ------------------------------------------------------ | ------------------ | ------------------------------------------- |
+| `invent` (case-insensitive)                            | **87**             | **all doctrine / honesty comments** (good)  |
+| `\bfake\b`                                             | **8**              | comments + anti-fraud copy word “fake”      |
+| `PriceTrend` / `priceTrend`                            | **1**              | historical note in `en.js` (column removed) |
+| `Math.random` (excl. jquery/charts)                    | **1** (`gt.js`)    | captcha id — not market invent              |
+| live `dataFanyong` / `CNYRate \|\| 6.5` / `mockTicker` | **0**              | prior removals still gone                   |
+| **NEW hard invent residual**                           | **0**              | no invent-fix code PR from this pass        |
 
 ### No new hard invent residual
 
@@ -48,27 +48,27 @@ Executable invent checks (hardcoded money returns, fake leaderboard identifiers,
 
 ### Known residual surfaces (already owned — do not dual-edit)
 
-| surface                            | signal after shell wave                                      | owner claim                                      |
-| ---------------------------------- | ------------------------------------------------------------ | ------------------------------------------------ |
-| `pages/index/Index.vue`            | honesty comments only (PriceTrend/CNY invent **removed** in #465/#472) | **RP2 MERGED** · AFK-INDEX residual-own blocked |
-| `pages/exchange/Exchange.vue`      | money-on-wire / no invent fees comments (#468)               | **RP1 MERGED**                                   |
-| `components/uc/MinTrade.vue`       | §13 `trade.mining` socket (#462)                             | **AFK-UC-COMP MERGED**                           |
-| `pages/uc/AppDownload.vue`         | §13 invented-content case documented in header               | **AFK-APPDOWNLOAD** residual-own                 |
-| `pages/uc/IdentBusiness.vue`       | form placeholders (jurisdiction etc.) — UX not money invent  | **AFK-IDENT** residual-own                       |
-| `pages/cms/Help*.vue`              | honesty empty≠FAQ invent                                     | **AFK-HELP-DETAIL** residual-own                 |
-| WhitePaper / BZB path              | socket / no invent PDF (cmd-palette golden asserts absence)  | **AFK-WHITEPAPER** residual-own                  |
-| `App.vue` footer                   | no invent social URLs (#464)                                 | **AFK-FOOTER MERGED**                            |
-| `cmd-palette` + golden             | market/route not invented (#463)                             | **AFK-CMDK-ROUTES MERGED**                       |
-| `pages/intafaced/*`                | dual-book / no fake deployed badges                          | **AFK-LAB-PASS** residual-own                    |
-| `components/uc/*` (empty≠zero)     | empty≠zero sweeps; MinTrade closed                           | **AFK-UC-COMP MERGED** (residual empty≠zero ok)  |
+| surface                        | signal after shell wave                                                | owner claim                                     |
+| ------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------- |
+| `pages/index/Index.vue`        | honesty comments only (PriceTrend/CNY invent **removed** in #465/#472) | **RP2 MERGED** · AFK-INDEX residual-own blocked |
+| `pages/exchange/Exchange.vue`  | money-on-wire / no invent fees comments (#468)                         | **RP1 MERGED**                                  |
+| `components/uc/MinTrade.vue`   | §13 `trade.mining` socket (#462)                                       | **AFK-UC-COMP MERGED**                          |
+| `pages/uc/AppDownload.vue`     | §13 invented-content case documented in header                         | **AFK-APPDOWNLOAD** residual-own                |
+| `pages/uc/IdentBusiness.vue`   | form placeholders (jurisdiction etc.) — UX not money invent            | **AFK-IDENT** residual-own                      |
+| `pages/cms/Help*.vue`          | honesty empty≠FAQ invent                                               | **AFK-HELP-DETAIL** residual-own                |
+| WhitePaper / BZB path          | socket / no invent PDF (cmd-palette golden asserts absence)            | **AFK-WHITEPAPER** residual-own                 |
+| `App.vue` footer               | no invent social URLs (#464)                                           | **AFK-FOOTER MERGED**                           |
+| `cmd-palette` + golden         | market/route not invented (#463)                                       | **AFK-CMDK-ROUTES MERGED**                      |
+| `pages/intafaced/*`            | dual-book / no fake deployed badges                                    | **AFK-LAB-PASS** residual-own                   |
+| `components/uc/*` (empty≠zero) | empty≠zero sweeps; MinTrade closed                                     | **AFK-UC-COMP MERGED** (residual empty≠zero ok) |
 
 ### Cross-check: `apps/web` / `apps/admin` (not Stream A shell, but invent family)
 
-| surface                         | signal                                                          | verdict                                      |
-| ------------------------------- | --------------------------------------------------------------- | -------------------------------------------- |
-| `apps/web` landing + terminal   | header comments + `page.test` / fabricated-money ratchet        | honesty (prior invent **removed**)           |
-| `apps/web` `Math.random`        | client order id entropy only                                    | not market invent                            |
-| `apps/admin` ledger freeze path | “never invents a state” comments                                | honesty                                      |
+| surface                         | signal                                                   | verdict                            |
+| ------------------------------- | -------------------------------------------------------- | ---------------------------------- |
+| `apps/web` landing + terminal   | header comments + `page.test` / fabricated-money ratchet | honesty (prior invent **removed**) |
+| `apps/web` `Math.random`        | client order id entropy only                             | not market invent                  |
+| `apps/admin` ledger freeze path | “never invents a state” comments                         | honesty                            |
 
 ### Noise (not product invent)
 
