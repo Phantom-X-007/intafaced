@@ -1,7 +1,7 @@
 # Claim AFK-RESCAN
 
 **status:** residual-own
-**tip:** c1c233a3
+**tip:** 81771578
 **bucket:** residual-own after 2026-08-03 Class N merge cluster
 **proof:** NO-FLEET proof_missing:fleet-blocked
-**note:** See docs/ops/R02-BUCKETS-LIVE.md · merged PRs #462-#469 shell wave
+**note:** Re-scan 2026-08-03 · shell wave #462-#472 · new hard invent = 0 · see docs/ops/R-AFK-RESCAN.md
