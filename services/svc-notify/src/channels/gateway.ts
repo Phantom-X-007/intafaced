@@ -137,7 +137,7 @@ export abstract class GatewayChannel implements NotificationChannel {
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
-      throw new ChannelDeliveryError(this.channel, `gateway responded ${response.status}: ${truncate(body, 300)}`, {
+      throw new ChannelDeliveryError(this.channel, `gateway responded ${response.status}: ${truncate(redact(body, to), 300)}`, {
         retryable: isRetryableStatus(response.status),
         status: response.status,
       });
@@ -196,6 +196,36 @@ export class InAppChannel implements NotificationChannel {
   async deliver(message: OutboundMessage): Promise<DeliveryReceipt> {
     return { reference: message.notificationId };
   }
+}
+
+/**
+ * Take the recipient back out of whatever the gateway said about them.
+ *
+ * A gateway rejecting a destination almost always echoes it — `The 'To' number
+ * +447700900000 is not valid`, `invalid recipient borrower@example.com`. That
+ * string becomes the delivery row's `detail`, and `detail` is not a field the
+ * read API returns, so this is not an exposure to another user. It is still a
+ * SECOND COPY of a mailbox, a handset or a device token, written to a table
+ * whose rows outlive `channel_targets` — and `removeTarget` deletes the address
+ * of record, not every place a gateway happened to quote it back. A delete path
+ * that misses a copy is not a delete path.
+ *
+ * So the address is removed on the way in and the diagnosis is kept: an
+ * operator reading the row still sees the status, the gateway's own wording and
+ * its error code, which is what tells them whether to fix the token, the URL or
+ * the number. They do not need the number printed twice to know which row it is
+ * — the row is already keyed to the user.
+ *
+ * Substring, not a parse: the address may be JSON-quoted, percent-encoded in a
+ * URL the gateway echoes, or repeated. Every literal occurrence goes.
+ */
+function redact(body: string, address: string): string {
+  if (address.length === 0) return body;
+  let out = body.split(address).join('[address redacted]');
+  // The same value as a gateway may have re-encoded it before quoting it back.
+  const encoded = encodeURIComponent(address);
+  if (encoded !== address) out = out.split(encoded).join('[address redacted]');
+  return out;
 }
 
 /** Cut to `max` INCLUDING the ellipsis, so a budget is a budget. */

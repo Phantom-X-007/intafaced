@@ -103,6 +103,16 @@ async function gateway(reply: (n: number, r: Recorded) => Reply): Promise<FakeGa
 }
 const ok = (): Reply => ({ status: 202, body: JSON.stringify({ id: 'gw-1' }) });
 
+/** The Error a deliver() rejected with. Fails the test if it resolved instead. */
+async function failure(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise;
+  } catch (err) {
+    return err as Error;
+  }
+  throw new Error('expected the delivery to be rejected, but it resolved');
+}
+
 afterEach(async () => {
   while (running.length > 0) await running.pop()!.stop();
 });
@@ -270,6 +280,37 @@ describe('what the adapter does when the gateway misbehaves', () => {
     // The assertion that matters: the second server saw nothing, so it never saw
     // the credential either.
     expect(elsewhere.received).toHaveLength(0);
+  });
+
+  it('does not copy the recipient into the delivery row when the gateway quotes it back', async () => {
+    // The realistic shape of an aggregator's rejection: it names the number.
+    const g = await gateway(() => ({
+      status: 422,
+      body: JSON.stringify({ code: 21211, message: "The 'To' number +447700900000 is not a valid phone number." }),
+    }));
+
+    const err = await failure(
+      new SmsChannel({ url: g.url, token: TOKEN, timeoutMs: 2_000, maxChars: 480 }).deliver(
+        message({ channel: 'sms', address: '+447700900000' }),
+      ),
+    );
+
+    // `detail` on the delivery row is this message. The handset must not be in it.
+    expect(err.message).not.toContain('+447700900000');
+    expect(err.message).toContain('[address redacted]');
+    // The diagnosis survives — an operator still learns what to fix.
+    expect(err.message).toContain('422');
+    expect(err.message).toContain('is not a valid phone number');
+  });
+
+  it('redacts an address the gateway percent-encoded before quoting it', async () => {
+    const address = 'borrower+tag@example.com';
+    const g = await gateway(() => ({ status: 400, body: `rejected: ${encodeURIComponent(address)}` }));
+
+    const err = await failure(new EmailChannel({ url: g.url, token: TOKEN, timeoutMs: 2_000 }).deliver(message({ address })));
+
+    expect(err.message).not.toContain('example.com');
+    expect(err.message).toContain('[address redacted]');
   });
 
   it('treats a 2xx with no body as acceptance, with an honest null reference', async () => {
