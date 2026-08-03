@@ -1,6 +1,6 @@
 # Swarm ops dashboard (generated index)
 
-Last report: 2026-08-03T21:06:04.948Z · tip `fa367739`
+Last report: 2026-08-03T21:14:04.748Z · tip `d180104e`
 
 | Report          | Path                                       |
 | --------------- | ------------------------------------------ |
