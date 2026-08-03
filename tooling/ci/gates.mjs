@@ -182,6 +182,8 @@ export const NOT_GATES = {
     'advisory, interactive, and needs a working `gh` + network to list open PRs. Run it by hand (`pnpm claim:check`) before starting work, not as a build gate.',
   'assert-test-db-env.mjs':
     'asserts the TEST_DATABASE_URL_* env the CI Tests job sets up. It is meaningless without that env, so it belongs to that job (residual #9) rather than to a laptop run.',
+  'shell-i18n-scan.mjs':
+    'Vue-shell companion to i18n-scan. Deliberately NOT a gate until a fresh keying pass: tip currently has 200+ hardcoded user-facing strings across the shell, so wiring it as blocking would red main. Run by hand via `pnpm scan:shell-i18n` to drive that pass; promote to GATES (blocking) once the count is zero. Not advisory-GATES either — the scan exits 1 by design and its header claims it blocks; keep that contract for the day it is wired.',
 };
 
 // ── Self-check: nothing in tooling/ci/ may be unaccounted for ───────────────
