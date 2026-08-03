@@ -1,5 +1,7 @@
 # R-AFK-RESCAN — invent-pattern scan (Coord-OPS)
 
+<<<<<<< HEAD
+
 ## AFK invent re-scan cycle80 (2026-08-03T20:50Z · tip `d36b2823`)
 
 | check                                | result                                                                                    |
@@ -10,6 +12,20 @@
 | NEW hard invent residual             | **0**                                                                                     |
 | shell product delta since invent c79 | **empty** (docs/ops only)                                                                 |
 | freeProduct                          | **0** — re-scan is OPS pivot, not product spawn                                           |
+| =======                              |
+
+## AFK invent re-scan cycle80 (2026-08-03T20:49Z · tip `d36b2823`)
+
+| check                                       | result                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| tip                                         | `d36b2823` · #647 R07 cycle79 freeProduct=0 + tip 25f73927                                |
+| fabricated-money-scan                       | **EXIT=0** · 0 findings / 0 baseline · 93 shell files                                     |
+| invent (vendor front)                       | honesty/doctrine comments only (`dataFanyong` / `CNYRate \|\| 6.5` are **comment** lines) |
+| NEW hard invent residual                    | **0**                                                                                     |
+| shell product delta since invent c77 (#642) | **empty** (docs/ops only)                                                                 |
+| freeProduct                                 | **0** — re-scan is OPS pivot, not product spawn                                           |
+
+> > > > > > > e8a3b348 (docs(ops): invent re-scan cycle80 tip d36b2823)
 
 **Verdict:** no new invent residual · no invent-fix PR · freeProduct=0 ≠ kill.
 
@@ -998,6 +1014,39 @@ EXIT=0
 | **NEW hard invent residual**  |                                                  **0** | no invent-fix PR from this pass                   |
 
 **freeProduct=0 note:** shell craft queue drained — keep-alive re-scan only; no invent money UI. freeze @ tip band `f82f6fab`/`083a26fa`: free=2 freeProduct=0 freeTracker=0 blocked=P-WS-REPORT. Shell product paths unchanged since invent c74 tip `03de420e` (docs-only tip advances #635–#640 R07 c74–c76 + invent c74 + P-WS c75 + R01 c76). freeProduct=0 ≠ kill · P-WS still blocked by partner/Denon queue (#433/#432).
+
+### fabricated-money-scan.mjs (verbatim)
+
+```
+✓ fabricated-money — 93 shell file(s), 0 finding(s), all at the frozen baseline
+  ⚠ 0 invented figure(s) frozen across 0 file(s) — the queue cannot grow. Money on a surface comes from a service response, or the surface renders the absence.
+EXIT=0
+```
+
+**Verdict:** invent honesty holds · live invent residual **0** · fabricated-money findings **0**.
+
+---
+
+## Re-scan cycle80 — 2026-08-03T20:49Z · tip `d36b2823`
+
+**Mode:** NO-FLEET · static `rg` + `tooling/ci/fabricated-money-scan.mjs`  
+**Trigger:** AFK OPS invent re-scan keep-alive (freeProduct=0 shell drain — **not** platform done)  
+**Tip full:** `d36b2823fbb3aa1281f736562dcabe1f0c8b73fb` · main after R07 cycle79 land (#647) · prior invent stamp cycle79 @ `25f73927` / cycle77 @ `083a26fa`
+
+| check                         |                                                 result | verdict                                           |
+| ----------------------------- | -----------------------------------------------------: | ------------------------------------------------- |
+| `fabricated-money-scan.mjs`   | **0** finding(s) / **0** frozen baseline rows · EXIT=0 | queue not grown; baseline empty since #489 (10→0) |
+| shell files scanned           |                                                 **93** | gate path green                                   |
+| `invent` (ci) vendor front    |                                                 **94** | doctrine / honesty comments only                  |
+| `\bfake\b`                    |                                                  **8** | comments + anti-fraud copy                        |
+| `PriceTrend` / `priceTrend`   |                                                  **1** | historical note in `en.js`                        |
+| live `dataFanyong` rows       |                                                  **0** | honesty comment only (`Invite.vue`)               |
+| live `CNYRate \|\| 6.5`       |                                                  **0** | REMOVED/comment notes only                        |
+| `mockTicker` / zero-sparkline |                                                  **0** | still gone                                        |
+| `Math.random` product         |                                   captcha `gt.js` only | not market invent                                 |
+| **NEW hard invent residual**  |                                                  **0** | no invent-fix PR from this pass                   |
+
+**freeProduct=0 note:** shell craft queue drained — keep-alive re-scan only; no invent money UI. freeze @ tip `d36b2823` / prior freeze `25f73927`: free=2 freeProduct=0 freeTracker=0 blocked=P-WS-REPORT. Shell product paths unchanged since invent c77 tip `083a26fa` (docs-only tip advances #641–#647 R07 c77–c79 + invent c77 + P-WS c78 + R01 c79). freeProduct=0 ≠ kill · P-WS still blocked by partner/Denon queue (#433/#432).
 
 ### fabricated-money-scan.mjs (verbatim)
 
