@@ -658,13 +658,53 @@ export const FEATURES = [
     phase: '5',
     dependsOn: ['agents.gateway', 'trade.copy'],
   }),
-  f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', {
+  // TITLE CORRECTED 2026-08-03. It read 'Live lobbies, LiveKit SFU, capacity
+  // tiers' while carrying a ✅, and there is no LiveKit anywhere in this
+  // repository — no deployment, no client, no API key, no adapter. The only
+  // occurrences of the word are this file, §8.3 of the law describing an
+  // INTENTION, and svc-academy's own prose explaining that it does not have one.
+  // A title is the line most people read and the only line some people read, so
+  // a component named there is claimed as delivered. What is delivered is a
+  // `StreamProvider` interface with exactly one implementation that refuses;
+  // that is `socket.stream-provider` below, and it is where the SFU belongs.
+  f('academy.lobbies', 'Live lobbies + capacity tiers (text/presence — no SFU)', {
     module: 'academy',
     phase: '5',
     status: 'done',
     dependsOn: ['identity.rank'],
     requires: ['services/svc-academy'],
-    note: 'svc-academy on 4016, mounted at /api/academy. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is now issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here.',
+    // STATUS RE-VERIFIED 2026-08-03 rather than assumed. `done` here means what
+    // the header says it means — mounted, tested, not propped up — and all
+    // three now hold against a live probe through svc-edge, not against a
+    // reading of the source:
+    //   GET  /api/academy/trpc/health      → 200 {"ok":true,"service":"svc-academy"}
+    // That is the entire unauthenticated surface. `health` is this router's only
+    // publicProcedure; the three below are scopedProcedure, so each was probed
+    // WITH A SESSION — a freshly registered account, which carries academy:read
+    // and academy:write because every session does. Unauthenticated they return
+    // 401 "Authentication required", and that was actually run rather than
+    // assumed: a reachable service refusing an anonymous caller and a service
+    // that is not running at all are easy to confuse and mean opposite things.
+    //   GET  /api/academy/trpc/curriculum  → 401 anonymous · 200 with a session, the day-one spine
+    //   GET  /api/academy/trpc/rooms       → 401 anonymous · 200 with a session, []
+    //   POST /api/academy/trpc/createRoom  → 401 anonymous · 403 with a session, "Hosting a lobby is a rank perk"
+    // So nothing here should be read as evidence that the Academy answers
+    // unauthenticated. Only `health` does, and `health` proves the process is up
+    // — not that any of the product behind it works.
+    // The 403 is the load-bearing one: it is svc-identity answering
+    // /internal/rank/<id>/perks with 200 over the shared internal secret, so the
+    // §4.1 gate refused on the PERK rather than failing closed on an unreachable
+    // dependency. The two failures look identical from outside and mean
+    // opposite things.
+    //
+    // WHAT WAS ACTUALLY FALSE, and it was not the status: this service had never
+    // run. `docker ps -a` had no academy container in any state, and its compose
+    // block supplied *service-env and *edge-secret but NOT *internal-secret,
+    // which src/env.ts requires with no default — so it would have died at
+    // import with `EnvError: INTERNAL_SERVICE_SECRET: Required` had anyone ever
+    // started it. Mounted-and-tested was true; deployable was not, and this
+    // tracker's definition of `done` does not currently ask the second question.
+    note: 'svc-academy on 4016, mounted at /api/academy — LIVE-PROBED through svc-edge 2026-08-03, not inferred. Read that narrowly: health is the only route that answers unauthenticated, and every other probe below needed a session — curriculum, rooms and createRoom are all scoped and return 401 without one. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU AND NO LIVEKIT: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider owns that gap. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here. DEPLOYMENT FIXED 2026-08-03: the compose block was missing INTERNAL_SERVICE_SECRET, so the container had never been created and the service had never once run.',
   }),
   f('academy.spatial', '2D navigable room canvas, VR-ready scene state', { module: 'academy', phase: '5', dependsOn: ['academy.lobbies'] }),
   f('academy.curriculum', 'DERIV//DESK library import — 20 playbooks + 3 workbooks', {
