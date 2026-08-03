@@ -119,6 +119,16 @@ services:
       SERVICE_NAME: svc-ledger
       HTTP_PORT: '4001'
       DATABASE_URL: postgres://svc_ledger:svc_ledger@postgres:5432/intafaced
+      # svc-ledger merges `authEnvSchema` for its OPERATOR surface
+      # (operator-http.ts), so this is required at boot with no default — and it
+      # was never set here. The service crash-looped on `JWT_ACCESS_SECRET:
+      # Required` the first time its container was recreated.
+      #
+      # It hid for so long because a running container keeps the environment it
+      # started with: the fleet looked healthy until an unrelated
+      # `--force-recreate` of another service pulled the dependency chain with
+      # it. workspace-sync check 3b now fails on this shape.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4001']
     healthcheck: *healthcheck

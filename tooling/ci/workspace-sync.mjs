@@ -149,6 +149,39 @@ if (compose !== null) {
   }
 }
 
+// ── 3b · same rule, second secret: authEnvSchema needs JWT_ACCESS_SECRET ────
+//
+// Check 3 caught `edgeEnvSchema` and stopped there, so the identical mistake
+// with a different secret went straight through it. On 2026-08-03 svc-ledger —
+// THE LEDGER — crash-looped on `JWT_ACCESS_SECRET: Required`. It merges
+// `authEnvSchema` for its operator surface, three other blocks are handed the
+// variable, and its own block never was.
+//
+// It stayed hidden because the failure needs a container RECREATE to surface:
+// a long-running container keeps the environment it started with, so the fleet
+// looked healthy for as long as nobody restarted it. It took an unrelated
+// `--force-recreate` of another service to expose it.
+//
+// A gate that names one secret is a gate for one secret. Both are checked.
+if (compose !== null) {
+  for (const svc of services) {
+    const env = read(`services/${svc}/src/env.ts`);
+    if (!env?.includes('authEnvSchema')) continue;
+
+    // `\\s` — inside a template literal a single backslash is dropped, so `\s`
+    // becomes the letter s and the block never matches. The first draft of this
+    // check reported clean against a service that was crash-looping in front of
+    // me. Same trap as check 7's first draft.
+    const block = new RegExp(`^  ${svc}:([\\s\\S]*?)(?=^  \\S|\\Z)`, 'm').exec(compose);
+    if (block && !block[1].includes('JWT_ACCESS_SECRET')) {
+      failures.push({
+        file: 'docker-compose.apps.yml',
+        reason: `${svc} merges authEnvSchema but its compose block does not set JWT_ACCESS_SECRET — it will crash-loop the moment the container is recreated, and look fine until then`,
+      });
+    }
+  }
+}
+
 // ── 4 · no two services claim the same host port ────────────────────────────
 // Docker does not detect this until the second container tries to bind, so the
 // fleet comes up MOSTLY working and one service is missing — which reads like
