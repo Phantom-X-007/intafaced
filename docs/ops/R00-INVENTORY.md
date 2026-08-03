@@ -1,11 +1,11 @@
 # R00 inventory (generated)
 
-Generated: 2026-08-03T16:41:09.082Z
+Generated: 2026-08-03T16:48:45.518Z
 
 | Field                             | Value                                                             |
 | --------------------------------- | ----------------------------------------------------------------- |
-| Tip                               | `68edb9db`                                                        |
-| Tip subject                       | docs(ops): P-WS still blocked tip 54795ac8 (#553)                 |
+| Tip                               | `b6dc674f`                                                        |
+| Tip subject                       | docs(ops): R01 babysit cycle36 tip 2004d68f ready=4 (#556)        |
 | Open PRs                          | 12                                                                |
 | Free claims                       | 2                                                                 |
 | Free product (REGROUP/AFK/LANDER) | 0                                                                 |
