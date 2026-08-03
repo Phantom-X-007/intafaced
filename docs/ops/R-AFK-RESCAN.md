@@ -483,6 +483,9 @@ EXIT=0
 
 ## Re-scan cycle46 — 2026-08-03T17:43Z · tip `cf900011`
 
+**Mode:** NO-FLEET · freeProduct=0 pivot  
+**Verdict:** live invent residual **0**.
+
 **Mode:** NO-FLEET · static `rg` + `tooling/ci/fabricated-money-scan.mjs`  
 **Trigger:** AFK OPS invent re-scan keep-alive (freeProduct=0 shell drain — **not** platform done)  
 **Tip full:** `cf900011cefc7bff0a3afa281bf4f8fd2aae5a04` · main after FREEZE+DASHBOARD cycle45 land (#576)
