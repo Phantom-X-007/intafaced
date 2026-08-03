@@ -181,6 +181,29 @@ module.exports = {
             noPositions: "No open positions.",
             ledgerNote: "Balances come from the INTAFACED ledger — the single book. This is not a venue wallet.",
             noLastPrice: "No last price — nothing has traded",
+            /* ── PORTED FROM THE RETIRING apps/web LANDING PANEL ─────────────
+               These three exist because five invented prices sat on the old
+               default page for months under a "Streaming" badge. They are the
+               copy that makes an empty market look empty.
+
+               `notTraded` goes in the price cell of a market whose `last` is
+               null. The market list used to render that null straight into the
+               table, which draws a BLANK numeric cell — and a blank where a
+               price goes reads as a value that failed to load, not as a market
+               that has never traded. That distinction is the whole point.
+
+               `snapshotSource` is provenance the reader can go and check, and
+               it is also the refusal to call this feed live. The table is one
+               REST read on load: startWebsock is gone, this shell has no
+               websocket, and Exchange.vue hardcodes feedLive: false. */
+            notTraded: "Not traded",
+            noneTraded: "No listed market has traded yet, so there is no last price to show.",
+            snapshotSource: "Snapshot · svc-trade /api/v1/tickers",
+            /* The 24h change column, which is null on EVERY market here — not
+               because they are untraded but because no windowed aggregation job
+               exists to compute a move over. Kept separate from `notTraded` so
+               the two absences cannot be read as the same one. */
+            noChangeWindow: "No 24h change — this venue publishes no windowed rollup, so there is no move to report.",
             totalColumn: "Total",
             liquidityColumn: "Role",
             watchlistTab: "Watchlist",
@@ -1562,6 +1585,13 @@ module.exports = {
             read: 'Read',
             yes: 'Yes',
             no: 'No',
+            /* The one-line form of `announcementsMissing`, for the strip at the
+               very top of the landing page. The strip is 40px tall and shows
+               one sentence, so it states the absence and links here, where the
+               full §13 panel is; the long paragraph above is the same fact with
+               room to breathe. Two lengths of one statement, not two claims. */
+            announcementsStrip: 'No announcements — nothing behind the front door publishes them.',
+            announcementsWhy: 'What is missing',
             keysNote: 'Message text is not shown. The notification service stores a copy key and its parameters rather than a finished sentence, and the copy catalogue those keys resolve to is not carried by this app. The key is shown as it was stored — writing a plausible sentence from it would be inventing the content of a message the platform sent you.'
         },
         noticeItem: {
