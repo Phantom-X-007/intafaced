@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { DEFAULT_SMS_MAX_CHARS, GATEWAY_ENV, parseRequiredChannels } from './channels/registry.js';
+import { OUT_OF_APP_CHANNELS } from './channels/channel.js';
 
 /**
  * svc-notify environment.
@@ -18,6 +20,28 @@ import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
  *
  * A channel with no URL is not "off". It is UNCONFIGURED, and it refuses every
  * message by name so the refusal is on the record — see `channels/gateway.ts`.
+ *
+ * WHY THAT IS NOT ENOUGH ON ITS OWN, AND WHAT `NOTIFY_REQUIRED_CHANNELS` DOES
+ *
+ * An honest refusal is the right behaviour in dev and in test. In a deployment
+ * that is supposed to be sending margin calls it is a silent outage with a good
+ * paper trail — nobody reads a delivery table until somebody complains.
+ *
+ * So the operator states which channels this deployment depends on, and a
+ * required channel with no credentials is FATAL AT BOOT. Same posture as
+ * `EDGE_PRINCIPAL_SECRET` in `@intafaced/config`: no default, no fallback, the
+ * process refuses to start. A notifier that cannot notify should page somebody
+ * at deploy time, not at 3am through a borrower.
+ *
+ *   dev / test    unset means "nothing required". Frictionless: no gateway is
+ *                 needed to run the suite or the local stack.
+ *   staging/prod  unset is itself FATAL. The operator must write `none` to say
+ *                 "in-app only, on purpose" — because "decided" and "never
+ *                 thought about it" must not look the same in a config file.
+ *
+ * This variable does NOT decide which channels a product should use. That is the
+ * owner's call, and inventing it here would be inventing product law. It only
+ * makes the decision explicit and its absence loud.
  */
 
 const bool = (defaultOn: boolean) =>
@@ -25,6 +49,23 @@ const bool = (defaultOn: boolean) =>
     .union([z.boolean(), z.string()])
     .default(defaultOn)
     .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase())));
+
+/**
+ * An unset variable arrives as an empty string, not as nothing.
+ *
+ * `docker compose` interpolates `${NOTIFY_SMS_GATEWAY_URL:-}` to `""`, and every
+ * other deployment system does something similar. Without this, an unset gateway
+ * would fail `z.string().url()` and take the whole service down — turning "this
+ * channel is not wired", which is a supported state, into a boot failure.
+ *
+ * Worse, it would let `NOTIFY_REQUIRED_CHANNELS=""` satisfy the staging/prod
+ * requirement to STATE something while stating nothing. Blank is absent.
+ */
+const blankAsAbsent = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), inner);
+
+/** Environments where an unwired-but-required channel must stop the boot. */
+const ENFORCED_APP_ENVS = ['staging', 'prod'] as const;
 
 const schema = serviceEnvSchema
   .merge(edgeEnvSchema)
@@ -48,19 +89,38 @@ const schema = serviceEnvSchema
       NOTIFY_OUT_OF_APP_ENABLED: bool(true),
 
       /** Email gateway. URL and token are all-or-nothing; see the refine below. */
-      NOTIFY_EMAIL_GATEWAY_URL: z.string().url().optional(),
-      NOTIFY_EMAIL_GATEWAY_TOKEN: z.string().min(16).optional(),
+      NOTIFY_EMAIL_GATEWAY_URL: blankAsAbsent(z.string().url().optional()),
+      NOTIFY_EMAIL_GATEWAY_TOKEN: blankAsAbsent(z.string().min(16).optional()),
 
       /** Push gateway. */
-      NOTIFY_PUSH_GATEWAY_URL: z.string().url().optional(),
-      NOTIFY_PUSH_GATEWAY_TOKEN: z.string().min(16).optional(),
+      NOTIFY_PUSH_GATEWAY_URL: blankAsAbsent(z.string().url().optional()),
+      NOTIFY_PUSH_GATEWAY_TOKEN: blankAsAbsent(z.string().min(16).optional()),
 
       /** SMS gateway. */
-      NOTIFY_SMS_GATEWAY_URL: z.string().url().optional(),
-      NOTIFY_SMS_GATEWAY_TOKEN: z.string().min(16).optional(),
+      NOTIFY_SMS_GATEWAY_URL: blankAsAbsent(z.string().url().optional()),
+      NOTIFY_SMS_GATEWAY_TOKEN: blankAsAbsent(z.string().min(16).optional()),
+
+      /**
+       * Which out-of-app channels this deployment DEPENDS ON: a comma-separated
+       * subset of email, push, sms — or the literal `none`.
+       *
+       * No default. In `staging` and `prod` its absence stops the boot; see the
+       * header. Anything listed here must have both of its gateway variables set
+       * or the process refuses to start naming exactly which one is missing.
+       */
+      NOTIFY_REQUIRED_CHANNELS: blankAsAbsent(z.string().optional()),
 
       /** Budget for one gateway call. A slow gateway must not stall the consumer. */
       NOTIFY_GATEWAY_TIMEOUT_MS: z.coerce.number().int().min(250).max(30_000).default(5_000),
+
+      /**
+       * Characters before an SMS body is cut. Three GSM segments by default.
+       *
+       * A cap rather than a refusal: refusing to send a margin call because its
+       * translation ran long is worse than sending a cut one with a link. See
+       * `SmsChannel`.
+       */
+      NOTIFY_SMS_MAX_CHARS: z.coerce.number().int().min(64).max(1_600).default(DEFAULT_SMS_MAX_CHARS),
 
       /**
        * Attempts per channel before a delivery row is abandoned. Kept at or below
@@ -79,20 +139,71 @@ const schema = serviceEnvSchema
     // reach it. Refusing to boot is the correct response: the alternative is a
     // service that looks configured and posts unauthenticated notifications at
     // somebody's endpoint.
-    const pairs = [
-      ['email', parsed.NOTIFY_EMAIL_GATEWAY_URL, parsed.NOTIFY_EMAIL_GATEWAY_TOKEN, 'NOTIFY_EMAIL_GATEWAY_TOKEN'],
-      ['push', parsed.NOTIFY_PUSH_GATEWAY_URL, parsed.NOTIFY_PUSH_GATEWAY_TOKEN, 'NOTIFY_PUSH_GATEWAY_TOKEN'],
-      ['sms', parsed.NOTIFY_SMS_GATEWAY_URL, parsed.NOTIFY_SMS_GATEWAY_TOKEN, 'NOTIFY_SMS_GATEWAY_TOKEN'],
-    ] as const;
-
-    for (const [channel, url, token, tokenVar] of pairs) {
+    for (const channel of OUT_OF_APP_CHANNELS) {
+      const names = GATEWAY_ENV[channel];
+      const url = parsed[names.url];
+      const token = parsed[names.token];
       if (url && !token) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: [tokenVar],
-          message: `${channel} gateway URL is set without ${tokenVar}. An unauthenticated notification gateway is an open relay — set the token, or unset the URL and let the channel refuse honestly.`,
+          path: [names.token],
+          message: `${channel} gateway URL is set without ${names.token}. An unauthenticated notification gateway is an open relay — set the token, or unset the URL and let the channel refuse honestly.`,
         });
       }
+    }
+
+    const enforced = (ENFORCED_APP_ENVS as readonly string[]).includes(parsed.APP_ENV);
+
+    if (enforced && parsed.NOTIFY_REQUIRED_CHANNELS === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['NOTIFY_REQUIRED_CHANNELS'],
+        message:
+          `APP_ENV=${parsed.APP_ENV} must state which out-of-app channels this deployment depends on. ` +
+          'Set NOTIFY_REQUIRED_CHANNELS to a comma-separated subset of email,push,sms — or to `none` if in-app delivery ' +
+          'alone is the intended posture. There is no default because "decided" and "never considered" must not look alike.',
+      });
+      return;
+    }
+
+    const required = parseRequiredChannels(parsed.NOTIFY_REQUIRED_CHANNELS);
+    if (!required.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['NOTIFY_REQUIRED_CHANNELS'],
+        message: `unknown channel(s): ${required.invalid.join(', ')}. Allowed: ${OUT_OF_APP_CHANNELS.join(', ')} — or \`none\`.`,
+      });
+      return;
+    }
+
+    for (const channel of required.channels) {
+      const names = GATEWAY_ENV[channel];
+      const missing = [names.url, names.token].filter((name) => !parsed[name]);
+      if (missing.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['NOTIFY_REQUIRED_CHANNELS'],
+          message:
+            `${channel} is listed in NOTIFY_REQUIRED_CHANNELS but ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not set. ` +
+            'A deployment that depends on this channel must not start without it — every message would be refused and the outage would ' +
+            'be visible only to whoever reads notify.deliveries.',
+        });
+      }
+    }
+
+    // Requiring a channel and switching all out-of-app sending off is a
+    // contradiction, and it is the shape a bad rollback takes: the kill-switch
+    // is flipped during an incident and never flipped back. Refuse it rather
+    // than run a deployment whose two settings disagree about whether the
+    // margin calls go out.
+    if (required.channels.length > 0 && !parsed.NOTIFY_OUT_OF_APP_ENABLED) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['NOTIFY_OUT_OF_APP_ENABLED'],
+        message:
+          `NOTIFY_REQUIRED_CHANNELS lists ${required.channels.join(', ')} while NOTIFY_OUT_OF_APP_ENABLED is off, so every ` +
+          'required channel would refuse. Turn sending on, or stop requiring the channels.',
+      });
     }
   });
 
