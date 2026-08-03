@@ -8,12 +8,12 @@
 
 ## 0 · Can you “just go”? (honest)
 
-| Question | Answer on tip after this PR lands |
-|---|---|
-| Are Denon’s specs/docs on GitHub? | **Yes — and more are on branches.** You must `git fetch` + read **main docs** and **open PR / branch specs**, not only main. |
-| Do you know what to build without Nitro? | **Yes if you run §1 discovery.** Free work is derived, not remembered. |
-| Insane swarms without drift? | **Yes if** every writer has a claim, worktree, path allowlist, and collision check. **No if** 100 agents open the same file. |
-| Board Clear agent Done bars still free? | **No.** Campaign is **AGENT-COMPLETE**. Free = craft residual + REGROUP product queue + hygiene + babysit + reports — not re-open M1–M7. |
+| Question                                 | Answer on tip after this PR lands                                                                                                        |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Are Denon’s specs/docs on GitHub?        | **Yes — and more are on branches.** You must `git fetch` + read **main docs** and **open PR / branch specs**, not only main.             |
+| Do you know what to build without Nitro? | **Yes if you run §1 discovery.** Free work is derived, not remembered.                                                                   |
+| Insane swarms without drift?             | **Yes if** every writer has a claim, worktree, path allowlist, and collision check. **No if** 100 agents open the same file.             |
+| Board Clear agent Done bars still free?  | **No.** Campaign is **AGENT-COMPLETE**. Free = craft residual + REGROUP product queue + hygiene + babysit + reports — not re-open M1–M7. |
 
 ---
 
@@ -38,25 +38,25 @@ gh pr list --state open --limit 50
 
 ### What answers which question
 
-| Question | Source |
-|---|---|
-| What is product UI? | Shell `:8090` · `vendor/**/05_Web_Front` · not `apps/web` · ADR retire on tip |
-| Who merges what? | `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md` |
-| Product free / human mountain? | `tooling/tracker/features.mjs` |
-| Campaign next? | `docs/BOARD-CLEAR-NEXT.md` (sequence only — **AGENT-COMPLETE**) |
-| **What FE to build now (Denon queue)?** | **`docs/REGROUP-2026-08-03.md` §5–7** |
-| What honesty craft residual? | residual-register · AFK campaign |
-| Who is coding this hour? | `docs/LIVE-LANES.md` + open PR **file lists** |
-| Partner walls? | Shehzad M1–M7 · Denon open PR paths |
+| Question                                | Source                                                                        |
+| --------------------------------------- | ----------------------------------------------------------------------------- |
+| What is product UI?                     | Shell `:8090` · `vendor/**/05_Web_Front` · not `apps/web` · ADR retire on tip |
+| Who merges what?                        | `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`                      |
+| Product free / human mountain?          | `tooling/tracker/features.mjs`                                                |
+| Campaign next?                          | `docs/BOARD-CLEAR-NEXT.md` (sequence only — **AGENT-COMPLETE**)               |
+| **What FE to build now (Denon queue)?** | **`docs/REGROUP-2026-08-03.md` §5–7**                                         |
+| What honesty craft residual?            | residual-register · AFK campaign                                              |
+| Who is coding this hour?                | `docs/LIVE-LANES.md` + open PR **file lists**                                 |
+| Partner walls?                          | Shehzad M1–M7 · Denon open PR paths                                           |
 
 ### Specs on GitHub — not only “docs on main”
 
 Denon puts direction in: **merged docs**, **open PRs**, and **branches without PRs yet**.  
 **All-out agents must:**
 
-1. Read tip docs  
-2. `gh pr list` + `gh pr view N --json files` before claiming paths  
-3. For known free branches: `git log origin/main..origin/<branch> --oneline` and prefer **finish that branch** over re-implementing  
+1. Read tip docs
+2. `gh pr list` + `gh pr view N --json files` before claiming paths
+3. For known free branches: `git log origin/main..origin/<branch> --oneline` and prefer **finish that branch** over re-implementing
 
 ---
 
@@ -66,14 +66,14 @@ Denon puts direction in: **merged docs**, **open PRs**, and **branches without P
 
 From `docs/REGROUP-2026-08-03.md` (do not invent alternatives):
 
-| Claim | Build |
-|---|---|
-| **RP1** | `Exchange.vue` call sites → `ix-money` (money-on-wire real finish) |
-| **RP2** | `Index.vue` landing honesty (wire copy; kill null / green ▲ / PRICE TREND lie) |
-| **RP3** | Announcement strip stated reason (sockets / IxNoSurface) |
-| **RP4** | `ix-wire` golden + adopt schemas on `ix-trade` reads |
-| **RP5** | Terminal residual ports after RP1–4 progress |
-| **RP-LAND** | Open/finish PRs from `fix/shell-*` branches without rewriting from zero |
+| Claim       | Build                                                                          |
+| ----------- | ------------------------------------------------------------------------------ |
+| **RP1**     | `Exchange.vue` call sites → `ix-money` (money-on-wire real finish)             |
+| **RP2**     | `Index.vue` landing honesty (wire copy; kill null / green ▲ / PRICE TREND lie) |
+| **RP3**     | Announcement strip stated reason (sockets / IxNoSurface)                       |
+| **RP4**     | `ix-wire` golden + adopt schemas on `ix-trade` reads                           |
+| **RP5**     | Terminal residual ports after RP1–4 progress                                   |
+| **RP-LAND** | Open/finish PRs from `fix/shell-*` branches without rewriting from zero        |
 
 **One owner for `Index.vue`** (RP2 wins over AFK-INDEX if both free).
 
@@ -83,13 +83,13 @@ From `docs/REGROUP-2026-08-03.md` (do not invent alternatives):
 
 ### C · Ops / hygiene / babysit (parallel, always)
 
-| Claim | Action |
-|---|---|
-| LIVE-LANES refresh | Keep board true to tip + open PRs |
-| Nitro green Class N PRs | Merge per ownership matrix |
-| #346 Shehzad | Babysit only |
-| Denon open PRs | No dual-edit files; optional CI comment |
-| Reports R00–R11 | See §4 |
+| Claim                   | Action                                  |
+| ----------------------- | --------------------------------------- |
+| LIVE-LANES refresh      | Keep board true to tip + open PRs       |
+| Nitro green Class N PRs | Merge per ownership matrix              |
+| #346 Shehzad            | Babysit only                            |
+| Denon open PRs          | No dual-edit files; optional CI comment |
+| Reports R00–R11         | See §4                                  |
 
 ### D · Platform integrity (report first)
 
@@ -98,7 +98,7 @@ Depth/tape **blocked** until WS market-ID edge∩matching + nginx `/ws`→`/stre
 
 ### E · Explicitly forbidden writers
 
-Shehzad M1–M7 · dual-edit Denon open PR files · invent prices/depth/balances · Class X · apps/web as product · force-push spine · main-checkout code  
+Shehzad M1–M7 · dual-edit Denon open PR files · invent prices/depth/balances · Class X · apps/web as product · force-push spine · main-checkout code
 
 ### F · Research swarms (unlimited readers)
 
@@ -108,19 +108,19 @@ Invent-money scan · PR risk rank · branch-ahead audit · design critique → *
 
 ## 3 · Swarm anti-negatives (accounted for)
 
-| Negative | Combat |
-|---|---|
-| Double-write same path | LIVE-LANES claim + open PR file intersect **before** edit |
-| Stale tip | PRE-FLIGHT fetch every fire |
-| Swarm tax (duplicate agents) | One writer per claim id; research is read-only |
-| Context exhaustion | Progressive load: this file → REGROUP/residual slice → paths only |
-| Semantic merge hell | Sequential merge Class N; rebase after tip moves |
-| Fake board clear | Residual honesty + H-peace tip SHA |
-| Continue-loop | AFK residual drain; no “wait for Nitro” on free Class N |
-| Drift to apps/web / Next | Product law every paste |
-| Depth thrash while WS broken | Integrity gate |
-| Push storms | Local `pnpm verify` first |
-| Meta forever | Each agent ends in PR link, residual stamp, or report path |
+| Negative                     | Combat                                                            |
+| ---------------------------- | ----------------------------------------------------------------- |
+| Double-write same path       | LIVE-LANES claim + open PR file intersect **before** edit         |
+| Stale tip                    | PRE-FLIGHT fetch every fire                                       |
+| Swarm tax (duplicate agents) | One writer per claim id; research is read-only                    |
+| Context exhaustion           | Progressive load: this file → REGROUP/residual slice → paths only |
+| Semantic merge hell          | Sequential merge Class N; rebase after tip moves                  |
+| Fake board clear             | Residual honesty + H-peace tip SHA                                |
+| Continue-loop                | AFK residual drain; no “wait for Nitro” on free Class N           |
+| Drift to apps/web / Next     | Product law every paste                                           |
+| Depth thrash while WS broken | Integrity gate                                                    |
+| Push storms                  | Local `pnpm verify` first                                         |
+| Meta forever                 | Each agent ends in PR link, residual stamp, or report path        |
 
 **Insane N is OK** when N ≈ free claims + research readers + verifiers — **not** N writers on one mountain.
 
@@ -130,26 +130,26 @@ Invent-money scan · PR risk rank · branch-ahead audit · design critique → *
 
 Agents write under `docs/ops/` (or update existing) on cadence:
 
-| ID | Purpose |
-|---|---|
-| R00 inventory | Tip · PR counts · residual open count · FREEZE |
-| R01 PR matrix | Every open PR: CI · mergeable · Nitro action |
-| R02 free claims | Living claim table |
-| R05 Denon return | What shipped · what waits · WS handoff |
-| R07 peace | Finish status + residuals + tip SHA |
+| ID               | Purpose                                        |
+| ---------------- | ---------------------------------------------- |
+| R00 inventory    | Tip · PR counts · residual open count · FREEZE |
+| R01 PR matrix    | Every open PR: CI · mergeable · Nitro action   |
+| R02 free claims  | Living claim table                             |
+| R05 Denon return | What shipped · what waits · WS handoff         |
+| R07 peace        | Finish status + residuals + tip SHA            |
 
 ---
 
 ## 5 · Roles for insane parallel
 
-| Role | N | Job |
-|---|---|---|
-| Coord-FE | 1 | REGROUP + residual writers |
-| Coord-OPS | 1 | Reports + babysit + merges Class N |
-| Writers | = free claims | One claim · worktree · PR |
-| Landers | 1–3 | Shell branches → PRs |
-| Verifiers | 1 per 2–4 writers | Prefer second model |
-| Research | many | Reports only |
+| Role      | N                 | Job                                |
+| --------- | ----------------- | ---------------------------------- |
+| Coord-FE  | 1                 | REGROUP + residual writers         |
+| Coord-OPS | 1                 | Reports + babysit + merges Class N |
+| Writers   | = free claims     | One claim · worktree · PR          |
+| Landers   | 1–3               | Shell branches → PRs               |
+| Verifiers | 1 per 2–4 writers | Prefer second model                |
+| Research  | many              | Reports only                       |
 
 ---
 
@@ -177,11 +177,11 @@ I am AFK. Peace scoreboard when free residual empty or blocked-only.
 
 ## 8 · Related tip docs
 
-| Doc | Role |
-|---|---|
-| `docs/REGROUP-2026-08-03.md` | Denon product queue + blockers |
-| `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md` | One surface law |
-| `docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md` | AFK residual drain |
-| `docs/NITRO-PARALLEL-OPS.md` | Multi-agent board ops |
-| `docs/PERMANENT-TIP-AND-HYGIENE-2026-08-03.md` | Tip hygiene |
-| `docs/NITRO-SESSION-PROMPT.md` | Paste PRE-FLIGHT |
+| Doc                                                        | Role                           |
+| ---------------------------------------------------------- | ------------------------------ |
+| `docs/REGROUP-2026-08-03.md`                               | Denon product queue + blockers |
+| `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md` | One surface law                |
+| `docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md`      | AFK residual drain             |
+| `docs/NITRO-PARALLEL-OPS.md`                               | Multi-agent board ops          |
+| `docs/PERMANENT-TIP-AND-HYGIENE-2026-08-03.md`             | Tip hygiene                    |
+| `docs/NITRO-SESSION-PROMPT.md`                             | Paste PRE-FLIGHT               |
