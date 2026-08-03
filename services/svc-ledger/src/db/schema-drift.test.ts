@@ -1,0 +1,271 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { describe, expect, it, afterAll } from 'vitest';
+import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import * as schema from './schema.js';
+
+/**
+ * THE SCHEMA DRIFT GATE.
+ *
+ *
+ * WHAT WENT WRONG, AND WHY A TEST RATHER THAN CARE.
+ *
+ * `drizzle/*.sql` and `src/db/schema.ts` are two descriptions of one database.
+ * The migrations have run against real data and are immutable; `schema.ts` has
+ * never run against anything. Nothing kept them honest, so `schema.ts` fell
+ * four migrations behind: no `purpose` column, the pre-0001 identity index,
+ * and none of the eight CHECK constraints.
+ *
+ * A stale ORM file is normally a nuisance. This one was a loaded gun, because
+ * `schema.ts` is an INPUT to a code generator. Running the generator against
+ * the drifted file emitted 21 statements including:
+ *
+ *     ALTER TABLE "ledger"."accounts" DROP COLUMN "purpose";
+ *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_hold_purposed_ck";
+ *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_non_negative_ck";
+ *     ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_owner_id_space_ck";
+ *     ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT "ledger_entries_positive_ck";
+ *     truncate table "ledger"."chain_tip" cascade;
+ *
+ * Every database-level invariant in §4.2, and the hash chain's anchor row,
+ * removed by someone doing nothing worse than regenerating a migration in good
+ * faith. Reviewing that diff would require noticing that four of twenty-one
+ * lines are the ones that stop two loans in one asset unsecuring each other.
+ *
+ * So the gate is not "remember to check". It is: build the database BOTH ways
+ * and require them to be the same database.
+ *
+ *
+ * HOW IT WORKS.
+ *
+ *   Side A — the truth. A per-run database with `drizzle/*.sql` applied
+ *            verbatim, in order. This is what production has.
+ *   Side B — the claim. A per-run database with the DDL drizzle-kit generates
+ *            from `schema.ts` against an empty state — literally what
+ *            `db:generate` would write into a migration file.
+ *
+ * Then both are read back out of `pg_catalog` / `information_schema` and
+ * compared: columns, constraints (including every CHECK), indexes, enums.
+ *
+ *
+ * WHY THE COMPARISON IS THROUGH POSTGRES AND NOT THROUGH drizzle-kit.
+ *
+ * The obvious gate is `pushSchema()` — ask drizzle-kit to diff `schema.ts`
+ * against a live database and assert it wants to change nothing. It was tried
+ * first and it CRIES WOLF, which for a gate is fatal: one that fires on a clean
+ * tree gets disabled, and then the real drift walks through the hole where it
+ * used to be.
+ *
+ * Two independent reasons, both measured rather than assumed:
+ *
+ *   1. drizzle-kit 0.30.6 unwraps an introspected CHECK with
+ *      `.replace(/^CHECK\s*\(\(/, '')`. `accounts_owner_id_space_ck` is a CASE
+ *      expression, which Postgres renders as `CHECK (\nCASE …END)` — one paren,
+ *      then a newline. The regex does not match, the value keeps its wrapper,
+ *      and no expression written in `schema.ts` can ever equal it.
+ *   2. Even with everything correct, push still emits
+ *      `ALTER COLUMN "seq" SET DEFAULT 0` and `ALTER COLUMN "balance" SET
+ *      DEFAULT 0` — against columns whose default is already `0`. Textual
+ *      comparison of defaults, not semantic.
+ *
+ * Both sides of THIS comparison are rendered by the same Postgres deparser, so
+ * formatting, parenthesisation, quoting, casing and type-cast spelling are
+ * normalised away before anything is compared. That is what lets the assertion
+ * be exact — no allowlist of "known acceptable differences", because such a
+ * list is where a dropped constraint eventually goes to hide.
+ *
+ * The cost is two `CREATE DATABASE` round trips. The thing it protects is every
+ * money invariant §4.2 pushed down into the database on purpose.
+ *
+ *
+ * WHEN THIS TEST GOES RED.
+ *
+ * Almost always the fix is to correct `schema.ts`, because the migrations have
+ * already run somewhere and it has not. Changing an applied migration to match
+ * the ORM file is rewriting history and is never the answer. If the database
+ * genuinely needs to change, write a NEW migration (backfill before you
+ * constrain) and then update `schema.ts` to match it.
+ */
+
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+const here = dirname(fileURLToPath(import.meta.url));
+const drizzleDir = join(here, '..', '..', 'drizzle');
+
+/**
+ * Read from disk, never listed here — a hardcoded list silently stops covering
+ * the newest migration, which is precisely the one most likely to have drifted.
+ */
+const migrations = readdirSync(drizzleDir)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
+
+if (migrations.length === 0) throw new Error(`No migrations found in ${drizzleDir}`);
+
+/**
+ * drizzle-kit's ESM build (`api.mjs`) throws `Dynamic require of "fs" is not
+ * supported` on import. The CJS build is the same code and loads fine.
+ */
+const require_ = createRequire(import.meta.url);
+const drizzleKit = require_('drizzle-kit/api') as {
+  generateDrizzleJson: (imports: Record<string, unknown>) => unknown;
+  generateMigration: (prev: unknown, cur: unknown) => Promise<string[]>;
+};
+
+interface CatalogSnapshot {
+  columns: string[];
+  constraints: string[];
+  indexes: string[];
+  enums: string[];
+}
+
+/**
+ * Everything about the `ledger` schema that a migration could get wrong, as
+ * sorted, comparable strings.
+ *
+ * `pg_get_constraintdef` and `pg_indexes.indexdef` are Postgres's own canonical
+ * renderings — the reason this comparison can be exact.
+ */
+async function snapshotCatalog(db: TestDatabase): Promise<CatalogSnapshot> {
+  const columns = await db.sql<Array<Record<string, unknown>>>`
+    SELECT table_name, column_name, udt_name, is_nullable, column_default,
+           numeric_precision, numeric_scale
+      FROM information_schema.columns
+     WHERE table_schema = 'ledger'
+     ORDER BY table_name, column_name
+  `;
+
+  const constraints = await db.sql<Array<Record<string, unknown>>>`
+    SELECT rel.relname AS table_name, con.conname AS name, con.contype AS type,
+           pg_get_constraintdef(con.oid) AS definition
+      FROM pg_constraint con
+      JOIN pg_class rel ON rel.oid = con.conrelid
+      JOIN pg_namespace nsp ON nsp.oid = con.connamespace
+     WHERE nsp.nspname = 'ledger'
+     ORDER BY rel.relname, con.conname
+  `;
+
+  const indexes = await db.sql<Array<Record<string, unknown>>>`
+    SELECT indexname AS name, indexdef AS definition
+      FROM pg_indexes WHERE schemaname = 'ledger' ORDER BY indexname
+  `;
+
+  const enums = await db.sql<Array<Record<string, unknown>>>`
+    SELECT t.typname AS name, string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS labels
+      FROM pg_type t
+      JOIN pg_enum e ON e.enumtypid = t.oid
+      JOIN pg_namespace n ON n.oid = t.typnamespace
+     WHERE n.nspname = 'ledger'
+     GROUP BY t.typname
+     ORDER BY t.typname
+  `;
+
+  const render = (rows: Array<Record<string, unknown>>) => rows.map((r) => JSON.stringify(r)).sort();
+
+  return {
+    columns: render(columns),
+    constraints: render(constraints),
+    indexes: render(indexes),
+    enums: render(enums),
+  };
+}
+
+/** What `pnpm db:generate` would emit from `schema.ts` against an empty database. */
+async function generateFromSchemaTs(): Promise<string[]> {
+  const empty = drizzleKit.generateDrizzleJson({});
+  const current = drizzleKit.generateDrizzleJson(schema as unknown as Record<string, unknown>);
+  return drizzleKit.generateMigration(empty, current);
+}
+
+const available = await postgresAvailable(URL);
+
+if (!available) {
+  describe.skip('svc-ledger schema drift (Postgres unavailable — start docker compose)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  // Built before describe() so the assertions below are plain comparisons.
+  const fromMigrations = await createTestDatabase({ service: 'ledger', url: URL, migrations });
+
+  const generated = await generateFromSchemaTs();
+  const fromSchemaTs = await createTestDatabase({
+    service: 'ledger',
+    url: URL,
+    // The generated DDL creates `ledger` itself; createTestDatabase already made
+    // an empty one, so drop it first and let the generator own the whole schema.
+    migrations: ['DROP SCHEMA IF EXISTS "ledger" CASCADE;', ...generated],
+  });
+
+  const truth = await snapshotCatalog(fromMigrations);
+  const claim = await snapshotCatalog(fromSchemaTs);
+
+  describe('svc-ledger — src/db/schema.ts matches drizzle/ (the applied migrations)', () => {
+    afterAll(async () => {
+      await fromMigrations.drop();
+      await fromSchemaTs.drop();
+    });
+
+    /**
+     * Each section compares one kind of object. Split rather than one big
+     * assertion so a failure names WHAT drifted in its title — "constraints"
+     * red is a different emergency from "indexes" red.
+     */
+    const sections: Array<{ what: keyof CatalogSnapshot; why: string }> = [
+      { what: 'columns', why: 'a column that exists in the database is missing from schema.ts, or vice versa' },
+      { what: 'constraints', why: 'a CHECK / FK / PK / UNIQUE differs — this is where the money invariants live (§4.2)' },
+      { what: 'indexes', why: 'an index differs — account identity uniqueness is an index (0001)' },
+      { what: 'enums', why: 'an enum type or its labels differ' },
+    ];
+
+    for (const { what, why } of sections) {
+      it(`${what} are identical`, () => {
+        const missingFromSchemaTs = truth[what].filter((row) => !claim[what].includes(row));
+        const inventedBySchemaTs = claim[what].filter((row) => !truth[what].includes(row));
+
+        const report = [
+          `schema.ts has drifted from the applied migrations — ${why}.`,
+          '',
+          'The migrations are the source of truth: they have run against real data',
+          'and cannot be changed. Correct src/db/schema.ts to match them.',
+          '',
+          ...(missingFromSchemaTs.length > 0
+            ? ['IN THE DATABASE, MISSING FROM schema.ts:', ...missingFromSchemaTs.map((r) => `  - ${r}`), '']
+            : []),
+          ...(inventedBySchemaTs.length > 0 ? ['DECLARED BY schema.ts, NOT IN THE DATABASE:', ...inventedBySchemaTs.map((r) => `  + ${r}`)] : []),
+        ].join('\n');
+
+        expect(missingFromSchemaTs.length + inventedBySchemaTs.length, report).toBe(0);
+      });
+    }
+
+    /**
+     * A guard on the guard.
+     *
+     * Every assertion above passes trivially if both snapshots are empty — a
+     * `CREATE SCHEMA` that silently did nothing, a migration list that failed to
+     * load, a filter typo naming a schema that does not exist. Then the gate is
+     * bright green and checking nothing at all, which is worse than not having
+     * it. Anchor it to what §4.2 actually mandates.
+     */
+    it('compared a real ledger schema, not two empty ones', () => {
+      expect(truth.columns.length).toBeGreaterThan(30);
+      expect(truth.enums.length).toBe(4);
+
+      const checkNames = truth.constraints.filter((c) => JSON.parse(c).type === 'c').map((c) => JSON.parse(c).name as string);
+      expect(checkNames).toEqual(
+        expect.arrayContaining([
+          'accounts_non_negative_ck',
+          'accounts_hold_purposed_ck',
+          'accounts_purpose_len_ck',
+          'accounts_owner_id_space_ck',
+          'ledger_entries_positive_ck',
+          'chain_tip_singleton_ck',
+          'posting_freeze_singleton_ck',
+          'posting_freeze_attributed_ck',
+        ]),
+      );
+    });
+  });
+}
