@@ -13,7 +13,7 @@
 2. **Completeness:** every place work can hide is checked (not a 3-minute sample).
 3. **Correct truth base:** **GitHub `origin/main`**, not a stale/dirty laptop checkout.
 4. **Distinguish** “not in git history as that commit” vs “behavior still on main under squash/rewrite.”
-5. **Bizzan alignment:** do not rescue work that **rebuilds** what the kit already is; rescue only **our** honesty/wiring/i18n/brand.
+5. **vendored exchange kit alignment:** do not rescue work that **rebuilds** what the kit already is; rescue only **our** honesty/wiring/i18n/brand.
 6. **Intentional supersession ≠ loss:** Denon may **replace** a screen with “not built” for doctrine — that must be named, not treated as accident.
 7. **Deferred ≠ lost:** residual/AFK board items are backlog, not recovery emergencies.
 8. **Actionable output:** named RESCUE / SAFE / DROP / DEFER / SUPERSEDED lists — no vague “looks fine.”
@@ -35,7 +35,7 @@
 | G9  | Residual register open/partial/blocked named                                  | **Yes** (from main)            |
 | G10 | Local dirty classified rescue vs regression                                   | **Yes**                        |
 | G11 | Untracked docs split (session vs bulk noise)                                  | **Yes**                        |
-| G12 | Bizzan “don’t rebuild” applied to rescue advice                               | **Yes**                        |
+| G12 | vendored exchange kit “don’t rebuild” applied to rescue advice                | **Yes**                        |
 | G13 | Intentional #421 supersession of Withdraw/Recharge named                      | **Yes**                        |
 | G14 | External `sovereign-worktrees` checked                                        | **Yes** (docs-only path)       |
 
@@ -120,7 +120,7 @@ External `~/projects/sovereign-worktrees`: docs-frontend-operating-plan only.
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Behind origin by **100+** commits (was 156 earlier; tip moved with #418/#421) | **Stale** — not truth                                                                                                                 |
 | Dirty Vue (Withdraw, Register, …)                                             | Vs origin: **REGRESSION / wrong base** — main’s Withdraw is **CustodyNotBuilt** (27 lines); local dirt is not a secret better product |
-| Untracked session docs (BIZZAN map, this family)                              | **Optional docs RESCUE**                                                                                                              |
+| Untracked session docs (VENDORED-KIT map, this family)                        | **Optional docs RESCUE**                                                                                                              |
 | ~188 untracked docs                                                           | **Do not bulk commit**                                                                                                                |
 
 ## C6 · Residual register (deferred by design — from main)
@@ -149,12 +149,12 @@ Same pattern for other custody screens. Commit **#421** states the **vendor work
 
 **Pre-#421** Withdraw was ~1200 lines including B3 dual-book craft (`ix-dualbook`, `feeSourceLabel`, …).
 
-| Interpretation                                   | Correct?                                                              |
-| ------------------------------------------------ | --------------------------------------------------------------------- |
-| “Nitro’s withdraw craft was never committed”     | **False** — it was on main before #421                                |
-| “It’s gone from tip forever with no recovery”    | **False** — full file in history (`7f8b9d0^`)                         |
-| “We should immediately put B3 craft back on tip” | **No** — would **lie** about custody while ADR says no wallet RPC yet |
-| “Use Bizzan withdraw Java flow as live money UI” | **No** — dual-book / Option B                                         |
+| Interpretation                                                  | Correct?                                                              |
+| --------------------------------------------------------------- | --------------------------------------------------------------------- |
+| “Nitro’s withdraw craft was never committed”                    | **False** — it was on main before #421                                |
+| “It’s gone from tip forever with no recovery”                   | **False** — full file in history (`7f8b9d0^`)                         |
+| “We should immediately put B3 craft back on tip”                | **No** — would **lie** about custody while ADR says no wallet RPC yet |
+| “Use vendored exchange kit withdraw Java flow as live money UI” | **No** — dual-book / Option B                                         |
 
 **MoneyIndex** on tip **still** carries B3/desk dual-book honesty and edge balance source — not all craft was wiped.
 
@@ -213,13 +213,13 @@ All residual **open/partial/blocked** rows → FE board input for Chat D. Named 
 - `apps/web` as product
 - Bulk 188 untracked research docs
 - Re-merging entire `rebrand-english-black-orange` / pr86 historical branches
-- Rebuilding Bizzan screens from Next
+- Rebuilding vendored exchange kit screens from Next
 
 ---
 
-# F · Bizzan rule (applied)
+# F · vendored exchange kit rule (applied)
 
-| Bizzan already is                | We do not rescue as “rebuild”      | We may still add                             |
+| vendored exchange kit already is | We do not rescue as “rebuild”      | We may still add                             |
 | -------------------------------- | ---------------------------------- | -------------------------------------------- |
 | Auth, OTC, exchange shell, admin | New parallel apps                  | Honesty, i18n keys, edge rewire, brand purge |
 | Custody **workflows** in history | Live Java wallet UI                | CustodyNotBuilt until review                 |
@@ -255,7 +255,7 @@ Do:
 3) RESCUE R2: PR adding vendor/.../05_Web_Front/.dockerignore from c9e9d4f if still missing.
 4) Message/PR path for purge-legacy only with Denon ownership note.
 5) Never merge promo WIP. Never commit dirty stale main Vue.
-6) Bizzan rule: no apps/web product; no rebuild of kit screens.
+6) vendored exchange kit rule: no apps/web product; no rebuild of kit screens.
 
 Prove: gh pr urls + git grep shell-i18n-scan / .dockerignore on main after merge.
 ```

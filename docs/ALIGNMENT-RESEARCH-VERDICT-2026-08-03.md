@@ -22,15 +22,15 @@
 
 ### Agentic engineering (how strong AI-assisted teams work now)
 
-| Practice                                                         | Status in field                                                           | Our situation                                                                |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| **Short always-on instructions** (AGENTS.md / CLAUDE.md / rules) | Standard “context engineering”                                            | You already have this — **keep, keep thin**                                  |
-| **Git worktrees for parallel agents**                            | Mainstream pattern (Nx, Cursor multi-agent guides, many 2025–26 writeups) | **Keep** — you already use them; 142 rotting trees is the bug, not worktrees |
-| **Fetch tip / don’t trust stale local**                          | Basic professionalism                                                     | **Keep** — your laptop is 160 behind                                         |
-| **Specs / ADRs for money & product law**                         | Rising “spec-driven” + old ADR practice                                   | **Keep** ADRs you already accepted                                           |
-| **Land orientation on main so cold agents see it**               | “Repos in repo,” knowledge priming                                        | **Keep** — maps only on laptop = agents drift                                |
-| **Giant parallel doc piles / multi-wave meta-programs**          | Anti-pattern when they **duplicate** and go **stale**                     | **Cut** — research/FRONTEND\* dumps are the risk                             |
-| **Monolithic 2000+ word root prompts**                           | Called out as signal dilution                                             | **Don’t grow** session paste into a novel                                    |
+| Practice                                                              | Status in field                                                           | Our situation                                                                |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Short always-on instructions** (AGENTS.md / agent-entry.md / rules) | Standard “context engineering”                                            | You already have this — **keep, keep thin**                                  |
+| **Git worktrees for parallel agents**                                 | Mainstream pattern (Nx, Cursor multi-agent guides, many 2025–26 writeups) | **Keep** — you already use them; 142 rotting trees is the bug, not worktrees |
+| **Fetch tip / don’t trust stale local**                               | Basic professionalism                                                     | **Keep** — your laptop is 160 behind                                         |
+| **Specs / ADRs for money & product law**                              | Rising “spec-driven” + old ADR practice                                   | **Keep** ADRs you already accepted                                           |
+| **Land orientation on main so cold agents see it**                    | “Repos in repo,” knowledge priming                                        | **Keep** — maps only on laptop = agents drift                                |
+| **Giant parallel doc piles / multi-wave meta-programs**               | Anti-pattern when they **duplicate** and go **stale**                     | **Cut** — research/FRONTEND\* dumps are the risk                             |
+| **Monolithic 2000+ word root prompts**                                | Called out as signal dilution                                             | **Don’t grow** session paste into a novel                                    |
 
 Sources (field practice, not blog folklore alone): monorepo.tools on single SoT; SIGPLAN “repositories as human/agent knowledge factories” on **stale duplicate** as top agent failure; Packmind context-engineering playbook on scoped rules vs monolith prompts; widespread 2025–26 worktree+multi-agent guides; Fowler/Willison line: **agentic engineering ≠ vibe coding** (tests, real docs, responsibility).
 
@@ -44,7 +44,7 @@ Not FAANG process. Not zero process.
 
 1. **One product default on main** (shell :8090; not apps/web) in START-HERE + session prompt + AGENTS.
 2. **Always worktree from fetched `origin/main`.** Never code on dirty main.
-3. **≤1 short law pack on main** (Bizzan one-pager + “what not to rebuild” + owners) — **link**, don’t fork.
+3. **≤1 short law pack on main** (vendored exchange kit one-pager + “what not to rebuild” + owners) — **link**, don’t fork.
 4. **`gh pr list` + don’t touch open Denon/Shehzad paths** — re-derive every session (no frozen PR table as law).
 5. **Ship FE on shell** after that. Cleanup of worktrees/docs is **background**, not a multi-week gate before product.
 6. **CI gates** that encode law (you already have brand/custody/workspace-sync) > more markdown.
@@ -86,7 +86,7 @@ Not FAANG process. Not zero process.
 
 **Do this week (thin):**
 
-1. One **docs PR**: START-HERE + session prompt refresh + link Bizzan peace map + recovery one-screen + owners.
+1. One **docs PR**: START-HERE + session prompt refresh + link vendored exchange kit peace map + recovery one-screen + owners.
 2. Agents: **worktree only** from tip.
 3. Merge **#425** when green.
 4. First **shell FE** tasks from residual/i18n scan — product motion.
@@ -99,7 +99,7 @@ Not FAANG process. Not zero process.
 
 - Invent another 40-page process.
 - Wait for “perfect clean laptop” before shipping.
-- Re-litigate Bizzan vs apps/web every chat.
+- Re-litigate vendored exchange kit vs apps/web every chat.
 
 ---
 

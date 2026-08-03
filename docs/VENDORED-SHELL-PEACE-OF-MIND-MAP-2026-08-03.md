@@ -1,8 +1,8 @@
-# Bizzan / CoinExchange — peace-of-mind map
+# vendored exchange kit / vendored exchange — peace-of-mind map
 
 **Type:** scope truth for agents + Nitro  
 **Verified against:** `origin/main` @ `d768d7c` (2026-08-03 this session)  
-**Upstream name:** CoinExchange / bitrade / Bizzan lineage · Apache-2.0 · in-repo as `vendor/coinexchange`  
+**Upstream name:** vendored exchange / upstream package / vendored exchange kit lineage · Apache-2.0 · in-repo as `vendor/exchange-tree`  
 **Product law:** adopt product UI + workflows; **our ledger only** (ADR Accepted 2026-08-02)
 
 ---
@@ -11,11 +11,11 @@
 
 | Question                                   | Answer                                                                                                                                                                       |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| What is “Bizzan” here?                     | The **vendored full exchange kit** under `vendor/coinexchange` (~**1,787** files on main).                                                                                   |
+| What is “vendored exchange kit” here?      | The **vendored full exchange kit** under `vendor/exchange-tree` (~**1,787** files on main).                                                                                  |
 | Is it on GitHub?                           | **Yes** — on `main`. Source of truth is the **repo**, not a laptop or random web copy.                                                                                       |
 | What do we use as the product UI?          | **`05_Web_Front`** (trader web) → fleet port **:8090** (`vendor-shell` in compose).                                                                                          |
 | Is the whole upstream promise in our tree? | **Almost.** Web front, web admin, Java engines, wallet RPC, docs = **present**. **Android, iOS, trading robot = stubs only** (upstream said not open-source / not included). |
-| Is anything “missing” from our vision?     | **Yes, by design:** own L1/chain story, our TypeScript services, our ledger books, Protocol plane, spiritual/G-master — those are **ours**, not Bizzan.                      |
+| Is anything “missing” from our vision?     | **Yes, by design:** own L1/chain story, our TypeScript services, our ledger books, Protocol plane, spiritual/G-master — those are **ours**, not vendored exchange kit.       |
 | Second app?                                | `apps/web` (Next, :3000) is **not** the product. Retire as product.                                                                                                          |
 | Who owns FE?                               | **Nitro** (call 2026-08-03).                                                                                                                                                 |
 
@@ -35,7 +35,7 @@
 | **`06_ExchangeRobot`** | **Stub only**                            | Same                                                                                 | Out of scope                                  |
 | Root scripts           | Yes                                      | rebrand / CJK / seed helpers used in our waves                                       | Tooling                                       |
 
-**Provenance (must stay):** `vendor/coinexchange/NOTICE` — Apache-2.0 attribution; external brand stripped by `brand-scan`.
+**Provenance (must stay):** `vendor/exchange-tree/NOTICE` — Apache-2.0 attribution; external brand stripped by `brand-scan`.
 
 **Vendored into this monorepo:** PR **#73** (2026-07-28). Shell made **deployable** PR **#412** (+ follow-on container fixes).
 
@@ -67,7 +67,7 @@
 
 ## What the law says (agent pack)
 
-Load these for any FE / Bizzan work (all **on main** except starred):
+Load these for any FE / vendored exchange kit work (all **on main** except starred):
 
 | Doc                                                             | Role                                                  |
 | --------------------------------------------------------------- | ----------------------------------------------------- |
@@ -80,10 +80,10 @@ Load these for any FE / Bizzan work (all **on main** except starred):
 | `docs/adr/2026-07-28-vendored-exchange-ui.md`                   | UI assessment (historical)                            |
 | `docs/NITRO-STREAM-A-CLAIM.md`                                  | FE territory map (vendor paths)                       |
 | `docs/START-HERE.md`                                            | Nitro plain map                                       |
-| `docs/BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md`                   | **This file**                                         |
+| `docs/VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md`             | **This file**                                         |
 | `docs/DENON-CALL-EXTRACT-2026-08-03.md` _local_                 | Call alignment                                        |
 | `docs/NITRO-CALL-SAID-2026-08-03.md` _local_                    | Nitro’s own commitments                               |
-| Branch `docs/bizzan-adoption-queue`                             | Counted adopt/adapt/rewire queue (**not merged** yet) |
+| Branch `docs/vendored exchange kit-adoption-queue`              | Counted adopt/adapt/rewire queue (**not merged** yet) |
 
 ### Ownership freeze (2026-08-03)
 
@@ -96,7 +96,7 @@ Load these for any FE / Bizzan work (all **on main** except starred):
 
 ---
 
-## Adoption buckets (so “use Bizzan” is not vague)
+## Adoption buckets (so “use vendored exchange kit” is not vague)
 
 From adoption queue (branch; counted, not vibes):
 
@@ -113,7 +113,7 @@ From adoption queue (branch; counted, not vibes):
 
 ---
 
-## What’s _not_ Bizzan (ours / later)
+## What’s _not_ vendored exchange kit (ours / later)
 
 | Item                                        | Where it lives                         |
 | ------------------------------------------- | -------------------------------------- |
@@ -138,7 +138,7 @@ From adoption queue (branch; counted, not vibes):
 | Java framework modules present          | **Yes** (admin, exchange, market, otc, ucenter, …)                               |
 | Wallet RPC tree present                 | **Yes**                                                                          |
 | Android/iOS/robot full source           | **No** — stubs + “not open source” READMEs                                       |
-| Adoption queue doc on main              | **No** — still branch `docs/bizzan-adoption-queue`                               |
+| Adoption queue doc on main              | **No** — still branch `docs/vendored exchange kit-adoption-queue`                |
 | Call extract docs on main               | **No** — local only until committed                                              |
 | Open FE-related PR (at check)           | **#418** rewire OTC/identity/inbox (Denon) · **#346** Shehzad pay (not FE shell) |
 
@@ -149,9 +149,9 @@ From adoption queue (branch; counted, not vibes):
 ## Agent cold-start (copy into FE chats)
 
 ```
-Product UI = vendor/coinexchange/05_Web_Front (:8090). apps/web is not product.
+Product UI = vendor/exchange-tree/05_Web_Front (:8090). apps/web is not product.
 Law: adopt vendored product, ledger.* only book. Nitro owns frontend.
-Read: docs/BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md + AGENTS.md + ADR 2026-08-02.
+Read: docs/VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md + AGENTS.md + ADR 2026-08-02.
 Do not implement Shehzad pay/perps paths. Do not dual-edit Denon open vendor PRs without check.
 git fetch && worktree off origin/main — never edit main checkout.
 Near-horizon only. TradingView preferred for charts (Denon).

@@ -50,17 +50,17 @@ Not “Nitro pulls every day.”
 
 ## 3 · How agentic engineers actually do it (consensus)
 
-| Practice                                   | Normal?                                     | Your repo today                       |
-| ------------------------------------------ | ------------------------------------------- | ------------------------------------- |
-| Remote `main` = source of truth            | Yes                                         | Yes                                   |
-| **New worktree per task from fetched tip** | Yes (Nx/Cursor/Claude multi-agent guides)   | `pnpm wt` already fetches             |
-| Never implement on shared main checkout    | Yes                                         | Written in AGENTS                     |
-| Short AGENTS.md / session rules on main    | Yes                                         | Yes + #450 pack                       |
-| PR + CI merge                              | Yes                                         | Yes                                   |
-| Human never touches git                    | Less common but fine if **agent owns loop** | Nitro operator mode                   |
-| 100+ uncleared worktrees                   | Common **failure** under agents             | You have this — hygiene, not redesign |
-| Human “file genitoring” weekly by hand     | **No** — agents/cron GC                     | Should not be your job                |
-| Perfect always-synced main folder          | **Not required** if unused for code         | Optional comfort reset                |
+| Practice                                   | Normal?                                         | Your repo today                       |
+| ------------------------------------------ | ----------------------------------------------- | ------------------------------------- |
+| Remote `main` = source of truth            | Yes                                             | Yes                                   |
+| **New worktree per task from fetched tip** | Yes (Nx/Cursor/coding agent multi-agent guides) | `pnpm wt` already fetches             |
+| Never implement on shared main checkout    | Yes                                             | Written in AGENTS                     |
+| Short AGENTS.md / session rules on main    | Yes                                             | Yes + #450 pack                       |
+| PR + CI merge                              | Yes                                             | Yes                                   |
+| Human never touches git                    | Less common but fine if **agent owns loop**     | Nitro operator mode                   |
+| 100+ uncleared worktrees                   | Common **failure** under agents                 | You have this — hygiene, not redesign |
+| Human “file genitoring” weekly by hand     | **No** — agents/cron GC                         | Should not be your job                |
+| Perfect always-synced main folder          | **Not required** if unused for code             | Optional comfort reset                |
 
 **Willison-style agentic eng:** isolation + tip + tests/docs as discipline — not a forever-clean home directory.
 
@@ -99,7 +99,7 @@ Mandatory preflight (already in session prompt post-#450):
 fetch origin/main
 if cwd is main checkout → create worktree; refuse implement
 gh pr list
-read START-HERE / Bizzan map if needed
+read START-HERE / vendored exchange kit map if needed
 ```
 
 **If agents follow this, staleness cannot affect new work.**  

@@ -1,4 +1,4 @@
-# Redundant vs port — old work vs Bizzan shell
+# Redundant vs port — old work vs vendored exchange kit shell
 
 **Type:** Chat B outcome · decision list for Nitro  
 **Verified:** `origin/main` @ `d768d7c` (2026-08-03)  
@@ -15,13 +15,13 @@
 | **PORT** | A **short list of patterns** from `apps/web` (how it talks to our live edge/WS) — re-express in the shell, not copy React files. |
 | **DROP** | Treating `apps/web` as a second product; more Next terminal features; dual design systems.                                       |
 
-**Bottom line:** You did **not** build a huge throwaway product. The big pile is **already on Bizzan**. The small Next app has a few **live-wiring lessons** worth stealing, then ignore as product.
+**Bottom line:** You did **not** build a huge throwaway product. The big pile is **already on vendored exchange kit**. The small Next app has a few **live-wiring lessons** worth stealing, then ignore as product.
 
 ---
 
 ## 1 · KEEP (already on shell — do not redo / do not trash)
 
-These landed under `vendor/coinexchange/05_Web_Front` (and related tooling). **This is your main work product.**
+These landed under `vendor/exchange-tree/05_Web_Front` (and related tooling). **This is your main work product.**
 
 | Theme                                    | Evidence (examples)                                                                            | Why keep                       |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------ |
@@ -68,14 +68,14 @@ These landed under `vendor/coinexchange/05_Web_Front` (and related tooling). **T
 
 ## 3 · DROP (stop spending here)
 
-| Item                                                                     | Why drop                                                   |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| **`apps/web` as product / default demo**                                 | Shell is product; dual surface caused the drift story      |
-| **New features only on Next terminal**                                   | Diverges forever                                           |
-| **Rebuilding auth, OTC, CMS, activity in Next**                          | Shell already has full areas                               |
-| **Parallel “sexy redesign” of whole exchange in Next**                   | Explicitly not the path                                    |
-| **Marketing invent money on landing**                                    | Already fixed once (#416); don’t reintroduce in either app |
-| **Treating Stream A shell commits as “redundant because Bizzan exists”** | Those commits **are** the Bizzan product layer             |
+| Item                                                                                    | Why drop                                                      |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **`apps/web` as product / default demo**                                                | Shell is product; dual surface caused the drift story         |
+| **New features only on Next terminal**                                                  | Diverges forever                                              |
+| **Rebuilding auth, OTC, CMS, activity in Next**                                         | Shell already has full areas                                  |
+| **Parallel “sexy redesign” of whole exchange in Next**                                  | Explicitly not the path                                       |
+| **Marketing invent money on landing**                                                   | Already fixed once (#416); don’t reintroduce in either app    |
+| **Treating Stream A shell commits as “redundant because vendored exchange kit exists”** | Those commits **are** the vendored exchange kit product layer |
 
 **Repo fate of `apps/web` (recommended):**  
 leave code on main for now (tests, edge examples) · **no product roadmap** · optional later delete or demote to internal sandbox. No decision needed beyond “not product.”
@@ -84,12 +84,12 @@ leave code on main for now (tests, edge examples) · **no product roadmap** · o
 
 ## 4 · Split that reduces anxiety
 
-| Workstream                                         | Redundant?                                      | Action                    |
-| -------------------------------------------------- | ----------------------------------------------- | ------------------------- |
-| ~49 commits of shell craft/honesty                 | **No**                                          | KEEP + continue           |
-| Next terminal live WS/edge wiring                  | **Partially**                                   | PORT patterns P1–P3 first |
-| Next as second home for traders                    | **Yes**                                         | DROP product role         |
-| Scaffolding Bizzan already had (login, many pages) | You didn’t invent those; you **civilized** them | KEEP civilization         |
+| Workstream                                                        | Redundant?                                      | Action                    |
+| ----------------------------------------------------------------- | ----------------------------------------------- | ------------------------- |
+| ~49 commits of shell craft/honesty                                | **No**                                          | KEEP + continue           |
+| Next terminal live WS/edge wiring                                 | **Partially**                                   | PORT patterns P1–P3 first |
+| Next as second home for traders                                   | **Yes**                                         | DROP product role         |
+| Scaffolding vendored exchange kit already had (login, many pages) | You didn’t invent those; you **civilized** them | KEEP civilization         |
 
 ---
 

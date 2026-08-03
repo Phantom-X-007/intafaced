@@ -5,7 +5,7 @@
 **Re-derive every session (do not trust frozen SHAs in chat):**  
 `git fetch origin main && git rev-parse --short origin/main` · `gh pr list --state open`  
 **Anti-drift pack (2026-08-03):** product + recovery + owners live in  
-[`BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md`](BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md) ·  
+[`VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md`](VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md) ·  
 [`WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md`](WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md) ·  
 [`ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md`](ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md) ·  
 [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md) ·  
@@ -61,9 +61,9 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 
 - **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists. Shell deployable on **:8090** (Dockerfile + compose). Major shell rewire waves landed (#412 deploy, #418 OTC/identity, #419 nav, #421 trading edge, #426 promo honesty — re-check `gh` for newer).
 - **Not a live money product:** rails/sandbox, chain feed propped — see trust floor.
-- **Do not rebuild** services already on main. **Do not rebuild Bizzan screens from scratch** — rewire / honesty / i18n / brand only ([`BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md`](BIZZAN-PEACE-OF-MIND-MAP-2026-08-03.md)).
+- **Do not rebuild** services already on main. **Do not rebuild vendored exchange kit screens from scratch** — rewire / honesty / i18n / brand only ([`VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md`](VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md)).
 - **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · what “proper cleanup” means: [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md)
-- **Product UI (law):** vendored exchange shell → http://localhost:8090 (`vendor/coinexchange/05_Web_Front`). **`apps/web` is not the product** (retire as product; optional pattern port only — [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md)).
+- **Product UI (law):** vendored exchange shell → http://localhost:8090 (`vendor/<exchange-tree>/05_Web_Front`). **`apps/web` is not the product** (retire as product; optional pattern port only — [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md)).
 - **Custody honesty:** some money screens may be **CustodyNotBuilt** until wallet-RPC security review — do not re-paint fake withdraw/recharge UI over that.
 - **Owners:** Nitro = FE/shell · Denon = spine / his open PRs (do not dual-edit) · Shehzad `@shehzad002` = M1–M7 (agents babysit only).
 - **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
