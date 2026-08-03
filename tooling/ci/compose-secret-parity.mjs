@@ -185,16 +185,71 @@ const supplied = new Map();
   }
 }
 
+/**
+ * ── FIXED IN AN OPEN PR ─────────────────────────────────────────────────────
+ *
+ * A gap whose fix is already committed on another branch. Reported loudly, does
+ * not fail the build, and — like `KNOWN_DISCLOSED` in `secret-scan.mjs` — an
+ * entry that no longer describes a real gap is itself a FAILURE. That is what
+ * retires it: the day the referenced PR merges, this build goes red until
+ * someone deletes the entry.
+ *
+ * This exists so a new gate can land without either duplicating another agent's
+ * work or blocking on it. Writing this check found svc-academy independently;
+ * `gh pr list` then found #442, which had already fixed it, verified better than
+ * I could here — by running the shipped image with the secret withheld and
+ * probing `createRoom` through svc-edge for a 403-on-perk rather than a
+ * fail-closed 401. Making the same one-line edit on this branch would have
+ * produced a merge conflict on a file that PR already touches, and claim-check
+ * warns about exactly that.
+ */
+const FIXED_IN_OPEN_PR = [
+  {
+    svc: 'svc-academy',
+    missing: ['INTERNAL_SERVICE_SECRET'],
+    ref: 'PR #442 fix/academy-actually-starts',
+  },
+];
+const excusedKey = (svc, missing) => `${svc}:${[...missing].sort().join(',')}`;
+const EXCUSED = new Map(FIXED_IN_OPEN_PR.map((e) => [excusedKey(e.svc, e.missing), e]));
+
 // ── 4 · compare ──────────────────────────────────────────────────────────────
 const gaps = [];
+const excused = [];
 const notDeployed = [];
+const seenExcuses = new Set();
 for (const [svc, need] of required) {
   if (!supplied.has(svc)) {
     if (need.size > 0) notDeployed.push(svc);
     continue;
   }
   const missing = [...need].filter((v) => !supplied.get(svc).has(v)).sort();
-  if (missing.length > 0) gaps.push({ svc, missing });
+  if (missing.length === 0) continue;
+  const k = excusedKey(svc, missing);
+  const excuse = EXCUSED.get(k);
+  if (excuse) {
+    seenExcuses.add(k);
+    excused.push({ svc, missing, ref: excuse.ref });
+  } else {
+    gaps.push({ svc, missing });
+  }
+}
+
+const staleExcuses = FIXED_IN_OPEN_PR.filter((e) => !seenExcuses.has(excusedKey(e.svc, e.missing)));
+
+if (excused.length > 0) {
+  console.log(`\n⚠ ${excused.length} parity gap(s) already fixed on another branch — reported, not failing\n`);
+  for (const e of excused) console.log(`  ${e.svc} — ${e.missing.join(', ')} → ${e.ref}`);
+  console.log('');
+}
+
+if (staleExcuses.length > 0) {
+  console.error(`\n✖ COMPOSE SECRET PARITY FAILED — ${staleExcuses.length} stale FIXED_IN_OPEN_PR entr(ies)\n`);
+  for (const e of staleExcuses) {
+    console.error(`  ${e.svc} — ${e.missing.join(', ')} (${e.ref})`);
+    console.error('      no such gap exists any more. If that PR merged, delete this entry.\n');
+  }
+  process.exit(1);
 }
 
 if (gaps.length > 0) {

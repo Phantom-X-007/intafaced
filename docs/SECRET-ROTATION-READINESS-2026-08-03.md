@@ -108,19 +108,24 @@ Because all three are symmetric HMAC secrets with no versioning, none supports a
 
 **Per-service secrets** have a blast radius of exactly one service and can be rotated independently — that is the entire benefit of them being per-service, and it is worth preserving. `PAY_*_WEBHOOK_SECRET` additionally requires updating the value held by the sender at the same time, or deliveries begin failing signature verification.
 
-### 2.4 · The category that hides: missing, but not yet fatal
+### 2.4 · The category that hides: required, but never supplied
 
-The most important line in this map is not about a value at all.
+The most important line in this map is not about a value at all. It is about **schema/compose drift**: a service declares a secret as required, its compose block never passes it, and nothing says so.
 
-**A running container keeps the environment it started with.** So a service whose required secret is missing from compose does not fail — it keeps running on the environment it was started with, healthy, until something unrelated recreates it.
+What makes this class dangerous is that it is silent in **two different ways**, and the two look nothing alike:
 
-This is exactly how **#431** hid: `svc-ledger` merges `authEnvSchema`, `JWT_ACCESS_SECRET` was never in its compose block, and the fleet looked fine until a recreate pulled the dependency chain and it crash-looped. The loudness of the refusal-to-boot is what finally surfaced it — that loudness is load-bearing and nothing here weakens it.
+| Silence                          | Mechanism                                                                                                                        | Instance                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **The container keeps its past** | A running container keeps the environment it started with. The fleet is healthy and stays healthy until something recreates it.  | **#431 · svc-ledger.** Crash-looped on `JWT_ACCESS_SECRET: Required` when a recreate reached it. |
+| **The container never existed**  | The process dies at import, so the container is never created — and there is no restart loop for anyone to read. Nothing to see. | **#442 · svc-academy.** Nobody had logs to look at, because nothing ever ran.                    |
 
-**A rotation is a mass container recreate.** Which means a rotation is precisely the event that converts every latent binding gap in the fleet into a simultaneous crash-loop, at the worst possible moment, while the operator is already looking at something else and will reasonably blame the new value.
+The second is the nastier one and is not intuitive: **a service that fails to boot is loud; a service nobody started is silent.** That framing is PR #442's, established by running the shipped image with the secret withheld — not mine, and it corrects what I had assumed from reading alone.
 
-So this is now a gate, not a warning: **`tooling/ci/compose-secret-parity.mjs`**, in the DoD gate. It compares what every `services/*/src/env.ts` requires against what that service's `docker-compose.apps.yml` block actually supplies, and fails the build on a gap. Run against the commit **before** #431, it reproduces that bug exactly, and emits the same one-line fix that was actually applied.
+**A rotation is a mass container recreate.** Which is to say: a rotation is precisely the event that converts every latent binding gap in the fleet into a simultaneous crash-loop, at the worst possible moment, while the operator is already looking at something else — and will reasonably blame the new value.
 
-Run against `main` today it found a **second, still-latent instance** — see §4.3.
+So this is now a gate, not a warning: **`tooling/ci/compose-secret-parity.mjs`**, in the DoD gate. It compares what every `services/*/src/env.ts` requires against what that service's `docker-compose.apps.yml` block actually supplies, and fails the build on a gap.
+
+**Proven retroactively:** run against the commit _before_ #431, it reports `svc-ledger — declares but is never given: JWT_ACCESS_SECRET` and emits the same one-line fix that was actually applied. Run against `main` today, it independently reports svc-academy — the defect #442 fixes (§4.3).
 
 ---
 
@@ -206,11 +211,11 @@ Listed anyway, because the failure mode is specific: **rotating the environment 
 
 A third, lower-severity instance of the same shape: a hard-coded base32 TOTP seed at **`…/core/src/main/java/com/bizzan/bitrade/util/GoogleAuthenticatorUtil.java:25`**, in a class both `admin` and `ucenter-api` depend on. Referenced nowhere — an upstream demo constant. Registered as `OWNER-6` so "dead" is a recorded judgement rather than an omission.
 
-### 4.3 · svc-academy would crash-loop on its next recreate
+### 4.3 · svc-academy — found independently, **already fixed by PR #442, not duplicated here**
 
-**Not a disclosure — an availability defect, and the exact repeat of #431.**
+**Not a disclosure — an availability defect, and the same class as #431.**
 
-`services/svc-academy/src/env.ts:26` merges `internalServiceEnvSchema`, because the service calls svc-token's `/internal/stake/:userId` and svc-identity's `/internal/rank/:userId/perks`. `INTERNAL_SERVICE_SECRET` is therefore required with no default. Its `docker-compose.apps.yml` block supplied only `*edge-secret`.
+`services/svc-academy/src/env.ts:26` merges `internalServiceEnvSchema`, because the service calls svc-token's `/internal/stake/:userId` and svc-identity's `/internal/rank/:userId/perks`. `INTERNAL_SERVICE_SECRET` is therefore required with no default. Its `docker-compose.apps.yml` block on `main` supplies only `*edge-secret`.
 
 Reproduced against the real schema with exactly the environment compose passes:
 
@@ -220,9 +225,11 @@ Invalid environment for svc-academy:
   - INTERNAL_SERVICE_SECRET: Required
 ```
 
-Latent today for the §2.4 reason — the container is running on the environment it started with. **A rotation would have triggered it**, and it would have looked like the rotation caused it.
+**This is already fixed on `fix/academy-actually-starts` (PR #442, open).** I found it by writing the parity check, then found the PR — in that order. Their verification is better than what I could produce here: they ran the shipped image with the secret withheld, and probed `createRoom` through svc-edge to see a **403 on the rank perk** rather than a fail-closed 401, which is what actually proves svc-identity answered `/internal/rank/…` over the shared secret. Those two outcomes look identical from outside and mean opposite things.
 
-**Fixed on this branch** (one line: `*internal-secret` added to its environment merge) and the class is now gated by `compose-secret-parity.mjs`.
+**So this branch does not touch `docker-compose.apps.yml` at all.** Making the same one-line edit would duplicate their work and hand the reviewer a merge conflict on a file that PR already changes — the thing `pnpm claim:check` warns about. Instead the gap is listed in `FIXED_IN_OPEN_PR` in the parity check: reported loudly on every run, not failing, and **the entry becomes a build failure the moment #442 merges** — verified by running the check against their branch — so it cannot be left behind.
+
+The lasting contribution here is not the one-line fix; it is that the class is now gated.
 
 ---
 
@@ -307,14 +314,16 @@ No disclosure is known for `EDGE_PRINCIPAL_SECRET`, `INTERNAL_SERVICE_SECRET` or
 - `tooling/ci/secret-scan.mutation.mjs` — new; 28 mutants; in the DoD gate.
 - `tooling/ci/compose-secret-parity.mjs` — new; in the DoD gate.
 - `tooling/ci/dod-gate.mjs`, `package.json` — wiring only.
-- `docker-compose.apps.yml` — **one line**, svc-academy's missing `*internal-secret` (§4.3).
 - This document.
+
+**Nothing under `services/`, `packages/` or `apps/` is touched.** The diff is four tooling files, `package.json` and this document.
 
 **Deliberately not touched**
 
 - **No secret rotated, generated or invented.** No value committed, including as a placeholder.
 - **No vendored Java source or properties edited.** `01_wallet_rpc` does not compile from this tree, and `ucenter-api` is under the ADR security-review precondition. Editing a withdrawal path I cannot build, or the construction order of a running controller I cannot test, trades a permanent disclosure I cannot undo for a fresh risk I cannot measure. **Removing a literal from HEAD does not un-disclose it** — only the owner's rotation does. Registered instead, and permanently visible on every scan run.
-- **No refusal-to-boot weakened.** The parity gate and the svc-academy fix both make boot failure _more_ reliable, never less.
+- **`docker-compose.apps.yml` — not touched.** The svc-academy one-liner belongs to PR #442 (§4.3). Two open PRs already edit this file; a third making a redundant edit is a merge conflict, not a contribution.
+- **No refusal-to-boot weakened.** Both new gates make boot failure _more_ reliable, never less. The `SECRET_SCAN_NO_REGISTER` flag can only make `secret-scan` stricter — setting it turns a build red, never green, so it cannot decay into a bypass.
 
 ## 7 · What I did not verify
 
