@@ -51,7 +51,24 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'intafaced_ops') THEN
     CREATE ROLE intafaced_ops LOGIN PASSWORD 'intafaced_ops';
   END IF;
+  -- CREATE lets it make SCHEMAS inside intafaced_test (createTestDb).
   GRANT CREATE ON DATABASE intafaced_test TO intafaced_ops;
 END
 $$;
+
+-- CREATEDB lets it make whole DATABASES (createTestDatabase, packages/db).
+--
+-- Services whose SQL is schema-qualified — svc-pay, svc-trade, svc-bank write
+-- `pay.merchants`, `trade.markets`, `bank.spaces` — cannot be isolated by a
+-- generated schema name, because their statements name the schema literally.
+-- Those suites therefore take a per-run DATABASE and create the real schema
+-- inside it. That needs CREATEDB, which the per-service roles deliberately do
+-- not have (§2: a service cannot reach outside its own schema).
+--
+-- This is a ROLE attribute, not a database grant, so it has to live outside the
+-- DO block above. CI already does the equivalent in .github/workflows/ci.yml;
+-- without this line a local `docker compose up` produced an ops role that could
+-- create schemas but not databases, and every migrated suite failed with
+-- "permission denied to create database" — on the developer's machine only.
+ALTER ROLE intafaced_ops WITH CREATEDB;
 EOSQL

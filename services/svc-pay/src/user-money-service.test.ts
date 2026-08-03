@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
-import { assertTestDatabase } from '@intafaced/db';
+import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import {
   MemoryLedger,
@@ -58,72 +57,61 @@ import { MemoryChain } from './rails/chain-port.js';
  * `TEST_DATABASE_URL_TRADE`, and `turbo.json` already passes the variable
  * through, so an override is honoured everywhere.
  */
-const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@localhost:5433/intafaced_test';
-const here = dirname(fileURLToPath(import.meta.url));
 /**
- * 0001 only, and deliberately not 0000.
+ * A PER-RUN DATABASE, created and dropped by this suite.
  *
- * `deposits` and `withdrawals` reference nothing in 0000 — no foreign keys, no
- * shared types — so this suite can stand its own schema up without touching a
- * single table the other svc-pay suite owns. That disjointness is the point:
- * vitest runs test FILES in parallel, and 0000 re-asserts its CHECK constraints
- * with DROP ... IF EXISTS first, so a second file re-applying it holds
- * ACCESS EXCLUSIVE locks on tables `payment-service.test.ts` is truncating at
- * the same moment. Postgres resolves that by killing one of them.
+ * pay's SQL is schema-qualified (`pay.…`) on purpose — §2 keeps a service
+ * physically unable to reach outside its own schema. That is exactly why
+ * `createTestDb`'s generated schema (`test_pay_4711_1`) cannot host it, and
+ * why this suite used to share the one real `pay` schema in `intafaced_test`
+ * with every other worktree on the machine — truncating their rows mid-test.
+ *
+ * `createTestDatabase` moves the isolation boundary from the schema to the
+ * DATABASE and creates the schema under its real name inside it. Every
+ * statement below, and every migration, is unchanged.
+ *
+ * The URL is the ADMIN one (`TEST_DATABASE_URL`), not `TEST_DATABASE_URL_PAY`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack. It
+ * must still name a `*_test` database — `assertTestDatabase` refuses anything
+ * else, and asks the server rather than trusting the string.
  */
-const migrations = ['0001_pay_user_money.sql'].map((f) => readFileSync(join(here, '..', 'drizzle', f), 'utf8'));
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+const here = dirname(fileURLToPath(import.meta.url));
 
-/** Shared by every svc-pay suite that brings the schema up. Any constant, as long as it is the same one. */
-const PAY_MIGRATION_LOCK = 8_140_701;
+/**
+ * EVERY forward migration, in order.
+ *
+ * This used to be `0001` alone, deliberately: `deposits` and `withdrawals`
+ * reference nothing in `0000`, so applying only the one file was how this suite
+ * avoided taking ACCESS EXCLUSIVE locks on tables `payment-service.test.ts` was
+ * truncating in a parallel vitest worker. That contortion — and the advisory
+ * lock that went with it — existed only because both suites brought the schema
+ * up on ONE shared database.
+ *
+ * They no longer do, so the constraint is gone and the correct thing is
+ * possible again: apply what production applies. A suite that stands up half a
+ * schema is testing a schema nobody deploys.
+ */
+const drizzle = join(here, '..', 'drizzle');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
 const SECRET = 'svc-pay-user-money-test-secret-at-least-32-chars';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OTHER_USER = '22222222-2222-4222-8222-222222222222';
 const OPERATOR = '99999999-9999-4999-8999-999999999999';
 
-async function reachable(): Promise<boolean> {
-  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end({ timeout: 2 }).catch(() => undefined);
-  }
-}
-
-const available = await reachable();
+const available = await postgresAvailable(URL);
 
 if (!available) {
   describe.skip('svc-pay user money (Postgres unavailable — start docker compose)', () => {
     it('skipped', () => undefined);
   });
 } else {
-  const sql = postgres(URL, {
-    max: 12,
-    connection: { search_path: 'pay,public', application_name: 'svc-pay-user-money-test' },
-    onnotice: () => undefined,
-  });
-
-  // Owns its database, or does not run. This suite TRUNCATEs — pointed at the
-  // shared database that is destruction of live rows, which has happened here.
-  await assertTestDatabase(sql, 'svc-pay (user money)');
-
-  /**
-   * Applied under an advisory lock, because vitest runs test FILES in parallel
-   * and both svc-pay suites bring the schema up on the same database.
-   *
-   * The migration re-asserts CHECK constraints with DROP ... IF EXISTS first, so
-   * two files running it at once take the same table locks in opposite orders
-   * and Postgres kills one of them with a deadlock. That is a test-harness race,
-   * not a schema problem — but a suite that fails one run in three is a suite
-   * people learn to re-run instead of read.
-   */
-  await sql.begin(async (tx) => {
-    await tx`SELECT pg_advisory_xact_lock(${PAY_MIGRATION_LOCK})`;
-    for (const migration of migrations) await tx.unsafe(migration);
-  });
+  const db: TestDatabase = await createTestDatabase({ service: 'pay', url: URL, migrations });
+  const sql = db.sql;
 
   let ledger: MemoryLedger;
   let chain: MemoryChain;
@@ -141,7 +129,7 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await sql.end({ timeout: 5 });
+    await db.drop();
   });
 
   // ── helpers ────────────────────────────────────────────────────────────────
