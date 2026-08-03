@@ -139,8 +139,8 @@ const RESIDUAL_PATH_HINTS = {
   'AFK-INDEX': [shell('src', 'pages', 'index', 'Index.vue')],
   'AFK-CMDK-ROUTES': [shell('src', 'assets', 'js', 'cmd-palette.js')],
   'AFK-HELP-DETAIL': [shell('src', 'pages', 'cms', 'HelpDetail.vue')],
-  'AFK-WHITEPAPER': [shell('src', 'pages', 'cms', 'WhitePaper.vue')],
-  'AFK-APPDOWNLOAD': [shell('src', 'pages', 'cms', 'AppDownload.vue')],
+  // AFK-WHITEPAPER retired — no WhitePaper.vue anywhere in shell (route removed).
+  'AFK-APPDOWNLOAD': [shell('src', 'pages', 'uc', 'AppDownload.vue')],
   'AFK-FOOTER': [shell('src', 'App.vue')],
   'AFK-RESCAN': [SHELL],
   B12: [shell('src', 'pages')],
@@ -150,6 +150,30 @@ const RESIDUAL_PATH_HINTS = {
   'META-ORCA': [],
   'P0.4': ['tooling/uiproof'],
 };
+
+/** Hints that must not appear in free spawn (no target on disk). */
+const RETIRED_RESIDUAL_IDS = new Set(['AFK-WHITEPAPER']);
+
+/**
+ * Fail closed: a path hint that points at nothing means collision detection
+ * can never fire for that id (false free). Empty path lists are allowed.
+ */
+function validateResidualPathHints() {
+  const missing = [];
+  for (const [id, paths] of Object.entries(RESIDUAL_PATH_HINTS)) {
+    if (RETIRED_RESIDUAL_IDS.has(id)) continue;
+    for (const p of paths || []) {
+      if (!p) continue;
+      const abs = join(ROOT, p);
+      if (!existsSync(abs)) missing.push(`${id} → ${p}`);
+    }
+  }
+  if (missing.length) {
+    const msg = 'swarm.mjs RESIDUAL_PATH_HINTS points at missing paths (collision detection would fail open):\n  ' + missing.join('\n  ');
+    console.error(msg);
+    throw new Error(msg);
+  }
+}
 
 function loadTrackerFree() {
   try {
@@ -182,8 +206,36 @@ function loadTrackerFree() {
 function listClaimLocks() {
   if (!existsSync(CLAIMS_DIR)) return [];
   return readdirSync(CLAIMS_DIR)
-    .filter((n) => n.endsWith('.md'))
+    .filter((n) => n.endsWith('.md') && n !== 'README.md')
     .map((n) => n.replace(/\.md$/, ''));
+}
+
+/**
+ * Claim-lock authority (P4): docs/ops/claims/<id>.md wins over residual-register
+ * and over open-PR path collision for "is this claim free to spawn?"
+ * status residual-own | merged | retired → closed (not free)
+ * status claimed | pr-open | missing status → active lock
+ */
+function readClaimLock(id) {
+  const path = join(CLAIMS_DIR, `${id}.md`);
+  if (!existsSync(path)) return null;
+  const body = readFileSync(path, 'utf8');
+  const m = body.match(/\*\*status:\*\*\s*(\S+)/i);
+  const status = (m && m[1] ? m[1].toLowerCase() : 'claimed').replace(/[,.]$/, '');
+  const proof = (body.match(/\*\*proof:\*\*\s*(.+)/i) || [])[1] || '';
+  return { id, status, proof: proof.trim(), path };
+}
+
+function claimLockCloses(id) {
+  const lock = readClaimLock(id);
+  if (!lock) return false;
+  return ['residual-own', 'merged', 'retired', 'done', 'closed'].includes(lock.status);
+}
+
+function claimLockActive(id) {
+  const lock = readClaimLock(id);
+  if (!lock) return false;
+  return !claimLockCloses(id);
 }
 
 function writeClaimFile(id, claim) {
@@ -251,47 +303,51 @@ function buildModel() {
   const residual = loadResidual();
   const claims = [];
 
-  const productLocks = new Set(listClaimLocks());
+  // P4: claim-lock files are spawn authority (residual-register is advisory only).
   for (const c of REGROUP_CLAIMS) {
     const hits = openFiles.filter((o) => c.paths.some((p) => touches(p, o.path)));
     const blocked = hits.length > 0;
-    const locked = productLocks.has(c.id);
-    let status = blocked ? 'blocked' : locked ? 'claimed' : 'free';
+    const closed = claimLockCloses(c.id);
+    const active = claimLockActive(c.id);
+    let status = blocked ? 'blocked' : closed || active ? 'claimed' : 'free';
     const collisions = blocked
       ? hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`)
-      : locked
+      : closed || active
         ? ['claim file docs/ops/claims/' + c.id + '.md']
         : [];
+    const lock = readClaimLock(c.id);
     claims.push({
       ...c,
       status,
       collisions,
       priority: c.rank,
-      note: (c.note || '') + (locked && !blocked ? ' · CLAIMED/residual-own' : ''),
+      note:
+        (c.note || '') +
+        (closed ? ' · residual-own/merged (claim-lock)' : active ? ' · CLAIMED (claim-lock)' : '') +
+        (lock && lock.proof ? ' · proof: ' + lock.proof.slice(0, 80) : ''),
     });
   }
 
-  const afkItems = (residual.items || []).filter((i) => i.afk_safe !== false && (i.status === 'open' || i.status === 'partial'));
+  const afkItems = (residual.items || []).filter(
+    (i) =>
+      i.afk_safe !== false &&
+      !RETIRED_RESIDUAL_IDS.has(i.id) &&
+      i.status !== 'retired' &&
+      !claimLockCloses(i.id) &&
+      (i.status === 'open' || i.status === 'partial') &&
+      !claimLockActive(i.id),
+  );
   for (const i of afkItems) {
     const paths = RESIDUAL_PATH_HINTS[i.id] || [SHELL];
     const hits = paths.length === 0 ? [] : openFiles.filter((o) => paths.some((p) => touches(p, o.path)));
-    // AFK-INDEX blocked if RP2 free (prefer REGROUP landing owner)
     const rp2Free = claims.find((c) => c.id === 'RP2' && c.status === 'free');
-    let status = hits.length > 0 ? 'blocked' : productLocks.has(i.id) ? 'claimed' : 'free';
-    let collisions =
-      hits.length > 0
-        ? hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`)
-        : productLocks.has(i.id)
-          ? ['claim file docs/ops/claims/' + i.id + '.md']
-          : [];
+    let status = hits.length > 0 ? 'blocked' : 'free';
+    let collisions = hits.length > 0 ? hits.slice(0, 12).map((h) => `#${h.pr}@${h.author} ${h.path}`) : [];
     let note = i.next_action || i.blocker || '';
     if (i.id === 'AFK-INDEX' && rp2Free) {
       status = 'blocked';
       note = 'Blocked while RP2 free (sole Index.vue owner)';
       collisions = ['RP2 owns Index'];
-    }
-    if (productLocks.has(i.id) && status === 'claimed') {
-      note = (note ? note + ' · ' : '') + 'CLAIMED/residual-own';
     }
     claims.push({
       id: i.id,
@@ -352,8 +408,17 @@ function buildModel() {
   const free = claims.filter((c) => c.status === 'free');
   const blocked = claims.filter((c) => c.status === 'blocked');
 
-  // Anti-under-spawn self-check
-  const underSpawnFail = free.length > 0 && free.filter((c) => c.track === 'REGROUP' || c.track === 'AFK').length > 0;
+  // P2: anti-under-spawn compares available free product vs active claim locks (spawned).
+  const freeProduct = free.filter((c) => c.track === 'REGROUP' || c.track === 'AFK' || c.track === 'LANDER' || c.track === 'INTEGRITY');
+  const freeTracker = free.filter((c) => c.track === 'TRACKER');
+  const productIds = new Set(claims.filter((c) => ['REGROUP', 'AFK', 'LANDER', 'INTEGRITY'].includes(c.track)).map((c) => c.id));
+  const activeSpawned = listClaimLocks().filter((id) => productIds.has(id) && claimLockActive(id)).length;
+  const available = freeProduct.length;
+  const underGap = available;
+  const underSpawnFail = available > 0;
+  const underSpawnNote = underSpawnFail
+    ? `anti-under-spawn FAIL: available=${available} active_spawned_locks=${activeSpawned} gap=${underGap} — spawn or residual-own every free product id (target concurrent width 6–8 path-disjoint).`
+    : `anti-under-spawn OK: available=0 active_spawned_locks=${activeSpawned} gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).`;
 
   return {
     tip,
@@ -375,11 +440,16 @@ function buildModel() {
     claims,
     free,
     blocked,
-    freeProduct: free.filter((c) => c.track === 'REGROUP' || c.track === 'AFK' || c.track === 'LANDER'),
-    freeTracker: free.filter((c) => c.track === 'TRACKER'),
-    underSpawnNote: underSpawnFail
-      ? 'FREE product claims exist — coordinator must spawn or residual-own each (anti-under-spawn).'
-      : 'No free REGROUP/AFK claims (or only OPS).',
+    freeProduct,
+    freeTracker,
+    available,
+    activeSpawned,
+    underGap,
+    underSpawnFail,
+    underSpawnNote,
+    spawnWidthTarget: '6-8',
+    mandate:
+      'SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.',
   };
 }
 
@@ -393,7 +463,11 @@ function renderFreezeMd(m) {
   lines.push(`- **Generated:** ${m.generatedAt}`);
   lines.push(`- **Open PRs:** ${m.openPrCount}`);
   lines.push(`- **Free claims:** ${m.free.length} (product ${m.freeProduct.length}) · **Blocked:** ${m.blocked.length}`);
+  lines.push(
+    `- **Spawn accounting:** available=${m.available ?? m.freeProduct.length} · active_spawned_locks=${m.activeSpawned ?? '?'} · gap=${m.underGap ?? m.freeProduct.length} · width_target=${m.spawnWidthTarget || '6-8'}`,
+  );
   lines.push(`- **Anti-under-spawn:** ${m.underSpawnNote}`);
+  lines.push(`- **Mandate:** ${m.mandate || 'shell product only'}`);
   lines.push('- **Proof mode:** NO-FLEET until Docker present — static build + scans; never fake UI done');
   lines.push('- **Claims:** docs/ops/claims/<id>.md (do not hand-edit LIVE-LANES mid-wave)');
   if (m.residualError) lines.push(`- **Residual error:** ${m.residualError}`);
@@ -463,7 +537,11 @@ function printStatus(m) {
   console.log(
     `  free=${m.free.length}  freeProduct=${m.freeProduct.length}  freeTracker=${(m.freeTracker || []).length}  blocked=${m.blocked.length}`,
   );
+  console.log(
+    `  spawn: available=${m.available ?? m.freeProduct.length} active_spawned=${m.activeSpawned ?? '?'} gap=${m.underGap ?? m.freeProduct.length} width_target=${m.spawnWidthTarget || '6-8'}`,
+  );
   console.log(`  ${m.underSpawnNote}`);
+  console.log(`  mandate: ${m.mandate || 'shell product only'}`);
   console.log('  free product ids:', m.freeProduct.map((c) => c.id).join(', ') || '(none)');
   if (m.blocked.length) {
     console.log('  blocked ids:', m.blocked.map((c) => c.id).join(', '));
@@ -552,6 +630,10 @@ function writeReports(m) {
     '',
     m.underSpawnNote,
     '',
+    m.mandate || '',
+    '',
+    `- Spawn accounting: available=${m.available ?? m.freeProduct.length} · active_spawned=${m.activeSpawned ?? '?'} · gap=${m.underGap ?? m.freeProduct.length} · width_target=${m.spawnWidthTarget || '6-8'}`,
+    '',
     'Commands: `pnpm swarm:freeze` · `pnpm swarm:status` · `pnpm swarm:report` · `pnpm swarm:next`',
     '',
   ].join('\n');
@@ -584,7 +666,9 @@ function pasteFor(claim) {
     `Note: ${claim.note || '—'}`,
     'Forbidden: Shehzad M1–M7; dual-edit Denon open PR files; invent money/depth; apps/web product; main checkout; mid-wave features.mjs/package.json.',
     'Proof: if no Docker — NO-FLEET (proof_missing: fleet-blocked). If :8090 listener cwd ≠ your worktree — visual proof invalid.',
-    'Worktree from origin/main. pnpm verify when code. One PR. Stamp residual if AFK id.',
+    'PRE-PUSH: pnpm format:check must pass (covers tooling/scripts/*.mjs). Do not merge until Docs format + CI both green on the PR.',
+    'Worktree from origin/main. pnpm format:check && pnpm verify when code. One PR. Stamp residual-own with checkable proof string.',
+    'Coord width: 6–8 concurrent path-disjoint writers when free claims allow.',
     '--- end paste ---',
   ].join('\n');
 }
@@ -601,7 +685,9 @@ function printNext(m, all = false) {
       console.log(pasteFor(c));
       console.log('');
     }
-    console.log(`ANTI-UNDER-SPAWN: spawn or residual-own every id above (${list.length}).`);
+    console.log(
+      `ANTI-UNDER-SPAWN: available=${list.length} active_spawned_locks=${m.activeSpawned ?? 0} gap=${list.length} — spawn or residual-own every id above (width target 6–8 path-disjoint).`,
+    );
     return;
   }
   console.log(pasteFor(list[0]));
@@ -611,6 +697,14 @@ function printNext(m, all = false) {
 }
 
 // --- main ---
+try {
+  validateResidualPathHints();
+} catch (e) {
+  console.error('swarm — RESIDUAL_PATH_HINTS invalid (fail closed).');
+  console.error(`  ${e.message || e}`);
+  process.exit(2);
+}
+
 const m = buildModel();
 if (m.error) {
   console.error('swarm — CANNOT ANSWER: gh/git failed.');
