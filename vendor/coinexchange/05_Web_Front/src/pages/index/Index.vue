@@ -307,7 +307,7 @@ export default {
                         "ivu-icon ivu-icon-ios-star";
                     }
                   } else {
-                    this.$Message.warning("Please sign in first");
+                    this.$Message.warning(this.$t('common.loginfirst'));
                   }
                 }
               }
@@ -512,7 +512,7 @@ export default {
                           "ivu-icon ivu-icon-ios-star";
                       }
                     } else {
-                      this.$Message.warning("Please sign in first");
+                      this.$Message.warning(this.$t('common.loginfirst'));
                     }
                   }
                 }

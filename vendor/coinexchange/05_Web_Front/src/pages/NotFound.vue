@@ -20,17 +20,16 @@
   <div class="ix-notfound">
     <div class="ix-notfound-panel" role="alert" aria-live="polite">
       <p class="ix-notfound-code">404</p>
-      <h1 class="ix-notfound-title">This address is not one of ours</h1>
+      <h1 class="ix-notfound-title">{{ $t("shellResidual.notFoundLead") }}</h1>
       <p class="ix-notfound-body">
-        Nothing on INTAFACED is served at
+        {{ $t("shellResidual.notFoundMid") }}
         <code class="ix-notfound-path">{{ attempted }}</code
-        >. If you followed a link from inside the product, that link is wrong —
-        it is worth reporting rather than working around.
+        >{{ $t("shellResidual.notFoundTail") }}
       </p>
       <div class="ix-notfound-actions">
-        <router-link to="/" class="ix-notfound-btn is-primary">Home</router-link>
-        <router-link to="/exchange" class="ix-notfound-btn">Exchange desk</router-link>
-        <router-link to="/platform" class="ix-notfound-btn">Platform</router-link>
+        <router-link to="/" class="ix-notfound-btn is-primary">{{ $t("shellResidual.home") }}</router-link>
+        <router-link to="/exchange" class="ix-notfound-btn">{{ $t("shellResidual.exchangeDesk") }}</router-link>
+        <router-link to="/platform" class="ix-notfound-btn">{{ $t("shellResidual.platform") }}</router-link>
       </div>
     </div>
   </div>

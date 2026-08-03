@@ -45,9 +45,9 @@
         </p>
       </Form>
       <Alert v-else type="warning">
-        Registration closed
+        {{ $t("shellResidual.registrationClosed") }}
         <template slot="desc">
-          New accounts are not open on this venue yet — closed is not the same as a full book of users.
+          {{ $t("shellResidual.registrationClosedBody") }}
         </template>
       </Alert>
     </div>

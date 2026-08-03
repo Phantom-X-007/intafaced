@@ -169,7 +169,7 @@
       <Row :gutter="20" style="min-height: 600px;padding-top: 10px;">
         <Col :xs="24" :sm="24" :md="4" :lg="4">
           <div class="header_nav_mobile_triggle" @click="toggleMemu()">
-            <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/> Account
+            <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/> {{ $t("shellResidual.account") }}
           </div>
           <Menu class="pc_menu" :active-name="activename" :open-names="opennames" @on-open-change="sss" ref="test" :accordion="true" style="width:100%;">
             <div class="title">{{$t('uc.member.usercenter')}}</div>

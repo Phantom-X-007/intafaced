@@ -3,14 +3,14 @@
     <div class="ix-page-head">
       <h1>{{ $t('uc.safe.title') }}</h1>
       <p>{{ $t('uc.safe.lead') }}</p>
-      <div class="ix-source">svc-identity · /api/identity/trpc</div>
+      <div class="ix-source">{{ $t("shellResidual.svcIdentityPath") }}</div>
     </div>
 
     <!-- ── two-factor ───────────────────────────────────────────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('uc.safe.totpTitle') }}</h2>
-        <span class="ix-sub">totp.enrol · totp.confirm</span>
+        <span class="ix-sub">{{ $t("shellResidual.totpEnrol") }}</span>
       </div>
       <p class="ix-lead">{{ $t('uc.safe.totpLead') }}</p>
 
@@ -127,7 +127,7 @@
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('uc.safe.missingTitle') }}</h2>
-        <span class="ix-sub">no service</span>
+        <span class="ix-sub">{{ $t("shellResidual.noService") }}</span>
       </div>
       <IxState reason="no_surface" :message="$t('uc.safe.missingBody')" />
     </div>

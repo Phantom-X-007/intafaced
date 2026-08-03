@@ -29,7 +29,7 @@
             tabindex="-1"
             ref="walletError"
           >{{ walletError }}</p>
-          <p v-else-if="loading" class="ix-empty ix-empty-loading">Loading balances…</p>
+          <p v-else-if="loading" class="ix-empty ix-empty-loading">{{ $t("shellResidual.loadingBalances") }}</p>
           <p v-else-if="walletReachable && tableMoneyShow.length === 0" class="ix-empty">{{ $t('intafaced.trade.noBalances') }}</p>
           <Table
             v-if="!walletError && !loading && tableMoneyShow.length"

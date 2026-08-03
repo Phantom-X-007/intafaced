@@ -68,7 +68,7 @@
     <div class="table">
       <p class="ix-source">{{ $t('intafaced.trade.source') }} · <code>GET /api/v1/orders/open</code></p>
       <p v-if="ordersError" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ ordersError }}</p>
-      <p v-else-if="loading" class="ix-empty ix-empty-loading">Loading open orders…</p>
+      <p v-else-if="loading" class="ix-empty ix-empty-loading">{{ $t("shellResidual.loadingOpenOrders") }}</p>
       <p v-else-if="ordersReachable && orders.length === 0" class="ix-empty">{{ $t('intafaced.trade.noOpenOrders') }}</p>
       <Table v-if="!ordersError && !loading && orders.length" :no-data-text="$t('common.nodata')" :columns="columns " :data="pagedOrders"></Table>
       <div class="page" v-if="!ordersError && orders.length > pageSize">
@@ -376,7 +376,7 @@ export default {
         if (!res.ok || !Array.isArray(res.data)) {
           // Leave prior symbols; never invent pairs.
           if (!this.symbol || !this.symbol.length) {
-            this.$Message.error("Market list unavailable — symbols unknown, not empty.");
+            this.$Message.error(this.$t('shellResidual.marketsUnavailableSymbols'));
           }
           return;
         }

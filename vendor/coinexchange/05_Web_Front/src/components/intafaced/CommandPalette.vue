@@ -9,7 +9,7 @@
   >
     <div class="ix-cmdk-backdrop" @click="close"></div>
     <div class="ix-cmdk-panel">
-      <label class="ix-cmdk-label" for="ix-cmdk-input">Go to…</label>
+      <label class="ix-cmdk-label" for="ix-cmdk-input">{{ $t("shellResidual.goTo") }}</label>
       <input
         id="ix-cmdk-input"
         ref="input"
@@ -17,12 +17,12 @@
         type="search"
         autocomplete="off"
         spellcheck="false"
-        placeholder="Search routes &amp; markets…"
+        :placeholder="$t('shellResidual.searchRoutes')"
         :value="query"
         @input="onInput"
       />
       <p class="ix-cmdk-hint">
-        <kbd>↑</kbd><kbd>↓</kbd> move · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close ·
+        <kbd>↑</kbd><kbd>↓</kbd> move · <kbd>{{ $t("shellResidual.enter") }}</kbd> open · <kbd>{{ $t("shellResidual.esc") }}</kbd> close ·
         <kbd>{{ modKey }}</kbd>+<kbd>K</kbd>
       </p>
       <ul class="ix-cmdk-list" role="listbox" :aria-activedescendant="activeId">
@@ -45,7 +45,7 @@
           </span>
         </li>
         <li v-if="filtered.length === 0" class="ix-cmdk-empty" role="presentation">
-          No matches — not inventing routes or markets
+          {{ $t("shellResidual.noMatches") }}
         </li>
       </ul>
     </div>

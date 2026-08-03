@@ -1,10 +1,10 @@
 <template>
   <div class="ix-honest-state" :class="'is-' + kind" :role="kind === 'error' ? 'alert' : 'status'">
-    <p v-if="kind === 'loading'" class="ix-empty-loading">{{ message || 'Loading…' }}</p>
+    <p v-if="kind === 'loading'" class="ix-empty-loading">{{ message || $t('shellResidual.loading') }}</p>
     <p v-else-if="kind === 'error'" class="ix-empty ix-empty-error" role="alert" tabindex="-1">{{ message }}</p>
-    <p v-else-if="kind === 'empty'" class="ix-empty">{{ message || 'Nothing here yet' }}</p>
+    <p v-else-if="kind === 'empty'" class="ix-empty">{{ message || $t('shellResidual.nothingYet') }}</p>
     <p v-else-if="kind === 'note'" class="ix-empty" role="note">{{ message }}</p>
-    <p v-else-if="kind === 'unknown'" class="ix-dim">{{ message || '— unknown' }}</p>
+    <p v-else-if="kind === 'unknown'" class="ix-dim">{{ message || $t('shellResidual.unknown') }}</p>
   </div>
 </template>
 <script>

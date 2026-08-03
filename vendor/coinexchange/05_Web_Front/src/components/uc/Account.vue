@@ -13,7 +13,7 @@
                     <IxHonestState v-if="profileLoading" kind="loading" message="Loading payment methods…" />
                     <IxHonestState v-else-if="profileError" kind="error" :message="profileError" />
                     <p v-else-if="profileReachable" class="ix-dualbook" role="note">
-                      <strong>OTC methods.</strong> Payment methods on this account — unknown is not “unbound.”
+                      <strong>{{ $t("shellResidual.otcMethods") }}</strong> {{ $t("shellResidual.paymentMethodsHonest") }}
                     </p>
                     <div class="account-in" v-if="profileReachable">
                         <div class="account-item">

@@ -3,15 +3,15 @@
     <div class="containers" id="List">
       <div class="fiat">
         <div class="to_business">
-          <h3>Fiat Trading</h3>
-          <span>Buy and sell digital assets quickly and safely</span>
-          <a href="javascript:void(0)" @click="goBusiness">Become a merchant</a>
-          <!-- <router-link to="/identbusiness">Become a merchant</router-link> -->
+          <h3>{{ $t("otc.mainHonest.title") }}</h3>
+          <span>{{ $t("otc.mainHonest.subtitle") }}</span>
+          <a href="javascript:void(0)" @click="goBusiness">{{ $t("otc.mainHonest.becomeMerchant") }}</a>
+          <!-- <router-link to="/identbusiness">{{ $t("otc.mainHonest.becomeMerchant") }}</router-link> -->
         </div>
       </div>
       <div class="content ix-money ix-otc">
         <p class="ix-dualbook" role="note">
-          <strong>One book.</strong> OTC escrow is posted to the platform ledger — the same book as every other module. Amounts are decimal strings end to end.
+          <strong>{{ $t("otc.mainHonest.oneBook") }}</strong> {{ $t("otc.mainHonest.oneBookBody") }}
         </p>
         <IxState
           :loading="assets.loading"
@@ -49,23 +49,23 @@
         <ul>
           <li>
             <div class="image"><img src="../../assets/images/price.png" alt=""></div>
-            <div class="title">The maker sets the price</div>
-            <div class="content1">Fixed or floating, quoted per offer. Nothing here is a platform quote.</div>
+            <div class="title">{{ $t("otc.mainHonest.makerSets") }}</div>
+            <div class="content1">{{ $t("otc.mainHonest.makerSetsBody") }}</div>
           </li>
           <li>
             <div class="image"><img src="../../assets/images/poundage.png" alt=""></div>
-            <div class="title">Quoted price only</div>
-            <div class="content1">The merchant quote is the deal price — there is no hidden platform fee line.</div>
+            <div class="title">{{ $t("otc.mainHonest.quotedOnly") }}</div>
+            <div class="content1">{{ $t("otc.mainHonest.quotedOnlyBody") }}</div>
           </li>
           <li>
             <div class="image"><img src="../../assets/images/instant.png" alt=""></div>
-            <div class="title">Settles when the seller releases</div>
-            <div class="content1">Not automatic. Each trade carries a deadline, and either side can open a dispute.</div>
+            <div class="title">{{ $t("otc.mainHonest.settlesWhen") }}</div>
+            <div class="content1">{{ $t("otc.mainHonest.settlesWhenBody") }}</div>
           </li>
           <li>
             <div class="image"><img src="../../assets/images/platedanbao.png" alt=""></div>
-            <div class="title">Escrowed on the ledger</div>
-            <div class="content1">The asset is locked on the platform ledger when the trade opens, and released or refunded from there.</div>
+            <div class="title">{{ $t("otc.mainHonest.escrowed") }}</div>
+            <div class="content1">{{ $t("otc.mainHonest.escrowedBody") }}</div>
           </li>
         </ul>
       </div>
