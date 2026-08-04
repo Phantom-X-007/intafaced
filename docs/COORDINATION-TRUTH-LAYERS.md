@@ -91,6 +91,8 @@ This prevents **dual-build**. Tracker prevents **wrong-mountain** and **false fr
 ```
 git fetch origin main && git log origin/main -1 --oneline
 gh pr list --state open
+# install work order (temporary — delete when all boxes ticked):
+docs/ops/OPEN-INSTALL.md   # if present: P0 before any P1–P5
 # machine board (generated — do not hand-edit):
 pnpm swarm:freeze && pnpm swarm:status && pnpm swarm:lanes
 # product free / locks:
@@ -104,6 +106,7 @@ docs/BOARD-CLEAR-HUMAN-BLOCKERS.md
 ```
 
 **Resume home:** `docs/ops/FREEZE-LIVE.md` (from `pnpm swarm:freeze`) — not a separate RESUME.md.  
+**Open install:** `docs/ops/OPEN-INSTALL.md` while any box unticked (work order, not law).  
 **Cost line:** `swarm:status` prints Actions runs last 24h; if Docs-format dominates, thrift before more stamp PRs.  
 **F-STANDBY:** when freeProduct=0, idling is valid; only P1–P5 with Board-Delta. Law: `docs/ops/SWARM-MANDATE.md`.  
 **Value gate:** `tooling/ci/value-gate.mjs` (Docs format workflow) + L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`.
