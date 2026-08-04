@@ -48,7 +48,7 @@ are wrong**, and the arithmetic is worth showing because the denominator is the
 part people keep getting wrong.
 
 ```
-find vendor/coinexchange -name '*Controller.java'          → 108
+find vendor/upstream-exchange -name '*Controller.java'          → 108
   01_wallet_rpc                                            →  14   (13 per-chain WalletController + RpcController)
   00_framework                                             →  94
 ```
@@ -117,7 +117,7 @@ the four balance mutators. **It does not, as of #234 and #289.** Every one is no
 a no-op:
 
 ```java
-// vendor/coinexchange/00_framework/core/.../dao/MemberWalletDao.java:26-27
+// vendor/upstream-exchange/00_framework/core/.../dao/MemberWalletDao.java:26-27
 @Query(value = "UPDATE member_wallet SET id = id WHERE 1 = 0", nativeQuery = true)
 int increaseBalance(@Param("walletId") long walletId, @Param("amount") BigDecimal amount);
 ```
@@ -200,16 +200,16 @@ standing between "the direction" and "a thing you can open in a browser".
 
 Live, this machine, right now:
 
-| Container                                | State            | Consequence                             |
-| ---------------------------------------- | ---------------- | --------------------------------------- |
-| `intafaced-coinex-cloud`                 | Up 2 days        | Eureka only — 0 controllers             |
-| `intafaced-coinex-exchange`              | Up 2 days        | matching module — **1** controller      |
-| `intafaced-coinex-market`                | **Exited (1)**   | Mongo `OP_QUERY` — see §2.1             |
-| `intafaced-coinex-ucenter`               | **Exited (1)**   | Redis AUTH — see §2.2                   |
-| `intafaced-coinex-otc`                   | **Exited (255)** | hand-started, not in compose — see §2.3 |
-| `intafaced-coinex-exchange-api`          | **Exited (255)** | hand-started, not in compose — see §2.3 |
-| `intafaced-shell-web`                    | **Exited (255)** | hand-started, not in compose — #412     |
-| `admin`, `chat`, `wallet`, `bitrade-job` | never started    | not in compose at all                   |
+| Container                                   | State            | Consequence                             |
+| ------------------------------------------- | ---------------- | --------------------------------------- |
+| `intafaced-cx-cloud`                        | Up 2 days        | Eureka only — 0 controllers             |
+| `intafaced-cx-exchange`                     | Up 2 days        | matching module — **1** controller      |
+| `intafaced-cx-market`                       | **Exited (1)**   | Mongo `OP_QUERY` — see §2.1             |
+| `intafaced-cx-ucenter`                      | **Exited (1)**   | Redis AUTH — see §2.2                   |
+| `intafaced-cx-otc`                          | **Exited (255)** | hand-started, not in compose — see §2.3 |
+| `intafaced-cx-exchange-api`                 | **Exited (255)** | hand-started, not in compose — see §2.3 |
+| `intafaced-shell-web`                       | **Exited (255)** | hand-started, not in compose — #412     |
+| `admin`, `chat`, `wallet`, `job-module-job` | never started    | not in compose at all                   |
 
 **1 of 94 controllers is reachable today** — `exchange/MonitorController`. Not 4
 modules as the audit found on 30 July; two of those four have since died.
@@ -242,21 +242,21 @@ Three blockers plus a fourth nobody has named, exact remediation. All four are
 
 ### 2.1 `market` — MongoDB removed the wire protocol Spring Boot 1.5 speaks
 
-**Verified cause**, from `docker logs intafaced-coinex-market`:
+**Verified cause**, from `docker logs intafaced-cx-market`:
 
 ```
 Caused by: com.mongodb.MongoQueryException: Query failed with error code 352 and error
 message 'Unsupported OP_QUERY command: find. The client driver may require an upgrade.
 For more details see https://dochub.mongodb.org/core/legacy-opcode-removal'
-on server coinex-mongo:27017
+on server cx-mongo:27017
     at com.mongodb.DBCursor.initializeCursor(DBCursor.java:870)
     at org.springframework.data.mongodb.core.MongoTemplate.executeFindMultiInternal(MongoTemplate.java:1967)
 ```
 
 **The brief's diagnosis is wrong and it matters.** There is no `mongo:4.4` pin
 anywhere in the repo — `grep -rn "mongo:4"` returns nothing.
-`vendor/coinexchange-compose.yml:85` pins **`mongo:6`**, and
-`docker exec intafaced-coinex-mongo mongosh --eval "db.version()"` returns
+`vendor/upstream-exchange-compose.yml:85` pins **`mongo:6`**, and
+`docker exec intafaced-cx-mongo mongosh --eval "db.version()"` returns
 **`6.0.28`**. Compose and container agree. Nothing needs recreating.
 
 The actual cause is a version skew that no `--force-recreate` fixes: Spring Boot
@@ -269,7 +269,7 @@ legacy template path is, and bumping the driver alone will not move it.
 **Remediation — do the cheap one now, file the correct one:**
 
 ```yaml
-# vendor/coinexchange-compose.yml — coinex-mongo
+# vendor/upstream-exchange-compose.yml — cx-mongo
 - image: mongo:6
 + # 4.4 is the last server that speaks OP_QUERY, which Spring Data MongoDB 1.x
 + # (Boot 1.5.9) emits via the legacy DBCursor API. Not a preference — 5.1
@@ -285,8 +285,8 @@ test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand("ping")']
 ```
 
 **`mongosh` does not exist before MongoDB 5.** On a 4.4 image that healthcheck can
-never pass, so the container sits `unhealthy` forever and `coinex-market` — which
-has `depends_on: coinex-mongo: {condition: service_healthy}` — never starts, behind
+never pass, so the container sits `unhealthy` forever and `cx-market` — which
+has `depends_on: cx-mongo: {condition: service_healthy}` — never starts, behind
 a database that is perfectly fine. It must become `mongo` in the same edit:
 
 ```yaml
@@ -297,9 +297,9 @@ a database that is perfectly fine. It must become `mongo` in the same edit:
 then, because a 6.0 data directory will not mount on 4.4:
 
 ```bash
-docker compose -f vendor/coinexchange-compose.yml rm -sf coinex-mongo
-docker volume rm vendor_coinex-mongo          # 0 rows of value — see §3.3 of the audit
-docker compose -f vendor/coinexchange-compose.yml up -d coinex-mongo coinex-market
+docker compose -f vendor/upstream-exchange-compose.yml rm -sf cx-mongo
+docker volume rm vendor_cx-mongo          # 0 rows of value — see §3.3 of the audit
+docker compose -f vendor/upstream-exchange-compose.yml up -d cx-mongo cx-market
 ```
 
 Losing that volume costs nothing: every table behind it is empty.
@@ -318,7 +318,7 @@ datastores to loopback, not every interface`). Keep the binding.
 
 ### 2.2 `ucenter` — the client sends a Redis password the server has never been configured to want
 
-**Verified cause**, from `docker logs intafaced-coinex-ucenter`:
+**Verified cause**, from `docker logs intafaced-cx-ucenter`:
 
 ```
 Caused by: redis.clients.jedis.exceptions.JedisDataException:
@@ -334,10 +334,10 @@ service, it is a service that cannot boot.
 **Both halves verified:**
 
 - Seven `application.properties` set `spring.redis.password=${COINEX_REDIS_PASSWORD}` —
-  `admin:32`, `bitrade-job:75`, `chat:29`, `exchange-api:24`, `market:91`,
+  `admin:32`, `job-module-job:75`, `chat:29`, `exchange-api:24`, `market:91`,
   `otc-api:41`, `ucenter-api:40`.
-- `vendor/coinexchange-compose.yml:97-99` declares `coinex-redis` with **no
-  `command:`**, so no `--requirepass`. `docker exec intafaced-coinex-redis redis-cli
+- `vendor/upstream-exchange-compose.yml:97-99` declares `cx-redis` with **no
+  `command:`**, so no `--requirepass`. `docker exec intafaced-cx-redis redis-cli
 CONFIG GET requirepass` returns **empty**.
 
 **Remediation — set the password, do not delete it.** The tempting fix is to
@@ -346,21 +346,21 @@ Redis holding every user session, and `docs/A1.4-WALLET-SECRETS-PERIMETER-2026-0
 already rates this perimeter P1–P4.
 
 ```yaml
-# vendor/coinexchange-compose.yml — coinex-redis
-  coinex-redis:
+# vendor/upstream-exchange-compose.yml — cx-redis
+  cx-redis:
     image: redis:7-alpine
-+   command: ['redis-server', '--requirepass', '${COINEX_REDIS_PASSWORD:-coinex_dev_only}']
++   command: ['redis-server', '--requirepass', '${COINEX_REDIS_PASSWORD:-cx_dev_only}']
     ...
     healthcheck:
 -     test: ['CMD', 'redis-cli', 'ping']
-+     test: ['CMD', 'redis-cli', '-a', '${COINEX_REDIS_PASSWORD:-coinex_dev_only}', 'ping']
++     test: ['CMD', 'redis-cli', '-a', '${COINEX_REDIS_PASSWORD:-cx_dev_only}', 'ping']
 ```
 
 and every Java service gains:
 
 ```yaml
 environment:
-  COINEX_REDIS_PASSWORD: ${COINEX_REDIS_PASSWORD:-coinex_dev_only}
+  COINEX_REDIS_PASSWORD: ${COINEX_REDIS_PASSWORD:-cx_dev_only}
 ```
 
 The Java services currently have **no `environment:` block at all**, which is why
@@ -369,38 +369,38 @@ The Java services currently have **no `environment:` block at all**, which is wh
 
 ### 2.3 `otc-api` and `exchange-api` are not in the compose file, so they cannot be started
 
-`vendor/coinexchange-compose.yml` defines exactly eight services: `coinex-mysql`,
-`coinex-mongo`, `coinex-redis`, `coinex-kafka`, `coinex-cloud`, `coinex-exchange`,
-`coinex-market`, `coinex-ucenter`.
+`vendor/upstream-exchange-compose.yml` defines exactly eight services: `cx-mysql`,
+`cx-mongo`, `cx-redis`, `cx-kafka`, `cx-cloud`, `cx-exchange`,
+`cx-market`, `cx-ucenter`.
 
 **Absent:** `otc-api` (6006), `exchange-api` (6003), `admin`, `chat`,
-`bitrade-job`, `wallet`, and the Vue shell. The `intafaced-coinex-otc` and
-`intafaced-coinex-exchange-api` containers on this machine were hand-started, are
+`job-module-job`, `wallet`, and the Vue shell. The `intafaced-cx-otc` and
+`intafaced-cx-exchange-api` containers on this machine were hand-started, are
 `Exited (255)`, and `docker compose up` will not bring them back because compose
 does not know they exist.
 
-**Remediation** — add four service blocks mirroring `coinex-ucenter`. Ports from
+**Remediation** — add four service blocks mirroring `cx-ucenter`. Ports from
 each module's `dev/application.properties` (`exchange-api:1` → `6003`,
 `otc-api:1` → `6006`), context-paths `/exchange` and `/otc` (`:3` and `:2`):
 
 ```yaml
-coinex-exchange-api:
+cx-exchange-api:
   image: eclipse-temurin:8-jre
-  container_name: intafaced-coinex-exchange-api
+  container_name: intafaced-cx-exchange-api
   working_dir: /app
-  volumes: ['./coinexchange/00_framework:/app:ro']
+  volumes: ['./upstream-exchange/00_framework:/app:ro']
   command: ['java', '-Xms256m', '-Xmx512m', '-jar', 'exchange-api/target/exchange-api.jar']
-  environment: { COINEX_REDIS_PASSWORD: '${COINEX_REDIS_PASSWORD:-coinex_dev_only}' }
+  environment: { COINEX_REDIS_PASSWORD: '${COINEX_REDIS_PASSWORD:-cx_dev_only}' }
   ports: ['127.0.0.1:${COINEX_EXCHANGE_API_PORT:-6003}:6003']
   depends_on:
-    coinex-market: { condition: service_started }
-    coinex-redis: { condition: service_healthy }
+    cx-market: { condition: service_started }
+    cx-redis: { condition: service_healthy }
 
-coinex-otc:
+cx-otc:
   # …identical shape, otc-api/target/otc-api.jar, 6006
-coinex-admin:
+cx-admin:
   # …admin/target/admin-api.jar — see the caution below
-coinex-chat:
+cx-chat:
   # …chat/target/chat.jar — bucket 1, no money
 ```
 
@@ -418,7 +418,7 @@ start it.
 
 ### 2.4 The fourth blocker nobody has named: the jars are not in the repo, and nothing builds them
 
-`find vendor/coinexchange/00_framework -name "*.jar" -path "*/target/*"` in this
+`find vendor/upstream-exchange/00_framework -name "*.jar" -path "*/target/*"` in this
 worktree returns **nothing**. The same command against the main checkout returns
 **13 jars**. `target/` is gitignored; the compose `command:` lines are
 `java -jar …/target/….jar`.
@@ -441,7 +441,7 @@ This is the item that turns "it runs here" into "it runs".
 **Placement rule:** it writes no balance, it needs no adapter, and the only thing
 between us and it is §2. **68 of the 94 controllers.**
 
-Counted, not asserted: `find vendor/coinexchange -name '*Controller.java'` → **108**.
+Counted, not asserted: `find vendor/upstream-exchange -name '*Controller.java'` → **108**.
 Minus 13 in `01_wallet_rpc` (12 per-chain `WalletController` + `RpcController`)
 → **95**. Minus `wallet/…/TestController.java` → **94**. Of those, 25 touch
 `MemberWalletService` / `MemberTransaction` (§4), leaving **68**.
@@ -519,7 +519,7 @@ not begun.
 
 **`market` — 2 of 2.** `MarketController` (13 routes), `ExchangeRateController`.
 Adopt with a hard caveat: the data is **seeded and synthetic**
-(`vendor/coinexchange/seed-market-data.mjs` header says so; `volume: 0.0000`).
+(`vendor/upstream-exchange/seed-market-data.mjs` header says so; `volume: 0.0000`).
 Audit F5 stands. Adopting the module is fine; **presenting its candles as market
 truth is not**, and that is the honesty line `docs/STREAM-A-PHASE1-PLAN.md`
 already draws.
@@ -823,7 +823,7 @@ must land **before** the adapters, per §15.2.
 
 ## 5 · Bucket 3 — REWIRE · the 74 screens
 
-**Verified count**: `find vendor/coinexchange/05_Web_Front/src -name '*.vue'` →
+**Verified count**: `find vendor/upstream-exchange/05_Web_Front/src -name '*.vue'` →
 **74** (43 under `pages/`, 30 under `components/`, plus `App.vue`).
 
 I classified all 74 by what they actually call — `/api/*` is `svc-edge`
@@ -952,9 +952,9 @@ where the second column says _quarantine_, the files stay and the door stays shu
 | What                                        |  Count | Why                                                                                                                                                                                                                                                   |
 | ------------------------------------------- | -----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `vendor/**/*.jar` committed binaries        | **32** | `git ls-files "vendor/**/*.jar"` — `apns-http2-core`, `aqmd-netty-*`, `spark-core`, and 28 more. Unverifiable against any upstream or checksum, on the classpath of services that hold custody. ADR §4 says replace with Maven coordinates or remove. |
-| `vendor/coinexchange/02_App_Android`        |  **2** | `.keep` + `README.md`. Already stripped. Nothing to read, nothing to adopt.                                                                                                                                                                           |
-| `vendor/coinexchange/03_APP_IOS`            |  **2** | Same.                                                                                                                                                                                                                                                 |
-| `vendor/coinexchange/06_ExchangeRobot`      |  **2** | Same. And a trading robot is `trade.mm-bot`, which is ours and has non-negotiable seeded-liquidity rules (`DIRECTION-2026-07-31.md` §1).                                                                                                              |
+| `vendor/upstream-exchange/02_App_Android`   |  **2** | `.keep` + `README.md`. Already stripped. Nothing to read, nothing to adopt.                                                                                                                                                                           |
+| `vendor/upstream-exchange/03_APP_IOS`       |  **2** | Same.                                                                                                                                                                                                                                                 |
+| `vendor/upstream-exchange/06_ExchangeRobot` |  **2** | Same. And a trading robot is `trade.mm-bot`, which is ours and has non-negotiable seeded-liquidity rules (`DIRECTION-2026-07-31.md` §1).                                                                                                              |
 | `00_framework/wallet/…/TestController.java` |  **1** | A test controller on a custody service. The audit already excluded it from the 94.                                                                                                                                                                    |
 
 ### 6.2 Quarantine — keep the files, keep the door shut
@@ -1036,7 +1036,7 @@ adapting it. `matching.engine` ✅ and `trade.spot` ✅ already do it, tested,
 deterministic, against our book. Adopting a second matcher would be the one place
 where "adopt everything" costs us something we already do better.
 
-**Why it is not merely quarantine.** `intafaced-coinex-exchange` is **Up 2 days
+**Why it is not merely quarantine.** `intafaced-cx-exchange` is **Up 2 days
 right now** — it is the only vendored module still running. It is idle only
 because `exchange-api` cannot reach it and no order has ever been placed. Bring
 `exchange-api` back per §2.3 and there are two matching engines on one machine.
@@ -1172,7 +1172,7 @@ It is a statement of what must happen first — and a first read found enough th
 | Committed `.jar`s in `01_wallet_rpc` | **18 files, 3 distinct artefacts** (32 jars across the whole vendored tree)                                    |
 
 **It does not touch the book.** `grep -rl "MemberWallet\|member_wallet" 01_wallet_rpc`
-returns **nothing** — a separate Maven tree under `com.bizzan.bc.wallet` that
+returns **nothing** — a separate Maven tree under `com.upstream.bc.wallet` that
 speaks only to chain nodes and Kafka. Adopting it creates **no** second set of
 books, and none of §4's adapter work applies. **The entire risk here is private
 keys, and none of it is dual-book.** The gates we built for §4 do not help here
@@ -1208,7 +1208,7 @@ at `:27`, `@PostConstruct` refusing blank or `< 32` chars at `:31-41`,
 `eth-support/…/config/KeystorePasswordValidator.java` (48 lines).
 
 **"Deliberately shut" was never the right description.** A second read confirms:
-`git diff a19e337 HEAD -- vendor/coinexchange/01_wallet_rpc` is 36 files,
+`git diff a19e337 HEAD -- vendor/upstream-exchange/01_wallet_rpc` is 36 files,
 +447/−204, and **every change is additive hardening or a literal→placeholder
 swap. Nothing in this tree is no-op'd** the way `MemberWalletDao` was. Key
 generation, every block watcher and its thread, Kafka deposit publication, ETH
@@ -1603,7 +1603,7 @@ claim-check — 3 path(s) from arguments, against 4 open PR(s)
         · tooling/tracker/features.mjs
 ```
 
-`docs/BIZZAN-ADOPTION-QUEUE-2026-08-02.md` and `docs/LIVE-LANES.md` are free;
+`docs/UPSTREAM-ADOPTION-QUEUE-2026-08-02.md` and `docs/LIVE-LANES.md` are free;
 **`tooling/tracker/features.mjs` is inside @shehzad002's open #346.** Editing it
 here creates a merge conflict on a human-claimed money PR — the exact thing
 claim-check exists to prevent, and `AGENTS.md`'s "tracker touch = mountain events
@@ -1630,7 +1630,7 @@ nobody has decided to want.
 ## 10 · Method, and what is not verified
 
 Everything above was read or probed on 2026-08-02 against `main` @ `a43b469`,
-from the worktree `docs/bizzan-adoption-queue`:
+from the worktree `docs/upstream-adoption-queue`:
 
 - `find … -name '*Controller.java'` → 108; module breakdown counted, not quoted.
 - `grep -rl "MemberWalletService\|MemberTransactionService\|MemberWalletDao\|MemberTransaction "
@@ -1639,8 +1639,8 @@ from the worktree `docs/bizzan-adoption-queue`:
   call-sites, 23 non-controller call-sites, 5 DAO definitions, 882 Java files.
 - `find …/05_Web_Front/src -name '*.vue'` → 74; every file classified by grepping
   for `/api/` versus `/(uc|market|exchange|otc)/` and for `$http`/`fetch`/`axios`.
-- `docker ps -a`, `docker logs intafaced-coinex-{market,ucenter}`,
-  `docker exec intafaced-coinex-{mongo,redis}` for the live state and the two
+- `docker ps -a`, `docker logs intafaced-cx-{market,ucenter}`,
+  `docker exec intafaced-cx-{mongo,redis}` for the live state and the two
   stack traces quoted verbatim in §2.
 - `node tooling/ci/{vendor-java-money,vendor-shell,dual-book-door,custody}-scan.mjs`
   — all four clean; output quoted.
@@ -1650,7 +1650,7 @@ from the worktree `docs/bizzan-adoption-queue`:
 - **§7.3:** `services/svc-identity/src/db/schema.ts:23` (uuid),
   `…/core/…/entity/Member.java:27-29` (`Long`),
   `services/svc-ledger/src/db/schema.ts:32` (`owner_id` is `text`).
-- **§8:** `git show c221cc8` and `git diff a19e337 HEAD -- vendor/coinexchange/01_wallet_rpc`;
+- **§8:** `git show c221cc8` and `git diff a19e337 HEAD -- vendor/upstream-exchange/01_wallet_rpc`;
   every `pom.xml` and `application.properties` under `01_wallet_rpc`;
   `grep -c rpc-common <module>/pom.xml` across all 14 modules for §8.3;
   `find -name RpcSecurityConfig.java` → one path; the key-generation and
@@ -1699,7 +1699,7 @@ from the worktree `docs/bizzan-adoption-queue`:
 - Direction, settled: [`docs/DIRECTION-2026-07-31.md`](DIRECTION-2026-07-31.md) §4
 - The ADR, Accepted: [`docs/adr/2026-07-28-vendored-exchange-integration.md`](adr/2026-07-28-vendored-exchange-integration.md)
 - The evidence this queue rests on: [`docs/VENDORED-OVERLAP-AUDIT.md`](VENDORED-OVERLAP-AUDIT.md) (#213)
-- The bucket-2 backlog, already written: `vendor/coinexchange/00_framework/core/…/interceptor/DualBookMoneyDoorInterceptor.java`
+- The bucket-2 backlog, already written: `vendor/upstream-exchange/00_framework/core/…/interceptor/DualBookMoneyDoorInterceptor.java`
 - Money inventory, regenerable: `node tooling/scripts/vendor-money-inventory.mjs` → [`docs/ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md`](ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md)
 - Recipes: `packages/ledger-client/src/recipes/{index,bank,loans}.ts`
 - Lane law: [`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) · [`docs/BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`](BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md)
