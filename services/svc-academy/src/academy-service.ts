@@ -2,6 +2,7 @@ import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
+import { assertScene } from './spatial/scene.js';
 import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from './access/room-access.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
@@ -425,9 +426,10 @@ export class AcademyService {
   async updateScene(input: { sessionId: string; hostId: string; scene: Record<string, unknown> }): Promise<SessionRecord> {
     const session = await this.session(input.sessionId);
     this.assertHost(session.hostId, input.hostId, 'session');
+    const scene = assertScene(input.scene);
 
     const rows = await this.sql<SessionRow[]>`
-      UPDATE academy.sessions SET scene = ${this.sql.json(input.scene as never)}, updated_at = now() WHERE id = ${session.id} RETURNING *
+      UPDATE academy.sessions SET scene = ${this.sql.json(scene as never)}, updated_at = now() WHERE id = ${session.id} RETURNING *
     `;
     return toSession(rows[0]!);
   }

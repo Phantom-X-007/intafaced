@@ -109,6 +109,10 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.session_not_live':
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
 
+    case 'academy.scene_invalid':
+      // Client sent a scene that fails Stage-1 schema or size gate.
+      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+
     case 'academy.stake_unavailable':
     case 'academy.stream_unavailable':
     case 'academy.host_rights_unavailable':
