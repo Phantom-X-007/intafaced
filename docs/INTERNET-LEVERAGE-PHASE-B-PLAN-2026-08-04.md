@@ -1,7 +1,8 @@
 # Internet leverage — Phase B plan (new external candidates)
 
-**Status:** PLAN / SPEC — execute only after green light  
+**Status:** PLAN / SPEC — **executed** (v1 thin #772; **v2 all-out** report is canonical)  
 **Depends on:** Phase A complete on tip — [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md)  
+**Canonical report:** [`INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md)  
 **Term:** **Internet leverage** = already-built systems we adopt/wire/wrap instead of rebuilding.
 
 **Phase B is not shopping for fun.** It is a disciplined landscape of **candidates that fill real gaps** left after Phase A, filtered by doctrine, ownership, cost, and dual-build risk.
