@@ -186,6 +186,28 @@ Holding a database transaction open across the ledger call is a deliberate cost:
 
 ---
 
+## Who may be named in a refusal
+
+**A refusal may only describe objects the caller was already entitled to see. Where it cannot, it says `NOT_FOUND` and names nothing.** ([ADR, 2026-08-04](../../docs/adr/2026-08-04-authority-and-refusal-shape.md))
+
+`transfers.create` and `transfers.schedule` each name **two** spaces and owner-check **one**. That is deliberate and it stays: the debit side is the side that can lose value, and paying another user is the product — a transfer moves value between two different users' spaces, and a test pins it.
+
+What was wrong was what a **failure** said. `space-service.ts` writes its refusals for the person who owns the space (`Space "Holiday fund" is archived`, `Cannot transfer USDT into a EUR space`) and the router's mapper returned `err.message` verbatim. So transferring one atomic unit into a guessed uuid revealed whether that space existed, what its owner had **named** it, and which asset it held — for somebody else's account, without the transfer needing to succeed.
+
+Three changes, none of which removes cross-user transfer:
+
+| Where               | What it does now                                                                                                                                                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateDestination`   | Resolves the destination. Not the caller's, or absent → `NOT_FOUND`, **naming nothing**, from one construction site so the two cases cannot drift apart by a byte. Somebody else's live space in the right asset proceeds. |
+| `SpaceService.find` | The lookup that does **not** throw, so "absent" and "not yours" issue the same single query. An exception is a message, and whether one was produced is itself an oracle.                                                  |
+| `toTrpcError`       | Exhaustive over `BankErrorCode`, with a `never` in the default. Unmapped errors get `Bank operation failed (ref …)`; the detail goes to stderr as `bank.undisclosed_error` with that correlation id.                       |
+
+**Owners are unaffected.** They still get `Space "Holiday fund" is archived` and `Cannot transfer USDT into a EUR space — convert first`, and tests pin both — a service so cautious the owner cannot act is a worse bug than the leak it was written for.
+
+`assertSelf` keeps `FORBIDDEN` rather than `NOT_FOUND`, and the docblock argues why at length. Its message names nothing, so the ADR's rule is satisfied either way; the status-code half is a change to who may see what, which the ADR reserves to the owner.
+
+---
+
 ## Database constraints as a backstop
 
 The service checks these; the database enforces them regardless.

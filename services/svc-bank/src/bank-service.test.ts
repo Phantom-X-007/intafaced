@@ -1492,4 +1492,289 @@ if (!available) {
       expect(codeOf(err)).toBe('FORBIDDEN');
     });
   });
+
+  // ══ A refusal may only describe what the caller could already read ════════
+
+  /**
+   * THE EXISTENCE-AND-NAME ORACLE OVER OTHER USERS' ACCOUNTS.
+   *
+   * `transfers.create` takes two space ids and owner-checks one. That is right
+   * for safety — the debit side is the side that can lose value — and cross-user
+   * transfer is the product, pinned above by "moves value between two different
+   * users spaces". Neither of those changes here.
+   *
+   * What was wrong is what a FAILURE said. `space-service.ts` writes its refusals
+   * for the person who owns the space (`Space "Holiday fund" is archived`,
+   * `Cannot transfer USDT into a EUR space`) and the router's error mapper
+   * returned `err.message` verbatim for both codes. So transferring one atomic
+   * unit into a guessed uuid told the caller whether that space existed, what its
+   * owner had NAMED it, and which asset it held — for a space belonging to
+   * somebody else, with no need for the transfer to succeed.
+   *
+   * Every part of that is correct in the context it was written in. The bug is
+   * that nothing between them decided whether THIS caller may hear it.
+   */
+  describe('a failed transfer into a stranger’s space describes nothing', () => {
+    /**
+     * Everything a client can observe about a refusal.
+     *
+     * Not `.message` alone: the ADR's done bar says absent and not-yours must be
+     * BYTE-IDENTICAL, and a difference in the error class, the tRPC code, or the
+     * presence of a `cause` is just as good an oracle as a difference in the
+     * sentence. Serialised, so the comparison is on bytes rather than on a
+     * matcher's idea of equality.
+     */
+    const wireShape = (err: unknown) => {
+      const e = err as { name?: string; code?: string; message?: string; cause?: unknown; data?: unknown };
+      return JSON.stringify({
+        name: e.name ?? null,
+        code: e.code ?? null,
+        message: e.message ?? null,
+        cause: e.cause === undefined ? null : 'present',
+        data: e.data ?? null,
+      });
+    };
+
+    /** USER_A's own space, in the state the argument names, plus a funded USER_B. */
+    async function stage(state: 'archived' | 'other-asset') {
+      const mine = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      await fund(USER_B, 'USDT', '10');
+
+      if (state === 'archived') {
+        const theirs = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Holiday fund' });
+        await bank.spaces.archive(theirs.id);
+        return { mine, theirs };
+      }
+      const theirs = await bank.spaces.create({ userId: USER_A, assetId: 'EUR', name: 'Holiday fund' });
+      return { mine, theirs };
+    }
+
+    it('answers an archived space of another user exactly as it answers a uuid that does not exist', async () => {
+      const { mine, theirs } = await stage('archived');
+      const api = await caller(USER_B, ['bank:write']);
+
+      const notYours = await api.transfers
+        .create({ transferId: 'probe-0001', fromSpaceId: mine.id, toSpaceId: theirs.id, amount: '0.000000000000000001' })
+        .catch((e: unknown) => e);
+
+      const absent = await api.transfers
+        .create({
+          transferId: 'probe-0002',
+          fromSpaceId: mine.id,
+          toSpaceId: '5f2b7c1e-0000-4000-8000-000000000000',
+          amount: '0.000000000000000001',
+        })
+        .catch((e: unknown) => e);
+
+      // The whole ADR, as one assertion.
+      expect(wireShape(notYours)).toBe(wireShape(absent));
+
+      // And it is the RIGHT answer, not merely a consistent one: NOT_FOUND,
+      // naming nothing. A FORBIDDEN here would itself confirm the id.
+      expect(codeOf(notYours)).toBe('NOT_FOUND');
+      expect((notYours as Error).message).toBe('No such space');
+
+      // The specific facts that used to leak.
+      expect((notYours as Error).message).not.toContain('Holiday fund');
+      expect((notYours as Error).message).not.toContain('archived');
+      expect((notYours as Error).message).not.toContain(theirs.id);
+    });
+
+    it('answers a foreign-asset space of another user the same way — the asset does not leak either', async () => {
+      const { mine, theirs } = await stage('other-asset');
+      const api = await caller(USER_B, ['bank:write']);
+
+      const notYours = await api.transfers
+        .create({ transferId: 'probe-0003', fromSpaceId: mine.id, toSpaceId: theirs.id, amount: '1' })
+        .catch((e: unknown) => e);
+
+      const absent = await api.transfers
+        .create({ transferId: 'probe-0004', fromSpaceId: mine.id, toSpaceId: '5f2b7c1e-0000-4000-8000-000000000001', amount: '1' })
+        .catch((e: unknown) => e);
+
+      expect(wireShape(notYours)).toBe(wireShape(absent));
+      expect((notYours as Error).message).not.toContain('EUR');
+      expect((notYours as Error).message).not.toContain('Holiday fund');
+    });
+
+    it('does the same work on both paths, so the timing does not reintroduce the oracle', async () => {
+      const { mine, theirs } = await stage('archived');
+
+      /**
+       * The deterministic half of "watch the timing".
+       *
+       * Wall-clock on a shared machine is noise; the fact underneath it is not.
+       * Both refusals must issue the SAME NUMBER OF QUERIES — one for the source
+       * space, one for the destination — because a short-circuit on the absent
+       * path is exactly what a timing attack measures. This counts them.
+       */
+      let queries = 0;
+      const counting = new Proxy(sql, {
+        apply(target, thisArg, args: unknown[]) {
+          queries++;
+          return Reflect.apply(target as never, thisArg, args as never);
+        },
+      }) as typeof sql;
+
+      const countingBank = createBankServices(counting, ledger, memoryLedgerHistory(ledger), { nativeAssetId: 'IFC' });
+      const api = createBankRouter(countingBank).createCaller(await ctx(USER_B, ['bank:write']));
+
+      queries = 0;
+      await api.transfers
+        .create({ transferId: 'timing-0001', fromSpaceId: mine.id, toSpaceId: theirs.id, amount: '1' })
+        .catch((e: unknown) => e);
+      const notYoursQueries = queries;
+
+      queries = 0;
+      await api.transfers
+        .create({ transferId: 'timing-0002', fromSpaceId: mine.id, toSpaceId: '5f2b7c1e-0000-4000-8000-000000000002', amount: '1' })
+        .catch((e: unknown) => e);
+      const absentQueries = queries;
+
+      expect(notYoursQueries).toBe(absentQueries);
+      // Two, and the number is asserted so a future refactor that resolves the
+      // destination twice — or not at all — is visible here rather than in a
+      // latency graph.
+      expect(notYoursQueries).toBe(2);
+    });
+
+    it('still gives the OWNER the full, actionable message including the name', async () => {
+      // The half that matters more. A service so cautious it returns NOT_FOUND
+      // to the person who set the lock is a worse bug than the leak it was
+      // written for, because it breaks everybody at once.
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await fund(USER_A, 'USDT', '100');
+      const mine = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Holiday fund' });
+      await bank.spaces.archive(mine.id);
+
+      const api = await caller(USER_A, ['bank:write']);
+      const err = await api.transfers
+        .create({ transferId: 'owner-0001', fromSpaceId: primary.id, toSpaceId: mine.id, amount: '1' })
+        .catch((e: unknown) => e);
+
+      expect((err as Error).message).toBe('Space "Holiday fund" is archived');
+      expect(codeOf(err)).toBe('CONFLICT');
+
+      // And the cross-asset message, which is the one that tells an owner what
+      // to do next rather than merely that they cannot.
+      const eur = await bank.spaces.create({ userId: USER_A, assetId: 'EUR', name: 'Trip' });
+      const mismatch = await api.transfers
+        .create({ transferId: 'owner-0002', fromSpaceId: primary.id, toSpaceId: eur.id, amount: '1' })
+        .catch((e: unknown) => e);
+      expect((mismatch as Error).message).toBe('Cannot transfer USDT into a EUR space — convert first');
+    });
+
+    it('still lets a transfer to another user succeed — this is product, not a leak', async () => {
+      // The behaviour the ADR explicitly protects. Paying somebody else works;
+      // only the FAILURES stopped describing their account.
+      const mine = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const theirs = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await fund(USER_B, 'USDT', '80');
+
+      const api = await caller(USER_B, ['bank:write']);
+      await expect(
+        api.transfers.create({ transferId: 'peer-0001', fromSpaceId: mine.id, toSpaceId: theirs.id, amount: '80' }),
+      ).resolves.toMatchObject({ amount: '80' });
+
+      expect(await availableOf(USER_A, 'USDT')).toBe('80');
+      expect(await availableOf(USER_B, 'USDT')).toBe('0');
+    });
+
+    it('reports the caller’s OWN empty balance honestly, even paying a stranger', async () => {
+      // The gate must not flatten refusals that are about the caller's own side.
+      // "You do not have the money" is theirs to read, whoever they were paying.
+      const mine = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const theirs = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await fund(USER_B, 'USDT', '1');
+
+      const api = await caller(USER_B, ['bank:write']);
+      const err = await api.transfers
+        .create({ transferId: 'broke-0001', fromSpaceId: mine.id, toSpaceId: theirs.id, amount: '500' })
+        .catch((e: unknown) => e);
+
+      expect(codeOf(err)).toBe('BAD_REQUEST');
+      expect((err as Error).message).toContain('Insufficient USDT');
+    });
+
+    it('closes the same oracle on the standing-order surface', async () => {
+      // `transfers.schedule` names two spaces and checks one, exactly as
+      // `create` does, and leaked the same two facts through
+      // `bank.asset_mismatch`. It matters more there: a caller could leave the
+      // probe running.
+      const mine = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const theirs = await bank.spaces.create({ userId: USER_A, assetId: 'EUR', name: 'Holiday fund' });
+      const api = await caller(USER_B, ['bank:write']);
+
+      const notYours = await api.transfers
+        .schedule({
+          fromSpaceId: mine.id,
+          toSpaceId: theirs.id,
+          amount: '10',
+          cadence: 'monthly',
+          startsAt: '2026-01-01T09:00:00Z',
+        })
+        .catch((e: unknown) => e);
+
+      const absent = await api.transfers
+        .schedule({
+          fromSpaceId: mine.id,
+          toSpaceId: '5f2b7c1e-0000-4000-8000-000000000003',
+          amount: '10',
+          cadence: 'monthly',
+          startsAt: '2026-01-01T09:00:00Z',
+        })
+        .catch((e: unknown) => e);
+
+      expect(wireShape(notYours)).toBe(wireShape(absent));
+      expect(codeOf(notYours)).toBe('NOT_FOUND');
+
+      // And no row was written for the probe.
+      const rows = await sql`SELECT id FROM bank.scheduled_transfers WHERE from_space_id = ${mine.id}`;
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('the error mapper returns no raw domain message by default', () => {
+    it('answers a generic message with a correlation reference, and logs the detail', async () => {
+      /**
+       * The mapper's `default:` used to be `err.message`, which is how a
+       * sentence written for an owner reached a stranger. It is now generic, and
+       * the switch above it is EXHAUSTIVE over `BankErrorCode` — so this branch
+       * is reachable only by a code nobody declared, which is precisely the one
+       * whose message nobody vetted.
+       *
+       * Provoked with an undeclared code rather than by adding one, because the
+       * point is what happens to a code the mapper has never seen.
+       */
+      const undeclared = new BankError('Space "Holiday fund" is archived and owned by user 1111', 'bank.not_a_real_code' as never);
+
+      const logged: string[] = [];
+      const realError = console.error;
+      console.error = (line: unknown) => void logged.push(String(line));
+      try {
+        const api = await caller(USER_A, ['bank:read']);
+        // `earn.pools` is the cheapest procedure to make throw from inside the
+        // service, and which one it is does not matter — the mapper is shared.
+        const original = bank.earn.listPools.bind(bank.earn);
+        bank.earn.listPools = async () => {
+          throw undeclared;
+        };
+        const err = await api.earn.pools({}).catch((e: unknown) => e);
+        bank.earn.listPools = original;
+
+        expect(codeOf(err)).toBe('INTERNAL_SERVER_ERROR');
+        expect((err as Error).message).not.toContain('Holiday fund');
+        expect((err as Error).message).toMatch(/^Bank operation failed \(ref [0-9a-f-]{36}\)$/);
+
+        // The detail is not lost — it is where an operator can join it to the
+        // reference the caller was given.
+        const record = JSON.parse(logged.at(-1)!) as { correlationId: string; detail: string; event: string };
+        expect(record.event).toBe('bank.undisclosed_error');
+        expect(record.detail).toContain('Holiday fund');
+        expect((err as Error).message).toContain(record.correlationId);
+      } finally {
+        console.error = realError;
+      }
+    });
+  });
 }
