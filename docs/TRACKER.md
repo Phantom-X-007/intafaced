@@ -217,7 +217,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | Merchant agent — approval-rate watch | F | `pay.routing` | `agents.merchant` |
 | ⛔ | Copy-Intel — writes audited leader stats | F | `trade.copy` | `agents.copy-intel` |
 | ✅ | Live lobbies, LiveKit SFU, capacity tiers <br/>_svc-academy on 4016, mounted at /api/academy. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is now issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here._ | F |  | `academy.lobbies` |
-| 🟢 | 2D navigable room canvas, VR-ready scene state | F |  | `academy.spatial` |
+| 🟢 | 2D navigable room canvas, VR-ready scene state <br/>_Stage-1 2026-08-04: versioned Scene v1 schema + size gate (`spatial/scene.ts`); updateScene rejects invalid/oversized. Canvas product residual. Not tracker done until navigable shell uses server scene._ | F |  | `academy.spatial` |
 | 🟢 | DERIV//DESK library import — 20 playbooks + 3 workbooks | F |  | `academy.curriculum` |
 | ⛔ | Certifications → XP → real perks | F | `academy.curriculum` | `academy.certs` |
 | 🟢 | Residencies, IFC pay, revenue share | F |  | `academy.ambassadors` |
