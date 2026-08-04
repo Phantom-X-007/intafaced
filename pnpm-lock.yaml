@@ -1179,6 +1179,9 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.1
       '@trpc/server':
         specifier: ^11.0.0-rc.660
         version: 11.18.0(typescript@5.9.3)

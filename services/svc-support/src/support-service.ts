@@ -8,6 +8,7 @@ import type {
   SupportTicket,
   SupportTicketStatus,
 } from '@intafaced/contracts';
+import { withSupportSpan } from './tracing.js';
 
 export class SupportError extends Error {
   constructor(
@@ -28,29 +29,36 @@ export class SupportService implements SupportContract {
   private readonly comments = new Map<string, SupportComment[]>();
 
   async createTicket(input: { userId: string } & CreateTicketInput): Promise<SupportTicket> {
-    const now = new Date().toISOString();
-    const ticket: SupportTicket = {
-      id: randomUUID(),
-      userId: input.userId,
-      category: input.category,
-      subject: input.subject,
-      body: input.body,
-      status: 'open',
-      assigneeId: null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.tickets.set(ticket.id, ticket);
-    this.comments.set(ticket.id, []);
-    return ticket;
+    return withSupportSpan('support.createTicket', { op: 'createTicket' }, async (span) => {
+      const now = new Date().toISOString();
+      const ticket: SupportTicket = {
+        id: randomUUID(),
+        userId: input.userId,
+        category: input.category,
+        subject: input.subject,
+        body: input.body,
+        status: 'open',
+        assigneeId: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.tickets.set(ticket.id, ticket);
+      this.comments.set(ticket.id, []);
+      span.setAttribute('intafaced.support.ticket_id', ticket.id);
+      return ticket;
+    });
   }
 
   async listMyTickets(input: { userId: string }): Promise<SupportTicket[]> {
-    return [...this.tickets.values()].filter((t) => t.userId === input.userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return withSupportSpan('support.listMyTickets', { op: 'listMyTickets' }, async () =>
+      [...this.tickets.values()].filter((t) => t.userId === input.userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    );
   }
 
   async listAllTickets(): Promise<SupportTicket[]> {
-    return [...this.tickets.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return withSupportSpan('support.listAllTickets', { op: 'listAllTickets' }, async () =>
+      [...this.tickets.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    );
   }
 
   async getTicket(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicket> {
