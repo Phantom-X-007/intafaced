@@ -643,6 +643,7 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     dependsOn: ['agents.gateway', 'trade.spot'],
+    note: 'Stage-1 2026-08-04: pure fixture rank in svc-agents (`scanner/rank.ts`) — empty/stale/incomplete refuse with copy keys; no invent prices; no auto-trade. Live tools + shell UX residual. Not tracker done until allowlisted live data path.',
   }),
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',
