@@ -115,15 +115,29 @@ One latent bug: the mint destination is hardcoded `rewardsEngine('IFC')` while `
 
 ## Refuse cases
 
-| Situation                                               | Correct answer                                                                             |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `token_params` row missing or unreadable                | **Fail.** Never fall back to the source constant — the precedent is already in the file.   |
-| Code constant disagrees with the live row               | **Fail the build.** Extend the existing fee-ladder agreement test to emission and buyback. |
-| Buyback window overlaps a settled one                   | **Refuse before burning.** Claim the window, then post.                                    |
-| Burn funded from a source that includes mint            | **Refuse.** A burn funded by mint is not a buyback.                                        |
-| A proposal reaches its deadline                         | **Nothing happens, and the surface says so.** No status flip without an executor.          |
-| Any surface asked for supply, burn total, APY, or fee-% | **Say it is not set.** Never a zero, never a dash, never a plausible figure.               |
-| An agent needs an economic number to proceed            | **Stop and ask.** This is the invent ban at its sharpest.                                  |
+| Situation                                                        | Correct answer                                                                           |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `token_params` row missing or unreadable                         | **Fail.** Never fall back to the source constant — the precedent is already in the file. |
+| A **new** disagreement appears, or an existing one changes value | **Fail the build.** Extend the fee-ladder agreement test to emission and buyback.        |
+| The **four existing** disagreements                              | **Pinned, surfaced, and impossible to resolve silently** — see the correction below.     |
+| Buyback window overlaps a settled one                            | **Refuse before burning.** Claim the window, then post.                                  |
+| Burn funded from a source that includes mint                     | **Refuse.** A burn funded by mint is not a buyback.                                      |
+| A proposal reaches its deadline                                  | **Nothing happens, and the surface says so.** No status flip without an executor.        |
+| Any surface asked for supply, burn total, APY, or fee-%          | **Say it is not set.** Never a zero, never a dash, never a plausible figure.             |
+| An agent needs an economic number to proceed                     | **Stop and ask.** This is the invent ban at its sharpest.                                |
+
+### Correction — 2026-08-04, same day
+
+This ADR first said, flatly, _"Code constant disagrees with the live row → **Fail the build**."_ Applied to the **four disagreements that already exist**, that lands an unconditionally-red test on `main` and keeps it red until an owner decides four numbers that have been undecided for weeks — blocking every unrelated merge in the repo while the swarm is landing several PRs an hour.
+
+That is the failure mode this ADR is supposed to prevent, arriving from the other side: **a red everyone must route around is a red that gets deleted**, and it would take the honest part with it.
+
+The rule as it stands:
+
+- **A new disagreement, or a change to an existing one, fails the build.** That is what "fail the build" was always for.
+- **The four existing ones are pinned by a hand-written inventory** that is derived from nothing and so cannot go green on its own. Editing either copy — including "fixing" the drift by copying one value over the other — forces a human to come and edit an expectation by hand, in a file whose comments say these numbers are the owner's. **That closes the silent-resolution hole in both directions**, which was the actual requirement; an unconditional red was only ever a blunt way of reaching it.
+
+The disagreement stays visible in normal test output. It cannot be shipped further, resolved quietly, or forgotten.
 
 ---
 
