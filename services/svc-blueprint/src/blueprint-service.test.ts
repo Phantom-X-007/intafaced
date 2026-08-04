@@ -991,6 +991,24 @@ if (!available) {
       expect((await service.get({ userId: USER_A }))?.cardAssetUrl).toBe(rendered.url);
     });
 
+    it('Stage-1 shareMode is svg when raster is unavailable (product share artifact)', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      const card = await blueprint.card({ userId: USER_A, size: 'portrait' });
+      expect(card.shareMode).toBe('svg');
+      expect(card.raster.status).toBe('unavailable');
+      expect(card.svg.length).toBeGreaterThan(0);
+      expect(cardRenderSchema.safeParse(card).success).toBe(true);
+    });
+
+    it('Stage-1 shareMode is png when raster rendered', async () => {
+      const service = withRenderer(new StubRenderer(rendered));
+      await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      const card = await service.card({ userId: USER_A, size: 'portrait' });
+      expect(card.shareMode).toBe('png');
+      expect(card.raster.status).toBe('rendered');
+      expect(cardRenderSchema.safeParse(card).success).toBe(true);
+    });
+
     it('is stable: the same Blueprint yields a byte-identical card', async () => {
       await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
 

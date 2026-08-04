@@ -158,6 +158,12 @@ export const cardRenderSchema = z.object({
    */
   svg: z.string().min(1),
   raster: cardRasterSchema,
+  /**
+   * Stage-1 share mode (implementable TRK blueprint.card).
+   * `svg` = vector card is the share artifact (always available).
+   * `png` = hosted raster URL is available for unfurl.
+   */
+  shareMode: z.enum(['svg', 'png']),
 });
 export type CardRender = z.infer<typeof cardRenderSchema>;
 

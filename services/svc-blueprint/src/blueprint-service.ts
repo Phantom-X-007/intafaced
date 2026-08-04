@@ -565,7 +565,8 @@ export class BlueprintService implements BlueprintContract {
 
     const raster = await this.renderer.rasterize({ svg, size, width, height, blueprintId: blueprint.id });
 
-    return { size, width, height, svg, raster };
+    const shareMode = raster.status === 'rendered' ? 'png' : 'svg';
+    return { size, width, height, svg, raster, shareMode };
   }
 
   /**
