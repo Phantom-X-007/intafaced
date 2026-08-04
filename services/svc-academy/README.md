@@ -149,3 +149,16 @@ Appoint / freeze / public badge. **No pay.** Hosting still uses §4.1 `lobbyHost
 
 Migration: `drizzle/0001_ambassadors.sql`.
 
+## Tournament ladders (Stage-1 — no prize money)
+
+Seasons + ranked standings. **No prize pools.** Kill-switch: `ACADEMY_TOURNAMENT_ENABLED` (flag `academy.tournament`).
+
+| Capability | Gate |
+| --- | --- |
+| List seasons / standings | `academy:read` when enabled |
+| Create season / set status / set score | `admin:write` |
+| Prize fund / payout | **Not built** (Class M Stage-2) |
+
+Anti-cheat basics: scores only while season `live`; rank = score DESC, earlier `updated_at` wins ties; frozen/ended refuse score writes.
+
+Migration: `drizzle/0002_tournaments.sql`.

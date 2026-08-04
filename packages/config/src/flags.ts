@@ -183,7 +183,7 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   // is the same drift pointed the other way — noted, not laundered into a claim.
   def('token.tge', 'token', 'IV', 'TGE + listing', NOT_ENFORCED),
   def('token.staking', 'token', 'IV', 'Staking live', NOT_ENFORCED),
-  def('academy.tournament', 'academy', 'IV', 'Tournament engine', NOT_ENFORCED),
+  def('academy.tournament', 'academy', 'IV', 'Tournament engine', serviceEnv('svc-academy', 'ACADEMY_TOURNAMENT_ENABLED')),
 
   // Drop V · Seasons
   def('identity.seasonEngine', 'identity', 'V', 'Seasonal XP + ladders', NOT_ENFORCED),

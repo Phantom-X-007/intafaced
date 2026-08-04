@@ -171,5 +171,53 @@ export const ambassadors = academy.table(
   (t) => [index('ambassadors_status_idx').on(t.status, t.appointedAt)],
 );
 
-export const schema = { rooms, roomInvites, sessions, sessionAttendees, ambassadors };
+
+/** Tournament seasons — Stage-1 ladder metadata (no prize balances). */
+export const seasonStatusEnum = academy.enum('season_status', ['scheduled', 'live', 'frozen', 'ended']);
+
+export const tournamentSeasons = academy.table(
+  'tournament_seasons',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    slug: text('slug').notNull(),
+    title: text('title').notNull(),
+    status: seasonStatusEnum('status').notNull().default('scheduled'),
+    rulesSummary: text('rules_summary').notNull(),
+    startsAt: tstz('starts_at').notNull(),
+    endsAt: tstz('ends_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('tournament_seasons_slug_idx').on(t.slug),
+    index('tournament_seasons_status_idx').on(t.status, t.startsAt),
+  ],
+);
+
+export const tournamentStandings = academy.table(
+  'tournament_standings',
+  {
+    seasonId: uuid('season_id')
+      .notNull()
+      .references(() => tournamentSeasons.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    score: integer('score').notNull().default(0),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('tournament_standings_pk').on(t.seasonId, t.userId),
+    index('tournament_standings_rank_idx').on(t.seasonId, t.score, t.updatedAt),
+  ],
+);
+
+export const schema = {
+  rooms,
+  roomInvites,
+  sessions,
+  sessionAttendees,
+  ambassadors,
+  tournamentSeasons,
+  tournamentStandings,
+};
+
 

@@ -61,6 +61,17 @@ const schema = serviceEnvSchema
        * up.
        */
       ACADEMY_MAX_ROOM_CAPACITY: z.coerce.number().int().min(1).max(100_000).default(5_000),
+
+      /**
+       * Stage-1 tournament ladder kill-switch (mirrors flag `academy.tournament`).
+       * When false, season/standing procedures refuse `academy.tournament_disabled`.
+       */
+      ACADEMY_TOURNAMENT_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) =>
+          typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase()),
+        ),
     }),
   );
 

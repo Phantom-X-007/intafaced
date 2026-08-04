@@ -722,6 +722,7 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'trade.spot'],
+    note: 'Stage-1 2026-08-04: seasons + standings + ACADEMY_TOURNAMENT_ENABLED. Prize pools Class M residual — not tracker done.',
   }),
   f('academy.paper-trading', 'Paper-trading market flag for workbooks', {
     module: 'academy',

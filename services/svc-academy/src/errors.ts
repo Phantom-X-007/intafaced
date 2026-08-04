@@ -32,7 +32,13 @@ export type AcademyErrorCode =
   | 'academy.ambassador_not_found'
   | 'academy.ambassador_already_active'
   | 'academy.ambassador_already_frozen'
-  | 'academy.ambassador_invalid';
+  | 'academy.ambassador_invalid'
+  /** Tournament ladder Stage-1. */
+  | 'academy.tournament_disabled'
+  | 'academy.season_not_found'
+  | 'academy.season_not_live'
+  | 'academy.season_invalid'
+  | 'academy.standing_invalid';
 
 export class AcademyError extends Error {
   constructor(

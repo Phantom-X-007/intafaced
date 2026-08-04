@@ -94,6 +94,24 @@ const ambassadorBadgeOut = z.object({
   status: ambassadorStatus.nullable(),
 });
 
+const seasonStatus = z.enum(['scheduled', 'live', 'frozen', 'ended']);
+const seasonOut = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  title: z.string(),
+  status: seasonStatus,
+  rulesSummary: z.string(),
+  startsAt: z.date(),
+  endsAt: z.date().nullable(),
+});
+const standingOut = z.object({
+  seasonId: z.string().uuid(),
+  userId: z.string().uuid(),
+  score: z.number().int(),
+  updatedAt: z.date(),
+  rank: z.number().int(),
+});
+
 const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room, minStake: formatAmount(room.minStake) });
 
 /**
@@ -137,6 +155,19 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.ambassador_already_active':
     case 'academy.ambassador_already_frozen':
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+
+    case 'academy.season_not_found':
+      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+
+    case 'academy.tournament_disabled':
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+
+    case 'academy.season_not_live':
+      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+
+    case 'academy.season_invalid':
+    case 'academy.standing_invalid':
+      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
 
     case 'academy.stake_unavailable':
     case 'academy.stream_unavailable':
@@ -366,6 +397,64 @@ export function createAcademyRouter(academy: AcademyService) {
           }),
         ),
       ),
+
+    // ── Tournament ladders Stage-1 (NO PRIZE MONEY) ───────────────────────────
+    //
+    // Gated by ACADEMY_TOURNAMENT_ENABLED. Operator creates/starts seasons;
+    // standings are readable by academy:read. Score writes are admin:write until
+    // a paper/live source is product-lawed (Stage-2+).
+
+    seasons: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ status: seasonStatus.optional() }).optional())
+      .output(z.array(seasonOut))
+      .query(({ input }) =>
+        guard(async () => academy.listSeasons({ ...(input?.status ? { status: input.status } : {}) })),
+      ),
+
+    season: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid() }))
+      .output(seasonOut)
+      .query(({ input }) => guard(() => academy.season(input.seasonId))),
+
+    standings: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid() }))
+      .output(z.array(standingOut))
+      .query(({ input }) => guard(() => academy.standings(input.seasonId))),
+
+    createSeason: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          slug: z.string().min(3).max(64),
+          title: z.string().min(3).max(160),
+          rulesSummary: z.string().min(8).max(4000),
+          startsAt: z.coerce.date(),
+          endsAt: z.coerce.date().nullable().optional(),
+        }),
+      )
+      .output(seasonOut)
+      .mutation(({ input }) =>
+        guard(() =>
+          academy.createSeason({
+            slug: input.slug,
+            title: input.title,
+            rulesSummary: input.rulesSummary,
+            startsAt: input.startsAt,
+            endsAt: input.endsAt ?? null,
+          }),
+        ),
+      ),
+
+    setSeasonStatus: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid(), status: seasonStatus }))
+      .output(seasonOut)
+      .mutation(({ input }) => guard(() => academy.setSeasonStatus(input))),
+
+    setStanding: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid(), userId: z.string().uuid(), score: z.number().int() }))
+      .output(standingOut.omit({ rank: true }))
+      .mutation(({ input }) => guard(() => academy.setStanding(input))),
+
+
   });
 }
 
