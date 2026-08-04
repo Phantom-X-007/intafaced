@@ -22,18 +22,37 @@
  * `internalServiceEnvSchema` and its compose block supplied only the edge
  * secret. Same defect, same latency, not yet triggered.
  *
+ * It then found it a THIRD time. That gap was fixed by #442, and reverted 26
+ * minutes later by an unrelated merge; this gate caught the revert on a rebase
+ * a day afterwards, when nothing else had. See FIXED_IN_OPEN_PR below — that
+ * sequence is the argument for this file existing.
+ *
  * It matters most during a ROTATION. Rotating a shared secret means editing
  * every consumer; getting three of four is the same failure with a worse blast
  * radius, and the fourth service will not tell you until it restarts. See
  * docs/SECRET-ROTATION-READINESS-2026-08-03.md for the blast-radius map this
  * check mechanises.
  *
- * WHAT IT DOES NOT DO: it never reads a secret's value, and it never asserts a
- * secret is *set* — `${VAR:?…}` already makes compose refuse to start for that.
- * It asserts only that the WIRING exists: schema requires it, compose passes it.
+ * WHAT IT DOES NOT DO, stated so the green line is not read as more than it is:
+ *
+ *   · It never reads a secret's VALUE, and never asserts one is set — `${VAR:?…}`
+ *     already makes compose refuse to start for that. It asserts only that the
+ *     WIRING exists: schema requires it, compose passes it.
+ *   · It covers SECRET-SHAPED names only (see `SECRET_VAR`). A required
+ *     `DATABASE_URL` absent from compose crash-loops identically and is invisible
+ *     here. The name of this file is `compose-SECRET-parity` for that reason.
+ *   · Both sides are read with regexes, not with a TS parser and a YAML parser.
+ *     The requirement side fails toward MISSING a requirement (a false negative);
+ *     the compose side fails toward seeing FEWER supplied variables (a false
+ *     alarm). Neither direction can invent a green tick out of a real gap, and
+ *     the zero-comparison guard at the bottom refuses the degenerate case where
+ *     a parse stops matching entirely.
+ *   · `env_file:` is not read. Nothing in this compose file uses it today; a
+ *     service that started to would show up as a false alarm, not a false pass.
  *
  * Exit 0 = every required secret is wired. Exit 1 = a service would crash-loop
- * on its next container recreate.
+ * on its next container recreate, is in no compose block at all, or a parse
+ * stopped matching and nothing was actually compared.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -203,14 +222,26 @@ const supplied = new Map();
  * produced a merge conflict on a file that PR already touches, and claim-check
  * warns about exactly that.
  */
-// Empty, and that is the point: the one entry it held — svc-academy missing
-// INTERNAL_SERVICE_SECRET, deferred to PR #442 — was removed when #442 merged.
+// Empty, and the story of how it emptied is the best evidence this gate is
+// worth having.
 //
-// The gate FAILED on it first. That is the anti-rot rule working: an entry here
-// says "a real gap, already fixed on a branch", and the moment that stops being
-// true it must stop being here. Otherwise this list quietly becomes an
-// exemption list, which is how a gate ends up green while the thing it guards
-// is broken.
+// The one entry it ever held was svc-academy missing INTERNAL_SERVICE_SECRET,
+// deferred to PR #442. #442 merged at 16:39 on 2026-08-03 and added the
+// `*internal-secret` merge. The entry went stale, this gate FAILED on it, and
+// the entry was deleted — the anti-rot rule working exactly as designed.
+//
+// Then, on the rebase, it failed AGAIN — and this time not on a stale excuse
+// but on a live gap. #447 ("the console had two freeze paths") had branched
+// before #442 landed, and its merge at 17:05 silently reverted that line: 26
+// minutes of fix, undone by a PR about the admin console that never mentioned
+// academy. Nothing caught it, because the failure mode is a container that is
+// never created — no crash loop, no logs, nothing to notice. The line is
+// restored in the same commit as this comment.
+//
+// That is the difference between a gate that proves and a gate that asserts. A
+// human had already verified #442 by running the image; the fix still went away
+// silently 26 minutes later. Only something that re-derives both sides on every
+// run could have said so.
 const FIXED_IN_OPEN_PR = [];
 const excusedKey = (svc, missing) => `${svc}:${[...missing].sort().join(',')}`;
 const EXCUSED = new Map(FIXED_IN_OPEN_PR.map((e) => [excusedKey(e.svc, e.missing), e]));
@@ -222,7 +253,7 @@ const notDeployed = [];
 const seenExcuses = new Set();
 for (const [svc, need] of required) {
   if (!supplied.has(svc)) {
-    if (need.size > 0) notDeployed.push(svc);
+    if (need.size > 0) notDeployed.push({ svc, need: [...need].sort() });
     continue;
   }
   const missing = [...need].filter((v) => !supplied.get(svc).has(v)).sort();
@@ -254,6 +285,35 @@ if (staleExcuses.length > 0) {
   process.exit(1);
 }
 
+/**
+ * ── THE OTHER HALF OF THE SAME SILENCE ──────────────────────────────────────
+ *
+ * A service whose env.ts demands secrets and which has NO block in compose at
+ * all is not "wired differently" — it is not deployed, and #442 is what that
+ * looks like: `EnvError` at import, no container, therefore no restart loop and
+ * no logs for anyone to read.
+ *
+ * This started life as a count on the green line. That was an assertion, not a
+ * check: it made the condition visible to whoever happened to read the summary
+ * and blocked nothing. Measured on the commit this became a failure, the count
+ * is zero — all 17 services carrying required secrets have a compose block — so
+ * hardening it costs nothing today and refuses the eighteenth that does not.
+ *
+ * If a service is deliberately not in this file (run only in CI, or deployed by
+ * something else), the honest fix is to say so where someone will read it, not
+ * to let the fleet definition and the service list disagree in silence.
+ */
+if (notDeployed.length > 0) {
+  console.error(`\n✖ COMPOSE SECRET PARITY FAILED — ${notDeployed.length} service(s) require secrets and are in no ${COMPOSE} block\n`);
+  for (const { svc, need } of notDeployed) {
+    console.error(`  ${svc} — requires ${need.join(', ')} and has no compose service of that name`);
+    console.error('      it is not misconfigured, it is not deployed: no container, no logs, no restart loop.\n');
+  }
+  console.error(`  Give it a block in ${COMPOSE}, or rename the mismatched one — a service list and a`);
+  console.error('  fleet definition that disagree is exactly the silence #442 hid in.\n');
+  process.exit(1);
+}
+
 if (gaps.length > 0) {
   console.error(`\n✖ COMPOSE SECRET PARITY FAILED — ${gaps.length} service(s) would crash-loop on their next container recreate\n`);
   for (const { svc, missing } of gaps) {
@@ -273,7 +333,21 @@ if (gaps.length > 0) {
 }
 
 const checked = [...required.values()].reduce((n, s) => n + s.size, 0);
-console.log(
-  `✓ compose-secret-parity — ${checked} required secret binding(s) across ${supplied.size} compose service(s) wired` +
-    (notDeployed.length > 0 ? `; ${notDeployed.length} service(s) not in ${COMPOSE}` : ''),
-);
+
+/**
+ * A scan that walked nothing is a failure, not a pass — the house rule, and the
+ * one this file would otherwise be most vulnerable to. Both halves are parsed
+ * with regexes: if the per-service `env.ts` files stop matching, or the compose
+ * file is reformatted past the indentation these patterns expect, the outcome
+ * is zero requirements compared against zero suppliers and a green tick over
+ * nothing. Refuse it here instead.
+ */
+if (required.size === 0 || supplied.size === 0 || checked === 0) {
+  console.error('\n✖ COMPOSE SECRET PARITY FAILED — NOTHING WAS COMPARED.');
+  console.error(`  ${required.size} service env schema(s), ${checked} required secret binding(s), ${supplied.size} compose service(s).`);
+  console.error('  A zero on any of those means a parse stopped matching, not that the fleet is clean.');
+  console.error(`  Check requiredSecretsIn() against the per-service env.ts, and the environment: parse against ${COMPOSE}.\n`);
+  process.exit(1);
+}
+
+console.log(`✓ compose-secret-parity — ${checked} required secret binding(s) across ${supplied.size} compose service(s) wired`);

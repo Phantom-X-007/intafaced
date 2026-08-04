@@ -262,26 +262,31 @@ The lasting contribution here is not the one-line fix; it is that the class is n
 
 ## 5 · Owner action list
 
-Nothing below has been done. Each item names what to rotate, where it is set, what to restart, and how to know it worked. **Order matters:** OWNER-1 first because it can move value.
+Every **rotation** below is still outstanding — no credential named here has been changed. Some of the surrounding code fixes have since landed on other PRs and are struck through where that is true; a struck-through step is a literal removed from HEAD, never a value rotated. Each item names what to rotate, where it is set, what to restart, and how to know it worked. **Order matters:** OWNER-1 first because it can move value.
 
 ### OWNER-1 — the two ECT withdrawal secrets · **highest severity**
+
+> **Updated 2026-08-04 — the code half is done, the rotation is not.**
+> While this branch was open, [#720](https://github.com/theplugXE/plug-x-inta/pull/720) landed steps 2 and 3 below: `coin.withdraw-wallet` is now `${ECT_WITHDRAW_WALLET_SECRET}` with a boot refusal on the disclosed value (`EctWithdrawSecretConfig`), and the `EctApi` `main()` harness is deleted. The env var is documented in [`docs/OWNER-ACTIONS-WALLET-RPC-SECRETS.md`](OWNER-ACTIONS-WALLET-RPC-SECRETS.md), not `.env.example` — this module is not in `docker-compose.apps.yml`.
+> The two `KNOWN_DISCLOSED` entries in `tooling/ci/secret-scan.mjs` were deleted on this branch as a result. **They were not deleted because anyone remembered:** the staleness rule turned the scan red on the rebase and named both entries. That is the forcing function step 4 predicted, working.
+> **Steps 1 and 4 remain open, and step 1 is the one that matters.** Both seeds are still in git history and are still disclosed. Removing a literal from HEAD has never been able to un-disclose it — only moving the value can. This item stays open until an owner does that.
 
 **Precondition, and it is a hard one:** [`docs/adr/2026-08-02-adopt-vendored-product-keep-our-ledger.md`](adr/2026-08-02-adopt-vendored-product-keep-our-ledger.md) §62 — _"A security review is a precondition of adoption, not a follow-up."_ Whether `01_wallet_rpc` ever runs against real value is an open owner decision (§94). **Do not deploy this service to rotate these secrets. Rotate them because they are disclosed, and keep the service off until the review is done.**
 
 Two distinct secrets, both permanently disclosed in git history:
 
-1. **`vendor/coinexchange/01_wallet_rpc/ect/src/main/resources/application.properties:14`** — key `coin.withdraw-wallet`. The withdrawal signing seed. `WalletController:47` reads it straight into `EctApi.sendFrom`, which POSTs it as a JSON field named `secret` to `coin.rpc` **over plain HTTP**. The key name is why no gate saw it: in the ETH family the same key holds a harmless keystore filename.
-2. **`vendor/coinexchange/01_wallet_rpc/ect/src/main/java/com/bizzan/bc/wallet/component/EctApi.java:152`** — a **second** seed, hard-coded in a `main()` that signs a real transfer to a hard-coded counterparty account, against the hard-coded third-party IP on line 17, over plain HTTP.
+1. **`vendor/coinexchange/01_wallet_rpc/ect/src/main/resources/application.properties`**, key `coin.withdraw-wallet` (line 14 as committed; the key is now line 28 and holds a placeholder). The withdrawal signing seed. `WalletController:47` reads it straight into `EctApi.sendFrom`, which POSTs it as a JSON field named `secret` to `coin.rpc` **over plain HTTP**. The key name is why no gate saw it: in the ETH family the same key holds a harmless keystore filename.
+2. **`vendor/coinexchange/01_wallet_rpc/ect/src/main/java/com/bizzan/bc/wallet/component/EctApi.java`**, line 152 as committed (the `main()` is now deleted; a comment at line 159 records it) — a **second** seed, hard-coded in a `main()` that signed a real transfer to a hard-coded counterparty account, against a hard-coded third-party IP, over plain HTTP.
 
 **Do:**
 
-1. Treat **both** as compromised. Move any value they control to freshly generated addresses. Rotating a seed does not recover a key that has been public in a repository — **the destination must change, not just the credential.**
-2. Delete the `main()` at `EctApi.java:150–155`. It is a scratch harness that signs real transfers and has no reason to ship. (Not done here: the module **cannot be compiled from this tree** — its `pom.xml` lists an untracked `xrp` module, A1.4 §1 — so an edit to a withdrawal path could not be verified.)
-3. Move `coin.withdraw-wallet` to `${ECT_WITHDRAW_WALLET_SECRET}` with **no default**, matching the pattern A1.4 applied to 22 other files, and document it in `.env.example`.
-4. `coin.rpc` is plain HTTP and the seed is in the request body. **Either terminate TLS in front of it or do not run it.**
+1. **OPEN.** Treat **both** as compromised. Move any value they control to freshly generated addresses. Rotating a seed does not recover a key that has been public in a repository — **the destination must change, not just the credential.**
+2. ~~Delete the `main()` at `EctApi.java:150–155`.~~ **Done by #720**, replaced by a comment recording what was there and why it went. It was a scratch harness that signed real transfers.
+3. ~~Move `coin.withdraw-wallet` to `${ECT_WITHDRAW_WALLET_SECRET}` with **no default**.~~ **Done by #720** — and better than asked: `EctWithdrawSecretConfig` refuses to boot if the variable is unset _or_ still holds the disclosed literal, so a redeploy cannot quietly reuse it.
+4. **OPEN.** `coin.rpc` is plain HTTP and the seed is in the request body. **Either terminate TLS in front of it or do not run it.** Steps 2 and 3 do nothing about this: a freshly rotated seed sent in cleartext is disclosed again on first use.
 
 **Restart:** nothing — the service is not running and should not be started until the security review.
-**Verify:** the old addresses hold no value; `pnpm scan:secrets` no longer lists `OWNER-1` (after step 3 the register entries must be deleted, or the staleness rule fails the build — which is the intended forcing function).
+**Verify:** the old addresses hold no value. Note that `pnpm scan:secrets` no longer lists `OWNER-1` **and that is not evidence of rotation** — the register entries went when the literals left HEAD, which is a different fact. The scan can only ever see the code; whether the value moved is a question for the chain, not for CI.
 
 ### OWNER-2 — NetEase captcha key pair · **new, §4.1**
 

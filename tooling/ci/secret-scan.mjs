@@ -384,22 +384,28 @@ const KNOWN_DISCLOSED = [
   // host is 127.0.0.1 — the matched dev pair this file already argues is not a
   // disclosure. It was in this register on the first draft; the staleness rule
   // above is what caught the mistake.
-  {
-    file: 'vendor/coinexchange/01_wallet_rpc/ect/src/main/resources/application.properties',
-    line: 14,
-    check: 'secret-by-convention',
-    action: 'OWNER-1 — ECT withdrawal seed (properties)',
-    reason:
-      'the ECT withdrawal signing seed, under a key name (`coin.withdraw-wallet`) that holds a harmless keystore filename everywhere else. Read straight into `EctApi.sendFrom` and POSTed as a JSON field named `secret` over PLAIN HTTP.',
-  },
-  {
-    file: 'vendor/coinexchange/01_wallet_rpc/ect/src/main/java/com/bizzan/bc/wallet/component/EctApi.java',
-    line: 152,
-    check: 'wallet-signing-literal',
-    action: 'OWNER-1 — ECT withdrawal seed (main harness)',
-    reason:
-      'a SECOND ECT withdrawal seed, hard-coded in a `main()` that signs a real transfer to a hard-coded counterparty account against a hard-coded third-party IP over plain HTTP. Deleting the `main()` is almost certainly right and is in the owner list; it is a change to a withdrawal path in a module that does not compile here.',
-  },
+  // ── OWNER-1, the two ECT withdrawal seeds: REMOVED 2026-08-04, and the way
+  // they left is the point of rule 2 above.
+  //
+  // Both were registered here on this branch: the seed committed as
+  // `coin.withdraw-wallet` in the ect module's properties, and a second one
+  // hard-coded in an `EctApi` `main()` that signed a real transfer. While this
+  // branch was open, #720 removed both from HEAD — the property is now
+  // `${ECT_WITHDRAW_WALLET_SECRET}` with a boot refusal on the disclosed value,
+  // and the `main()` is deleted. That PR deliberately did not edit this file,
+  // because this branch already had it open; its own residual note says so.
+  //
+  // Nobody had to remember. On the rebase onto that work, the two entries no
+  // longer matched a real finding and the scan went RED and named them — which
+  // is the whole reason an entry that has stopped being true is a failure
+  // rather than a silent pass. Had this list been advisory, it would now be
+  // covering two findings that are gone while implying they are still there.
+  //
+  // What did NOT change: the seeds are still disclosed in git history, so
+  // OWNER-1 in docs/SECRET-ROTATION-READINESS-2026-08-03.md stays open. It is
+  // an owner rotation, and removing a literal from HEAD has never been able to
+  // un-disclose it. The entries left this register because the CODE finding is
+  // gone, not because the RISK is.
 ];
 
 const registerKey = (v) => `${v.file.replace(/\\/g, '/')}:${v.line}:${v.check}`;
