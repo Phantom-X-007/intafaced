@@ -271,6 +271,33 @@ export function createNotifyRouter(notify: NotifyService) {
         .input(z.object({ notificationId: z.string().uuid() }))
         .output(z.array(deliveryOutput))
         .query(async ({ ctx, input }) => (await notify.deliveriesFor(ctx.principal.userId, input.notificationId)).map(deliveryToWire)),
+
+      /** Out-of-app mute prefs. Critical severity never respects mute (dispatch law). */
+      mutePrefs: scopedProcedure('notify:read', { module: 'notify' })
+        .output(
+          z.array(
+            z.object({
+              channel: z.enum(['email', 'push', 'sms']),
+              muted: z.boolean(),
+            }),
+          ),
+        )
+        .query(({ ctx }) => notify.listMutePrefs(ctx.principal.userId)),
+
+      setMute: scopedProcedure('notify:write', { module: 'notify' })
+        .input(z.object({ channel: z.enum(['email', 'push', 'sms']), muted: z.boolean() }))
+        .output(
+          z.array(
+            z.object({
+              channel: z.enum(['email', 'push', 'sms']),
+              muted: z.boolean(),
+            }),
+          ),
+        )
+        .mutation(({ ctx, input }) => {
+          notify.setChannelMute(ctx.principal.userId, input.channel, input.muted);
+          return notify.listMutePrefs(ctx.principal.userId);
+        }),
     }),
   });
 }

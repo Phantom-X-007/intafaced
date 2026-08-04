@@ -6,6 +6,7 @@ import type { ChannelRegistry, ChannelStatus } from './channels/registry.js';
 import { ChannelRefusal, type OutOfAppChannel, type RefusalCode } from './channels/channel.js';
 import { normaliseLocale, renderVerification } from './channels/render.js';
 import { withNotifySpan } from './tracing.js';
+import type { ChannelMutePrefs, MemoryMuteStore, MuteableChannel } from './preferences/mute.js';
 
 /**
  * svc-notify — event-driven fan-out (ops.notifications).
@@ -50,6 +51,8 @@ export interface NotifyServiceDeps {
   readonly deliveries: DeliveryStore;
   readonly channels: ChannelRegistry;
   readonly dispatcher: NotificationDispatcher;
+  /** Stage-1 in-memory mute prefs (durable store residual). */
+  readonly muteStore?: MemoryMuteStore;
 }
 
 /** Confirmation codes are compared as hashes, and only ever stored as one. */
@@ -255,5 +258,28 @@ export class NotifyService {
       if (!own) return [];
       return this.deps.deliveries.listForNotification(notificationId);
     });
+  }
+
+  // ── Preferences (mute) ─────────────────────────────────────────────────────
+
+  getMutePrefs(userId: string): ChannelMutePrefs {
+    return this.deps?.muteStore?.get(userId) ?? { muted: new Set() };
+  }
+
+  setChannelMute(userId: string, channel: MuteableChannel, muted: boolean): ChannelMutePrefs {
+    const store = this.deps?.muteStore;
+    if (!store) {
+      // Process without mute store still applies pure toggle ephemerally? Refuse — no sink.
+      throw new Error('Mute preferences store is not configured');
+    }
+    return store.setMuted(userId, channel, muted);
+  }
+
+  listMutePrefs(userId: string): { channel: MuteableChannel; muted: boolean }[] {
+    const prefs = this.getMutePrefs(userId);
+    return (['email', 'push', 'sms'] as const).map((channel) => ({
+      channel,
+      muted: prefs.muted.has(channel),
+    }));
   }
 }
