@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**44 of 108 shipped (41%)** · 3 in progress · 33 ready to claim · 28 blocked · 25 deliberate §13 sockets
+**44 of 108 shipped (41%)** · 3 in progress · 32 ready to claim · 29 blocked · 25 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -42,7 +42,6 @@ pnpm wt feat/<the-thing>
 | CardIssuerAdapter + card-sim, <2s auth decision | `bank` | 5 | `bank.cards` |
 | Fiat on/off ramp reusing svc-pay adapters | `bank` | 5 | `bank.ramps` |
 | Navigator — tool-calling inside user guardrails | `agents` | 5 | `agents.navigator` |
-| Support agent — KB + account-state grounded | `agents` | 5 | `agents.support` |
 | Market Scanner — ranked signals by tier | `agents` | 5 | `agents.scanner` |
 | 2D navigable room canvas, VR-ready scene state | `academy` | 5 | `academy.spatial` |
 | DERIV//DESK library import — 20 playbooks + 3 workbooks | `academy` | 5 | `academy.curriculum` |
@@ -213,7 +212,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Fiat on/off ramp reusing svc-pay adapters <br/>_**Reclaimed 2026-08-04** M6 — Nitro agents thin Class M._ | F |  | `bank.ramps` |
 | ✅ | Model-agnostic gateway, per-user metering <br/>_Reference mount — the /trpc + createEdgeContext recipe every other service copies_ | F |  | `agents.gateway` |
 | 🟢 | Navigator — tool-calling inside user guardrails | F |  | `agents.navigator` |
-| 🟢 | Support agent — KB + account-state grounded | F |  | `agents.support` |
+| ⛔ | Support agent — KB + account-state grounded <br/>_Stage-1 2026-08-04: supportAgentGuardrail — read-only support tools + support.classify/reply tasks; money tools (ledger/pay/bank/trade/p2p) refused undeclared. Stage-2: KB grounding via ops.support. Not tracker done until grounded env._ | F | `ops.support` | `agents.support` |
 | 🟢 | Market Scanner — ranked signals by tier <br/>_Stage-1 2026-08-04: pure fixture rank in svc-agents (`scanner/rank.ts`) — empty/stale/incomplete refuse with copy keys; no invent prices; no auto-trade. Live tools + shell UX residual. Not tracker done until allowlisted live data path._ | F |  | `agents.scanner` |
 | ⛔ | Merchant agent — approval-rate watch | F | `pay.routing` | `agents.merchant` |
 | ⛔ | Copy-Intel — writes audited leader stats | F | `trade.copy` | `agents.copy-intel` |

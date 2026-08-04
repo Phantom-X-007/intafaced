@@ -16,7 +16,7 @@ Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 6/16 · **3P** 1/8 · **
 
 **In progress:** Pro terminal — depth, charts, hotkeys, sub-accounts (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
 
-**🟢 33 ready to claim** — nothing blocks these:
+**🟢 32 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
@@ -26,7 +26,7 @@ Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 6/16 · **3P** 1/8 · **
 - `trade.algo` — TWAP / VWAP / POV execution
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
 - `trade.mm-bot` — Internal market-maker seeding books at launch
-- …and 25 more
+- …and 24 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
