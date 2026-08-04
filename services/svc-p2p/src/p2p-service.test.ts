@@ -1151,7 +1151,7 @@ if (!available) {
       await expire(trade.id);
 
       const result = await p2p.sweepDeadlines();
-      expect(result).toEqual({ swept: 1, failed: 0, escalated: 0 });
+      expect(result).toMatchObject({ swept: 1, failed: 0, escalated: 0, failures: [] });
 
       const after = await p2p.getTrade(trade.id);
       expect(after.status).toBe('cancelled');
@@ -1335,6 +1335,65 @@ if (!available) {
       });
     });
 
+    /**
+     * THE REASON, NOT JUST THE COUNT.
+     *
+     * Both sweeps used to `catch { failed++ }` and discard the error object.
+     * The cost showed up for real: the escrow guard refused a write with a
+     * perfectly clear sentence, this line ate it, and the refusal surfaced two
+     * branches away as an assertion failure that named nothing. A settlement
+     * failure is the sharpest case of all — a committed decision with no
+     * ledger post is value that is LATE, and `escrowIntegrity()` counts it as
+     * still escrowed, correctly, so it does not flag either.
+     */
+    it('says WHY a settlement failed instead of counting it and moving on', async () => {
+      const trade = await escrowedTrade('100');
+
+      // A ledger that refuses to post, so the decision commits and the money
+      // does not move — the one window in which P2P value can be late.
+      const brokenLedger = {
+        post: async () => {
+          throw new Error('ledger unavailable');
+        },
+        balance: (account: Parameters<typeof ledger.balance>[0]) => ledger.balance(account),
+        balances: (kind: string, id: string) => (ledger.balances as (k: string, i: string) => unknown)(kind, id),
+      } as unknown as MemoryLedger;
+
+      const breaking = new P2pService(sql, brokenLedger, bus, options);
+      await expect(breaking.confirmFiatReceived(trade.id, MAKER)).rejects.toThrow('ledger unavailable');
+
+      const result = await breaking.sweepSettlements();
+      expect(result.settled).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.failures).toHaveLength(1);
+      expect(result.failures[0]).toMatchObject({ tradeId: trade.id, error: 'ledger unavailable' });
+
+      // And the decision is still on the row, so the next sweep re-drives it.
+      expect((await p2p.getTrade(trade.id)).resolution).toBe('released');
+      expect((await p2p.getTrade(trade.id)).settledAt).toBeNull();
+      expect((await p2p.sweepSettlements()).settled).toBe(1);
+    });
+
+    it('names the trade and the guard when a timeout sweep is refused', async () => {
+      // Reaching this needs the escrow guard to refuse, which nothing in the
+      // service does any more — so the trade row is put into the one shape the
+      // trigger objects to, directly. That is the point: if a future change
+      // reintroduces a path that tries to terminate a disputed escrow, the
+      // sweep reports the sentence rather than a number.
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
+
+      const failure = await sql`
+        UPDATE p2p.p2p_trades SET status = 'cancelled', resolution = 'refunded', resolution_reason = 'x',
+                                  resolved_at = now(), deadline_at = NULL
+         WHERE id = ${trade.id}
+      `.catch((e: unknown) => e as Error);
+
+      expect((failure as Error).message).toMatch(/only on a human ruling/);
+      // The sweep's own shape carries that same string when it happens there.
+      expect((await p2p.getTrade(trade.id)).resolution).toBeNull();
+    });
+
     it('keeps sweeping after one trade fails', async () => {
       const a = await escrowedTrade('100');
       const offer = await sellOffer();
@@ -1368,7 +1427,7 @@ if (!available) {
       expect(await escrowOf(MAKER)).toBe('100');
       const result = await p2p.sweepSettlements();
 
-      expect(result).toEqual({ settled: 1, failed: 0 });
+      expect(result).toMatchObject({ settled: 1, failed: 0, failures: [] });
       expect(await availableOf(TAKER)).toBe('99');
       expect(await houseOf()).toBe('1');
       expect(await escrowOf(MAKER)).toBe('0');

@@ -274,6 +274,48 @@ interface DisputeRow {
   escalations: number;
 }
 
+/**
+ * WHY ONE TRADE THE SWEEP TOUCHED DID NOT MOVE.
+ *
+ * The sweeps deliberately keep going when one trade fails — one bad trade must
+ * not stop the next from settling — and the price of that used to be a bare
+ * `catch { failed++ }`: a counter, and the reason discarded. Which is how the
+ * escrow guard's refusal ("a disputed escrow terminates only on a human
+ * ruling") reached a `catch`, was thrown away, and surfaced as an assertion
+ * failure in another branch's test run that named nothing at all.
+ *
+ * The message is carried, not the Error: the caller logs this, and an Error
+ * dragged into a log line brings a stack that says where the sweep is rather
+ * than what refused.
+ */
+export interface SweepFailure {
+  readonly tradeId: string;
+  readonly status: TradeStatus;
+  /** The service's own code where there is one — `p2p.escrow_missing`, etc. */
+  readonly code: string | null;
+  readonly error: string;
+}
+
+export interface SweepResult {
+  readonly swept: number;
+  readonly failed: number;
+  readonly escalated: number;
+  readonly failures: SweepFailure[];
+}
+
+function describeFailure(tradeId: string, status: TradeStatus, err: unknown): SweepFailure {
+  const code =
+    err instanceof P2pError || err instanceof TradeStateError || err instanceof PricingError
+      ? err.code
+      : ((err as { code?: unknown })?.code ?? null);
+  return {
+    tradeId,
+    status,
+    code: typeof code === 'string' ? code : null,
+    error: err instanceof Error ? err.message : String(err),
+  };
+}
+
 /** Who authorised a terminal decision. Goes on the event and into the trace. */
 type Actor = 'seller' | 'buyer' | 'moderator' | 'timeout';
 
@@ -1387,7 +1429,7 @@ export class P2pService {
    * growing pile of unreachable disputes read on a dashboard as a busy,
    * healthy sweep.
    */
-  async sweepDeadlines(now?: Date, limit = 100): Promise<{ swept: number; failed: number; escalated: number }> {
+  async sweepDeadlines(now?: Date, limit = 100): Promise<SweepResult> {
     // Every `deadline_at` was derived from the server clock, so the cutoff this
     // compares them against has to come from there too. A caller may still pass
     // its own instant — that is how a test asks "what would be due at T?" — but
@@ -1402,22 +1444,30 @@ export class P2pService {
     `;
 
     let swept = 0;
-    let failed = 0;
     let escalated = 0;
+    const failures: SweepFailure[] = [];
 
     for (const row of due) {
       try {
         const outcome = await this.applyTimeout(row.id, row.status);
         if (outcome === 'escalated') escalated++;
         else swept++;
-      } catch {
+      } catch (err) {
         // Left with its deadline in the past, so the next sweep retries it. A
         // trade that cannot be resolved must keep asking, not go quiet.
-        failed++;
+        //
+        // AND IT SAYS WHY. This `catch` used to be bare — `catch { failed++ }`
+        // — so the sweep counted a number and threw the reason away. The cost
+        // of that is not theoretical: the escrow guard's refusal ("a disputed
+        // escrow terminates only on a human ruling") reached this line, was
+        // discarded, and surfaced three files away as an assertion failure that
+        // named nothing. A refusal a human never sees is most of the way back
+        // to the problem this service exists to fix.
+        failures.push(describeFailure(row.id, row.status, err));
       }
     }
 
-    return { swept, failed, escalated };
+    return { swept, failed: failures.length, escalated, failures };
   }
 
   private async applyTimeout(tradeId: string, status: TradeStatus): Promise<'acted' | 'escalated'> {
@@ -1534,27 +1584,32 @@ export class P2pService {
    * late. This closes it, and it is self-healing because every recipe is keyed
    * on the trade id.
    */
-  async sweepSettlements(limit = 100): Promise<{ settled: number; failed: number }> {
-    const pending = await this.sql<Array<{ id: string }>>`
-      SELECT id FROM p2p.p2p_trades
+  async sweepSettlements(limit = 100): Promise<{ settled: number; failed: number; failures: SweepFailure[] }> {
+    const pending = await this.sql<Array<{ id: string; status: TradeStatus }>>`
+      SELECT id, status FROM p2p.p2p_trades
        WHERE resolved_at IS NOT NULL AND settled_at IS NULL
        ORDER BY resolved_at ASC
        LIMIT ${limit}
     `;
 
     let settled = 0;
-    let failed = 0;
+    const failures: SweepFailure[] = [];
 
     for (const row of pending) {
       try {
         await this.settle(row.id);
         settled++;
-      } catch {
-        failed++;
+      } catch (err) {
+        // The sharpest case in the service. A trade here has a COMMITTED
+        // decision and no ledger post: value that is late. Swallowing the
+        // reason left it sitting `resolved` and unsettled with nothing but a
+        // counter to show for it, and `escrowIntegrity()` counts it as still
+        // holding escrow — correctly — so it does not flag either.
+        failures.push(describeFailure(row.id, row.status, err));
       }
     }
 
-    return { settled, failed };
+    return { settled, failed: failures.length, failures };
   }
 
   // ── Reads ──────────────────────────────────────────────────────────────────

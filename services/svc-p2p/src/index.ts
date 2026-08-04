@@ -122,8 +122,17 @@ async function sweep(): Promise<void> {
   try {
     const settled = await p2p.sweepSettlements();
     const swept = await p2p.sweepDeadlines();
-    if (settled.failed > 0 || swept.failed > 0) {
-      app.log.warn({ settled, swept }, 'p2p sweep left work behind — it will retry next tick');
+
+    // EVERY FAILURE, WITH ITS REASON, ONE LINE EACH. The sweep used to return
+    // a count and discard the error object, so "2 failed" was the whole story
+    // an operator got — and the two failures could have been a transient
+    // ledger timeout or a guard refusing something that will never succeed on
+    // its own. Those need different people out of bed.
+    for (const f of settled.failures) {
+      app.log.error({ ...f, sweep: 'settlement' }, 'p2p settlement failed — a decision is committed and the value is late');
+    }
+    for (const f of swept.failures) {
+      app.log.error({ ...f, sweep: 'timeout' }, 'p2p timeout sweep could not act on a trade');
     }
     if (swept.escalated > 0) {
       // NOT a retryable failure. These are disputes past their moderator SLA
