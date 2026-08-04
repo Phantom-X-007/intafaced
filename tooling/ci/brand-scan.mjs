@@ -324,4 +324,33 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`✓ brand-scan clean — ${scanned} files, 0 forbidden names (Doctrine §0.7)`);
+/**
+ * A walk that read nothing is a failure, not a pass.
+ *
+ * This scan has printed `clean — N files` since it was written, and nobody has
+ * ever had to ask what happens when N is 0 — because `walk` would throw on a
+ * missing ROOT and CI would go red for a different reason. That is luck, not a
+ * guard: an over-broad SKIP_DIRS entry, or an ALLOWLIST prefix that swallows
+ * more than its author meant, produces `clean — 0 files, 0 forbidden names` and
+ * a green tick, which is the single most confident-sounding wrong answer this
+ * file can give. Four scans in this repo have already been caught reporting
+ * clean about a tree they never opened.
+ */
+if (scanned === 0) {
+  console.error('\n✖ BRAND SCAN FAILED — 0 files were read. NOTHING WAS SCANNED.');
+  console.error('  This is not a clean repo; it is a scan that opened nothing. Check SKIP_DIRS,');
+  console.error('  ALLOWLIST and EXTENSIONS — one of them is now matching everything.\n');
+  process.exit(1);
+}
+
+// The count is qualified on purpose, and on the SAME line, because `gates.mjs`
+// prints only the last non-empty line as a gate's summary — a caveat on a second
+// line is a caveat nobody reads in CI.
+//
+// `vendor` is in SKIP_DIRS, so this number has never included one file of the
+// product shell, and an unqualified "clean" over a repo whose only user-facing
+// surface is skipped reads as a far larger claim than this scan can make. That
+// wording is what let the hole survive: the line was true and sounded total.
+console.log(
+  `✓ brand-scan clean — ${scanned} files, 0 forbidden names (Doctrine §0.7) · vendored trees excluded, product surface covered by shell-brand-scan`,
+);

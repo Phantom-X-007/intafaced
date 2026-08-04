@@ -29,7 +29,7 @@
  * list has no `.vue`. The product surface is 70 single-file components. Even
  * with the skip removed, the shell's actual user-facing markup would still go
  * unread. This scan adds `.vue`, and it can do that without changing what the
- * repo-wide number means for the other 955 files.
+ * repo-wide number means for the other 1009 files.
  *
  * ── ONE LIST OF NAMES, NOT TWO ──────────────────────────────────────────────
  *
@@ -56,8 +56,8 @@
  * `\b` cannot see it because `_` is a word character. Anchored, this scan finds
  * 7 hits; relaxed, 8. The eighth is the title of the product surface's README.
  *
- * Measured cost of relaxing: zero. Across 129 shell files the relaxed patterns
- * find the same 7 plus that one, and no false positive.
+ * Measured cost of relaxing: zero. Across 130 product-surface files the relaxed
+ * patterns find the same 7 plus that one, and no false positive.
  *
  * ── WHY A FROZEN BASELINE AND NOT A FIX ─────────────────────────────────────
  *
@@ -92,9 +92,12 @@
  * ── A SCAN THAT WALKS NOTHING IS A FAILURE, NOT A PASS ──────────────────────
  *
  * The bug that made this file necessary was a gate reporting success over a
- * tree it never opened. Refusing to repeat that is cheap: no shell root, no
- * files walked, or no names parsed, and this exits 1 saying so. A green tick
- * over zero files is the only outcome this scan will not produce.
+ * tree it never opened. Refusing to repeat that is cheap. Four conditions exit
+ * 1 rather than reporting clean: no forbidden names parsed, FEWER parsed than
+ * the other file declares, no shell root discovered, or a root found and no
+ * files read. A green tick over zero files is the one outcome this scan will
+ * not produce — and all four branches have been run and seen to fire, which is
+ * a different claim from having written them.
  *
  * Exit 0 = at or below the frozen baseline. Exit 1 = it grew, a row is stale,
  * or nothing was scanned.
@@ -129,7 +132,29 @@ const fingerprint = (text) => createHash('sha256').update(text, 'utf8').digest('
 function forbiddenFromRepoScan() {
   const src = readFileSync(join(ROOT, REPO_SCAN), 'utf8');
   const block = /const FORBIDDEN\s*=\s*\[([\s\S]*?)\n\];/.exec(src);
-  if (!block) return [];
+  if (!block) return { rules: [], declared: 0 };
+
+  /**
+   * How many names the other file MEANT to declare, counted independently of
+   * whether this parse can read them.
+   *
+   * Without this, drift is silent in the one direction that matters: the
+   * extractor below reads regex LITERALS only, so a name declared any other way
+   * is counted by nobody and enforced by nobody, and this scan still prints a
+   * green tick over the shorter list.
+   *
+   * The realistic case is `pattern: new RegExp(…)` — a computed or composed
+   * pattern, which is how a list like this usually grows once it gets long. A
+   * `pattern: SOME_CONST` reference behaves the same way. (A URL in a literal
+   * does NOT: `/` inside a regex literal must be written `\/`, and the extractor
+   * handles escapes. That was the first guess when this guard was written, and
+   * testing it disproved it — the guard stayed because the real cause is worse,
+   * being the one that arrives when someone tidies the list.)
+   *
+   * "Parsed some" and "parsed all" are not the same claim, so they are not
+   * allowed to look the same. A mismatch is a hard failure at the call site.
+   */
+  const declared = (block[1].match(/^\s*(?:\{\s*)?pattern:/gm) ?? []).length;
 
   const out = [];
   const declaration = /pattern:\s*\/((?:[^/\\\n]|\\.)+)\/([a-z]*)/g;
@@ -155,23 +180,12 @@ function forbiddenFromRepoScan() {
       reason: (reason && (reason[1] ?? reason[2])) || `forbidden name declared in ${posix(REPO_SCAN)}`,
     });
   }
-  return out;
+  return { rules: out, declared };
 }
 
 // ── The surface, discovered rather than named ───────────────────────────────
 
-const SKIP_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  '.next',
-  '.turbo',
-  'coverage',
-  'drizzle',
-  '.docker-data',
-  'target',
-  'build',
-]);
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.next', '.turbo', 'coverage', 'drizzle', '.docker-data', 'target', 'build']);
 
 /**
  * Identical in shape and rationale to `findShellRoots` in
@@ -294,17 +308,27 @@ const BASELINE = {
 
 // ── Run ────────────────────────────────────────────────────────────────────
 
-const FORBIDDEN = forbiddenFromRepoScan();
+const { rules: FORBIDDEN, declared: DECLARED } = forbiddenFromRepoScan();
 
 /**
- * Three ways this scan can be looking at nothing, and all three are failures.
- * A gate that passes over an empty tree is precisely the defect this file
- * exists to remove, so it is refused here rather than reported cheerfully.
+ * Four ways this scan can be looking at nothing, or at less than it claims, and
+ * all four are failures. A gate that passes over an empty tree is precisely the
+ * defect this file exists to remove, so it is refused here rather than reported
+ * cheerfully.
  */
 if (FORBIDDEN.length === 0) {
   console.error(`\n✖ shell-brand-scan — parsed 0 forbidden names out of ${posix(REPO_SCAN)}.`);
   console.error('  This scan takes its rules from that file and has none. It is not clean; it is blind.');
   console.error('  Fix the FORBIDDEN parse in forbiddenFromRepoScan(), do not ignore this line.\n');
+  process.exit(1);
+}
+
+if (FORBIDDEN.length !== DECLARED) {
+  console.error(`\n✖ shell-brand-scan — ${posix(REPO_SCAN)} declares ${DECLARED} forbidden name(s); this parse read ${FORBIDDEN.length}.`);
+  console.error('  Partial is worse than none, because it still prints a green tick over the shorter list.');
+  console.error('  The usual cause is a name declared as `new RegExp(…)` or as a reference rather than as a');
+  console.error('  regex literal — the extractor reads literals only.');
+  console.error('  Fix forbiddenFromRepoScan() until the two numbers agree — do not lower the expectation.\n');
   process.exit(1);
 }
 
@@ -333,16 +357,39 @@ for (const root of projectRoots) {
       const perLine = new RegExp(pattern.source, pattern.flags + 'g');
       lines.forEach((line, i) => {
         for (const match of line.matchAll(perLine)) {
-          findings.push({ key, reported, line: i + 1, text: match[0], fp: fingerprint(match[0]), reason, context: line.trim().slice(0, 120) });
+          findings.push({
+            key,
+            reported,
+            line: i + 1,
+            text: match[0],
+            fp: fingerprint(match[0]),
+            reason,
+            context: line.trim().slice(0, 120),
+          });
         }
       });
     }
   }
 }
 
+/**
+ * Roots found, nothing read.
+ *
+ * Stated honestly: this branch cannot be reached by any change to the SHELL,
+ * because the entry pair that identifies a root — `App.vue` and `main.js` — is
+ * itself scannable, so a discovered root always yields at least two files. It is
+ * reachable only by a change to THIS file: an emptied or narrowed EXTENSIONS
+ * list, or a SKIP_DIRS entry that swallows the tree.
+ *
+ * Kept, and proven to fire (by running a copy with EXTENSIONS emptied against
+ * the real tree), because that is exactly the class of edit that produced the
+ * bug this scan exists for. The guard costs one comparison and removes the
+ * possibility of a green tick over an empty walk.
+ */
 if (scanned === 0) {
   console.error(`\n✖ shell-brand-scan — found ${projectRoots.length} shell root(s) but walked 0 files. NOTHING WAS SCANNED.`);
-  console.error('  A gate that reports clean over an empty walk is the failure this scan exists to prevent.\n');
+  console.error('  A gate that reports clean over an empty walk is the failure this scan exists to prevent.');
+  console.error('  Nothing about the product surface can cause this — check EXTENSIONS and SKIP_DIRS in this file.\n');
   process.exit(1);
 }
 
@@ -378,7 +425,9 @@ for (const [key, frozen] of Object.entries(BASELINE)) {
 const frozenTotal = Object.values(BASELINE).reduce((n, rows) => n + rows.length, 0);
 
 if (problems.length === 0) {
-  console.log(`✓ shell-brand-scan — ${scanned} product-surface file(s), ${FORBIDDEN.length} forbidden name(s) checked, all findings at the frozen baseline`);
+  console.log(
+    `✓ shell-brand-scan — ${scanned} product-surface file(s), ${FORBIDDEN.length} forbidden name(s) checked, all findings at the frozen baseline`,
+  );
   for (const [key, rows] of Object.entries(BASELINE)) {
     const where = byFile.get(key)?.[0]?.reported ?? key;
     console.log(`  ⚠ ${where} — ${rows.length}: ${rows.map((r) => r.note).join('; ')}`);
@@ -396,7 +445,9 @@ if (problems.length === 0) {
 const grew = problems.filter((p) => p.severity === 'new');
 const stale = problems.filter((p) => p.severity === 'stale');
 
-console.error(`\n✖ SHELL BRAND SCAN FAILED — ${problems.length} problem(s). ${findings.length} finding(s) against a frozen baseline of ${frozenTotal}.\n`);
+console.error(
+  `\n✖ SHELL BRAND SCAN FAILED — ${problems.length} problem(s). ${findings.length} finding(s) against a frozen baseline of ${frozenTotal}.\n`,
+);
 
 for (const p of grew) {
   console.error(`  ${p.reported}:${p.line}`);

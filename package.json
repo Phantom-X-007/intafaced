@@ -39,6 +39,7 @@
     "scan:coverage": "node tooling/ci/coverage-check.mjs",
     "coverage:report": "node tooling/ci/coverage-check.mjs --report",
     "scan:brand": "node tooling/ci/brand-scan.mjs",
+    "scan:shell-brand": "node tooling/ci/shell-brand-scan.mjs",
     "scan:custody": "node tooling/ci/custody-scan.mjs",
     "scan:secrets": "node tooling/ci/secret-scan.mjs",
     "scan:wallet-rpc-auth": "node tooling/ci/wallet-rpc-auth-scan.mjs",
