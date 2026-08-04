@@ -22,7 +22,8 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | **P4**   | Integrity              | Invent re-scan **only if** shell code changed since last scan; P-WS report **only if** #433/#432 state changed | cycle stamp every few minutes with no delta |
 | **P5**   | Hygiene                | LIVE-LANES / claims truth when false free rows; Class N merge green Nitro                                      | R07 peace rows for unchanged freeProduct=0  |
 
-**Night/AFK after freeProduct=0:** P1→P5 above. Class N merge when green. **Not** invent depth UI. **Not** R07 cycle spam.
+**Night/AFK after freeProduct=0:** P1→P5 above. Class N merge when green. **Not** invent depth UI. **Not** R07 cycle spam.  
+**One-pager:** [`AFK-NO-STAMP-MILL.md`](./AFK-NO-STAMP-MILL.md) · **machine:** `pnpm swarm:status` / `swarm:next` print `afk-ladder` + `stamp-mill: BAN` when freeProduct=0.
 
 **Spawn width:** target **6–8 concurrent** path-disjoint free product writers when freeProduct>0. When freeProduct=0, spawn **P1–P3** workers (width 3–6), not 6–8 stamp clones. Anti-under-spawn logs `available` / `active_spawned` / `gap`.
 

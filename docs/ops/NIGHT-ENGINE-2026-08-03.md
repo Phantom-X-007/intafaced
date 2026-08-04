@@ -23,11 +23,13 @@ While AFK overnight, loop until human returns:
 | TRK-\*         | research/spec packs under docs/ops/trk/ | not full implement swarms     |
 | #425           | rebase/conflict resolve Class N         | merged or blocked with reason |
 
-Cadence: every ~15–30m re-freeze · PR matrix · merge green · spawn free · write R07.
+Cadence: every ~30–45m re-freeze · PR matrix · merge green · **spawn P1–P3 real work** when freeProduct=0.
+
+**Stamp-mill ban (2026-08-04, permanent):** do **not** open R07/R01/P-WS “cycle N” docs PRs when freeProduct stays 0 and the partner matrix is unchanged. `pnpm swarm:status` prints the AFK ladder — follow it. Law: [`SWARM-MANDATE.md`](./SWARM-MANDATE.md).
 
 ## Honest limit (not thrift theater)
 
-There is **not** infinite free product UI once residual is drained. Night value then is: partner CI hygiene, conflict unstick, integrity reports, tracker research, gate hardening — not 20 agents inventing depth.
+There is **not** infinite free product UI once residual is drained. Night value then is: **stranded branch lands**, partner CI hygiene (exact fails), conflict unstick, integrity reports **on delta**, tracker research, gate hardening — not 20 agents inventing depth and **not** tip-bump stamp spam.
 
 ## Cycle log (Coord-OPS)
 
