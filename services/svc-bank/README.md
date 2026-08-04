@@ -6,7 +6,7 @@
 
 **What this service is not:** it is not a wallet, it does not hold balances, and it does not price anything. It stores names, policies, instructions, and records of jobs that already ran. Every "how much" question is answered by `ledger.balance(...)` at the moment it is asked.
 
-This PR covers **accounts and earn only**. Loans, cards and the sovereign card are separate tracker features with their own risk profiles (`bank.loans`, `bank.cards`, `bank.sovereign-card`) and are not started here.
+Also here: **loans** (§8.1) and the **ledger half of cards**. `bank.sovereign-card` is a separate tracker feature and is not started. The card **live rail** is a §13 socket, not unbuilt code — see [Cards](#cards-what-is-built-and-what-is-a-contract).
 
 ---
 
@@ -77,6 +77,18 @@ tRPC, `packages/contracts`. All money crosses the wire as **decimal strings**.
 | `earn.withdraw`  | `bank:write` | Close a position; fixed terms enforced |
 | `earn.positions` | `bank:read`  | The user's open positions              |
 
+### `cards` — **the ledger half. There is no card programme.**
+
+| Procedure              | Scope        | Purpose                                                                       |
+| ---------------------- | ------------ | ----------------------------------------------------------------------------- |
+| `cards.programme`      | `bank:read`  | What this deployment's issuer is — including that it is a **simulator**       |
+| `cards.list`           | `bank:read`  | The user's cards. Every row carries `simulated`, never optional               |
+| `cards.issue`          | `bank:write` | Issue a card against one of the user's asset balances                         |
+| `cards.setStatus`      | `bank:write` | Freeze, unfreeze, close. The gesture a user reaches for first                 |
+| `cards.authorizations` | `bank:read`  | Every decision on the card, **approvals and declines alike**, with the reason |
+
+`authorize`, `capture` and `reverse` are **not** here. They are the issuer speaking, not the user — a user who can call `cardAuthorize` approves their own purchase — so they sit in `ops` behind `admin:treasury`. On a live rail they do not become user procedures either; they become a signed webhook owned by the issuer integration.
+
 ### `analytics`
 
 | Procedure         | Scope       | Purpose                                                     |
@@ -85,11 +97,15 @@ tRPC, `packages/contracts`. All money crosses the wire as **decimal strings**.
 
 ### `ops` — operator only
 
-| Procedure             | Scope            | Purpose                                 |
-| --------------------- | ---------------- | --------------------------------------- |
-| `ops.runDueTransfers` | `admin:treasury` | Fire every due standing order           |
-| `ops.accrueInterest`  | `admin:treasury` | One day's interest, one pool or all     |
-| `ops.fundPool`        | `admin:treasury` | Move bank revenue into a pool's reserve |
+| Procedure             | Scope            | Purpose                                                             |
+| --------------------- | ---------------- | ------------------------------------------------------------------- |
+| `ops.runDueTransfers` | `admin:treasury` | Fire every due standing order                                       |
+| `ops.accrueInterest`  | `admin:treasury` | One day's interest, one pool or all                                 |
+| `ops.fundPool`        | `admin:treasury` | Move bank revenue into a pool's reserve                             |
+| `ops.cardAuthorize`   | `admin:treasury` | The authorisation "webhook" — decide, and hold if the answer is yes |
+| `ops.cardCapture`     | `admin:treasury` | The merchant took this much; the remainder of the hold goes back    |
+| `ops.cardReverse`     | `admin:treasury` | The authorisation expired or was voided; the whole hold goes back   |
+| `ops.fundCashbackPot` | `admin:treasury` | Sweep bank revenue into the pot cashback is paid from               |
 
 The two jobs are deliberately **not user-callable**: a user who can trigger "run every due transfer" is a user who can choose when other people's money moves. `admin:treasury` is interactive-only (§4.1), so it can never be held by a long-lived API key.
 
@@ -192,6 +208,28 @@ Holding a database transaction open across the ledger call is a deliberate cost:
 
 ---
 
+## Who may be named in a refusal
+
+**A refusal may only describe objects the caller was already entitled to see. Where it cannot, it says `NOT_FOUND` and names nothing.** ([ADR, 2026-08-04](../../docs/adr/2026-08-04-authority-and-refusal-shape.md))
+
+`transfers.create` and `transfers.schedule` each name **two** spaces and owner-check **one**. That is deliberate and it stays: the debit side is the side that can lose value, and paying another user is the product — a transfer moves value between two different users' spaces, and a test pins it.
+
+What was wrong was what a **failure** said. `space-service.ts` writes its refusals for the person who owns the space (`Space "Holiday fund" is archived`, `Cannot transfer USDT into a EUR space`) and the router's mapper returned `err.message` verbatim. So transferring one atomic unit into a guessed uuid revealed whether that space existed, what its owner had **named** it, and which asset it held — for somebody else's account, without the transfer needing to succeed.
+
+Three changes, none of which removes cross-user transfer:
+
+| Where               | What it does now                                                                                                                                                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateDestination`   | Resolves the destination. Not the caller's, or absent → `NOT_FOUND`, **naming nothing**, from one construction site so the two cases cannot drift apart by a byte. Somebody else's live space in the right asset proceeds. |
+| `SpaceService.find` | The lookup that does **not** throw, so "absent" and "not yours" issue the same single query. An exception is a message, and whether one was produced is itself an oracle.                                                  |
+| `toTrpcError`       | Exhaustive over `BankErrorCode`, with a `never` in the default. Unmapped errors get `Bank operation failed (ref …)`; the detail goes to stderr as `bank.undisclosed_error` with that correlation id.                       |
+
+**Owners are unaffected.** They still get `Space "Holiday fund" is archived` and `Cannot transfer USDT into a EUR space — convert first`, and tests pin both — a service so cautious the owner cannot act is a worse bug than the leak it was written for.
+
+`assertSelf` keeps `FORBIDDEN` rather than `NOT_FOUND`, and the docblock argues why at length. Its message names nothing, so the ADR's rule is satisfied either way; the status-code half is a change to who may see what, which the ADR reserves to the owner.
+
+---
+
 ## Database constraints as a backstop
 
 The service checks these; the database enforces them regardless.
@@ -253,7 +291,44 @@ pnpm --filter @intafaced/svc-bank test
 
 Failure branches covered: insufficient funds on a one-off transfer and on a standing order, a cross-asset transfer, a debit from a user-locked space, a deposit larger than the user holds, a deposit below the pool minimum, an early withdrawal from a fixed term, a double withdrawal, eight concurrent withdrawals, eight concurrent job runs, a re-run of a rejected occurrence, an accrual from an unfunded pool (and its recovery once funded), a second accrual on the same day, six concurrent accruals, a position opened after the accrual moment, a schedule past its end date, a cancelled schedule, a native-asset earn pool, and a claim left stranded by a crashed run.
 
+## Cards: what is built, and what is a contract
+
+`bank.cards` splits in two, and the halves fail for unrelated reasons. **They are split, not resolved.**
+
+| Half          | Missing in the WORLD                                     | Verdict                                        |
+| ------------- | -------------------------------------------------------- | ---------------------------------------------- |
+| **Ledger**    | Nothing. Auth decision, balance check, decline, cashback | **Built.** `src/cards/`, 36 tests              |
+| **Live rail** | A card-scheme sponsor and an issuing BIN                 | **§13 forever.** Lands on `socket.live-issuer` |
+
+`CardIssuerAdapter` (`src/cards/issuer.ts`) is the seam. Everything above it is finished; everything below it is a licence and a contract that no amount of engineering time produces.
+
+**No new ledger recipe was needed, and that is the design.** A card spend **is a withdrawal**, so the four postings already existed:
+
+| Step                   | Recipe            | Effect                                           |
+| ---------------------- | ----------------- | ------------------------------------------------ |
+| authorisation approved | `withdrawHold`    | available → a hold account **per authorisation** |
+| capture (clearing)     | `withdrawSettle`  | hold → `railBoundary('card-sim', asset)`         |
+| the unspent remainder  | `withdrawReverse` | hold → available, in the same pass               |
+| cashback               | `rewardPay`       | `rewardsEngine(asset)` → available               |
+
+A `cardSpend` recipe would have been `withdrawSettle` with a different string in it — a second way to spell one movement, which is how two subsystems come to disagree about what happened.
+
+### `card-sim` is a simulator. What it is **not**
+
+- **NOT a card.** Nothing here can be presented at a terminal, added to a wallet, or used online. `panTail` is four digits derived from a uuid, and there is no column a card number could be stored in.
+- **NOT a connection** to a card scheme, issuer, processor or bank. It makes no network call and has no credentials to make one with.
+- **NOT a settlement rail.** `railBoundary('card-sim', asset)` records that value left **our** book; nothing is on the other side of it.
+- **NOT a decision engine.** No fraud scoring, no velocity check, no 3-D Secure, no MCC policy. There are exactly four decline reasons and each is a fact somebody can check afterwards.
+- **NOT refunds, disputes, chargebacks, or incremental authorisations.** A refund is `recipes.deposit` over the same rail and is deliberately unbuilt: it brings a product question — whether cashback on the original capture is clawed back — that inventing an answer to would make the module look finished while paying for returned purchases.
+
+`simulated: true` is on the card row, on the port, and on every router output. A deployment with **no** issuer configured refuses every card procedure with `bank.no_card_issuer` rather than falling back to the simulator — the same posture as the loan price source, and for the same reason: the dangerous default is the plausible one.
+
+**Cashback has a named source.** It is paid from `rewardsEngine(asset)`, funded by `ops.fundCashbackPot` sweeping `houseFees('bank', asset)` — fees the platform really charged. An empty pot refuses by name (`bank.cashback_pot_unfunded`) on a row, and the capture still stands: undoing a purchase the merchant already has, because a marketing promise could not be kept, would be the worse failure.
+
+---
+
 ## Sockets (§13)
 
+- **`socket.live-issuer`** — a card programme needs a **card-scheme sponsor and an issuing BIN**. That is a licence and a commercial relationship, not code: no amount of engineering time produces one, which is precisely the §13 test. `CardIssuerAdapter` is written against the shape a live issuer would implement, and the only implementation in the tree is `cardSim()`, which says on every surface that it is a simulator. Pointing working code at real money is additionally Class X.
 - **`ledger.history`** — spend analytics needs a transaction-history read that svc-ledger does not expose yet. Declaring it is a `packages/contracts` + svc-ledger PR that must land first (§1). `createLedgerHistory()` is written against the shape and **fails loudly** rather than returning an empty answer: a spend view that silently reports zero is worse than one that is unavailable, because the user cannot tell "you spent nothing" from "we could not ask".
 - **Chunked interest keys** — one accrual is one ledger transaction per (pool, day). When a pool outgrows a single transaction the key gains a deterministic chunk index, `bank.interest:<poolId>:<date>:<chunk>`, which keeps the same property per chunk. The shape was chosen so that change is additive.

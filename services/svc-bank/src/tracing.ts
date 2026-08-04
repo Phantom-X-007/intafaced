@@ -37,6 +37,10 @@ export interface MoneySpanAttributes {
   loanId?: string;
   /** Which rung of a liquidation ladder — with loanId, this identifies the seizure exactly. */
   tranche?: number;
+  /** §8.1 cards. Never a card number — there is none, and this service stores none. */
+  cardId?: string;
+  /** The issuer's reference for one authorisation. */
+  authorizationRef?: string;
 }
 
 export async function withMoneySpan<T>(name: string, attributes: MoneySpanAttributes, fn: (span: Span) => Promise<T>): Promise<T> {

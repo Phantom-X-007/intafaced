@@ -6,6 +6,7 @@ import { EarnService } from './earn/earn-service.js';
 import { SpendAnalytics } from './analytics/spend.js';
 import { LoanService, type LoanServiceOptions } from './loans/loan-service.js';
 import { fixedPriceSource } from './loans/prices.js';
+import { CardService, type CardServiceOptions } from './cards/card-service.js';
 import type { LedgerHistory } from './analytics/ledger-history.js';
 
 /**
@@ -28,6 +29,7 @@ export interface BankServices {
   readonly earn: EarnService;
   readonly analytics: SpendAnalytics;
   readonly loans: LoanService;
+  readonly cards: CardService;
 }
 
 export interface BankServiceOptions {
@@ -45,6 +47,18 @@ export interface BankServiceOptions {
    * in this module inside a composition root nobody reads.
    */
   loans?: LoanServiceOptions;
+  /**
+   * Card wiring: which issuer, if any.
+   *
+   * Not defaulted to `cardSim()`, and the omission is the same shape as the
+   * price source above. The dangerous default here is the plausible one — fall
+   * back to the simulator and an environment somebody believes is live starts
+   * approving authorisations against a counterparty that does not exist. With no
+   * issuer configured every card procedure refuses with `bank.no_card_issuer`,
+   * which is the correct posture for a deployment that has not been given a card
+   * programme (and none has one: the live rail is `socket.live-issuer`).
+   */
+  cards?: CardServiceOptions;
 }
 
 export function createBankServices(sql: Sql, ledger: LedgerClient, history: LedgerHistory, options: BankServiceOptions = {}): BankServices {
@@ -56,11 +70,14 @@ export function createBankServices(sql: Sql, ledger: LedgerClient, history: Ledg
   // fails with `bank.mark_missing`. The correct posture for a deployment that has
   // not decided where its prices come from.
   const loans = new LoanService(sql, ledger, options.loans ?? { priceSource: fixedPriceSource({}) });
+  // No issuer configured = no card programme, and every card procedure refuses
+  // by name rather than simulating one. See `cards/issuer.ts`.
+  const cards = new CardService(sql, ledger, options.cards ?? {});
 
-  return { spaces, transfers, earn, analytics, loans };
+  return { spaces, transfers, earn, analytics, loans, cards };
 }
 
-export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService };
+export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService, CardService };
 export { BankError, type BankErrorCode } from './errors.js';
 export { accountForSpace, type SpaceRecord, type SpaceView } from './spaces/space-service.js';
 export { planDue, occurrenceStart, dueOccurrence, type Cadence } from './transfers/schedule.js';
@@ -102,5 +119,21 @@ export {
   type LoanServiceOptions,
   type MarginCallSink,
 } from './loans/loan-service.js';
+export {
+  cardSim,
+  cashbackOn,
+  noCardIssuer,
+  type AuthorizationOutcome,
+  type CardIssuerAdapter,
+  type CardProgramme,
+  type IssuedCardHandle,
+} from './cards/issuer.js';
+export {
+  type AuthorizationRecord,
+  type CardRecord,
+  type CardServiceOptions,
+  type CaptureResult,
+  type CashbackOutcome,
+} from './cards/card-service.js';
 export { categorise, SPEND_CATEGORIES, type SpendCategory, type SpendSummary } from './analytics/spend.js';
 export { memoryLedgerHistory, type LedgerHistory, type LedgerEntryRecord } from './analytics/ledger-history.js';

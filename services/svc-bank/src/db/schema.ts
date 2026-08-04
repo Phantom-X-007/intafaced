@@ -611,6 +611,196 @@ export const loanLiquidations = bank.table(
   (t) => [uniqueIndex('loan_liquidations_tranche_idx').on(t.loanId, t.tranche), index('loan_liquidations_loan_idx').on(t.loanId, t.status)],
 );
 
+// ═════════════════════════════════════════════════════════════════════════════
+// CARDS (§8.1) — the LEDGER half. The live rail is `socket.live-issuer`.
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Same three-kinds-of-column rule as everything above, and the temptation here
+// is a specific one: a card feels like it should have a `spendable` or an
+// `available_credit` on it. It does not, and cannot. What a card may spend is
+// `ledger.balance(userAvailable(user, asset))` minus whatever is currently held
+// against open authorisations — and BOTH halves of that are ledger reads. An
+// authorisation's hold lives in `withdrawalHoldAccount(user, asset, authId)`,
+// one account per authorisation, so "what is held" is a sum the ledger already
+// knows and this schema deliberately does not mirror.
+//
+// The tables below store: a card (a name, a policy and an issuer handle), the
+// DECISION taken on each authorisation, and a write-once record of each
+// completed movement. Nothing accumulates.
+//
+// `simulated` is on the card row rather than derived from `issuer`, because a
+// row that outlives the composition root that made it must still be able to say
+// whether it was ever real.
+
+export const cardStatusEnum = bank.enum('card_status', ['active', 'frozen', 'closed']);
+
+/** What we told the issuer. `declined` is a first-class outcome, not an error row. */
+export const cardDecisionEnum = bank.enum('card_decision', ['approved', 'declined']);
+
+/** A capture takes value out; a reversal puts the unspent hold back. */
+export const cardSettlementKindEnum = bank.enum('card_settlement_kind', ['capture', 'reversal']);
+
+/**
+ * A CARD — an issuer handle, a name, and two policy numbers.
+ *
+ * No balance and no credit line: this is a DEBIT instrument over an account the
+ * user already has. `asset_id` is which of their balances it draws on.
+ */
+export const cards = bank.table(
+  'cards',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    /** Programme id, which is also the ledger rail label — e.g. 'card-sim'. */
+    issuer: text('issuer').notNull(),
+    /**
+     * FALSE WOULD MEAN A REAL CARD EXISTS. Nothing sets it false today, and
+     * nothing can until `socket.live-issuer` is a contract rather than a row.
+     */
+    simulated: boolean('simulated').notNull().default(true),
+    /** The issuer's own identifier for this card. */
+    issuerRef: text('issuer_ref').notNull(),
+    /** Four digits a human recognises the card by. Not a card number, and not part of one. */
+    panTail: text('pan_tail').notNull(),
+    status: cardStatusEnum('status').notNull().default('active'),
+    /** POLICY: the cashback rate this card was issued on. Snapshotted per capture. */
+    cashbackBps: integer('cashback_bps').notNull().default(0),
+    /**
+     * POLICY: the largest single authorisation this card may approve.
+     *
+     * A ceiling, never a holding — no money path writes it, and it is not a
+     * remaining allowance that counts down. A per-period allowance would be a
+     * running total by another name, and the ledger already answers "how much
+     * has this card spent" from the settlement records.
+     */
+    perAuthorizationLimit: amount('per_authorization_limit').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    /** One card row per issuer handle — a re-delivered issue callback finds this one. */
+    uniqueIndex('cards_issuer_ref_idx').on(t.issuer, t.issuerRef),
+    index('cards_user_status_idx').on(t.userId, t.status),
+  ],
+);
+
+/**
+ * ONE AUTHORISATION — the decision, recorded whichever way it went.
+ *
+ * `unique(card_id, authorization_ref)` is the double-decide guard, and it is the
+ * same shape as `transfer_executions`: an issuer WILL redeliver an
+ * authorisation webhook, and a second delivery must return the first decision
+ * rather than place a second hold on the same purchase.
+ *
+ * Declines are rows too. A card that says no is answering a question a user will
+ * ask about later — "why was I declined at the till" — and a design that only
+ * persisted approvals could not answer it.
+ */
+export const cardAuthorizations = bank.table(
+  'card_authorizations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => cards.id),
+    /** The issuer's reference for this authorisation. The business key. */
+    authorizationRef: text('authorization_ref').notNull(),
+    /** What the merchant asked for. A RECORD of one request, written once. */
+    amount: amount('amount').notNull(),
+    /** A category label from the issuer, for the user's own statement. Never a merchant's brand. */
+    merchantCategory: text('merchant_category'),
+    decision: cardDecisionEnum('decision').notNull(),
+    /** The named reason, e.g. `bank.card_not_active`. NULL when approved. */
+    declineCode: text('decline_code'),
+    /** `pending` is the claim written before the hold is posted. Same reason as everywhere else. */
+    status: loanEventStatusEnum('status').notNull().default('pending'),
+    /** The hold. NULL on a decline, because a decline moves nothing. */
+    holdLedgerTxId: text('hold_ledger_tx_id'),
+    decidedAt: tstz('decided_at').notNull().defaultNow(),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [
+    /** ONE DECISION PER AUTHORISATION, forever. */
+    uniqueIndex('card_authorizations_ref_idx').on(t.cardId, t.authorizationRef),
+    index('card_authorizations_card_idx').on(t.cardId, t.status),
+  ],
+);
+
+/**
+ * A CAPTURE OR A REVERSAL — one completed movement against one authorisation.
+ *
+ * `unique(authorization_id, sequence)` rather than one row per authorisation,
+ * because a partial capture produces BOTH: the merchant takes what they charged
+ * and the unspent remainder of the hold goes back to the user in the same pass.
+ * Two facts, two rows, each with its own ledger transaction id.
+ *
+ * The pair also has to be exhaustive. A hold account for an authorisation that
+ * has been captured must end at zero — the capture plus the reversal equals what
+ * was authorised — and `cards.test.ts` asserts that on the account itself rather
+ * than on these rows, because the ledger is the one that has to be right.
+ */
+export const cardSettlements = bank.table(
+  'card_settlements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    authorizationId: uuid('authorization_id')
+      .notNull()
+      .references(() => cardAuthorizations.id),
+    sequence: integer('sequence').notNull(),
+    kind: cardSettlementKindEnum('kind').notNull(),
+    /** A RECORD of one completed movement; written once with its ledger tx id. */
+    amount: amount('amount').notNull(),
+    status: loanEventStatusEnum('status').notNull().default('pending'),
+    ledgerTxId: text('ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [
+    uniqueIndex('card_settlements_seq_idx').on(t.authorizationId, t.sequence),
+    index('card_settlements_auth_idx').on(t.authorizationId, t.status),
+  ],
+);
+
+/**
+ * CASHBACK ON ONE CAPTURE.
+ *
+ * Its own table and its own row status, so a reward that could not be paid is
+ * VISIBLE as an unpaid reward rather than as an absence. The rewards pot is
+ * funded from bank revenue and can be empty; when it is, the capture still
+ * stands and this row says `rejected` with `bank.cashback_pot_unfunded` on it.
+ *
+ * A design that swallowed the failure would leave a user quietly unpaid and an
+ * operator with nothing to look at. A design that failed the capture would undo
+ * a purchase that already happened because a marketing promise could not be
+ * kept.
+ */
+export const cardCashback = bank.table(
+  'card_cashback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    authorizationId: uuid('authorization_id')
+      .notNull()
+      .references(() => cardAuthorizations.id),
+    /** Snapshotted, so re-rating the card later cannot rewrite what was promised. */
+    rateBps: integer('rate_bps').notNull(),
+    /** A RECORD of one reward; summing the table is the lifetime figure. */
+    amount: amount('amount').notNull(),
+    status: loanEventStatusEnum('status').notNull().default('pending'),
+    ledgerTxId: text('ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [
+    /** ONE CASHBACK PER AUTHORISATION, forever. */
+    uniqueIndex('card_cashback_auth_idx').on(t.authorizationId),
+    index('card_cashback_status_idx').on(t.status),
+  ],
+);
+
 export const schema = {
   spaces,
   scheduledTransfers,
@@ -625,4 +815,8 @@ export const schema = {
   loanRepayments,
   loanMarginCalls,
   loanLiquidations,
+  cards,
+  cardAuthorizations,
+  cardSettlements,
+  cardCashback,
 };
