@@ -83,6 +83,19 @@ export function hasBoardDeltaTrailer(body) {
  * @param {(args: string[]) => { failed: boolean, stdout: string }} [run] injectable for tests
  */
 export function isNoOpOntoBase(baseRef, headRef, run = gitMergeTree) {
+  // A run ON the base is not a branch. After a squash merge the workflow fires
+  // again with HEAD === origin/main, and "merging" main into main trivially
+  // yields main's own tree — so every merge painted the base's own CI run red
+  // with `FAIL — branch adds nothing`. The question this gate asks only has
+  // meaning for a head that is not the base.
+  const baseCommit = run(['rev-parse', baseRef]);
+  const headCommit = run(['rev-parse', headRef]);
+  if (!baseCommit.failed && !headCommit.failed) {
+    const b = baseCommit.stdout.trim().split('\n')[0].trim();
+    const h = headCommit.stdout.trim().split('\n')[0].trim();
+    if (b && h && b === h) return false;
+  }
+
   const main = run(['rev-parse', `${baseRef}^{tree}`]);
   if (main.failed || !main.stdout.trim()) return false;
   const mainTree = main.stdout.trim().split('\\n')[0].trim();
@@ -220,10 +233,22 @@ function selfTest() {
   );
 
   // no-op tree: merge result equals main tree → BLOCK (already landed / empty)
+  //
+  // `rev-parse` is stubbed per-ref rather than one blanket answer: the function
+  // now resolves the base and head COMMITS as well as the base TREE, and a stub
+  // that returns one value for all three makes every branch look like main.
   const mainTree = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const mainCommit = '1111111111111111111111111111111111111111';
+  const headCommit = '2222222222222222222222222222222222222222';
+  const revParse = (args) => {
+    if (args[1] === 'main^{tree}') return { failed: false, stdout: mainTree };
+    if (args[1] === 'main') return { failed: false, stdout: mainCommit };
+    if (args[1] === 'HEAD') return { failed: false, stdout: headCommit };
+    return { failed: true, stdout: '' };
+  };
   assert(
     isNoOpOntoBase('main', 'HEAD', (args) => {
-      if (args[0] === 'rev-parse') return { failed: false, stdout: mainTree };
+      if (args[0] === 'rev-parse') return revParse(args);
       if (args[0] === 'merge-tree') return { failed: false, stdout: mainTree + '\n' };
       return { failed: true, stdout: '' };
     }) === true,
@@ -233,11 +258,27 @@ function selfTest() {
   // real delta: merge-tree returns different tree → not no-op
   assert(
     isNoOpOntoBase('main', 'HEAD', (args) => {
-      if (args[0] === 'rev-parse') return { failed: false, stdout: mainTree };
+      if (args[0] === 'rev-parse') return revParse(args);
       if (args[0] === 'merge-tree') return { failed: false, stdout: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' };
       return { failed: true, stdout: '' };
     }) === false,
     'no-op: different trees must PASS',
+  );
+
+  // THE REGRESSION THIS FIXTURE EXISTS FOR: the workflow re-fires on the base
+  // after a squash merge, so HEAD *is* main. Merging main into main yields
+  // main's tree, which looked exactly like an empty branch and failed the run —
+  // on every single merge. Identical commits must never be a no-op verdict.
+  assert(
+    isNoOpOntoBase('main', 'HEAD', (args) => {
+      if (args[0] === 'rev-parse') {
+        if (args[1] === 'main^{tree}') return { failed: false, stdout: mainTree };
+        return { failed: false, stdout: mainCommit }; // main and HEAD are the same commit
+      }
+      if (args[0] === 'merge-tree') return { failed: false, stdout: mainTree + '\n' };
+      return { failed: true, stdout: '' };
+    }) === false,
+    'no-op: a push ON the base is not a no-op branch',
   );
 
   // conflicts (merge-tree fails) → not a pure no-op (real work may still exist)
@@ -254,12 +295,13 @@ function selfTest() {
     for (const f of fails) console.error(`  · ${f}`);
     process.exit(1);
   }
-  console.log('value-gate --self-test OK (5 fixtures)');
+  console.log('value-gate --self-test OK (6 fixtures)');
   console.log('  fixture near-dup docs-only no Board-Delta → BLOCK (exit 1 path)');
   console.log('  fixture near-dup + Board-Delta → PASS');
   console.log('  fixture code change → PASS');
   console.log('  fixture unique docs title → PASS');
   console.log('  fixture no-op merge tree equals main → BLOCK');
+  console.log('  fixture push ON the base (HEAD === main) → PASS, not a no-op branch');
   process.exit(0);
 }
 
