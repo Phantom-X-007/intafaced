@@ -211,7 +211,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | Self-custody funded card, JIT conversion (§18) <br/>_**Reclaimed 2026-08-04** M6 custodial half — agents thin; on-chain JIT contract half remains Shehzad protocol board._ | P | `bank.cards`, `protocol.smart-accounts` | `bank.sovereign-card` |
 | 🟢 | Fiat on/off ramp reusing svc-pay adapters <br/>_**Reclaimed 2026-08-04** M6 — Nitro agents thin Class M._ | F |  | `bank.ramps` |
 | ✅ | Model-agnostic gateway, per-user metering <br/>_Reference mount — the /trpc + createEdgeContext recipe every other service copies_ | F |  | `agents.gateway` |
-| 🟢 | Navigator — tool-calling inside user guardrails | F |  | `agents.navigator` |
+| 🟢 | Navigator — tool-calling inside user guardrails <br/>_Stage-1 2026-08-04: navigatorAgentGuardrail — navigator.plan/tool_select + read-only trade/identity tools; money-write tools refuse undeclared. Stage-2 grounded tools residual. Not tracker done until live grounded env._ | F |  | `agents.navigator` |
 | ⛔ | Support agent — KB + account-state grounded <br/>_Stage-1 2026-08-04: supportAgentGuardrail — read-only support tools + support.classify/reply tasks; money tools (ledger/pay/bank/trade/p2p) refused undeclared. Stage-2: KB grounding via ops.support. Not tracker done until grounded env._ | F | `ops.support` | `agents.support` |
 | 🟢 | Market Scanner — ranked signals by tier <br/>_Stage-1 2026-08-04: pure fixture rank in svc-agents (`scanner/rank.ts`) — empty/stale/incomplete refuse with copy keys; no invent prices; no auto-trade. Live tools + shell UX residual. Not tracker done until allowlisted live data path._ | F |  | `agents.scanner` |
 | ⛔ | Merchant agent — approval-rate watch | F | `pay.routing` | `agents.merchant` |

@@ -644,7 +644,12 @@ export const FEATURES = [
     requires: ['services/svc-agents'],
     note: 'Reference mount — the /trpc + createEdgeContext recipe every other service copies',
   }),
-  f('agents.navigator', 'Navigator — tool-calling inside user guardrails', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
+  f('agents.navigator', 'Navigator — tool-calling inside user guardrails', {
+    module: 'agents',
+    phase: '5',
+    dependsOn: ['agents.gateway'],
+    note: 'Stage-1 2026-08-04: navigatorAgentGuardrail — navigator.plan/tool_select + read-only trade/identity tools; money-write tools refuse undeclared. Stage-2 grounded tools residual. Not tracker done until live grounded env.',
+  }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
