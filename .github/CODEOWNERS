@@ -34,12 +34,13 @@
 # ── Jurisdiction and custody. Legal surface, not just code. ──────────────────
 /packages/config/src/jurisdiction.ts @Phantom-X-007 @ZenYoda3
 
-# ── Shehzad hard mountains (M1–M7) — human spine; agents babysit only ───────
-# Law: docs/GITHUB-OWNERSHIP-SHEHZAD.md · docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md
-# · docs/LIVE-LANES.md HUMAN-CLAIMED. Review requests fire for @shehzad002 on
-# these paths. Agents must not open implement PRs here while claimed.
-/services/svc-pay/                   @shehzad002 @Phantom-X-007 @ZenYoda3
+# ── Shehzad — Protocol Plane + INTACHAIN only (2026-08-04 reclaim) ───────────
+# Law: docs/GITHUB-OWNERSHIP-SHEHZAD.md · docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
+# · docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md
+# Pay/bank reclaimed for Nitro agents (Class M). Agents must not implement
+# protocol/chain paths while shehzad002 owns tracker rows.
 /services/svc-protocol/              @shehzad002 @Phantom-X-007 @ZenYoda3
-/services/svc-bank/                  @shehzad002 @Phantom-X-007 @ZenYoda3
-/docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md @shehzad002 @ZenYoda3
+/services/svc-dex/                   @shehzad002 @Phantom-X-007 @ZenYoda3
+/docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md @shehzad002 @ZenYoda3
 /docs/GITHUB-OWNERSHIP-SHEHZAD.md    @shehzad002 @ZenYoda3
+/docs/THREE-WAY-DISTRIBUTION-2026-08-04.md @shehzad002 @ZenYoda3 @Phantom-X-007

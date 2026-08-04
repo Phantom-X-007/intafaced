@@ -1,11 +1,13 @@
 # Shehzad — Blockchain / Protocol Plane task board
 
-**Date:** 2026-08-03  
-**Audience:** `@shehzad002` (Shehzad) + his agents  
+**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04  
+**Audience:** `@shehzad002` (Shehzad / Shizu) + his agents  
 **GitHub tip:** re-derive `origin/main` every session  
-**Status:** BINDING assignment for **crypto + on-chain + Protocol Plane** work
+**Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-**Why this board exists:** Nitro agents are AFK-swarming **vendor shell honesty/craft** and free residual. Denon owns **platform integrity** (WS market-id law, open integrity PR pile, many Class M holds). You get an **insane runway on blockchain / self-custody / contracts / chain path** — your strength — without dual-building shell or Denon’s open branches.
+**Law:** [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) · [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · definitive build **§16–§25 / §17**
+
+**Why this board exists:** Nitro agents own shell + reclaimed custodial residual. Denon owns platform integrity + open money PR pile + product-law invent. **You** own the entire on-chain / self-custody / L1 runway — plan freely, communicate large plans before execute, ship with proof.
 
 **Master law (read first):**
 
@@ -20,14 +22,14 @@
 
 ## 0 · Collision wall (do not touch)
 
-| Owned by others right now                                                                  | Why                                                                                                                      |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| **Vendor shell `:8090` / shell craft** (Index, Exchange honesty, AFK residual, RP1–RP5 UI) | Nitro swarm — dual-build destroys free parallel                                                                          |
-| **Denon open integrity PRs** (file sets live on `gh pr list`)                              | Dual-edit ban                                                                                                            |
-| **Platform WS market-id authority + nginx depth path** (Denon D-P0-WS)                     | Product law he is deciding                                                                                               |
-| **Custodial pay card / #346 open branch**                                                  | Until tip reclaim handoff is explicit — prefer **on-chain pay acceptance contracts** below, not competing on his open PR |
-| **apps/web product resurrection**                                                          | Retired surface                                                                                                          |
-| **Class X** (prod keys, mainnet go-live yes, sanctions content)                            | Nitro human                                                                                                              |
+| Owned by others right now                                                                  | Why                                                                                                     |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| **Vendor shell `:8090` / shell craft** (Index, Exchange honesty, AFK residual, RP1–RP5 UI) | Nitro swarm — dual-build destroys free parallel                                                         |
+| **Denon open integrity PRs** (file sets live on `gh pr list`)                              | Dual-edit ban                                                                                           |
+| **Platform WS depth path** (#727/#737 landed)                                              | Shell client = Nitro; you do not dual-build nginx/ws unless chain events                                |
+| **Custodial pay card / #346**                                                              | **Handoff residual** — finish or hand to Nitro; no further pay expand. On-chain pay leg = **S-B1** only |
+| **apps/web product resurrection**                                                          | Retired surface                                                                                         |
+| **Class X** (prod keys, mainnet go-live yes, sanctions content)                            | Nitro human                                                                                             |
 
 **You may:** open new branches from tip · own `services/svc-protocol/**` contracts · forge/scripts · audit packages · indexer **venue contract** side · launch factory · on-chain escrow · research ADRs on tip.
 
@@ -78,14 +80,24 @@ Definitive build promise: **sovereignty by architecture** — non-custodial plan
 | **S-C2** | **Reorg-safe event surface**            | Property tests: reorg deeper than history · tip replace                   | Pair with indexer owners; you own Solidity venue                     |
 | **S-C3** | **Permissionless position/fill events** | Document event matrix for agents to WS later                              | Don’t invent futures mids                                            |
 
-### Tier D — INTACHAIN long path (honest sequencing)
+### Tier D — INTACHAIN L1 epic (honest sequencing · §17 — YOU OWN THIS)
 
-| ID       | Outcome                              | Done bar                                                                                         |
-| -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| **S-D1** | **P0 rails ADR**                     | Written decision: which EVM L2 / HyperEVM / anvil-only for v1 · no fantasy “mainnet next week”   |
-| **S-D2** | **INTACORE module map**              | Spec only until P0 contracts live: CLOB-at-chain, margin, one-block finality targets as **SLOs** |
-| **S-D3** | **Validator / staking architecture** | How IFC staking ties to chain security vs ledger stakeOf                                         |
-| **S-D4** | **CometBFT / app-chain residual**    | `chain.mainnet` tracker row — research + phased milestones, not vapor status:done                |
+This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Communication gate:** before P1 implement, land an **ADR/plan PR** on tip (Nitro + Denon can see), then ship.
+
+| ID       | Outcome                                  | Done bar                                                                                    |
+| -------- | ---------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **S-D0** | **Plan-first handshake**                 | ADR/plan PR: attack order, stack choice, risks, what is P0 vs P1 — **before** large P1 code |
+| **S-D1** | **P0 rails ADR**                         | Which EVM L2 / HyperEVM / anvil for contract suite v1 · no fantasy “mainnet next week”      |
+| **S-D2** | **INTACORE module map**                  | Spec: on-chain CLOB, margin, one-block finality SLOs (§20) until P0 contracts live          |
+| **S-D3** | **Validator / staking architecture**     | IFC staking secures validators · honest vs ledger `stakeOf`                                 |
+| **S-D4** | **P1 own chain (CometBFT / Cosmos SDK)** | `chain.mainnet` phased milestones · native CLOB module (dYdX v4-class) · not vapor `done`   |
+| **S-D5** | **INTAEVM**                              | EVM module sharing validator set / state with INTACORE                                      |
+| **S-D6** | **svc-chain**                            | Node ops, validator tooling, chain config (§17.5)                                           |
+| **S-D7** | **svc-bridge**                           | Fiat↔Protocol canonical IFC bridge + attestations (§17.3 / §17.5)                           |
+| **S-D8** | **P2 rust CLOB core**                    | Shared matching-spec target with Fiat Plane engine · throughput SLOs                        |
+| **S-D9** | **P3 progressive decentralisation**      | Validator open schedule · IFC governance parameter control                                  |
+
+**Tracker gravity:** `chain.mainnet` · `chain.evm` · `chain.validators` · `chain.governance` · `chain.rust-core` · `bridge.canonical` · owner `shehzad002`.
 
 ### Tier E — Sovereign card / JIT (contract half)
 
@@ -149,7 +161,7 @@ Definitive build promise: **sovereignty by architecture** — non-custodial plan
 
 ## 3 · Suggested attack order (reorder when deps force)
 
-1. **S-D1** (rails ADR) → **S-A1** smart accounts audit package → **S-A2** AMM honesty
+1. **S-D0** plan PR + **S-D1** rails ADR → **S-A1** smart accounts audit package → **S-A2** AMM honesty
 2. **S-A3** escrow + **S-A6** merchant contracts (sovereign rails story)
 3. **S-A4** lending + **S-A5** router
 4. **S-A7** launch factory honesty + **S-G\*** as oxygen
@@ -192,12 +204,21 @@ Parallel: 2–4 worktrees inside **protocol/contracts only** is fine.
 
 ```
 git fetch origin main
-Read: INTAFACED_DEFINITIVE_BUILD.md §16–§25
+Read: INTAFACED_DEFINITIVE_BUILD.md §16–§25 (especially §17 INTACHAIN)
+Read: docs/GITHUB-OWNERSHIP-SHEHZAD.md
+Read: docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
 Read: docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md (this file)
-gh pr list — do not touch open Denon/Nitro shell paths
-Claim: LIVE-LANES or docs/ops/claims/<id>.md for your protocol claim
-Worktree from tip · contracts + svc-protocol first
-Ship: PR with proof commands (forge/anvil tests, audit package path)
+gh pr list — do not touch open Denon paths or vendor shell
+#346: finish or handoff — no pay expand
+Claim: LIVE-LANES shehzad-protocol-chain
+Worktree from tip · svc-protocol contracts first (P0) · plan PR before P1 L1
+Ship: PR with proof (forge/anvil tests, audit package path, ADR link)
+```
+
+## 7 · #346 pay handoff (one-time)
+
+Custodial pay is **reclaimed**. On open **#346**: merge if honest Done bar + conflicts resolved, **or** comment that Nitro agents take residual. Do not open new pay product PRs.
+
 ```
 
 ---
@@ -205,6 +226,7 @@ Ship: PR with proof commands (forge/anvil tests, audit package path)
 ## 7 · One-breath message (paste to Shehzad)
 
 ```
+
 Shehzad — blockchain / Protocol Plane board is yours.
 
 Nitro agents: vendor shell honesty only. Denon: platform WS + his open integrity pile.
@@ -213,4 +235,7 @@ You: insane runway on-chain — smart accounts audit package, AMM honesty, escro
 Law: INTAFACED_DEFINITIVE_BUILD.md §16–25 + docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md on tip.
 Do not dual-edit open partner PRs or shell residual. Spec freely, ship with proof, honest §13 over fake Done.
 Start when ready from latest main.
+
+```
+
 ```

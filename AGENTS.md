@@ -4,15 +4,16 @@ You are working in the INTAFACED monorepo. Read this before your first edit.
 
 ## Who is driving (read this)
 
-| Human                        | Role                                                                                                                                                                                                                                                     | GitHub |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| **Nitro** (`@ZenYoda3`)      | Non-technical operator. Directs work; does not run git/PR by hand.                                                                                                                                                                                       | write  |
-| **Denon** (`@Phantom-X-007`) | Experienced builder. Owns technical quality of what he ships. Direction on spine law.                                                                                                                                                                    | admin  |
-| **Shehzad** (`@shehzad002`)  | Senior spine builder. **Hard mountains** (pay card, protocol SA/AMM, futures risk, OTC/copy/algo, bank money, sub-account money). See [`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) + LIVE-LANES H-\* claims. | write  |
+| Human                        | Role                                                                                                                                                                                                                                                        | GitHub |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| **Nitro** (`@ZenYoda3`)      | Non-technical operator. Directs work; does not run git/PR by hand.                                                                                                                                                                                          | write  |
+| **Denon** (`@Phantom-X-007`) | Experienced builder. Owns technical quality of what he ships. Direction on spine law.                                                                                                                                                                       | admin  |
+| **Shehzad** (`@shehzad002`)  | Senior **Protocol Plane + INTACHAIN** builder (on-chain only). Board: [`docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md). Lock: [`docs/GITHUB-OWNERSHIP-SHEHZAD.md`](docs/GITHUB-OWNERSHIP-SHEHZAD.md). | write  |
 
-**Agents must not implement on HUMAN-CLAIMED M1–M7 / H-\* lanes** (babysit only).  
-**GitHub lock (read every session):** [`docs/GITHUB-OWNERSHIP-SHEHZAD.md`](docs/GITHUB-OWNERSHIP-SHEHZAD.md) · [`docs/LIVE-LANES.md`](docs/LIVE-LANES.md) · tracker `owner: shehzad002` · `.github/CODEOWNERS` on `svc-pay` / `svc-protocol` / `svc-bank`.  
-**Agents keep:** Stream A shell (P-UI), trade-light (mm/spot/venue residual), WS, academy/ops thin, tracker honesty, Board Clear coord.
+**Agents must not implement on Shehzad chain mountains** (protocol/chain/bridge/launch contracts / dex self-custody) — babysit only.  
+**Three-way split:** [`docs/THREE-WAY-DISTRIBUTION-2026-08-04.md`](docs/THREE-WAY-DISTRIBUTION-2026-08-04.md).  
+**GitHub lock (read every session):** ownership Shehzad · LIVE-LANES · tracker `owner: shehzad002` on chain rows · CODEOWNERS on `svc-protocol` / `svc-dex`.  
+**Agents keep:** shell (P-UI), reclaimed pay/bank/identity residual (after #346 handoff), trade-light, WS client, academy/ops thin, tracker honesty. Pay/bank **no longer** blanket human-locked.
 
 ### Operating split (durable decision — 2026-07-31)
 
@@ -60,7 +61,7 @@ export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
 6. If orienting Nitro (status / plan / “where are we”): [`docs/START-HERE.md`](docs/START-HERE.md). Live swarm board: [`docs/ops/README.md`](docs/ops/README.md) (`pnpm swarm:freeze` / `status` / `lanes`).
 7. Before multi-agent code: [`docs/LIVE-LANES.md`](docs/LIVE-LANES.md) + residual campaign on tip.
 8. Multi-dev / claim / “what’s free”: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md) — product tracker vs campaign NEXT vs session lanes (do not collapse).
-9. **Shehzad blockchain / Protocol Plane:** [`docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) — on-chain runway; not shell.
+9. **Shehzad Protocol Plane + INTACHAIN (sole human chain owner):** [`docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) · [`docs/THREE-WAY-DISTRIBUTION-2026-08-04.md`](docs/THREE-WAY-DISTRIBUTION-2026-08-04.md) · reclaim non-chain for agents.
 10. **All-out swarms / max parallel (Nitro go all-out):** [`docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md`](docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md) · **AFK ladder / no stamp mill:** [`docs/ops/SWARM-MANDATE.md`](docs/ops/SWARM-MANDATE.md) · `pnpm swarm:freeze` / `swarm:next` / `swarm:report` · Denon queue [`docs/REGROUP-2026-08-03.md`](docs/REGROUP-2026-08-03.md) · residual-register · `pnpm claim:check` before edit. Specs = main **+** open PRs **+** branches. When `freeProduct=0`, do **P1–P3 real work** (stranded branches, partner unblock, TRK research) — **not** R07/R01 tip-bump cycle spam.
     9b. **Denon hard tasks (not agent free craft):** [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — platform integrity, money Class M under his open PRs, product law; Nitro agents babysit only.
 
@@ -101,7 +102,7 @@ Nitro does not know GitHub workflow. **You run the whole loop.** Do not hand him
 
 ### Every task — do this without asking him to do it
 
-1. **Claim** — LIVE-LANES session row + tracker mountain if free (owner/wip in `features.mjs` on first PR for that mountain). Human-owned / shehzad M1–M7 → babysit only. See COORDINATION-TRUTH-LAYERS.
+1. **Claim** — LIVE-LANES session row + tracker mountain if free (owner/wip in `features.mjs` on first PR for that mountain). Shehzad chain mountains (protocol/INTACHAIN) → babysit only; pay/bank reclaimed for agents after #346 handoff. See COORDINATION-TRUTH-LAYERS.
 2. **Worktree** — ensure work is on `feat/|fix/|chore/|docs/…`, never on `main` checkout.
 3. **Implement** — surgical; match repo style; no drive-by refactors.
 4. **`pnpm verify`** — run it; paste real output. Not “should pass.”

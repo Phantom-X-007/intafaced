@@ -1,68 +1,108 @@
-# GitHub ownership lock — `@shehzad002` (Shehzad / “sheezad”)
+# GitHub ownership lock — `@shehzad002` (Shehzad / “Shizu”)
 
 **Status:** BINDING on `main` · cold agents must obey  
-**Detail backlog:** [`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md)  
-**Live claims:** [`LIVE-LANES.md`](LIVE-LANES.md)  
-**Scoreboard:** [`BOARD-CLEAR-SCOREBOARD.md`](BOARD-CLEAR-SCOREBOARD.md)
+**Supersedes:** M1–M7 hard spine lock (2026-08-01) for **who may code**  
+**Historical detail (superseded for scope):** [`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md)  
+**Task board (sole runway):** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md)  
+**Three-way split:** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md)  
+**Live claims:** [`LIVE-LANES.md`](LIVE-LANES.md)
+
+---
+
+## Decision (2026-08-04)
+
+Shehzad owns **Protocol Plane + INTACHAIN only** (definitive build §16–§25, especially §17).
+
+He does **not** own custodial Pay OS, bank fiat money products, futures/OTC/copy/algo risk engines, identity money-routing residual, or vendor shell. Those are **reclaimed** for Nitro agents (Class M rigor) and Denon product law where invent is required.
+
+| Who              | Owns                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| **Shehzad**      | On-chain / self-custody / contracts / L1 path — see mountains below                    |
+| **Nitro agents** | Shell, reclaimed pay/bank/identity residual, trade-light, research→implement-from-spec |
+| **Denon**        | Direction + his open integrity/money PR pile + true product-law invent                 |
+| **Nitro human**  | Class X (secrets, prod go-live, licence, sanctions content)                            |
 
 ---
 
 ## What “ownership on GitHub” means here
 
-GitHub does **not** have a single “this human owns the module” switch. On this repo, ownership is **enforced for agents and humans** by stacking:
+| Layer                                              | What it does                                                                   |
+| -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **This file + blockchain task board + LIVE-LANES** | Law for agents: do not implement his chain mountains                           |
+| **`AGENTS.md` + START-HERE**                       | Cold chat entry chain                                                          |
+| **Tracker `owner: shehzad002`**                    | Only on protocol/chain/bridge/launch/dex self-custody rows                     |
+| **`.github/CODEOWNERS`**                           | Review request on `svc-protocol` (+ chain docs) — **not** blanket pay/bank     |
+| **Open PRs by him**                                | Live WIP — babysit only; #346 pay is **handoff residual** (not new pay expand) |
 
-| Layer                                               | What it does                                                                                                                            |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **This file + SHEHZAD-HARD-OWNERSHIP + LIVE-LANES** | Law for agents: **do not implement** his mountains                                                                                      |
-| **`AGENTS.md` + session paste**                     | Every cold chat sees the ban in the entry chain                                                                                         |
-| **Tracker `owner: shehzad002`**                     | Scoreboard / `pnpm tracker` shows who owns the feature                                                                                  |
-| **`.github/CODEOWNERS`**                            | GitHub **auto-requests review** from him on his paths (review request, not a hard merge block unless branch protection requires owners) |
-| **Open PRs by him**                                 | Live WIP (e.g. pay M1) — babysit only                                                                                                   |
-
-If any layer lags, **LIVE-LANES HUMAN-CLAIMED + this file win** for “who may code.”
+If layers disagree: **this file + LIVE-LANES win** for “who may code.”
 
 ---
 
 ## His mountains (never agent-implement)
 
-| ID     | Mountain                | Primary paths / tracker                                                                                   |
-| ------ | ----------------------- | --------------------------------------------------------------------------------------------------------- |
-| **M1** | Pay OS                  | `services/svc-pay/**` · `pay.gateway` + pay.\* expand                                                     |
-| **M2** | Protocol OS             | `services/svc-protocol/**` · smart-accounts, amm, lending, escrow, router, merchant                       |
-| **M3** | Futures risk            | `trade.futures` risk/margin/liq (not shell charts)                                                        |
-| **M4** | OTC / copy / algo       | `trade.otc` · `trade.copy` · `trade.algo`                                                                 |
-| **M5** | Identity money graph    | sub-accounts / money routing · `identity.apikeys` (sub-accounts half) · related identity money gates      |
-| **M6** | Bank money              | `bank.earn` · `bank.cards` · `bank.ramps` · `bank.sovereign-card` · `services/svc-bank/**` money products |
-| **M7** | Java dual-book residual | vendor Java money doors (after #289)                                                                      |
+| ID             | Mountain                        | Paths / tracker (gravity)                                                                                           |
+| -------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **S-PROT**     | Protocol suite                  | `services/svc-protocol/**` · `protocol.*` (SA, AMM, lending, escrow, router, merchant)                              |
+| **S-CHAIN**    | INTACHAIN L1 path (§17)         | `chain.mainnet` · `chain.evm` · `chain.validators` · `chain.governance` · `chain.rust-core` · future `svc-chain/**` |
+| **S-BRIDGE**   | Canonical IFC bridge            | `bridge.canonical` · future `svc-bridge/**` (chain side)                                                            |
+| **S-LAUNCH**   | On-chain launch factories       | `launch.*` contract honesty                                                                                         |
+| **S-DEX**      | Self-custody DEX surface        | `services/svc-dex/**` · `dex.*` residual on-chain                                                                   |
+| **S-INDEX-CT** | Venue **contracts** (not shell) | Real venue ABI vs DevVenue; indexer adapter may be agent residual                                                   |
+| **S-AUDIT**    | Audit factory / no fake audited | docs/audit packages + protocol audit pipeline                                                                       |
 
-**Agents may:** comment on his PRs, CI babysit, **never** open competing implement PRs on those paths unless he comments `agents free on <path>`.
+**Sequencing law (no fantasy mainnet week-1):**
+
+1. **P0** — contracts on proven EVM rails (L2 / HyperEVM)
+2. **P1** — own CometBFT/Cosmos chain + native CLOB + INTAEVM + IFC gas/staking + bridge
+3. **P2–P3** — rust core, validator open, governance schedule
+
+**Freedom:** he designs PR DAGs.  
+**Communication gate:** before large implement (especially P1 L1), he lands an **ADR/plan PR** on tip for Nitro + Denon visibility, then ships.
+
+**Agents may:** comment/CI babysit on his PRs; **never** open competing implement PRs on the paths above unless he comments `agents free on <path>`.
 
 ---
 
-## What agents still own (safe to cook)
+## Reclaimed (agents may implement — Class M where money)
 
-P-UI vendor shell `:8090` · P-TRADE-LIGHT (mm residual / spot OHLCV / venue) · P-WS · P-P5-LIGHT academy/ops · P-TRACK · Board Clear coord · ledger/core not listed above.
+| Former M-id | Area                        | Notes                                                                      |
+| ----------- | --------------------------- | -------------------------------------------------------------------------- |
+| M1          | Pay OS / `svc-pay`          | After #346 handoff — no dual-edit his open pay branch until handoff sealed |
+| M3–M4       | Futures / OTC / copy / algo | Implement only from tip law or honest thin §13 — never invent mids/rates   |
+| M5          | Identity money graph        | Agents + leak tests                                                        |
+| M6          | Bank money / `svc-bank`     | Thin ledger-true verticals; Class X issuer keys still Nitro human          |
+| M7          | Java dual-book residual     | After path-clear vs Denon open custody PRs                                 |
 
 ---
 
-## Cold-agent checklist (every session)
+## #346 disposition (pay M1 open PR)
+
+- **Not** “Shehzad keeps expanding pay.”
+- **Options:** he finishes merge if conflict-clean + Done bar honest, **or** comments handoff and stops.
+- Nitro agents may take residual **after** handoff is explicit (PR comment or closed with residual note).
+- Proof must not be silently discarded.
+
+---
+
+## Cold-agent checklist
 
 ```
 1) git fetch && gh pr list --state open
-2) Read docs/LIVE-LANES.md — skip any HUMAN-CLAIMED / M1–M7 row
-3) Read docs/GITHUB-OWNERSHIP-SHEHZAD.md (this file) if coding near pay/protocol/trade/bank/identity
-4) If path is under his CODEOWNERS lines → do not implement; babysit only
-5) Never mark tracker done on his rows without his proof
+2) Read docs/LIVE-LANES.md + docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
+3) If path is protocol/chain/bridge/launch/dex self-custody → babysit only
+4) pay/bank/identity money residual → agent Class M OK after #346 handoff
+5) Never mark tracker done on shehzad002 rows without his proof
+6) Never dual-edit Denon open PR file sets
 ```
 
 ---
 
 ## Nitro unspoken needs (hardened)
 
-1. You can keep building forever **without colliding** with Shehzad.
-2. Chat memory is **not** ownership — **main tip is**.
-3. “I checked GitHub” must show the same ban as this file.
-4. Agents that only read tracker must see **owner shehzad002**, not stale Nitro.
-5. Speed is fine on **agent** lanes; stealing his money mountains is not.
+1. One ownership story — no M1–M7 vs blockchain dual narrative.
+2. Chat memory is not ownership — **main tip is**.
+3. Insane chain runway for Shehzad without shell thrash.
+4. Agents not blocked forever on pay/bank they reclaimed.
+5. L1 freedom + plan-before-build gate.
 
-_Update this file only with a PR that also updates LIVE-LANES if claims change._
+_Update this file only with a PR that also updates LIVE-LANES / CODEOWNERS / tracker mountain owners when claims change._
