@@ -44,13 +44,23 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 
 Self-test (fixtures, no network): `pnpm value-gate:self-test` → near-dup exit-1 path, real work pass.
 
-### F-STANDBY (finish type when freeProduct=0)
+### F-STANDBY (finish type when freeProduct=0) — corrected
 
-When the primary board finish is met but the session continues (AFK / “never stop”), the state is **F-STANDBY** (OS harvest `shared/S-CORE.md` §1.1). Rules:
+When the primary board finish is met but the session continues (AFK / “never stop”), the state is **F-STANDBY** (OS harvest `shared/S-CORE.md` §1.1).
 
-- **Idling silently is valid** — producing a PR is not required.
-- Any ship must be P1–P5 with a real **Board-Delta** (or code). Metric: value-gate (L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`).
-- Re-check cadence 30–45m via `pnpm swarm:freeze` / `swarm:lanes`.
+**Idle is valid ONLY when you can name why no lane has work.** Before any “idle OK” / “board unchanged” report, state in one line each:
+
+| Line            | Required content                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| **P1 stranded** | N path-clear branches vs open partners, and **why each is not landable this cycle** (or “landed #…”) |
+| **P2 partner**  | Which partner PRs changed state since last cycle (or “matrix unchanged”)                             |
+| **P3 TRK**      | How many specs remain under 100 lines                                                                |
+
+**If P1 path-clear count > 0, IDLE IS NOT A VALID OUTPUT. Land one** (smallest first). One branch → one PR. Re-verify path-clear at the tip you branch from.
+
+- “No delta” justifies **not opening a stamp PR**. It **never** justifies not doing real P1–P3 work.
+- Any ship must still be P1–P5 with a real **Board-Delta** (or code). Metric: value-gate (L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`).
+- **Report format every cycle:** `P1 N clear / M landed this cycle · P2 <changes> · P3 <thin count> · tip <sha>`
 
 **Spawn width:** target **6–8 concurrent** path-disjoint free product writers when freeProduct>0. When freeProduct=0, spawn **P1–P3** workers (width 3–6), not stamp clones.
 
