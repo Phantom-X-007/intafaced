@@ -160,14 +160,17 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 
 ### Do
 
-1. **`pnpm verify` green locally** before the push that opens or updates a **code** PR.
-2. **Batch** coherent change-sets; avoid push storms (push → CI → push 2 min later → cancel → repeat) while iterating without local green.
-3. Prefer **pure docs/markdown** commits when the work is docs-only (`ci.yml` path-ignore skips full CI).
-4. **Re-run all jobs** only for flake or known infra fix.
+1. **`pnpm thrift:check` before `gh pr create` / any push that restarts CI.** Hard-fails when 24h Actions runs exceed caps (default total≥400 or Docs-format≥250). Soft-warns ≥200. Override only with `THRIFT_ALLOW=1` (emergency — note why in the PR). Meter: `tooling/ci/thrift-preflight.mjs`.
+2. **`pnpm verify` green locally** before the push that opens or updates a **code** PR.
+3. **Batch** coherent change-sets; avoid push storms (push → CI → push 2 min later → cancel → repeat) while iterating without local green.
+4. Prefer **pure docs/markdown** commits when the work is docs-only (full CI skipped; Docs format on **PR only** — not again on main merge).
+5. **`pnpm value-gate:self-test`** stays green; docs tip-bumps without `Board-Delta:` fail Docs format (STRICT).
+6. **Re-run all jobs** only for flake or known infra fix.
 
 ### Never (false thrift)
 
 - Make the repo public, skip doctrine/money tests, claim green without verify, or disable required checks “to save money.”
+- Restore `push: main` full CI / Docs-format without a spend review (double-bill thrash).
 
 ### Denon-only infra (agents may implement workflow PR after he installs the runner app)
 
