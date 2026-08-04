@@ -85,6 +85,16 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.proposal_not_allowed':
       case 'token.already_voted':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      // 409: the request is well-formed, but the revenue window (or the run id)
+      // is already spoken for. This is the refusal that used to arrive as a raw
+      // PG 23505 — an opaque INTERNAL_SERVER_ERROR, *after* the burn had already
+      // posted irreversibly.
+      case 'token.buyback_window_overlap':
+      case 'token.buyback_run_conflict':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'token.buyback_window_invalid':
+      case 'token.buyback_revenue_invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
       case 'token.stake_locked':
       case 'token.stake_closed':
       case 'token.stake_conflict':
@@ -338,11 +348,23 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       .input(
         z.object({
           runId: z.string().uuid(),
+          /** Half-open `[from, to)` — `to` belongs to the next window (0002). */
           revenueWindow: z.object({
             from: z.string().datetime({ offset: true }),
             to: z.string().datetime({ offset: true }),
           }),
-          revenueTotal: z.record(z.string()),
+          /**
+           * assetId → revenue collected, as decimal strings.
+           *
+           * Was `z.record(z.string())`, which accepted any string at all and
+           * wrote it straight to jsonb: `{"IFC":"not-a-number","USDT":"-999"}`
+           * stored cleanly. This is the audit record of what the run was sized
+           * against, so an unparseable figure here cannot be reconciled against
+           * the ledger later — the one thing the column is for. `amountString`
+           * is the same unsigned-decimal money-law shape every other amount on
+           * this router uses; the service re-validates and canonicalises.
+           */
+          revenueTotal: z.record(z.string(), amountString),
           tokensBought: amountString,
         }),
       )
