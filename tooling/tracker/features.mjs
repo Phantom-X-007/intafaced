@@ -834,6 +834,7 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     dependsOn: ['ledger.double-entry'],
+    note: 'Slice A 2026-08-04: referral tree pure law (self/cycle/depth) — no commission/payout. Class M residual.',
   }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', { module: 'core-ops', phase: '5', dependsOn: ['identity.kyc'] }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', { module: 'core-ops', phase: '5', dependsOn: ['ledger.double-entry'] }),

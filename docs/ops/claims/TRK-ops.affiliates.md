@@ -1,8 +1,9 @@
 # Claim TRK-ops.affiliates
 
-**status:** residual-own
-**proof:** docs/ops/trk/ops.affiliates.md on tip · research/spec complete · not implement
-**tip:** 04f9b1f2
-**updated:** 2026-08-03
+**status:** wip
+**owner:** nitro-afk
+**proof:** Slice A tree + attribution pure law + tests (no commission/payout)
+**tip:** fa005d1d
+**updated:** 2026-08-04
 
-Claim-lock is spawn authority. residual-own = research/spec complete on tip; not an implement swarm.
+No money invent. Accrual/payout Class M residual. thrift HARD — local craft only.
