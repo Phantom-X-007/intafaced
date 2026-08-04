@@ -51,31 +51,36 @@ const schema = serviceEnvSchema
         .default(30 * 60),
 
       /**
-       * `disputed` → no moderator ruled within the SLA.
+       * `disputed` → THE MODERATOR SLA, and nothing more than that.
        *
-       * Past this the backstop decides, because a dispute that can stay open
-       * forever is the same bug as an escrow that can stay locked forever — it
-       * just has a person's name attached to the delay.
+       * Past this the dispute ESCALATES: it is raised, it keeps its (now past)
+       * deadline so it stays at the top of the moderator queue, and the escrow
+       * does not move. There is no setting here that resolves a dispute,
+       * because there is no code path that does.
+       *
+       * `P2P_DISPUTE_BACKSTOP_SECONDS`, `P2P_DISPUTE_BACKSTOP_RESOLUTION` and
+       * `P2P_BACKSTOP_MODERATOR_ID` are gone rather than deprecated. Leaving a
+       * `…_RESOLUTION` knob in the environment would say the platform still has
+       * an opinion about how to auto-settle a disagreement, and it does not.
        */
-      P2P_DISPUTE_BACKSTOP_SECONDS: z.coerce
+      P2P_DISPUTE_SLA_SECONDS: z.coerce
         .number()
         .int()
         .min(3600)
         .default(7 * 24 * 60 * 60),
 
       /**
-       * How an un-adjudicated dispute resolves when the backstop fires.
+       * How often an escalated dispute is raised again.
        *
-       * `refund` by default, and the asymmetry is deliberate: releasing to a
-       * buyer who never paid destroys the seller's asset irrecoverably, while
-       * refunding a buyer who did pay leaves them a fiat claim they can still
-       * pursue through their bank. When we must decide without evidence, we
-       * decide the recoverable way.
+       * `p2p_trades_live_has_deadline_ck` requires a live trade to carry a
+       * deadline. This is the deadline it carries once the SLA is blown — a
+       * re-check, not a disposition.
        */
-      P2P_DISPUTE_BACKSTOP_RESOLUTION: z.enum(['release', 'refund']).default('refund'),
-
-      /** The identity recorded as moderator when the backstop rules. Never a real person. */
-      P2P_BACKSTOP_MODERATOR_ID: z.string().default('system:p2p-backstop'),
+      P2P_DISPUTE_ESCALATION_RECHECK_SECONDS: z.coerce
+        .number()
+        .int()
+        .min(60)
+        .default(60 * 60),
 
       /** How often the timeout + settlement sweeps run. */
       P2P_SWEEP_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),

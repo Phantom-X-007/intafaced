@@ -53,18 +53,26 @@ So a trade stuck in `created` is never ambiguous. This matters more than it look
 
 The six states are §6.2's enum exactly. `resolution` (`released` · `refunded` · `voided`) records where the value went; `voided` means the lock never happened, so nothing had to move.
 
-| State       | Holds escrow? | Deadline | What the clock does about it                          |
-| ----------- | ------------- | -------- | ----------------------------------------------------- |
-| `created`   | not provably  | 2 min    | re-drive the lock, then refund or void                |
-| `escrowed`  | yes           | 15 min   | **refund** — the buyer never even claimed to pay      |
-| `fiat_sent` | yes           | 30 min   | **open a dispute** — never auto-release               |
-| `disputed`  | yes           | 7 days   | **backstop-resolve** — a named system moderator rules |
-| `released`  | no            | —        | terminal                                              |
-| `cancelled` | no            | —        | terminal                                              |
+| State       | Holds escrow? | Deadline | What the clock does about it                                   |
+| ----------- | ------------- | -------- | -------------------------------------------------------------- |
+| `created`   | not provably  | 2 min    | re-drive the lock, then refund or void                         |
+| `escrowed`  | yes           | 15 min   | **refund** — the buyer never even claimed to pay               |
+| `fiat_sent` | yes           | 30 min   | **open a dispute** — never auto-release                        |
+| `disputed`  | yes           | 7 days   | **escalate and re-arm** — nothing moves without a human ruling |
+| `released`  | no            | —        | terminal                                                       |
+| `cancelled` | no            | —        | terminal                                                       |
 
 `fiat_sent` deliberately does **not** auto-release. The buyer says they paid and the seller has not confirmed: that is two people disagreeing, not a stall. Auto-releasing would hand the asset to anyone willing to click "I've paid" and wait out the clock.
 
-`disputed` deliberately **does** terminate. A dispute that can stay open forever is the same bug as an escrow that can stay locked forever; it just has a person's name attached to the delay. The backstop defaults to **refund**, and the asymmetry is on purpose: releasing to a buyer who never paid destroys the seller's asset irrecoverably, while refunding a buyer who did pay leaves them a fiat claim they can still pursue through their bank. When we must decide without evidence, we decide the recoverable way.
+`disputed` deliberately does **not** terminate on a clock, and this is the one behaviour in the service that changed rather than being added to.
+
+It used to. A 7-day timer called `backstop_resolve` refunded the buyer and attributed the refund to `system:p2p-backstop` — an automated resolution of a disputed release, which [SPEC-OTC-RFQ-AND-EARN](../../docs/SPEC-OTC-RFQ-AND-EARN-2026-08-02.md) says is the one place in the platform where a human decision is the design rather than the fallback. It fired while there was **no queue** to find a dispute in, **no way to read the evidence** filed on it, and **no session that could hold `admin:compliance`**. A timer that acts because nobody could have looked is not a fallback; it is the only path.
+
+Past its SLA a dispute now **escalates**: `escalated_at` is stamped, the count goes up, the dispute keeps its (now past) deadline so the moderator queue's "most overdue first" ordering keeps telling the truth, and the trade's own `deadline_at` re-arms on `P2P_DISPUTE_ESCALATION_RECHECK_SECONDS` so it stays visible to the sweeper. The escrow does not move.
+
+That reads like a conflict with `p2p_trades_live_has_deadline_ck`, which makes "a trade sits in escrow with no clock on it" unrepresentable. It is not: **the constraint requires a live trade to carry a deadline; it does not require the deadline to dispose of value.**
+
+And the database enforces the rest. `p2p_trades_disputed_needs_ruling_trg` refuses any write that terminates a `disputed` trade unless the dispute row is already `resolved` and attributed to a moderator id that is not a `system:` principal. A future timer cannot become a moderator again without impersonating a person, which is a thing a reviewer sees rather than a default nobody read.
 
 ---
 
@@ -85,8 +93,10 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `trades.confirmReceived`      | `p2p:write`              | Seller only. **→ `escrowRelease`**                               |
 | `trades.cancel`               | `p2p:write`              | **→ `escrowRefund`**, in full                                    |
 | `trades.get` / `trades.list`  | `p2p:read`               |                                                                  |
-| `disputes.open`               | `p2p:write`              | Either party                                                     |
-| `disputes.get`                | `p2p:read`               |                                                                  |
+| `disputes.open`               | `p2p:write`              | Either party. Discloses what happens if nobody rules             |
+| `disputes.appendEvidence`     | `p2p:write`              | Either party, while open. **Append-only** — no edit, no remove   |
+| `disputes.get`                | `p2p:read`               | Party sees their own evidence; moderator sees all of it          |
+| `disputes.list`               | `admin:compliance`       | **The queue** — open disputes, most overdue first, paginated     |
 | `disputes.resolve`            | `admin:compliance`       | **Moderator only** — release or refund, no third option          |
 | `reputation.get`              | `p2p:read`               | Completion rate, average release time, disputes lost, badges     |
 
@@ -97,6 +107,7 @@ HTTP (`src/index.ts`):
 | `GET /health`, `GET /ready`        | liveness / readiness                                                                                  |
 | `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's escrow view vs the ledger's. Non-zero drift returns 500 |
 | `GET /internal/reputation/:userId` | the hot path other modules read for `p2pLimitMultiplier`                                              |
+| `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more   |
 
 Two background sweeps start before the HTTP listener, because if they do not run, escrow eventually strands:
 
@@ -109,16 +120,16 @@ Two background sweeps start before the HTTP listener, because if they do not run
 
 **Publishes**
 
-| Subject                          | When                                                            |
-| -------------------------------- | --------------------------------------------------------------- |
-| `intafaced.p2p.offer.created`    | a maker publishes an offer                                      |
-| `intafaced.p2p.escrow.locked`    | taker accepted; the seller's asset is in escrow                 |
-| `intafaced.p2p.escrow.released`  | escrow went to the buyer, minus the fee. Terminal               |
-| `intafaced.p2p.escrow.refunded`  | escrow went back to the seller, in full. Terminal               |
-| `intafaced.p2p.trade.disputed`   | a trade entered dispute; funds hold until a moderator decides   |
-| `intafaced.p2p.dispute.resolved` | a moderator (or the SLA backstop) ruled                         |
-| `intafaced.p2p.trade.expired`    | a deadline elapsed and the sweeper resolved the trade           |
-| `intafaced.identity.xp.earned`   | §6.2 → §4.1 — completion and dispute-loss into the one XP graph |
+| Subject                          | When                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| `intafaced.p2p.offer.created`    | a maker publishes an offer                                               |
+| `intafaced.p2p.escrow.locked`    | taker accepted; the seller's asset is in escrow                          |
+| `intafaced.p2p.escrow.released`  | escrow went to the buyer, minus the fee. Terminal                        |
+| `intafaced.p2p.escrow.refunded`  | escrow went back to the seller, in full. Terminal                        |
+| `intafaced.p2p.trade.disputed`   | a trade entered dispute; funds hold until a moderator decides            |
+| `intafaced.p2p.dispute.resolved` | a moderator ruled. `automatic` is always `false` — nothing else can rule |
+| `intafaced.p2p.trade.expired`    | a deadline elapsed and the sweeper resolved the trade                    |
+| `intafaced.identity.xp.earned`   | §6.2 → §4.1 — completion and dispute-loss into the one XP graph          |
 
 Every publish carries a **business** idempotency key (`p2p.escrow.release:<tradeId>`, `p2p:trade.completed.seller:<tradeId>:<userId>`), never a random uuid. A redelivered envelope finds the original, which is what makes svc-identity's XP dedupe work.
 
@@ -243,7 +254,9 @@ The money paths run against real Postgres with the ledger's in-memory reference 
 - take above max, below min, above remaining liquidity → rejected before any lock, no trade row
 - self-trade, unsupported payment method, closed offer, unavailable reference price → rejected before any lock
 - concurrent takers on one offer → exactly one escrows; 12 racing takes never over-draw the inventory
-- timeout from `escrowed` → refund; from `fiat_sent` → dispute, never auto-release; from `disputed` → backstop rules
+- timeout from `escrowed` → refund; from `fiat_sent` → dispute, never auto-release; from `disputed` → **escalate, and move nothing** — five sweeps in a row leave the escrow exactly where it was
+- the database refusing to terminate a disputed escrow without an attributed human ruling, including for a `system:` moderator id
+- dispute evidence edited, reordered, truncated or removed by raw SQL → refused by the append-only trigger
 - timeout from `created` where the lock **had** posted → re-driven and refunded
 - timeout from `created` where the lock **never** posted → voided, nothing moved
 - a resolution recorded but never settled → the sweep posts it, once

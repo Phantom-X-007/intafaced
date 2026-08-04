@@ -2,7 +2,15 @@ import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { enabledFiat } from '@intafaced/config';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
-import { P2pError, PricingError, TradeStateError, type P2pService } from './p2p-service.js';
+import {
+  MAX_EVIDENCE_PER_CALL,
+  P2pError,
+  PricingError,
+  TradeStateError,
+  evidenceVisibleTo,
+  type DisputeRecord,
+  type P2pService,
+} from './p2p-service.js';
 
 /**
  * svc-p2p's API (§6.2).
@@ -59,6 +67,49 @@ const tradeOutput = z.object({
   settledAt: z.string().nullable(),
 });
 
+/**
+ * ONE PIECE OF EVIDENCE, ON THE WIRE.
+ *
+ * `item` is `z.unknown()` because it is whatever the party submitted and this
+ * service has no business asserting a shape for a screenshot reference or a
+ * bank narrative. What it does assert is the envelope: who, when, and in what
+ * order — the part a moderator has to be able to trust.
+ */
+const evidenceOutput = z.object({
+  seq: z.number().int(),
+  submittedBy: z.string().nullable(),
+  submittedAt: z.string().nullable(),
+  item: z.unknown(),
+});
+
+/**
+ * A DISPUTE, ON THE WIRE — the same shape for `.get` and `.list`.
+ *
+ * `evidence` was the missing field. It was accepted by `disputes.open`, stored
+ * in `p2p_disputes.evidence`, carried on `DisputeRecord`, and then never
+ * serialised by anything: write-only, so a moderator could not read what they
+ * were ruling on. It is here on both reads now.
+ */
+const disputeOutput = z.object({
+  id: z.string().uuid(),
+  tradeId: z.string().uuid(),
+  openedBy: z.string(),
+  reason: z.string(),
+  status: z.enum(['open', 'resolved']),
+  moderatorId: z.string().nullable(),
+  resolution: z.enum(['release', 'refund']).nullable(),
+  deadlineAt: z.string(),
+  openedAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  evidence: z.array(evidenceOutput),
+  /** True when the SLA has passed. The queue's whole reason to exist. */
+  overdue: z.boolean(),
+  escalatedAt: z.string().nullable(),
+  escalations: z.number().int(),
+  /** Null until a moderator has actually been served this row. */
+  lastSeenByModeratorAt: z.string().nullable(),
+});
+
 const reputationOutput = z.object({
   tradesTotal: z.number().int(),
   completed: z.number().int(),
@@ -108,6 +159,7 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.offer_not_active':
       case 'p2p.offer_method_unsupported':
+      case 'p2p.dispute_evidence_rejected':
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
       case 'p2p.escrow_missing':
         // Not a client error: the caller asked for something reasonable and the
@@ -278,10 +330,25 @@ export function createP2pRouter(p2p: P2pService) {
           z.object({
             tradeId: z.string().uuid(),
             reason: z.string().min(1).max(2000),
-            evidence: z.array(z.unknown()).optional(),
+            evidence: z.array(z.unknown()).max(MAX_EVIDENCE_PER_CALL).optional(),
           }),
         )
-        .output(z.object({ disputeId: z.string().uuid(), tradeId: z.string().uuid(), deadlineAt: z.string() }))
+        .output(
+          z.object({
+            disputeId: z.string().uuid(),
+            tradeId: z.string().uuid(),
+            deadlineAt: z.string(),
+            /**
+             * THE DISPOSITION, DISCLOSED BEFORE IT CAN HAPPEN.
+             *
+             * The ADR asks that a party entering a dispute be told what happens
+             * if nobody rules. The honest answer is now short, and it is this
+             * literal rather than a configurable string because there is no
+             * configuration that could make it say anything else.
+             */
+            ifNobodyRules: z.literal('escalated_and_held'),
+          }),
+        )
         .mutation(async ({ ctx, input }) =>
           guard(async () => {
             const dispute = await p2p.openDispute({
@@ -290,45 +357,106 @@ export function createP2pRouter(p2p: P2pService) {
               reason: input.reason,
               ...(input.evidence ? { evidence: input.evidence } : {}),
             });
-            return { disputeId: dispute.id, tradeId: dispute.tradeId, deadlineAt: dispute.deadlineAt.toISOString() };
+            return {
+              disputeId: dispute.id,
+              tradeId: dispute.tradeId,
+              deadlineAt: dispute.deadlineAt.toISOString(),
+              ifNobodyRules: 'escalated_and_held' as const,
+            };
+          }),
+        ),
+
+      /**
+       * ADD EVIDENCE TO AN OPEN DISPUTE. A party, and append-only.
+       *
+       * There is no edit and no remove, here or anywhere: not a missing feature
+       * but the shape of the thing. A dispute record whose earlier entries can
+       * change is a record whose last writer decides what was said.
+       */
+      appendEvidence: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(
+          z.object({
+            tradeId: z.string().uuid(),
+            evidence: z.array(z.unknown()).min(1).max(MAX_EVIDENCE_PER_CALL),
+          }),
+        )
+        .output(z.object({ disputeId: z.string().uuid(), tradeId: z.string().uuid(), evidence: z.array(evidenceOutput) }))
+        .mutation(async ({ ctx, input }) =>
+          guard(async () => {
+            const dispute = await p2p.appendDisputeEvidence({
+              tradeId: input.tradeId,
+              actorId: ctx.principal.userId,
+              evidence: input.evidence,
+            });
+            // Their own back, so a client can confirm what landed — never the
+            // counterparty's, for the reason in `evidenceVisibleTo`.
+            return {
+              disputeId: dispute.id,
+              tradeId: dispute.tradeId,
+              evidence: evidenceVisibleTo(dispute, ctx.principal.userId).map(toEvidenceOut),
+            };
           }),
         ),
 
       get: scopedProcedure('p2p:read', { module: 'p2p' })
         .input(z.object({ tradeId: z.string().uuid() }))
-        .output(
-          z.object({
-            id: z.string().uuid(),
-            tradeId: z.string().uuid(),
-            openedBy: z.string(),
-            reason: z.string(),
-            status: z.enum(['open', 'resolved']),
-            moderatorId: z.string().nullable(),
-            resolution: z.enum(['release', 'refund']).nullable(),
-            deadlineAt: z.string(),
-            resolvedAt: z.string().nullable(),
-          }),
-        )
+        .output(disputeOutput)
         .query(async ({ ctx, input }) =>
           guard(async () => {
-            const d = await p2p.getDispute(input.tradeId);
             const trade = await p2p.getTrade(input.tradeId);
             const isParty = trade.buyerId === ctx.principal.userId || trade.sellerId === ctx.principal.userId;
             const isModerator = ctx.principal.scopes.includes('admin:compliance');
             if (!isParty && !isModerator) {
               throw new TRPCError({ code: 'NOT_FOUND', message: 'Dispute not found' });
             }
-            return {
-              id: d.id,
-              tradeId: d.tradeId,
-              openedBy: d.openedBy,
-              reason: d.reason,
-              status: d.status,
-              moderatorId: d.moderatorId,
-              resolution: d.resolution,
-              deadlineAt: d.deadlineAt.toISOString(),
-              resolvedAt: d.resolvedAt?.toISOString() ?? null,
-            };
+
+            // A moderator's read is STAMPED. That stamp is what makes "has a
+            // human ever reached this dispute" a question the database can
+            // answer; a party reading their own dispute is not evidence of
+            // anything about moderation and must not be counted as if it were.
+            const d = isModerator
+              ? await p2p.getDisputeAsModerator(input.tradeId, ctx.principal.userId)
+              : await p2p.getDispute(input.tradeId);
+
+            return toDisputeOut(d, isModerator ? null : ctx.principal.userId);
+          }),
+        ),
+
+      /**
+       * THE MODERATOR QUEUE. Open disputes, most overdue first, paginated.
+       *
+       * Before this existed a moderator could only call `.get({ tradeId })` and
+       * had to already know the id — which meant, in practice, that nobody
+       * could reach a dispute at all, and a seven-day timer refunded every one
+       * of them without a person ever seeing it.
+       *
+       * `admin:compliance`, exactly like `resolve`: this reads other people's
+       * disputes, including the reasons and evidence they filed against each
+       * other.
+       */
+      list: scopedProcedure('admin:compliance', { module: 'p2p' })
+        .input(
+          z
+            .object({
+              status: z.enum(['open', 'resolved']).optional(),
+              limit: z.number().int().min(1).max(200).optional(),
+              cursor: z.string().max(200).nullable().optional(),
+            })
+            .optional(),
+        )
+        .output(z.object({ disputes: z.array(disputeOutput), nextCursor: z.string().nullable() }))
+        .query(async ({ ctx, input }) =>
+          guard(async () => {
+            const page = await p2p.listDisputes({
+              moderatorId: ctx.principal.userId,
+              ...(input?.status ? { status: input.status } : {}),
+              ...(input?.limit ? { limit: input.limit } : {}),
+              ...(input?.cursor ? { cursor: input.cursor } : {}),
+            });
+            // Evidence rides the queue, not just `.get`. A triage list that
+            // cannot show what is being alleged sends the moderator on a second
+            // round trip for every row, which is how a queue stops being used.
+            return { disputes: page.disputes.map((d) => toDisputeOut(d, null)), nextCursor: page.nextCursor };
           }),
         ),
 
@@ -338,6 +466,10 @@ export function createP2pRouter(p2p: P2pService) {
        * the escrow: §6.2's promise is that every dispute terminates.
        *
        * `admin:compliance`, not `p2p:write` — this moves someone else's escrow.
+       *
+       * It is also the ONLY way a disputed escrow terminates. The timeout sweep
+       * escalates and re-arms; the database refuses a terminal write on a
+       * disputed trade without an attributed human ruling behind it.
        */
       resolve: scopedProcedure('admin:compliance', { module: 'p2p' })
         .input(
@@ -408,6 +540,43 @@ function toOfferOut(offer: Awaited<ReturnType<P2pService['getOffer']>>): OfferOu
     terms: offer.terms,
     status: offer.status,
     createdAt: offer.createdAt.toISOString(),
+  };
+}
+
+function toEvidenceOut(entry: DisputeRecord['evidence'][number]): z.infer<typeof evidenceOutput> {
+  return {
+    seq: entry.seq,
+    submittedBy: entry.submittedBy,
+    submittedAt: entry.submittedAt?.toISOString() ?? null,
+    item: entry.item,
+  };
+}
+
+/**
+ * `viewerId === null` means a moderator is reading: the whole evidence set.
+ *
+ * Any other value is a party, and a party sees only what they filed. That is
+ * not a serialisation convenience — it is the disclosure decision, made in one
+ * place so it cannot be half-made in two. See `evidenceVisibleTo`.
+ */
+function toDisputeOut(d: DisputeRecord, viewerId: string | null): z.infer<typeof disputeOutput> {
+  const evidence = viewerId === null ? d.evidence : evidenceVisibleTo(d, viewerId);
+  return {
+    id: d.id,
+    tradeId: d.tradeId,
+    openedBy: d.openedBy,
+    reason: d.reason,
+    status: d.status,
+    moderatorId: d.moderatorId,
+    resolution: d.resolution,
+    deadlineAt: d.deadlineAt.toISOString(),
+    openedAt: d.openedAt.toISOString(),
+    resolvedAt: d.resolvedAt?.toISOString() ?? null,
+    evidence: evidence.map(toEvidenceOut),
+    overdue: d.status === 'open' && d.deadlineAt.getTime() <= Date.now(),
+    escalatedAt: d.escalatedAt?.toISOString() ?? null,
+    escalations: d.escalations,
+    lastSeenByModeratorAt: d.lastSeenByModeratorAt?.toISOString() ?? null,
   };
 }
 

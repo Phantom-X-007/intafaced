@@ -48,13 +48,12 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const p2p = new P2pService(sql, ledger, bus, {
   feeBps: env.P2P_FEE_BPS,
   tradingEnabled: env.P2P_TRADING_ENABLED,
-  disputeBackstopResolution: env.P2P_DISPUTE_BACKSTOP_RESOLUTION,
-  backstopModeratorId: env.P2P_BACKSTOP_MODERATOR_ID,
   deadlines: {
     escrowSeconds: env.P2P_ESCROW_DEADLINE_SECONDS,
     paymentSeconds: env.P2P_PAYMENT_DEADLINE_SECONDS,
     releaseSeconds: env.P2P_RELEASE_DEADLINE_SECONDS,
-    disputeSeconds: env.P2P_DISPUTE_BACKSTOP_SECONDS,
+    disputeSeconds: env.P2P_DISPUTE_SLA_SECONDS,
+    escalationRecheckSeconds: env.P2P_DISPUTE_ESCALATION_RECHECK_SECONDS,
   },
   // No reference price source yet: floating offers are refused rather than
   // priced from a stale number. svc-trade owns pricing (§5.2) and supplies this
@@ -87,6 +86,22 @@ app.get('/internal/escrow-integrity', async (req, reply) => {
   return result;
 });
 
+/**
+ * THE MODERATION BACKLOG, as an endpoint.
+ *
+ * Nothing disposes of a dispute on a timer any more, so this number is real: it
+ * grows when nobody is working the queue and it does not quietly drain into
+ * refunds. `neverSeen` is the sharp one — disputes no moderator has ever been
+ * served, which is what "the moderation path is unreachable" actually looks
+ * like from the outside.
+ */
+app.get('/internal/moderation-backlog', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
+  }
+  return p2p.moderationBacklog();
+});
+
 app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (req, reply) => {
   if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
     return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
@@ -109,6 +124,15 @@ async function sweep(): Promise<void> {
     const swept = await p2p.sweepDeadlines();
     if (settled.failed > 0 || swept.failed > 0) {
       app.log.warn({ settled, swept }, 'p2p sweep left work behind — it will retry next tick');
+    }
+    if (swept.escalated > 0) {
+      // NOT a retryable failure. These are disputes past their moderator SLA
+      // that nobody has ruled on, and the only thing that clears them is a
+      // person. Logged every tick on purpose: an alarm that stops sounding
+      // because the condition persisted is the alarm that let the old backstop
+      // refund seven days of escrow with nobody watching.
+      const backlog = await p2p.moderationBacklog();
+      app.log.warn({ escalated: swept.escalated, backlog }, 'p2p disputes past the moderator SLA — escrow held, awaiting a human ruling');
     }
   } catch (err) {
     // Never let a sweep failure kill the interval. The one thing worse than a
