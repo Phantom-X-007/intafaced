@@ -152,9 +152,8 @@ export const FEATURES = [
     module: 'identity',
     phase: '1',
     status: 'done',
-    owner: 'shehzad002',
     requires: ['services/svc-identity'],
-    note: 'Base keys/sub-accounts create/list/revoke on main. HUMAN M5 @shehzad002 owns remaining **money-routing** graph (no cross-leak, trade ownership gates). Agents: UI selector only after his APIs; do not invent money routing. Updated 2026-08-02 ownership lock.',
+    note: 'Base keys on main. **Reclaimed 2026-08-04** from Shehzad M5 — Nitro agents own remaining money-routing graph (no cross-leak). Class M. Do not invent money routing.',
   }),
   f('identity.kyc', 'KYC tiers wired to JURISDICTION_MATRIX', {
     module: 'identity',
@@ -257,10 +256,9 @@ export const FEATURES = [
   f('trade.futures', 'Perps: cross/isolated margin, funding, liquidation ladder', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
-    owner: 'shehzad002',
+    status: 'ready',
     dependsOn: ['trade.spot'],
-    note: 'HUMAN M3 @shehzad002 (Board Clear). Residual stack + jobs OFF on main; risk/margin/liq/mark truth is his. Agents: babysit only. Updated 2026-08-02 ownership lock.',
+    note: '**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
@@ -270,17 +268,15 @@ export const FEATURES = [
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
     phase: '2',
-    owner: 'shehzad002',
     dependsOn: ['trade.spot', 'token.staking'],
-    note: 'HUMAN M4 @shehzad002. Agents must not invent OTC product.',
+    note: '**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent OTC product truth.',
   }),
   f('trade.copy', 'Copy trading, audited leaders, profit share', {
     module: 'trade',
     phase: '2',
     plane: 'B',
-    owner: 'shehzad002',
     dependsOn: ['trade.spot'],
-    note: 'HUMAN M4 @shehzad002. Agents must not invent copy product.',
+    note: '**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent copy product.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
@@ -291,9 +287,8 @@ export const FEATURES = [
   f('trade.algo', 'TWAP / VWAP / POV execution', {
     module: 'trade',
     phase: '2',
-    owner: 'shehzad002',
     dependsOn: ['trade.spot'],
-    note: 'HUMAN M4 @shehzad002. Agents must not invent algo product.',
+    note: '**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent algo product.',
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
@@ -354,27 +349,25 @@ export const FEATURES = [
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
   f('pay.gateway', 'Branded gateway, hosted checkout, payment links', {
+    owner: 'Nitro',
     module: 'pay',
     phase: '3',
     status: 'wip',
-    owner: 'shehzad002',
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
-    note: 'HUMAN M1 @shehzad002 (Board Clear Pay OS). Crypto rail on main (#226). Card sandbox + expand pay.* is his. Agents: babysit only (e.g. #346). Not go-live. Updated 2026-08-02 ownership lock.',
+    note: '**Reclaimed 2026-08-04** from Shehzad M1 — Nitro agents after #346 handoff. Crypto rail on main (#226). Card sandbox residual Class M. Not go-live.',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
     phase: '3',
-    owner: 'shehzad002',
     dependsOn: ['pay.gateway'],
-    note: 'HUMAN M1 expand @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
     phase: '3',
-    owner: 'shehzad002',
     dependsOn: ['pay.psp'],
-    note: 'HUMAN M1 expand @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
     module: 'pay',
@@ -397,45 +390,39 @@ export const FEATURES = [
   f('pay.routing', 'Smart routing — geo, method, risk, approval rate', {
     module: 'pay',
     phase: '3',
-    owner: 'shehzad002',
     dependsOn: ['pay.rails'],
-    note: 'HUMAN M1 expand @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('pay.settlement', 'Dual settlement — bank or crypto', {
     module: 'pay',
     phase: '3',
-    owner: 'shehzad002',
     dependsOn: ['pay.rails'],
-    note: 'HUMAN M1 expand @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('pay.fraud', 'Risk scoring, chargebacks, decline recovery', {
     module: 'pay',
     phase: '3',
-    owner: 'shehzad002',
     dependsOn: ['pay.gateway'],
-    note: 'HUMAN M1 expand @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('pay.subscriptions', 'Recurring — card and crypto', {
     module: 'pay',
     phase: '3',
-    owner: 'shehzad002',
     dependsOn: ['pay.gateway'],
-    note: 'HUMAN M1 expand @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
     phase: '3',
-    owner: 'shehzad002',
     dependsOn: ['pay.gateway'],
-    note: 'HUMAN M1 expand @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', {
     module: 'pay',
     phase: '3',
     plane: 'B',
-    owner: 'shehzad002',
     dependsOn: ['pay.gateway', 'identity.apikeys'],
-    note: 'HUMAN M1 expand @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', {
     module: 'p2p',
@@ -480,7 +467,7 @@ export const FEATURES = [
     owner: 'shehzad002',
     dependsOn: ['identity.accounts'],
     requires: ['services/svc-protocol'],
-    note: 'HUMAN M2 @shehzad002. Deploy + adversarial audit package required for Done. Agents babysit only. Not go-live. Updated 2026-08-02 ownership lock.',
+    note: 'HUMAN Protocol Plane @shehzad002 (2026-08-04 sole chain lock). Deploy + adversarial audit package. Agents babysit only. Not go-live Class X.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
     module: 'protocol',
@@ -490,7 +477,7 @@ export const FEATURES = [
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
     requires: ['services/svc-protocol/contracts/amm', 'services/svc-protocol/src/amm'],
-    note: 'HUMAN M2 @shehzad002 after SA. Agents babysit only.',
+    note: 'HUMAN Protocol Plane @shehzad002 after SA. Agents babysit only.',
   }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', {
     module: 'protocol',
@@ -498,7 +485,7 @@ export const FEATURES = [
     plane: 'P',
     owner: 'shehzad002',
     dependsOn: ['protocol.amm'],
-    note: 'HUMAN M2 expand @shehzad002.',
+    note: 'HUMAN Protocol Plane @shehzad002. Agents babysit only.',
   }),
   f('protocol.escrow', 'Non-custodial P2P escrow contracts', {
     module: 'protocol',
@@ -506,7 +493,7 @@ export const FEATURES = [
     plane: 'P',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'HUMAN M2 expand @shehzad002.',
+    note: 'HUMAN Protocol Plane @shehzad002. Agents babysit only.',
   }),
   f('protocol.router', 'Sovereign router — book vs pool best execution', {
     module: 'protocol',
@@ -514,7 +501,7 @@ export const FEATURES = [
     plane: 'P',
     owner: 'shehzad002',
     dependsOn: ['protocol.amm'],
-    note: 'HUMAN M2 expand @shehzad002.',
+    note: 'HUMAN Protocol Plane @shehzad002. Agents babysit only.',
   }),
   f('protocol.merchant', 'Lane A merchant contracts — zero KYB (§24)', {
     module: 'protocol',
@@ -522,7 +509,7 @@ export const FEATURES = [
     plane: 'P',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'HUMAN M2 expand @shehzad002.',
+    note: 'HUMAN Protocol Plane @shehzad002. Agents babysit only.',
   }),
   f('indexer.readmodels', 'Chain → Postgres read models', {
     module: 'indexer',
@@ -574,13 +561,24 @@ export const FEATURES = [
 
   // ── PHASE 4P · INTACHAIN ─────────────────────────────────────────────────
   f('chain.mainnet', 'INTACHAIN — CometBFT + native CLOB module', {
+    owner: 'shehzad002',
+    note: 'HUMAN INTACHAIN P1 @shehzad002 (§17). Plan ADR before large implement. Agents babysit only.',
     module: 'chain',
     phase: '4P',
     plane: 'P',
     dependsOn: ['matching.engine', 'protocol.amm'],
   }),
-  f('chain.evm', 'INTAEVM sharing validator set + state', { module: 'chain', phase: '4P', plane: 'P', dependsOn: ['chain.mainnet'] }),
+  f('chain.evm', 'INTAEVM sharing validator set + state', {
+    owner: 'shehzad002',
+    note: 'HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only.',
+    module: 'chain',
+    phase: '4P',
+    plane: 'P',
+    dependsOn: ['chain.mainnet'],
+  }),
   f('bridge.canonical', 'Canonical IFC bridge + attestations', {
+    owner: 'shehzad002',
+    note: 'HUMAN Protocol Plane bridge @shehzad002. Agents babysit only.',
     module: 'bridge',
     phase: '4P',
     plane: 'B',
@@ -607,31 +605,27 @@ export const FEATURES = [
   f('bank.earn', 'Flexible + fixed yield pools', {
     module: 'bank',
     phase: '5',
-    owner: 'shehzad002',
     dependsOn: ['bank.accounts', 'token.staking'],
-    note: 'HUMAN M6 @shehzad002. Agents must not implement bank money product.',
+    note: '**Reclaimed 2026-08-04** from Shehzad M6 — Nitro agents thin ledger-true. Class M. Class X issuer keys = Nitro human.',
   }),
   f('bank.cards', 'CardIssuerAdapter + card-sim, <2s auth decision', {
     module: 'bank',
     phase: '5',
-    owner: 'shehzad002',
     dependsOn: ['bank.accounts'],
-    note: 'HUMAN M6 @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M6 — Nitro agents thin. Class X keys = Nitro human.',
   }),
   f('bank.sovereign-card', 'Self-custody funded card, JIT conversion (§18)', {
     module: 'bank',
     phase: '5',
     plane: 'P',
-    owner: 'shehzad002',
     dependsOn: ['bank.cards', 'protocol.smart-accounts'],
-    note: 'HUMAN M6 @shehzad002 (depends M2 SA).',
+    note: '**Reclaimed 2026-08-04** M6 custodial half — agents thin; on-chain JIT contract half remains Shehzad protocol board.',
   }),
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',
     phase: '5',
-    owner: 'shehzad002',
     dependsOn: ['pay.rails'],
-    note: 'HUMAN M6 @shehzad002.',
+    note: '**Reclaimed 2026-08-04** M6 — Nitro agents thin Class M.',
   }),
   f('agents.gateway', 'Model-agnostic gateway, per-user metering', {
     module: 'agents',
@@ -689,6 +683,7 @@ export const FEATURES = [
   }),
   f('academy.paper-trading', 'Paper-trading market flag for workbooks', { module: 'academy', phase: '5', dependsOn: ['trade.spot'] }),
   f('launch.token-factory', 'ERC-20 deploy from audited templates', {
+    owner: 'shehzad002',
     module: 'launch',
     phase: '5',
     plane: 'B',
@@ -704,7 +699,7 @@ export const FEATURES = [
     dependsOn: [],
     requires: ['services/svc-protocol/contracts/launch', 'services/svc-protocol/src/launch'],
     note:
-      'NOT `done`, for the same reason protocol.smart-accounts is not: a local dev chain is not a chain decision, and ' +
+      'HUMAN on-chain launch @shehzad002. Agents babysit only.' +
       'the title says "audited templates" while nothing here has been audited. What DOES exist, on main and mounted: ' +
       'contracts/launch/SovereignToken.sol (fixed-supply ERC-20 — NO mint, NO owner, NO pause, NO blacklist, NO upgrade ' +
       'path; entire supply minted once in the constructor to a named recipient) and TokenFactory.sol (CREATE2; the salt ' +
@@ -736,23 +731,31 @@ export const FEATURES = [
       'Sockets: socket.contract-audit, socket.contract-toolchain (no fuzz suite and no gas snapshots for these contracts).',
   }),
   f('launch.meme-factory', 'One-click meme launch + instant market + LP', {
+    owner: 'shehzad002',
+    note: 'HUMAN on-chain launch @shehzad002. Agents babysit only.',
     module: 'launch',
     phase: '5',
     plane: 'P',
     dependsOn: ['launch.token-factory', 'protocol.amm'],
   }),
   f('launch.launchpad', 'Presale / fair launch, vesting, staked allocation tiers', {
+    owner: 'shehzad002',
+    note: 'HUMAN on-chain launch @shehzad002. Agents babysit only.',
     module: 'launch',
     phase: '5',
     dependsOn: ['launch.token-factory', 'token.staking'],
   }),
   f('launch.nft', 'NFT mint / list / auction, on-chain royalties', {
+    owner: 'shehzad002',
+    note: 'HUMAN on-chain launch @shehzad002. Agents babysit only.',
     module: 'launch',
     phase: '5',
     plane: 'P',
     dependsOn: ['launch.token-factory'],
   }),
   f('launch.rwa', 'RWA issuance registry, licence-gated', {
+    owner: 'shehzad002',
+    note: 'HUMAN on-chain launch @shehzad002 (licence honesty). Agents babysit only.',
     module: 'launch',
     phase: '5',
     status: 'socket',
@@ -768,7 +771,13 @@ export const FEATURES = [
     phase: '5',
     dependsOn: ['market.vendors'],
   }),
-  f('mining.pool', 'Stratum share protocol, PPLNS payouts', { module: 'mining-pool', phase: '5', dependsOn: ['token.emissions'] }),
+  f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
+    owner: 'shehzad002',
+    note: 'HUMAN mining epoch/share protocol surface @shehzad002 (token minter remains svc-token). Agents babysit chain half.',
+    module: 'mining-pool',
+    phase: '5',
+    dependsOn: ['token.emissions'],
+  }),
   f('ops.support', 'Support desk, tickets, KB', { module: 'core-ops', phase: '5', dependsOn: ['identity.accounts'] }),
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',
@@ -845,6 +854,8 @@ export const FEATURES = [
     note: 'Mounted, tested and probed live 2026-08-03. `routePreview` sweeps a set of venue quotes by effective price and returns the split. It is explicitly NOT a price and the router says so in its own header — it was called `quote` once, which is precisely how a caller ends up rendering invented numbers in good faith, so it was renamed rather than deleted because the arithmetic is genuinely useful for a routing explainer. Live probe with two venues (a: 3 @ 90000 @ 10bps, b: 4 @ 124000 @ 30bps, want 5) returned 200 and correctly took 3 from the cheaper venue and 2 from the dearer, effective prices 30030.03003003003003003 and 31093.279839518555667001, all decimal strings. Money law holds on the wire: a JSON-number `qty` is refused with HTTP 400 by the zod schema, and every amount is parsed to scaled bigint via parseAmount before any arithmetic. 16 tests in router-quote.test.ts plus 16 mount tests that would fail if it stopped being reachable.',
   }),
   f('dex.quote-router', 'Live cross-venue quote — real prices or a typed refusal', {
+    owner: 'shehzad002',
+    note: 'HUMAN Protocol Plane dex residual @shehzad002. Agents babysit only — no invent prices.',
     module: 'dex',
     phase: '5',
     plane: 'P',
@@ -880,6 +891,8 @@ export const FEATURES = [
 
   // ── PHASE 5P · PROTOCOL P2–P3 ────────────────────────────────────────────
   f('chain.rust-core', 'Rust CLOB execution engine', {
+    owner: 'shehzad002',
+    note: 'HUMAN INTACHAIN P2 @shehzad002. Agents babysit only.',
     module: 'chain',
     phase: '5P',
     plane: 'P',
@@ -887,12 +900,16 @@ export const FEATURES = [
     dependsOn: ['chain.mainnet'],
   }),
   f('chain.validators', 'Validator set opening, published schedule', {
+    owner: 'shehzad002',
+    note: 'HUMAN INTACHAIN @shehzad002. Agents babysit only.',
     module: 'chain',
     phase: '5P',
     plane: 'P',
     dependsOn: ['chain.mainnet'],
   }),
   f('chain.governance', 'Governance parameter handover', {
+    owner: 'shehzad002',
+    note: 'HUMAN INTACHAIN @shehzad002. Agents babysit only.',
     module: 'chain',
     phase: '5P',
     plane: 'P',

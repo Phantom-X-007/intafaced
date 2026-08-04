@@ -66,4 +66,4 @@ When the primary board finish is met but the session continues (AFK / “never s
 
 **Cold resume (no third file):** regenerate + read [`FREEZE-LIVE.md`](./FREEZE-LIVE.md) · [`../COORDINATION-TRUTH-LAYERS.md`](../COORDINATION-TRUTH-LAYERS.md) § Agent cold-start · human inbox [`../BOARD-CLEAR-HUMAN-BLOCKERS.md`](../BOARD-CLEAR-HUMAN-BLOCKERS.md).
 
-Forbidden unchanged: Shehzad M1–M7 implement · Denon open-PR dual-edit · invent money/depth · main-checkout · fake visual under NO-FLEET.
+Forbidden unchanged: Shehzad protocol/INTACHAIN implement · Denon open-PR dual-edit · invent money/depth · main-checkout · fake visual under NO-FLEET.

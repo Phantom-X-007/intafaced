@@ -1,3 +1,11 @@
+# SUPERSEDED FOR SCOPE (2026-08-04)
+
+**Who may code / what Shehzad owns now:** [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) + [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) + [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md).
+
+This file remains as **historical** Board Clear mountain detail (M1–M7). **Do not** treat M1/M3–M7 as human-locked for agents anymore. Protocol (old M2) + INTACHAIN continue under the blockchain board.
+
+---
+
 # Shehzad hard ownership — big spine mountains · 2026-08-01
 
 **Status:** BINDING on main · re-audit after Board Clear GO started  

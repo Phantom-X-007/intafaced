@@ -1,9 +1,23 @@
 # Denon — hard task board (while Nitro agents swarm free shell)
 
-**Date:** 2026-08-03  
+**Date:** 2026-08-03 · **Refresh:** 2026-08-04 (three-way distribution)  
 **Tip at write:** re-derive `origin/main` (swarm freeze may lag)  
 **From:** Nitro (agents parallel on free product)  
+**Split law:** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md)  
 **Why this board exists:** Agents are good at **path-clean shell craft + reports + Class N merges**. They are **bad** at platform integrity, money/custody spine under open PR piles, product law, and finishing _your_ conflicting integrity PRs without dual-edit thrash.
+
+## 2026-08-04 refresh (do not use stale P0 list blindly)
+
+| Was                                    | Now                                                                                                                                                             |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D-P0-WS** platform path reachability | **Largely landed** (#727 + #737). Shell may start **WS client**. Still: write market-id authority if not on tip; **fleet real image rebuild** (hot-patch trap). |
+| #445 #441 #438 #446                    | **Merged** — drop from “must land” theater                                                                                                                      |
+| Shehzad M1–M7 babysit-only             | **Reclaimed** non-chain for agents · Shehzad = Protocol Plane + INTACHAIN only                                                                                  |
+| freeProduct=0 shell                    | Shell drained — agents still have reclaim mountains + depth client + stranded                                                                                   |
+
+**Your live open queue:** re-derive `gh pr list --author Phantom-X-007 --state open` (numbers rot). Typical: secrets #448, launch flags, matching reconcile, screening, p2p instruments, tracker money docs — land green first, rebase conflicts.
+
+**Not yours:** shell depth **client** craft · AFK residual · pay implement after #346 handoff · invent-free research packs agents can own.
 
 **Re-derive before you cook:** `git fetch && git log -1 --oneline origin/main` · `gh pr list`
 
@@ -29,7 +43,7 @@
 | **WS market-ID ∩ edge + `/ws`→`/stream`**            | Platform services; blocks all depth; REGROUP §3                  |
 | **Money Class M under your PRs**                     | ledger schema, custody, matching reconcile, event bus            |
 | **Product law** (futures/OTC/multi-asset invent)     | Ownership law — direction is yours                               |
-| **Shehzad M1–M7**                                    | Human hard lock — babysit only                                   |
+| **Shehzad Protocol Plane / INTACHAIN**               | Human hard lock — babysit only (pay/bank reclaimed)              |
 | **apps/web one-commit delete + compose build proof** | Needs runtime + tracker/i18n decisions you already framed        |
 | **Abandon vs resume** spine crash WIP branches       | Your call                                                        |
 
@@ -65,7 +79,7 @@ Ranked for **unblock agents + real money integrity**, not volume theater.
 | ID               | Task                                                                                            | Why you                                           |
 | ---------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | **D-P2-LAW**     | Futures / OTC / multi-asset / copy **product law** for anything still greenfield                | Ownership law — agents must not invent            |
-| **D-P2-SHEHZAD** | Unblock/coordinate **#346** pay M1 with Shehzad (not implement his mountain)                    | Human hard lock                                   |
+| **D-P2-SHEHZAD** | Optional: coordinate **#346** handoff (Nitro reclaim pay) — not implement                       | Handoff residual                                  |
 | **D-P2-SPINE**   | **Abandon vs resume** `feat/spine-*` crash WIPs still on remote                                 | Only you can decide without destroy               |
 | **D-P2-DEPTH**   | Depth/tape **after** D-P0-WS                                                                    | Port is worthless before integrity                |
 | **D-P2-DELETE**  | **`apps/web` one-commit delete** when REGROUP §7 queue clear + **`docker compose build`** proof | Sequencing + image gate agents lack without fleet |

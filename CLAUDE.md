@@ -14,6 +14,6 @@ The non-negotiables (money + process), repeated because they cost real money or 
 2. **Never move value outside `packages/ledger-client`.** Doctrine §0.6 — no module holds its own balance.
 3. **Never store money in a `number`.** Decimal strings on the wire, scaled bigint in memory.
 4. **Run `pnpm verify` before claiming done**, and report what it actually printed.
-5. **Multi-dev claim law (automatic — do not wait for Nitro to remind you):** before code, LIVE-LANES + tracker free/owner check; never implement HUMAN-CLAIMED / shehzad M1–M7; on mountain claim/handoff/done update `features.mjs` (not every craft PR). Home: `docs/COORDINATION-TRUTH-LAYERS.md`.
+5. **Multi-dev claim law (automatic — do not wait for Nitro to remind you):** before code, LIVE-LANES + tracker free/owner check; never implement Shehzad chain mountains (protocol/INTACHAIN; tracker owner shehzad002); on mountain claim/handoff/done update `features.mjs` (not every craft PR). Home: `docs/COORDINATION-TRUTH-LAYERS.md`.
 
 The law is [`INTAFACED_DEFINITIVE_BUILD.md`](INTAFACED_DEFINITIVE_BUILD.md). The rules are [`tooling/agent-protocol/AGENT_PROTOCOL.md`](tooling/agent-protocol/AGENT_PROTOCOL.md). On ambiguity, the doctrine (§0) decides; if it does not, stop and ask.

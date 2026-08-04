@@ -753,7 +753,7 @@ function renderFreezeMd(m) {
     '- `docs/ops/SWARM-MANDATE.md` (AFK priority ladder + stamp-mill ban) · `docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md` · `docs/REGROUP-2026-08-03.md`',
   );
   lines.push('- Before edit: `pnpm claim:check <paths>` · worktree only · no invent money/depth');
-  lines.push('- Shehzad M1–M7 babysit only · no dual-edit Denon open PR files');
+  lines.push('- Shehzad protocol/INTACHAIN babysit only · no dual-edit Denon open PR files');
   lines.push('');
   return lines.join('\n');
 }
@@ -919,7 +919,7 @@ function pasteFor(claim) {
     `Scope: ${claim.title}`,
     `Allowed paths:\n  ${paths}`,
     `Note: ${claim.note || '—'}`,
-    'Forbidden: Shehzad M1–M7; dual-edit Denon open PR files; invent money/depth; apps/web product; main checkout; mid-wave features.mjs/package.json.',
+    'Forbidden: Shehzad protocol/INTACHAIN implement; dual-edit Denon open PR files; invent money/depth; apps/web product; main checkout; mid-wave features.mjs thrash.',
     'Proof: if no Docker — NO-FLEET (proof_missing: fleet-blocked). If :8090 listener cwd ≠ your worktree — visual proof invalid.',
     'PRE-PUSH: pnpm format:check must pass (covers tooling/scripts/*.mjs). Do not merge until Docs format + CI both green on the PR.',
     'Worktree from origin/main. pnpm format:check && pnpm verify when code. One PR. Stamp residual-own with checkable proof string.',

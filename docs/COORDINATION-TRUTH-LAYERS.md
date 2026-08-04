@@ -108,7 +108,7 @@ docs/BOARD-CLEAR-HUMAN-BLOCKERS.md
 **F-STANDBY:** when freeProduct=0, idling is valid; only P1–P5 with Board-Delta. Law: `docs/ops/SWARM-MANDATE.md`.  
 **Value gate:** `tooling/ci/value-gate.mjs` (Docs format workflow) + L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`.
 
-If tracker owner / LIVE-LANES is **HUMAN-CLAIMED** or shehzad M1–M7 → **babysit only**, never implement.
+If tracker owner is **shehzad002** (Protocol Plane / INTACHAIN) or LIVE-LANES human chain claim → **babysit only**, never implement. Pay/bank reclaimed for agents after #346 handoff.
 
 ---
 
