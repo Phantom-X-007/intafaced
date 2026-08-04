@@ -447,9 +447,16 @@ function buildModel() {
     underGap,
     underSpawnFail,
     underSpawnNote,
-    spawnWidthTarget: '6-8',
+    spawnWidthTarget: freeProduct.length > 0 ? '6-8' : '3-6 (P1–P3 only)',
     mandate:
       'SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.',
+    // AFK anti-drift (docs/ops/SWARM-MANDATE.md ladder) — freeProduct=0 must not spawn stamp mills
+    afkLadder:
+      freeProduct.length === 0
+        ? 'P1 stranded-branch land · P2 partner unblock (exact CI comment) · P3 TRK deepen · P4 invent/P-WS only on real delta · P5 hygiene. BAN: R07/R01/P-WS tip-bump cycles when board unchanged.'
+        : 'P0 SPAWN_NOW free product path-disjoint (width 6–8). Stamp mill still banned.',
+    stampMillBan:
+      'Do not open docs(ops) R07/R01/P-WS “cycle N” PRs solely because freeProduct=0. Ship only on board delta or P1–P3 deliverable. Law: docs/ops/SWARM-MANDATE.md',
   };
 }
 
@@ -468,11 +475,25 @@ function renderFreezeMd(m) {
   );
   lines.push(`- **Anti-under-spawn:** ${m.underSpawnNote}`);
   lines.push(`- **Mandate:** ${m.mandate || 'shell product only'}`);
+  lines.push(`- **AFK ladder:** ${m.afkLadder || 'see docs/ops/SWARM-MANDATE.md'}`);
+  lines.push(`- **Stamp-mill ban:** ${m.stampMillBan || 'no R07/R01 tip-bump spam when board unchanged'}`);
   lines.push('- **Proof mode:** NO-FLEET until Docker present — static build + scans; never fake UI done');
   lines.push('- **Claims:** docs/ops/claims/<id>.md (do not hand-edit LIVE-LANES mid-wave)');
   if (m.residualError) lines.push(`- **Residual error:** ${m.residualError}`);
   else lines.push(`- **Residual:** updated=${m.residualUpdated} tip_note=${m.residualTipNote || '—'}`);
   lines.push('');
+  if ((m.freeProduct || []).length === 0) {
+    lines.push('## freeProduct=0 — real work (not stamp cycles)');
+    lines.push('');
+    lines.push('1. **P1** Land stranded `origin/feat/*` / `fix/*` after path-intersect vs open partner PRs.');
+    lines.push('2. **P2** Partner babysit: extract exact CI fails; one NEW comment only; never merge partners.');
+    lines.push('3. **P3** Deepen thin `docs/ops/trk/*` for tracker ready non-shehzad rows (code-grounded).');
+    lines.push('4. **P4** Invent re-scan only after shell code change; P-WS report only if #433/#432 state changed.');
+    lines.push('5. **P5** LIVE-LANES/claims truth + merge green Nitro Class N.');
+    lines.push('');
+    lines.push('**BAN:** `docs(ops): R07 cycleN freeProduct=0` style PRs when freeProduct stays 0 and partner matrix unchanged.');
+    lines.push('');
+  }
   lines.push('## Free (spawn one worker each)');
   lines.push('');
   lines.push('| rank | id | track | title | paths (sample) | note |');
@@ -516,7 +537,9 @@ function renderFreezeMd(m) {
   lines.push('');
   lines.push('## Law');
   lines.push('');
-  lines.push('- `docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md` · `docs/REGROUP-2026-08-03.md`');
+  lines.push(
+    '- `docs/ops/SWARM-MANDATE.md` (AFK priority ladder + stamp-mill ban) · `docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md` · `docs/REGROUP-2026-08-03.md`',
+  );
   lines.push('- Before edit: `pnpm claim:check <paths>` · worktree only · no invent money/depth');
   lines.push('- Shehzad M1–M7 babysit only · no dual-edit Denon open PR files');
   lines.push('');
@@ -542,6 +565,8 @@ function printStatus(m) {
   );
   console.log(`  ${m.underSpawnNote}`);
   console.log(`  mandate: ${m.mandate || 'shell product only'}`);
+  if (m.afkLadder) console.log(`  afk-ladder: ${m.afkLadder}`);
+  if (m.stampMillBan) console.log(`  stamp-mill: BAN — ${m.stampMillBan}`);
   console.log('  free product ids:', m.freeProduct.map((c) => c.id).join(', ') || '(none)');
   if (m.blocked.length) {
     console.log('  blocked ids:', m.blocked.map((c) => c.id).join(', '));
@@ -677,6 +702,13 @@ function printNext(m, all = false) {
   const list = m.freeProduct.length ? m.freeProduct : m.free.filter((c) => c.track !== 'OPS');
   if (!list.length) {
     console.log('swarm:next — no free product claims. Board empty or only blocked/OPS.');
+    console.log('swarm:next — freeProduct=0 AFK ladder (docs/ops/SWARM-MANDATE.md) — NOT a kill switch:');
+    console.log('  P1 land stranded origin/feat/*|fix/* (path-intersect clean vs partner open PRs)');
+    console.log('  P2 partner unblock: exact CI fail extract + one NEW comment; never merge partners');
+    console.log('  P3 deepen thin docs/ops/trk/* for ready non-shehzad tracker rows');
+    console.log('  P4 invent re-scan only after shell code change; P-WS report only if #433/#432 changed');
+    console.log('  P5 LIVE-LANES/claims truth + merge green Nitro Class N');
+    console.log('  BAN: R07/R01/P-WS tip-bump “cycle N” PRs when freeProduct stays 0 and matrix unchanged');
     return;
   }
   if (all) {

@@ -48,6 +48,21 @@ gh pr list --state open --limit 50
 
 **NO-FLEET proof:** Docker may be absent — honesty ships with `proof_missing: fleet-blocked`, never fake browser done. **:8090:** if `lsof` listener cwd ≠ your worktree, visual proof is invalid.\n\n**Anti-under-spawn:** if `pnpm swarm:status` shows free product claims, the coordinator must spawn or residual-own each — idle free claims = FAIL for an all-out run.
 
+### freeProduct=0 — do not drift into stamp mill (mandatory)
+
+**Law home:** [`docs/ops/SWARM-MANDATE.md`](ops/SWARM-MANDATE.md) AFK priority ladder.  
+`pnpm swarm:status` / `swarm:next` print the ladder when product is empty. **Enforce it.**
+
+| Do                                                           | Don't                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------- |
+| Land stranded `origin/feat/*` after path-intersect           | Open `docs(ops): R07 cycleN freeProduct=0` every few minutes  |
+| Partner babysit: **exact** CI fail extract + one NEW comment | Merge Denon/Shehzad PRs or dual-edit their files              |
+| Deepen thin `docs/ops/trk/*` (code-grounded)                 | Invent depth UI / Shehzad M1–M7 implement                     |
+| Invent re-scan only after shell code changed                 | Invent re-scan / P-WS report stamps with **no board delta**   |
+| Merge green Nitro Class N when checks complete               | Treat freeProduct=0 as session kill **or** as license to spam |
+
+Schedulers (30m/45m keep-alives) must run the ladder, not open stamp PRs when freeze is unchanged.
+
 ### What answers which question
 
 | Question                                | Source                                                                        |
