@@ -12,7 +12,7 @@
 
 | Dimension     | Good job                                                                                                 | Failure (lazy / dangerous)                     |
 | ------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| **Scope**     | New leverage **outside** monorepo (or not yet adopted) for Nitro + Denon work                            | Re-auditing the vendored kit as if new         |
+| **Scope**     | New leverage **outside** monorepo (or not yet adopted) for Nitro + Denon work                            | Re-auditing prior kits as if new               |
 | **Anchor**    | Every search lane starts from a **named gap** (Phase A G-\* + tracker ready + Denon D-S-\* / hard board) | “Cool projects on GitHub” with no job          |
 | **Planes**    | Fiat vs Protocol vs shell clearly labeled                                                                | Handing Shizu UI kits or agents chain L1 cores |
 | **Doctrine**  | Ledger-only money; no dual-book; no invent prices; partner names in adapters                             | “Just use their wallet balances”               |
