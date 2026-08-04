@@ -16,6 +16,33 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Deepen wave 2 — ops + blueprint + launch (tip freeze `d9e517bd`)
+
+In-place deepen of ten short-name packs that were still thin (~48–66 lines) into
+code-grounded long-form specs (≥120 lines each). Same pattern as #713
+chain+launch+market deepen. Research only — no implement, no `features.mjs`.
+
+| Id                    | Spec                                               |
+| --------------------- | -------------------------------------------------- |
+| `infra.i18n`          | [infra.i18n.md](./infra.i18n.md)                   |
+| `ops.notifications`   | [ops.notifications.md](./ops.notifications.md)     |
+| `ops.admin`           | [ops.admin.md](./ops.admin.md)                     |
+| `launch.nft`          | [launch.nft.md](./launch.nft.md)                   |
+| `market.vendors`      | [market.vendors.md](./market.vendors.md)           |
+| `blueprint.ownership` | [blueprint.ownership.md](./blueprint.ownership.md) |
+| `bridge.canonical`    | [bridge.canonical.md](./bridge.canonical.md)       |
+| `blueprint.card`      | [blueprint.card.md](./blueprint.card.md)           |
+| `launch.meme-factory` | [launch.meme-factory.md](./launch.meme-factory.md) |
+| `indexer.readmodels`  | [indexer.readmodels.md](./indexer.readmodels.md)   |
+
+**Honesty highlights:** shell-i18n #425/#714 on tip; notify multi-channel shipped
+credentials residual; admin kill/freeze live (tracker note stale); ownership
+cascade #229 (tracker note stale); indexer residual = `socket.clob-contracts`;
+bridge/meme/nft greenfield + Shehzad adjacency babysit; market.vendors needs
+`svc-market`.
+
+---
+
 ## Pack 6 — solid layer (tip freeze `04f9b1f2`)
 
 Long-form `TRK-*.md` research for free tracker rows that already have short
