@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { LinearPattern, PatternError } from './linear-pattern.js';
 
 /**
  * PAYMENT INSTRUMENTS — the shape, the rules, and none of the I/O (§6.2).
@@ -49,10 +50,14 @@ export interface FieldSpec {
   readonly label: string;
   readonly required: boolean;
   /**
-   * Anchored automatically. Operator-supplied, so it is capped in length and
-   * run only against a capped value: a pattern is arbitrary code with a
-   * pathological worst case, and the input it runs against comes from the
-   * internet.
+   * Anchored automatically — the whole value must match, not a substring.
+   *
+   * Run by `linear-pattern.ts`, NOT by `RegExp`. It is operator-supplied and it
+   * meets input that came from the internet, and under JavaScript's own engine
+   * that combination is a denial of service: `(a+)+b` is six characters, passes
+   * every cap here, and blocks the event loop for 24 seconds against 33
+   * characters of input. The caps below bound length; only a non-backtracking
+   * engine bounds work.
    */
   readonly pattern?: string;
   readonly minLength?: number;
@@ -79,7 +84,14 @@ export interface MethodSchema {
 /** Country wildcard. A schema registered against it applies to every country. */
 export const ANY_COUNTRY = '*';
 
-/** Caps. Both halves of "an operator regex meets a stranger's input". */
+/**
+ * Caps. Both halves of "an operator regex meets a stranger's input".
+ *
+ * These are NOT the ReDoS control and never were — see `linear-pattern.ts`.
+ * They became a real bound on work only once the engine underneath them stopped
+ * being able to take exponential time; against a backtracking engine a length
+ * cap bounds nothing at all.
+ */
 export const MAX_PATTERN_LENGTH = 200;
 export const MAX_VALUE_LENGTH = 512;
 export const MAX_FIELDS = 24;
@@ -222,17 +234,24 @@ export function parseFieldSpecs(raw: unknown): FieldSpec[] {
           key,
         );
       }
-      try {
-        // Compiled now so a broken pattern fails at registration, in front of
-        // the operator, rather than at every user's first attempt to save.
-        new RegExp(f.pattern, 'u');
-      } catch {
-        throw new InstrumentError(
-          `Field "${key}" has a pattern that is not a valid regular expression`,
-          'p2p.instrument_schema_invalid',
-          key,
-        );
-      }
+      // Compiled now so a broken pattern fails at registration, in front of the
+      // operator, rather than at every user's first attempt to save.
+      //
+      // THE COMPILED FORM IS THE FORM THAT RUNS. That was the bug: registration
+      // used to check `new RegExp(pattern, 'u')` while validation ran a
+      // different string — `^(?:${body})$` after textually stripping a leading
+      // `^` and a trailing `$`. The strip was blind to escapes, so `\d+\$` — a
+      // currency-amount field, entirely plausible — passed registration and then
+      // threw a raw `SyntaxError` (`/^(?:\d+\)$/u: Unterminated group`) at every
+      // user's first save. Not an InstrumentError, so it surfaced as
+      // INTERNAL_SERVER_ERROR: precisely the failure the paragraph above says
+      // this check exists to prevent.
+      //
+      // There is now no second form. `compilePattern` produces the one object
+      // `validateDetails` uses, anchoring is a property of the matcher rather
+      // than of a rewritten string, and the compile is cached so the pattern is
+      // parsed once instead of on every validation call.
+      compilePattern(f.pattern, key);
       spec.pattern = f.pattern;
     }
 
@@ -340,7 +359,7 @@ export function validateDetails(schema: MethodSchema, raw: unknown): InstrumentD
     if (field.maxLength !== undefined && trimmed.length > field.maxLength) {
       throw new InstrumentError(`"${field.label}" is longer than ${field.maxLength} characters`, 'p2p.instrument_field_invalid', field.key);
     }
-    if (field.pattern !== undefined && !anchored(field.pattern).test(trimmed)) {
+    if (field.pattern !== undefined && !compilePattern(field.pattern, field.key).test(trimmed)) {
       // The message names the field and never the value: an error string is the
       // one place personal data escapes into logs without anyone deciding to.
       throw new InstrumentError(`"${field.label}" is not in the expected format`, 'p2p.instrument_field_invalid', field.key);
@@ -352,10 +371,58 @@ export function validateDetails(schema: MethodSchema, raw: unknown): InstrumentD
   return Object.freeze(out);
 }
 
-/** Whole-value match. A half-anchored operator pattern is not a validation. */
-function anchored(pattern: string): RegExp {
-  const body = pattern.replace(/^\^/, '').replace(/\$$/, '');
-  return new RegExp(`^(?:${body})$`, 'u');
+/**
+ * Compile an operator pattern — once, and to the thing that actually runs.
+ *
+ * Whole-value by construction: a half-anchored operator pattern is not a
+ * validation, and `[0-9]{4}` must not accept `1234abcd`. The previous version
+ * of this achieved that by rewriting the pattern into `^(?:${body})$` after
+ * stripping a leading `^` and trailing `$` with two regexes that could not tell
+ * an anchor from an escaped literal. Nothing here rewrites anything: `^` and `$`
+ * are parsed as assertions, and the match is anchored because the matcher is.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY IT IS CACHED
+ *
+ * It was previously rebuilt on EVERY validation call — one regex compile per
+ * field per save. The cache is keyed on the pattern source, so the object built
+ * at registration is the object used at validation, which is what makes
+ * "registration checked the form that runs" true rather than merely intended.
+ *
+ * Bounded, and cleared rather than evicted one-by-one: the population is
+ * operator method schemas, which is small and changes rarely, so an LRU would
+ * be machinery for a problem this does not have. The cap exists so that a
+ * pathological caller cannot grow it without limit, not to manage churn.
+ */
+const PATTERN_CACHE = new Map<string, LinearPattern>();
+const PATTERN_CACHE_LIMIT = 256;
+
+function compilePattern(source: string, key: string): LinearPattern {
+  const cached = PATTERN_CACHE.get(source);
+  if (cached !== undefined) return cached;
+
+  let compiled: LinearPattern;
+  try {
+    compiled = LinearPattern.compile(source);
+  } catch (err) {
+    if (err instanceof PatternError) {
+      // Every refusal names the field and the reason, and none of them names a
+      // value. An operator gets told what is wrong with the pattern they wrote;
+      // nobody gets told what someone typed into it.
+      throw new InstrumentError(
+        err.problem === 'unsupported'
+          ? `Field "${key}" has a pattern this validator cannot run: ${err.message}`
+          : `Field "${key}" has a pattern that is not a valid regular expression: ${err.message}`,
+        'p2p.instrument_schema_invalid',
+        key,
+      );
+    }
+    throw err;
+  }
+
+  if (PATTERN_CACHE.size >= PATTERN_CACHE_LIMIT) PATTERN_CACHE.clear();
+  PATTERN_CACHE.set(source, compiled);
+  return compiled;
 }
 
 /**

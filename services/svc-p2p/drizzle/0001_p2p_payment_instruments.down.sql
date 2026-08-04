@@ -28,3 +28,6 @@ DROP TABLE IF EXISTS "p2p"."instrument_access_log";
 DROP TABLE IF EXISTS "p2p"."trade_payment_instruments";
 DROP TABLE IF EXISTS "p2p"."payment_instruments";
 DROP TABLE IF EXISTS "p2p"."payment_method_schemas";
+
+-- After the table, because the constraint on it depends on this.
+DROP FUNCTION IF EXISTS "p2p"."payment_method_fields_are_well_formed"(jsonb);
