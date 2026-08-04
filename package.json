@@ -35,6 +35,7 @@
     "value-gate:self-test": "node tooling/ci/value-gate.mjs --self-test",
     "thrift:check": "node tooling/ci/thrift-preflight.mjs",
     "thrift:self-test": "node tooling/ci/thrift-preflight.mjs --self-test",
+    "pr": "node tooling/scripts/agent-pr.mjs",
     "verify": "node tooling/ci/verify.mjs",
     "verify:verdict": "node tooling/ci/infra-verdict.mjs",
     "gate": "node tooling/ci/dod-gate.mjs",

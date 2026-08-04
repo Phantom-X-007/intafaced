@@ -153,19 +153,20 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 
 ### Speed / autonomy preserved (explicit)
 
-- **Parallel agents and many open PRs are allowed** — no thrift max-PR cap.
+- **Parallel agents are allowed** — many open PRs only while `thrift: ok|soft`; **hard thrift stops new CI-starting opens**.
 - **No new human approval** beyond existing asymmetric review + green CI.
 - **Remote CI stays the merge seal** (full matrix green). Local `pnpm verify` is the filter so we do not pay for “push to discover red.”
 - Budget stop-at-cap is Denon’s **high fuse** (infra), not a reason to open fewer PRs.
 
 ### Do
 
-1. **`pnpm thrift:check` before `gh pr create` / any push that restarts CI.** Hard-fails when 24h Actions runs exceed caps (default total≥400 or Docs-format≥250). Soft-warns ≥200. Override only with `THRIFT_ALLOW=1` (emergency — note why in the PR). Meter: `tooling/ci/thrift-preflight.mjs`.
-2. **`pnpm verify` green locally** before the push that opens or updates a **code** PR.
-3. **Batch** coherent change-sets; avoid push storms (push → CI → push 2 min later → cancel → repeat) while iterating without local green.
-4. Prefer **pure docs/markdown** commits when the work is docs-only (full CI skipped; Docs format on **PR only** — not again on main merge).
-5. **`pnpm value-gate:self-test`** stays green; docs tip-bumps without `Board-Delta:` fail Docs format (STRICT).
-6. **Re-run all jobs** only for flake or known infra fix.
+1. **`pnpm thrift:check` before any push/PR that starts Actions** (also in `.githooks/pre-push`). Hard-fails at default **≥220 runs/24h** or **Docs≥120** or **CI≥80**. Soft-warns ≥120. Open PRs via **`pnpm pr -- …`** (fail-closed wrap of `gh pr create`). Override only `THRIFT_ALLOW=1` + PR note.
+2. **AFK batch law:** parallel code in worktrees is fine; **do not** open one micro-PR per claim when thrift is soft/hard — batch path-clusters into fat PRs (see SWARM-MANDATE).
+3. **`pnpm verify` green locally** before the push that opens or updates a **code** PR.
+4. **Batch** coherent change-sets; avoid push storms (push → CI → push 2 min later → cancel → repeat) while iterating without local green.
+5. Prefer **pure docs/markdown** when docs-only (full CI skipped; Docs format **PR only**, skips FREEZE/claims meters).
+6. **`pnpm value-gate:self-test`** stays green; docs tip-bumps without `Board-Delta:` fail Docs format (STRICT).
+7. **Re-run all jobs** only for flake or known infra fix.
 
 ### Never (false thrift)
 

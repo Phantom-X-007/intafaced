@@ -1,12 +1,30 @@
 #!/bin/sh
 #
 # Refuse direct push to main + require format:check before any push.
-# Safety net only — --no-verify bypasses; real enforcement is branch protection.
+# THRIFT: thrift-preflight hard-fail when 24h Actions meter is red (unless THRIFT_ALLOW=1).
+# Safety net only — --no-verify bypasses; real enforcement is branch protection (needs Pro).
 #
 # P1: format:check covers tooling/scripts/*.mjs (what red-trunked main via #471).
 # Worktrees often lack node_modules — resolve prettier from git-common-dir parent.
 
 TOP=$(git rev-parse --show-toplevel)
+
+# --- thrift meter (agent AFK spend brake) ---
+# Skip when no node (cannot run) or when only tags are pushed with empty stdin later.
+if command -v node >/dev/null 2>&1 && [ -f "$TOP/tooling/ci/thrift-preflight.mjs" ]; then
+  if ! (CDPATH= cd -- "$TOP" && node tooling/ci/thrift-preflight.mjs); then
+    cat >&2 <<'THRIFT'
+
+  ✖ thrift-preflight refused this push (24h Actions hard cap).
+
+    AFK rule: batch more, open fewer PRs, wait for the window to cool.
+    Emergency only (note why in PR):
+      THRIFT_ALLOW=1 git push
+
+THRIFT
+    exit 1
+  fi
+fi
 COMMON_GIT=$(git rev-parse --git-common-dir)
 # git-common-dir is e.g. /repo/.git or /repo/.git/worktrees/x → parent of .git is main checkout
 REPO_ROOT=$(CDPATH= cd -- "$(dirname "$COMMON_GIT")" && pwd)

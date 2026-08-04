@@ -39,8 +39,8 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | Mechanism                                      | What it does when context degrades                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`tooling/ci/value-gate.mjs` on Docs format** | **Exits 1** (strict) on docs-only + ≥0.80 subject similarity to last 10 ancestors + no `Board-Delta:` trailer. Git-only. **This is enforcement.** |
-| **`pnpm thrift:check`** (agent preflight)      | **Exits 1** when 24h Actions runs ≥ hard cap (default 400 total or 250 Docs-format). Soft warn ≥200. **Run before every `gh pr create`.**         |
-| **CI / Docs-format triggers**                  | **PR only** (no full matrix / docs job on push to main after merge) — kills double-bill thrash. Manual re-check: `workflow_dispatch`.             |
+| **`pnpm thrift:check` / `pnpm pr` / pre-push** | **Exits 1** at hard caps (default 220 total / 120 Docs / 80 CI). Soft ≥120. **`pnpm pr` fail-closes open.**                                       |
+| **CI / Docs-format triggers**                  | **PR only** (no push:main). Docs-format skips FREEZE/claims/R00–R02/DASHBOARD-only. Manual: `workflow_dispatch`.                                  |
 | `pnpm swarm:status` ops-churn / Actions 24h    | Prints meter + thrift level; hard level is a **FAIL line** agents must not ignore                                                                 |
 | `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                       |
 
@@ -65,6 +65,18 @@ When the primary board finish is met but the session continues (AFK / “never s
 - **Report format every cycle:** `P1 N clear / M landed this cycle · P2 <changes> · P3 <thin count> · tip <sha>`
 
 **Spawn width:** target **6–8 concurrent** path-disjoint free product writers when freeProduct>0. When freeProduct=0, spawn **P1–P3** workers (width 3–6), not stamp clones.
+
+### AFK PR batch law (Actions thrift — mandatory)
+
+Parallel **coding** is free. Parallel **CI-starting PR opens** are not.
+
+| Rule               | Detail                                                                                                                             |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Fat PRs**        | Prefer **one PR per coherent path-cluster**, not one PR per residual id when ids share a service or can land together.             |
+| **Max CI-starts**  | Soft target: **≤5 new code PRs / hour** per coordinator wave; when `thrift: soft                                                   | hard`, **≤1** until cool. |
+| **Open path**      | `pnpm thrift:check` then `pnpm pr -- …` (wraps thrift + `gh pr create`). Bare `gh pr create` is a thrift hole — do not use in AFK. |
+| **Push path**      | `.githooks/pre-push` runs thrift-preflight (hard fail). `THRIFT_ALLOW=1` only with PR note.                                        |
+| **Caps (default)** | soft≥120 · hard≥220 total · docs≥120 · ci≥80 (24h). Env override only for measured incidents.                                      |
 
 **Cold resume (no third file):** regenerate + read [`FREEZE-LIVE.md`](./FREEZE-LIVE.md) · [`../COORDINATION-TRUTH-LAYERS.md`](../COORDINATION-TRUTH-LAYERS.md) § Agent cold-start · human inbox [`../BOARD-CLEAR-HUMAN-BLOCKERS.md`](../BOARD-CLEAR-HUMAN-BLOCKERS.md).
 

@@ -56,8 +56,8 @@ We only stop paying for **waste** (remote CI used as a debugger, push storms, do
 
 ### Binding agent rules (both Nitro and Denon agents)
 
-1. **`pnpm thrift:check` before every PR open/update that starts Actions.**  
-   Hard-fails at default **≥400 runs/24h** or **≥250 Docs-format/24h** (`tooling/ci/thrift-preflight.mjs`). Soft-warns ≥200. Emergency only: `THRIFT_ALLOW=1` + PR note. [MECHANICAL 2026-08-04]
+1. **`pnpm thrift:check` / `pnpm pr` / pre-push before every CI-starting open/push.**  
+   Hard-fails at default **≥220 runs/24h** or **Docs≥120** or **CI≥80** (`tooling/ci/thrift-preflight.mjs`). Soft-warns ≥120. Emergency only: `THRIFT_ALLOW=1` + PR note. [MECHANICAL 2026-08-04 deep]
 
 2. **Local is the filter; remote is the seal.**  
    `pnpm verify` **green** before the push that **opens or updates** a code PR. Remote CI proves merge; it is not the first debugger.
@@ -77,13 +77,15 @@ We only stop paying for **waste** (remote CI used as a debugger, push storms, do
 
 ### Workflow thrift (shipped — do not silently revert)
 
-| Workflow          | Trigger thrift                                                              | Why                                                            |
-| ----------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `ci.yml`          | **`pull_request` + `workflow_dispatch` only** — no `push: main` full matrix | Merge used to re-run ~11–12 min billable job-sum on every land |
-| `docs-format.yml` | **`pull_request` + `workflow_dispatch` only** — no `push: main`             | Half of thrash-day Docs runs were post-merge doubles           |
-| value-gate        | STRICT on Docs format                                                       | Stops freeProduct=0 tip-bump mill                              |
+| Workflow             | Trigger thrift                                                              | Why                                                            |
+| -------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `ci.yml`             | **`pull_request` + `workflow_dispatch` only** — no `push: main` full matrix | Merge used to re-run ~11–12 min billable job-sum on every land |
+| `docs-format.yml`    | **PR only** + exclude FREEZE/claims/R00–R02/DASHBOARD                       | Post-merge doubles + claim-file spam                           |
+| value-gate           | STRICT on Docs format                                                       | Stops freeProduct=0 tip-bump mill                              |
+| pre-push + `pnpm pr` | thrift hard-fail                                                            | Agents cannot forget the meter on push/open                    |
+| Caps                 | soft 120 / hard 220 / docs 120 / ci 80                                      | Tighter AFK thrift wave                                        |
 
-[VERIFIED 2026-08-04] Prior thrash window ~776 runs / ~$15–20 list; double-bill was a first-class root cause.
+[VERIFIED 2026-08-04] Prior thrash window ~776–785 runs / ~$15–20 list; double-bill + micro-PR mill were first-class root causes.
 
 ### Humans / autonomy (unchanged)
 
