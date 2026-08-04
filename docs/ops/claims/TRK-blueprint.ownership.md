@@ -1,8 +1,8 @@
 # Claim TRK-blueprint.ownership
 
-**status:** residual-own
-**proof:** docs/ops/trk/blueprint.ownership.md on tip · research/spec complete · not implement
-**tip:** 04f9b1f2
-**updated:** 2026-08-03
+**status:** pr-open
+**proof:** Stage A honesty — tracker note + svc-blueprint README match identity consumer on tip; mountain done
+**tip:** 99b1e8aa
+**updated:** 2026-08-04
 
-Claim-lock is spawn authority. residual-own = research/spec complete on tip; not an implement swarm.
+Claim-lock is spawn authority. Stage A mountain event for blueprint.ownership.
