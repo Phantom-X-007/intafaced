@@ -83,6 +83,19 @@ const SKIP_DIRS = new Set([
   // are what catch it if it tries. Note the trade-off this makes: our own code
   // would go unscanned if it were ever parked under a `vendor/` directory.
   // Don't do that.
+  //
+  // 2026-08-03: that paragraph was describing a hole while calling it a
+  // trade-off. The vendored Vue shell became the SOLE product surface, so the
+  // one tree this scan never opens is now the only one whose copy a user reads,
+  // and the file count printed at the bottom has never included a single file
+  // of it. Deleting this entry is still the wrong fix — measured, it takes the
+  // repo-wide result from 0 findings to 59, of which 51 are build tooling,
+  // compose bind-mount paths and the upstream's own attribution documents — and
+  // it would not even work, because EXTENSIONS below has no `.vue` and the
+  // shell is 70 single-file components. `tooling/ci/shell-brand-scan.mjs`
+  // covers it instead: the same FORBIDDEN list, PARSED OUT OF THIS FILE so the
+  // two cannot drift, plus `.vue`, against a frozen baseline that can only
+  // shrink. The Java trees stay skipped, for the reason above.
   'vendor',
 ]);
 
@@ -155,6 +168,16 @@ const ALLOWLIST = [
     path: join('docs', 'A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md'),
     reason:
       'internal security work product (board item A1.4); names the exact module and file each committed credential sits in. A finding that says "a password in some properties file" is not actionable — the whole value of the document is that an engineer can go straight to the key and rotate it. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
+    path: join('docs', 'SECRET-ROTATION-READINESS-2026-08-03.md'),
+    reason:
+      'internal security work product; the owner action list for rotating what A1.4 found. Identical rationale to the A1.4 entry above and over the same file set: an owner cannot act on "a seed in some wallet module", so every item names the exact module, file and line. The document deliberately contains no secret VALUES — only locations — which is exactly what makes the paths load-bearing. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
+    path: join('tooling', 'ci', 'secret-scan.mjs'),
+    reason:
+      'its KNOWN_DISCLOSED register keys each finding by exact tracked path, and the scan FAILS on a register entry that no longer matches — so a paraphrased path would not merely be unhelpful, it would break the rule that stops the register rotting into an exemption list. Seven entries, each a real path plus line and check name, no values. The synthetic paths in secret-scan.mutation.mjs need no such exception and deliberately use none. Remove this entry once the Java package root is renamed.',
   },
   {
     path: join('docs', 'RUNBOOK-ETH-KEYSTORE-REENCRYPTION.md'),
@@ -301,4 +324,33 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`✓ brand-scan clean — ${scanned} files, 0 forbidden names (Doctrine §0.7)`);
+/**
+ * A walk that read nothing is a failure, not a pass.
+ *
+ * This scan has printed `clean — N files` since it was written, and nobody has
+ * ever had to ask what happens when N is 0 — because `walk` would throw on a
+ * missing ROOT and CI would go red for a different reason. That is luck, not a
+ * guard: an over-broad SKIP_DIRS entry, or an ALLOWLIST prefix that swallows
+ * more than its author meant, produces `clean — 0 files, 0 forbidden names` and
+ * a green tick, which is the single most confident-sounding wrong answer this
+ * file can give. Four scans in this repo have already been caught reporting
+ * clean about a tree they never opened.
+ */
+if (scanned === 0) {
+  console.error('\n✖ BRAND SCAN FAILED — 0 files were read. NOTHING WAS SCANNED.');
+  console.error('  This is not a clean repo; it is a scan that opened nothing. Check SKIP_DIRS,');
+  console.error('  ALLOWLIST and EXTENSIONS — one of them is now matching everything.\n');
+  process.exit(1);
+}
+
+// The count is qualified on purpose, and on the SAME line, because `gates.mjs`
+// prints only the last non-empty line as a gate's summary — a caveat on a second
+// line is a caveat nobody reads in CI.
+//
+// `vendor` is in SKIP_DIRS, so this number has never included one file of the
+// product shell, and an unqualified "clean" over a repo whose only user-facing
+// surface is skipped reads as a far larger claim than this scan can make. That
+// wording is what let the hole survive: the line was true and sounded total.
+console.log(
+  `✓ brand-scan clean — ${scanned} files, 0 forbidden names (Doctrine §0.7) · vendored trees excluded, product surface covered by shell-brand-scan`,
+);

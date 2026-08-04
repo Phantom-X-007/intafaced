@@ -577,7 +577,21 @@ services:
     container_name: intafaced-svc-academy
     command: ['node', 'services/svc-academy/dist/index.js']
     environment:
-      <<: [*service-env, *edge-secret]
+      # *internal-secret is required here. src/env.ts merges
+      # `internalServiceEnvSchema` for its two callees, and
+      # INTERNAL_SERVICE_SECRET has no default — so without it the process dies
+      # at import with `EnvError: INTERNAL_SERVICE_SECRET: Required` and the
+      # container is never created at all. That is why there are no
+      # restart-loop logs for anyone to read: a service that fails to boot is
+      # loud, a service nobody started is silent.
+      #
+      # Restored 2026-08-04. #442 landed exactly this line at 16:39 on
+      # 2026-08-03; #447 had branched before that, and its merge dropped it
+      # again at 17:05 — 26 minutes of fix, undone by a PR about the admin
+      # console that never mentioned academy. Nobody noticed, for the reason
+      # above. compose-secret-parity is what noticed; it lands in the same
+      # commit as this line, on purpose.
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-academy
       # 4016: every port from 4000 to 4015 is already claimed above.
       HTTP_PORT: '4016'

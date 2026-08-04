@@ -40,7 +40,50 @@
  * wolf is a gate people learn to bypass with --no-verify. This checks a narrow
  * thing exactly.
  *
- * Exit 0 = no credential-shaped literal is tracked. Exit 1 = one landed.
+ * ── 2026-08-03: SOURCE FILES ARE NOW SCANNED TOO ────────────────────────────
+ *
+ * The paragraph above used to say a secret in a `.java`/`.ts` file was "a
+ * different, rarer problem". That was wrong, and the A1.4 audit
+ * (docs/A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md) only looked like it swept
+ * the vendored tree because it swept `.properties`. Reading source found a
+ * live third-party captcha key pair hard-coded in a controller of a PUBLISHED,
+ * RUNNING jar, and a node credential inside a URL in a test's `main()`. Neither
+ * was visible to any gate.
+ *
+ * Source is scanned, but NOT with the config rules — running the key/value
+ * check over ~1,800 source files is the "cries wolf" failure this file's own
+ * comments warn about. Source gets three narrow checks instead:
+ *
+ *   1. `inline-url-credential` — a `scheme://user:pass@host` literal. Runs on
+ *      EVERYTHING including test files: a test that embeds a credentialled URL
+ *      is pointing at a real host, which is precisely the shape of the ACT and
+ *      Mongo findings. Measured across the tree: 2 hits, both genuine.
+ *   2. `source-credential-literal` — a credential-NAMED identifier declared
+ *      equal to a string literal. Skipped in test files, where such a constant
+ *      is a fixture by construction (`const SECRET = 'a-mount-test-secret'`);
+ *      scanning them costs one false positive per test file and teaches
+ *      nothing. Measured: 33 hits with tests, 4 without, all 4 genuine.
+ *   3. `wallet-signing-literal` — under `01_wallet_rpc` only, a string literal
+ *      passed positionally into a `sendFrom`/`transfer`/`withdraw` call. No
+ *      identifier and no URL to key off; the tell is that a signing call is
+ *      being handed a constant. Measured in that tree: 1 hit, genuine.
+ *
+ * ── THE KNOWN-DISCLOSED REGISTER ────────────────────────────────────────────
+ *
+ * Widening a gate over a vendored tree you cannot compile means finding things
+ * whose FIX is an owner decision, not a code edit. Two bad answers exist:
+ * exempt the path (hides it forever) or fail the build (the gate gets deleted
+ * within a week). So registered findings are printed loudly on every single run
+ * with their rotation-doc reference, and do not fail. Anything NOT registered
+ * fails.
+ *
+ * The register cannot rot: an entry whose file/line no longer produces the
+ * violation it claims is itself a FAILURE. You cannot park a finding here and
+ * let the code move out from under it.
+ *
+ * Exit 0 = no unregistered credential-shaped literal is tracked, and every
+ * register entry still describes a real finding. Exit 1 = one landed, or the
+ * register is stale.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -49,14 +92,57 @@ import { join, extname } from 'node:path';
 const ROOT = process.cwd();
 
 /**
- * Config-ish files only. A secret in a `.java`/`.ts` source file is a different
- * (rarer) problem and a much noisier scan; this targets where credentials
- * actually accumulate.
+ * Config-ish files. Where credentials actually accumulate, and where the full
+ * key-name-plus-value rule applies.
  */
 const SCANNED_EXTENSIONS = new Set(['.properties', '.yml', '.yaml', '.env', '.conf', '.cfg', '.ini', '.toml', '.json']);
 
 /** Explicitly scanned regardless of extension. */
 const SCANNED_BASENAMES = new Set(['.env.example', 'Dockerfile', 'docker-compose.yml', 'docker-compose.yaml']);
+
+/**
+ * Source files. These get the three narrow source checks only — see the header.
+ * `.xml` is here for Maven `settings.xml`-shaped credentials and costs nothing;
+ * `.sh` because a deploy script is where a curl `-u user:pass` ends up.
+ */
+const SCANNED_SOURCE_EXTENSIONS = new Set([
+  '.java',
+  '.kt',
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.cts',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.jsx',
+  '.vue',
+  '.go',
+  '.py',
+  '.rb',
+  '.sh',
+  '.bash',
+  '.xml',
+  '.gradle',
+]);
+
+/**
+ * Test files. The `source-credential-literal` check does not run here, and the
+ * reason is not squeamishness about noise for its own sake:
+ *
+ *   `const SECRET = 'a-bank-mount-test-edge-secret-long-enough'`
+ *
+ * is a FIXTURE. It has to be credential-shaped or the test is not testing
+ * anything, and it authenticates against nothing outside the test process.
+ * Across this repo that pattern accounts for 29 of 33 identifier hits — one per
+ * mount test — and a gate that fires 29 times on correct code is a gate someone
+ * deletes.
+ *
+ * The inline-URL check still runs on test files, deliberately. A test can only
+ * disclose something real by naming a real host, and that is exactly what
+ * `01_wallet_rpc/act/src/test/java/ActClientTest.java` does.
+ */
+const TEST_FILE = /(\.|-)(test|spec)\.[a-z]+$|(^|[\\/])(__tests__|__mocks__)[\\/]|(^|[\\/])src[\\/]test[\\/]|Test\.java$|Tests\.java$/;
 
 /**
  * Paths where a credential-shaped literal is expected and harmless.
@@ -98,6 +184,13 @@ const PLACEHOLDER_VALUES = [
   /^your[_-]/i,
   /^<.*>$/, // <your-key-here>
   /^\*+$/,
+  // The value is the generic NOUN for the thing itself — `postgres://user:pw@host/db`
+  // in a schema test. It announces itself exactly as loudly as `changeme` does.
+  /^(?:pw|pwd|pass|passwd|password|passphrase|secret|creds?|credential|user|username|host|hostname|token|key)$/i,
+  // One or two characters. `postgres://u:p@localhost` is a shape, not a credential;
+  // nothing two characters long is a credible secret, so treating it as one only
+  // trains people to ignore the gate.
+  /^.{1,2}$/,
   // YAML anchor declaration (`x-edge-secret: &edge-secret`) or alias (`*edge-secret`).
   // The value on this line is the anchor NAME; the mapping it introduces is on the
   // following lines and is checked there, line by line, like any other assignment.
@@ -121,6 +214,92 @@ const NOT_ACTUALLY_SECRET = [
   /(?:^|[._-])URI?L?(?:[._-]|$)/i, // see below
 ];
 
+// ── Source-file rules ───────────────────────────────────────────────────────
+
+/**
+ * A declaration of an identifier equal to a string literal, in any of the
+ * brace languages this repo actually contains:
+ *
+ *   private static final String secretKey = "…";      (Java)
+ *   const SECRET = '…';  let apiKey: string = "…";     (TS/JS)
+ *   PASSWORD = "…"                                     (shell/py, via the bare form)
+ *
+ * Requires a declaration keyword or a type, so `x.password = y` and
+ * `{ password: fn() }` do not match — assignment FROM something is not a
+ * committed literal, and only a literal can be committed.
+ */
+const SOURCE_DECLARATION =
+  /(?:^|[\s;{(,])(?:(?:private|public|protected|static|final|const|let|var|readonly|String|string|val|export)\s+)+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*[A-Za-z<>[\]|\s]+?)?=\s*(["'`])([^"'`\n]*)\2/g;
+
+/**
+ * Credential-shaped IDENTIFIERS, which is a different shape from
+ * credential-shaped config KEYS: identifiers are camelCase, so the value is
+ * snake-normalised (`secretKey` → `secret_Key`) before this is applied.
+ *
+ * Two alternatives, and the split matters:
+ *   · ENDS WITH a credential word — `savedSecret`, `privateKey`, `apiKey`.
+ *     Ending is what makes `PHONE_UPDATE_PASSWORD_PREFIX` (a Redis key prefix)
+ *     and `tokenName` (a header name) correctly NOT match.
+ *   · STARTS WITH one — `secretId`, `secretKey`. Half of a key PAIR is still
+ *     half of a key pair; `secretId` is the credential's identifier and leaks
+ *     the account it belongs to.
+ *
+ * Bare `token` is deliberately absent, unlike the config-key rule. In config a
+ * key named `token` is a credential; in source `token`/`accessToken` is the
+ * JWT plumbing of half this codebase, and including it would fire on every
+ * auth file. `authToken`/`apiToken`-shaped names still match.
+ */
+const SECRET_IDENTIFIER =
+  /(?:^|[._$-])(?:pass(?:word|wd|phrase)|secret|secretkey|privatekey|apikey|api_key|accesskey|access_key|credential|authtoken|auth_token|apitoken|api_token)s?$|^(?:secret|password|passphrase|privatekey|private_key|apikey|api_key|accesskey|access_key)[a-z0-9_$]*$/i;
+
+/**
+ * Minimum literal length before a credential-named identifier is a finding.
+ * Below this it is a sentinel, a separator or a mask (`""`, `"n/a"`, `"***"`),
+ * not a disclosure.
+ */
+const MIN_SOURCE_LITERAL_LENGTH = 8;
+
+/**
+ * A string literal handed positionally to a signing / value-moving call, inside
+ * the wallet RPC tree only.
+ *
+ * This exists for exactly one shape, and it is the worst one in the repository:
+ *
+ *   public static void main(String[] args) {
+ *       api.sendFrom("<seed>", "<from>", "<to>", new BigDecimal("10"), "12");
+ *   }
+ *
+ * There is no identifier to key off and no URL — the tell is that a call which
+ * MOVES VALUE is being handed a constant. Restricted to `01_wallet_rpc` because
+ * `send(` is a generic verb everywhere else (`kafkaTemplate.send("topic", …)`),
+ * and bare `send` is excluded for the same reason. Measured in that tree: one
+ * hit, genuine.
+ */
+const WALLET_SIGNING_TREE = /(^|[\\/])01_wallet_rpc[\\/]/;
+const WALLET_SIGNING_LITERAL = /\b(?:sendFrom|sendTo|sendRaw|sendTransaction|transfer|withdraw)[A-Za-z]*\s*\(\s*(["'])([^"'\n]{8,})\1/g;
+
+/**
+ * Config keys that are NOT credential-shaped but carry key material anyway.
+ * Every entry is a specific, checked claim — this is not a place to guess.
+ *
+ * `coin.withdraw-wallet` is the whole reason this list exists. In the ETH
+ * family it holds a keystore FILENAME (`UTC--2019-…`) and the secret beside it
+ * is `coin.withdraw-wallet-password`, already `${ETH_WITHDRAW_WALLET_PASSWORD}`.
+ * In `ect` the same key holds the RAW SIGNING SEED, because `EctApi.sendFrom`
+ * takes the seed as its `privatekey` argument and POSTs it as a JSON field
+ * named `secret` over plain HTTP. Same key name, opposite sensitivity — which
+ * is exactly why a key-name rule alone can never find it.
+ */
+const SECRET_BY_CONVENTION = [
+  {
+    key: /^coin\.withdraw-wallet$/i,
+    /** A keystore filename is not a secret; the password beside it is. */
+    allow: /^UTC--/i,
+    reason:
+      'in the ETH family this is a keystore filename, but in `ect` the same key holds the raw signing seed that `sendFrom` POSTs as `secret` over plain HTTP',
+  },
+];
+
 /**
  * Why `*URL*` / `*URI*` keys are excluded from the KEY-NAME check specifically:
  * `TEST_DATABASE_URL_TOKEN` is svc-token's test database URL, not a token, and
@@ -129,6 +308,120 @@ const NOT_ACTUALLY_SECRET = [
  * line, and checks better. Excluding them here removes a false positive without
  * removing any coverage.
  */
+
+/**
+ * ── KNOWN DISCLOSED ─────────────────────────────────────────────────────────
+ *
+ * Findings that are REAL, are already disclosed permanently in git history, and
+ * whose remedy is an owner rotation rather than a code edit. They are printed
+ * on every run and do not fail the build. Anything not listed here fails.
+ *
+ * Rules for this list, and they are the only thing keeping it honest:
+ *
+ *   1. An entry is a promise that the finding is in the owner action list at
+ *      `docs/SECRET-ROTATION-READINESS-2026-08-03.md`. `action` names the item.
+ *   2. An entry that no longer matches a real violation at that file and line
+ *      is a FAILURE, not a silent pass. A register you can leave behind is a
+ *      register that becomes an exemption list.
+ *   3. Nothing goes here to make a build green. The reason field has to say why
+ *      an edit is the wrong instrument, and "it was noisy" is not that reason.
+ *
+ * Why these four are registered rather than edited out: `01_wallet_rpc` cannot
+ * be compiled from this tree at all (its `pom.xml` lists an `xrp` module that is
+ * not tracked — A1.4 §1), and `ucenter-api` is under the security-review
+ * precondition of docs/adr/2026-08-02-adopt-vendored-product-keep-our-ledger.md
+ * §62. Editing a withdrawal path I cannot build, or the construction order of a
+ * running controller I cannot test, trades a permanent disclosure I cannot undo
+ * for a fresh risk I cannot measure. Removing the literal from HEAD does not
+ * un-disclose it; only the owner's rotation does.
+ */
+const KNOWN_DISCLOSED = [
+  {
+    file: 'vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
+    line: 102,
+    check: 'source-credential-literal',
+    action: 'ACCEPTED 2026-08-03 by the repo owner — not treated as a risk',
+    reason:
+      'Third-party captcha key pair, hard-coded in a controller of a packaged, running, 0.0.0.0-published jar. ' +
+      'The repo owner reviewed this on 2026-08-03 and accepted it — it is not treated as a risk, so it is NOT pending rotation. ' +
+      'Recorded rather than deleted: the scan finds it on every run, and an unexplained hit trains people to ignore the register. ' +
+      'This entry is the explanation. It says nothing about the ECT withdrawal seeds or the actuator password, which are separate items.',
+  },
+  {
+    file: 'vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
+    line: 103,
+    check: 'source-credential-literal',
+    action: 'ACCEPTED 2026-08-03 by the repo owner — not treated as a risk',
+    reason: 'the secret half of the pair on line 102.',
+  },
+  {
+    file: 'vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/system/GeetestLib.java',
+    line: 54,
+    check: 'source-credential-literal',
+    action: 'OWNER-3 — geetest captcha private key',
+    reason:
+      'field-initialiser copy of the geetest private key that A1.4 already told the owner to rotate as `geetest.privateKey`. GeetestConfig overrides it from ${GEETEST_PRIVATE_KEY}, so it is unreachable in the Spring path — but rotating the env var does NOT remove this second copy, and that is the point of listing it.',
+  },
+  {
+    file: 'vendor/coinexchange/00_framework/core/src/main/java/com/bizzan/bitrade/util/GoogleAuthenticatorUtil.java',
+    line: 25,
+    check: 'source-credential-literal',
+    action: 'OWNER-6 — dead 2FA demo constant',
+    reason:
+      'hard-coded base32 TOTP seed in the 2FA utility of `core`, which both `admin` and `ucenter-api` depend on. Referenced nowhere — an upstream demo constant. Lowest severity here, listed because "dead" should be a recorded judgement rather than an omission.',
+  },
+  {
+    file: 'vendor/coinexchange/01_wallet_rpc/act/src/test/java/ActClientTest.java',
+    line: 10,
+    check: 'inline-url-credential',
+    action: 'OWNER-4 — ACT node credential',
+    reason:
+      'ACT node RPC credential inside a URL against a third-party public IP. Known disclosed. The module does not compile from this tree, so an edit here is unverifiable.',
+  },
+  // NOT listed, and the omission is a checked result rather than an oversight:
+  // `01_wallet_rpc/usdt/.../JsonrpcClient.java:163` also embeds a credentialled
+  // URL in a `main()`, but its password is IDENTICAL to its username and the
+  // host is 127.0.0.1 — the matched dev pair this file already argues is not a
+  // disclosure. It was in this register on the first draft; the staleness rule
+  // above is what caught the mistake.
+  // ── OWNER-1, the two ECT withdrawal seeds: REMOVED 2026-08-04, and the way
+  // they left is the point of rule 2 above.
+  //
+  // Both were registered here on this branch: the seed committed as
+  // `coin.withdraw-wallet` in the ect module's properties, and a second one
+  // hard-coded in an `EctApi` `main()` that signed a real transfer. While this
+  // branch was open, #720 removed both from HEAD — the property is now
+  // `${ECT_WITHDRAW_WALLET_SECRET}` with a boot refusal on the disclosed value,
+  // and the `main()` is deleted. That PR deliberately did not edit this file,
+  // because this branch already had it open; its own residual note says so.
+  //
+  // Nobody had to remember. On the rebase onto that work, the two entries no
+  // longer matched a real finding and the scan went RED and named them — which
+  // is the whole reason an entry that has stopped being true is a failure
+  // rather than a silent pass. Had this list been advisory, it would now be
+  // covering two findings that are gone while implying they are still there.
+  //
+  // What did NOT change: the seeds are still disclosed in git history, so
+  // OWNER-1 in docs/SECRET-ROTATION-READINESS-2026-08-03.md stays open. It is
+  // an owner rotation, and removing a literal from HEAD has never been able to
+  // un-disclose it. The entries left this register because the CODE finding is
+  // gone, not because the RISK is.
+];
+
+const registerKey = (v) => `${v.file.replace(/\\/g, '/')}:${v.line}:${v.check}`;
+/**
+ * `SECRET_SCAN_NO_REGISTER=1` empties the register, so every known-disclosed
+ * finding becomes a hard failure. `secret-scan.mutation.mjs` sets it because it
+ * runs the scan against a synthetic repo where none of the registered files
+ * exist, and the staleness rule would otherwise fire on every one of them.
+ *
+ * An env flag is safe here because it can only make the gate STRICTER. Setting
+ * it in CI turns the build red, never green — so it is not a bypass and cannot
+ * decay into one.
+ */
+const REGISTER_DISABLED = process.env.SECRET_SCAN_NO_REGISTER === '1';
+const REGISTERED = REGISTER_DISABLED ? [] : KNOWN_DISCLOSED;
+const REGISTER = new Map(REGISTERED.map((e) => [registerKey(e), e]));
 
 function tracked() {
   const out = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -140,6 +433,11 @@ function isScanned(rel) {
   if (SCANNED_BASENAMES.has(base)) return true;
   if (base.startsWith('.env')) return true;
   return SCANNED_EXTENSIONS.has(extname(base).toLowerCase());
+}
+
+function isScannedSource(rel) {
+  const base = rel.split(/[\\/]/).pop();
+  return SCANNED_SOURCE_EXTENSIONS.has(extname(base).toLowerCase());
 }
 
 function exemptReason(rel) {
@@ -167,10 +465,13 @@ const isMatchedDevPair = (user, password) => user.toLowerCase() === password.toL
 
 const violations = [];
 let filesScanned = 0;
+let sourceFilesScanned = 0;
 let assignmentsChecked = 0;
 
 for (const rel of tracked()) {
-  if (!isScanned(rel)) continue;
+  const isConfig = isScanned(rel);
+  const isSource = !isConfig && isScannedSource(rel);
+  if (!isConfig && !isSource) continue;
   if (exemptReason(rel)) continue;
 
   const abs = join(ROOT, rel);
@@ -184,7 +485,13 @@ for (const rel of tracked()) {
   }
   if (content.includes('\u0000')) continue;
 
-  filesScanned++;
+  if (isConfig) filesScanned++;
+  else sourceFilesScanned++;
+  const isTest = TEST_FILE.test(rel);
+  const inWalletTree = WALLET_SIGNING_TREE.test(rel);
+  // Shell is source by extension but config by shape — `export KEY=value` is an
+  // assignment, not a declaration, so it gets the config rule as well.
+  const isShell = /\.(?:sh|bash)$/i.test(rel);
   const lines = content.split(/\r?\n/);
 
   /**
@@ -207,14 +514,44 @@ for (const rel of tracked()) {
   lines.forEach((line, i) => {
     const lineNo = i + 1;
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('*')) return;
+    // Comments, in every syntax this now reads. `/*` joined the list when source
+    // scanning landed: without it this file's own doc comment describing the
+    // `scheme://user:password@host` shape was reported as a finding, which is a
+    // small joke and a real bug — a scanner that cannot read a comment cannot
+    // read most of a Java file.
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
 
     // ── credential-shaped key = literal value ────────────────────────────────
     // Handles `key=value`, `key: value` and `- key: value`.
-    const assignment = /^[-\s]*["']?([A-Za-z0-9_.\-[\]]+)["']?\s*[:=]\s*(.*)$/.exec(trimmed);
+    // CONFIG FILES AND SHELL. Running this over Java/TS is the noise catastrophe
+    // the header describes; those get the three narrow checks further down.
+    //
+    // The leading-keyword strip is what makes `ENV API_KEY=…` in a Dockerfile
+    // and `export API_KEY=…` in a deploy script visible: both are `key=value`
+    // wearing a prefix, and the mutation test scored them as survivors until
+    // this line existed. Measured cost across the repo: zero new hits — the
+    // only ENV/export lines here set PATH, NODE_ENV and a port.
+    const declLine = isConfig || isShell ? trimmed.replace(/^(?:ENV|ARG|export|declare\s+-x|set\s+-x)\s+/i, '') : null;
+    const assignment = declLine === null ? null : /^[-\s]*["']?([A-Za-z0-9_.\-[\]]+)["']?\s*[:=]\s*(.*)$/.exec(declLine);
     if (assignment) {
       const [, key, rawValue] = assignment;
       const value = rawValue.replace(/\s+#.*$/, '').replace(/^['"]|['"]$/g, '');
+
+      // ── keys that carry key material despite a harmless name ──────────────
+      for (const conv of SECRET_BY_CONVENTION) {
+        if (!conv.key.test(key)) continue;
+        assignmentsChecked++;
+        if (isPlaceholder(value) || conv.allow.test(value.trim())) continue;
+        violations.push({
+          check: 'secret-by-convention',
+          file: rel,
+          line: lineNo,
+          key,
+          reason: `\`${key}\` is assigned a literal value, and ${conv.reason}`,
+          detail:
+            'Move it to the environment with NO default — `${VAR}` — so the service refuses to start rather than signing with a published seed.',
+        });
+      }
 
       if (SECRET_KEY.test(key) && !NOT_ACTUALLY_SECRET.some((p) => p.test(key))) {
         assignmentsChecked++;
@@ -264,12 +601,106 @@ for (const rel of tracked()) {
           'Put the whole URL in the environment with no default. A credential hidden inside a connection string is still a committed credential.',
       });
     }
+
+    if (!isSource) return;
+
+    // ── source: credential-named identifier = string literal ─────────────────
+    // Not in test files — see TEST_FILE for why that is a coverage decision and
+    // not a concession.
+    if (!isTest) {
+      SOURCE_DECLARATION.lastIndex = 0;
+      let d;
+      while ((d = SOURCE_DECLARATION.exec(line)) !== null) {
+        const [, name, , value] = d;
+        // camelCase → snake, so the same ends-with rule reads `secretKey` and
+        // `secret_key` identically.
+        const normalised = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+        if (!SECRET_IDENTIFIER.test(normalised) && !SECRET_IDENTIFIER.test(name)) continue;
+        if (value.trim().length < MIN_SOURCE_LITERAL_LENGTH) continue;
+        if (isPlaceholder(value)) continue;
+        assignmentsChecked++;
+        violations.push({
+          check: 'source-credential-literal',
+          file: rel,
+          line: lineNo,
+          key: name,
+          reason: `\`${name}\` is declared equal to a string literal`,
+          detail:
+            'A credential in source is a credential in every build artefact that ever shipped. Inject it — @Value/${VAR}/env — with no default, so an unset value stops the service instead of shipping the published one.',
+        });
+      }
+    }
+
+    // ── source: string literal handed to a value-moving call ─────────────────
+    if (inWalletTree) {
+      WALLET_SIGNING_LITERAL.lastIndex = 0;
+      let w;
+      while ((w = WALLET_SIGNING_LITERAL.exec(line)) !== null) {
+        const value = w[2];
+        if (isPlaceholder(value)) continue;
+        assignmentsChecked++;
+        violations.push({
+          check: 'wallet-signing-literal',
+          file: rel,
+          line: lineNo,
+          key: '(positional argument)',
+          reason: 'a string literal is passed into a call that moves value',
+          detail:
+            'A signing call handed a constant is a signing key in the repository, whatever the argument is named. Take it from args or the environment, or delete the harness.',
+        });
+      }
+    }
   });
 }
 
-if (violations.length > 0) {
-  console.error(`\n✖ SECRET SCAN FAILED — ${violations.length} credential-shaped literal(s) in tracked files\n`);
-  for (const v of violations) {
+// ── register reconciliation ─────────────────────────────────────────────────
+// Split the findings into "already disclosed, owner rotates" and "new".
+const disclosed = [];
+const unregistered = [];
+const seenRegisterKeys = new Set();
+
+for (const v of violations) {
+  const k = registerKey(v);
+  const entry = REGISTER.get(k);
+  if (entry) {
+    seenRegisterKeys.add(k);
+    disclosed.push({ ...v, entry });
+  } else {
+    unregistered.push(v);
+  }
+}
+
+// Rule 2: an entry that no longer describes a real finding is itself a failure.
+const staleRegisterEntries = REGISTERED.filter((e) => !seenRegisterKeys.has(registerKey(e)));
+
+const ROTATION_DOC = 'docs/SECRET-ROTATION-READINESS-2026-08-03.md';
+
+// Printed on EVERY run, green or red. A disclosure the owner has not yet
+// rotated should be as visible on the thousandth build as on the first.
+if (disclosed.length > 0) {
+  console.log(`\n⚠ KNOWN DISCLOSED — ${disclosed.length} finding(s) awaiting owner rotation, not failing the build`);
+  console.log(`  Owner action list: ${ROTATION_DOC}\n`);
+  for (const v of disclosed) {
+    console.log(`  [${v.check}] ${v.file}:${v.line}  → ${v.entry.action}`);
+  }
+  console.log('');
+}
+
+if (staleRegisterEntries.length > 0) {
+  console.error(`\n✖ SECRET SCAN FAILED — ${staleRegisterEntries.length} stale KNOWN_DISCLOSED entr(ies)\n`);
+  for (const e of staleRegisterEntries) {
+    console.error(`  [${e.check}] ${e.file}:${e.line}`);
+    console.error(`    → registered as ${e.action}, but no such finding exists there any more\n`);
+  }
+  console.error('  Either the finding was fixed — in which case delete the entry and say so in');
+  console.error(`  ${ROTATION_DOC} — or the code moved and the`);
+  console.error('  register is now pointing at the wrong line, which is worse than not having one.\n');
+  process.exit(1);
+}
+
+if (unregistered.length > 0) {
+  console.error(`\n✖ SECRET SCAN FAILED — ${unregistered.length} credential-shaped literal(s) in tracked files\n`);
+  for (const v of unregistered) {
     // Deliberately prints the KEY and LOCATION, never the value. A CI log is
     // not a place to reproduce the secret you are complaining about.
     console.error(`  [${v.check}] ${v.file}:${v.line}`);
@@ -280,7 +711,13 @@ if (violations.length > 0) {
   console.error(
     '  If a value here is genuinely not a secret, make it say so (see PLACEHOLDER_VALUES\n  in tooling/ci/secret-scan.mjs) rather than widening the rule.\n',
   );
+  console.error('  If it IS a secret and the fix is an owner rotation rather than an edit, it goes');
+  console.error(`  in KNOWN_DISCLOSED with an action id from ${ROTATION_DOC} —\n  never in EXEMPT_PATHS.\n`);
   process.exit(1);
 }
 
-console.log(`✓ secret-scan clean — ${assignmentsChecked} credential-shaped assignment(s) across ${filesScanned} tracked config file(s)`);
+console.log(
+  `✓ secret-scan clean — ${assignmentsChecked} credential-shaped assignment(s) across ` +
+    `${filesScanned} tracked config file(s) and ${sourceFilesScanned} source file(s)` +
+    (disclosed.length > 0 ? `, ${disclosed.length} known-disclosed awaiting rotation` : ''),
+);
