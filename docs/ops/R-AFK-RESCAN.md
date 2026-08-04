@@ -1366,3 +1366,37 @@ EXIT=0
 ```
 
 **Verdict:** invent honesty holds · live invent residual **0** · fabricated-money findings **0**.
+
+---
+
+## Re-scan cycle106 — 2026-08-04T00:08Z · tip `3dc2dd3e` (#715 · post shell i18n #714)
+
+**Mode:** NO-FLEET · static `rg` + `tooling/ci/fabricated-money-scan.mjs`  
+**Trigger:** **P4 invent re-scan after real shell code land** — `feat(shell): residual Vue i18n keys` **#714** (then docs #715 on tip). **Not** freeProduct=0 keepalive / stamp mill.  
+**Tip full:** `3dc2dd3ee87804c209841e2d1a3eeda5dbce3682` · main after #714 shell i18n + #715 TRK deepen  
+**Shell delta (#714):** 22 Vue surfaces + `en.js` residual `$t()` rewires (stranded app-i18n-keys). No money path / ledger / svc-*.
+
+| check                         |                                                 result | verdict                                                                           |
+| ----------------------------- | -----------------------------------------------------: | --------------------------------------------------------------------------------- |
+| `fabricated-money-scan.mjs`   | **0** finding(s) / **0** frozen baseline rows · EXIT=0 | queue not grown; baseline empty since #489 (10→0)                                 |
+| shell files scanned           |                                                 **93** | gate path green                                                                   |
+| `invent` (ci) vendor front    |                                                 **89** | doctrine / honesty comments only (94→89 after i18n string moves — not new invent) |
+| `\bfake\b`                    |                                                  **8** | comments + anti-fraud copy                                                        |
+| `PriceTrend` / `priceTrend`   |                                                  **1** | historical note in `en.js`                                                        |
+| live `dataFanyong` rows       |                                                  **0** | honesty comment only (`Invite.vue`)                                               |
+| live `CNYRate \|\| 6.5`       |                                                  **0** | REMOVED/comment notes only                                                        |
+| `mockTicker` / zero-sparkline |                                                  **0** | still gone                                                                        |
+| `Math.random` product         |                                   captcha `gt.js` only | not market invent                                                                 |
+| **NEW hard invent residual**  |                                                  **0** | no invent-fix PR from this pass                                                   |
+
+**reason note:** justified re-scan because shell product source changed under #714 (i18n rewires). freeProduct=0 keepalives remain banned by AFK priority ladder (#711); this pass is shell-delta driven, not a freeProduct=0 stamp.
+
+### fabricated-money-scan.mjs (verbatim)
+
+```
+✓ fabricated-money — 93 shell file(s), 0 finding(s), all at the frozen baseline
+  ⚠ 0 invented figure(s) frozen across 0 file(s) — the queue cannot grow. Money on a surface comes from a service response, or the surface renders the absence.
+EXIT=0
+```
+
+**Verdict:** invent honesty holds after shell i18n #714 · live invent residual **0** · fabricated-money findings **0**.
