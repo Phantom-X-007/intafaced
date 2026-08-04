@@ -10,14 +10,14 @@ no agent spawns into these paths at any priority, including P5 hygiene.
 
 ## Scope — agents edit no file under these
 
-| Path                               | What it is                          |
-| ---------------------------------- | ----------------------------------- |
-| `vendor/coinexchange/05_Web_Front` | the sole product surface (`:8090`)  |
-| `vendor/coinexchange/04_Web_Admin` | vendored staff console (not served) |
-| `apps/web`                         | retired Next scaffold (see ADR)     |
-| `apps/admin`                       | operator console (`:3100`)          |
-| `packages/ui`                      | design tokens + console primitives  |
-| `packages/i18n`                    | language keys                       |
+| Path                                    | What it is                          |
+| --------------------------------------- | ----------------------------------- |
+| `vendor/upstream-exchange/05_Web_Front` | the sole product surface (`:8090`)  |
+| `vendor/upstream-exchange/04_Web_Admin` | vendored staff console (not served) |
+| `apps/web`                              | retired Next scaffold (see ADR)     |
+| `apps/admin`                            | operator console (`:3100`)          |
+| `packages/ui`                           | design tokens + console primitives  |
+| `packages/i18n`                         | language keys                       |
 
 Craft, polish, rebrand, a11y, honesty passes and **tests** are all in scope of the lock.
 "Class N shell craft" in a PR body does not create an exemption.

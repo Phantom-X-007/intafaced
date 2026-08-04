@@ -218,7 +218,7 @@ Two mutants were **survivors on the first run** and are now caught: `ENV API_KEY
 
 ### 4.1 · A third-party captcha key **pair** hard-coded in a running, published jar
 
-**`vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java:101–103`**
+**`vendor/upstream-exchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java:101–103`**
 
 Three `private static final String` constants — a captcha id and a **secret key pair** — constructed directly into a `final` verifier field on line 105. There is no `@Value`, no environment indirection, and no override: these are the credentials the service uses at runtime.
 
@@ -230,7 +230,7 @@ Value not reproduced here. Registered as `OWNER-2`.
 
 ### 4.2 · A second copy of an already-flagged secret, in source
 
-**`vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/system/GeetestLib.java:49, 54`**
+**`vendor/upstream-exchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/system/GeetestLib.java:49, 54`**
 
 Field-initialiser copies of the geetest captcha id and private key. `GeetestConfig` constructs the bean from `${geetest.captchaId}` / `${geetest.privateKey}`, so these defaults are unreachable in the Spring path.
 
@@ -275,8 +275,8 @@ Every **rotation** below is still outstanding — no credential named here has b
 
 Two distinct secrets, both permanently disclosed in git history:
 
-1. **`vendor/coinexchange/01_wallet_rpc/ect/src/main/resources/application.properties`**, key `coin.withdraw-wallet` (line 14 as committed; the key is now line 28 and holds a placeholder). The withdrawal signing seed. `WalletController:47` reads it straight into `EctApi.sendFrom`, which POSTs it as a JSON field named `secret` to `coin.rpc` **over plain HTTP**. The key name is why no gate saw it: in the ETH family the same key holds a harmless keystore filename.
-2. **`vendor/coinexchange/01_wallet_rpc/ect/src/main/java/com/bizzan/bc/wallet/component/EctApi.java`**, line 152 as committed (the `main()` is now deleted; a comment at line 159 records it) — a **second** seed, hard-coded in a `main()` that signed a real transfer to a hard-coded counterparty account, against a hard-coded third-party IP, over plain HTTP.
+1. **`vendor/upstream-exchange/01_wallet_rpc/ect/src/main/resources/application.properties`**, key `coin.withdraw-wallet` (line 14 as committed; the key is now line 28 and holds a placeholder). The withdrawal signing seed. `WalletController:47` reads it straight into `EctApi.sendFrom`, which POSTs it as a JSON field named `secret` to `coin.rpc` **over plain HTTP**. The key name is why no gate saw it: in the ETH family the same key holds a harmless keystore filename.
+2. **`vendor/upstream-exchange/01_wallet_rpc/ect/src/main/java/com/bizzan/bc/wallet/component/EctApi.java`**, line 152 as committed (the `main()` is now deleted; a comment at line 159 records it) — a **second** seed, hard-coded in a `main()` that signed a real transfer to a hard-coded counterparty account, against a hard-coded third-party IP, over plain HTTP.
 
 **Do:**
 
@@ -304,7 +304,7 @@ Two distinct secrets, both permanently disclosed in git history:
 
 ### OWNER-4 — ACT node credential
 
-**Where:** `vendor/coinexchange/01_wallet_rpc/act/src/test/java/ActClientTest.java:10` — inside a URL, against a third-party public IP.
+**Where:** `vendor/upstream-exchange/01_wallet_rpc/act/src/test/java/ActClientTest.java:10` — inside a URL, against a third-party public IP.
 **Do:** rotate the credential on the node if it is ours; if the node is not ours, there is nothing to rotate and the file should simply lose the literal. Take it from `args` or the environment.
 **Restart:** none — test-only, module does not compile.
 **Verify:** the register entry is removed and `pnpm scan:secrets` stays green.

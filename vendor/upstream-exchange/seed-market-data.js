@@ -46,11 +46,11 @@
    -----------------------------------------------------------------------------
    RUN
 
-     node vendor/coinexchange/seed-market-data.mjs            (recommended)
+     node vendor/upstream-exchange/seed-market-data.mjs            (recommended)
 
    or straight into the container:
 
-     docker cp vendor/coinexchange/seed-market-data.js intafaced-coinex-mongo:/tmp/
+     docker cp vendor/upstream-exchange/seed-market-data.js intafaced-coinex-mongo:/tmp/
      docker exec intafaced-coinex-mongo mongosh bitrade --quiet --file /tmp/seed-market-data.js
 
    The script is idempotent: it clears every collection it is about to write

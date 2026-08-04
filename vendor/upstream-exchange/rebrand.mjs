@@ -9,7 +9,7 @@
  * back — webpack then died on `Unexpected character '€'`. Do not do this with
  * Get-Content/Set-Content.
  *
- * Run from vendor/coinexchange: node rebrand.mjs
+ * Run from vendor/upstream-exchange: node rebrand.mjs
  */
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';

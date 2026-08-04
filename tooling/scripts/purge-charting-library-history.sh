@@ -18,11 +18,11 @@ if ! command -v git-filter-repo >/dev/null; then
   echo "git-filter-repo required (brew install git-filter-repo)" >&2
   exit 1
 fi
-ARGS=(--force --invert-paths --path vendor/coinexchange/05_Web_Front/src/assets/js/charting_library)
+ARGS=(--force --invert-paths --path vendor/upstream-exchange/05_Web_Front/src/assets/js/charting_library)
 if [[ "${FILTER_ALL_REFS:-0}" != "1" ]]; then
   ARGS+=(--refs refs/heads/main)
 fi
 echo "Running: git filter-repo ${ARGS[*]}"
 git filter-repo "${ARGS[@]}"
-echo "Verify: git log --all -- vendor/coinexchange/05_Web_Front/src/assets/js/charting_library | head"
+echo "Verify: git log --all -- vendor/upstream-exchange/05_Web_Front/src/assets/js/charting_library | head"
 echo "Then force-push ONLY after collaborators are ready."

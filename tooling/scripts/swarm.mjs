@@ -28,9 +28,11 @@ const OPS = join(ROOT, 'docs', 'ops');
 const CLAIMS_DIR = join(OPS, 'claims');
 const cmd = process.argv[2] || 'status';
 const args = process.argv.slice(3);
-// Brand-scan forbids the vendor directory name as a literal token in source;
-// same join trick as tooling/scripts/vendor-money-inventory.mjs.
-const SHELL = ['vendor', ['coin', 'exchange'].join(''), '05_Web_Front'].join('/');
+// Written plainly again: the vendor directory is `upstream-exchange`, which
+// carries no forbidden token, so the assemble-at-runtime trick this line needed
+// is gone. `vendor-money-inventory.mjs` still uses that trick and should — there
+// it redacts vendor identity out of OUTPUT rather than building a path.
+const SHELL = 'vendor/upstream-exchange/05_Web_Front';
 const shell = (...parts) => [SHELL, ...parts].join('/');
 
 function git(args) {

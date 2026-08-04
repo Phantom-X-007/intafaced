@@ -2,14 +2,14 @@
 
 ## ONE SURFACE — read before any front-end work (mandatory)
 
-`vendor/coinexchange/05_Web_Front`, served on `:8090`, is the **sole product surface**.
+`vendor/upstream-exchange/05_Web_Front`, served on `:8090`, is the **sole product surface**.
 Law: ADR [`../adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`](../adr/2026-08-03-retire-apps-web-port-to-vue-shell.md) (Accepted, owner decision) and doctrine §5.3. **Settled — implement it, do not re-litigate it.**
 
 > **Path warning, 2026-08-04.** 17 docs now spell that directory `vendor/upstream-exchange`
 > after the #743/#745 brand-scrubs. **No such directory exists.** The tree on disk is
-> `vendor/coinexchange` and always has been; the scrub renamed the docs and not the code, so
+> `vendor/upstream-exchange` and always has been; the scrub renamed the docs and not the code, so
 > the rename the brand-scan allowlist keeps anticipating ("remove this entry once the vendor
-> directory is renamed") is still pending. Until it happens: `cd` to `vendor/coinexchange`,
+> directory is renamed") is still pending. Until it happens: `cd` to `vendor/upstream-exchange`,
 > and do not "fix" a doc that disagrees — fix the directory, once, deliberately.
 
 | Rule                      | What it means in a PR                                                                                                                                                      |

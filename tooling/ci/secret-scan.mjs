@@ -337,7 +337,7 @@ const SECRET_BY_CONVENTION = [
  */
 const KNOWN_DISCLOSED = [
   {
-    file: 'vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
+    file: 'vendor/upstream-exchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
     line: 102,
     check: 'source-credential-literal',
     action: 'ACCEPTED 2026-08-03 by the repo owner — not treated as a risk',
@@ -348,14 +348,14 @@ const KNOWN_DISCLOSED = [
       'This entry is the explanation. It says nothing about the ECT withdrawal seeds or the actuator password, which are separate items.',
   },
   {
-    file: 'vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
+    file: 'vendor/upstream-exchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
     line: 103,
     check: 'source-credential-literal',
     action: 'ACCEPTED 2026-08-03 by the repo owner — not treated as a risk',
     reason: 'the secret half of the pair on line 102.',
   },
   {
-    file: 'vendor/coinexchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/system/GeetestLib.java',
+    file: 'vendor/upstream-exchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/system/GeetestLib.java',
     line: 54,
     check: 'source-credential-literal',
     action: 'OWNER-3 — geetest captcha private key',
@@ -363,7 +363,7 @@ const KNOWN_DISCLOSED = [
       'field-initialiser copy of the geetest private key that A1.4 already told the owner to rotate as `geetest.privateKey`. GeetestConfig overrides it from ${GEETEST_PRIVATE_KEY}, so it is unreachable in the Spring path — but rotating the env var does NOT remove this second copy, and that is the point of listing it.',
   },
   {
-    file: 'vendor/coinexchange/00_framework/core/src/main/java/com/bizzan/bitrade/util/GoogleAuthenticatorUtil.java',
+    file: 'vendor/upstream-exchange/00_framework/core/src/main/java/com/bizzan/bitrade/util/GoogleAuthenticatorUtil.java',
     line: 25,
     check: 'source-credential-literal',
     action: 'OWNER-6 — dead 2FA demo constant',
@@ -371,7 +371,7 @@ const KNOWN_DISCLOSED = [
       'hard-coded base32 TOTP seed in the 2FA utility of `core`, which both `admin` and `ucenter-api` depend on. Referenced nowhere — an upstream demo constant. Lowest severity here, listed because "dead" should be a recorded judgement rather than an omission.',
   },
   {
-    file: 'vendor/coinexchange/01_wallet_rpc/act/src/test/java/ActClientTest.java',
+    file: 'vendor/upstream-exchange/01_wallet_rpc/act/src/test/java/ActClientTest.java',
     line: 10,
     check: 'inline-url-credential',
     action: 'OWNER-4 — ACT node credential',
