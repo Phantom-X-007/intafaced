@@ -62,6 +62,20 @@ The sharpest of these: **`dex.quote-router` is finished code that cannot serve a
 
 ---
 
+## One rule that cost two ADRs
+
+> **A gate that freezes a pre-existing finding pins it by an explicit hand-written list. It does not fail unconditionally.**
+
+[D-S-13](adr/2026-08-04-event-socket-vs-broken-promise.md) and [D-S-14](adr/2026-08-04-token-economics-outcomes.md) both said "fail the build" about findings that **already existed**. Both were implemented faithfully, and both produced a gate red on `main` with no path to green — one waiting on four owner numbers, the other on an owner ruling the same ADR reserved. Either would have blocked every unrelated merge in the repo.
+
+**The repo already knew better.** `fabricated-money-scan` froze 12 findings. `vendor-java-money-scan` froze 63, now 55. `wallet-rpc-mainnet-scan` froze 38. **Not one of them fails on its pre-existing set** — and that is exactly why all three are still in the build rather than disabled.
+
+A red that must be routed around to get any work done is a red that gets deleted, and it takes the honest part with it. The pin achieves the real requirement — the finding cannot be shipped further, resolved silently, or forgotten — without holding the repo hostage to a decision that is not the gate's to make.
+
+Both ADRs carry the correction where the rule lives. It is recorded here as well, because it was the same mistake twice in one afternoon and the next author should meet it before making it a third time.
+
+---
+
 ## Maintaining this file
 
 When a D-S slot moves, edit this table in the same commit. An index that lags is worse than none — the seven-slot gap above exists precisely because the board and the specs were updated in different commits by different people, and neither noticed.

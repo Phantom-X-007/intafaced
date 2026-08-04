@@ -72,9 +72,27 @@ A Class B entry is a defect and is tracked as one, with the reason field kept ve
 32 declared event(s): 14 wired end to end, 18 recorded socket(s) with a written reason
 ```
 
-It must not be able to print a clean line while any Class B entry exists. **A socket declaration is a claim that nothing is broken, and that claim needs to be checkable** — not merely accompanied by prose.
+A socket declaration is a claim that nothing is broken, and **that claim needs to be checkable** — not merely accompanied by prose.
 
-This is the same defect class the repo has closed four times already: a check that reports on something real, in a shape that gets read as evidence for something it never examined.
+**The pre-existing Class B entries are pinned by a hand-written list, not failed unconditionally.** The gate goes red when a **new** Class B appears, when a pinned entry is silently reclassified or resolved, or when the list is edited without the entry changing. The pinned entries themselves print on every run and do not fail the build.
+
+See the correction below for why. This is the same defect class the repo has closed four times already: a check that reports on something real, in a shape that gets read as evidence for something it never examined.
+
+---
+
+### Correction — 2026-08-04, same day. And it is the second time.
+
+This ADR first said the gate _"must not be able to print a clean line while any Class B entry exists"_, flatly. An agent implemented it faithfully, and the result was `event-wiring` **red on main with no path to green** — because this same ADR puts `crewMemberCreated`'s consumers on the owner. No agent could ever clear it, and it would block every unrelated merge until a human ruled.
+
+**I made the identical mistake in [D-S-14](2026-08-04-token-economics-outcomes.md) the same afternoon**, and the repetition is the useful part. The general rule I should have written both times:
+
+> **A gate that freezes a pre-existing finding pins it by an explicit hand-written list. It does not fail unconditionally.**
+
+This is not a new idea — **it is what this repo already does everywhere**. `fabricated-money-scan` froze 12 findings. `vendor-java-money-scan` froze 63, now 55. `wallet-rpc-mainnet-scan` froze 38. **Not one of them fails on its pre-existing set.** Each pins it and fails on deviation, and that is precisely why they are still in the build rather than disabled.
+
+The reason the ratchet is right and the flat failure is wrong: a red that must be routed around to get any work done is a red that gets deleted, and it takes the honest part with it. The pin achieves the actual requirement — the finding cannot be shipped further, resolved silently, or forgotten — without holding the repo hostage to a decision that is not the gate's to make.
+
+**Two ADRs, one mistake, one afternoon.** Recorded here rather than quietly fixed, because an author who states a rule twice and gets it wrong twice should say so where the rule lives.
 
 ---
 
