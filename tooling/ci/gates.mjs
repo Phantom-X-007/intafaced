@@ -113,6 +113,19 @@ export const GATES = [
     why: 'a wallet RPC module must authenticate /rpc/** — the guard on one module is not the guard on every classpath that can boot',
   },
   {
+    id: 'wallet-rpc-mainnet',
+    script: 'tooling/ci/wallet-rpc-mainnet-scan.mjs',
+    doctrine: '§16 / ADR 2026-07-28',
+    why:
+      'the wallet RPC tree is barred from live value until the security review the vendored-exchange ADR makes a ' +
+      'precondition of adoption has happened — and until this gate that bar existed only in prose. What stopped ' +
+      'mainnet was incidental: no Dockerfile, no compose service, no CI job, and env placeholders that decide whether ' +
+      'a service STARTS, not which chain it talks to. Supply the environment and every other gate here still printed ' +
+      'clean. Ordered next to wallet-rpc-auth because they fence the same tree and answer different questions: auth ' +
+      'asks whether a bootable module authenticates, this asks whether anything can boot one at all, and whether a ' +
+      'new mainnet constant appeared. 38 existing constants are frozen by exact text, so the baseline can only shrink.',
+  },
+  {
     id: 'vendor-shell',
     script: 'tooling/ci/vendor-shell-scan.mjs',
     doctrine: 'vendor residue',
