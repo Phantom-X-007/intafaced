@@ -1,5 +1,25 @@
 # Swarm mandate scope
 
+## ONE SURFACE — read before any front-end work (mandatory)
+
+`vendor/coinexchange/05_Web_Front`, served on `:8090`, is the **sole product surface**.
+Law: ADR [`../adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`](../adr/2026-08-03-retire-apps-web-port-to-vue-shell.md) (Accepted, owner decision) and doctrine §5.3. **Settled — implement it, do not re-litigate it.**
+
+| Rule                      | What it means in a PR                                                                                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`apps/web` is retired** | No craft, no fixes, **no new tests** there. A PR touching `apps/web/**` is rejected on sight — "shell craft" in the body does not make it the shell.                       |
+| **Audience**              | Pro trader workbench. Retail arrives via **Convert**; "retail IA as terminal default" is a listed anti-pattern, not a direction.                                           |
+| **One kit**               | iView 3, restyled through CSS variables in `intafaced.css`. Never fork the kit. No Tailwind / shadcn / Radix / Element / Ant / Naive / Quasar.                             |
+| **Palette**               | P21 provisional. Re-picking it is **Nitro-only** — agents never decide taste.                                                                                              |
+| **Honesty**               | No fake prices · empty ≠ zero · loading / failed / empty are three states · brand scrub · Nitro is never the runner.                                                       |
+| **Still to port**         | Runtime shape validation of edge responses; decimal-safe desk arithmetic (`bignumber` is vendored but `ix-trade.js` does not use it). Live WS depth client landed in #748. |
+
+This section exists because the decision lived only in an ADR for a day, and in that day
+a PR put six files of craft into `apps/web` and called it shell work. If it is not in
+this file, the coordinator does not know it.
+
+---
+
 **Shell product craft** (REGROUP / AFK residual / LANDER / INTEGRITY) **plus non-money implementable tracker rows** is the swarm free-product board.
 
 | Signal              | Meaning                                                                                                         |

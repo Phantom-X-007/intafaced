@@ -251,14 +251,14 @@ otc_quotes     (id, user_id, side, base, quote, qty, quoted_px, expires_at, stat
 4. XP event emitted per filled order; volume aggregates per user per window feed rank + fee-tier
 
 **Futures:** cross + isolated margin, mark price from index feed, liquidation engine job (checks liq_px vs mark, partial-liquidation ladder, insurance fund backstop), funding every 8h as ledger recipes.
-**Options (v1 scope):** European calls/puts on BTC/ETH, cash-settled, strategy-builder UI in `apps/web`; margining conservative (full collateral) in v1.
+**Options (v1 scope):** European calls/puts on BTC/ETH, cash-settled, strategy-builder UI in the product shell (§5.3); margining conservative (full collateral) in v1.
 **Convert:** RFQ against internal book + spread — one-tap swap endpoint.
 **Copy trading:** leader fills fan out to followers as proportional child orders (queued, size-capped per follower guardrails); profit-share settled monthly by ledger recipe; `audited_stats` written only by svc-agents Copy-Intel job (Phase 5) — until then, displayed stats computed from fills directly.
 **OTC:** staked-tier gate via `token.stakeOf`, RFQ workflow, fills post directly to ledger with spread to house.
 **Liquidity:** internal MM bot account (house-owned, own strategy config) seeds books at launch; external venue aggregation is an adapter behind `LiquiditySource` interface — later, per Doctrine 4.
 **Forex markets:** same engine, `kind:spot` with fiat pairs — rails to fund them arrive with svc-pay adapters.
 
-### 5.3 apps/web — Trade surfaces
+### 5.3 The product shell — Trade surfaces · sole surface = the vendored Vue shell on `:8090`, `apps/web` retired (ADR `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`, Accepted — settled, not re-litigated) · audience = pro trader workbench, retail via Convert and never terminal-default · one kit = iView 3 through CSS variables, never forked
 - Pro terminal: multi-book layout, depth, hotkeys, TradingView-style charting (lightweight-charts lib), sub-account switcher
 - Convert: single-card swap UI (the retail on-ramp)
 - Copy: leader boards with audited badges; Mirror follow flow with guardrail defaults from Blueprint (Phase 4 hook)
@@ -311,7 +311,7 @@ interface RailAdapter {
 - **Smart routing:** rules table (geo, method, amount band, risk score, live approval-rate stats per adapter) → agent-tunable in Phase 5
 - **Settlement:** merchant net posts to their ledger account (same balance graph they trade/spend from — the doc's promise, kept); payout to bank/crypto via adapter `payout`
 - **Merchant crypto acceptance for any user:** flip `modes += merchant` on profile → instant `crypto-native` acceptance, payment links, hosted checkout
-- Checkout builder, hosted pages, plugins (Woo/Magento/OpenCart) in `apps/web` + public REST
+- Checkout builder, hosted pages, plugins (Woo/Magento/OpenCart) in the product shell (§5.3) + public REST
 
 ### 6.2 svc-p2p
 
@@ -530,7 +530,7 @@ End state mirrors the proven shape: one chain, BFT consensus, two execution doma
 ```
 services/
   ├── svc-chain/        # INTACHAIN node ops, validator tooling, chain config
-  ├── svc-indexer/      # Chain → Postgres read models for apps/web (books, fills, positions)
+  ├── svc-indexer/      # Chain → Postgres read models for the shell (books, fills, positions)
   ├── svc-bridge/       # Fiat Plane ↔ Protocol Plane transfers; canonical IFC bridge;
   │                     #   deposit/withdraw between ledger and chain with attestations
   └── svc-protocol/     # Contract suite lifecycle: smart accounts, AMM, lending,
@@ -632,7 +632,7 @@ Plane: **F** = Fiat (custodial/compliant) · **P** = Protocol (non-custodial/zer
 | Deep liquidity (internal MM day one; venue aggregation) | B | LiquiditySource adapters | 2 (§13 socket) |
 | Algo execution TWAP/VWAP/EWAP/PVOL | F | svc-trade exec module | 2 |
 | Sub-accounts + consolidated reporting | B | svc-identity + ledger | 1 |
-| Pro terminal + native mobile | B | apps/web + mobile (§8 Core row) | 2 |
+| Pro terminal + native mobile | B | product shell §5.3 + mobile (§8 Core row) | 2 |
 | 100+ languages | B | i18n system (§9) | 0 |
 
 ### DEX (§VII) — absorbed into Protocol Plane
