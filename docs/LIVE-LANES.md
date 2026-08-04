@@ -22,7 +22,7 @@
 2. **P1 stranded** — path-clean `origin/feat/*` land.
 3. **P2 babysit** — Denon open + #346 comment only; never merge partners.
 4. **Reclaimed mountains** — pay (after handoff), bank, identity money, trade-light; never invent mids.
-5. **Denon hard board** — babysit only: [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).
+5. _*Denon hard board (mega + D-S-* spec factory)_* — babysit only: [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).
 6. **Shehzad chain** — never implement: [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md).
 
 **Not free:** Shehzad protocol/chain implement · dual-edit Denon open files · invent money/depth · Class X · platform-pages dual-start without foundation/craft split.

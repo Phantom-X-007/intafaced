@@ -63,7 +63,7 @@ export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
 8. Multi-dev / claim / “what’s free”: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md) — product tracker vs campaign NEXT vs session lanes (do not collapse).
 9. **Shehzad Protocol Plane + INTACHAIN (sole human chain owner):** [`docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) · [`docs/THREE-WAY-DISTRIBUTION-2026-08-04.md`](docs/THREE-WAY-DISTRIBUTION-2026-08-04.md) · reclaim non-chain for agents.
 10. **All-out swarms / max parallel (Nitro go all-out):** [`docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md`](docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md) · **AFK ladder / no stamp mill:** [`docs/ops/SWARM-MANDATE.md`](docs/ops/SWARM-MANDATE.md) · `pnpm swarm:freeze` / `swarm:next` / `swarm:report` · Denon queue [`docs/REGROUP-2026-08-03.md`](docs/REGROUP-2026-08-03.md) · residual-register · `pnpm claim:check` before edit. Specs = main **+** open PRs **+** branches. When `freeProduct=0`, do **P1–P3 real work** (stranded branches, partner unblock, TRK research) — **not** R07/R01 tip-bump cycle spam.
-    9b. **Denon hard tasks (not agent free craft):** [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — platform integrity, money Class M under his open PRs, product law; Nitro agents babysit only.
+    9b. **Denon hard tasks (not agent free craft):** [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — mega hard board + product-law spec factory (D-S-*); money Class M under his open PRs; Nitro agents babysit his open files only.
 
 ---
 
