@@ -23,7 +23,7 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-02** ✅ | **done**    | [`SPEC-OTC-RFQ-AND-EARN-2026-08-02.md`](SPEC-OTC-RFQ-AND-EARN-2026-08-02.md) Part A                                                                                            |
 | **D-S-03** ✅ | **done**    | [`SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md). `DIRECTION` §1 marks the old ban superseded by it.                           |
 | **D-S-04** ✅ | **done**    | [`adr/2026-08-04-algo-execution-law.md`](adr/2026-08-04-algo-execution-law.md), on `DIRECTION` §1 (TWAP only, icebergs out).                                                   |
-| **D-S-05** ⚠️ | **partial** | `DIRECTION` §2 decides the instrument model and says RESUME `feat/multi-asset-instruments`. Enum authority unwritten.                                                          |
+| **D-S-05** ✅ | **done**    | [`adr/2026-08-04-instrument-enum-authority.md`](adr/2026-08-04-instrument-enum-authority.md) on `DIRECTION` §2.                                                                |
 | **D-S-06** ❌ | **blank**   | Nothing anywhere. **Highest agent-unblock value of the blanks.** Needs the fill-finality answer first.                                                                         |
 | **D-S-07** ⚠️ | **half**    | [`SPEC-LENDING-2026-08-02.md`](SPEC-LENDING-2026-08-02.md) §1 for lending. Futures mark side blank — see D-S-01.                                                               |
 | **D-S-08** ❌ | **blank**   | PR #428 open. No spec.                                                                                                                                                         |
@@ -32,23 +32,23 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-11** ✅ | **done**    | [`SPEC-SUBACCOUNTS-2026-08-02.md`](SPEC-SUBACCOUNTS-2026-08-02.md). Adjacent: [`adr/2026-08-04-authority-and-refusal-shape.md`](adr/2026-08-04-authority-and-refusal-shape.md) |
 | **D-S-12** ✅ | **done**    | [`adr/2026-08-04-cross-plane-bridge-accounting.md`](adr/2026-08-04-cross-plane-bridge-accounting.md) — accounting law only; chain side is Shehzad S-D7/S-B5.                   |
 | **D-S-13** ✅ | **done**    | [`adr/2026-08-04-event-socket-vs-broken-promise.md`](adr/2026-08-04-event-socket-vs-broken-promise.md)                                                                         |
-| **D-S-14** ❌ | **blank**   | Nothing current.                                                                                                                                                               |
+| **D-S-14** ✅ | **done**    | [`adr/2026-08-04-token-economics-outcomes.md`](adr/2026-08-04-token-economics-outcomes.md) — decides no number; decides whose they are.                                        |
 | **D-S-15** ✅ | **done**    | [`adr/2026-08-04-platform-pages-ia.md`](adr/2026-08-04-platform-pages-ia.md) — law only, craft stays Nitro.                                                                    |
-| **D-S-16** ⚠️ | **partial** | `DIRECTION` §3 — "Class M merge rule — decided" + four carve-outs.                                                                                                             |
+| **D-S-16** ✅ | **done**    | [`adr/2026-08-04-class-m-hold-language.md`](adr/2026-08-04-class-m-hold-language.md) on `DIRECTION` §3.                                                                        |
 | **D-S-17** ✅ | **done**    | Decision: `DIRECTION` §4 (Option B). Residual: [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)                                        |
 | **D-S-18** ❌ | **blank**   | Board itself says "if in scope".                                                                                                                                               |
 
-**Tally: 10 done · 4 partial · 4 blank.** The board read as 17 blank.
+**Tally: 13 done · 2 partial · 3 blank.** The board read as 17 blank.
 
 ---
 
 ## What this changes for agents, today
 
-**Agents may now implement against D-S-02, 03, 04, 09, 10, 11, 12, 13, 15 and 17 without waiting.** Those ten are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
+**Agents may now implement against D-S-02, 03, 04, 05, 09, 10, 11, 12, 13, 14, 15, 16 and 17 without waiting.** Those thirteen are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
 
-**D-S-01, 05, 07 and 16 are partially law.** Implement the decided part; do not invent the rest. Each row above names which half is which.
+**D-S-01 and 07 are partially law.** Implement the decided part; do not invent the rest. Each row above names which half is which.
 
-**D-S-06, 08, 14, 18 remain genuinely blank.** The invent-ban holds in full. Research is welcome; implementation is not.
+**D-S-06, 08 and 18 remain genuinely blank.** D-S-06 needs the fill-finality answer; D-S-08 needs the escrow-plane conflict ruled. The invent-ban holds in full. Research is welcome; implementation is not.
 
 ---
 
