@@ -18,9 +18,10 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { touches } from './path-collide.mjs';
+import { evaluateThrift } from '../ci/thrift-preflight.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OPS = join(ROOT, 'docs', 'ops');
@@ -794,6 +795,18 @@ function printStatus(m) {
     console.log(
       `  actions-24h: total=${m.actionsRuns24h.total}${m.actionsRuns24h.capped ? '+' : ''} ${by}${m.actionsRuns24h.capped ? ' (list capped — true total may be higher)' : ''}`,
     );
+    try {
+      const ev = evaluateThrift(m.actionsRuns24h);
+      const msg =
+        ev.level === 'hard'
+          ? 'FAIL — do not open/update PRs that start CI (pnpm thrift:check / pnpm pr); wait or THRIFT_ALLOW=1'
+          : ev.level === 'soft'
+            ? 'WARN — batch into fat PRs; no micro-PR / stamp docs'
+            : 'OK';
+      console.log(`  thrift: level=${ev.level} soft≥${ev.soft} hard≥${ev.hard} docs≥${ev.hardDocs} ci≥${ev.hardCi} — ${msg}`);
+    } catch {
+      console.log('  thrift: (evaluate failed)');
+    }
   } else {
     console.log('  actions-24h: (gh unavailable)');
   }

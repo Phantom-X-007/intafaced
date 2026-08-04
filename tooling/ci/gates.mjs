@@ -221,6 +221,8 @@ export const NOT_GATES = {
     'Vue-shell companion to i18n-scan. Deliberately NOT a gate until a fresh keying pass: tip currently has 200+ hardcoded user-facing strings across the shell, so wiring it as blocking would red main. Run by hand via `pnpm scan:shell-i18n` to drive that pass; promote to GATES (blocking) once the count is zero. Not advisory-GATES either — the scan exits 1 by design and its header claims it blocks; keep that contract for the day it is wired.',
   'value-gate.mjs':
     'stamp-mill detector for docs-only near-duplicate commits. Lives on Docs format workflow (docs-format.yml), not pnpm gates — ci.yml excludes docs/** and **/*.md, so coordinator docs PRs never hit GATES. (That exclusion is now written as negated `paths:` rather than `paths-ignore`, because INTAFACED_DEFINITIVE_BUILD.md is law and coverage-check has to see it; the set of excluded docs is unchanged.) Advisory first; flip to strict in that workflow only.',
+  'thrift-preflight.mjs':
+    'Actions spend brake for agents (`pnpm thrift:check`) before gh pr create / CI-restarting push — needs live `gh` + network to meter 24h runs. Not a doctrine gate: a laptop without GH_TOKEN would fail green trees for the wrong reason, and hard-capping mid-verify would block legitimate local work. Self-test via `pnpm thrift:self-test`; law in docs/GITHUB-CI-SPEND-CONTROL and AGENTS.md thrift.',
 };
 
 // ── Self-check: nothing in tooling/ci/ may be unaccounted for ───────────────

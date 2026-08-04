@@ -22,14 +22,31 @@
 # minute against the full run it deliberately avoids. This is thrift, not an
 # exception to it: the alternative is not "no CI", it is a red `main` and three
 # people debugging their own checkouts.
+#
+# THRIFT 2026-08-04: pull_request ONLY — do not re-run on push to main after merge.
+# Squash/merge already paid for Docs format on the PR; a second main run doubled
+# the mill (~half of 619 Docs-format runs in one thrash day). Local `pnpm verify`
+# still catches unformatted md before the next code PR. Manual: workflow_dispatch.
 name: Docs format
 
 on:
-  push:
-    branches: [main]
-    paths: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
   pull_request:
-    paths: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
+    # Negation: claim locks + FREEZE regen alone must not burn Docs-format.
+    # (Swarm claim files / FREEZE-LIVE are ops meters, not prose that needs CI.)
+    paths:
+      - 'docs/**'
+      - '**/*.md'
+      - 'NOTICE'
+      - 'LICENSE'
+      - '!docs/ops/FREEZE-LIVE.md'
+      - '!docs/ops/FREEZE-LIVE.json'
+      - '!docs/ops/claims/**'
+      - '!docs/ops/R00-INVENTORY.md'
+      - '!docs/ops/R01-PR-MATRIX.md'
+      - '!docs/ops/R02-FREE-CLAIMS.md'
+      - '!docs/ops/DASHBOARD.md'
+      - '!docs/ops/DASHBOARD.html'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
