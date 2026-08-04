@@ -9,6 +9,7 @@ import {
   normaliseMethodId,
   parseFieldSpecs,
   pickSchema,
+  takeRefused,
   validateDetails,
   type FieldSpec,
   type InstrumentDetails,
@@ -520,7 +521,7 @@ export class InstrumentService {
    */
   async attachToTrade(
     tx: Sql,
-    input: { tradeId: string; sellerId: string; methodId: string; fiatCurrency: string },
+    input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string },
   ): Promise<{ instrumentId: string; fingerprint: string }> {
     const methodId = methodIdKey(input.methodId);
     const rows = await tx<InstrumentRow[]>`
@@ -533,10 +534,19 @@ export class InstrumentService {
 
     const instrument = rows[0];
     if (!instrument) {
-      throw new InstrumentError(
-        `The seller has no active "${input.methodId}" destination for ${input.fiatCurrency}, so the buyer would have nowhere to pay`,
-        'p2p.no_payment_instrument',
-      );
+      // THE ORACLE, CLOSED. This used to echo the method id and the currency
+      // back — a self-describing answer to a question about someone else's
+      // bank accounts — and it wrote nothing down. Now it says the same
+      // sentence every other method-refused take says, and it is logged.
+      //
+      // `refuseTake` writes on `this.sql`, NOT on `tx`: the throw aborts the
+      // caller's reserve transaction, and a log row written inside it would
+      // roll back with everything else. Rolling back cleanly is exactly what
+      // made the probe free.
+      await this.refuseTake({ takerId: input.takerId, sellerId: input.sellerId, tradeId: input.tradeId });
+      // `refuseTake` is typed `Promise<never>`; this is unreachable and exists
+      // only so the narrowing below is a fact rather than an assertion.
+      throw takeRefused();
     }
 
     await tx`
@@ -551,6 +561,39 @@ export class InstrumentService {
     `;
 
     return { instrumentId: instrument.id, fingerprint: instrument.fingerprint };
+  }
+
+  /**
+   * REFUSE A TAKE, IDENTICALLY, AND WRITE IT DOWN. Never returns.
+   *
+   * Every reason a take could not name a destination comes through here — the
+   * offer not accepting the method, and the seller not holding an instrument
+   * for it — so the caller cannot tell them apart from the response, and
+   * neither can anyone reading a transcript of a thousand of them.
+   *
+   * `deny_reason` is the SAME string for both, deliberately. The access log is
+   * the owner's, and the owner already knows which of their own instruments
+   * exist; what a uniform reason buys is that nothing downstream — a support
+   * view, an export, a future admin screen — can reconstruct the distinction
+   * this method exists to erase.
+   *
+   * It logs on `this.sql` rather than any caller's transaction. `attachToTrade`
+   * throws from inside `reserveTrade`'s transaction, and a log row written
+   * there would roll back with the trade row. "Rolls back cleanly, costs
+   * nothing, leaves no trace" was the whole shape of the oracle.
+   */
+  async refuseTake(input: { takerId: string; sellerId: string; tradeId?: string }): Promise<never> {
+    await this.logDenied({
+      ownerId: input.sellerId,
+      viewerId: input.takerId,
+      viewerRole: 'other',
+      // No trade id: the take rolled back, so there is no trade to point at.
+      // Recording the id it WOULD have had would put a row in the owner's log
+      // referring to something that does not exist.
+      tradeId: null,
+      reason: 'take_refused',
+    });
+    throw takeRefused();
   }
 
   /**

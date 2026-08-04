@@ -117,7 +117,7 @@ if (!available) {
 
   /**
    * A take now requires the SELLER to have somewhere the buyer can pay, and is
-   * refused before any lock otherwise (`p2p.no_payment_instrument`). So every
+   * refused before any lock otherwise (`p2p.take_refused`). So every
    * account that ends up on the sell side of a trade in this file needs a
    * destination, in the currency that trade is priced in.
    *
@@ -364,6 +364,7 @@ if (!available) {
         price: amt('1'),
         minAmt: amt('10'),
         maxAmt: amt('500'),
+        methods: ['sepa'],
       });
       const trade = await noFee.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
       await noFee.confirmFiatReceived(trade.id, MAKER);
@@ -384,6 +385,7 @@ if (!available) {
         price: amt('1'),
         minAmt: amt('10'),
         maxAmt: amt('500'),
+        methods: ['sepa'],
       });
       const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
 
@@ -1081,11 +1083,20 @@ if (!available) {
       expect(await escrowOf(MAKER)).toBe('0');
     });
 
+    it('refuses a NEW offer that declares no payment methods', async () => {
+      // An offer with no declared methods accepts anything, so the only thing
+      // that can refuse a take on it is the seller's instrument set — which
+      // turns every such offer into a clean per-method probe of its own maker.
+      // Existing offers are left alone and refuse at take, honestly.
+      await expect(sellOffer({ methods: [] })).rejects.toMatchObject({ code: 'p2p.offer_methods_required' });
+      await expect(sellOffer({ methods: undefined })).rejects.toMatchObject({ code: 'p2p.offer_methods_required' });
+    });
+
     it('rejects a payment method the offer does not accept', async () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer({ methods: ['sepa'] });
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'wise' })).rejects.toMatchObject({
-        code: 'p2p.offer_method_unsupported',
+        code: 'p2p.take_refused',
       });
       expect(await escrowOf(MAKER)).toBe('0');
     });
@@ -1709,6 +1720,7 @@ if (!available) {
         minAmt: amt('10'),
         maxAmt: amt('100'),
         totalAmt: amt('1000'),
+        methods: ['sepa'],
       });
 
       const take = (offerId: string, takerId: string) => p2p.takeOffer({ offerId, takerId, amount: amt('100'), method: 'sepa' });
@@ -1752,6 +1764,7 @@ if (!available) {
         price: amt('1'),
         minAmt: amt('10'),
         maxAmt: amt('100'),
+        methods: ['sepa'],
       });
       await expect(take(broke.id, TAKER)).rejects.toThrow();
 
