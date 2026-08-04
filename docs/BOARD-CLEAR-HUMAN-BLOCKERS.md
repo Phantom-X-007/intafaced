@@ -22,18 +22,22 @@
 
 ---
 
-## Human mountain rows still open at last flush
+## Mountain rows still open — with who actually owns them on tip
 
-| Row                        | Owner      | What’s left (honest)                                       | Waiting on        |
-| -------------------------- | ---------- | ---------------------------------------------------------- | ----------------- |
-| pay.gateway (+ expand)     | shehzad002 | Card sandbox + KYB + durable list — PR #346 dirty/conflict | shehzad merge fix |
-| protocol.smart-accounts    | shehzad002 | Deploy + audit package                                     | M2 implement      |
-| protocol.amm (+ lending/…) | shehzad002 | After SA                                                   | M2                |
-| trade.futures              | shehzad002 | Risk/margin/liq/mark truth; unlocks B-WS-2 live positions  | M3                |
-| trade.otc / copy / algo    | shehzad002 | Real engines (agents must not invent)                      | M4                |
-| identity sub-account money | shehzad002 | Money routing graph (UI list already shipped)              | M5                |
-| Phase 5 bank money         | shehzad002 | earn/cards/ramps                                           | M6                |
-| dual-book / Java residual  | shehzad002 | M7 — agents never steal                                    | M7                |
+**This table used to read `shehzad002` on all eight rows. Six of those locks were dissolved by the 2026-08-04 law** (THREE-WAY-DISTRIBUTION §2 + GITHUB-OWNERSHIP-SHEHZAD): Shehzad is Protocol Plane + INTACHAIN only, so only the two `protocol.*` rows are still a human blocker. The prose note above said this; the table did not, and a table that contradicts the sentence above it is read as the lock. Corrected below.
+
+| Row                        | Owner on tip                      | What’s left (honest)                                                                         | Waiting on                               |
+| -------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| pay.gateway (+ expand)     | shehzad002 **until #346 handoff** | Card sandbox + KYB + durable list — PR #346 open and CONFLICTING                             | shehzad merge fix **or** handoff comment |
+| protocol.smart-accounts    | **shehzad002** (chain)            | Deploy + audit package                                                                       | S-A1 — genuine human blocker             |
+| protocol.amm (+ lending/…) | **shehzad002** (chain)            | After SA                                                                                     | S-A2 — genuine human blocker             |
+| trade.futures              | **Nitro agents** (was M3)         | Risk/margin/liq/mark truth; unlocks B-WS-2 live positions. Implement from D-S-01, not invent | Denon spec, not a human lock             |
+| trade.otc / copy / algo    | **Nitro agents** (was M4)         | Real engines. Agents must not invent mids/rates — thin §13 or from tip law                   | Denon spec, not a human lock             |
+| identity sub-account money | **Nitro agents** (was M5)         | Money routing graph (UI list already shipped) + leak tests                                   | nothing — claimable                      |
+| Phase 5 bank money         | **Nitro agents** (was M6)         | `bank.earn` shipped `done` 2026-08-04; cards ledger half + ramps crypto leg remain           | nothing — claimable                      |
+| dual-book / Java residual  | **Nitro agents** (was M7)         | After path-clear vs Denon open custody PRs                                                   | Denon open PR file sets                  |
+
+**Still a real human blocker on this table:** the two `protocol.*` rows, and `pay.gateway` only until #346 is finished or handed off. Everything else is agent work under Class M rigor — Class X (issuer keys, prod go-live, licence) stays Nitro human wherever it appears, which is a decision gate, not an ownership lock.
 
 ### Agent §13 residual (not a human steal)
 
@@ -60,3 +64,5 @@ _Re-derive with `gh pr list`. Snapshot is advisory._
 **2026-08-04** — Cost + protection blockers written to X1–X5 (were empty since 2026-08-02).  
 Human M1–M7 still OPEN → BOARD-COMPLETE not claimed.  
 Agent residual = F-STANDBY / P1–P5 ladder when freeProduct=0 — not stamp mills.
+
+**2026-08-04 (later)** — Mountain table re-derived against the 2026-08-04 ownership law. M3–M7 are **not** human blockers and had been reading as locks for as long as the table was the only thing anyone scrolled to; X1–X5 unchanged and still Denon. Human blockers now: X1–X5, `protocol.smart-accounts`, `protocol.amm`, and `pay.gateway` until #346 resolves. BOARD-COMPLETE still not claimed.

@@ -10,13 +10,13 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **41%** — 44 of 108 features shipped
+`████████░░░░░░░░░░░░` **42%** — 45 of 108 features shipped
 
-Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 6/16 · **3P** 1/8 · **4** 4/5 · **4P** 0/3 · **5** 6/35 · **5P** 0/2
+Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 6/16 · **3P** 1/8 · **4** 4/5 · **4P** 0/3 · **5** 7/35 · **5P** 0/2
 
 **In progress:** Pro terminal — depth, charts, hotkeys, sub-accounts (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro)
 
-**🟢 32 ready to claim** — nothing blocks these:
+**🟢 31 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
@@ -26,7 +26,7 @@ Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 6/16 · **3P** 1/8 · **
 - `trade.algo` — TWAP / VWAP / POV execution
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
 - `trade.mm-bot` — Internal market-maker seeding books at launch
-- …and 24 more
+- …and 23 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
