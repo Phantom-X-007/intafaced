@@ -65,11 +65,14 @@
     "claim:check": "node tooling/ci/claim-check.mjs",
     "wt:gc": "node tooling/scripts/worktree-gc.mjs",
     "wt:gc:apply": "node tooling/scripts/worktree-gc.mjs --apply",
+    "wt:gc:check": "node tooling/scripts/worktree-gc.mjs --check",
     "swarm:freeze": "node tooling/scripts/swarm.mjs freeze",
     "swarm:status": "node tooling/scripts/swarm.mjs status",
+    "swarm:lanes": "node tooling/scripts/swarm.mjs lanes",
     "swarm:report": "node tooling/scripts/swarm.mjs report",
     "swarm:next": "node tooling/scripts/swarm.mjs next",
-    "swarm:claim": "node tooling/scripts/swarm.mjs claim"
+    "swarm:claim": "node tooling/scripts/swarm.mjs claim",
+    "swarm:heartbeat": "node tooling/scripts/swarm.mjs heartbeat"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

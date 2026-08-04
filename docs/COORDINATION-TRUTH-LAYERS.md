@@ -91,13 +91,22 @@ This prevents **dual-build**. Tracker prevents **wrong-mountain** and **false fr
 ```
 git fetch origin main && git log origin/main -1 --oneline
 gh pr list --state open
+# machine board (generated — do not hand-edit):
+pnpm swarm:freeze && pnpm swarm:status && pnpm swarm:lanes
 # product free / locks:
 pnpm tracker ready   # or read tooling/tracker/features.mjs owners
 # session:
 docs/LIVE-LANES.md
 # campaign next only if Board Clear active:
 docs/BOARD-CLEAR-NEXT.md
+# human-only blockers (append-only inbox — refresh, do not invent a second file):
+docs/BOARD-CLEAR-HUMAN-BLOCKERS.md
 ```
+
+**Resume home:** `docs/ops/FREEZE-LIVE.md` (from `pnpm swarm:freeze`) — not a separate RESUME.md.  
+**Cost line:** `swarm:status` prints Actions runs last 24h; if Docs-format dominates, thrift before more stamp PRs.  
+**F-STANDBY:** when freeProduct=0, idling is valid; only P1–P5 with Board-Delta. Law: `docs/ops/SWARM-MANDATE.md`.  
+**Value gate:** `tooling/ci/value-gate.mjs` (Docs format workflow) + L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`.
 
 If tracker owner / LIVE-LANES is **HUMAN-CLAIMED** or shehzad M1–M7 → **babysit only**, never implement.
 

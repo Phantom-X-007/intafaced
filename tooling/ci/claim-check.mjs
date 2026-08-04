@@ -39,6 +39,7 @@
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
+import { touches } from '../scripts/path-collide.mjs';
 
 const args = process.argv.slice(2);
 
@@ -81,9 +82,6 @@ function myFiles() {
 
   return { source: 'this branch (committed + working tree)', files: [...new Set([...committed, ...working])] };
 }
-
-/** A path claims another if either contains the other — `services/svc-bank` covers its files. */
-const touches = (a, b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 
 const { source, files: mine } = myFiles();
 

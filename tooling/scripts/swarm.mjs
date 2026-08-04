@@ -6,20 +6,21 @@
  * Does NOT spawn agents, merge PRs, or edit product shell code.
  *
  *   pnpm swarm:freeze   → docs/ops/FREEZE-LIVE.md + stdout summary
- *   pnpm swarm:status   → short tip + free/blocked counts
+ *   pnpm swarm:status   → short tip + free/blocked counts + churn + Actions 24h
+ *   pnpm swarm:lanes    → P0–P3 ladder enumeration (stranded / partner-red / thin TRK)
  *   pnpm swarm:report   → docs/ops/R00 R01 R02 + DASHBOARD.md
  *   pnpm swarm:next [--all] → first free claim paste, or all free product pastes
  *   pnpm swarm:claim <id>   → write docs/ops/claims/<id>.md lock file
+ *   pnpm swarm:heartbeat <id> → touch claim heartbeat timestamp
  *
  * Exit 0 always when the tool answered honestly (including "0 free").
  * Exit 2 when gh/git cannot answer (same spirit as claim-check).
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
-const require = createRequire(import.meta.url);
+import { touches } from './path-collide.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OPS = join(ROOT, 'docs', 'ops');
@@ -46,8 +47,6 @@ function ghJson(args) {
     return { __error: error.stderr?.toString().trim() || error.message };
   }
 }
-
-const touches = (a, b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 
 /** REGROUP product claims — paths from tip docs/REGROUP-2026-08-03.md §5–6 */
 const REGROUP_CLAIMS = [
@@ -273,6 +272,175 @@ function writeClaimFile(id, claim) {
   return { path, existed: false };
 }
 
+/** Consecutive tip merges that touch only docs/ (churn). */
+function countOpsOnlyChurn(limit = 30) {
+  const log = git(['log', 'origin/main', `-${limit}`, '--name-only', '--pretty=format:---%H']);
+  if (!log) return { consecutive: 0, sample: [] };
+  const chunks = log
+    .split(/^---/m)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let consecutive = 0;
+  const sample = [];
+  for (const chunk of chunks) {
+    const lines = chunk
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const sha = (lines[0] || '').slice(0, 8);
+    const files = lines.slice(1);
+    if (!files.length) continue;
+    const docsOnly = files.every((f) => f.startsWith('docs/') || f.endsWith('.md'));
+    if (docsOnly) {
+      consecutive++;
+      sample.push(sha);
+    } else break;
+  }
+  return { consecutive, sample };
+}
+
+function worktreeCount() {
+  const raw = git(['worktree', 'list', '--porcelain']);
+  if (!raw) return 0;
+  return raw.split('\n').filter((l) => l.startsWith('worktree ')).length;
+}
+
+/** P1: remote feat|fix|chore|docs not on main, no open PR. */
+function listStrandedBranches(openPrs) {
+  const openHeads = new Set((openPrs || []).map((p) => p.headRefName).filter(Boolean));
+  const refs = git(['for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin']).split('\n').filter(Boolean);
+  const out = [];
+  for (const ref of refs) {
+    if (!/^origin\/(feat|fix|chore|docs)\//.test(ref)) continue;
+    const b = ref.replace(/^origin\//, '');
+    if (openHeads.has(b)) continue;
+    const r = spawnSync('git', ['merge-base', '--is-ancestor', ref, 'origin/main'], {
+      cwd: ROOT,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+    if (r.status === 0) continue; // already on main
+    const ahead = Number(git(['rev-list', '--count', `origin/main..${ref}`]) || 0);
+    if (!Number.isFinite(ahead) || ahead < 1) continue;
+    out.push({ branch: b, ahead });
+  }
+  out.sort((a, b) => b.ahead - a.ahead || a.branch.localeCompare(b.branch));
+  return out;
+}
+
+function touchClaimFile(id, patch = {}) {
+  const path = join(CLAIMS_DIR, `${id}.md`);
+  if (!existsSync(path)) return { path, ok: false, reason: 'missing' };
+  let body = readFileSync(path, 'utf8');
+  const now = new Date().toISOString();
+  if (/\*\*heartbeat:\*\*/i.test(body)) {
+    body = body.replace(/\*\*heartbeat:\*\*\s*.*/i, `**heartbeat:** ${now}`);
+  } else {
+    body = body.replace(/(\*\*started:\*\*[^\n]*\n)/i, `$1**heartbeat:** ${now}\n`);
+  }
+  if (patch.status) {
+    body = body.replace(/\*\*status:\*\*\s*\S+/i, `**status:** ${patch.status}`);
+  }
+  writeFileSync(path, body, 'utf8');
+  return { path, ok: true, heartbeat: now };
+}
+
+function countActionsRuns24h() {
+  // optional — needs gh; return null on failure (CI has no gh auth)
+  try {
+    const runs = JSON.parse(
+      execFileSync('gh', ['run', 'list', '--limit', '1000', '--json', 'createdAt,name,conclusion,event'], {
+        encoding: 'utf8',
+        cwd: ROOT,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }),
+    );
+    const cut = Date.now() - 24 * 3600 * 1000;
+    const last24 = runs.filter((r) => new Date(r.createdAt).getTime() >= cut);
+    const byName = {};
+    for (const r of last24) {
+      byName[r.name || 'unknown'] = (byName[r.name || 'unknown'] || 0) + 1;
+    }
+    // if we hit the API page cap, flag so status does not under-report billing risk
+    const capped = runs.length >= 1000;
+    return { total: last24.length, byName, capped };
+  } catch {
+    return null;
+  }
+}
+
+function buildLanes(m) {
+  const stranded = m.strandedBranches || listStrandedBranches(m.openPrs || []);
+  // P2: partner red needing comment — needs second gh call for statusCheckRollup
+  let partnerRed = [];
+  try {
+    const detail = JSON.parse(
+      execFileSync(
+        'gh',
+        ['pr', 'list', '--state', 'open', '--limit', '40', '--json', 'number,title,author,mergeable,statusCheckRollup,url'],
+        { encoding: 'utf8', cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
+      ),
+    );
+    partnerRed = detail
+      .filter((p) => p.author?.login && p.author.login !== 'ZenYoda3')
+      .filter((p) => (p.statusCheckRollup || []).some((c) => c.conclusion === 'FAILURE'))
+      .map((p) => ({
+        number: p.number,
+        title: p.title,
+        author: p.author.login,
+        fails: (p.statusCheckRollup || []).filter((c) => c.conclusion === 'FAILURE').map((c) => c.name),
+        url: p.url,
+      }));
+  } catch {
+    partnerRed = [];
+  }
+  // P3 thin TRK
+  let thinTrk = [];
+  try {
+    const trkDir = join(OPS, 'trk');
+    if (existsSync(trkDir)) {
+      thinTrk = readdirSync(trkDir)
+        .filter((n) => n.endsWith('.md') && n !== 'README.md' && !n.startsWith('TRK-'))
+        .map((n) => {
+          const body = readFileSync(join(trkDir, n), 'utf8');
+          const lines = body.split('\n').length;
+          return { file: n, lines };
+        })
+        .filter((x) => x.lines < 100)
+        .sort((a, b) => a.lines - b.lines);
+    }
+  } catch {
+    thinTrk = [];
+  }
+  return {
+    p0: (m.freeProduct || []).map((c) => c.id),
+    p1: stranded,
+    p2: partnerRed,
+    p3: thinTrk,
+    counts: {
+      p0: (m.freeProduct || []).length,
+      p1: stranded.length,
+      p2: partnerRed.length,
+      p3: thinTrk.length,
+    },
+  };
+}
+
+function printLanes(m) {
+  const L = buildLanes(m);
+  console.log(`swarm:lanes  tip=${m.tip}`);
+  console.log(`  P0 free product: ${L.counts.p0}`);
+  console.log(`  P1 stranded branches: ${L.counts.p1}`);
+  for (const s of L.p1.slice(0, 15)) console.log(`    STRANDED ${s.branch} (+${s.ahead})`);
+  if (L.p1.length > 15) console.log(`    … +${L.p1.length - 15} more`);
+  console.log(`  P2 partner NEW-red: ${L.counts.p2}`);
+  for (const p of L.p2.slice(0, 10)) console.log(`    #${p.number} @${p.author} fails=${p.fails.join(',')}`);
+  console.log(`  P3 thin TRK (<100 lines): ${L.counts.p3}`);
+  for (const t of L.p3.slice(0, 12)) console.log(`    ${t.file} (${t.lines} lines)`);
+  if (L.counts.p0 + L.counts.p1 + L.counts.p2 + L.counts.p3 === 0) {
+    console.log('  ALL LANES 0 — F-STANDBY idle is valid. Re-check 30–45m. Do NOT open a stamp PR.');
+  }
+}
+
 function loadResidual() {
   const p = join(ROOT, 'tooling/frontend/residual-register.json');
   if (!existsSync(p)) return { items: [], error: 'residual-register.json missing' };
@@ -420,6 +588,15 @@ function buildModel() {
     ? `anti-under-spawn FAIL: available=${available} active_spawned_locks=${activeSpawned} gap=${underGap} — spawn or residual-own every free product id (target concurrent width 6–8 path-disjoint).`
     : `anti-under-spawn OK: available=0 active_spawned_locks=${activeSpawned} gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).`;
 
+  const opsChurn = countOpsOnlyChurn(30);
+  const strandedBranches = listStrandedBranches(prs);
+  const wtCount = worktreeCount();
+  const actionsRuns24h = countActionsRuns24h();
+  const fStandby =
+    freeProduct.length === 0
+      ? 'F-STANDBY — primary finish met; session continues on P1–P5 only with declared Board-Delta. Idling silently is valid. Do not open a stamp PR.'
+      : null;
+
   return {
     tip,
     tipFull,
@@ -430,6 +607,7 @@ function buildModel() {
       number: p.number,
       title: p.title,
       author: p.author?.login,
+      headRefName: p.headRefName,
       url: p.url,
       mergeable: p.mergeable,
       fileCount: (p.files || []).length,
@@ -447,6 +625,13 @@ function buildModel() {
     underGap,
     underSpawnFail,
     underSpawnNote,
+    opsChurn,
+    strandedBranches,
+    strandedCount: strandedBranches.length,
+    worktreeCount: wtCount,
+    worktreeOverCap: wtCount > 20,
+    actionsRuns24h,
+    fStandby,
     spawnWidthTarget: freeProduct.length > 0 ? '6-8' : '3-6 (P1–P3 only)',
     mandate:
       'SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.',
@@ -477,21 +662,48 @@ function renderFreezeMd(m) {
   lines.push(`- **Mandate:** ${m.mandate || 'shell product only'}`);
   lines.push(`- **AFK ladder:** ${m.afkLadder || 'see docs/ops/SWARM-MANDATE.md'}`);
   lines.push(`- **Stamp-mill ban:** ${m.stampMillBan || 'no R07/R01 tip-bump spam when board unchanged'}`);
-  lines.push('- **Proof mode:** NO-FLEET until Docker present — static build + scans; never fake UI done');
+  if (m.fStandby) lines.push(`- **Finish state:** ${m.fStandby}`);
+  const churn = m.opsChurn || { consecutive: 0 };
+  lines.push(
+    `- **Ops churn:** ${churn.consecutive} consecutive docs-only tip merges${churn.consecutive >= 5 ? ' ⚠ CHURN (≥5) — value gate + Board-Delta required' : ''}`,
+  );
+  lines.push(`- **Stranded branches (P1):** ${m.strandedCount ?? (m.strandedBranches || []).length}`);
+  lines.push(`- **Worktrees:** ${m.worktreeCount ?? '?'} ${m.worktreeOverCap ? '⚠ OVER CAP 20 — run `pnpm wt:gc:apply`' : '(cap 20)'}`);
+  if (m.actionsRuns24h) {
+    const by = Object.entries(m.actionsRuns24h.byName || {})
+      .map(([n, c]) => `${n}=${c}`)
+      .join(', ');
+    lines.push(
+      `- **Actions runs (24h):** ${m.actionsRuns24h.total}${by ? ` (${by})` : ''} — billing ceiling risk if Docs-format dominates; Denon owns Actions budget`,
+    );
+  } else {
+    lines.push('- **Actions runs (24h):** (gh unavailable — re-run with network)');
+  }
+  lines.push(
+    '- **Proof mode:** NO-FLEET until Docker present — static build + scans; never fake UI done. UI proof tooling exists (`pnpm ui:proof` + `docs/styleboard/`) — NO-FLEET is Docker, not "never seen UI".',
+  );
   lines.push('- **Claims:** docs/ops/claims/<id>.md (do not hand-edit LIVE-LANES mid-wave)');
+  lines.push(
+    '- **Cold resume:** this file + `docs/COORDINATION-TRUTH-LAYERS.md` § Agent cold-start · human blockers: `docs/BOARD-CLEAR-HUMAN-BLOCKERS.md` · value gate: `tooling/ci/value-gate.mjs`',
+  );
   if (m.residualError) lines.push(`- **Residual error:** ${m.residualError}`);
   else lines.push(`- **Residual:** updated=${m.residualUpdated} tip_note=${m.residualTipNote || '—'}`);
   lines.push('');
   if ((m.freeProduct || []).length === 0) {
-    lines.push('## freeProduct=0 — real work (not stamp cycles)');
+    lines.push('## freeProduct=0 — F-STANDBY (real work, not stamp cycles)');
     lines.push('');
-    lines.push('1. **P1** Land stranded `origin/feat/*` / `fix/*` after path-intersect vs open partner PRs.');
+    lines.push('Primary finish met. Session may continue. **Idling silently is valid.** Producing a PR is not required.');
+    lines.push('');
+    lines.push('1. **P1** Land stranded `origin/feat/*` / `fix/*` after path-intersect vs open partner PRs. (`pnpm swarm:lanes`)');
     lines.push('2. **P2** Partner babysit: extract exact CI fails; one NEW comment only; never merge partners.');
     lines.push('3. **P3** Deepen thin `docs/ops/trk/*` for tracker ready non-shehzad rows (code-grounded).');
-    lines.push('4. **P4** Invent re-scan only after shell code change; P-WS report only if #433/#432 state changed.');
+    lines.push('4. **P4** Invent re-scan only after shell code change; P-WS report only if partner matrix changed.');
     lines.push('5. **P5** LIVE-LANES/claims truth + merge green Nitro Class N.');
     lines.push('');
     lines.push('**BAN:** `docs(ops): R07 cycleN freeProduct=0` style PRs when freeProduct stays 0 and partner matrix unchanged.');
+    lines.push(
+      '**Metric:** L0 value gate (`tooling/ci/value-gate.mjs`) + `Board-Delta:` trailer — see `docs/BOARD-CLEAR-PROCESS-LOOPS.md` L0.',
+    );
     lines.push('');
   }
   lines.push('## Free (spawn one worker each)');
@@ -567,6 +779,24 @@ function printStatus(m) {
   console.log(`  mandate: ${m.mandate || 'shell product only'}`);
   if (m.afkLadder) console.log(`  afk-ladder: ${m.afkLadder}`);
   if (m.stampMillBan) console.log(`  stamp-mill: BAN — ${m.stampMillBan}`);
+  if (m.fStandby) console.log(`  finish: ${m.fStandby}`);
+  const churn = m.opsChurn || { consecutive: 0, sample: [] };
+  console.log(
+    `  ops-churn: ${churn.consecutive} consecutive docs-only tip merges${churn.consecutive >= 5 ? ' ⚠ CHURN' : ''}${churn.sample?.length ? ` (${churn.sample.slice(0, 5).join(',')})` : ''}`,
+  );
+  console.log(`  stranded(P1): ${m.strandedCount ?? 0}`);
+  console.log(`  worktrees: ${m.worktreeCount ?? '?'}${m.worktreeOverCap ? ' ⚠ OVER CAP 20 — pnpm wt:gc:apply' : ''}`);
+  if (m.actionsRuns24h) {
+    const by = Object.entries(m.actionsRuns24h.byName || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([n, c]) => `${n}=${c}`)
+      .join(' ');
+    console.log(
+      `  actions-24h: total=${m.actionsRuns24h.total}${m.actionsRuns24h.capped ? '+' : ''} ${by}${m.actionsRuns24h.capped ? ' (list capped — true total may be higher)' : ''}`,
+    );
+  } else {
+    console.log('  actions-24h: (gh unavailable)');
+  }
   console.log('  free product ids:', m.freeProduct.map((c) => c.id).join(', ') || '(none)');
   if (m.blocked.length) {
     console.log('  blocked ids:', m.blocked.map((c) => c.id).join(', '));
@@ -789,7 +1019,25 @@ switch (cmd) {
     console.log(r.existed ? `claim exists: ${r.path}` : `claim locked: ${r.path}`);
     break;
   }
+  case 'lanes': {
+    printLanes(m);
+    break;
+  }
+  case 'heartbeat': {
+    const id = args[0];
+    if (!id) {
+      console.error('Usage: pnpm swarm:heartbeat <id>');
+      process.exit(1);
+    }
+    const r = touchClaimFile(id);
+    if (!r.ok) {
+      console.error(`heartbeat failed: ${r.reason || 'unknown'} (${r.path})`);
+      process.exit(1);
+    }
+    console.log(`heartbeat: ${id} → ${r.heartbeat}`);
+    break;
+  }
   default:
-    console.error(`Usage: node tooling/scripts/swarm.mjs <freeze|status|report|next|claim>`);
+    console.error(`Usage: node tooling/scripts/swarm.mjs <freeze|status|lanes|report|next|claim|heartbeat>`);
     process.exit(1);
 }
