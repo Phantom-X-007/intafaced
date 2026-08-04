@@ -85,7 +85,7 @@ So the vendored surface is **larger** than the brief said, and the part of it th
 | `otc-api`             | `intafaced-coinex-otc`          | 6006      | up 31h                                        |
 | `05_Web_Front` shell  | `intafaced-shell-web`           | 8090      | up 7h (127.0.0.1 only)                        |
 | **`admin`**           | —                               | —         | **jar built, never started**                  |
-| **`bitrade-job`**     | —                               | —         | **jar built, never started**                  |
+| **`job-module-job`**  | —                               | —         | **jar built, never started**                  |
 | **`chat`**            | —                               | —         | **jar built, never started**                  |
 | **`wallet`**          | —                               | —         | **jar built, never started**                  |
 | **`01_wallet_rpc`**   | —                               | 12 chains | **not built, deliberately shut** (`c221cc8`)  |
@@ -113,13 +113,13 @@ POST http://localhost:6001/uc/asset/wallet
 
 Read those carefully:
 
-- **Market data is alive and synthetic.** `vendor/coinexchange/seed-market-data.mjs` says so in its own header: _"KNOWN LIMIT — this seeds history, it does not simulate a live market… Until real fills exist, run it daily."_ Note `volume: 0.0000`.
+- **Market data is alive and synthetic.** `vendor/upstream-exchange/seed-market-data.mjs` says so in its own header: _"KNOWN LIMIT — this seeds history, it does not simulate a live market… Until real fills exist, run it daily."_ Note `volume: 0.0000`.
 - **The OTC desk is running with zero coins configured.** `otc/coin/all` returns `[]`, and every advert query therefore refuses with `validate otcCoin unit!`. The "complete OTC desk" is up, and **it cannot serve a single request that involves an advert.**
 - **The OTC service is doing work against nothing.** Its logs show `CheckOrderTask` running its expiry sweep every minute over an empty `otc_order` table, and `CheckExchangeRate` pulling `USDT rate = 7.00` (a CNY rate).
 
 ### 3.3 The database behind it
 
-`bizzan` on `localhost:5506`, exact counts:
+`upstream` on `localhost:5506`, exact counts:
 
 | table                                                               | rows  |
 | ------------------------------------------------------------------- | ----- |
@@ -159,9 +159,9 @@ Read those carefully:
 
 ### 3.5 Where the two stacks touch
 
-**They do not touch in code.** `grep -il "coinex|vendored|bizzan"` across `services/ packages/ apps/ tooling/` returns three files, and all three are scanners or a test fixture — `brand-scan.mjs`, `secret-scan.mjs`, `uiproof/auth-fixture.mjs`. **No TypeScript service calls any Java service, and no Java service calls any TypeScript service.** No port in the 6000s appears anywhere in our source.
+**They do not touch in code.** `grep -il "coinex|vendored|upstream"` across `services/ packages/ apps/ tooling/` returns three files, and all three are scanners or a test fixture — `brand-scan.mjs`, `secret-scan.mjs`, `uiproof/auth-fixture.mjs`. **No TypeScript service calls any Java service, and no Java service calls any TypeScript service.** No port in the 6000s appears anywhere in our source.
 
-They touch in exactly one place: **the browser**. `vendor/coinexchange/05_Web_Front/config/index.js` proxies `/uc`, `/market`, `/exchange`, `/otc` to the four Java services **and** `/api` to our `svc-edge` on 4000. The shell's own comment on the `/api` entry is careful and correct:
+They touch in exactly one place: **the browser**. `vendor/upstream-exchange/05_Web_Front/config/index.js` proxies `/uc`, `/market`, `/exchange`, `/otc` to the four Java services **and** `/api` to our `svc-edge` on 4000. The shell's own comment on the `/api` entry is careful and correct:
 
 > _"ONE entry, not one per service. svc-edge (§9) is the front door… A proxy entry per service port would bypass all three."_
 
@@ -319,17 +319,17 @@ Trace one adoption. Suppose we adopt the OTC desk because it is complete. A sell
 
 Per the audit brief — written down, no code touched.
 
-| #   | Finding                                                                                                                                                                                                                                                                       | Severity                          |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| F1  | **`custody-scan` walks `['.ts','.tsx']` only** (`tooling/ci/custody-scan.mjs:80`). The doctrine gate for "no module holds its own balance" cannot see the module that holds its own balance.                                                                                  | High — a gate that reads clean    |
-| F2  | **`vendor-shell-scan` bans 7 exotic mint patterns and permits the 4 ordinary mutators** in `MemberWalletDao`, which is what all 25 money controllers actually call.                                                                                                           | High — same shape as F1           |
-| F3  | **The ADR's balance-ownership decision is still `Status: In progress` two days on**, while eleven documents treat "dual-book" as a known open risk.                                                                                                                           | High — blocks everything else     |
-| F4  | **The vendored OTC desk runs with `otc_coin` empty**, so every advert route refuses `validate otcCoin unit!`. A live service that cannot serve its core request.                                                                                                              | Medium — misleading if demoed     |
-| F5  | **`market` serves seeded synthetic candles with `volume: 0.0000`**, and the seeder's own header says thumbnails decay toward zero at 00:00 UTC unless re-run daily. Anything screenshotting 6004 is screenshotting a fixture.                                                 | Medium — demo-honesty risk        |
-| F6  | **The admin module (57 of 94 controllers) has never started**, so every vendored approval step — fiat pass, withdraw approval, appeal release — is unreachable. Any claim that fiat rails "already work" is false today.                                                      | Medium — corrects a premise       |
-| F7  | **`intafaced-shell-web` is in neither compose file.** It is hand-started, bind-mounted from the main checkout at `05_Web_Front`, with `node_modules` bind-mounted from a _different worktree_ (`feat-coinexchange-integration`). It will break when that worktree is removed. | Medium — undeclared dependency    |
-| F8  | **`identity.users` grew by ~87 rows during this audit** (7,105 → 7,192) against the shared dev database. Same pollution that breaks `svc-identity`'s KYC test.                                                                                                                | Low — known, noted for the record |
-| F9  | Five vendored capabilities with **no tracker row at all** (CMS, red envelope, activity/sign-in, support chat content, mining orders) — the reason duplicate work keeps being started.                                                                                         | Low — process                     |
+| #   | Finding                                                                                                                                                                                                                                                                            | Severity                          |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| F1  | **`custody-scan` walks `['.ts','.tsx']` only** (`tooling/ci/custody-scan.mjs:80`). The doctrine gate for "no module holds its own balance" cannot see the module that holds its own balance.                                                                                       | High — a gate that reads clean    |
+| F2  | **`vendor-shell-scan` bans 7 exotic mint patterns and permits the 4 ordinary mutators** in `MemberWalletDao`, which is what all 25 money controllers actually call.                                                                                                                | High — same shape as F1           |
+| F3  | **The ADR's balance-ownership decision is still `Status: In progress` two days on**, while eleven documents treat "dual-book" as a known open risk.                                                                                                                                | High — blocks everything else     |
+| F4  | **The vendored OTC desk runs with `otc_coin` empty**, so every advert route refuses `validate otcCoin unit!`. A live service that cannot serve its core request.                                                                                                                   | Medium — misleading if demoed     |
+| F5  | **`market` serves seeded synthetic candles with `volume: 0.0000`**, and the seeder's own header says thumbnails decay toward zero at 00:00 UTC unless re-run daily. Anything screenshotting 6004 is screenshotting a fixture.                                                      | Medium — demo-honesty risk        |
+| F6  | **The admin module (57 of 94 controllers) has never started**, so every vendored approval step — fiat pass, withdraw approval, appeal release — is unreachable. Any claim that fiat rails "already work" is false today.                                                           | Medium — corrects a premise       |
+| F7  | **`intafaced-shell-web` is in neither compose file.** It is hand-started, bind-mounted from the main checkout at `05_Web_Front`, with `node_modules` bind-mounted from a _different worktree_ (`feat-upstream-exchange-integration`). It will break when that worktree is removed. | Medium — undeclared dependency    |
+| F8  | **`identity.users` grew by ~87 rows during this audit** (7,105 → 7,192) against the shared dev database. Same pollution that breaks `svc-identity`'s KYC test.                                                                                                                     | Low — known, noted for the record |
+| F9  | Five vendored capabilities with **no tracker row at all** (CMS, red envelope, activity/sign-in, support chat content, mining orders) — the reason duplicate work keeps being started.                                                                                              | Low — process                     |
 
 ---
 
@@ -339,7 +339,7 @@ Everything above was probed or read on 2026-07-30 against `main` @ `207c8a6`:
 
 - `docker ps` for the running fleet; `docker logs` for the two silent modules.
 - `curl` against 6001, 6003, 6004, 6006 — with the `server.context-path` prefixes (`/uc`, `/exchange`, `/market`, `/otc`) from each module's `dev/application.properties`; without them all four return a bare 404, which is how "these are down" gets reported by mistake.
-- `mysql` against `bizzan` on 5506 and `psql` against `intafaced` on 5433 for exact `count(*)` — not `information_schema.table_rows`, which is an InnoDB estimate.
+- `mysql` against `upstream` on 5506 and `psql` against `intafaced` on 5433 for exact `count(*)` — not `information_schema.table_rows`, which is an InnoDB estimate.
 - `find` / `grep` over 108 controller files and 1,105 vendored source files.
 - `git log --all --grep` and `git log --all -- docs/adr/` for the decision search.
 - `node tooling/ci/vendor-shell-scan.mjs` and `node tooling/ci/brand-scan.mjs` — both clean.

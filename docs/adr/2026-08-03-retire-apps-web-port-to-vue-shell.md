@@ -11,7 +11,7 @@
 
 > **`apps/web` retires. The terminal ports.**
 >
-> The vendored Vue shell at `vendor/coinexchange/05_Web_Front` becomes the sole product surface. Everything genuinely built in the Next scaffold moves there. Nothing is lost — including the reasoning for what is deliberately dropped.
+> The vendored Vue shell at `vendor/upstream-exchange/05_Web_Front` becomes the sole product surface. Everything genuinely built in the Next scaffold moves there. Nothing is lost — including the reasoning for what is deliberately dropped.
 
 The 2026-08-02 ADR left three options open: `apps/web` retires, becomes the admin/marketing surface, or has its trade terminal ported into the Vue shell. The answer is the first **and** the third. There is no third surface.
 
@@ -31,7 +31,7 @@ Keeping `apps/web` as "the admin/marketing surface" would recreate exactly that 
 
 The scaffold's real work is on the shell today:
 
-- **Order entry, blotter, depth and public tape**, against svc-edge rather than the retired Java venue — `vendor/coinexchange/05_Web_Front/src/config/intafaced.js`.
+- **Order entry, blotter, depth and public tape**, against svc-edge rather than the retired Java venue — `vendor/upstream-exchange/05_Web_Front/src/config/intafaced.js`.
 - **Charts.** `assets/js/market-chart/kline.js` on the same `lightweight-charts` build the scaffold used, reading real OHLCV. No invented candles.
 - **Hotkeys** (#337), **honesty pass** (#349), **sub-account selector** (#358), **a11y** (#367) — the desk craft, landed on the shell directly rather than ported after the fact.
 - **The empty-state discipline**, improved in transit — see below.

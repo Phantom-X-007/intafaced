@@ -21,18 +21,18 @@
 
 ## Machine truth (gates)
 
-| Check                            | Result                         | Notes                                                                                    |
-| -------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------- |
-| GitHub CI latest on `main` (#73) | **failure**                    | [run 30382040779](https://github.com/Phantom-X-007/intafaced/actions/runs/30382040779)   |
-| CI · Tests job                   | **success**                    | Same run                                                                                 |
-| CI · Typecheck & build           | **failure** on `format:check`  | Prettier issues under `vendor/coinexchange/`                                             |
-| CI · Doctrine gates              | **failure** on brand scan §0.7 | Vendor identity strings (docs + wiring)                                                  |
-| CI · DoD                         | **skipped**                    | After doctrine fail                                                                      |
-| Local `pnpm scan:brand`          | **fail**                       | Hits include `docs/adr/2026-07-28-coinexchange-integration.md` and related vendor naming |
-| Local `pnpm scan:custody`        | **pass**                       | 50 files / 3 Protocol Plane services                                                     |
-| Local `pnpm tracker:check`       | **pass**                       | TRACKER.md + README in sync with features.mjs                                            |
-| Local `pnpm format:check`        | **fail**                       | 43 files — almost entirely `vendor/coinexchange/**`                                      |
-| Local `pnpm verify`              | **running / see log**          | `/tmp/full-audit-verify.log` or session terminal log                                     |
+| Check                            | Result                         | Notes                                                                                         |
+| -------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
+| GitHub CI latest on `main` (#73) | **failure**                    | [run 30382040779](https://github.com/Phantom-X-007/intafaced/actions/runs/30382040779)        |
+| CI · Tests job                   | **success**                    | Same run                                                                                      |
+| CI · Typecheck & build           | **failure** on `format:check`  | Prettier issues under `vendor/upstream-exchange/`                                             |
+| CI · Doctrine gates              | **failure** on brand scan §0.7 | Vendor identity strings (docs + wiring)                                                       |
+| CI · DoD                         | **skipped**                    | After doctrine fail                                                                           |
+| Local `pnpm scan:brand`          | **fail**                       | Hits include `docs/adr/2026-07-28-upstream-exchange-integration.md` and related vendor naming |
+| Local `pnpm scan:custody`        | **pass**                       | 50 files / 3 Protocol Plane services                                                          |
+| Local `pnpm tracker:check`       | **pass**                       | TRACKER.md + README in sync with features.mjs                                                 |
+| Local `pnpm format:check`        | **fail**                       | 43 files — almost entirely `vendor/upstream-exchange/**`                                      |
+| Local `pnpm verify`              | **running / see log**          | `/tmp/full-audit-verify.log` or session terminal log                                          |
 
 ---
 
