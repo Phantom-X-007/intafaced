@@ -219,18 +219,18 @@ export default {
               //         props: {
               //           confirm: true,
               //           transfer: true,
-              //           title: "您确定要删除这条数据吗"
+              // title: ""
               //         },
               //         on: {
               //           "on-ok": () => {
               //             this.operation({ ids: [obj.row.id], status: 2 });
               //           },
               //           "on-cancel": () => {
-              //             this.$Message.info("已取消！");
+              // this.$Message.info("");
               //           }
               //         }
               //       },
-              //       advStatus === 1 || advStatus === 0 ? "删除" : "已删除"
+              // advStatus === 1 || advStatus === 0 ? "" : ""
               //     )
               //   ]
               // )

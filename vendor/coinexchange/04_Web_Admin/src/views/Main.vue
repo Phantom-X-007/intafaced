@@ -38,7 +38,6 @@
                 <div class="header-avator-con">
                     <full-screen v-model="isFullScreen" @on-change="fullscreenChange"></full-screen>
                     <lock-screen></lock-screen>
-                    <!-- 暂缺 -->
                     <!-- <message-tip v-model="mesCount"></message-tip> -->
                     <theme-switch style="display:none;"></theme-switch>
 
@@ -121,10 +120,10 @@ export default {
       return this.$store.state.app.menuList;
     },
     pageTagsList() {
-      return this.$store.state.app.pageOpenedList; // 打开的页面的页面对象
+      return this.$store.state.app.pageOpenedList;
     },
     currentPath() {
-      return this.$store.state.app.currentPath; // 当前面包屑数组
+      return this.$store.state.app.currentPath;
     },
     avatorPath() {
       return localStorage.avatorImgPath;
@@ -177,10 +176,8 @@ export default {
     },
     handleClickUserDropdown(name) {
       if (name === "ownSpace") {
-        //个人中心
        this.$router.push('/user/personalcenter')
       } else if (name === "loginout") {
-        // 退出登录
 				removeStore("leftSidebarList");
 				Cookies.remove('userInfo');
 				Cookies.remove('userPhone');
@@ -201,7 +198,6 @@ export default {
         }
       });
       if (!openpageHasTag) {
-        //  解决关闭当前标签后再点击回退按钮会退到当前页时没有标签的问题
         util.openNewPage(
           this,
           name,
@@ -231,7 +227,7 @@ export default {
       localStorage.currentPageName = to.name;
     },
     lang() {
-      // util.setCurrentPath(this, this.$route.name); // 在切换语言时用于刷新面包屑
+      // util.setCurrentPath(this, this.$route.name); //
     }
   },
   mounted() {
@@ -239,7 +235,6 @@ export default {
   },
   created() {
     this.$store.commit("updateMenulist");
-    // 显示打开的页面的列表
     this.$store.commit("setOpenedList");
 
   }

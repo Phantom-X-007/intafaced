@@ -29,7 +29,7 @@ export default {
             lockScreenBack.style.zIndex = 10000;
             lockScreenBack.style.boxShadow = '0 0 0 ' + this.lockScreenSize + 'px #667aa6 inset';
             this.showUnlock = true;
-            Cookies.set('last_page_name', this.$route.name); // 本地存储锁屏之前打开的页面以便解锁后打开
+            Cookies.set('last_page_name', this.$route.name);
             setTimeout(() => {
                 lockScreenBack.style.transition = 'all 0s';
                 this.$router.push({

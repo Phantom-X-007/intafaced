@@ -228,16 +228,16 @@ export default {
 					}	
         },
         // {
-        //   title: "订单状态",
+        // title: "",
         //   key: "orderStatus",
         //   render(h, obj) {
         //     let index = obj.row.orderStatus;
         //     let orderStatus = [
-        //       "已取消",
-        //       "未付款",
-        //       "已付款",
-        //       "已完成",
-        //       "申诉中"
+        // "",
+        // "",
+        // "",
+        // "",
+        // ""
         //     ];
         //     return h("span", {}, orderStatus[index]);
         //   }

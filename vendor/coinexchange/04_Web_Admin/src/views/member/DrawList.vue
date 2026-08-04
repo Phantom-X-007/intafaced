@@ -1,5 +1,4 @@
 <template>
-<!-- 提币明细 -->
   <div>
     <Card>
       <p slot="title">

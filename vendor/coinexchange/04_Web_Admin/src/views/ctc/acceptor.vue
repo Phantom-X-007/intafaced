@@ -145,7 +145,7 @@
             fixed: 'right',
             minWidth: 100,
             render: (h, params) => {
-              if(params.row.status == 0) { // 切换为有效
+              if(params.row.status == 0) {
                 return h("div", [
                   h(
                     "Button",
@@ -162,7 +162,7 @@
                   )
                 ]);
               }
-              if(params.row.status == 1){ // 切换为无效
+              if(params.row.status == 1){
                 return h("div", [
                   h(
                     "Button",

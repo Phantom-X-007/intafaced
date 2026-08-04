@@ -34,7 +34,6 @@
         </Page>
 
       </Row>
-       <!-- 是否删除 -->
       <Modal
         v-model="ifDelete"
         title="删除"

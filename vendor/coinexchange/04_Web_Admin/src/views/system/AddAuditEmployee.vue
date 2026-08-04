@@ -32,7 +32,7 @@
 
              <FormItem label="联系电话：" prop="mobilePhone">
               <Input type="text" v-model="formWrapperObj.mobilePhone"></Input>
-              <!-- <div  v-show="true" class="ivu-form-item-error-tip">请输入正确的手机号！</div> -->
+              <!-- <div  v-show="true" class="ivu-form-item-error-tip"></div> -->
             </FormItem>
 
             <FormItem label="角色：" prop="role">
@@ -108,11 +108,11 @@ export default {
       roleArr: [],
       departArr: [],
       formWrapperObj: {
-        id: null,//f  //11 不需要
+        id: null,// f  //11
         username: null, //11
-        password: null, //隐藏
+        password: null,
         enable: 0,//f //11
-        passwdCheck: null, //隐藏
+        passwdCheck: null,
         roleId: null,// 11
         departmentId: null,//11
         realName: null,//11

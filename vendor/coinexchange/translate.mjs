@@ -13,7 +13,9 @@ import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, '05_Web_Front/src');
+/** Target subdir: first non-flag argument, defaulting to the trading front end. */
+const TARGET = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? '05_Web_Front/src';
+const ROOT = join(HERE, TARGET);
 const DRY = process.argv.includes('--dry');
 const EXTS = new Set(['.vue', '.js']);
 const SKIP = new Set(['node_modules', 'charting_library', '.git', 'lang']);

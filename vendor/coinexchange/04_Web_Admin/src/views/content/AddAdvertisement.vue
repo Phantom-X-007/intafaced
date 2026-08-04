@@ -31,7 +31,6 @@
         show-elevator>
       </Page>
 		</Row>
-    <!-- 是否删除 -->
      <Modal
         v-model="ifDelete"
         title="删除"
@@ -40,7 +39,6 @@
         <p>是否删除已选择的{{ delArr.length }}项</p>
     </Modal>
 
-		<!-- 添加广告 -->
 		<Modal
 			v-model="addModal"
 			title="添加广告"
@@ -427,7 +425,6 @@ export default {
         this.$Message.warning('请选择需要删除的广告!');
       }else this.ifDelete = true;
     },
-    // 添加广告
 		confrimAddAd (val) {
       let judgeSTime =  String(this.adStartTime).trim().length===0;
       let judgeETime = String(this.adEndTime).trim().length===0;

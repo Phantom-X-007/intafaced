@@ -96,7 +96,6 @@ import { getStore, removeStore, setStore } from '@/config/storage';
 
           },
 
-          // 上传成功回调
           uploadCallback: (data) => {
             this.uploading = false;
             if(!data.code){
@@ -106,7 +105,7 @@ import { getStore, removeStore, setStore } from '@/config/storage';
               this.$Message.error('上传失败!');
             }
           },
-          // 上传失败回调, 可选
+          // ,
           uploadFailed: (err) => {
             this.uploading = false;
             console.log(err)

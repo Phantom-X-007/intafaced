@@ -127,7 +127,7 @@ export default {
           key: 'description'
         },
         //  {
-        //   title: '权限',
+        // title: '',
         //   key: ' | filterPermission'
         // },
         {
@@ -380,7 +380,7 @@ export default {
 
             removeStore('allPermission');
             
-            setStore('allPermission', allPermission); //处理后数据用于tree
+            setStore('allPermission', allPermission); // tree
 
           })
         }

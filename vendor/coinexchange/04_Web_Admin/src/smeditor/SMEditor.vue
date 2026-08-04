@@ -136,32 +136,19 @@ export default {
   props: ['config'],
   data () {
     return {
-      // 图标
       icons: icons,
-      // 样式
       styles: [],
-      // 基本样式名称
       basicIcons: ['bold', 'underline', 'italic', 'strikethrough'],
       basicStyleNames: ['粗体', '斜体', '下划线', '中划线'],
-      // 调色盘是否显示
       isColorPickerShow: false,
-      // 标题选择是否显示
       isTitlePickerShow: false,
-      // 字号选项是否显示
       isFontSizePickerShow: false,
-      // 插入选项是否显示
       isInsertShow: false,
-      // 插入链接是否显示
       isInsertLinkShow: false,
-      // 插入视频是否显示
       isInsertVideoShow: false,
-      // 选中文字内容
       selectWords: '',
-      // 字号
       fontSize: 16,
-      // 光标
       cursor: {},
-      // 鼠标选中节点
       selectNode: {},
       buttonsBarFixed: false,
       insertLinkSection: {
@@ -174,14 +161,12 @@ export default {
     }
   },
   methods: {
-    // 回车事件
     kenter (e) {
       e.stopPropagation()
       if (this.styles.length === 0) {
         return false
       }
     },
-    // 鼠标事件
     mouseup () {
       this.selectNode = getSelectedNode()
       const str = window.getSelection().toString()
@@ -193,7 +178,6 @@ export default {
         this.selectWords = ''
       }, 1500)
     },
-    // 鼠标事件
     mouseover (event) {
       let target = ''
       event.path.forEach(el => {
@@ -208,40 +192,33 @@ export default {
       //   arrow: true
       // })
     },
-    // 重做
     redo () {
       document.execCommand('redo')
     },
-    // 撤销
     undo () {
       document.execCommand('undo')
     },
-    // 移除格式
     removeFormat () {
       document.execCommand('removeFormat', false, '')
       document.execCommand('insertHTML', false, `<p></p>`)
       this.styles = []
       this.FontSize = 16
     },
-    // 字号选项点击
     fontSizePickerClick (size, index) {
       document.execCommand('FontSize', false, index + 1)
       this.fontSize = size
       this.closeAlert()
     },
-    // 标题按钮点击
     titleButtonClick () {
       getCursor(this)
       this.isTitlePickerShow = !this.isTitlePickerShow
     },
-    // 标题选项点击
     titlePickerClick (size, index) {
       this.closeAlert()
       let html = ''
       restoreCursor(this)
       let node = getSelectedNode()
       console.log(node, node.localName)
-      // 一共分六种情况
       // 1. empty <h>
       // 2. empty <p>
       if (node.className === editorElement().className ||
@@ -276,7 +253,6 @@ export default {
       // selection.removeAllRanges()
       // selection.addRange(range)
     },
-    // 基本样式点击
     basicStyleClick (name) {
       execCmd(this, () => {
         document.execCommand(name, false, '')
@@ -287,7 +263,6 @@ export default {
         }
       })
     },
-    // 调色盘点击
     colorPickerClick (color) {
       // document.querySelector('.ql-color-label').style.fill = color
       execCmd(this, () => {
@@ -295,11 +270,9 @@ export default {
         this.closeAlert()
       })
     },
-    // 点击插入图片
     insertImageClick (size, index) {
       this.closeAlert()
     },
-    // 上传图片
     uploadImages (files) {
 
       this.$emit('isUploading', true)
@@ -327,7 +300,7 @@ export default {
             if (self.config.uploadFailed) {
               self.config.uploadFailed(xhr.responseText)
             }
-            // 测试网站, 模拟上传
+            // ,
             if (location.href.indexOf('ericjj.com/smeditor.github.io') > 0) {
               const imgUrl = self.config.uploadCallback('')
               success(imgUrl)
@@ -343,14 +316,12 @@ export default {
                 <img class="uploaded-img" src=${url} max-width="100%" width="auto" height="auto">
               </div>`)
     },
-    // 点击插入链接
     insertLinkClick () {
       this.closeAlert()
       this.insertLinkSection.text = window.getSelection().toString()
       getCursor(this)
       this.isInsertLinkShow = true
     },
-    // 插入链接
     insertLink (url, title) {
       restoreCursor(this)
       const node = getSelectedNode()
@@ -360,12 +331,10 @@ export default {
       }
       document.execCommand('insertHTML', false, `<a href=${url} target="_blank">${title}</a>`)
     },
-    // 取消插入链接
     insertLinkCancel () {
       this.closeAlert()
       this.isInsertLinkShow = false
     },
-    // 点击插入链接
     insertVideoClick () {
       this.closeAlert()
       setTimeout(() => {
@@ -373,27 +342,22 @@ export default {
       }, 200)
       getCursor(this)
     },
-    // 插入链接
     insertVideo (text) {
       restoreCursor(this)
       document.execCommand('insertHTML', false, text)
       this.closeAlert()
     },
-    // 取消插入链接
     insertVideoCancel () {
       this.closeAlert()
     },
-    // 插入一条线
     insertLine () {
       this.closeAlert()
       document.execCommand('insertHTML', false, `<p><hr></p>`)
     },
-    // 插入代码块
     insertBlock () {
       this.closeAlert()
       document.execCommand('insertHTML', false, `<pre><code><span><br><span></code></pre>`)
     },
-    // 插入引用
     insertQuote () {
       let node = getSelectedNode()
       // console.log(node)
@@ -422,12 +386,12 @@ export default {
         document.execCommand('insertHTML', false, `<div class="blockquote"><blockquote style="color: #B2B2B2; padding-left: 15px; border-left: 5px solid #B2B2B2; margin-top: 0px; margin-bottom: 0px;"><span><br></span></blockquote></div>`)
       }
     },
-    // 插入 有序/无序 列表
+    // /
     insertList (name) {
       this.closeAlert()
       document.execCommand(`insert${name}`, false, '')
     },
-    // 插入 todo , 暂时不做
+    // todo ,
     insertCheck () {
       this.closeAlert()
       document.execCommand('insertHTML', false, `
@@ -443,29 +407,24 @@ export default {
         })
       })
     },
-    // 缩进+
+    // +
     indent () {
       document.execCommand('indent', false, null)
     },
-    // 缩进-
     outdent () {
       document.execCommand('outdent', false, null)
     },
-    // 对齐
     align (name) {
       execCmd(this, () => {
         document.execCommand(`Justify${name}`)
       })
     },
-    // 备份
     backupClick () {
       window.localStorage.setItem('smeditor', editorElement().innerHTML)
     },
-    // 恢复
     restoreClick () {
       editorElement().innerHTML = window.localStorage.getItem('smeditor') || ''
     },
-    // 预览预览
     previewClick () {
       window.localStorage.setItem('smeditorPreview', editorElement().innerHTML)
       const {href} = this.$router.resolve({
@@ -473,7 +432,6 @@ export default {
       })
       window.open(href, '_blank')
     },
-    // 关闭弹窗
     closeAlert () {
       setTimeout(() => {
         this.isFontSizePickerShow = false
@@ -557,7 +515,6 @@ function addEvents (self) {
   editorElement().onfocus = function (event) {
     self.closeAlert()
   }
-  // 回车事件
   editorElement().onkeypress = function (event) {
     const el = getSelectedNode()
     if (event.keyCode === 13 && isImageCaption(el)) {
@@ -582,7 +539,6 @@ function addEvents (self) {
       return false
     }
   }
-  // 删除事件
   editorElement().onkeydown = function (event) {
     const el = getSelectedNode()
     if (event.keyCode === 8 && isImageDesc(el)) {

@@ -120,7 +120,7 @@ export default {
     return {
 			btnType: 0,
       filterSearch: {
-        robotOrder:'',//是否包含机器人
+        robotOrder:'',
 				coinSymbol: '',
         orderDirection: '',
         type: '',
@@ -132,7 +132,7 @@ export default {
         status: '',
         pageNo: 1,
 				pageSize: 10,
-				completed: 0 //0是委托订单1是历史订单
+				completed: 0 // 01
       },
       robotOrderArr:[
         { status: 0, text: '查看机器人' },

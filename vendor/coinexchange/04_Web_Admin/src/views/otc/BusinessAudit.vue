@@ -77,11 +77,11 @@ export default {
 		return {
 			sortObj: {},
 			checkStatus: [
-				// { status: 0, text: '未认证' },
-				// { status: 1, text: '待审核' },
-				// { status: 2, text: '已认证' },
-				// { status: 3, text: '未通过' },
-				// { status: '', text: '全部' },
+				// { status: 0, text: '' },
+				// { status: 1, text: '' },
+				// { status: 2, text: '' },
+				// { status: 3, text: '' },
+				// { status: '', text: '' },
 			],
 			filterSearch: {
 				account: '',
@@ -191,7 +191,7 @@ export default {
           }
 				},
 				// {
-        //   title: '审核人',
+        // title: '',
         //   key: ''
         // },
         {

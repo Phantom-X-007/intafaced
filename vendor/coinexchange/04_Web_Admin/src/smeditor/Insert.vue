@@ -25,7 +25,7 @@ export default {
     return {
       icons: icons,
       labels: ['图片', '分割线'],
-      // labels: ['图片', '分割线', '视频', '代码块'],
+      // labels: ['', '', '', ''],
       
       // names: ['insertImage', 'insertLine', 'insertVideo', 'insertBlock']
       names: ['insertImage', 'insertLine']

@@ -200,7 +200,7 @@ import { getCoinName, withdrawManage  } from '@/service/getData';
 			.then(res => {
 				if (!res.code) {
 					this.coinSearchArr = res.data;
-					// this.coinSearchArr.push({ name: '全部', unit: '' })
+					// this.coinSearchArr.push({ name: '', unit: '' })
 				} else this.$Message.error(res.message);
 			})
 			.catch(err => {
