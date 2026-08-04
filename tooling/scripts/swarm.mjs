@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Swarm stack (Wave 1) — machine free-claim freeze, status, reports, next paste.
+ * Swarm stack (Wave 1) — status-lane print — machine free-claim freeze, status, reports, next paste.
  *
  * Plan: OS/harvest/WAVE-1-SWARM-STACK-PLAN-2026-08-03.md (judgment, not cargo-cult).
  * Does NOT spawn agents, merge PRs, or edit product shell code.
