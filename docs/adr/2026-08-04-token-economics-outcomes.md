@@ -55,6 +55,19 @@ The migration comment claims the opposite — _"A revenue window is spent exactl
 
 **The fix needs no economic decision:** claim the window first, then post the burn — the exact `claim → post → activate` order `stake` already uses in the same file. Do that before any number is chosen.
 
+**Reproduced 2026-08-04, with the money moving.** Against real Postgres, pre-fix:
+
+```
+REPRO A · burn account after run 1 = 600
+REPRO A · threw            = PostgresError code=23505   (is TokenError = false)
+REPRO A · burn after run 2 = 1200          ← doubled
+REPRO A · buyback_runs rows= 1   buybackExecuted events = 1
+REPRO B · burn after July window   = 600
+REPRO B · burn after NESTED window = 1200  (same revenue burned twice)
+```
+
+600 → 1200 against **one** row and **one** event. And REPRO B is the worse case: a nested window burned the same revenue twice and **raised no error at all** — the unique index never fired, because it matches only exact equality of both timestamps.
+
 Two smaller ones alongside it: `recordBuyback` is the only money method in the service **not** wrapped in `withMoneySpan`, so it is untraced; and `revenueTotal` is a `z.record(z.string())` written straight to jsonb and validated nowhere.
 
 ---
@@ -95,7 +108,11 @@ One latent bug for the refuse-cases: the tally loop **assigns** rather than accu
 
 **Emission:** initial epoch reward · supply cap · halving interval · the mining-vs-governance allocation split (currently only a code comment).
 
-**Buyback:** `buyback_bps` · `burn_split_bps` · window semantics (half-open vs closed, contiguity, overlap policy) · **the §20 published fee→buyback percentage**, which currently has three different values in the repo — 2000 bps live, 5000 bps in source, "dominant share" in doctrine — and has never been chosen.
+**Buyback:** `buyback_bps` · `burn_split_bps` · **window length, cadence and contiguity** · **the §20 published fee→buyback percentage**, which currently has three different values in the repo — 2000 bps live, 5000 bps in source, "dominant share" in doctrine — and has never been chosen.
+
+> **Corrected 2026-08-04** — this line first read "window semantics (half-open vs closed, contiguity, overlap policy)", which contradicted this ADR's own done bar and refuse table, both of which require overlap to be defined and enforced. An implementer caught the tension.
+>
+> The split is: **the overlap RULE is a refusal and is not an economic number** — no two windows may overlap, and boundaries are half-open `[from, to)`. That is not a choice so much as a derivation: under closed bounds a contiguous series is unsettleable, because `[Jul, Aug]` and `[Aug, Sep]` collide on their shared instant. **How long a window is, how often one runs, and whether the series must be gapless remain the owner's.**
 
 **Staking:** the `ACCESS_TIERS` decade ladder · lock multipliers · fee-discount steps · **and the open divergence the code refuses to resolve**: §4.3 keys the discount on the payer's _balance_, the code and the seeded row key on _staked_. The comment is right that "picking one re-prices every discount in the economy, so it is a governance decision and not a refactor."
 
