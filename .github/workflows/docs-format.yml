@@ -82,3 +82,18 @@ jobs:
         env:
           VALUE_GATE_STRICT: '1'
         run: node tooling/ci/value-gate.mjs
+
+      # Brand scan, for the SAME reason the value gate lives here rather than in
+      # gates.mjs: ci.yml matches `'!docs/**'` and `'!**/*.md'`, so a docs-only PR
+      # never runs the doctrine gates and brand-scan cannot see a brand regression
+      # in markdown at all.
+      #
+      # This is not hypothetical. #756 was docs-only, landed a forbidden vendor
+      # name in `docs/INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md:15`, and turned
+      # `main` red — where it stayed until a code PR happened to run the gates and
+      # inherit the failure. A gate that cannot run on the files most likely to
+      # break it is not a gate.
+      #
+      # Free to add: brand-scan imports `node:fs` and `node:path` and nothing else.
+      - name: brand scan
+        run: node tooling/ci/brand-scan.mjs
