@@ -64,7 +64,42 @@ export type BankErrorCode =
    * Collateral was exhausted without clearing the debt AND the insurance fund
    * could not cover it. The loudest code in this file.
    */
-  | 'bank.bad_debt_uncovered';
+  | 'bank.bad_debt_uncovered'
+  // ── Cards (§8.1, ledger half) ──────────────────────────────────────────────
+  /**
+   * NO ISSUER IS CONFIGURED, so this deployment has no card programme.
+   *
+   * The sibling of `bank.no_liquidation_counterparty`, and here for the same
+   * reason: a missing counterparty is a refusal, never a default. A card service
+   * that quietly approved authorisations with no issuer behind it would be
+   * claiming a card programme exists — which is a commercial relationship
+   * (`socket.live-issuer`), not a line of code. Refusing by name is the only
+   * honest thing an unconfigured deployment can do.
+   */
+  | 'bank.no_card_issuer'
+  | 'bank.card_not_found'
+  /** Frozen or closed. An authorisation on it is declined, never approved. */
+  | 'bank.card_not_active'
+  /** The authorisation is larger than the card's per-authorisation ceiling. */
+  | 'bank.card_limit_exceeded'
+  | 'bank.card_authorization_not_found'
+  /** Capture or reversal asked for on an authorisation that was declined. */
+  | 'bank.card_authorization_declined'
+  /** Already captured or already reversed — the hold is gone either way. */
+  | 'bank.card_authorization_closed'
+  /** A capture may never exceed what was authorised and held. */
+  | 'bank.card_capture_exceeds_authorization'
+  /**
+   * Cashback was owed and the rewards pot could not pay it.
+   *
+   * `loanBadDebt`'s rule applied to the other direction: a platform that cannot
+   * name where value came from should not be able to conjure it. Cashback is
+   * paid out of the rewards engine, which is funded from real bank revenue — so
+   * an empty pot means the promised rate is not currently earned, and an
+   * operator seeing this refuse has learned something true on the day it became
+   * true. The capture it belongs to still stands; only the reward refuses.
+   */
+  | 'bank.cashback_pot_unfunded';
 
 export class BankError extends Error {
   constructor(

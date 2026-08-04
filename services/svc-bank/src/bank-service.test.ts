@@ -133,7 +133,8 @@ if (!available) {
   beforeEach(async () => {
     await sql`
       TRUNCATE bank.interest_accruals, bank.earn_positions, bank.earn_pools,
-               bank.transfer_executions, bank.scheduled_transfers, bank.spaces
+               bank.transfer_executions, bank.scheduled_transfers, bank.spaces,
+               bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();
@@ -1066,6 +1067,23 @@ if (!available) {
         'loan_liquidations.penalty': 'a RECORD of one completed rung; written once',
         'loan_liquidations.surplus_returned': 'a RECORD of what went back to the borrower; written once',
         'loan_liquidations.shortfall': 'a RECORD of bad debt crystallised on a closing rung; written once',
+
+        // ── Cards (§8.1, ledger half) ────────────────────────────────────────
+        //
+        // Note what is NOT in this list, because it is the same design as the
+        // loans block: there is no `cards.spendable` and no
+        // `cards.remaining_daily_limit`. What a card may spend is the user's
+        // ledger balance less whatever is held against open authorisations, and
+        // BOTH halves are ledger reads — each authorisation holds into its own
+        // `withdraw:<authId>` account, so "what is currently held on this card"
+        // is a sum svc-ledger already knows. A mirror of it here would be a
+        // second source of truth for the number that decides whether somebody's
+        // payment goes through at a till.
+        'cards.per_authorization_limit':
+          'a POLICY ceiling on ONE authorisation; it does not fall as the card is used and no money path writes it',
+        'card_authorizations.amount': 'a RECORD of one authorisation request; written once',
+        'card_settlements.amount': 'a RECORD of one completed capture or reversal; written once with its ledger tx id',
+        'card_cashback.amount': 'a RECORD of one reward; summing the table is the lifetime figure',
       };
 
       const moneyColumns = columns

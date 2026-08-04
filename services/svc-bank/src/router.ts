@@ -159,7 +159,20 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.below_minimum':
       case 'bank.native_asset_not_earnable':
       case 'bank.ltv_exceeded':
+      case 'bank.card_not_found':
+      case 'bank.card_not_active':
+      case 'bank.card_limit_exceeded':
+      case 'bank.card_authorization_not_found':
+      case 'bank.card_authorization_declined':
+      case 'bank.card_authorization_closed':
+      case 'bank.card_capture_exceeds_authorization':
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+
+      // Named refusals where the platform, not the caller, is missing something.
+      // Same shape and the same reason as `bank.no_liquidation_counterparty`.
+      case 'bank.no_card_issuer':
+      case 'bank.cashback_pot_unfunded':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
 
       default: {
         // EXHAUSTIVENESS. If this line stops compiling, a `BankErrorCode` was
@@ -924,6 +937,164 @@ export function createBankRouter(bank: BankServices) {
   });
 
   /**
+   * CARDS (§8.1) — the LEDGER half only.
+   *
+   * ── WHAT IS DELIBERATELY NOT HERE ──────────────────────────────────────────
+   *
+   * There is no user-callable `authorize`, `capture` or `reverse`. Those three
+   * are the ISSUER speaking, not the user, and they are in `ops` behind
+   * `admin:treasury` for the same reason the risk sweep is: a user who can
+   * decide their own authorisation is a user who can approve a purchase the
+   * ledger would have declined, and a user who can trigger a capture can choose
+   * when their own money leaves.
+   *
+   * On a live rail they do not become user procedures either. They become a
+   * signed webhook endpoint owned by the issuer integration — which is
+   * `socket.live-issuer`, a card-scheme sponsor and an issuing BIN, and is a
+   * contract rather than code.
+   *
+   * ── EVERY SURFACE SAYS WHAT IT IS ──────────────────────────────────────────
+   *
+   * `simulated` is on the card output and it is not optional. A screen rendering
+   * a card from this router cannot accidentally present it as a real one, and a
+   * deployment with no issuer at all cannot get this far: it refuses with
+   * `bank.no_card_issuer` before a row is written.
+   */
+  const cardOutput = z.object({
+    id: z.string(),
+    assetId: z.string(),
+    /** The programme id, which is also the ledger rail label. */
+    issuer: z.string(),
+    /** TRUE MEANS THERE IS NO CARD. Never omitted, never defaulted. */
+    simulated: z.boolean(),
+    /** Four digits. Not a card number and not part of one. */
+    panTail: z.string(),
+    status: z.enum(['active', 'frozen', 'closed']),
+    cashbackBps: z.number().int(),
+    perAuthorizationLimit: amountString,
+  });
+
+  const cards = router({
+    /** What this deployment's card programme is — including that it is not one. */
+    programme: scopedProcedure('bank:read', { module: 'bank' })
+      .output(z.object({ id: z.string(), simulated: z.boolean(), displayName: z.string() }))
+      .query(async () => guard(async () => bank.cards.programme())),
+
+    list: scopedProcedure('bank:read', { module: 'bank' })
+      .output(z.array(cardOutput))
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const rows = await bank.cards.cardsOf(ctx.principal.userId);
+          return rows.map((c) => ({
+            id: c.id,
+            assetId: c.assetId,
+            issuer: c.issuer,
+            simulated: c.simulated,
+            panTail: c.panTail,
+            status: c.status,
+            cashbackBps: c.cashbackBps,
+            perAuthorizationLimit: formatAmount(c.perAuthorizationLimit),
+          }));
+        }),
+      ),
+
+    /**
+     * `cardId` is supplied by the client so a retried request is the same card,
+     * not a second one drawing on the same balance (§5).
+     */
+    issue: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          cardId: z.string().uuid(),
+          assetId: z.string().min(1).max(16),
+          cashbackBps: z.number().int().min(0).max(10_000).optional(),
+          perAuthorizationLimit: amountString,
+        }),
+      )
+      .output(cardOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const card = await bank.cards.issue({
+            cardId: input.cardId,
+            userId: ctx.principal.userId,
+            assetId: input.assetId,
+            ...(input.cashbackBps === undefined ? {} : { cashbackBps: input.cashbackBps }),
+            perAuthorizationLimit: parseAmount(input.perAuthorizationLimit),
+          });
+          return {
+            id: card.id,
+            assetId: card.assetId,
+            issuer: card.issuer,
+            simulated: card.simulated,
+            panTail: card.panTail,
+            status: card.status,
+            cashbackBps: card.cashbackBps,
+            perAuthorizationLimit: formatAmount(card.perAuthorizationLimit),
+          };
+        }),
+      ),
+
+    /**
+     * Freeze, unfreeze or close. The gesture a user reaches for first when
+     * something is wrong, so it is user surface and not an operator ticket.
+     */
+    setStatus: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ cardId: z.string().uuid(), status: z.enum(['active', 'frozen', 'closed']) }))
+      .output(z.object({ id: z.string(), status: z.string() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const card = await bank.cards.card(input.cardId);
+          assertSelf(ctx.principal.userId, card.userId);
+          const updated = await bank.cards.setStatus(input.cardId, input.status);
+          return { id: updated.id, status: updated.status };
+        }),
+      ),
+
+    /**
+     * Every decision taken on this card, approvals and declines alike.
+     *
+     * The declines are the point. "Why was I declined at the till" is the
+     * question a card generates, and a history that only listed successful
+     * purchases could not answer it.
+     */
+    authorizations: scopedProcedure('bank:read', { module: 'bank' })
+      .input(z.object({ cardId: z.string().uuid() }))
+      .output(
+        z.array(
+          z.object({
+            id: z.string(),
+            authorizationRef: z.string(),
+            amount: amountString,
+            merchantCategory: z.string().nullable(),
+            decision: z.enum(['approved', 'declined']),
+            declineCode: z.string().nullable(),
+            status: z.string(),
+            decidedAt: z.string(),
+          }),
+        ),
+      )
+      .query(async ({ ctx, input }) =>
+        guard(async () => {
+          // `bank:read` answers "may this principal read bank data". It never
+          // answered "whose" — same guard, same reason, as `transfers.executions`.
+          const card = await bank.cards.card(input.cardId);
+          assertSelf(ctx.principal.userId, card.userId);
+          const rows = await bank.cards.authorizationsOf(input.cardId);
+          return rows.map((a) => ({
+            id: a.id,
+            authorizationRef: a.authorizationRef,
+            amount: formatAmount(a.amount),
+            merchantCategory: a.merchantCategory,
+            decision: a.decision,
+            declineCode: a.declineCode,
+            status: a.status,
+            decidedAt: a.decidedAt.toISOString(),
+          }));
+        }),
+      ),
+  });
+
+  /**
    * Operator surface. The jobs live behind `admin:treasury` — a scope §4.1 marks
    * interactive-only, so it can never be held by a long-lived API key.
    */
@@ -1043,6 +1214,125 @@ export function createBankRouter(bank: BankServices) {
         }),
       ),
 
+    // ── Cards (§8.1, ledger half) ────────────────────────────────────────────
+    //
+    // THE ISSUER'S SIDE OF THE CONVERSATION, NOT THE USER'S.
+    //
+    // On a live rail these three are a signed webhook from the issuer, arriving
+    // on a deadline the card network sets. There is no live rail — that is
+    // `socket.live-issuer`, a sponsor bank and an issuing BIN — so today they are
+    // operator surface, and they must NEVER become user surface: a user who can
+    // call `cardAuthorize` approves their own purchase, and a user who can call
+    // `cardCapture` chooses when their own money leaves the book.
+    //
+    // The simulator is what makes them exercisable at all, and it says so on
+    // every card it issues (`simulated: true`).
+
+    cardAuthorize: scopedProcedure('admin:treasury')
+      .input(
+        z.object({
+          cardId: z.string().uuid(),
+          authorizationRef: z.string().min(4).max(128),
+          amount: amountString,
+          merchantCategory: z.string().min(1).max(64).optional(),
+        }),
+      )
+      .output(
+        z.object({
+          authorizationId: z.string(),
+          decision: z.enum(['approved', 'declined']),
+          declineCode: z.string().nullable(),
+          amount: amountString,
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const authorization = await bank.cards.authorize({
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+            amount: parseAmount(input.amount),
+            ...(input.merchantCategory === undefined ? {} : { merchantCategory: input.merchantCategory }),
+          });
+          return {
+            authorizationId: authorization.id,
+            decision: authorization.decision,
+            declineCode: authorization.declineCode,
+            amount: formatAmount(authorization.amount),
+          };
+        }),
+      ),
+
+    cardCapture: scopedProcedure('admin:treasury')
+      .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128), amount: amountString }))
+      .output(
+        z.object({
+          captured: amountString,
+          returned: amountString,
+          captureLedgerTxId: z.string(),
+          reversalLedgerTxId: z.string().nullable(),
+          // Surfaced rather than swallowed. A reward the rewards pot could not
+          // pay is a fact an operator needs on the day it happens — the same
+          // reasoning as `runRiskSweep.refused`.
+          cashback: z.object({
+            status: z.enum(['none', 'paid', 'refused']),
+            amount: amountString,
+            reason: z.string().optional(),
+          }),
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const result = await bank.cards.capture({
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+            amount: parseAmount(input.amount),
+          });
+          return {
+            captured: formatAmount(result.captured),
+            returned: formatAmount(result.returned),
+            captureLedgerTxId: result.captureLedgerTxId,
+            reversalLedgerTxId: result.reversalLedgerTxId,
+            cashback: {
+              status: result.cashback.status,
+              amount: formatAmount(result.cashback.amount),
+              ...(result.cashback.status === 'refused' ? { reason: result.cashback.reason } : {}),
+            },
+          };
+        }),
+      ),
+
+    /** The authorisation expired or was voided. The whole hold goes back. */
+    cardReverse: scopedProcedure('admin:treasury')
+      .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128) }))
+      .output(z.object({ returned: amountString, ledgerTxId: z.string() }))
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const result = await bank.cards.reverse({ cardId: input.cardId, authorizationRef: input.authorizationRef });
+          return { returned: formatAmount(result.returned), ledgerTxId: result.ledgerTxId };
+        }),
+      ),
+
+    /**
+     * Move bank revenue into the pot cashback is paid from.
+     *
+     * The named source, in one call. Cashback is a share of fees the platform
+     * really charged; a pot funded from anywhere else would make the advertised
+     * rate a promise against revenue that has not happened.
+     */
+    fundCashbackPot: scopedProcedure('admin:treasury')
+      .input(z.object({ windowId: z.string().min(4).max(64), assetId: z.string().min(1).max(16), amount: amountString }))
+      .output(z.object({ ledgerTxId: z.string(), capacity: amountString }))
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const posted = await bank.cards.fundCashbackPot({
+            windowId: input.windowId,
+            assetId: input.assetId,
+            amount: parseAmount(input.amount),
+          });
+          return { ledgerTxId: posted.ledgerTxId, capacity: formatAmount(await bank.cards.cashbackCapacity(input.assetId)) };
+        }),
+      ),
+
     /**
      * The reserve identity, as a query rather than an investigation:
      * `balance(loanReserve) + Σ outstanding principal` against what was funded.
@@ -1080,6 +1370,7 @@ export function createBankRouter(bank: BankServices) {
     transfers,
     earn,
     loans,
+    cards,
     analytics,
     ops,
   });
