@@ -16,6 +16,7 @@ Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURR
 ---
 
 - **Internet leverage (Phase A — in-repo reuse):** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md) — vendored kit + services; no rebuild map for Nitro+Denon.
+- **Internet leverage Phase B plan:** [`INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md`](INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md) — external candidates; gap-first (after Phase A).
 
 ## What we are building (one breath)
 
