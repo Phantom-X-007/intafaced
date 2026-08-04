@@ -2,12 +2,12 @@
 
 **Proof:** NO-FLEET · Docker no · :8090 foreign worktree  
 **Tip (re-derive):** `git fetch && git log -1 --oneline origin/main`  
-**Last coord cycle:** 2026-08-03T23:32Z · tip=`a8ca0e3f` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11  
-**Mandate:** freeProduct=0 is shell craft drained — **not** session kill.
+**Last coord cycle:** 2026-08-04T00:11Z · tip=`56696496` · freeProduct=0 · freeTracker=0 · blocked=P-WS-REPORT · SPAWN_NOW=none · open Nitro=0 · open partner=11  
+**Mandate:** freeProduct=0 is shell craft drained — **not** session kill. · **Anti-stamp:** ladder P1–P5 (no R07-only tip bump).
 
 ## Living board (one paragraph)
 
-Shell product drained (freeProduct=0); freeTracker=0; tip `a8ca0e3f` after **#707** R07 cycle106 + **#708** R01 cycle107 land; partner pile still **11** (Denon 10 + Shehzad #346) — list **unchanged**; Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING rebase (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck owner fix; P-WS-REPORT still blocked by **#433** matching + **#432** edge — **no dual-edit**; invent live **0** (re-scan c107); SPAWN_NOW none; free OPS only BABYSIT-MATRIX + REPORTS; **no Nitro Class N open** (this cycle ships R07 cycle107 keep-alive).
+Shell product drained (freeProduct=0); freeTracker=0; tip `56696496` after **#710–#716** (R07 c107 · ladder #711 · claim-check #712 · TRK #713/#715 · shell i18n #714 · invent re-scan #716); partner pile still **11** (Denon 10 + Shehzad #346); Denon green ready (self-merge only): **#445 #433 #430 #420**; CONFLICTING (#448 #441 #438 #436 #432 #346); #428 red Prettier+Typecheck; P-WS-REPORT blocked by **#433**+**#432** — **no dual-edit**; invent live **0** post-shell #714 (fabricated-money EXIT=0, 93 files); this cycle **P3** TRK wave3 deepen (10 packs) + R07 c108 board delta — **not** stamp mill; SPAWN_NOW none.
 
 ## Merged Class N (shell wave)
 
@@ -177,6 +177,7 @@ Buckets: [R02-BUCKETS-LIVE.md](./R02-BUCKETS-LIVE.md) · Night law: [NIGHT-ENGIN
 | 105 | →47f3c85c | 0 | #703 R07 cycle104 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 106 | →54317448 | 0 | #705 R07 cycle105 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
 | 107 | →a8ca0e3f | 0 | #707 R07 cycle106 + #708 R01 cycle107 land; freeze+report @ tip; open Nitro=0; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; invent 0 |
+| 108 | →56696496 | 0 | board delta: #710–#716 on main; P3 TRK wave3 deepen; invent 0 already #716 post-#714; partner 11; Denon ready #445 #433 #430 #420 his-merge; P-WS #433/#432 no dual-edit; anti-stamp ladder honored |
 
 ## Invent re-scan (cycle20)
 
@@ -498,10 +499,14 @@ fabricated-money EXIT=0 · live invent residual **0** · tip `54317448` · #705 
 
 fabricated-money EXIT=0 · live invent residual **0** · tip `a8ca0e3f` · #707 R07 cycle106 + #708 R01 cycle107 on main · freeProduct=0 ≠ kill.
 
+## Invent re-scan (cycle108)
+
+fabricated-money-scan **EXIT=0** · 0 findings / 0 baseline · 93 shell files · **NEW hard invent residual 0** · tip `56696496` · invent re-scan **#716** already on main (post shell #714) · freeProduct=0 ≠ kill · this PR is **P3** TRK wave3 not invent re-stamp.
+
 ## Coord actions this session
 
-1. freeze+report every cycle — freeProduct=0 does **not** stop the loop
+1. freeze+report — freeProduct=0 does **not** stop the loop; **re-stamp R07 only on board delta** (ladder #711)
 2. merge Class N green Nitro PRs only (docs/shell/chore) — Docs+CI when both required
 3. Denon/Shehzad babysit only — never merge partner PRs · no dual-edit
-4. TRK packs drained (freeTracker=0) — no invent implement swarms
+4. freeProduct=0 → **P1 stranded · P2 partner · P3 TRK deepen · P4 invent if shell changed · P5 hygiene**
 5. SPAWN_NOW only if freeProduct > 0

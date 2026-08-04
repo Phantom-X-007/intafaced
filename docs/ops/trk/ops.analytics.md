@@ -1,72 +1,122 @@
-# TRK-ops.analytics
+# TRK-ops.analytics — research / spec pack
 
+**Tracker id:** `ops.analytics`  
 **Title:** Warehouse — read replica + cube layer  
-**Tracker:** `ops.analytics` · module `core-ops` · phase 5 · status `ready` · owner none  
+**Module / phase:** `core-ops` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
 **Depends on:** `ledger.double-entry`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Tip freeze:** `origin/main` @ `56696496` (re-derive before implement)  
+**Pack type:** research only — no invent KPIs; warehouse is **read** path.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-Ops/product answer historical aggregates without ad-hoc OLTP BI dumps. Read replica/warehouse + cube — not a second ledger. Money from ledger truth or labeled provisional. Staff-scoped.
+1. A **warehouse** (or equivalent OLAP path) is fed from production data without writers inventing rollups.
+2. Read replica / ETL strategy is documented and runnable.
+3. Cube (or semantic) layer exposes metrics operators trust — sourced from ledger/trade facts.
+4. Apps do not query primary OLTP with unbounded analytics scans as a substitute.
+5. Money figures remain decimal-honest; no float warehouse “close enough”.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area                          | Reality                                               |
-| ----------------------------- | ----------------------------------------------------- |
-| Warehouse / analytics service | **None**                                              |
-| Cube/dbt in monorepo          | **None**                                              |
-| Money SoT                     | `services/svc-ledger` OLTP                            |
-| `svc-indexer`                 | Chain → protocol read models — **not** fiat warehouse |
-| `apps/admin`                  | Control plane, not BI warehouse                       |
+## 2 · Current code state (tip)
+
+### 2.1 What exists
+
+| Area              | Reality                                                                 |
+| ----------------- | ----------------------------------------------------------------------- |
+| `apps/admin`      | Operator console — kill/freeze/launch/jurisdiction; **not** a warehouse |
+| `apps/web`        | Customer surface — not BI                                               |
+| Analytics service | **Absent**                                                              |
+| Ledger            | Source of truth for money movements (`svc-ledger`)                      |
+| Tracker dep       | `ledger.double-entry`                                                   |
+
+### 2.2 Honest residual
+
+There is **no** cube project, no dbt project, no dedicated replica wiring in monorepo tip for this title. Admin charts that might appear later must not invent series.
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law           | Implication                                           |
-| ------------- | ----------------------------------------------------- |
-| §0.6          | Warehouse never posts or holds spendable balances     |
-| Dual-book     | Dashboard money must not silently diverge from ledger |
-| PII / Class X | Query rights, retention, residency                    |
+| Law                 | Implication                                      |
+| ------------------- | ------------------------------------------------ |
+| Dual-book           | Analytics never becomes a second money authority |
+| Read-only warehouse | ETL must not post ledger                         |
+| PII                 | Warehouse access ACL; no casual dump of identity |
+| NO-FLEET            | Do not claim live dashboards without data path   |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Slice A — replica + contract
 
-- [ ] Tech choice recorded (managed WH vs PG replica + views)
-- [ ] Allowed source tables documented
-- [ ] Read-only reporting role; BI cannot write OLTP
+- [ ] Document which DBs replicate (ledger, trade, …)
+- [ ] Lag SLO + fail-closed for “live” labels
 
-### Stage 2
+### Slice B — cube metrics v1
 
-- [ ] 3–5 certified metrics with tests + freshness SLO
+- [ ] Metric definitions mapped to SQL/views
+- [ ] Tests: fixture ledger → expected cube numbers
 
-### Tracker `done` bar
+### Slice C — consumer
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+- [ ] Admin or BI tool read path
+- [ ] No write credentials in BI layer
+
+---
 
 ## 5 · Open questions
 
-1. Warehouse vendor/tech.
-2. Metric ownership.
-3. Cross-border export.
+1. In-house cube vs vendor BI (brand scan if named in product UI)?
+2. Same Postgres logical replication vs warehouse product?
+3. Who owns metric definitions (ops vs each service)?
+
+---
 
 ## 6 · Estimated size
 
-| Slice                  | Size          |
-| ---------------------- | ------------- |
-| Replica plumbing       | **M–L** infra |
-| First metrics pack     | **M**         |
-| Full multi-domain cube | **XL**        |
+| Slice               | Size  |
+| ------------------- | ----- |
+| Replica + docs      | **M** |
+| Cube v1 + consumers | **L** |
+
+---
 
 ## 7 · Related docs / code
 
-- `services/svc-ledger`
-- `packages/ledger-client`
-- Dual-book CI gates
+- `services/svc-ledger` as money fact source
+- `apps/admin` for eventual consumer (not current warehouse)
+- Long-form twin: [TRK-ops.analytics.md](./TRK-ops.analytics.md)
 
-## 8 · Explicit non-goals for this pack
+---
 
-- No second balance engine in BI.
-- No invented fee income.
+## 8 · Explicit non-goals
+
+- No inventing dashboard KPIs offline.
+- No analytics writer that posts balances.
+- No claiming admin kill-switch UI as this feature.
+
+---
+
+## 9 · Metric examples that are safe only if sourced
+
+| Metric         | Source of truth      | Invent risk                     |
+| -------------- | -------------------- | ------------------------------- |
+| 24h notional   | trade fills / ledger | UI random walk                  |
+| Open interest  | matching/trade       | Fabricated OI                   |
+| Deposit volume | ledger recipes       | Double count without recipe ids |
+
+Each cube metric needs a written SQL/view definition and a fixture test.
+
+## 10 · First PR shape
+
+| PR  | Scope                           |
+| --- | ------------------------------- |
+| 1   | Warehouse ADR + replica runbook |
+| 2   | Three metrics + fixture tests   |
+| 3   | Admin read-only consumer        |
+
+Never grant BI write credentials to production primary.

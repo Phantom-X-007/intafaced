@@ -16,6 +16,32 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Deepen wave 3 — trade/ops/p2p residual shorts (tip freeze `56696496`)
+
+In-place deepen of ten short-name packs still thin (~66–72 lines) after wave 2,
+into code-grounded long-form research (≥120 lines each). Research only — no
+implement, no `features.mjs`. freeProduct=0 AFK **P3** (priority ladder).
+
+| Id                       | Spec                                                     |
+| ------------------------ | -------------------------------------------------------- |
+| `p2p.merchants`          | [p2p.merchants.md](./p2p.merchants.md)                   |
+| `mining.pool`            | [mining.pool.md](./mining.pool.md)                       |
+| `ops.affiliates`         | [ops.affiliates.md](./ops.affiliates.md)                 |
+| `ops.analytics`          | [ops.analytics.md](./ops.analytics.md)                   |
+| `ops.compliance`         | [ops.compliance.md](./ops.compliance.md)                 |
+| `blueprint.attestations` | [blueprint.attestations.md](./blueprint.attestations.md) |
+| `trade.forex`            | [trade.forex.md](./trade.forex.md)                       |
+| `trade.options`          | [trade.options.md](./trade.options.md)                   |
+| `dex.quote-router`       | [dex.quote-router.md](./dex.quote-router.md)             |
+| `trade.ccxt-api`         | [trade.ccxt-api.md](./trade.ccxt-api.md)                 |
+
+**Honesty highlights:** dex quote code finished / venue socket residual; trade.forex
+hours mostly done, settlement rails not; trade.options blocked multi-asset/M3;
+compliance list content Class X; mining.pool greenfield; p2p badges derived,
+programme packaging residual; no ccxt in money path.
+
+---
+
 ## Deepen wave 2 — ops + blueprint + launch (tip freeze `d9e517bd`)
 
 In-place deepen of ten short-name packs that were still thin (~48–66 lines) into
