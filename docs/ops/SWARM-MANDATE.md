@@ -1,5 +1,7 @@
 # Swarm mandate scope
 
+**Open install work order (temporary):** if [`OPEN-INSTALL.md`](./OPEN-INSTALL.md) exists, AFK **P0** is: tick its unchecked boxes before any P1–P5. Delete that file when every box is ticked — it is not law.
+
 **Shell product craft** (REGROUP / AFK residual / LANDER / INTEGRITY report) is the swarm free-product board.
 
 | Signal           | Meaning                                                                                                                                  |
