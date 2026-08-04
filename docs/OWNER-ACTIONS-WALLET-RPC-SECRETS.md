@@ -115,6 +115,38 @@ somebody has read it.
 | `tooling/ci/wallet-rpc-auth-scan.mjs` (wired into `pnpm gate` / `pnpm verify`) | A module that can boot without the guard on its classpath fails CI. So does an unread `rpc.auth-token`. |
 | Same scan, rule W3                                                             | Any future compose entry publishing a `01_wallet_rpc` port off `127.0.0.1` fails CI.                    |
 | `tooling/ci/secret-scan.mjs`                                                   | `withdraw-wallet` keys must be `${VAR}` or a keystore filename. The ECT literal now fails the gate.     |
+| `tooling/ci/wallet-rpc-mainnet-scan.mjs` (gate id `wallet-rpc-mainnet`)        | A4 above, made executable. See below.                                                                   |
 
 Nothing in `01_wallet_rpc` publishes a port today — no compose file defines one of these
 services at all. W3 exists so that stays true by accident-proofing rather than by memory.
+
+### A4 was prose until 2026-08-04
+
+Everything above is about **secrets**. None of it was ever about **which chain**, and A4 — the
+constraint the whole page sits under — had no gate at all. What actually kept this tree off
+mainnet was incidental: no Dockerfile, no compose service, no CI job, an unresolvable module in
+the reactor pom, and `${...}` placeholders that decide whether a service **starts**, not what it
+talks to. Supply the environment, point `coin.rpc` at a mainnet node, and every gate on this page
+still printed clean.
+
+`wallet-rpc-mainnet-scan.mjs` closes that. It fails the build on a **new** mainnet network
+selector, endpoint, start height, address or keystore name anywhere in the tree, and it turns the
+three accidental absences into stated invariants: no Dockerfile, no compose service, no CI job may
+build or boot any module here. The 38 mainnet constants already in the tree are frozen by exact
+text — not by count, so one cannot be swapped for another — and each carries a written reason
+naming what it is and what you would have to do about it.
+
+Two of those 38 are worth reading before anything here is ever deployed, because neither is
+fixable by configuration:
+
+- `eth-support/.../EtherscanApi.java` hardcodes `https://api.etherscan.io/api` — Ethereum
+  **mainnet** — and `PaymentHandler` broadcasts every ETH and ERC-20 withdrawal there a **second
+  time**, after sending it to `coin.rpc`. Aiming the node at a testnet does not make the withdrawal
+  a testnet withdrawal; it makes the mainnet copy the one that lands.
+- Both withdrawal paths sign with the two-argument `TransactionEncoder.signMessage(...)`, the
+  pre-EIP-155 form that carries **no chain id**, so the signature is valid on every EVM chain at
+  once.
+
+Together those mean "just point it at a testnet" is not an available mitigation for this tree. The
+only thing standing between it and mainnet is that nothing can boot it — which is now enforced
+rather than merely true.
