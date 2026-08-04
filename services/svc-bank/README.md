@@ -99,9 +99,15 @@ HTTP, for the external scheduler: `POST /internal/jobs/run-due-transfers`, `POST
 
 ## Events
 
-**Publishes — nothing, in this PR.**
+**Publishes — `intafaced.bank.margin_call.created`. This service owns the `INTAFACED_BANK` stream and creates it at boot.**
 
-That is a deliberate protocol decision, not an omission. AGENT_PROTOCOL §1: _"A `packages/contracts` and/or `packages/events` PR that declares the new interface or event. Reviewed on its own. … Never the reverse. Never both at once."_ §2 makes publishing an undeclared subject a hard prohibition. So the subjects below are specified here and go in an events PR before svc-bank publishes any of them:
+One subject, and it was declared in `packages/events` long before anything sent it. `bankMarginCalled` had a schema, and a complete svc-notify consumer, parked on a stream no service had ever created — so a margin call wrote a `loan_margin_calls` row, started a grace clock that gates liquidation, and told the borrower nothing. `loans/risk.ts` argues at length against precisely that outcome — _"the borrower's first notice of the loan would be its liquidation receipt"_ — and it was the live behaviour, because the notice had no transport.
+
+Raising the call and delivering it stay two facts. svc-bank publishes; whether the borrower was reached is svc-notify's answer, recorded per channel, and it is allowed to be "no". A failed publish is written to `loan_margin_calls.notify_error` and does **not** un-call the loan — see `loans/margin-call-publisher.ts`.
+
+Publishing moves no value. Every recipe in the Ledger table below still goes through `packages/ledger-client` and nothing else.
+
+The subjects below are still unwritten, and go in an events PR before svc-bank publishes any of them (AGENT_PROTOCOL §1: _"A `packages/contracts` and/or `packages/events` PR that declares the new interface or event. Reviewed on its own. … Never the reverse. Never both at once."_ §2 makes publishing an undeclared subject a hard prohibition):
 
 | Planned subject                    | When                                                 |
 | ---------------------------------- | ---------------------------------------------------- |
