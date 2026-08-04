@@ -645,12 +645,11 @@ export const FEATURES = [
     note: 'Reference mount — the /trpc + createEdgeContext recipe every other service copies',
   }),
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
-  f('agents.support', 'Support agent — KB + account-state grounded', { module: 'agents', phase: '5', dependsOn: ['agents.gateway'] }),
-  f('agents.scanner', 'Market Scanner — ranked signals by tier', {
+  f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
-    dependsOn: ['agents.gateway', 'trade.spot'],
-    note: 'Stage-1 2026-08-04: pure fixture rank in svc-agents (`scanner/rank.ts`) — empty/stale/incomplete refuse with copy keys; no invent prices; no auto-trade. Live tools + shell UX residual. Not tracker done until allowlisted live data path.',
+    dependsOn: ['agents.gateway', 'ops.support'],
+    note: 'Stage-1 2026-08-04: supportAgentGuardrail — read-only support tools + support.classify/reply tasks; money tools (ledger/pay/bank/trade/p2p) refused undeclared. Stage-2: KB grounding via ops.support. Not tracker done until grounded env.',
   }),
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',
