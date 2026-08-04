@@ -31,9 +31,11 @@ this file, the coordinator does not know it.
 
 | Signal              | Meaning                                                                                                         |
 | ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `freeProduct`       | Spawnable Class N craft: REGROUP/AFK/LANDER/INTEGRITY **+ implementable TRK**                                   |
-| `freeImplementable` | Tracker rows that pass the implementable gate (counted inside freeProduct)                                      |
-| `freeProduct=0`     | No spawnable craft and no implementable TRK — **not** “platform done”                                           |
+| `freeShell`         | REGROUP/AFK/LANDER/INTEGRITY only — shell craft                                                                 |
+| `freeImplementable` | Tracker rows that pass the implementable gate                                                                   |
+| `freeProduct`       | `freeShell` **+** `freeImplementable` (spawn total)                                                             |
+| `freeShell=0`       | No shell craft — **not** all-clear if `freeImplementable>0` or path-clear P1 remains                            |
+| `freeProduct=0`     | Both shell and implementable empty — **not** “platform done”; run P1–P5                                         |
 | `freeTracker`       | Ready/unowned tracker rows that are **not** implementable (money-gated, dep-blocked, thin spec, wave-1 exclude) |
 
 ### Tracker implementable gate (Nitro approved — open non-money)
@@ -52,7 +54,11 @@ Implementable rows enter **freeProduct** under normal Class N: path-disjoint, wi
 
 **Wave-1 exclude from auto-spawn** even if non-money: `ops.admin`, `ops.compliance`.
 
-Machine: `pnpm swarm:status` prints `freeImplementable=N` and implementable ids.
+Machine: `pnpm swarm:status` lane line is always:
+
+`free=N freeShell=N freeImplementable=N freeTracker=N blocked=N`
+
+`freeProduct` appears only on the spawn line as shell+implementable. **`freeShell=0` / `freeProduct=0` must never be read as all-clear** when `freeImplementable>0` or stranded P1 remains.
 
 ## AFK priority ladder (anti-drift — mandatory)
 
