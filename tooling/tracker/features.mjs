@@ -716,6 +716,7 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'token.staking'],
+    note: 'Stage-1 2026-08-04: appoint/freeze + public badge (status only). IFC pay/revenue share Class M residual — not tracker done.',
   }),
   f('academy.tournaments', 'Seasonal ladders, IFC prize pools', {
     module: 'academy',

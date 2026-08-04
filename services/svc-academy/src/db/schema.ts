@@ -147,4 +147,29 @@ export const sessionAttendees = academy.table(
   (t) => [uniqueIndex('session_attendees_pk').on(t.sessionId, t.userId), index('session_attendees_live_idx').on(t.sessionId, t.leftAt)],
 );
 
-export const schema = { rooms, roomInvites, sessions, sessionAttendees };
+
+/**
+ * Ambassador / residency programme membership (Stage-1 status only).
+ *
+ * NO pay columns. Appointed / frozen is operator-controlled programme state.
+ * Hosting rights remain identity `lobbyHostRights` — see ambassadors/programme.ts.
+ */
+export const ambassadorStatusEnum = academy.enum('ambassador_status', ['active', 'frozen']);
+
+export const ambassadors = academy.table(
+  'ambassadors',
+  {
+    userId: uuid('user_id').primaryKey(),
+    status: ambassadorStatusEnum('status').notNull().default('active'),
+    appointedBy: uuid('appointed_by').notNull(),
+    appointedAt: tstz('appointed_at').notNull().defaultNow(),
+    frozenAt: tstz('frozen_at'),
+    frozenBy: uuid('frozen_by'),
+    freezeReason: text('freeze_reason'),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('ambassadors_status_idx').on(t.status, t.appointedAt)],
+);
+
+export const schema = { rooms, roomInvites, sessions, sessionAttendees, ambassadors };
+

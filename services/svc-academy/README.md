@@ -135,3 +135,17 @@ That is the answer to the question this codebase asks everywhere — _if the pro
 All five are pure and need **no database** — none opens a connection, and none points at the shared `intafaced` instance.
 
 The service's SQL paths are exercised through the fleet's e2e suite rather than a per-service Postgres harness: this service holds no value, and its failure mode is an empty room rather than a lost balance, so the harness cost is better spent on services that move money. The one SQL path that would repay a harness is the capacity race under `FOR UPDATE`, and that is the honest gap in this suite.
+
+## Ambassador programme (Stage-1 — status only)
+
+Appoint / freeze / public badge. **No pay.** Hosting still uses §4.1 `lobbyHostRights` only.
+
+| Capability | Gate |
+| --- | --- |
+| Open lobby / invite / run session | `lobbyHostRights` (svc-identity) |
+| Programme badge active | `ambassadors.status = active` |
+| Appoint / freeze | operator `admin:write` |
+| IFC pay / revenue share | **Not built** (Class M Stage-2) |
+
+Migration: `drizzle/0001_ambassadors.sql`.
+

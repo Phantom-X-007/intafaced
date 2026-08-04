@@ -78,6 +78,22 @@ const curriculumItemOut = curriculumSummaryOut.extend({
   body: z.string(),
 });
 
+const ambassadorStatus = z.enum(['active', 'frozen']);
+const ambassadorOut = z.object({
+  userId: z.string().uuid(),
+  status: ambassadorStatus,
+  appointedBy: z.string().uuid(),
+  appointedAt: z.date(),
+  frozenAt: z.date().nullable(),
+  frozenBy: z.string().uuid().nullable(),
+  freezeReason: z.string().nullable(),
+});
+const ambassadorBadgeOut = z.object({
+  userId: z.string().uuid(),
+  isAmbassador: z.boolean(),
+  status: ambassadorStatus.nullable(),
+});
+
 const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room, minStake: formatAmount(room.minStake) });
 
 /**
@@ -110,8 +126,17 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
 
     case 'academy.scene_invalid':
-      // Client sent a scene that fails Stage-1 schema or size gate.
+    case 'academy.ambassador_invalid':
+      // Client sent a scene that fails Stage-1 schema or size gate /
+      // freeze reason that fails Stage-1 programme rules.
       return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+
+    case 'academy.ambassador_not_found':
+      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+
+    case 'academy.ambassador_already_active':
+    case 'academy.ambassador_already_frozen':
+      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
 
     case 'academy.stake_unavailable':
     case 'academy.stream_unavailable':
@@ -303,6 +328,43 @@ export function createAcademyRouter(academy: AcademyService) {
       .output(sessionOut)
       .mutation(({ ctx, input }) =>
         guard(() => academy.updateScene({ sessionId: input.sessionId, hostId: ctx.principal.userId, scene: input.scene })),
+      ),
+
+    // ── Ambassador programme Stage-1 (status only — NO PAY / Class M residual) ─
+    //
+    // Public badge is academy:read. Appoint/freeze are operator admin:write —
+    // programme control is not a user self-serve action.
+
+    ambassadorBadge: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ userId: z.string().uuid() }))
+      .output(ambassadorBadgeOut)
+      .query(({ input }) => guard(() => academy.ambassadorBadge(input.userId))),
+
+    ambassadors: scopedProcedure('admin:read', { module: 'academy' })
+      .input(z.object({ status: ambassadorStatus.optional() }).optional())
+      .output(z.array(ambassadorOut))
+      .query(({ input }) =>
+        guard(async () => academy.listAmbassadors({ ...(input?.status ? { status: input.status } : {}) })),
+      ),
+
+    appointAmbassador: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ userId: z.string().uuid() }))
+      .output(ambassadorOut)
+      .mutation(({ input, ctx }) =>
+        guard(() => academy.appointAmbassador({ userId: input.userId, operatorId: ctx.principal!.userId })),
+      ),
+
+    freezeAmbassador: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ userId: z.string().uuid(), reason: z.string().min(1).max(500) }))
+      .output(ambassadorOut)
+      .mutation(({ input, ctx }) =>
+        guard(() =>
+          academy.freezeAmbassador({
+            userId: input.userId,
+            operatorId: ctx.principal!.userId,
+            reason: input.reason,
+          }),
+        ),
       ),
   });
 }

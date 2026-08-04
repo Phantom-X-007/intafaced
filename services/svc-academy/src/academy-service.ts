@@ -3,6 +3,14 @@ import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import { assertScene } from './spatial/scene.js';
+import {
+  assertFreezeReason,
+  badgeOf,
+  AmbassadorProgrammeError,
+  type AmbassadorBadge,
+  type AmbassadorRecord,
+  type AmbassadorStatus,
+} from './ambassadors/programme.js';
 import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from './access/room-access.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
@@ -432,6 +440,174 @@ export class AcademyService {
       UPDATE academy.sessions SET scene = ${this.sql.json(scene as never)}, updated_at = now() WHERE id = ${session.id} RETURNING *
     `;
     return toSession(rows[0]!);
+  }
+
+
+  // ── Ambassador programme (Stage-1 status only — NO PAY) ───────────────────
+
+  private toAmbassador(row: {
+    user_id: string;
+    status: AmbassadorStatus;
+    appointed_by: string;
+    appointed_at: Date;
+    frozen_at: Date | null;
+    frozen_by: string | null;
+    freeze_reason: string | null;
+  }): AmbassadorRecord {
+    return {
+      userId: row.user_id,
+      status: row.status,
+      appointedBy: row.appointed_by,
+      appointedAt: row.appointed_at,
+      frozenAt: row.frozen_at,
+      frozenBy: row.frozen_by,
+      freezeReason: row.freeze_reason,
+    };
+  }
+
+  private mapAmbassadorErr(err: unknown): never {
+    if (err instanceof AmbassadorProgrammeError) {
+      throw new AcademyError(err.message, err.code);
+    }
+    throw err;
+  }
+
+  async ambassadorOf(userId: string): Promise<AmbassadorRecord | null> {
+    const rows = await this.sql<
+      Array<{
+        user_id: string;
+        status: AmbassadorStatus;
+        appointed_by: string;
+        appointed_at: Date;
+        frozen_at: Date | null;
+        frozen_by: string | null;
+        freeze_reason: string | null;
+      }>
+    >`
+      SELECT user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+        FROM academy.ambassadors WHERE user_id = ${userId}
+    `;
+    return rows[0] ? this.toAmbassador(rows[0]) : null;
+  }
+
+  async ambassadorBadge(userId: string): Promise<AmbassadorBadge> {
+    return badgeOf(userId, await this.ambassadorOf(userId));
+  }
+
+  async listAmbassadors(filter: { status?: AmbassadorStatus } = {}): Promise<AmbassadorRecord[]> {
+    const rows = filter.status
+      ? await this.sql<
+          Array<{
+            user_id: string;
+            status: AmbassadorStatus;
+            appointed_by: string;
+            appointed_at: Date;
+            frozen_at: Date | null;
+            frozen_by: string | null;
+            freeze_reason: string | null;
+          }>
+        >`
+          SELECT user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+            FROM academy.ambassadors WHERE status = ${filter.status}
+            ORDER BY appointed_at DESC
+        `
+      : await this.sql<
+          Array<{
+            user_id: string;
+            status: AmbassadorStatus;
+            appointed_by: string;
+            appointed_at: Date;
+            frozen_at: Date | null;
+            frozen_by: string | null;
+            freeze_reason: string | null;
+          }>
+        >`
+          SELECT user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+            FROM academy.ambassadors ORDER BY status ASC, appointed_at DESC
+        `;
+    return rows.map((r) => this.toAmbassador(r));
+  }
+
+  /**
+   * Operator appoint. Idempotent re-appoint of a frozen row reactivates.
+   * Already-active is refused so double-click does not rewrite appointed_by silently.
+   */
+  async appointAmbassador(input: { userId: string; operatorId: string }): Promise<AmbassadorRecord> {
+    const existing = await this.ambassadorOf(input.userId);
+    if (existing?.status === 'active') {
+      throw new AcademyError(
+        `User ${input.userId} is already an active ambassador`,
+        'academy.ambassador_already_active',
+      );
+    }
+
+    const rows = await this.sql<
+      Array<{
+        user_id: string;
+        status: AmbassadorStatus;
+        appointed_by: string;
+        appointed_at: Date;
+        frozen_at: Date | null;
+        frozen_by: string | null;
+        freeze_reason: string | null;
+      }>
+    >`
+      INSERT INTO academy.ambassadors (user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason, updated_at)
+      VALUES (${input.userId}, 'active', ${input.operatorId}, now(), NULL, NULL, NULL, now())
+      ON CONFLICT (user_id) DO UPDATE SET
+        status = 'active',
+        appointed_by = EXCLUDED.appointed_by,
+        appointed_at = now(),
+        frozen_at = NULL,
+        frozen_by = NULL,
+        freeze_reason = NULL,
+        updated_at = now()
+      RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+    `;
+    return this.toAmbassador(rows[0]!);
+  }
+
+  async freezeAmbassador(input: {
+    userId: string;
+    operatorId: string;
+    reason: string;
+  }): Promise<AmbassadorRecord> {
+    let reason: string;
+    try {
+      reason = assertFreezeReason(input.reason);
+    } catch (err) {
+      this.mapAmbassadorErr(err);
+    }
+
+    const existing = await this.ambassadorOf(input.userId);
+    if (!existing) {
+      throw new AcademyError(`No ambassador programme row for ${input.userId}`, 'academy.ambassador_not_found');
+    }
+    if (existing.status === 'frozen') {
+      throw new AcademyError(`Ambassador ${input.userId} is already frozen`, 'academy.ambassador_already_frozen');
+    }
+
+    const rows = await this.sql<
+      Array<{
+        user_id: string;
+        status: AmbassadorStatus;
+        appointed_by: string;
+        appointed_at: Date;
+        frozen_at: Date | null;
+        frozen_by: string | null;
+        freeze_reason: string | null;
+      }>
+    >`
+      UPDATE academy.ambassadors
+         SET status = 'frozen',
+             frozen_at = now(),
+             frozen_by = ${input.operatorId},
+             freeze_reason = ${reason},
+             updated_at = now()
+       WHERE user_id = ${input.userId}
+       RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+    `;
+    return this.toAmbassador(rows[0]!);
   }
 
   private async liveInvite(roomId: string, userId: string): Promise<{ expiresAt: Date | null } | null> {

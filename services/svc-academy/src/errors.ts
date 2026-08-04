@@ -27,7 +27,12 @@ export type AcademyErrorCode =
   /** Curriculum catalog slug is not in the day-one spine. */
   | 'academy.curriculum_not_found'
   /** Spatial scene failed Stage-1 schema / size gate. */
-  | 'academy.scene_invalid';
+  | 'academy.scene_invalid'
+  /** Ambassador programme Stage-1. */
+  | 'academy.ambassador_not_found'
+  | 'academy.ambassador_already_active'
+  | 'academy.ambassador_already_frozen'
+  | 'academy.ambassador_invalid';
 
 export class AcademyError extends Error {
   constructor(

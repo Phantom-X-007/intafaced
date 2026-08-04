@@ -1,8 +1,9 @@
 # Claim TRK-academy.ambassadors
 
-**status:** residual-own
-**proof:** docs/ops/trk/academy.ambassadors.md on tip · research/spec complete · not implement
-**tip:** 04f9b1f2
-**updated:** 2026-08-03
+**status:** wip
+**owner:** nitro-afk
+**proof:** Stage-1 programme without pay — appoint/freeze + badge API
+**tip:** fa005d1d
+**updated:** 2026-08-04
 
-Claim-lock is spawn authority. residual-own = research/spec complete on tip; not an implement swarm.
+Claim-lock is spawn authority. Stage-1 only — IFC pay / revenue share are Class M residual (Stage 2).
