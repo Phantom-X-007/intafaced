@@ -24,9 +24,9 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-03** ✅ | **done**    | [`SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md). `DIRECTION` §1 marks the old ban superseded by it.                           |
 | **D-S-04** ✅ | **done**    | [`adr/2026-08-04-algo-execution-law.md`](adr/2026-08-04-algo-execution-law.md), on `DIRECTION` §1 (TWAP only, icebergs out).                                                   |
 | **D-S-05** ✅ | **done**    | [`adr/2026-08-04-instrument-enum-authority.md`](adr/2026-08-04-instrument-enum-authority.md) on `DIRECTION` §2.                                                                |
-| **D-S-06** ❌ | **blank**   | Nothing anywhere. **Highest agent-unblock value of the blanks.** Needs the fill-finality answer first.                                                                         |
+| **D-S-06** ✅ | **done**    | [`adr/2026-08-04-matching-dual-target.md`](adr/2026-08-04-matching-dual-target.md) — fill-finality answered; INTACORE has zero code refs.                                      |
 | **D-S-07** ⚠️ | **half**    | [`SPEC-LENDING-2026-08-02.md`](SPEC-LENDING-2026-08-02.md) §1 for lending. Futures mark side blank — see D-S-01.                                                               |
-| **D-S-08** ❌ | **blank**   | PR #428 open. No spec.                                                                                                                                                         |
+| **D-S-08** ✅ | **done**    | [`adr/2026-08-04-p2p-escrow-and-dispute-law.md`](adr/2026-08-04-p2p-escrow-and-dispute-law.md) — escrow-plane conflict resolved.                                               |
 | **D-S-09** ✅ | **done**    | Earn half: `SPEC-OTC-RFQ-AND-EARN` Part B + `DIRECTION` §7. Cards/ramps §13 boundary: [`adr/2026-08-04-bank-vertical-law.md`](adr/2026-08-04-bank-vertical-law.md)             |
 | **D-S-10** ✅ | **done**    | [`SPEC-PAY-VERTICALS-2026-08-02.md`](SPEC-PAY-VERTICALS-2026-08-02.md) + [`adr/2026-08-04-pay-rails-and-psp-socket.md`](adr/2026-08-04-pay-rails-and-psp-socket.md)            |
 | **D-S-11** ✅ | **done**    | [`SPEC-SUBACCOUNTS-2026-08-02.md`](SPEC-SUBACCOUNTS-2026-08-02.md). Adjacent: [`adr/2026-08-04-authority-and-refusal-shape.md`](adr/2026-08-04-authority-and-refusal-shape.md) |
@@ -38,17 +38,17 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-17** ✅ | **done**    | Decision: `DIRECTION` §4 (Option B). Residual: [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)                                        |
 | **D-S-18** ❌ | **blank**   | Board itself says "if in scope".                                                                                                                                               |
 
-**Tally: 13 done · 2 partial · 3 blank.** The board read as 17 blank.
+**Tally: 15 done · 2 partial · 1 blank.** The board read as 17 blank.
 
 ---
 
 ## What this changes for agents, today
 
-**Agents may now implement against D-S-02, 03, 04, 05, 09, 10, 11, 12, 13, 14, 15, 16 and 17 without waiting.** Those thirteen are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
+**Agents may now implement against D-S-02 through 06, 08 through 17 without waiting.** Those fifteen are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
 
 **D-S-01 and 07 are partially law.** Implement the decided part; do not invent the rest. Each row above names which half is which.
 
-**D-S-06, 08 and 18 remain genuinely blank.** D-S-06 needs the fill-finality answer; D-S-08 needs the escrow-plane conflict ruled. The invent-ban holds in full. Research is welcome; implementation is not.
+**Only D-S-18 remains blank**, and the board itself says "if in scope". The invent-ban holds in full there. Research is welcome; implementation is not.
 
 ---
 
