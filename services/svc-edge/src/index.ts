@@ -38,7 +38,17 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, disableRequestLogging: f
  */
 const screening = assertScreeningConfigured();
 app.log[screening.configured ? 'info' : 'warn'](
-  { appEnv: env.APP_ENV, configured: screening.configured, blocked: screening.blockedRegions.length, source: screening.source },
+  {
+    appEnv: env.APP_ENV,
+    configured: screening.configured,
+    // `configured` alone no longer identifies the state. A reviewed-and-
+    // deliberately-empty list is `configured: true` with a count of zero, which
+    // reads in a field set exactly like a list that happens to be short. The
+    // message string spells it out; a structured field is what gets queried.
+    declaration: screening.declaration,
+    blocked: screening.blockedRegions.length,
+    source: screening.source,
+  },
   screening.summary,
 );
 
@@ -108,7 +118,21 @@ app.get('/ready', async () => ({
   // Whether screening is armed, and how many regions it refuses — a count, not
   // the codes. An operator needs to see the control is on; an unauthenticated
   // caller does not need our exact configuration read back to them.
-  screening: { configured: screening.configured, blockedRegions: screening.blockedRegions.length },
+  //
+  // `declaration` is here because `configured` stopped being enough to identify
+  // the state. There are now two ways to be configured: a supplied list
+  // (`listed`), and a recorded "reviewed, and no region is screened out"
+  // (`reviewed-empty`), and the second is `configured: true` with
+  // `blockedRegions: 0`. A probe with only the boolean and the count would render
+  // that identically to a short list, and the one thing this whole control exists
+  // to prevent is two different compliance states looking like the same number.
+  // It is a state name, not configuration content — it says which question was
+  // answered, never which regions.
+  screening: {
+    configured: screening.configured,
+    declaration: screening.declaration,
+    blockedRegions: screening.blockedRegions.length,
+  },
   // Same shape, same reason: whether a browser allowlist was SUPPLIED, and how
   // many origins it holds — a count, never the origins themselves. "Zero because
   // nobody configured one" and "zero because the list is short" are different

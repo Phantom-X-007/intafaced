@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**44 of 108 shipped (41%)** · 3 in progress · 32 ready to claim · 29 blocked · 25 deliberate §13 sockets
+**44 of 108 shipped (41%)** · 3 in progress · 32 ready to claim · 29 blocked · 26 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -162,6 +162,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Moderated dispute resolution <br/>_Dispute paths in svc-p2p core_ | F |  | `p2p.disputes` |
 | ✅ | Reputation feeding the same XP graph <br/>_Reputation module on main. This row's title was only nearly true for a while, and the gap is worth recording: svc-p2p published xpEarned and NOTHING consumed it, so P2P reputation did not reach the XP graph — svc-identity wrote rank_state from its own auth flows and its serviceProcedure only, and every rank shown to a P2P user was short by what they had earned. Closed by subscribeXpEvents in services/svc-identity/src/events.ts (ADR D-S-13 Class B). The producers' idempotency keys already matched identity.xp_events.idempotency_key, so no key translation and no migration were needed._ | F |  | `p2p.reputation` |
 | 🟢 | P2P merchant programme — badges, limits, API | F |  | `p2p.merchants` |
+| 🔌 | Resolve the caller’s region per request instead of stamping one constant <br/>_§13 — svc-edge resolves `region` ONCE, from `DEFAULT_REGION` (services/svc-edge/src/env.ts, default `XX`), and stamps that same value onto the principal of EVERY request (src/index.ts, the `exchangePrincipal` call). There is no geo-IP handling anywhere in the repo: no `cf-ipcountry`, no `x-vercel-ip-country`, no provider database, nothing. WHAT THAT MEANS FOR SCREENING: `checkAccess`, JURISDICTION_MATRIX and the sanctions list are all correct and armed, and they evaluate ONE CONSTANT REGION for all traffic. Even with a counsel-supplied `INTAFACED_SANCTIONS_REGIONS`, no real caller’s jurisdiction is ever tested against it — a listed region can only ever match if an operator happened to set DEFAULT_REGION to that same code. So `assertScreeningConfigured` passing in prod means "a list was supplied", NOT "traffic is screened against it", and this row exists so the first is never read as the second. It understates matrix enforcement (tiers, limits, per-module blocks) for the same reason, not only sanctions. WHY IT IS NOT A ONE-LINER: region must never be caller-supplied — a caller who could set it would choose its own regulator — so closing this needs a TRUSTED upstream geo header from whatever CDN or proxy fronts the edge, a stated precedence between headers, proof the header cannot be spoofed by a direct-to-origin request, and a fail-closed answer when it is absent or untrusted. That is a deployment-topology decision with an owner, not just code._ | F |  | `socket.geo-region-resolution` |
 
 ### Phase 3P — Protocol P0 (1/8)
 
