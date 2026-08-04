@@ -35,9 +35,9 @@ auth · config · contracts · db · events · exchange-contract · i18n · ledg
 
 ## Vendor (quarantined)
 
-| Path                              | Role                                                |
-| --------------------------------- | --------------------------------------------------- |
-| `vendor/coinexchange/`            | Third-party full exchange stack (reference only)    |
-| `vendor/coinexchange-compose.yml` | Isolated infra for vendor — not the product compose |
+| Path                                   | Role                                                |
+| -------------------------------------- | --------------------------------------------------- |
+| `vendor/upstream-exchange/`            | Third-party full exchange stack (reference only)    |
+| `vendor/upstream-exchange-compose.yml` | Isolated infra for vendor — not the product compose |
 
 **Safe default:** reference/quarantine — not product money path; brand/format excluded.

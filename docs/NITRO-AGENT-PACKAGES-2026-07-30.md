@@ -60,12 +60,12 @@ endpoints that actually answer, so nothing displays a number it did not receive.
 **Paths you may touch**
 
 ```
-vendor/coinexchange/05_Web_Front/src/pages/**
-vendor/coinexchange/05_Web_Front/src/components/**
-vendor/coinexchange/05_Web_Front/src/assets/images/**
-vendor/coinexchange/05_Web_Front/src/App.vue
-vendor/coinexchange/05_Web_Front/src/config/routes.js
-vendor/coinexchange/05_Web_Front/src/assets/lang/en.js   (append-only region)
+vendor/upstream-exchange/05_Web_Front/src/pages/**
+vendor/upstream-exchange/05_Web_Front/src/components/**
+vendor/upstream-exchange/05_Web_Front/src/assets/images/**
+vendor/upstream-exchange/05_Web_Front/src/App.vue
+vendor/upstream-exchange/05_Web_Front/src/config/routes.js
+vendor/upstream-exchange/05_Web_Front/src/assets/lang/en.js   (append-only region)
 ```
 
 Branch prefix `feat/app-*`.
@@ -85,7 +85,7 @@ Branch prefix `feat/app-*`.
   screen with the backend stopped.
 - Shell compiles: `docker logs intafaced-shell-web --since 3m | grep -E "Compiled|error  in"` → the only warning is the pre-existing `InnovationMinings.vue` v-for key.
 - `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/app.js` → 200.
-- `node vendor/coinexchange/scan-cjk.mjs` → **zero CJK**. That property was hard-won.
+- `node vendor/upstream-exchange/scan-cjk.mjs` → **zero CJK**. That property was hard-won.
 
 **Blocked on Denon?** **No.** Start now.
 
@@ -194,7 +194,7 @@ once it was back I re-probed with the same wrong units and blamed the units.
   `.gitignore`. There is no grant on file. **Do not re-add it under any
   circumstances**, and do not add a licensed chart dependency.
 
-**Paths:** `vendor/coinexchange/05_Web_Front/src/assets/js/market-chart/**` plus
+**Paths:** `vendor/upstream-exchange/05_Web_Front/src/assets/js/market-chart/**` plus
 the terminal page and components.
 
 **Done when** the chart renders bars on 1m/5m/15m/1h/4h/1d, indicators toggle,

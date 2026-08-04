@@ -128,7 +128,7 @@ No other new third-party dependency appears under `services/svc-pay` importer (w
 
 ## 6 · Stream A vendor (light skim only)
 
-Sampled honesty comments / patterns under `vendor/coinexchange/05_Web_Front`:
+Sampled honesty comments / patterns under `vendor/upstream-exchange/05_Web_Front`:
 
 - C2C: **never invent** quotes or balances; balance null until wallet API; failed price ≠ fixed 7.00
 - Exchange: empty positions honest (“not zero risk”)

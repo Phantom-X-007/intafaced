@@ -18,13 +18,13 @@
 **In the deployment on this machine there are no ETH keystores to migrate.** Checked, not
 assumed:
 
-| Check                                                         | Result                                                                                                                                                                                                                             |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker ps` — any `01_wallet_rpc` service running             | **none.** No `service-rpc-eth`, `-eusdt`, `-btc`, or any sibling                                                                                                                                                                   |
-| `/data/eth/data/keystore` inside each running container       | does not exist                                                                                                                                                                                                                     |
-| `find … -name '*.jar' -path '*target*'` under `01_wallet_rpc` | no build output — the tree has never been compiled here                                                                                                                                                                            |
-| `01_wallet_rpc/pom.xml` `<modules>`                           | lists `xrp`; **`vendor/coinexchange/01_wallet_rpc/xrp` is not tracked in git** — the reactor cannot resolve it                                                                                                                     |
-| the wallet address book in MongoDB                            | `coinex-mongo` **is** running, and `listDatabases` returns `admin`, `bitrade`, `config`, `local`. **There is no `wallet` database** — so no `ETH_address_book`, no `EUSDT_address_book`; not empty collections, no database at all |
+| Check                                                         | Result                                                                                                                                                                                                                                |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker ps` — any `01_wallet_rpc` service running             | **none.** No `service-rpc-eth`, `-eusdt`, `-btc`, or any sibling                                                                                                                                                                      |
+| `/data/eth/data/keystore` inside each running container       | does not exist                                                                                                                                                                                                                        |
+| `find … -name '*.jar' -path '*target*'` under `01_wallet_rpc` | no build output — the tree has never been compiled here                                                                                                                                                                               |
+| `01_wallet_rpc/pom.xml` `<modules>`                           | lists `xrp`; **`vendor/upstream-exchange/01_wallet_rpc/xrp` is not tracked in git** — the reactor cannot resolve it                                                                                                                   |
+| the wallet address book in MongoDB                            | `coinex-mongo` **is** running, and `listDatabases` returns `admin`, `job-module`, `config`, `local`. **There is no `wallet` database** — so no `ETH_address_book`, no `EUSDT_address_book`; not empty collections, no database at all |
 
 So on this host the migration is a **pre-flight**, not a rescue: set the password _before_
 the first `GET /rpc/address/{account}` ever runs and there is nothing to re-encrypt, because
@@ -42,7 +42,7 @@ Confirm which case you are in **before** doing anything else — §1 is that con
 
 ## Why the files stop decrypting
 
-Before `#86`, three things were true in `vendor/coinexchange/01_wallet_rpc`:
+Before `#86`, three things were true in `vendor/upstream-exchange/01_wallet_rpc`:
 
 | Path                                                             | Before `#86`                                                                                                                                                       | Now on `main`                                                    |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
@@ -417,7 +417,7 @@ Applies whether you migrated or started empty.
 
 ```bash
 # 1. Password present in the environment, absent from the tree.
-grep -rn 'coin.keystore-password' vendor/coinexchange/01_wallet_rpc --include=application.properties
+grep -rn 'coin.keystore-password' vendor/upstream-exchange/01_wallet_rpc --include=application.properties
 #    every hit must read: coin.keystore-password=${ETH_KEYSTORE_PASSWORD}
 
 # 2. Start ONE service, with the env var set, and read the log.

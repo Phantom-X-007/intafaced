@@ -77,14 +77,14 @@
 
 **When:** 2026-08-03 · tip `c773dafa` (#482 · post shell wave + post prior rescan #477)  
 **Mode:** NO-FLEET · static `rg` + `tooling/ci/fabricated-money-scan.mjs` (no visual)  
-**Scope:** `vendor/coinexchange/05_Web_Front` primary · `apps/web` + `apps/admin` honesty cross-check  
+**Scope:** `vendor/upstream-exchange/05_Web_Front` primary · `apps/web` + `apps/admin` honesty cross-check  
 **Claim:** AFK-RESCAN residual-own  
 **Trigger:** AFK-RESCAN invent re-scan after shell merge cluster (#462–#472) and post-#477 docs tip
 
 ## Method
 
 ```text
-rg -n -i invent|fake|stub|PriceTrend|Math\.random  vendor/coinexchange/05_Web_Front
+rg -n -i invent|fake|stub|PriceTrend|Math\.random  vendor/upstream-exchange/05_Web_Front
 # hard invent fingerprints: dataFanyong, CNYRate||6.5, mockTicker, zero-sparkline, ||'0.00'
 node tooling/ci/fabricated-money-scan.mjs
 ```
@@ -105,7 +105,7 @@ Distinguish **honesty law comments** (good — “never invent”) from **live i
 | #477      | prior AFK-RESCAN report                   | new hard invent = 0 at `f96ac6b4`          |
 | #473–#482 | format / docs / swarm chore only          | **no shell product code delta** since #477 |
 
-`git log 8c8157ba..c773dafa -- vendor/coinexchange/05_Web_Front apps/web apps/admin` → **empty**.
+`git log 8c8157ba..c773dafa -- vendor/upstream-exchange/05_Web_Front apps/web apps/admin` → **empty**.
 
 ## Findings
 
@@ -203,7 +203,7 @@ Invite fake leaderboard (`dataFanyong` live rows), Activity invented completion 
 ```
 proof_missing: fleet-blocked
 scan: static-rg + fabricated-money-scan.mjs
-scope: vendor/coinexchange/05_Web_Front + apps/web + apps/admin cross-check
+scope: vendor/upstream-exchange/05_Web_Front + apps/web + apps/admin cross-check
 tip: c773dafa
 shell_wave: #462-#472 · prior_rescan: #477 · tip_docs: #482
 invent_line_hits: 87 (all honesty/doctrine)

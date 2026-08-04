@@ -88,15 +88,15 @@ Each row = **ADR or equivalent on tip**. Done bar = link on main + “agents may
 
 ## 4 · Architecture / sequencing (P2) — only you can seal without destroy
 
-| ID          | Task                                      | Why human                                                                                   | Done bar                                         |
-| ----------- | ----------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| **D-P2-01** | **`apps/web` one-commit delete**          | Dockerfile COPY + i18n non-vacuity + tracker requires must move **same commit** or main red | `docker compose build` green; gates non-vacuous  |
-| **D-P2-02** | **Spine abandon vs resume**               | Many `origin/feat/spine-*` crash WIPs — force-push risk                                     | Each named: abandon / resume / greenfield on tip |
-| **D-P2-03** | **apps/web retirement tracker hygiene**   | Stale `requires: apps/web` paths hide red                                                   | Tracker paths honest after delete                |
-| **D-P2-04** | **Vendor Bizzan adoption money map seal** | What stays Java vs TypeScript money path — wrong call = dual-book forever                   | Written map agents obey                          |
-| **D-P2-05** | **Edge/CORS production posture**          | Prod origins are deploy decisions                                                           | Staging/prod env contract documented             |
-| **D-P2-06** | **Depth/tape product completeness**       | After platform path: what “honest empty book” + gap/resnapshot SLOs mean at product level   | Spec agents implement in shell client            |
-| **D-P2-07** | **Private positions stream law**          | Needs futures event truth (D-S-01) first                                                    | Event payloads frozen → agents wire WS           |
+| ID          | Task                                        | Why human                                                                                   | Done bar                                         |
+| ----------- | ------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **D-P2-01** | **`apps/web` one-commit delete**            | Dockerfile COPY + i18n non-vacuity + tracker requires must move **same commit** or main red | `docker compose build` green; gates non-vacuous  |
+| **D-P2-02** | **Spine abandon vs resume**                 | Many `origin/feat/spine-*` crash WIPs — force-push risk                                     | Each named: abandon / resume / greenfield on tip |
+| **D-P2-03** | **apps/web retirement tracker hygiene**     | Stale `requires: apps/web` paths hide red                                                   | Tracker paths honest after delete                |
+| **D-P2-04** | **Vendor Upstream adoption money map seal** | What stays Java vs TypeScript money path — wrong call = dual-book forever                   | Written map agents obey                          |
+| **D-P2-05** | **Edge/CORS production posture**            | Prod origins are deploy decisions                                                           | Staging/prod env contract documented             |
+| **D-P2-06** | **Depth/tape product completeness**         | After platform path: what “honest empty book” + gap/resnapshot SLOs mean at product level   | Spec agents implement in shell client            |
+| **D-P2-07** | **Private positions stream law**            | Needs futures event truth (D-S-01) first                                                    | Event payloads frozen → agents wire WS           |
 
 ---
 

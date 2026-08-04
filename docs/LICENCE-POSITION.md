@@ -10,14 +10,14 @@
 
 ## What was audited
 
-| Scope                                            | Count                                      |
-| ------------------------------------------------ | ------------------------------------------ |
-| Files redistributed under `vendor/coinexchange/` | 1,822 tracked                              |
-| Distinct third-party components inventoried      | 43 itemised in `NOTICE` §1–§9              |
-| Committed `.jar` binaries                        | 31 files, 8 distinct artefacts             |
-| Maven coordinates declared across 31 POMs        | 91                                         |
-| Node packages resolved in the pnpm workspace     | 250, from 37 declared deps in 29 manifests |
-| Container images declared in compose             | 12                                         |
+| Scope                                                 | Count                                      |
+| ----------------------------------------------------- | ------------------------------------------ |
+| Files redistributed under `vendor/upstream-exchange/` | 1,822 tracked                              |
+| Distinct third-party components inventoried           | 43 itemised in `NOTICE` §1–§9              |
+| Committed `.jar` binaries                             | 31 files, 8 distinct artefacts             |
+| Maven coordinates declared across 31 POMs             | 91                                         |
+| Node packages resolved in the pnpm workspace          | 250, from 37 declared deps in 29 manifests |
+| Container images declared in compose                  | 12                                         |
 
 Method, and the only reason this document is worth anything: **every licence recorded was read from
 the artefact itself** — the jar's embedded POM, the file's banner, the font's metadata — or from the
@@ -33,13 +33,13 @@ lists what was checked. `NOTICE` §10 indexes all 23 such entries.
 
 **DECISION 2026-07-29 — Path A.** Hold TERMINAL.md (lightweight-charts). Charting Library purged from the product shell; chart rewired to lightweight-charts. See `docs/OWNER-DECISIONS-OPEN.md`. History rewrite (optional): `tooling/scripts/purge-charting-library-history.sh`.
 
-**What.** `vendor/coinexchange/05_Web_Front/src/assets/js/charting_library/` — 85 files, 5.4 MB, all
+**What.** `vendor/upstream-exchange/05_Web_Front/src/assets/js/charting_library/` — 85 files, 5.4 MB, all
 git-tracked. Version string read from the artefact: `1.11 (internal id fe319232 @ 2017-11-14)`.
 
 **The finding.** There is **no licence file, no NOTICE, no EULA and no copyright header anywhere in
 those 85 files.** The Charting Library is licensed software. TradingView grants it to a named
 licensee under their own agreement; it is not open source and it is not sublicensable. The
-Apache-2.0 grant covering the upstream exchange (`vendor/coinexchange/LICENSE`) cannot convey it,
+Apache-2.0 grant covering the upstream exchange (`vendor/upstream-exchange/LICENSE`) cannot convey it,
 because the upstream author did not own it. It arrived bundled with someone else's project and we
 inherited a copy, not a right.
 
@@ -77,7 +77,7 @@ Denon submits 2 — it is a commercial application, not an engineering task. Eng
 
 ### 1.2 · Six of eight committed jars have no licence, and one of them holds keys
 
-**What.** 31 `.jar` files are committed under `vendor/coinexchange/` and wired into POMs with
+**What.** 31 `.jar` files are committed under `vendor/upstream-exchange/` and wired into POMs with
 `<scope>system</scope>`, so the build uses the committed bytes and never resolves a coordinate.
 
 **Resolved from the previous audit's "6 of 8 unidentifiable".** Every jar was opened. Every one
@@ -118,7 +118,7 @@ unauditable binary of unknown authorship with access to key material, which no a
 paperwork would make acceptable.
 
 **Action.** These jars should be **replaced with declared Maven coordinates or removed**, which is
-the same conclusion `docs/adr/2026-07-28-coinexchange-integration.md` §4 reached from the security
+the same conclusion `docs/adr/2026-07-28-upstream-exchange-integration.md` §4 reached from the security
 side. Where no public equivalent exists — and for the four private ones, none does — the calling
 code has to be rewritten or the module dropped. Treat `bitcoin-rpc` first.
 
@@ -128,7 +128,7 @@ code has to be rewritten or the module dropped. Treat `bitcoin-rpc` first.
 
 ### 1.3 · MySQL Connector/J is GPLv2 in a proprietary product
 
-**What.** `mysql:mysql-connector-java:8.0.11`, declared in `vendor/coinexchange/00_framework/pom.xml`
+**What.** `mysql:mysql-connector-java:8.0.11`, declared in `vendor/upstream-exchange/00_framework/pom.xml`
 and resolved into every Java service that talks to the database.
 
 **Evidence.** Read from `mysql-connector-java-8.0.11.pom` on Maven Central:
@@ -162,10 +162,10 @@ established commercial licensing programme and a history of enforcement.
 
 ### 2.1 · Geetest appears twice, once with its attribution removed
 
-`vendor/coinexchange/05_Web_Front/src/assets/js/gt.js` carries a bare copyright line
+`vendor/upstream-exchange/05_Web_Front/src/assets/js/gt.js` carries a bare copyright line
 (`// "v0.4.6 Geetest Inc.";`) and no grant. Its server-side counterpart is worse: the Java SDK has
 been copied into the upstream project's **own package namespace** at
-`00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/system/GeetestLib.java`, with the original
+`00_framework/ucenter-api/src/main/java/com/upstream/job-module/system/GeetestLib.java`, with the original
 header stripped. Its Javadoc reads, in full, `Java SDK`. It is identifiable only by its API
 endpoints (`api.geetest.com`, `/register.php`, `/validate.php`).
 
@@ -302,10 +302,10 @@ confidently misattributed as Apache-2.0, including by people who have shipped it
 
 ## What was deliberately left alone
 
-- **`vendor/coinexchange/LICENSE` and `vendor/coinexchange/NOTICE`** — unmodified. They are the
+- **`vendor/upstream-exchange/LICENSE` and `vendor/upstream-exchange/NOTICE`** — unmodified. They are the
   upstream provenance record. The root `NOTICE` adds to them and cites them; it does not correct or
   replace them.
-- **The vendored source tree itself.** No file under `vendor/coinexchange/` was edited, moved or
+- **The vendored source tree itself.** No file under `vendor/upstream-exchange/` was edited, moved or
   deleted. Everything in Priority 1 and 2 is a _recommendation_; acting on it is a separate,
   reviewable change. An audit that also performs the remediation is an audit nobody can check.
 - **The upstream's CJK-script copyright holder name** in `04_Web_Admin/LICENSE`. It is not

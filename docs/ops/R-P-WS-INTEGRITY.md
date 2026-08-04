@@ -31,7 +31,7 @@
 
 ### What the shell proxies
 
-`vendor/coinexchange/05_Web_Front/nginx.conf` (compose maps host `:8090` → container `:80`):
+`vendor/upstream-exchange/05_Web_Front/nginx.conf` (compose maps host `:8090` → container `:80`):
 
 | Location         | Lines | Behaviour                                                                                  |
 | ---------------- | ----- | ------------------------------------------------------------------------------------------ |
@@ -39,7 +39,7 @@
 | `location /api/` | 64–71 | `proxy_pass http://svc-edge:4000`                                                          |
 | `location /ws`   | 76–83 | `proxy_pass http://svc-ws:4014` **with no URI rewrite** + `Upgrade` / `Connection` headers |
 
-```76:83:vendor/coinexchange/05_Web_Front/nginx.conf
+```76:83:vendor/upstream-exchange/05_Web_Front/nginx.conf
     location /ws {
         proxy_pass http://svc-ws:4014;
         proxy_http_version 1.1;
@@ -328,16 +328,16 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 ## 5 · File / PR touch map (for implementers)
 
-| Area                | Path                                                     | Role                          |
-| ------------------- | -------------------------------------------------------- | ----------------------------- |
-| nginx               | `vendor/coinexchange/05_Web_Front/nginx.conf` L76–83     | `/ws` proxy vs SPA `/` L55–57 |
-| ws gateway          | `services/svc-ws/src/ws/gateway.ts` L58, L127–140        | `/stream` only                |
-| ws market gate      | `services/svc-ws/src/depth/source.ts`, `hub.ts`          | matching list                 |
-| edge route          | `services/svc-edge/src/routes.ts` L60–69, L126–141       | `/api/v1` → trade; ws outside |
-| trade id            | `drizzle/0000_trade_init.sql` L51–52; `trade-service.ts` | UUID to matching              |
-| matching list       | `services/svc-matching/src/router.ts` L224–239           | journal books + depth 404     |
-| prior live write-up | `docs/REGROUP-2026-08-03.md` §3                          | 16 vs 10, ∩0                  |
-| Denon queue id      | **D-P0-WS**                                              | authority + implement         |
+| Area                | Path                                                      | Role                          |
+| ------------------- | --------------------------------------------------------- | ----------------------------- |
+| nginx               | `vendor/upstream-exchange/05_Web_Front/nginx.conf` L76–83 | `/ws` proxy vs SPA `/` L55–57 |
+| ws gateway          | `services/svc-ws/src/ws/gateway.ts` L58, L127–140         | `/stream` only                |
+| ws market gate      | `services/svc-ws/src/depth/source.ts`, `hub.ts`           | matching list                 |
+| edge route          | `services/svc-edge/src/routes.ts` L60–69, L126–141        | `/api/v1` → trade; ws outside |
+| trade id            | `drizzle/0000_trade_init.sql` L51–52; `trade-service.ts`  | UUID to matching              |
+| matching list       | `services/svc-matching/src/router.ts` L224–239            | journal books + depth 404     |
+| prior live write-up | `docs/REGROUP-2026-08-03.md` §3                           | 16 vs 10, ∩0                  |
+| Denon queue id      | **D-P0-WS**                                               | authority + implement         |
 
 ---
 

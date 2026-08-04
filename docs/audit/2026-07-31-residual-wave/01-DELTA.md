@@ -34,7 +34,7 @@
 ### Stream A UI only (vendor shell — not books of record)
 
 - Exchange order entry / dual-book banner / depth / UC money panes / OTC-C2C / Activity
-- All under `vendor/coinexchange/05_Web_Front/...`
+- All under `vendor/upstream-exchange/05_Web_Front/...`
 
 ### Tracker / docs
 
