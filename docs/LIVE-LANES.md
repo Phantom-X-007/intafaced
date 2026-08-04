@@ -22,7 +22,7 @@
 1. **A-WS-CLIENT** — shell WS depth client (#727/#737 unblocked platform).
 2. **P1 stranded** — path-clean `origin/feat/*` land.
 3. **P2 babysit** — Denon open + #346 comment only; never merge partners.
-4. **Reclaimed mountains** — pay (after handoff), bank, identity money, trade-light; never invent mids.
+4. **Reclaimed mountains** — pay (handoff asserted), bank, identity money, trade-light; never invent mids; never dual-edit #346 branch.
 5. _*Denon hard board (mega + D-S-* spec factory)_* — babysit only: [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).
 6. **Shehzad chain** — never implement: [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md).
 
@@ -30,4 +30,5 @@
 
 ## Last board update
 
-- **2026-08-04 three-way distribution:** Shehzad chain-only; M1/M3–M7 reclaimed for agents; #346 handoff lane; Denon hard queue refreshed.
+- **2026-08-04 three-way distribution:** Shehzad chain-only; M1/M3–M7 reclaimed for agents; Denon hard queue refreshed.
+- **2026-08-04 #346 handoff asserted (operator):** Nitro residual from tip; do not dual-edit his open pay branch; Shizu = Protocol/INTACHAIN only.

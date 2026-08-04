@@ -77,12 +77,11 @@ If layers disagree: **this file + LIVE-LANES win** for “who may code.”
 
 ## #346 disposition (pay M1 open PR)
 
-- **Not** “Shehzad keeps expanding pay.”
-- **Options:** he finishes merge if conflict-clean + Done bar honest, **or** comments handoff and stops.
-- Nitro agents may take residual **after** handoff is explicit (PR comment or closed with residual note).
-- Proof must not be silently discarded.
+**Operator handoff asserted 2026-08-04 (Nitro):** residual pay implement proceeds from **tip** under Nitro agents (Class M).
 
----
+- Do **not** dual-edit branch `feat/pay-os-m1-gateway` — leave as reference / his to close.
+- Shehzad **stops** pay expand; sole mountain = Protocol Plane + INTACHAIN.
+- His commits/PR body remain evidence; cherry-pick useful diffs with proof, never silent drop of honest work.
 
 ## Cold-agent checklist
 
