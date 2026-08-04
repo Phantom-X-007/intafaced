@@ -1,8 +1,20 @@
 # Claim TRK-ops.support
 
-**status:** residual-own
-**proof:** docs/ops/trk/ops.support.md on tip · research/spec complete · not implement
-**tip:** 04f9b1f2
-**updated:** 2026-08-03
+**status:** pr-open
+**started:** 2026-08-04T00:00:00.000Z
+**heartbeat:** 2026-08-04T00:00:00.000Z
+**title:** Support desk Stage-1 ticket spine
+**track:** IMPLEMENTABLE
+**paths:**
 
-Claim-lock is spawn authority. residual-own = research/spec complete on tip; not an implement swarm.
+- services/svc-support
+- packages/contracts/src/support.ts
+- packages/auth/src/scopes.ts
+
+## Done bar
+
+- [x] contracts ticket create/list/comment/status + empty KB
+- [x] thin svc-support (memory) + auth mount tests
+- [x] edge route + fleet wire
+- [ ] Stage-2 operator queue UI
+- [ ] Stage-3 optional agent

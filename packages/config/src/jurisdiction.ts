@@ -125,6 +125,7 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   'mining-pool': OPEN_BASIC,
   agents: { status: 'open', minTier: 'none' },
   'core-ops': { status: 'open', minTier: 'none' },
+  support: { status: 'open', minTier: 'none' },
   // Inbox only — no custody, no money movement. minTier none so a user can
   // always read their own notifications regardless of verification tier.
   notify: { status: 'open', minTier: 'none' },

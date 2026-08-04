@@ -233,7 +233,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Vendor lifecycle — apply, vet, list, stake-gated slots | F |  | `market.vendors` |
 | ⛔ | Listings, subscriptions, purchases, house commission | F | `market.vendors` | `market.commerce` |
 | 🟢 | Stratum share protocol, PPLNS payouts <br/>_HUMAN mining epoch/share protocol surface @shehzad002 (token minter remains svc-token). Agents babysit chain half._ | F |  | `mining.pool` |
-| 🟢 | Support desk, tickets, KB | F |  | `ops.support` |
+| 🟢 | Support desk, tickets, KB <br/>_Stage-1 2026-08-04: contracts + svc-support in-memory ticket spine (create/list/comment/status) + empty KB. No money. Operator UI Stage-2 residual._ | F |  | `ops.support` |
 | 🟢 | Multi-tier affiliate / IB trees, payout automation | F |  | `ops.affiliates` |
 | 🟢 | Screening queues, geo-block, VPN/Tor detection | F |  | `ops.compliance` |
 | 🟢 | Warehouse — read replica + cube layer | F |  | `ops.analytics` |

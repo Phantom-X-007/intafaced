@@ -50,6 +50,7 @@ export const MODULE_IDS = [
   'agents',
   'core-ops',
   'notify',
+  'support',
   'edge',
   // Protocol Plane (v1.1 §17.5)
   'chain',
@@ -99,6 +100,8 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
   // In-app inbox only. Non-custodial: holds no balance, posts no ledger txs.
   // Push / email / SMS are §13 sockets — not this service.
   notify: { id: 'notify', service: 'svc-notify', planes: ['fiat', 'protocol'], phase: '5', custodial: false },
+  // Support desk (ops.support). Non-custodial tickets + KB; no ledger.
+  support: { id: 'support', service: 'svc-support', planes: ['fiat'], phase: '5', custodial: false },
 
   // Protocol Plane — never custodial. custody-scan asserts this stays true.
   chain: { id: 'chain', service: 'svc-chain', planes: ['protocol'], phase: '4P', custodial: false },

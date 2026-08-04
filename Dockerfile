@@ -81,6 +81,7 @@ COPY services/svc-identity/package.json      services/svc-identity/
 COPY services/svc-ledger/package.json        services/svc-ledger/
 COPY services/svc-matching/package.json      services/svc-matching/
 COPY services/svc-notify/package.json        services/svc-notify/
+COPY services/svc-support/package.json       services/svc-support/
 COPY services/svc-p2p/package.json           services/svc-p2p/
 COPY services/svc-pay/package.json           services/svc-pay/
 COPY services/svc-protocol/package.json      services/svc-protocol/

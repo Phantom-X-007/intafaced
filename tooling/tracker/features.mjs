@@ -784,7 +784,12 @@ export const FEATURES = [
     phase: '5',
     dependsOn: ['token.emissions'],
   }),
-  f('ops.support', 'Support desk, tickets, KB', { module: 'core-ops', phase: '5', dependsOn: ['identity.accounts'] }),
+  f('ops.support', 'Support desk, tickets, KB', {
+    module: 'core-ops',
+    phase: '5',
+    dependsOn: ['identity.accounts'],
+    note: 'Stage-1 2026-08-04: contracts + svc-support in-memory ticket spine (create/list/comment/status) + empty KB. No money. Operator UI Stage-2 residual.',
+  }),
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',
     phase: '5',

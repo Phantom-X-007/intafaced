@@ -244,6 +244,9 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   // In-app fan-out kill-switch. OFF = consumers ack without writing inbox rows.
   // Push / email / SMS are §13 sockets and are not gated by this flag.
   def('notify.fanout', 'notify', 'III', 'In-app notification fan-out from bus events', serviceEnv('svc-notify', 'NOTIFY_FANOUT_ENABLED')),
+  // Support desk Stage-1. NOT_ENFORCED: edge kill-switch is the live control;
+  // flag is rollout plan only (same honesty pattern as other surfaces).
+  def('support.desk', 'support', 'V', 'Support tickets + KB desk', NOT_ENFORCED),
 ];
 
 export const FLAG_KEYS = FLAG_REGISTRY.map((f) => f.key);
