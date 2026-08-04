@@ -662,6 +662,9 @@ function buildModel() {
   const blocked = claims.filter((c) => c.status === 'blocked');
 
   // Spawnable free product: shell craft + implementable TRK (SWARM-MANDATE).
+  // freeShell and freeImplementable are printed separately so freeShell=0 / freeProduct
+  // cannot be misread as "nothing to do" when implementable TRK is open.
+  const freeShell = free.filter((c) => c.track === 'REGROUP' || c.track === 'AFK' || c.track === 'LANDER' || c.track === 'INTEGRITY');
   const freeImplementable = free.filter((c) => c.track === 'IMPLEMENTABLE');
   const freeProduct = free.filter(
     (c) => c.track === 'REGROUP' || c.track === 'AFK' || c.track === 'LANDER' || c.track === 'INTEGRITY' || c.track === 'IMPLEMENTABLE',
@@ -675,16 +678,18 @@ function buildModel() {
   const underGap = available;
   const underSpawnFail = available > 0;
   const underSpawnNote = underSpawnFail
-    ? `anti-under-spawn FAIL: available=${available} (implementable=${freeImplementable.length}) active_spawned_locks=${activeSpawned} gap=${underGap} — spawn path-disjoint Class N (width 3–6 TRK / 6–8 shell).`
-    : `anti-under-spawn OK: available=0 implementable=0 active_spawned_locks=${activeSpawned} gap=0.`;
+    ? `anti-under-spawn FAIL: available=${available} (shell=${freeShell.length} implementable=${freeImplementable.length}) active_spawned_locks=${activeSpawned} gap=${underGap} — spawn path-disjoint Class N (width 3–6 TRK / 6–8 shell).`
+    : `anti-under-spawn OK: available=0 shell=0 implementable=0 active_spawned_locks=${activeSpawned} gap=0.`;
 
   const opsChurn = countOpsOnlyChurn(30);
   const strandedBranches = listStrandedBranches(prs);
   const wtCount = worktreeCount();
   const actionsRuns24h = countActionsRuns24h();
+  // F-STANDBY only when BOTH shell and implementable boards are empty.
+  // freeShell=0 alone is NOT idle when freeImplementable>0 (or P1 still has work).
   const fStandby =
-    freeProduct.length === 0
-      ? 'F-STANDBY — freeProduct=0 and freeImplementable=0; continue P1–P5 only with Board-Delta. Idle only if every path-clear P1 is named blocked.'
+    freeShell.length === 0 && freeImplementable.length === 0
+      ? 'F-STANDBY — freeShell=0 and freeImplementable=0; continue P1–P5 only with Board-Delta. Idle only if every path-clear P1 is named blocked. freeProduct=0 is never platform-done.'
       : null;
 
   return {
@@ -708,6 +713,7 @@ function buildModel() {
     claims,
     free,
     blocked,
+    freeShell,
     freeProduct,
     freeImplementable,
     freeTracker,
@@ -724,20 +730,22 @@ function buildModel() {
     actionsRuns24h,
     fStandby,
     spawnWidthTarget:
-      freeImplementable.length > 0 && freeProduct.length === freeImplementable.length
+      freeImplementable.length > 0 && freeShell.length === 0
         ? '3-6 (implementable TRK)'
         : freeProduct.length > 0
           ? '6-8'
           : '3-6 (P1–P3 only)',
     mandate:
-      'freeProduct = REGROUP/AFK/LANDER/INTEGRITY + implementable TRK (non-money, deps done, spec≥100). residual-own does not hide TRK implementable. Money-class closed. Wave1 exclude ops.admin/ops.compliance.',
-    // AFK anti-drift (docs/ops/SWARM-MANDATE.md ladder) — freeProduct=0 must not spawn stamp mills
+      'freeProduct = freeShell(REGROUP/AFK/LANDER/INTEGRITY) + freeImplementable TRK. residual-own does not hide TRK implementable. Money-class closed. Wave1 exclude ops.admin/ops.compliance. freeShell=0 is not all-clear when freeImplementable>0.',
+    // AFK anti-drift (docs/ops/SWARM-MANDATE.md ladder) — freeShell=0 alone must not kill spawn
     afkLadder:
-      freeProduct.length === 0
-        ? 'P1 stranded-branch land · P2 partner unblock (exact CI comment) · P3 TRK deepen · P4 invent/P-WS only on real delta · P5 hygiene. BAN: R07/R01/P-WS tip-bump cycles when board unchanged.'
-        : 'P0 SPAWN_NOW free product path-disjoint (width 6–8). Stamp mill still banned.',
+      freeImplementable.length > 0
+        ? `P0 SPAWN_NOW freeImplementable=${freeImplementable.length} path-disjoint (width 3–6 TRK). freeShell=${freeShell.length}. Stamp mill still banned.`
+        : freeShell.length > 0
+          ? 'P0 SPAWN_NOW free shell product path-disjoint (width 6–8). Stamp mill still banned.'
+          : 'P1 stranded-branch land · P2 partner unblock (exact CI comment) · P3 TRK deepen · P4 invent/P-WS only on real delta · P5 hygiene. BAN: R07/R01/P-WS tip-bump cycles when board unchanged. freeShell=0 freeImplementable=0 is NOT platform-done.',
     stampMillBan:
-      'Do not open docs(ops) R07/R01/P-WS “cycle N” PRs solely because freeProduct=0. Ship only on board delta or P1–P3 deliverable. Law: docs/ops/SWARM-MANDATE.md',
+      'Do not open docs(ops) R07/R01/P-WS “cycle N” PRs solely because freeShell=0 or freeProduct=0. Ship only on board delta or P1–P3 deliverable. Law: docs/ops/SWARM-MANDATE.md',
   };
 }
 
@@ -751,7 +759,7 @@ function renderFreezeMd(m) {
   lines.push(`- **Generated:** ${m.generatedAt}`);
   lines.push(`- **Open PRs:** ${m.openPrCount}`);
   lines.push(
-    `- **Free claims:** ${m.free.length} (product ${m.freeProduct.length} · implementable ${(m.freeImplementable || []).length}) · **Blocked:** ${m.blocked.length}`,
+    `- **Free claims:** free=${m.free.length} freeShell=${(m.freeShell || []).length} freeImplementable=${(m.freeImplementable || []).length} freeTracker=${(m.freeTracker || []).length} blocked=${m.blocked.length} (freeProduct=${m.freeProduct.length}=shell+implementable)`,
   );
   lines.push(
     `- **Spawn accounting:** available=${m.available ?? m.freeProduct.length} · active_spawned_locks=${m.activeSpawned ?? '?'} · gap=${m.underGap ?? m.freeProduct.length} · width_target=${m.spawnWidthTarget || '6-8'}`,
@@ -787,10 +795,12 @@ function renderFreezeMd(m) {
   if (m.residualError) lines.push(`- **Residual error:** ${m.residualError}`);
   else lines.push(`- **Residual:** updated=${m.residualUpdated} tip_note=${m.residualTipNote || '—'}`);
   lines.push('');
-  if ((m.freeProduct || []).length === 0) {
-    lines.push('## freeProduct=0 — F-STANDBY (real work, not stamp cycles)');
+  if ((m.freeShell || []).length === 0 && (m.freeImplementable || []).length === 0) {
+    lines.push('## freeShell=0 freeImplementable=0 — F-STANDBY (real work, not stamp cycles)');
     lines.push('');
-    lines.push('Primary finish met. Session may continue. **Idling silently is valid.** Producing a PR is not required.');
+    lines.push(
+      'Shell craft and implementable TRK are both empty. **freeProduct=0 is not platform-done.** Session may continue on P1–P5. Producing a stamp PR is not required.',
+    );
     lines.push('');
     lines.push('1. **P1** Land stranded `origin/feat/*` / `fix/*` after path-intersect vs open partner PRs. (`pnpm swarm:lanes`)');
     lines.push('2. **P2** Partner babysit: extract exact CI fails; one NEW comment only; never merge partners.');
@@ -798,7 +808,9 @@ function renderFreezeMd(m) {
     lines.push('4. **P4** Invent re-scan only after shell code change; P-WS report only if partner matrix changed.');
     lines.push('5. **P5** LIVE-LANES/claims truth + merge green Nitro Class N.');
     lines.push('');
-    lines.push('**BAN:** `docs(ops): R07 cycleN freeProduct=0` style PRs when freeProduct stays 0 and partner matrix unchanged.');
+    lines.push(
+      '**BAN:** `docs(ops): R07 cycleN freeProduct=0` style PRs when freeShell+freeImplementable stay 0 and partner matrix unchanged.',
+    );
     lines.push(
       '**Metric:** L0 value gate (`tooling/ci/value-gate.mjs`) + `Board-Delta:` trailer — see `docs/BOARD-CLEAR-PROCESS-LOOPS.md` L0.',
     );
@@ -866,13 +878,27 @@ function writeFreeze(m) {
 }
 
 function printStatus(m) {
+  const freeShellN = (m.freeShell || []).length;
+  const freeImplN = (m.freeImplementable || []).length;
+  const freeProdN = (m.freeProduct || []).length;
   console.log(`swarm:status  tip=${m.tip}  openPRs=${m.openPrCount}`);
+  // Canonical lane — freeShell vs freeImplementable must both be visible.
+  // freeProduct is shell+implementable (spawn total); never the sole idle signal.
   console.log(
-    `  free=${m.free.length}  freeProduct=${m.freeProduct.length}  freeImplementable=${(m.freeImplementable || []).length}  freeTracker=${(m.freeTracker || []).length}  blocked=${m.blocked.length}`,
+    `  free=${m.free.length} freeShell=${freeShellN} freeImplementable=${freeImplN} freeTracker=${(m.freeTracker || []).length} blocked=${m.blocked.length}`,
   );
   console.log(
-    `  spawn: available=${m.available ?? m.freeProduct.length} active_spawned=${m.activeSpawned ?? '?'} gap=${m.underGap ?? m.freeProduct.length} width_target=${m.spawnWidthTarget || '6-8'}`,
+    `  spawn: freeProduct=${freeProdN}(=shell+implementable) available=${m.available ?? freeProdN} active_spawned=${m.activeSpawned ?? '?'} gap=${m.underGap ?? freeProdN} width_target=${m.spawnWidthTarget || '6-8'}`,
   );
+  if (freeShellN === 0 && freeImplN > 0) {
+    console.log(
+      `  lane-read: freeShell=0 is NOT all-clear — freeImplementable=${freeImplN} spawnable (SPAWN_NOW). freeProduct=${freeProdN}.`,
+    );
+  } else if (freeShellN === 0 && freeImplN === 0) {
+    console.log(
+      `  lane-read: freeShell=0 freeImplementable=0 freeProduct=0 — NOT platform-done; run P1–P5 (stranded=${m.strandedCount ?? 0}).`,
+    );
+  }
   console.log(`  ${m.underSpawnNote}`);
   console.log(`  mandate: ${m.mandate || 'shell product only'}`);
   if (m.afkLadder) console.log(`  afk-ladder: ${m.afkLadder}`);
@@ -907,8 +933,9 @@ function printStatus(m) {
   } else {
     console.log('  actions-24h: (gh unavailable)');
   }
-  console.log('  free product ids:', m.freeProduct.map((c) => c.id).join(', ') || '(none)');
+  console.log('  free shell ids:', (m.freeShell || []).map((c) => c.id).join(', ') || '(none)');
   console.log('  free implementable ids:', (m.freeImplementable || []).map((c) => c.id).join(', ') || '(none)');
+  console.log('  free product ids (shell+impl):', m.freeProduct.map((c) => c.id).join(', ') || '(none)');
   if (m.blocked.length) {
     console.log('  blocked ids:', m.blocked.map((c) => c.id).join(', '));
   }
@@ -927,7 +954,9 @@ function writeReports(m) {
     `| Tip subject | ${m.tipSubject} |`,
     `| Open PRs | ${m.openPrCount} |`,
     `| Free claims | ${m.free.length} |`,
-    `| Free product (REGROUP/AFK/LANDER) | ${m.freeProduct.length} |`,
+    `| freeShell (REGROUP/AFK/LANDER/INTEGRITY) | ${(m.freeShell || []).length} |`,
+    `| freeImplementable (TRK Stage-1) | ${(m.freeImplementable || []).length} |`,
+    `| freeProduct (shell+implementable) | ${m.freeProduct.length} |`,
     `| Blocked | ${m.blocked.length} |`,
     `| Residual tip_note | ${m.residualTipNote || '—'} |`,
     '',
@@ -990,7 +1019,7 @@ function writeReports(m) {
     '',
     '## At a glance',
     '',
-    `- Free product claims: **${m.freeProduct.length}**`,
+    `- freeShell: **${(m.freeShell || []).length}** · freeImplementable: **${(m.freeImplementable || []).length}** · freeProduct: **${m.freeProduct.length}**`,
     `- Blocked: **${m.blocked.length}**`,
     `- Open PRs: **${m.openPrCount}**`,
     '',
@@ -1009,7 +1038,7 @@ function writeReports(m) {
 h1{font-size:1.4rem} .ok{color:#0a0} .warn{color:#a60} code{background:#f4f4f4;padding:.1rem .3rem}</style>
 <h1>Swarm dashboard</h1>
 <p>Tip <code>${m.tip}</code> · ${m.generatedAt}</p>
-<p class=warn>Free product: <b>${m.freeProduct.length}</b> · Tracker free: <b>${(m.freeTracker || []).length}</b> · Blocked: <b>${m.blocked.length}</b> · Open PRs: <b>${m.openPrCount}</b></p>
+<p class=warn>freeShell: <b>${(m.freeShell || []).length}</b> · freeImplementable: <b>${(m.freeImplementable || []).length}</b> · freeProduct: <b>${m.freeProduct.length}</b> · freeTracker: <b>${(m.freeTracker || []).length}</b> · Blocked: <b>${m.blocked.length}</b> · Open PRs: <b>${m.openPrCount}</b></p>
 <p>${m.underSpawnNote}</p>
 <p><a href="./FREEZE-LIVE.md">FREEZE-LIVE</a> · <a href="./R00-INVENTORY.md">R00</a> · <a href="./R01-PR-MATRIX.md">R01</a> · <a href="./R02-FREE-CLAIMS.md">R02</a></p>
 <p>Regenerate: <code>pnpm swarm:report</code></p>`;
@@ -1042,14 +1071,14 @@ function pasteFor(claim) {
 function printNext(m, all = false) {
   const list = m.freeProduct.length ? m.freeProduct : m.free.filter((c) => c.track !== 'OPS');
   if (!list.length) {
-    console.log('swarm:next — no free product claims. Board empty or only blocked/OPS.');
-    console.log('swarm:next — freeProduct=0 AFK ladder (docs/ops/SWARM-MANDATE.md) — NOT a kill switch:');
+    console.log('swarm:next — no free shell or implementable claims. Board empty or only blocked/OPS/tracker.');
+    console.log('swarm:next — freeShell=0 freeImplementable=0 is NOT a kill switch (docs/ops/SWARM-MANDATE.md):');
     console.log('  P1 land stranded origin/feat/*|fix/* (path-intersect clean vs partner open PRs)');
     console.log('  P2 partner unblock: exact CI fail extract + one NEW comment; never merge partners');
     console.log('  P3 deepen thin docs/ops/trk/* for ready non-shehzad tracker rows');
     console.log('  P4 invent re-scan only after shell code change; P-WS report only if #433/#432 changed');
     console.log('  P5 LIVE-LANES/claims truth + merge green Nitro Class N');
-    console.log('  BAN: R07/R01/P-WS tip-bump “cycle N” PRs when freeProduct stays 0 and matrix unchanged');
+    console.log('  BAN: R07/R01/P-WS tip-bump “cycle N” PRs when freeShell+freeImplementable stay 0 and matrix unchanged');
     return;
   }
   if (all) {
