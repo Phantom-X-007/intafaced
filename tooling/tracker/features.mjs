@@ -836,7 +836,7 @@ export const FEATURES = [
     dependsOn: ['ledger.double-entry'],
   }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', { module: 'core-ops', phase: '5', dependsOn: ['identity.kyc'] }),
-  f('ops.analytics', 'Warehouse — read replica + cube layer', { module: 'core-ops', phase: '5', dependsOn: ['ledger.double-entry'] }),
+  f('ops.analytics', 'Warehouse — read replica + cube layer', { module: 'core-ops', phase: '5', dependsOn: ['ledger.double-entry'], note: 'Slice A 2026-08-04: source DBs + lag fail-closed + metric defs (no warehouse).' }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
     phase: '5',

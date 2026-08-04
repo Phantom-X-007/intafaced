@@ -1,8 +1,9 @@
 # Claim TRK-ops.analytics
 
-**status:** residual-own
-**proof:** docs/ops/trk/ops.analytics.md on tip · research/spec complete · not implement
-**tip:** 04f9b1f2
-**updated:** 2026-08-03
+**status:** wip
+**owner:** nitro-afk
+**proof:** Slice A replica contract + lag fail-closed (pure types/tests; no warehouse)
+**tip:** fa005d1d
+**updated:** 2026-08-04
 
-Claim-lock is spawn authority. residual-own = research/spec complete on tip; not an implement swarm.
+No invent KPIs. No analytics writer. thrift HARD — local craft only.
