@@ -340,6 +340,8 @@ var limitPair = shape({
 
 /** One CCXT market row, as `ix-trade.js` `toMarketRow` reads it. */
 var market = shape({
+  /* UUID for depth stream; optional so older fixtures still validate. */
+  id: optional(text),
   symbol: nonEmptyText,
   base: optional(text),
   quote: optional(text),

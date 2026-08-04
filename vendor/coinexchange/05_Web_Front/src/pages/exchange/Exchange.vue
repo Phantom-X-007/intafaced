@@ -958,6 +958,7 @@ var deskA11y = require('../../assets/js/desk-a11y.js');
 var deskPrefs = require('../../assets/js/desk-prefs.js');
 var bookHonesty = require('../../assets/js/book-honesty.js');
 var ixMoney = require('../../assets/js/ix-money.js');
+var ixDepthFeed = require('../../assets/js/ix-depth-feed.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
 
@@ -1420,6 +1421,7 @@ export default {
     this.klineChart = null;
     this.depthTimer = 0;
     this.depthPending = false;
+    this.depthFeed = null;
     this.lastTick = 0;
 
     this.loadDeskPrefs();
@@ -1738,6 +1740,7 @@ export default {
 
     teardown() {
       this.destroyChart();
+      this.stopDepthFeed();
       clearTimeout(this.depthTimer);
       this.depthTimer = 0;
       this.depthPending = false;
@@ -1940,6 +1943,8 @@ export default {
           }
         }
         this.currentCoinIsFavor = this.localFavorites.indexOf(this.currentCoin.symbol) >= 0;
+        /* Depth stream needs the venue UUID (not the symbol). Start after list. */
+        this.startDepthFeed();
       });
     },
 
@@ -1951,6 +1956,9 @@ export default {
      * sets `bookReachable = true` and the ladder renders its empty state. Only
      * a refusal clears reachability, and then the ladder says the book is
      * unknown instead of empty.
+     *
+     * While the live feed is up, REST is the seed / fallback only — deltas
+     * own the ladder via applyPlate (same shape as REST).
      */
     getPlate() {
       rest('/orderbook/' + symbolPath(this.currentCoin.symbol), { query: { limit: BOOK_DEPTH } }).then(res => {
@@ -2073,30 +2081,60 @@ export default {
       });
     },
 
-    /* ── live feed ─────────────────────────────────────────────────────── */
+    /* ── live feed (svc-ws depth) ──────────────────────────────────────── */
 
-    /* REMOVED: startWebsock / stopWebsock / subscribeTopics.
+    /**
+     * Public depth stream: same-origin `WebSocket` to
+     * `/ws/stream?market=<uuid>` (nginx → svc-ws). Market id is the listing
+     * UUID — never the symbol (gateway rejects `/` in market ids).
+     *
+     * Empty snapshot (sequence 0, empty sides) is honest "No asks / No bids"
+     * via bookSideEmpty — not an error. Gaps resnapshot REST
+     * `GET /ws/markets/<uuid>/depth` without closing the socket.
+     */
+    startDepthFeed() {
+      this.stopDepthFeed();
+      var marketId =
+        (this.currentCoin && this.currentCoin.id) ||
+        (this.marketMap &&
+          this.marketMap[this.currentCoin.symbol] &&
+          this.marketMap[this.currentCoin.symbol].id) ||
+        (this.market && this.market.id) ||
+        null;
+      if (!marketId) {
+        this.feedLive = false;
+        return;
+      }
+      var self = this;
+      this.depthFeed = ixDepthFeed.createDepthFeed({
+        marketId: marketId,
+        onLive: function (live) {
+          self.feedLive = live;
+        },
+        onBook: function (plate) {
+          /* Same path as REST getPlate — applyPlate is the shared seam. */
+          self.bookLoading = false;
+          self.bookReachable = true;
+          self.bookMessage = '';
+          self.applyPlate('SELL', ixTrade.toPlateItems(plate.asks || []));
+          self.applyPlate('BUY', ixTrade.toPlateItems(plate.bids || []));
+          if (self.mainTab === 'depth' && self.$refs.depthGraph) {
+            self.$refs.depthGraph.draw({
+              ask: { items: ixTrade.toPlateItems(plate.asks || []) },
+              bid: { items: ixTrade.toPlateItems(plate.bids || []) }
+            });
+          }
+        }
+      });
+    },
 
-       They opened a SockJS/STOMP connection to `/market/market-ws` on the
-       retired Java market service and subscribed to five topics: thumb
-       tickers, the trade tape, the trade plate, and three per-user order
-       events that re-read the account on every fill.
-
-       NOT REPOINTED. Our live feed is svc-ws, a different protocol on a
-       different service, and wiring it is a piece of work in its own right
-       rather than a URL swap. Leaving the STOMP client in place would have
-       been worse than removing it: against a dead host it reconnects, and a
-       desk that looks connected while receiving nothing is a desk showing a
-       stale book with no indication that it is stale.
-
-       WHAT THE ABSENCE COSTS, STATED PLAINLY. `feedLive` stays false, so
-       every headline figure renders through marketNum/marketStat and prints
-       a dash rather than a stale number. The book and tape are REST snapshots
-       taken when the pair loaded; they do not tick. The blotter refreshes
-       after your own order actions because those call loadAccount() directly.
-       Nothing on this screen claims to stream. */
-
-    /* ── account ───────────────────────────────────────────────────────── */
+    stopDepthFeed() {
+      if (this.depthFeed && typeof this.depthFeed.stop === 'function') {
+        this.depthFeed.stop();
+      }
+      this.depthFeed = null;
+      this.feedLive = false;
+    },
 
     /* ── account ───────────────────────────────────────────────────────── */
 
