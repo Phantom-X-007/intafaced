@@ -769,6 +769,26 @@ services:
       timeout: 5s
       retries: 12
 
+  # no-deploy: 04_Web_Admin — the vendored STAFF console (92 Vue files), and the
+  # one front-end in this repo that is deliberately not served.
+  #
+  # It is a decision, not an oversight, and it was taken in
+  # `docs/ADMIN-0-INVENTORY-VENDOR-VS-APPS-2026-08-02.md`: that console speaks
+  # to the legacy Java backend over its own HTTP API, not to svc-edge, so
+  # starting it in this fleet would either 404 against a backend that is not
+  # here or — worse — reach one that is, unauthenticated. Hard block 1 of that
+  # doc: "Do not connect 04_Web_Admin webpack to monorepo services without edge
+  # auth." The staff surface we DO serve is `admin` below, on 3100.
+  #
+  # This line exists because `workspace-sync` check 7 forbids SILENCE, not
+  # absence. Until 2026-08-03 the check could not see anything under `vendor/`
+  # at all, so this directory was absent AND silent — the exact state that let
+  # the trading shell take 48 commits with nobody able to look at it.
+  #
+  # Not permanent. ADMIN-0 phase A2 ports the screens that must move (withdraw
+  # examine, fee manage) one at a time through contracts; phase A3 is the
+  # quarantine path for what is left. When either lands, this line goes.
+
   # THE OPERATOR CONSOLE — and the one container in this file that is a SAFETY
   # CONTROL rather than a surface.
   #
