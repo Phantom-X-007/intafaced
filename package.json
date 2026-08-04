@@ -35,6 +35,8 @@
     "value-gate:self-test": "node tooling/ci/value-gate.mjs --self-test",
     "verify": "pnpm gates && pnpm format:check && turbo run build typecheck test && node tooling/ci/dod-gate.mjs",
     "gate": "node tooling/ci/dod-gate.mjs",
+    "scan:coverage": "node tooling/ci/coverage-check.mjs",
+    "coverage:report": "node tooling/ci/coverage-check.mjs --report",
     "scan:brand": "node tooling/ci/brand-scan.mjs",
     "scan:custody": "node tooling/ci/custody-scan.mjs",
     "scan:secrets": "node tooling/ci/secret-scan.mjs",

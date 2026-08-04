@@ -65,6 +65,18 @@ export const GATES = [
     why: 'a tracker that drifts from the code is worse than no tracker',
   },
   {
+    id: 'coverage',
+    script: 'tooling/ci/coverage-check.mjs',
+    doctrine: '§25:740',
+    why:
+      'the law names this gate by path. It answers, on every push, the question the 2026-08-03 audit had to ' +
+      'answer by hand: is anything in the law absent from the board without someone having said so — and its ' +
+      'mirror, is anything on the board claiming a law that does not say it. Ordered after tracker because it ' +
+      'imports features.mjs, and a broken tracker should report as a broken tracker rather than as coverage drift. ' +
+      'It was a hand-written step in ci.yml on this branch; it is an entry here instead, because a step that CI ' +
+      'runs and `pnpm verify` does not is the exact drift gates.mjs exists to make impossible.',
+  },
+  {
     id: 'brand',
     script: 'tooling/ci/brand-scan.mjs',
     doctrine: '§0.7',
