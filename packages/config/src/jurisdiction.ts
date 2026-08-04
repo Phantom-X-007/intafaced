@@ -267,12 +267,41 @@ export function businessBlocksFrom(entries: readonly JurisdictionEntry[]): reado
     .map((e) => ({ region: e.region.toUpperCase(), reason: e.reason, source: BUSINESS_BLOCK_SOURCE, authority: 'business' as const }));
 }
 
-const BUSINESS_BLOCKS: readonly BusinessBlock[] = businessBlocksFrom(JURISDICTION_MATRIX);
-const BUSINESS_BLOCK_BY_REGION = new Map(BUSINESS_BLOCKS.map((b) => [b.region, b]));
+/**
+ * The business blocks the shipped matrix actually declares. Currently none.
+ *
+ * EXPORTED, AND THAT IS THE SEAM. Every function below that consults business
+ * blocks takes them as a defaulted parameter defaulting to this — because the
+ * shipped matrix has ZERO `blocked: true` entries, and a rule that can only be
+ * exercised once somebody adds one is a rule no test can hold to account.
+ *
+ * The specific failure this prevents: a test named "a business block leaves the
+ * boot guard refusing" that stages no business block. It passes. It passed
+ * before the fix too, against the exact code that let a commercial block satisfy
+ * a sanctions guard, because the guard had nothing to be satisfied by. A
+ * compliance test that cannot fail is not evidence, and this is a compliance
+ * control — so the blocked case gets a way in.
+ */
+export const SHIPPED_BUSINESS_BLOCKS: readonly BusinessBlock[] = businessBlocksFrom(JURISDICTION_MATRIX);
 
-/** The business block for a region, if this file refuses it outright. */
-export function businessBlockFor(region: RegionCode): BusinessBlock | undefined {
-  return BUSINESS_BLOCK_BY_REGION.get(region.toUpperCase());
+let businessLookupCache: { blocks: readonly BusinessBlock[]; byRegion: ReadonlyMap<string, BusinessBlock> } | null = null;
+
+/**
+ * The business block for a region, if the business refuses it outright.
+ *
+ * `business` is the injection seam — pass a staged set to exercise the blocked
+ * case. Production callers pass nothing and get the shipped matrix. Cached on
+ * the array's identity, the same way `screenedRegion` caches on the list's, so
+ * repeated production lookups stay a single map build.
+ */
+export function businessBlockFor(
+  region: RegionCode,
+  business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS,
+): BusinessBlock | undefined {
+  if (!businessLookupCache || businessLookupCache.blocks !== business) {
+    businessLookupCache = { blocks: business, byRegion: new Map(business.map((b) => [b.region, b])) };
+  }
+  return businessLookupCache.byRegion.get(region.toUpperCase());
 }
 
 /**
@@ -283,8 +312,8 @@ export function businessBlockFor(region: RegionCode): BusinessBlock | undefined 
  * legal control and which are a business choice, because only one of those is
  * counsel's to change.
  */
-export function businessBlockedRegions(): readonly RegionCode[] {
-  return BUSINESS_BLOCKS.map((b) => b.region);
+export function businessBlockedRegions(business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS): readonly RegionCode[] {
+  return business.map((b) => b.region);
 }
 
 /**
@@ -360,6 +389,22 @@ export interface AccessQuery {
    * — which is every production call site — means `activeScreeningList()`.
    */
   readonly screening?: ScreeningList;
+  /**
+   * Use these business blocks instead of the shipped matrix's.
+   *
+   * The counterpart seam to `screening`, and it exists for the same reason that
+   * one does — with one difference that matters. `screening` could always be
+   * pointed at a populated list, so the screened-region branches of this
+   * function were genuinely exercised. The business branches were not: the
+   * shipped matrix declares ZERO `blocked: true` entries, so
+   * `businessBlockFor` returned `undefined` in every test that has ever run,
+   * and `blockedBy: 'business'`, the business half of the region check, and the
+   * §24 Lane A ordering for a commercially-blocked region were all unreachable.
+   * Tests over them would have passed against code that did not implement them.
+   *
+   * Omitted — every production call site — means the shipped matrix.
+   */
+  readonly business?: readonly BusinessBlock[];
 }
 
 export interface AccessDecision {
@@ -423,9 +468,17 @@ export function ruleFor(module: ModuleId, region: RegionCode): JurisdictionRule 
  *
  * Note what a `false` here does NOT mean: it does not mean screened-and-clear.
  * Use `screeningStatus()` if you need to know whether anything was screened.
+ *
+ * `business` is the seam, for the same reason `screening` is one: the shipped
+ * matrix has no `blocked: true` entry, so the business half of this OR has
+ * never once returned `true` under test.
  */
-export function isRegionBlocked(region: RegionCode, screening: ScreeningList = activeScreeningList()): boolean {
-  if (businessBlockFor(region) !== undefined) return true;
+export function isRegionBlocked(
+  region: RegionCode,
+  screening: ScreeningList = activeScreeningList(),
+  business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS,
+): boolean {
+  if (businessBlockFor(region, business) !== undefined) return true;
   return screenedRegion(screening, region) !== undefined;
 }
 
@@ -475,7 +528,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
   // consequential fact, and it is the one that must not look removable by
   // editing the matrix.
   const screened = screenedRegion(screening, q.region);
-  const businessBlock = businessBlockFor(q.region);
+  const businessBlock = businessBlockFor(q.region, q.business ?? SHIPPED_BUSINESS_BLOCKS);
   const regionBlocked = businessBlock !== undefined || screened !== undefined;
   const blockedBy: BlockAuthority | undefined = screened ? 'screening' : businessBlock ? 'business' : undefined;
   const regionBlockReason = screened?.reason ?? businessBlock?.reason;
@@ -625,7 +678,7 @@ export interface ScreeningStatus {
  */
 export function screeningStatus(
   screening: ScreeningList = activeScreeningList(),
-  business: readonly BusinessBlock[] = BUSINESS_BLOCKS,
+  business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS,
 ): ScreeningStatus {
   const blockedRegions = screening.regions.map((r) => r.region);
   const businessBlockedRegions = business.map((b) => b.region);
@@ -734,10 +787,26 @@ export const SCREENING_ENFORCED_ENVS = ['staging', 'prod'] as const;
  *
  * Returns the status so the caller can log it — in dev, where this does not
  * throw, the log line IS the control's visibility.
+ *
+ * `business` IS AN INJECTION SEAM AND IT IS NOT DECORATION. The claim this
+ * function makes — "a commercial block cannot satisfy a sanctions guard" — is
+ * a claim about what happens WHEN A COMMERCIAL BLOCK EXISTS, and the shipped
+ * matrix declares none. Without a way to stage one, a test named "a business
+ * block leaves the prod boot guard refusing" calls this with zero business
+ * blocks: it asserts that an empty matrix does not satisfy the guard, which is
+ * true of the buggy code too. It passes either way, and a compliance test that
+ * cannot fail is worth less than no test, because it is read as evidence.
+ *
+ * Production callers pass one argument. The second exists so the blocked case
+ * is reachable at the guard, and so re-merging the two authorities makes a test
+ * go red instead of going unnoticed.
  */
-export function assertScreeningConfigured(env: Record<string, string | undefined> = process.env): ScreeningStatus {
+export function assertScreeningConfigured(
+  env: Record<string, string | undefined> = process.env,
+  business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS,
+): ScreeningStatus {
   const list = activeScreeningList(env);
-  const status = screeningStatus(list);
+  const status = screeningStatus(list, business);
   const appEnv = env.APP_ENV ?? 'dev';
   const enforced = (SCREENING_ENFORCED_ENVS as readonly string[]).includes(appEnv);
   if (enforced && list.declaration === 'unset') {

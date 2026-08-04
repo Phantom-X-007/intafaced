@@ -1678,6 +1678,18 @@ tracker_extra:
     extends: 13
     reason: >-
       SMS channel, blocked on gateway credentials. Same §13 arithmetic as socket.notify-push.
+  - id: socket.geo-region-resolution
+    basis: law-extension
+    extends: 13
+    reason: >-
+      Per-request region resolution from a trusted upstream geo header. svc-edge reads DEFAULT_REGION
+      once and stamps that one value onto the principal of every request, so §24 Lane A's sanctions
+      screening — which is law, and is correctly implemented in packages/config — evaluates ONE
+      CONSTANT REGION for all traffic. §13 reserves five deliberate non-v1 items and does not carry
+      this one, and the deferral is real: region must never be caller-supplied, so closing it is a
+      deployment-topology decision about which CDN header is trusted and what happens when it is
+      absent, not a header read. Recorded as a socket rather than left silent because the undeclared
+      version of this gap reads as a claim that traffic is screened.
   - id: socket.social-recovery
     basis: law-extension
     extends: 13
