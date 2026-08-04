@@ -83,6 +83,18 @@ export const GATES = [
     why: 'a partner or model-vendor name in user-facing copy',
   },
   {
+    id: 'shell-brand',
+    script: 'tooling/ci/shell-brand-scan.mjs',
+    doctrine: '§0.7',
+    why:
+      'the same rule as `brand` above, over the one tree `brand` has never opened. brand-scan carries `vendor` in ' +
+      'SKIP_DIRS, so its "clean — N files" has never counted a single file of the product shell — which is now the ' +
+      'sole product surface, and therefore the surface most likely to show a partner name to a user. It also has no ' +
+      '`.vue` in EXTENSIONS, and the shell is 70 single-file components, so removing the skip would not have covered ' +
+      'it either. Takes its forbidden names by parsing brand-scan.mjs rather than restating them, so the two cannot ' +
+      'drift. Enforcing, at a frozen baseline of 8 named findings that can only shrink — see BASELINE in the scan.',
+  },
+  {
     id: 'custody',
     script: 'tooling/ci/custody-scan.mjs',
     doctrine: '§16.10',
