@@ -1,78 +1,140 @@
-# TRK-agents.navigator
+# TRK-agents.navigator — research / spec pack
 
+**Tracker id:** `agents.navigator`  
 **Title:** Navigator — tool-calling inside user guardrails  
-**Tracker:** `agents.navigator` · module `agents` · phase 5 · status `ready` · owner none  
-**Depends on:** `agents.gateway`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `agents` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
+**Depends on:** `agents.gateway` (**done**)  
+**Tip freeze:** `origin/main` @ `083ef879` (re-derive before implement)  
+**Pack type:** research only — no invent prices/pay rates; no ledger posts from agents; no `features.mjs` edit.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-1. Named agent product runs on **`svc-agents` gateway** with task id(s): `navigator.plan / navigator.tool_select`.
-2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
-3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
-4. Guardrails bound tools; no money movement from agent.
+1. Navigator agent product runs on the gateway with tasks `navigator.plan` and `navigator.tool_select`.
+2. Outputs are **grounded** (tools + allowlisted data), brand-safe, **guardrailed**.
+3. Tool allowlist is product law; out-of-policy tool use is refused.
+4. No balances; no ledger posts; side effects only via existing APIs with user scopes.
+5. Users can escalate to human support when navigator cannot act safely.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area      | Reality                                                                         |
-| --------- | ------------------------------------------------------------------------------- |
-| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
-| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
-| Depth     | Routing row ≠ full product for every tracker title                              |
-| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
-| Readiness | useful-path / readiness tests prove runnable mock paths                         |
+## 2 · Current code state (tip)
+
+### Shared gateway spine (`agents.gateway` **done**)
+
+| Area       | Path / fact                                                           |
+| ---------- | --------------------------------------------------------------------- |
+| Service    | `services/svc-agents`                                                 |
+| Routing    | `src/gateway/routing.ts` — task → provider alias + price + capability |
+| Guardrails | `src/fleet/guardrails.ts` (+ tests)                                   |
+| Brand copy | `src/copy.ts` + `copy.test.ts` ban third-party names                  |
+| Metering   | `src/metering/` — rates travel with route (decimal strings)           |
+| Providers  | Model-agnostic; aliases never vendor names in user copy               |
+| Readiness  | `readiness.ts` / `useful-path.ts` prove mock runnable paths           |
+
+**Law:** Routing row ≠ full product. Agents name a **task**, never a model. Agents never `ledger.post`.
+
+### Navigator-specific
+
+| Area                      | Reality                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| Tasks in default table    | `navigator.plan`, `navigator.tool_select` **present**     |
+| useful-path default       | Often starts at `navigator.plan` when capability complete |
+| Full tool-calling product | **Residual** — routing ≠ grounded planner product         |
+| User-facing shell surface | Residual                                                  |
+| Tool allowlist v1         | Open question / product law                               |
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law         | Implication                                       |
-| ----------- | ------------------------------------------------- |
-| §0.7 brand  | No vendor model names in user-facing agent copy   |
-| §0.6        | Agents never `ledger.post`                        |
-| Guardrails  | Refuse out-of-policy tool use                     |
-| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
+| Law              | Implication                                     |
+| ---------------- | ----------------------------------------------- |
+| §0.7 brand       | No vendor model names in user-facing agent copy |
+| §0.6             | Agents never `ledger.post`                      |
+| Guardrails       | Refuse out-of-policy tool use                   |
+| Metering honesty | Bill reconstructable from route price           |
+| No dual-edit     | Open svc-agents gateway PRs                     |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Stage 1 — task + guardrails
 
-- [ ] Named task in routing + readiness
-- [ ] Guardrail tests for this agent’s tools
-- [ ] Copy keys only from catalogue
+- [ ] Named tasks in routing + readiness (largely true).
+- [ ] Guardrail tests for navigator tool set.
+- [ ] Copy keys only from catalogue.
 
-### Stage 2
+### Stage 2 — grounded tools
 
-- [ ] Real data tools with typed refusals
-- [ ] Audit log of user-affecting actions
-- [ ] Tier/gating per product law
+- [ ] Real data tools with typed refusals.
+- [ ] Audit log of user-affecting actions.
+- [ ] Tier/gating per product law.
+
+### Stage 3 — product surface
+
+- [ ] Shell entry; human escalation path.
 
 ### Tracker `done` bar
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+Flip only when tool-calling navigator is grounded in real env — mock route alone is not done.
+
+---
 
 ## 5 · Open questions
 
 1. v1 tool allowlist.
 2. Human escalation path.
-3. Metering / cost attribution.
+3. Metering / cost attribution UX.
+4. Blueprint guardrail integration depth.
 
-## 6 · Estimated size
+---
 
-| Slice                 | Size    |
-| --------------------- | ------- |
-| Task + tests on mock  | **S–M** |
-| Full grounded product | **M–L** |
+## 6 · Gaps (named)
 
-## 7 · Related docs / code
+1. Product tool implementations residual.
+2. Shell UX residual.
+3. Escalation residual.
+4. Audit product residual.
+5. Allowlist unsigned.
+
+---
+
+## 7 · Risks
+
+| Risk                       | Why it hurts            |
+| -------------------------- | ----------------------- |
+| Unbounded tools            | Unexpected side effects |
+| Vendor names in copy       | Brand gate              |
+| Silent fallback task       | Wrong billing           |
+| Claiming routing = product | Tracker lie             |
+
+---
+
+## 8 · Estimated size
+
+| Slice                 | Size                     |
+| --------------------- | ------------------------ |
+| Task + tests on mock  | **S–M** (mostly shipped) |
+| Full grounded product | **M–L**                  |
+
+**First implement PR (when free):** **S–M** — first real read-only tool + guardrail tests.
+
+---
+
+## 9 · Related docs / code
 
 - `services/svc-agents/src/gateway/routing.ts`
-- `services/svc-agents/src/fleet/guardrails.ts`
-- `services/svc-agents/src/copy.ts`
+- `fleet/guardrails.ts`, `copy.ts`, `metering/`
+- `agents.gateway` tracker note
 
-## 8 · Explicit non-goals for this pack
+---
 
-- No inventing prices or pay approval rates.
-- No Shehzad implement under merchant agent.
-- No `features.mjs` flip from research.
+## 10 · Explicit non-goals for this pack
+
+- No inventing prices.
+- No money movement from navigator.
+- No `features.mjs` edit.

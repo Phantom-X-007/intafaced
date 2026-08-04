@@ -1,78 +1,141 @@
-# TRK-agents.scanner
+# TRK-agents.scanner — research / spec pack
 
+**Tracker id:** `agents.scanner`  
 **Title:** Market Scanner — ranked signals by tier  
-**Tracker:** `agents.scanner` · module `agents` · phase 5 · status `ready` · owner none  
-**Depends on:** `agents.gateway` · `trade.spot`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `agents` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
+**Depends on:** `agents.gateway` (**done**) · `trade.spot` (**done**)  
+**Tip freeze:** `origin/main` @ `083ef879` (re-derive before implement)  
+**Pack type:** research only — no invent prices/pay rates; no ledger posts from agents; no `features.mjs` edit.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-1. Named agent product runs on **`svc-agents` gateway** with task id(s): `scanner.rank`.
-2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
-3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
-4. Signals must not invent prices; rank by tier honestly.
+1. Scanner agent runs with task `scanner.rank`.
+2. Signals are **ranked by tier** honestly — no invent prices or fabricated market data.
+3. Grounded on allowlisted market data tools (spot book/ticker/etc.) with typed refusals when data missing.
+4. Guardrails bound tools; no order placement from scanner unless product law explicitly adds it later (default: read-only).
+5. Brand-safe signal copy.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area      | Reality                                                                         |
-| --------- | ------------------------------------------------------------------------------- |
-| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
-| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
-| Depth     | Routing row ≠ full product for every tracker title                              |
-| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
-| Readiness | useful-path / readiness tests prove runnable mock paths                         |
+## 2 · Current code state (tip)
+
+### Shared gateway spine (`agents.gateway` **done**)
+
+| Area       | Path / fact                                                           |
+| ---------- | --------------------------------------------------------------------- |
+| Service    | `services/svc-agents`                                                 |
+| Routing    | `src/gateway/routing.ts` — task → provider alias + price + capability |
+| Guardrails | `src/fleet/guardrails.ts` (+ tests)                                   |
+| Brand copy | `src/copy.ts` + `copy.test.ts` ban third-party names                  |
+| Metering   | `src/metering/` — rates travel with route (decimal strings)           |
+| Providers  | Model-agnostic; aliases never vendor names in user copy               |
+| Readiness  | `readiness.ts` / `useful-path.ts` prove mock runnable paths           |
+
+**Law:** Routing row ≠ full product. Agents name a **task**, never a model. Agents never `ledger.post`.
+
+### Scanner-specific
+
+| Area                       | Reality                                      |
+| -------------------------- | -------------------------------------------- |
+| Task                       | `scanner.rank` in default routing            |
+| Guardrail tests            | Reference `scanner.rank` in guardrails tests |
+| Full ranked-signal product | **Residual**                                 |
+| Price honesty              | Must use trade/public data — never invent    |
+| Tier gating                | Product law residual                         |
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law         | Implication                                       |
-| ----------- | ------------------------------------------------- |
-| §0.7 brand  | No vendor model names in user-facing agent copy   |
-| §0.6        | Agents never `ledger.post`                        |
-| Guardrails  | Refuse out-of-policy tool use                     |
-| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
+| Law                  | Implication                                |
+| -------------------- | ------------------------------------------ |
+| No fabricated prices | Refuse > invent (same spirit as dex quote) |
+| §0.7 brand           | No vendor names in signal copy             |
+| §0.6                 | No ledger posts                            |
+| Guardrails           | Default read-only tools                    |
+| No dual-edit         | Open trade/agents PRs                      |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Stage 1 — rank on fixtures
 
-- [ ] Named task in routing + readiness
-- [ ] Guardrail tests for this agent’s tools
-- [ ] Copy keys only from catalogue
+- [ ] Task + tests with fixture market data.
+- [ ] Explicit empty/unavailable signals.
+- [ ] Copy catalogue.
 
-### Stage 2
+### Stage 2 — live data tools
 
-- [ ] Real data tools with typed refusals
-- [ ] Audit log of user-affecting actions
-- [ ] Tier/gating per product law
+- [ ] Tools to spot public endpoints / indexer as product allows.
+- [ ] Max-age / stale handling.
+- [ ] Tier-gated signal depth.
+
+### Stage 3 — product surface
+
+- [ ] Shell scanner UX; rate limits; metering.
 
 ### Tracker `done` bar
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+Flip only when ranked signals use real allowlisted data in env — mock rank alone is not done.
+
+---
 
 ## 5 · Open questions
 
-1. v1 tool allowlist.
-2. Human escalation path.
-3. Metering / cost attribution.
+1. Signal types v1 (momentum, liquidity, funding)?
+2. Can scanner ever place orders?
+3. Tier map (rank perks)?
+4. Latency SLO?
 
-## 6 · Estimated size
+---
+
+## 6 · Gaps (named)
+
+1. No production signal pipeline.
+2. No tier product matrix.
+3. Shell residual.
+4. Stale-data policy residual.
+5. Correlation with dex quote residual.
+
+---
+
+## 7 · Risks
+
+| Risk                    | Why it hurts              |
+| ----------------------- | ------------------------- |
+| Invent prices           | Trading harm / doctrine   |
+| Auto-trade from scanner | Unexpected money movement |
+| Vendor names            | Brand gate                |
+| Stale as live           | Bad decisions             |
+
+---
+
+## 8 · Estimated size
 
 | Slice                 | Size    |
 | --------------------- | ------- |
-| Task + tests on mock  | **S–M** |
-| Full grounded product | **M–L** |
+| Fixture rank path     | **S–M** |
+| Live grounded product | **M–L** |
 
-## 7 · Related docs / code
+**First implement PR (when free):** **S–M** — fixture rank + refuse-on-missing-data tests.
 
-- `services/svc-agents/src/gateway/routing.ts`
-- `services/svc-agents/src/fleet/guardrails.ts`
-- `services/svc-agents/src/copy.ts`
+---
 
-## 8 · Explicit non-goals for this pack
+## 9 · Related docs / code
 
-- No inventing prices or pay approval rates.
-- No Shehzad implement under merchant agent.
-- No `features.mjs` flip from research.
+- `gateway/routing.ts` `scanner.rank`
+- `fleet/guardrails.ts`
+- `trade.spot` / public REST
+- `dex.quote-router` honesty cousin
+
+---
+
+## 10 · Explicit non-goals for this pack
+
+- No inventing prices.
+- No silent auto-trade.
+- No `features.mjs` edit.

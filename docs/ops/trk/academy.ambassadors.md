@@ -1,79 +1,139 @@
-# TRK-academy.ambassadors
+# TRK-academy.ambassadors — research / spec pack
 
+**Tracker id:** `academy.ambassadors`  
 **Title:** Residencies, IFC pay, revenue share  
-**Tracker:** `academy.ambassadors` · module `academy` · phase 5 · status `ready` · owner none  
-**Depends on:** `academy.lobbies` · `token.staking`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `academy` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
+**Depends on:** `academy.lobbies` (**done**) · `token.staking` (**done**)  
+**Tip freeze:** `origin/main` @ `083ef879` (re-derive before implement)  
+**Pack type:** research only — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-Title promise for `academy.ambassadors` is product-complete, not “a stub route exists.”  
-**Reality check:** Host/ambassador concepts in code; pay is Class M.
+1. **Ambassador / residency** programme: named hosts with elevated rights and obligations.
+2. **IFC pay** and/or **revenue share** settle via ledger recipes — not academy-held balances.
+3. Host rights stay consistent with identity perks (`lobbyHostRights`) — programme layers, does not bypass rank law.
+4. Operators can appoint/freeze ambassadors with audit.
+5. No double-pay with `ops.affiliates` or tournament prizes without exclusion rules.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area       | Reality                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| Service    | `services/svc-academy` — lobbies, host-rights, curriculum catalog, spatial `scene`                            |
-| Curriculum | `curriculum/catalog.ts` thin real catalog; full DERIV//DESK 20+3 residual (see `academy-service.ts` comments) |
-| Edge       | `/api/academy` in `svc-edge`                                                                                  |
-| Flags      | `academy.inviteLobbies`, `academy.tournament`                                                                 |
-| Scopes     | `academy:read` / `academy:write`                                                                              |
-| XP         | `intafaced.identity.xp.earned` named for cert path — consumer wiring residual                                 |
+## 2 · Current code state (tip)
+
+### 2.1 Host rights (related, not programme)
+
+| Area             | Reality                                                       |
+| ---------------- | ------------------------------------------------------------- |
+| Host gate        | `host-rights.ts` / `mayHost` — identity `lobbyHostRights`     |
+| Access           | Hosts bypass stake gate for their rooms (`room-access.ts`)    |
+| Programme entity | **No** residency application / IFC payroll product            |
+| Pay              | Explicitly **not built** (moves value → needs ledger recipes) |
+
+### 2.2 Dependencies
+
+| Dep               | Status                                        |
+| ----------------- | --------------------------------------------- |
+| `academy.lobbies` | done — rooms, seats, scene, host              |
+| `token.staking`   | done — stake tiers for access gating patterns |
+
+### 2.3 Naming
+
+“Ambassador” in access comments is role narrative — not a paid programme implementation.
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law           | Implication                                                  |
-| ------------- | ------------------------------------------------------------ |
-| Brand         | Education content copy vendor-clean                          |
-| Money         | Tournament prizes / ambassador IFC pay → ledger recipes only |
-| Paper trading | Must not spend real ledger balances                          |
-| Events        | XP must not double-award                                     |
+| Law            | Implication                                                 |
+| -------------- | ----------------------------------------------------------- |
+| §0.6           | Pay/revenue share via recipes only                          |
+| Class M        | Payroll automation audited                                  |
+| Rank/perks SoT | identity — don’t hardcode host bypass that contradicts rank |
+| Brand          | Residency copy vendor-clean                                 |
+| Double-pay     | Coordinate affiliates/tournaments                           |
+| No dual-edit   | Open token/identity/academy PRs                             |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Stage 1 — programme without pay
 
-- [ ] Spec matches code: live vs residual for **this** id
-- [ ] Smallest vertical slice for this title only
+- [ ] Ambassador/residency status model + admin appoint/freeze.
+- [ ] Public badge / host label (i18n).
+- [ ] Rights matrix vs lobbyHostRights documented.
 
-### Stage 2
+### Stage 2 — IFC pay Class M
 
-- [ ] Title-level acceptance tests
-- [ ] i18n for new strings
-- [ ] Money paths (if any) Class M audited
+- [ ] Pay schedule product law.
+- [ ] Recipes + idempotent job; dry-run.
+- [ ] Revenue share definition (of which fees?).
+
+### Stage 3 — residencies product
+
+- [ ] Season/residency windows; deliverables; KPIs.
 
 ### Tracker `done` bar
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+Flip only when residencies **and** pay/share (or product-cut pay) match title — host rights alone are lobbies.
+
+---
 
 ## 5 · Open questions
 
-1. Content licensing for full curriculum import.
-2. Prize pool funding + custody.
-3. Paper market operator controls.
+1. Pay basis (per session, per seat, revenue %)?
+2. Staking requirement for ambassadors?
+3. Overlap with affiliates IB trees?
+4. Tax/reporting?
 
-## 6 · Estimated size
+---
+
+## 6 · Gaps (named)
+
+1. No programme entity.
+2. No IFC payroll.
+3. No revenue share accounting.
+4. No admin appoint UI.
+5. Double-pay matrix residual.
+
+---
+
+## 7 · Risks
+
+| Risk                    | Why it hurts       |
+| ----------------------- | ------------------ |
+| Shadow academy balances | Dual book          |
+| Pay without freeze      | Fraud              |
+| Bypass rank host law    | Perk inconsistency |
+| Double-pay              | Margin leak        |
+
+---
+
+## 8 · Estimated size
 
 | Slice                  | Size          |
 | ---------------------- | ------------- |
-| Catalog/certs progress | **M–L**       |
-| Spatial canvas UI      | **L**         |
-| Tournaments + prizes   | **L** Class M |
-| Ambassadors pay        | **L** Class M |
+| Programme status only  | **M**         |
+| IFC pay automation     | **L** Class M |
+| Full residency seasons | **L**         |
 
-## 7 · Related docs / code
+**First implement PR (when free):** **M** — status + admin freeze; pay later Class M.
 
-- `services/svc-academy/src/curriculum/catalog.ts`
-- `services/svc-academy/src/academy-service.ts`
-- `packages/contracts` blueprint curriculumPath
-- `packages/ledger-client` tournament prize notes
+---
 
-## 8 · Explicit non-goals for this pack
+## 9 · Related docs / code
 
-- No inventing full 20+3 content without product assets.
-- No real-money paper trading confusion.
+- `services/svc-academy/src/host-rights.ts`, `access/room-access.ts`
+- `services/svc-token` staking
+- `ops.affiliates` pack (collision)
+- academy-service comments on ambassador pay
+
+---
+
+## 10 · Explicit non-goals for this pack
+
+- No inventing IFC credits in academy tables.
+- No weakening host rank gates.
 - No `features.mjs` edit.

@@ -1,78 +1,143 @@
-# TRK-agents.support
+# TRK-agents.support — research / spec pack
 
+**Tracker id:** `agents.support`  
 **Title:** Support agent — KB + account-state grounded  
-**Tracker:** `agents.support` · module `agents` · phase 5 · status `ready` · owner none  
-**Depends on:** `agents.gateway`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `agents` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
+**Depends on:** `agents.gateway` (**done**)  
+**Tip freeze:** `origin/main` @ `083ef879` (re-derive before implement)  
+**Pack type:** research only — no invent prices/pay rates; no ledger posts from agents; no `features.mjs` edit.
+**Soft dep:** `ops.support` KB + read-only account projections before production grounding.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-1. Named agent product runs on **`svc-agents` gateway** with task id(s): `support.reply / support.classify`.
-2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
-3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
-4. Needs `ops.support` KB + read-only account projections before production grounding.
+1. Support agent runs on gateway with tasks `support.reply` and `support.classify`.
+2. Answers are grounded in **KB + read-only account state** — not invented balances or policy.
+3. Brand-safe copy; guardrails refuse unsafe tools (no refund money posts).
+4. Human desk (`ops.support`) works **without** this agent; agent is assist layer.
+5. Escalation to human ticket is first-class.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area      | Reality                                                                         |
-| --------- | ------------------------------------------------------------------------------- |
-| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
-| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
-| Depth     | Routing row ≠ full product for every tracker title                              |
-| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
-| Readiness | useful-path / readiness tests prove runnable mock paths                         |
+## 2 · Current code state (tip)
+
+### Shared gateway spine (`agents.gateway` **done**)
+
+| Area       | Path / fact                                                           |
+| ---------- | --------------------------------------------------------------------- |
+| Service    | `services/svc-agents`                                                 |
+| Routing    | `src/gateway/routing.ts` — task → provider alias + price + capability |
+| Guardrails | `src/fleet/guardrails.ts` (+ tests)                                   |
+| Brand copy | `src/copy.ts` + `copy.test.ts` ban third-party names                  |
+| Metering   | `src/metering/` — rates travel with route (decimal strings)           |
+| Providers  | Model-agnostic; aliases never vendor names in user copy               |
+| Readiness  | `readiness.ts` / `useful-path.ts` prove mock runnable paths           |
+
+**Law:** Routing row ≠ full product. Agents name a **task**, never a model. Agents never `ledger.post`.
+
+### Support-specific
+
+| Area                    | Reality                                                        |
+| ----------------------- | -------------------------------------------------------------- |
+| Tasks                   | `support.reply`, `support.classify` in routing table           |
+| Readiness / useful-path | May use `support.classify` as useful-path task when configured |
+| KB product              | **`ops.support` residual** — no desk/KB yet                    |
+| Account-state tools     | Residual (read contracts only when built)                      |
+| Desk independence       | Human desk must not require agent                              |
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law         | Implication                                       |
-| ----------- | ------------------------------------------------- |
-| §0.7 brand  | No vendor model names in user-facing agent copy   |
-| §0.6        | Agents never `ledger.post`                        |
-| Guardrails  | Refuse out-of-policy tool use                     |
-| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
+| Law                       | Implication                                 |
+| ------------------------- | ------------------------------------------- |
+| §0.7 brand                | No vendor/model names in replies            |
+| §0.6                      | Never post ledger; no invent refund amounts |
+| Guardrails                | No money tools without product law          |
+| PII                       | Minimize account fields exposed to model    |
+| Order vs support “ticket” | Do not confuse trading order tickets        |
+| No dual-edit              | Open agents / support PRs                   |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Stage 1 — classify/reply on mock
 
-- [ ] Named task in routing + readiness
-- [ ] Guardrail tests for this agent’s tools
-- [ ] Copy keys only from catalogue
+- [ ] Tasks routed + tested (partially true).
+- [ ] Copy catalogue for support refusals.
+- [ ] Guardrail: refuse money tools.
 
-### Stage 2
+### Stage 2 — grounding
 
-- [ ] Real data tools with typed refusals
-- [ ] Audit log of user-affecting actions
-- [ ] Tier/gating per product law
+- [ ] KB tool after `ops.support` Stage 1+.
+- [ ] Read-only account projection tool.
+- [ ] Typed “I don’t know / escalate” path.
+
+### Stage 3 — production assist
+
+- [ ] Operator review of agent drafts optional.
+- [ ] Metering + quality metrics.
 
 ### Tracker `done` bar
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+Flip only when grounded on KB + account reads in real env — routing names alone are not the desk product (see `ops.support`).
+
+---
 
 ## 5 · Open questions
 
-1. v1 tool allowlist.
-2. Human escalation path.
-3. Metering / cost attribution.
+1. When can agent draft without human approve?
+2. Which account fields are allowed?
+3. Multi-language KB?
+4. Metering who pays (user tier vs house)?
 
-## 6 · Estimated size
+---
 
-| Slice                 | Size    |
-| --------------------- | ------- |
-| Task + tests on mock  | **S–M** |
-| Full grounded product | **M–L** |
+## 6 · Gaps (named)
 
-## 7 · Related docs / code
+1. No ops.support KB yet.
+2. No account-state tools.
+3. No escalation product wire.
+4. Full grounded reply residual.
+5. Confusion with ops.support mountain.
 
-- `services/svc-agents/src/gateway/routing.ts`
-- `services/svc-agents/src/fleet/guardrails.ts`
-- `services/svc-agents/src/copy.ts`
+---
 
-## 8 · Explicit non-goals for this pack
+## 7 · Risks
 
-- No inventing prices or pay approval rates.
-- No Shehzad implement under merchant agent.
-- No `features.mjs` flip from research.
+| Risk                    | Why it hurts     |
+| ----------------------- | ---------------- |
+| Invent refund amounts   | Fabricated money |
+| Claim agent = desk done | No human queue   |
+| PII over-exposure       | Privacy incident |
+| Vendor names in replies | Brand gate       |
+
+---
+
+## 8 · Estimated size
+
+| Slice                      | Size    |
+| -------------------------- | ------- |
+| Mock task polish           | **S**   |
+| Grounded after ops.support | **M–L** |
+
+**First implement PR (when free):** **S** — refuse-money guardrail tests; wait on KB for grounding.
+
+---
+
+## 9 · Related docs / code
+
+- `gateway/routing.ts` support tasks
+- `docs/ops/trk/ops.support.md`
+- `copy.ts`, `guardrails.ts`
+
+---
+
+## 10 · Explicit non-goals for this pack
+
+- No inventing refund ledger recipes.
+- No replacing human desk.
+- No `features.mjs` edit.

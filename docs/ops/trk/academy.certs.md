@@ -1,79 +1,142 @@
-# TRK-academy.certs
+# TRK-academy.certs — research / spec pack
 
+**Tracker id:** `academy.certs`  
 **Title:** Certifications → XP → real perks  
-**Tracker:** `academy.certs` · module `academy` · phase 5 · status `ready` · owner none  
-**Depends on:** `academy.curriculum` · `identity.rank`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `academy` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
+**Depends on:** `academy.curriculum` (**ready**) · `identity.rank` (**done**)  
+**Tip freeze:** `origin/main` @ `083ef879` (re-derive before implement)  
+**Pack type:** research only — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-Title promise for `academy.certs` is product-complete, not “a stub route exists.”  
-**Reality check:** Needs progress + identity.rank XP event; certs not full product.
+1. Completing defined curriculum milestones grants a **certification** record.
+2. Cert path emits **XP** into the one identity rank graph (`intafaced.identity.xp.earned`) without double-award.
+3. Certs unlock **real perks** via rank/perks tables — not cosmetic-only badges that claim perks.
+4. Progress is durable, user-visible, and re-complete is idempotent.
+5. Cert grant itself does not post ledger money.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area       | Reality                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| Service    | `services/svc-academy` — lobbies, host-rights, curriculum catalog, spatial `scene`                            |
-| Curriculum | `curriculum/catalog.ts` thin real catalog; full DERIV//DESK 20+3 residual (see `academy-service.ts` comments) |
-| Edge       | `/api/academy` in `svc-edge`                                                                                  |
-| Flags      | `academy.inviteLobbies`, `academy.tournament`                                                                 |
-| Scopes     | `academy:read` / `academy:write`                                                                              |
-| XP         | `intafaced.identity.xp.earned` named for cert path — consumer wiring residual                                 |
+## 2 · Current code state (tip)
+
+### 2.1 Absent product
+
+| Area                           | Reality                                              |
+| ------------------------------ | ---------------------------------------------------- |
+| Cert schema / progress tables  | **Not built** (catalog says so)                      |
+| XP emit from academy cert path | Event named for cert path — consumer wiring residual |
+| Perk unlock from cert          | Residual                                             |
+| Catalog                        | Spine only; progress excluded                        |
+
+### 2.2 Dependencies
+
+| Dep                  | Status | Role                                                     |
+| -------------------- | ------ | -------------------------------------------------------- |
+| `academy.curriculum` | ready  | Content to certify against                               |
+| `identity.rank`      | done   | XP graph + rank ladder + perks SoT                       |
+| `academy.lobbies`    | done   | Host rights already read `lobbyHostRights` from identity |
+
+### 2.3 Honest residual quotes
+
+- `catalog.ts`: Progress, certifications, paper workbooks, and XP are **not** here.
+- `academy-service.ts`: Certifications need progress tracking — not on lobby class.
+- P2P already emits XP into the same graph — certs must use same event + idempotency discipline.
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law           | Implication                                                  |
-| ------------- | ------------------------------------------------------------ |
-| Brand         | Education content copy vendor-clean                          |
-| Money         | Tournament prizes / ambassador IFC pay → ledger recipes only |
-| Paper trading | Must not spend real ledger balances                          |
-| Events        | XP must not double-award                                     |
+| Law             | Implication                                   |
+| --------------- | --------------------------------------------- |
+| One XP graph    | No academy-local rank silo                    |
+| No double-award | Idempotency keys on cert completion           |
+| Brand           | Cert names/copy vendor-clean                  |
+| Perks SoT       | identity rank_thresholds — no parallel limits |
+| Money           | Cert grant ≠ ledger post                      |
+| No dual-edit    | Open identity rank / academy PRs              |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Stage 1 — progress spine
 
-- [ ] Spec matches code: live vs residual for **this** id
-- [ ] Smallest vertical slice for this title only
+- [ ] Schema: enrollment, item completion, cert grant.
+- [ ] API: mark complete, list progress, list certs.
+- [ ] Tests: re-complete no-op; incomplete cannot grant.
 
-### Stage 2
+### Stage 2 — XP + perks
 
-- [ ] Title-level acceptance tests
-- [ ] i18n for new strings
-- [ ] Money paths (if any) Class M audited
+- [ ] Emit `intafaced.identity.xp.earned` with stable idempotency.
+- [ ] Map cert → XP policy (product law).
+- [ ] User-visible perk unlock from cert.
+
+### Stage 3 — surfaces
+
+- [ ] Shell UI; i18n for cert titles.
 
 ### Tracker `done` bar
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+Flip only when cert → XP → real perk works in a real env.
+
+---
 
 ## 5 · Open questions
 
-1. Content licensing for full curriculum import.
-2. Prize pool funding + custody.
-3. Paper market operator controls.
+1. Which spine items required for v1 cert?
+2. XP amounts (product law).
+3. Expire / revoke policy?
+4. Exam vs completion-only?
 
-## 6 · Estimated size
+---
 
-| Slice                  | Size          |
-| ---------------------- | ------------- |
-| Catalog/certs progress | **M–L**       |
-| Spatial canvas UI      | **L**         |
-| Tournaments + prizes   | **L** Class M |
-| Ambassadors pay        | **L** Class M |
+## 6 · Gaps (named)
 
-## 7 · Related docs / code
+1. No progress store.
+2. No cert grant API.
+3. XP wiring residual.
+4. Perk mapping residual.
+5. Curriculum still thin for full program.
+
+---
+
+## 7 · Risks
+
+| Risk                         | Why it hurts                   |
+| ---------------------------- | ------------------------------ |
+| Double XP                    | Rank inflation → unfair limits |
+| Cosmetic cert claiming perks | Trust break                    |
+| Academy-local rank           | Dual identity                  |
+| Empty content cert farm      | Integrity failure              |
+
+---
+
+## 8 · Estimated size
+
+| Slice                      | Size    |
+| -------------------------- | ------- |
+| Progress + cert schema/API | **M**   |
+| XP wire + tests            | **S–M** |
+| UI                         | **S–M** |
+
+**First implement PR (when free):** **M** — progress + one cert against spine; XP idempotency tests.
+
+---
+
+## 9 · Related docs / code
 
 - `services/svc-academy/src/curriculum/catalog.ts`
-- `services/svc-academy/src/academy-service.ts`
-- `packages/contracts` blueprint curriculumPath
-- `packages/ledger-client` tournament prize notes
+- `services/svc-identity` rank / XP
+- Event `intafaced.identity.xp.earned`
+- `academy.curriculum` pack
 
-## 8 · Explicit non-goals for this pack
+---
 
-- No inventing full 20+3 content without product assets.
-- No real-money paper trading confusion.
+## 10 · Explicit non-goals for this pack
+
+- No inventing full curriculum under certs.
+- No ledger posts for “cert fees” without product law.
 - No `features.mjs` edit.

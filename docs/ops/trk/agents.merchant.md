@@ -1,78 +1,143 @@
-# TRK-agents.merchant
+# TRK-agents.merchant — research / spec pack
 
+**Tracker id:** `agents.merchant`  
 **Title:** Merchant agent — approval-rate watch  
-**Tracker:** `agents.merchant` · module `agents` · phase 5 · status `ready` · owner none  
-**Depends on:** `agents.gateway` · `pay.routing`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `agents` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
+**Depends on:** `agents.gateway` (**done**) · `pay.routing` (**ready**, **owner shehzad002** M1 — babysit)  
+**Tip freeze:** `origin/main` @ `083ef879` (re-derive before implement)  
+**Pack type:** research only — no invent prices/pay rates; no ledger posts from agents; no `features.mjs` edit.
+**Hard blocker:** pay routing product law is Shehzad M1 — agents babysit only for that lane.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-1. Named agent product runs on **`svc-agents` gateway** with task id(s): `merchant.watch`.
-2. Outputs are **grounded** (tools + allowlisted data), brand-safe (`copy.ts`), **guardrailed** (`fleet/guardrails.ts`).
-3. No agent holds balances or posts ledger; side effects use existing APIs with user scopes.
-4. Depends pay.routing — babysit Shehzad pay law; research only here.
+1. Merchant agent runs with task `merchant.watch`.
+2. Watches **approval-rate** (and related pay health) using real metrics — never invents approval rates.
+3. Outputs are grounded, brand-safe, guardrailed; no money movement from agent.
+4. Depends on honest `pay.routing` / pay surfaces for data — do not invent routing law under this id.
+5. Escalation when rates breach thresholds (notify/ops) without auto-changing rails unless product law says so.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area      | Reality                                                                         |
-| --------- | ------------------------------------------------------------------------------- |
-| Service   | `services/svc-agents` — gateway, routing, providers, fleet guardrails, metering |
-| Tasks     | `gateway/routing.ts` includes navigator / support / scanner / merchant tasks    |
-| Depth     | Routing row ≠ full product for every tracker title                              |
-| Brand     | `copy.ts` + `copy.test.ts` ban third-party names in user copy                   |
-| Readiness | useful-path / readiness tests prove runnable mock paths                         |
+## 2 · Current code state (tip)
+
+### Shared gateway spine (`agents.gateway` **done**)
+
+| Area       | Path / fact                                                           |
+| ---------- | --------------------------------------------------------------------- |
+| Service    | `services/svc-agents`                                                 |
+| Routing    | `src/gateway/routing.ts` — task → provider alias + price + capability |
+| Guardrails | `src/fleet/guardrails.ts` (+ tests)                                   |
+| Brand copy | `src/copy.ts` + `copy.test.ts` ban third-party names                  |
+| Metering   | `src/metering/` — rates travel with route (decimal strings)           |
+| Providers  | Model-agnostic; aliases never vendor names in user copy               |
+| Readiness  | `readiness.ts` / `useful-path.ts` prove mock runnable paths           |
+
+**Law:** Routing row ≠ full product. Agents name a **task**, never a model. Agents never `ledger.post`.
+
+### Merchant-specific
+
+| Area                       | Reality                                                          |
+| -------------------------- | ---------------------------------------------------------------- |
+| Task                       | `merchant.watch` in routing                                      |
+| Full approval-rate product | **Residual**                                                     |
+| `pay.routing`              | **ready** · **owner shehzad002** (M1 expand) — babysit implement |
+| Invent risk                | Highest money-adjacent of agent fleet                            |
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law         | Implication                                       |
-| ----------- | ------------------------------------------------- |
-| §0.7 brand  | No vendor model names in user-facing agent copy   |
-| §0.6        | Agents never `ledger.post`                        |
-| Guardrails  | Refuse out-of-policy tool use                     |
-| Pay/Shehzad | `agents.merchant` must not invent pay routing law |
+| Law                 | Implication                                                 |
+| ------------------- | ----------------------------------------------------------- |
+| Shehzad M1          | Do not invent pay routing / rail selection under this agent |
+| No fabricated rates | Refuse when metrics unavailable                             |
+| §0.6                | No ledger posts from agent                                  |
+| §0.7 brand          | No acquirer partner names in user copy                      |
+| Class M adjacent    | Any automation that changes money path needs audit          |
+| No dual-edit        | Open pay PRs                                                |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Stage 0 — dependency gate
 
-- [ ] Named task in routing + readiness
-- [ ] Guardrail tests for this agent’s tools
-- [ ] Copy keys only from catalogue
+- [ ] Re-derive pay.routing ownership and available metrics APIs.
 
-### Stage 2
+### Stage 1 — watch on fixtures
 
-- [ ] Real data tools with typed refusals
-- [ ] Audit log of user-affecting actions
-- [ ] Tier/gating per product law
+- [ ] Task + fixture approval series.
+- [ ] Threshold breach → structured alert (no rail change).
+
+### Stage 2 — live metrics
+
+- [ ] Read-only tools to pay metrics once APIs exist.
+- [ ] Typed refusal when pay plane dark.
+
+### Stage 3 — optional automation
+
+- [ ] Only after product law: suggest vs act on routing — likely still human approve.
 
 ### Tracker `done` bar
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+Flip only when approval-rate watch is grounded on real pay metrics — not when routing task exists.
+
+---
 
 ## 5 · Open questions
 
-1. v1 tool allowlist.
-2. Human escalation path.
-3. Metering / cost attribution.
+1. Which metrics define approval rate?
+2. Thresholds product law?
+3. Who receives alerts?
+4. Ever auto-disable a rail?
 
-## 6 · Estimated size
+---
 
-| Slice                 | Size    |
-| --------------------- | ------- |
-| Task + tests on mock  | **S–M** |
-| Full grounded product | **M–L** |
+## 6 · Gaps (named)
 
-## 7 · Related docs / code
+1. No live metrics tools.
+2. Pay routing human-owned residual.
+3. Alert sink residual.
+4. Shell residual.
+5. High invent temptation.
 
-- `services/svc-agents/src/gateway/routing.ts`
-- `services/svc-agents/src/fleet/guardrails.ts`
-- `services/svc-agents/src/copy.ts`
+---
 
-## 8 · Explicit non-goals for this pack
+## 7 · Risks
 
-- No inventing prices or pay approval rates.
-- No Shehzad implement under merchant agent.
-- No `features.mjs` flip from research.
+| Risk                  | Why it hurts                         |
+| --------------------- | ------------------------------------ |
+| Invent approval rates | Wrong ops decisions                  |
+| Agent changes rails   | Money incident / ownership violation |
+| Partner names in copy | Brand gate                           |
+| Dual-edit pay.routing | Ownership breach                     |
+
+---
+
+## 8 · Estimated size
+
+| Slice                  | Size                       |
+| ---------------------- | -------------------------- |
+| Fixture watch          | **S–M**                    |
+| Live after pay metrics | **M** (blocked on M1 data) |
+
+**First implement PR (when free):** **S** — fixture path + hard refuse without metrics; no pay law invent.
+
+---
+
+## 9 · Related docs / code
+
+- `gateway/routing.ts` `merchant.watch`
+- Tracker `pay.routing` (shehzad002)
+- `copy.ts`, `guardrails.ts`
+
+---
+
+## 10 · Explicit non-goals for this pack
+
+- No inventing approval rates.
+- No Shehzad pay.routing implement from this pack.
+- No `features.mjs` edit.
