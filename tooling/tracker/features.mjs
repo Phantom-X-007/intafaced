@@ -706,7 +706,6 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies'],
-    note: 'Stage-1 2026-08-04: import pipeline format + brand checklist + count gate (titlePromiseMet false). Content residual — not tracker done.',
   }),
   f('academy.certs', 'Certifications → XP → real perks', {
     module: 'academy',
@@ -717,13 +716,11 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'token.staking'],
-    note: 'Stage-1 2026-08-04: appoint/freeze + public badge (status only). IFC pay/revenue share Class M residual — not tracker done.',
   }),
   f('academy.tournaments', 'Seasonal ladders, IFC prize pools', {
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'trade.spot'],
-    note: 'Stage-1 2026-08-04: seasons + standings + ACADEMY_TOURNAMENT_ENABLED. Prize pools Class M residual — not tracker done.',
   }),
   f('academy.paper-trading', 'Paper-trading market flag for workbooks', {
     module: 'academy',
