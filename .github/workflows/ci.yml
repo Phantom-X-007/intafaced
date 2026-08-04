@@ -247,6 +247,21 @@ jobs:
 
       - run: pnpm test
 
+      # The backstop. REQUIRE_POSTGRES / REQUIRE_EVM_CHAIN make the shared probes
+      # throw, which turns most missing infrastructure into a red suite before
+      # this step runs. What they cannot cover is a suite whose own required-gate
+      # is narrower than the run's — svc-pay's crypto rail gates on
+      # REQUIRE_PAY_EVM, which is not set here, so until now it could skip on CI
+      # and be counted as a pass. This reads the journal every probe writes and
+      # fails the job when something did not execute.
+      #
+      # `always()` because a red suite is the moment you most want to know how
+      # much of the rest was real — the exact question the agent who reported
+      # "92 successful, 92 total" could not answer.
+      - name: Every infrastructure-backed suite actually ran
+        if: always()
+        run: node tooling/ci/infra-verdict.mjs
+
   dod:
     name: Definition of Done
     runs-on: ubuntu-latest

@@ -9,6 +9,7 @@
  */
 export * from './columns.js';
 export * from './connection.js';
+export * from './infra-journal.js';
 export * from './migrate.js';
 export {
   assertTestDatabase,

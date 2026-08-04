@@ -1,4 +1,9 @@
 import postgres from 'postgres';
+import { describeError, recordInfraProbe } from './infra-journal.js';
+
+// `@intafaced/db/testing` is an entry point in its own right; anything reaching
+// for the harness should get the journal that reports on it from the same import.
+export * from './infra-journal.js';
 
 /**
  * Test database harness (§1 Testing: "drizzle test DB").
@@ -474,21 +479,40 @@ export async function assertTestDatabase(sql: postgres.Sql, context: string): Pr
 /**
  * True when a live Postgres is reachable — lets *local* suites skip rather than fail.
  * On CI / REQUIRE_POSTGRES, unreachable Postgres is a hard failure (no silent green).
+ *
+ * THIS IS THE ONLY SANCTIONED POSTGRES PROBE. Five suites used to open their own
+ * two-line `reachable()` helper instead, which swallowed the error and returned
+ * `false` no matter what — so `REQUIRE_POSTGRES=1` and `CI=true` did nothing to
+ * them and five money suites could silently skip on CI. `tooling/ci/skip-honesty-scan.mjs`
+ * now fails a build that re-introduces a private probe. Use this one.
+ *
+ * Every call is journalled (`packages/db/src/infra-journal.ts`) whichever way it
+ * goes, so `pnpm verify` can say out loud which suites did not run instead of
+ * letting turbo's "N successful" imply that they did.
  */
 export async function postgresAvailable(url?: string): Promise<boolean> {
   const target = url ?? process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
-  const sql = postgres(target, { max: 1, connect_timeout: 2, onnotice: () => undefined });
+  /**
+   * Three seconds, not two. Five suites carried a private probe with a 3s
+   * timeout; folding them onto this one at 2s would have manufactured skips
+   * under exactly the parallel load that started this. A probe must never be
+   * stingier than the suites it gates.
+   */
+  const sql = postgres(target, { max: 1, connect_timeout: 3, onnotice: () => undefined });
   try {
     await sql`SELECT 1`;
+    recordInfraProbe({ dependency: 'postgres', outcome: 'ran', target });
     return true;
   } catch (err) {
+    const msg = describeError(err);
     if (postgresRequired()) {
-      const msg = err instanceof Error ? err.message : String(err);
+      recordInfraProbe({ dependency: 'postgres', outcome: 'required-failed', target, reason: msg });
       throw new Error(
         `Postgres required in CI (residual #9) but unreachable at ${target}: ${msg}. ` +
           `Bootstrap service roles and set TEST_DATABASE_URL_* (see .github/workflows/ci.yml).`,
       );
     }
+    recordInfraProbe({ dependency: 'postgres', outcome: 'skipped', target, reason: msg });
     return false;
   } finally {
     await sql.end({ timeout: 1 }).catch(() => undefined);

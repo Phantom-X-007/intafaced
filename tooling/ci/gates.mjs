@@ -155,6 +155,17 @@ export const GATES = [
       'exactly like a working one. Every unwired end is now an entry in WIRING_SOCKETS with a written reason, or red.',
   },
   {
+    id: 'skip-honesty',
+    script: 'tooling/ci/skip-honesty-scan.mjs',
+    doctrine: '§14',
+    why:
+      'a test file that decides whether to run using a connection it opened itself can skip on CI ' +
+      'without honouring REQUIRE_POSTGRES. Six money and identity suites had each copied such a probe, ' +
+      'so a database hiccup skipped them silently and the build went green. Four are fixed; the two in ' +
+      'svc-pay are under the M1–M7 human lock and sit in tooling/ci/unreported-suites.mjs, which the scan ' +
+      'prints on every run and fails on if an entry goes stale.',
+  },
+  {
     id: 'i18n-bypass',
     script: 'tooling/ci/i18n-bypass-scan.mjs',
     doctrine: '§9, §14.4',
@@ -186,6 +197,12 @@ export const NOT_GATES = {
     'run by `pnpm gate`, separately and last — it walks every service and is the §14 Definition of Done, not a repo-wide scan. verify runs it after build/typecheck/test; CI runs it in the `dod` job, which needs [gates, build, test].',
   'claim-check.mjs':
     'advisory, interactive, and needs a working `gh` + network to list open PRs. Run it by hand (`pnpm claim:check`) before starting work, not as a build gate.',
+  'verify.mjs':
+    'the verify runner itself — it CALLS this list. Listing it as a gate would make it invoke itself. It exists so the infrastructure verdict prints even when turbo halts early, which a `&&` chain cannot do.',
+  'infra-verdict.mjs':
+    'a reporter, not a gate: it prints which infrastructure-backed suites actually executed. It never fails a clean run — it exits 2 for "incomplete but permitted", which verify reports without failing. Run by verify.mjs after the test step.',
+  'unreported-suites.mjs':
+    'data, not a scan — the register of suites that still skip invisibly and that this change was barred from fixing (M1–M7 human lock). It exports two lists and runs nothing. Both skip-honesty-scan.mjs and infra-verdict.mjs import it; the scan fails if an entry goes stale, so it cannot rot into blanket cover.',
   'assert-test-db-env.mjs':
     'asserts the TEST_DATABASE_URL_* env the CI Tests job sets up. It is meaningless without that env, so it belongs to that job (residual #9) rather than to a laptop run.',
   'shell-i18n-scan.mjs':
