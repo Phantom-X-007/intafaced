@@ -36,9 +36,9 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-15** ✅ | **done**    | [`adr/2026-08-04-platform-pages-ia.md`](adr/2026-08-04-platform-pages-ia.md) — law only, craft stays Nitro.                                                                    |
 | **D-S-16** ✅ | **done**    | [`adr/2026-08-04-class-m-hold-language.md`](adr/2026-08-04-class-m-hold-language.md) on `DIRECTION` §3.                                                                        |
 | **D-S-17** ✅ | **done**    | Decision: `DIRECTION` §4 (Option B). Residual: [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)                                        |
-| **D-S-18** ❌ | **blank**   | Board itself says "if in scope".                                                                                                                                               |
+| **D-S-18** ✅ | **done**    | [`adr/2026-08-04-predict-quant-connect-law.md`](adr/2026-08-04-predict-quant-connect-law.md) — §27 in scope; §28/29 blocked on it; §32 is 5P.                                  |
 
-**Tally: 15 done · 2 partial · 1 blank.** The board read as 17 blank.
+**Tally: 16 done · 2 partial · 0 blank.** The board read as 17 blank.
 
 ---
 
@@ -48,7 +48,7 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 
 **D-S-01 and 07 are partially law.** Implement the decided part; do not invent the rest. Each row above names which half is which.
 
-**Only D-S-18 remains blank**, and the board itself says "if in scope". The invent-ban holds in full there. Research is welcome; implementation is not.
+**No slot is blank.** D-S-01 and D-S-07 remain partial — both are the futures mark/funding side, and both are named in their rows.
 
 ---
 
