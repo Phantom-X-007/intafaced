@@ -318,8 +318,8 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Nitro',
     dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.depth'],
-    requires: ['apps/web/src/components/terminal'],
-    note: 'Updated 2026-07-31: CHARTS + EQUITY are live. `LiveChart` reads real OHLCV from edge `/api/v1/ohlcv` (fill aggregation #201 — honest [] when never traded; decimal-string OHLC; SVG candles, no invented zeros). `AccountEquity` reads self-only `/api/v1/account/balance`. Depth + public tape + order entry/blotter already wired. Hotkeys #337, honesty #349, sub-accounts selector #358, a11y #367 on vendor shell; pro polish residual. `dependsOn` is `ws.depth` not `ws.gateway` so the book is not blocked on positions.',
+    requires: ['docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md'],
+    note: "Repointed 2026-08-03 (ADR `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`): the terminal is the vendored Vue desk, not the retired Next scaffold — this row previously named both codebases at once. On the shell today: order entry, blotter, depth and public tape against svc-edge; real OHLCV candles via `assets/js/market-chart/kline.js` (lightweight-charts, honest [] when never traded); hotkeys #337, honesty #349, sub-account selector #358, a11y #367. NOT done, and the three gaps are the ported scaffold's strengths: (1) no live feed at all — `Exchange.vue:1020` hardcodes `feedLive: false` and the screen says so; the sequenced-delta + gap-resnapshot client is still to port; (2) no runtime shape validation of edge responses; (3) `bignumber.min.js` is vendored but `ix-trade.js` does not reference it, so desk arithmetic is not yet decimal-safe. `dependsOn` is `ws.depth` not `ws.gateway` so the book is not blocked on positions.",
   }),
   f('web.shell', 'apps/web scaffold on the design system', {
     module: 'core-ops',
