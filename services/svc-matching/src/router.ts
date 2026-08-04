@@ -11,6 +11,7 @@ import {
 } from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
 import type { CancelledRef, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
+import { reconcile } from './reconcile.js';
 
 /**
  * HTTP surface.
@@ -41,6 +42,32 @@ const submitBodySchema = z.object({
   price: decimal.nullish(),
   stopPrice: decimal.nullish(),
   tif: timeInForceSchema,
+});
+
+/**
+ * The caller's view of its own orders, for `POST /reconcile`.
+ *
+ * `state` is three values on purpose. svc-trade's status enum has six, and the
+ * mapping from `filled | cancelled | rejected | expired` to `terminal` belongs
+ * to svc-trade — putting it here would teach the engine another service's enum
+ * for no gain, and would have to be edited every time that enum grows.
+ *
+ * Capped at 10k orders per call so an operator sweep pages rather than handing
+ * the engine an unbounded body to hold in memory while it is matching.
+ */
+const counterpartOrderSchema = z.object({
+  orderId: z.string().min(1).max(128),
+  marketId: z.string().min(1).max(128),
+  state: z.enum(['pending', 'open', 'terminal']),
+  remaining: decimal,
+  /** Does the caller hold value against this order? The engine relays it; it never computes it. */
+  funded: z.boolean(),
+  /** Echoed into a refusal so an operator sees the caller's side without a second query. */
+  detail: z.string().max(256).optional(),
+});
+
+const reconcileBodySchema = z.object({
+  orders: z.array(counterpartOrderSchema).max(10_000),
 });
 
 function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
@@ -234,6 +261,68 @@ export function registerRoutes(
       return reply.code(404).send({ code: 'MarketNotFound', message: `${marketId} is not a market on this engine` });
     }
     return reply.code(200).send({ marketId, ...depth });
+  });
+
+  /**
+   * THE NON-DESTRUCTIVE LIVENESS READ.
+   *
+   * Service-only, and the reason is the same one that closed the write routes:
+   * this response carries order ids and account ids, and an order id is all you
+   * need to cancel someone's order. Depth is public because a price is not a
+   * secret — a list of whose orders are resting where is not the same fact.
+   *
+   * 404 for a market with no book, matching `/depth`: "no such market" and "a
+   * market with nothing resting" are different answers and a reconciler that
+   * cannot tell them apart will report a whole book as missing.
+   */
+  app.get('/markets/:marketId/orders', async (req, reply) => {
+    try {
+      requireService(req);
+    } catch (err) {
+      return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    if (!engine.hasMarket(marketId)) {
+      return reply.code(404).send({ code: 'MarketNotFound', message: `${marketId} is not a market on this engine` });
+    }
+
+    return reply.code(200).send({ marketId, orders: engine.restingOrders(marketId) });
+  });
+
+  /**
+   * RECONCILE — compare the engine against the caller's view of the world.
+   *
+   * Service-only for the same reason as the read above: the caller has to send
+   * order ids to get order ids back.
+   *
+   * READ-ONLY, and that is the design, not a limitation. It cancels nothing and
+   * moves no value; the response is a list of disagreements that names the order
+   * and both states. Where a disagreement cannot be resolved without choosing
+   * which side is wrong, it refuses and says so — see `reconcile.ts` for why
+   * every one of those choices is unsafe from the two states alone.
+   *
+   * 200 with `ok:false` rather than a 4xx: a refusal is a successful, correct
+   * answer to the question that was asked. A caller polling this should not have
+   * to distinguish "the engine is unreachable" from "the engine found a problem".
+   */
+  app.post('/reconcile', async (req, reply) => {
+    try {
+      requireService(req);
+    } catch (err) {
+      return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
+    }
+
+    const parsed = reconcileBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    // The whole engine, not one market: an order resting under a market the
+    // caller did not expect is one `market_disagreement`, and a per-market view
+    // would report it as two unrelated findings instead.
+    const report = reconcile(engine.restingOrders(), parsed.data.orders);
+    return reply.code(200).send(report);
   });
 
   app.get('/markets', async () => ({ markets: engine.markets }));
