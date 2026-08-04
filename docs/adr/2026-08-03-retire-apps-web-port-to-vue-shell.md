@@ -123,6 +123,47 @@ That is a **worse lie than the "Systems nominal" constant it was written to repl
 
 ---
 
+## DELETION RECORD — 2026-08-04
+
+`apps/web` was deleted. 59 files. This section is the audit trail, written so that "can we still get X?" never needs a git archaeologist.
+
+### Recovery, in one command
+
+The complete pre-deletion tree is pinned at the annotated tag **`apps-web-retired-2026-08-04`**.
+
+```
+git show apps-web-retired-2026-08-04:apps/web/src/lib/money.ts   # any single file
+git checkout apps-web-retired-2026-08-04 -- apps/web             # the whole directory back
+```
+
+A tag is not a branch: nothing prunes it, and it survives every rebase and force-push in the repo. Deleting the tag is the only way to lose it.
+
+### Every capability, and where it lives now
+
+The three things §"What the OLD app was better at" named as the port's remaining work were **all closed before this deletion**, not waived by it. Verified against `main` on 2026-08-04:
+
+| Capability                                       | Was                                                      | Is now                                                                                                                                                                   |
+| ------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sequenced-delta depth client with gap resnapshot | `src/lib/market/depth-controller.ts` + `ws-transport.ts` | `assets/js/ix-depth-feed.js` (+ `.golden.js` tests), landed #748                                                                                                         |
+| Runtime shape validation of every edge response  | `src/lib/api/wire.ts` (zod + `Result`)                   | `assets/js/ix-wire.js` — its own header names `wire.ts` as what it replaces                                                                                              |
+| Decimal-safe desk arithmetic                     | `src/lib/money.ts` (scaled bigint)                       | `assets/js/ix-money.js` (bignumber.js — bigint is unavailable: the vendor tree is outside the pnpm workspace and its webpack 3 / babel-loader 7 build cannot parse `0n`) |
+| Fabricated-money test fixture                    | `src/testing/fabricated-money.ts`                        | promoted into the CI gate `tooling/ci/fabricated-money-scan.mjs` — it now guards the whole repo instead of one app                                                       |
+
+Deliberately dropped, with the reasons already recorded above and not repeated here: `grid-backdrop.tsx`, `data-table.tsx`, `depth-ladder.tsx`, `app/trade/page.tsx`, `app/layout.tsx`. Nothing else in the tree was load-bearing.
+
+### What else the deletion had to take, and why each was required
+
+- **`Dockerfile`** — the `COPY apps/web/package.json` line. Left behind it fails the image build outright: `COPY failed: file not found in build context`.
+- **`services/svc-edge/src/cors.ts`, `.env.example`, `services/svc-edge/README.md`** — the `:3000` dev-origin pair, exactly as the standing note in `cors.ts` instructed. This is a **security** removal, not tidying: with the app gone, `http://localhost:3000` would have been a standing cross-origin grant to whatever a developer next starts on the most commonly squatted port on a workstation.
+- **`tooling/ci/i18n-bypass-scan.mjs`** — its `BASELINE` was 15 rows, all `apps/web` files. The scan fails on a **stale** row (a baseline entry with no file), so an untouched map would have turned the gate red. It is now empty, with a comment stating plainly that the 164 strings went away with the app rather than being translated, so a green result is not read as an achievement.
+- **`tooling/tracker/features.mjs`** — `web.shell` retitled and repointed exactly as §"The tracker moves in the same commit as the deletion" required, and its false `dependsOn: infra.ui-tokens` removed. `requires` names this ADR rather than the shell directory, for the brand-scan reason `web.terminal` already does (#741).
+
+### Known consequence, accepted
+
+Three stranded branches carry `apps/web` edits that will never land: `feat/amm-charts-ops-merge` (7 files), `feat/spine-otc-desk` (5), `feat/spine-scope-issuance` (3). None ever had a PR. Their non-`apps/web` content is unaffected and still landable; the `apps/web` halves are work on a surface that no longer exists, which is the intended outcome of this ADR rather than a cost of the deletion.
+
+---
+
 ## Open
 
 Nothing about the surface. The remaining questions from the 2026-08-02 ADR — the wallet-RPC security review's scope and owner, and any decision to run `01_wallet_rpc` against real value — are untouched by this and remain owner-gated.

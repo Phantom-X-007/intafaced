@@ -60,24 +60,21 @@ const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', '.turbo', 'coverage'
  * present may not have more strings than its number. Both directions are
  * enforced — a stale row that reads higher than reality is the same kind of
  * dishonesty this whole change is about.
+ *
+ * **EMPTY SINCE 2026-08-04, and that is a deletion, not an achievement.** All 15
+ * rows were `apps/web` files and the directory was deleted with the one-surface
+ * ADR. The 164 strings were not keyed into `@intafaced/i18n`; they went away with
+ * the app that held them, so this queue draining to zero says nothing about
+ * whether the product is translatable.
+ *
+ * The scan still runs and the queue is now CLOSED: any `.ts`/`.tsx` file under a
+ * scanned root that introduces a `copy` object is a new bypass and fails. What it
+ * does NOT cover is the product surface, which is Vue under `vendor/` and outside
+ * this walk — the shell keys its copy through `assets/lang/`. Reading a green
+ * result here as "the product has no hardcoded copy" is exactly the inference
+ * this file exists to prevent.
  */
-const BASELINE = {
-  'apps/web/src/app/page.tsx': 24,
-  'apps/web/src/components/app-shell.tsx': 7,
-  'apps/web/src/components/landing/market-pulse.tsx': 7,
-  'apps/web/src/components/platform-status.tsx': 5,
-  'apps/web/src/components/terminal/account-equity.tsx': 9,
-  'apps/web/src/components/terminal/blotter.tsx': 17,
-  'apps/web/src/components/terminal/live-book.tsx': 9,
-  'apps/web/src/components/terminal/live-chart.tsx': 5,
-  'apps/web/src/components/terminal/live-tape.tsx': 9,
-  'apps/web/src/components/terminal/order-ticket.tsx': 24,
-  'apps/web/src/components/terminal/plane-switch.tsx': 3,
-  'apps/web/src/components/terminal/protocol-plane.tsx': 27,
-  'apps/web/src/components/terminal/sign-in.tsx': 11,
-  'apps/web/src/components/terminal/socket-panel.tsx': 2,
-  'apps/web/src/components/terminal/terminal.tsx': 5,
-};
+const BASELINE = {};
 
 /** `apps/admin` is operator tooling — English-only by design (§14.6), same as the i18n scan. */
 const ALLOWLIST = [{ path: join('apps', 'admin'), reason: 'operator console — internal tooling, English-only by design (§14.6)' }];
