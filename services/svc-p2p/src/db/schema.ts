@@ -312,6 +312,12 @@ export const paymentMethodSchemas = p2p.table(
  * appeal months later may ask which destination a trade used. "The seller
  * deleted their account details" is precisely the moment those records matter.
  *
+ * Removal keeps the row and NOT the data: `details` goes NULL in the same
+ * statement that sets the status, and `payment_instruments_details_ck` makes
+ * `removed` with details a row Postgres will not accept. The fingerprint stays,
+ * so an appeal can still ask "was the buyer shown this account" without us
+ * holding the account in order to answer.
+ *
  * The unique partial index below is the load-bearing one — see the migration.
  * One active destination per `(owner, method, currency)` is what makes "which
  * account does the buyer pay?" have exactly one answer at take time, on the one
@@ -328,8 +334,12 @@ export const paymentInstruments = p2p.table(
     fiatCurrency: text('fiat_currency').notNull(),
     /** The owner's own name for it. Shown to the payer, so it is not a public handle. */
     label: text('label').notNull().default(''),
-    /** THE PERSONAL DATA. Exactly the declared fields — an undeclared key is refused, not dropped. */
-    details: jsonb('details').notNull(),
+    /**
+     * THE PERSONAL DATA. Exactly the declared fields — an undeclared key is
+     * refused, not dropped. NULL exactly when `status = 'removed'`; the CHECK
+     * constraint, not this column, is what enforces both halves.
+     */
+    details: jsonb('details'),
     /** sha256 over the canonical details. Outlives them, so an appeal survives the purge. */
     fingerprint: text('fingerprint').notNull(),
     status: text('status').notNull().default('active'),

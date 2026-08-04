@@ -64,6 +64,32 @@ export async function withMoneySpan<T>(name: string, attributes: MoneySpanAttrib
   });
 }
 
+/**
+ * A failure that is deliberately not raised to the caller — and must not be
+ * silent either.
+ *
+ * The one caller today is the access log's REFUSAL write. Letting that throw
+ * would turn "you may not see this" into an error a prober can tell apart from
+ * "no such trade", which is precisely the existence oracle the disclosure path
+ * is built to deny them. So it is swallowed on purpose.
+ *
+ * `catch {}` on its own, though, makes a security control's own failure the one
+ * event nobody can observe: the log would stop recording refusals — the half
+ * that shows harvesting — and the first sign of it would be an empty table
+ * during an incident. Recording it on the active span costs nothing, is
+ * invisible to the caller, and turns "refusals are always logged" from a hope
+ * into a claim with an alarm behind it.
+ */
+export function recordSwallowed(what: string, err: unknown): void {
+  const span = trace.getActiveSpan();
+  if (!span) return;
+  span.addEvent('intafaced.swallowed_failure', {
+    'intafaced.what': what,
+    'intafaced.error': err instanceof Error ? err.message : String(err),
+  });
+  span.setAttribute('intafaced.swallowed_failure', what);
+}
+
 export async function withSpan<T>(name: string, fn: () => Promise<T>): Promise<T> {
   return tracer.startActiveSpan(name, async (span) => {
     try {

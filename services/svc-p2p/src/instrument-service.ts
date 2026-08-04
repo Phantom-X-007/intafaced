@@ -4,6 +4,7 @@ import {
   ANY_COUNTRY,
   InstrumentError,
   fingerprintDetails,
+  methodIdKey,
   normaliseCountry,
   normaliseMethodId,
   parseFieldSpecs,
@@ -13,7 +14,7 @@ import {
   type InstrumentDetails,
   type MethodSchema,
 } from './instruments.js';
-import { withSpan } from './tracing.js';
+import { recordSwallowed, withSpan } from './tracing.js';
 
 /**
  * PAYMENT INSTRUMENTS — storage, disclosure, and the record of both.
@@ -147,7 +148,12 @@ interface InstrumentRow {
   country: string;
   fiat_currency: string;
   label: string;
-  details: Record<string, string>;
+  /**
+   * NULL exactly when `status = 'removed'` — enforced by
+   * `payment_instruments_details_ck`, not by this type. Every read below that
+   * dereferences it has already filtered `status = 'active'`.
+   */
+  details: Record<string, string> | null;
   fingerprint: string;
   status: 'active' | 'removed';
   created_at: Date;
@@ -358,7 +364,7 @@ export class InstrumentService {
   }
 
   /**
-   * Remove an instrument.
+   * Remove an instrument. **The account number goes with it.**
    *
    * A state change, never a DELETE. Three things still need the row after the
    * owner is done with it: an in-flight trade's snapshot points at it, the
@@ -366,11 +372,35 @@ export class InstrumentService {
    * destination a trade used. A DELETE would break the first and orphan the
    * other two — and "the seller deleted their account details" is exactly the
    * moment the log becomes worth having.
+   *
+   * WHAT THE ROW KEEPS AND WHAT IT LOSES, because "soft delete" is the phrase
+   * under which personal data usually survives being deleted:
+   *
+   *   lost  · `details` — the account number, the name on it, every declared
+   *           field. Nulled in the same statement that flips the status, so
+   *           there is no window and no second job that has to run.
+   *   kept  · the fingerprint, so an appeal can still be told whether the
+   *           account a seller now names is the one the buyer was shown;
+   *           the header (method, country, currency, label, timestamps), which
+   *           is what the access log needs in order to still mean something;
+   *           the row itself, for the two references above.
+   *
+   * This used to set the status alone. Nothing else nulled it either — the
+   * retention sweep only touches `trade_payment_instruments` — so a removed
+   * instrument kept its details forever, in a state where `revealOwn` (which
+   * filters `status = 'active'`) would not let the owner so much as look at
+   * what was still being held. Retained and unreadable is the worst of both:
+   * no delete, and no export.
+   *
+   * A trade already in flight is unaffected: its own frozen snapshot is a
+   * separate copy, deliberately, so the buyer halfway through a bank transfer
+   * still has somewhere to send the money. `purgeExpiredSnapshots` clears that
+   * copy once the trade has been closed for the retention window.
    */
   async removeInstrument(input: { instrumentId: string; ownerId: string }): Promise<InstrumentHeader> {
     const rows = await this.sql<InstrumentRow[]>`
       UPDATE p2p.payment_instruments
-         SET status = 'removed', removed_at = now(), updated_at = now()
+         SET status = 'removed', details = NULL, removed_at = now(), updated_at = now()
        WHERE id = ${input.instrumentId} AND owner_id = ${input.ownerId} AND status = 'active'
       RETURNING *
     `;
@@ -476,15 +506,27 @@ export class InstrumentService {
    *
    * Same transaction as the trade row, so a trade with no destination is not a
    * state that can be committed.
+   *
+   * THE METHOD ID IS KEYED, NOT COMPARED RAW. Every write path stores the id
+   * through `normaliseMethodId`, so what is in this column is always lowercase.
+   * The id arriving here is not: it is the taker's copy of a string the MAKER
+   * typed into their offer's `methods`, which is stored verbatim. A maker who
+   * declared `"Bank_Transfer"` therefore produced takes carrying
+   * `Bank_Transfer`, which matched no row — and the seller was told they had no
+   * destination for a method they were holding one for, on every single take of
+   * that offer. Comparing raw here was the difference between an offer that
+   * works and an offer that cannot be taken by anyone, decided by a capital
+   * letter nobody was ever told mattered.
    */
   async attachToTrade(
     tx: Sql,
     input: { tradeId: string; sellerId: string; methodId: string; fiatCurrency: string },
   ): Promise<{ instrumentId: string; fingerprint: string }> {
+    const methodId = methodIdKey(input.methodId);
     const rows = await tx<InstrumentRow[]>`
       SELECT * FROM p2p.payment_instruments
        WHERE owner_id = ${input.sellerId}
-         AND method_id = ${input.methodId}
+         AND method_id = ${methodId}
          AND fiat_currency = ${input.fiatCurrency}
          AND status = 'active'
     `;
@@ -692,6 +734,13 @@ export class InstrumentService {
    * is nothing to read and therefore nothing to join to. It is best-effort by
    * design: a failure to record a refusal must not turn a refusal into an
    * error the caller can distinguish from "no such trade".
+   *
+   * Best-effort is not the same as unobservable, and here the difference
+   * matters more than the swallow does. This is the half of the log that shows
+   * harvesting; if it silently stopped writing, the first anyone would know is
+   * an empty table during the incident it exists to describe. So the failure
+   * goes on the span — nothing reaches the caller, and the control's own
+   * failure is still something an operator can alert on.
    */
   private async logDenied(input: {
     instrumentId?: string;
@@ -709,8 +758,9 @@ export class InstrumentService {
           ${input.tradeId ?? null}, 'denied', ${input.reason}
         )
       `;
-    } catch {
-      // Swallowed on purpose — see the doc comment.
+    } catch (err) {
+      // Swallowed on purpose, recorded on purpose — see the doc comment.
+      recordSwallowed('p2p.instrument.log_denied', err);
     }
   }
 }

@@ -41,6 +41,7 @@ import {
   type TradeOutcome,
   type XpPolicy,
 } from './reputation.js';
+import { methodIdKey } from './instruments.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
 /**
@@ -2043,13 +2044,28 @@ function assertDisputeCursor(cursor: string | null): string | null {
 
 export { evidenceVisibleTo };
 
+/**
+ * Does this offer accept this payment method?
+ *
+ * CASE IS NOT MEANING. An offer's `methods` are stored exactly as the maker
+ * typed them; a method id is lowercased everywhere it is stored as an
+ * instrument. Comparing the two with `===` made `"Bank_Transfer"` and
+ * `"bank_transfer"` different methods — a distinction no maker or taker was
+ * ever shown, and one that failed on both spellings: the take was refused here,
+ * or it passed here and was refused a layer down by `attachToTrade`. Keyed
+ * comparison is the same rule on both sides of the door.
+ */
 function methodAllowed(methods: unknown[], method: string): boolean {
   // An offer with no declared methods accepts anything — the maker's terms text
   // is the contract in that case. An offer WITH methods accepts only those.
   if (methods.length === 0) return true;
+  const wanted = methodIdKey(method);
   return methods.some((m) => {
-    if (typeof m === 'string') return m === method;
-    if (m && typeof m === 'object' && 'id' in m) return (m as { id: unknown }).id === method;
+    if (typeof m === 'string') return methodIdKey(m) === wanted;
+    if (m && typeof m === 'object' && 'id' in m) {
+      const id = (m as { id: unknown }).id;
+      return typeof id === 'string' && methodIdKey(id) === wanted;
+    }
     return false;
   });
 }

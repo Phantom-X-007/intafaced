@@ -194,7 +194,7 @@ Three bugs stop being possible:
 
 `trade_payment_instruments` freezes the destination in the **same transaction** that creates the trade. Two things follow, and the second is the bigger one:
 
-1. The owner may edit or remove their instrument at any time without blanking the screen a buyer is halfway through copying an account number out of. Removal is a state change (`status = 'removed'`), never a `DELETE`, because the snapshot, the access log and any future appeal all still point at that row.
+1. The owner may edit or remove their instrument at any time without blanking the screen a buyer is halfway through copying an account number out of. Removal is a state change (`status = 'removed'`), never a `DELETE`, because the snapshot, the access log and any future appeal all still point at that row — but the account number itself is nulled on removal, not kept (see [Retention](#retention)). The row that survives is a header, not the data.
 2. **The destination cannot change mid-trade.** Show account A, wait for the buyer to start the transfer, switch to account B, then truthfully report that nothing arrived at B — that is a scam with a clean audit trail, and a live pointer instead of a snapshot is exactly what makes it work.
 
 ### The access log, and why it cannot be avoided
@@ -205,9 +205,15 @@ The database holds up the other end: `instrument_access_log` has a `BEFORE UPDAT
 
 **Refusals are recorded too, and they are the more interesting half.** One reveal is a buyer paying. Eleven refusals against eleven different sellers in an hour is someone harvesting, and that looks like nothing at all in a table that only records successes. The owner can read their own log (`instruments.accessLog`) — a log only compliance can see is a log the person whose data it is cannot use, and they are the one who knows whether a look was expected.
 
+A refusal's log write is the **one** write on this path that is best-effort, and the reason is the paragraph above it: raising on a failed write would turn "you may not see this" into an error a prober can tell apart from "no such trade" — the existence oracle everything else here denies them. It is swallowed, not hidden: the failure is recorded on the span as `intafaced.swallowed_failure`, so a log that quietly stopped recording refusals is something an operator can alert on rather than something found as an empty table during the incident. The asymmetry with a **disclosure** is deliberate — a disclosure cannot go unlogged at all, because it and its log row are one statement.
+
 ### Retention
 
-`P2P_INSTRUMENT_RETENTION_DAYS` (default 90). The API already refuses to disclose a terminal trade's snapshot; the sweep is the other half of the same promise, because "you cannot read it" and "we no longer have it" are different statements and only the second survives a database being copied. The purge nulls `details` and keeps the `fingerprint`, so a late appeal can still be told whether the account a seller now names is the one the buyer was shown — without us holding the account in order to say so.
+There are **two** things to forget, and they expire on different clocks.
+
+**The owner's own instrument — the moment they remove it.** `instruments.remove` nulls `details` in the same statement that sets `status = 'removed'`. Not on a sweep, not after a window: "remove my bank account" has to mean the account is gone. The row survives, because the snapshot, the access log and any future appeal all still point at it, and the `fingerprint` survives with it — but the account number does not. `payment_instruments_details_ck` states both halves as a constraint (`active` ⇒ details present, `removed` ⇒ details `NULL`), so this is not a rule that depends on `removeInstrument` remaining the only writer. Removal is also the reason to reveal _before_ removing: `instruments.reveal` is the owner's export, it works while the instrument is active, and afterwards there is nothing left to export.
+
+**A closed trade's frozen snapshot — `P2P_INSTRUMENT_RETENTION_DAYS` (default 90).** This one has to outlive the removal, or a seller could blank the evidence of where a buyer was told to pay by deleting their instrument mid-dispute. The API already refuses to disclose a terminal trade's snapshot; the sweep is the other half of the same promise, because "you cannot read it" and "we no longer have it" are different statements and only the second survives a database being copied. The purge nulls `details` and keeps the `fingerprint`, so a late appeal can still be told whether the account a seller now names is the one the buyer was shown — without us holding the account in order to say so.
 
 The **number** is an operator decision, not an engineering one, and where a market imposes its own retention rule that rule wins. The floor is set well clear of the 7-day dispute SLA so a purge can never race an open appeal.
 
@@ -391,9 +397,11 @@ The device throughout is a **canary** — the seller's account details contain a
 - a non-counterparty revealing → `NOT_FOUND`, not `FORBIDDEN`, and the attempt is logged
 - before the lock (`created`) → refused; after `released` and after `cancelled` → refused for **both** parties
 - a moderator with `admin:compliance` → refused with no dispute, allowed while the dispute is open, refused again once it is ruled on
-- the seller removing the instrument mid-trade → the buyer still sees it; new takes on that offer are refused
+- the seller removing the instrument mid-trade → the buyer still sees it (their trade's own frozen copy); new takes on that offer are refused; and the **live** row's `details` are already `NULL`
+- removal → `details` nulled, `fingerprint` and header kept, canary unfindable in `payment_instruments`; the owner's `reveal` export works before removal and is `NOT_FOUND` after; raw SQL putting details back onto a removed row, or emptying an active one, → refused by the database
 - the seller **editing** the instrument mid-trade → the buyer still sees the original. This is the account-swap scam, and the snapshot is what makes it fail
 - a take where the seller has no destination for that currency → refused **before any lock**: no trade row, no snapshot, no reserved inventory, book at zero
+- a maker who capitalised the method id (`"Bank_Transfer"`) against an instrument stored `bank_transfer` → the take **completes**. Case is not meaning: an offer's `methods` are the maker's own strings, an instrument's `method_id` is normalised, and comparing the two exactly made an offer nobody could take while telling the seller they had no destination. Tested in both directions, and a genuinely different method is still refused
 - three reveals → exactly three access-log rows; the log cannot fall behind the reads
 - refusals logged with their reason; the owner can read their own log and nobody else's
 - raw `UPDATE` and `DELETE` on the access log, behind the service's back → refused by the database

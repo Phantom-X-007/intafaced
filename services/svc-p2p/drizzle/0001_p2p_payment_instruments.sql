@@ -74,7 +74,12 @@ CREATE TABLE IF NOT EXISTS "p2p"."payment_instruments" (
   -- THE PERSONAL DATA. Exactly the fields the method schema declared, nothing
   -- else — validateDetails() rejects an undeclared key rather than dropping it,
   -- so "what do we hold about this person" has a finite answer.
-  "details"       jsonb NOT NULL,
+  --
+  -- NULLABLE, and only for one reason: a removed instrument holds nothing. See
+  -- payment_instruments_details_ck below — the constraint, not this column, is
+  -- where "we still have the account number" is made a state the row cannot be
+  -- in once its owner has said to forget it.
+  "details"       jsonb,
   -- sha256 over the canonical details. Outlives the details themselves so an
   -- appeal can still ask "was the buyer shown this account" after the purge.
   "fingerprint"   text NOT NULL,
@@ -107,10 +112,43 @@ ALTER TABLE "p2p"."payment_instruments" DROP CONSTRAINT IF EXISTS "payment_instr
 ALTER TABLE "p2p"."payment_instruments" ADD CONSTRAINT "payment_instruments_fiat_code_ck"
   CHECK ("fiat_currency" ~ '^[A-Z]{3}$');
 
--- An instrument with no fields is a destination with no address.
+-- Re-runnable against a database that already has this table from an earlier
+-- run of this same migration, where `details` was created NOT NULL. CREATE
+-- TABLE IF NOT EXISTS does nothing to an existing table, so the column change
+-- has to be stated separately or the constraint below becomes unsatisfiable.
+ALTER TABLE "p2p"."payment_instruments" ALTER COLUMN "details" DROP NOT NULL;
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- ACTIVE ⇒ WE HOLD THE ACCOUNT.  REMOVED ⇒ WE DO NOT.
+--
+-- Two halves of one sentence, and the second half is the retention promise this
+-- service makes in `env.ts` and its README.
+--
+--   · An active instrument with no fields is a destination with no address —
+--     an instrument the buyer cannot pay, which is what the schema table exists
+--     to prevent.
+--   · A REMOVED instrument with details is worse, and quieter. `revealOwn`
+--     filters `status = 'active'`, so the owner could neither read it nor
+--     export it — while the account number sat in the row indefinitely, out of
+--     reach of the snapshot purge (which only touches
+--     `trade_payment_instruments`) and readable by anyone with the database.
+--     "Remove my bank account" has to mean the account is gone, not hidden.
+--
+-- Stated as a constraint rather than left to `removeInstrument` because a rule
+-- about how long personal data is kept is exactly the kind that a future edit
+-- one layer up drops without noticing. Here, the row cannot be written wrong.
+--
+-- The FINGERPRINT deliberately survives: an appeal can still be told whether
+-- the account a seller now names is the one the buyer was shown, without us
+-- holding the account in order to say so.
 ALTER TABLE "p2p"."payment_instruments" DROP CONSTRAINT IF EXISTS "payment_instruments_details_ck";
 ALTER TABLE "p2p"."payment_instruments" ADD CONSTRAINT "payment_instruments_details_ck"
-  CHECK (jsonb_typeof("details") = 'object' AND "details" <> '{}'::jsonb);
+  CHECK (
+    CASE "status"
+      WHEN 'removed' THEN "details" IS NULL
+      ELSE "details" IS NOT NULL AND jsonb_typeof("details") = 'object' AND "details" <> '{}'::jsonb
+    END
+  );
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- ONE ACTIVE DESTINATION PER (owner, method, currency).

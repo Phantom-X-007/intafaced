@@ -131,7 +131,7 @@ export function normaliseCountry(raw: string): string {
 }
 
 export function normaliseMethodId(raw: string): string {
-  const value = raw.trim().toLowerCase();
+  const value = methodIdKey(raw);
   if (!METHOD_ID_RE.test(value)) {
     throw new InstrumentError(
       `"${raw}" is not a usable method id — lowercase letters, digits, "_" and "-", starting with a letter`,
@@ -139,6 +139,30 @@ export function normaliseMethodId(raw: string): string {
     );
   }
   return value;
+}
+
+/**
+ * THE ONE RULE FOR COMPARING TWO METHOD IDS. Case and padding are not meaning.
+ *
+ * Every write path stores a method id through `normaliseMethodId`, so what is
+ * in the database is always lowercase. The read paths did not all agree: an
+ * offer's `methods` array is stored verbatim from the maker, and a taker sends
+ * back whatever the offer showed them. A maker who declared `"Bank_Transfer"`
+ * therefore produced a take carrying `Bank_Transfer` and a stored instrument
+ * keyed `bank_transfer` — and the lookup, comparing them exactly, told the
+ * seller they had no destination while holding it.
+ *
+ * That is why this is a separate function from `normaliseMethodId` rather than
+ * a call to it: a COMPARISON must not throw. The strings being compared here
+ * arrive from a stranger taking an offer, and an id that could never name an
+ * instrument has to fall through to the ordinary "no such destination" refusal
+ * — not become a schema-validation error that distinguishes itself from it.
+ *
+ * Registration (`normaliseMethodId`) is where a malformed id is refused, in
+ * front of the operator who typed it.
+ */
+export function methodIdKey(raw: string): string {
+  return raw.trim().toLowerCase();
 }
 
 /**

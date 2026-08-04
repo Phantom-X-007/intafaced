@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
-import { assertTestDatabase } from '@intafaced/db';
+import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
@@ -58,19 +58,25 @@ const EDGE_SECRET = 'a-p2p-instrument-test-edge-secret-long-enough';
 /** Shared by every svc-p2p suite that brings the schema up. Any constant, as long as it is the same one. */
 const P2P_MIGRATION_LOCK = 8_140_702;
 
-async function reachable(): Promise<boolean> {
-  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end({ timeout: 2 });
-  }
-}
-
-const available = await reachable();
+/**
+ * The Postgres probe comes from `@intafaced/db`, exactly as in
+ * `p2p-service.test.ts` next door.
+ *
+ * This file was written with its own two-line `reachable()`, copied from the
+ * sibling suite before that suite was fixed. The private version swallowed
+ * every error and returned `false` regardless of `CI` or `REQUIRE_POSTGRES=1`,
+ * so on CI — where an unreachable database is meant to be a hard failure — this
+ * suite would have skipped in silence and been counted as a pass. That matters
+ * more here than in most places: what this file asserts is that account numbers
+ * do not leak, and a silent skip is indistinguishable from a green run that
+ * proved they do not.
+ *
+ * `postgresAvailable` honours `postgresRequired()` and journals its decision
+ * either way, so `pnpm verify` can name a suite that did not run instead of
+ * letting turbo's "N successful" imply that it did.
+ * (`tooling/ci/skip-honesty-scan.mjs` fails a build that re-adds a private probe.)
+ */
+const available = await postgresAvailable(URL);
 
 if (!available) {
   describe.skip('svc-p2p payment instruments (Postgres unavailable — start docker compose)', () => {
@@ -333,6 +339,134 @@ if (!available) {
       `;
       expect(rows).toHaveLength(1);
       expect(rows[0]!.owner_id).toBe(SELLER);
+    });
+
+    /**
+     * THE CAPITAL LETTER THAT MADE AN OFFER UNTAKEABLE.
+     *
+     * Every other test in this file uses a method id that is already lowercase,
+     * which is exactly why nothing caught this: storage normalises the id, the
+     * offer stores whatever the maker typed, the taker echoes the offer back,
+     * and the lookup compared the two with `=`. A maker who capitalised
+     * anything produced an offer nobody could take — and the message the seller
+     * got was that they had no destination, while holding one.
+     *
+     * Driven through `takeOffer`, not `attachToTrade`, because the bug needed
+     * BOTH comparisons on the path (`methodAllowed`, then the instrument
+     * lookup) to agree that case is not meaning. Fixing either alone just moves
+     * which layer refuses.
+     */
+    it('completes a take when the maker capitalised the method id and the instrument did not', async () => {
+      await fund(SELLER, '1000');
+      await registerMethod({ methodId: 'Bank_Transfer' });
+
+      // Stored lowercase — `createInstrument` normalises, as every write does.
+      const created = await instruments.createInstrument({
+        ownerId: SELLER,
+        methodId: 'BANK_TRANSFER',
+        country: 'DE',
+        fiatCurrency: 'USD',
+        label: 'Main account',
+        details: { account_reference: CANARY, holder_name: 'A Seller' },
+      });
+      expect(created.methodId).toBe('bank_transfer');
+
+      // Stored verbatim — an offer's `methods` are the maker's own strings.
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        totalAmt: amt('500'),
+        methods: ['Bank_Transfer'],
+      });
+      expect(offer.methods).toEqual(['Bank_Transfer']);
+
+      // The taker sends back what the offer showed them.
+      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'Bank_Transfer' });
+
+      const rows = await sql<Array<{ instrument_id: string; method_id: string }>>`
+        SELECT instrument_id, method_id FROM p2p.trade_payment_instruments WHERE trade_id = ${trade.id}
+      `;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.instrument_id).toBe(created.id);
+      // The frozen snapshot carries the normalised id, not the maker's spelling.
+      expect(rows[0]!.method_id).toBe('bank_transfer');
+
+      // And the buyer really can pay it — the whole point of not refusing.
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
+        details: { account_reference: CANARY },
+      });
+    });
+
+    it('accepts either spelling from the taker, since neither was ever shown to matter', async () => {
+      await fund(SELLER, '1000');
+      await registerMethod({ methodId: 'bank_transfer' });
+      await instruments.createInstrument({
+        ownerId: SELLER,
+        methodId: 'bank_transfer',
+        country: 'DE',
+        fiatCurrency: 'USD',
+        label: 'Main account',
+        details: { account_reference: CANARY, holder_name: 'A Seller' },
+      });
+
+      // The mirror image of the test above: the maker was lowercase, the taker
+      // capitalises. Refusing here would have been the same failure wearing the
+      // other hat.
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        totalAmt: amt('500'),
+        methods: ['bank_transfer'],
+      });
+
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: '  BANK_Transfer  ' }),
+      ).resolves.toBeTruthy();
+    });
+
+    it('still refuses a method the seller genuinely has no destination for', async () => {
+      // The fix must not become "any string matches". Case is not meaning; a
+      // different method still is.
+      await fund(SELLER, '1000');
+      await registerMethod({ methodId: 'Bank_Transfer' });
+      await registerMethod({ methodId: 'other_rail' });
+      await instruments.createInstrument({
+        ownerId: SELLER,
+        methodId: 'Bank_Transfer',
+        country: 'DE',
+        fiatCurrency: 'USD',
+        label: 'Main account',
+        details: { account_reference: CANARY, holder_name: 'A Seller' },
+      });
+
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        totalAmt: amt('500'),
+        methods: ['Other_Rail'],
+      });
+
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'Other_Rail' })).rejects.toMatchObject({
+        code: 'p2p.no_payment_instrument',
+      });
     });
   });
 
@@ -749,6 +883,98 @@ if (!available) {
       const short = new InstrumentService(sql, { retentionDays: 30 });
       expect(await short.purgeExpiredSnapshots()).toEqual({ purged: 0 });
       await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toBeTruthy();
+    });
+
+    /**
+     * "REMOVE MY BANK ACCOUNT" HAS TO MEAN THE ACCOUNT IS GONE.
+     *
+     * Removal used to set the status and nothing else. Nothing else nulled the
+     * details either — the snapshot purge only touches
+     * `trade_payment_instruments` — so the account number stayed in the row
+     * indefinitely, in a state where `revealOwn` (which filters `active`) would
+     * not let the owner so much as look at what was still held.
+     *
+     * Retained and unreadable is the worst pair available: no delete path and
+     * no export path, under a README and an `env.ts` that both promise a
+     * retention window.
+     */
+    it('wipes the account details when the owner removes the instrument, and keeps the fingerprint', async () => {
+      const created = await sellerInstrument();
+
+      // THE EXPORT, and it must exist BEFORE the removal — this is the moment
+      // the owner can still get their own data out. `reveal` is the export, and
+      // it is logged like every other read.
+      const exported = await callerFor(SELLER).instruments.reveal({ instrumentId: created.id });
+      expect(exported.details).toEqual({ account_reference: CANARY, holder_name: 'A Seller' });
+
+      await callerFor(SELLER).instruments.remove({ instrumentId: created.id });
+
+      const rows = await sql<Array<{ details: unknown; fingerprint: string; status: string; removed_at: Date | null }>>`
+        SELECT details, fingerprint, status, removed_at FROM p2p.payment_instruments WHERE id = ${created.id}
+      `;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.status).toBe('removed');
+      expect(rows[0]!.details).toBeNull();
+      expect(rows[0]!.removed_at).toBeInstanceOf(Date);
+      // Kept on purpose: an appeal can still be told whether the account a
+      // seller now names is the one the buyer was shown.
+      expect(rows[0]!.fingerprint).toHaveLength(64);
+
+      // The canary is the mechanical version of the claim: it appears nowhere
+      // else in the system, so scanning the whole table is a complete answer.
+      expect(await sql`SELECT id FROM p2p.payment_instruments WHERE details::text LIKE ${'%' + CANARY + '%'}`).toHaveLength(0);
+
+      // The header survives, because the access log has to keep meaning
+      // something after the data it describes is gone.
+      const [header] = await instruments.listInstruments(SELLER, true);
+      expect(header).toMatchObject({ id: created.id, status: 'removed', methodId: METHOD });
+    });
+
+    it('will not let a removed instrument hold details, even behind the service’s back', async () => {
+      const created = await sellerInstrument();
+      await callerFor(SELLER).instruments.remove({ instrumentId: created.id });
+
+      // The rule is a CHECK constraint, not a line in `removeInstrument`. A
+      // retention promise kept only by the one function that happens to write
+      // the row is a promise the next edit one layer up drops silently.
+      await expect(
+        sql`UPDATE p2p.payment_instruments SET details = ${sql.json({ account_reference: CANARY } as never)} WHERE id = ${created.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+
+      // And the other half of the same constraint: an ACTIVE instrument cannot
+      // be emptied, because a destination with no address is one the buyer
+      // cannot pay.
+      const live = await sellerInstrument({ fiatCurrency: 'GBP' });
+      await expect(sql`UPDATE p2p.payment_instruments SET details = NULL WHERE id = ${live.id}`).rejects.toMatchObject({
+        code: '23514',
+      });
+    });
+
+    it('leaves the owner nothing to read once it is removed, and says so as NOT_FOUND', async () => {
+      const created = await sellerInstrument();
+      await callerFor(SELLER).instruments.remove({ instrumentId: created.id });
+
+      // There is nothing left to disclose, and the refusal is the same
+      // NOT_FOUND every other refusal collapses to — a removed instrument must
+      // not be distinguishable from one that never existed.
+      await expect(callerFor(SELLER).instruments.reveal({ instrumentId: created.id })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+
+    it('does not strand a buyer who is mid-payment when the seller removes the destination', async () => {
+      const created = await sellerInstrument();
+      const { trade } = await liveTrade();
+
+      await callerFor(SELLER).instruments.remove({ instrumentId: created.id });
+
+      // The live row is wiped; the trade's own frozen copy is a separate one and
+      // survives until the retention sweep. Wiping on removal must not become a
+      // way to blank the screen a buyer is copying an account number out of.
+      expect(await sql`SELECT id FROM p2p.payment_instruments WHERE id = ${created.id} AND details IS NOT NULL`).toHaveLength(0);
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
+        details: { account_reference: CANARY, holder_name: 'A Seller' },
+      });
     });
   });
 

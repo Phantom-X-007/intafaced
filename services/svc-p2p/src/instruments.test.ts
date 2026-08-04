@@ -5,6 +5,7 @@ import {
   MAX_PATTERN_LENGTH,
   MAX_VALUE_LENGTH,
   fingerprintDetails,
+  methodIdKey,
   normaliseCountry,
   normaliseMethodId,
   parseFieldSpecs,
@@ -51,6 +52,33 @@ describe('normalising the keys of the registry', () => {
     expect(normaliseMethodId('Bank-Transfer_2')).toBe('bank-transfer_2');
     for (const bad of ['', '2fast', 'has space', 'has/slash', 'a'.repeat(65)]) {
       expect(() => normaliseMethodId(bad)).toThrow(InstrumentError);
+    }
+  });
+
+  /**
+   * `methodIdKey` is `normaliseMethodId` minus the throwing, and the split is a
+   * fix rather than tidiness.
+   *
+   * A COMPARISON must not throw. The strings compared with it arrive from a
+   * stranger taking an offer; an id that could never name an instrument has to
+   * fall through to the ordinary "no such destination" refusal, not become a
+   * schema-validation error a prober can tell apart from it. Registration is
+   * where a malformed id is refused, in front of the operator who typed it.
+   */
+  it('keys two spellings of the same method to the same string, without refusing either', () => {
+    for (const spelling of ['bank_transfer', 'Bank_Transfer', 'BANK_TRANSFER', '  bank_transfer  ']) {
+      expect(methodIdKey(spelling)).toBe('bank_transfer');
+    }
+
+    // The same rule storage applies, so a stored id keys to itself.
+    expect(methodIdKey(normaliseMethodId('Bank-Transfer_2'))).toBe(normaliseMethodId('Bank-Transfer_2'));
+
+    // Case is not meaning; a different method still is.
+    expect(methodIdKey('other_rail')).not.toBe(methodIdKey('bank_transfer'));
+
+    // And it never throws, on anything.
+    for (const hostile of ['', '2fast', 'has space', 'has/slash', 'a'.repeat(500)]) {
+      expect(() => methodIdKey(hostile)).not.toThrow();
     }
   });
 });
