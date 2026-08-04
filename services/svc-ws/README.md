@@ -54,14 +54,14 @@ smallest blast radius in the fleet. A second public origin on a process that hol
 HTTP + JSON, plus one websocket. Amounts in and out are **decimal strings**, never JSON numbers. The only JSON
 numbers anywhere in this service's output are integer sequences.
 
-| Route                                              | Input | Output                                                       |
-| -------------------------------------------------- | ----- | ------------------------------------------------------------ |
-| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                    |
-| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                 |
-| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unknown market · `502` upstream down |
-| `GET /markets`                                     | —     | `{ markets: string[] }`                                      |
-| `GET /health`                                      | —     | `{ ok, service, enabled, connections, … }`                   |
-| `GET /ready`                                       | —     | depth + trade counters · `503` when the kill-switch is off   |
+| Route                                              | Input | Output                                                        |
+| -------------------------------------------------- | ----- | ------------------------------------------------------------- |
+| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                     |
+| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                  |
+| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unlisted · `502` upstream down        |
+| `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books |
+| `GET /health`                                      | —     | `{ ok, service, enabled, connections, … }`                    |
+| `GET /ready`                                       | —     | depth + trade counters · `503` when the kill-switch is off    |
 
 ### The wire format is not ours
 
@@ -104,18 +104,37 @@ credentials.
 
 ---
 
-## The thing that would have been a vulnerability
+## Which markets exist — and the outage it caused
 
-`svc-matching`'s `engine.depth(marketId)` goes through `engine.book(marketId)`, which **creates the book if it does
-not exist**. A depth read for an arbitrary string is therefore not a 404 — it is an allocation in the engine's map.
+**A market id is checked against the LISTING, not against the engine's books.** `TRADE_URL` points at svc-trade's
+`GET /api/v1/markets` — the same public, unauthenticated JSON the browser fetches to draw its market picker.
+`MATCHING_URL`'s `GET /markets` is unioned in, but it is not the authority: it is `engine.markets`, the books the
+engine currently holds.
 
-An unauthenticated public socket that passed its `?market=` straight through would be a memory-growth primitive
-against the matching engine, driven from any browser. So **every subscription and every snapshot request is checked
-against `GET /markets` first**, and no depth call is made for an id that is not on it. The list is cached, refreshed
-on a timer, and refetched at most once per window on a miss so a newly listed market works without a restart.
+That distinction was, for a long time, the whole reason live depth did not work. `trade.markets` generates ids with
+`defaultRandom()`; svc-matching rebuilds its list by replaying its journal. After a reseed the two had an **empty
+intersection** — sixteen listed ids, ten journal ids, nothing in common — so every id a browser could legitimately
+discover was refused by the socket with `unknown market`, while both services reported healthy and correct.
 
-There are tests asserting the depth endpoint is never called for an unknown market, on both the socket and the HTTP
-path. `depth/source.ts` carries the reasoning next to the code.
+A listed market with no book is **not** an error. Six of the sixteen have never traded, and svc-matching answers 404
+for them; `HttpDepthSource` turns that into an empty book at sequence 0, which is what the terminal renders as
+"No asks / No bids". Refusing to stream a market because nobody has quoted in it yet is a lie about the market.
+An id **nobody** lists is still refused, with `unknown market` — that is the one case that earns it.
+
+The union survives a failure of either source: the listing being down leaves every traded market streaming, the
+engine being down leaves every listed market opening on an empty book, and only a failure of both keeps the last
+known list. `depth/registry.ts` carries the reasoning next to the code.
+
+### The thing that would have been a vulnerability
+
+`svc-matching`'s `engine.depth()` used to go through `engine.book()`, which **created the book if it did not
+exist** — so a depth read for an arbitrary string was not a 404, it was an allocation in the engine's map, reachable
+from any browser that could open a socket here. The engine closed that itself (`existingBook`, plus a 404 on the
+depth route), so the market check is no longer the only thing standing between an anonymous socket and svc-matching's
+heap. It is still the difference between "nobody is quoting" and "that is not a market", which is why it stays.
+
+There are tests asserting the depth endpoint is never called for an unlisted market, on both the socket and the HTTP
+path, and that a listed market with no book opens on an empty ladder rather than a close frame.
 
 There is deliberately **no Origin check**. An origin allow-list is an authorisation control and there is nothing here
 to authorise; it would inconvenience a bot without protecting anything, since the same bytes are a `curl` away.
@@ -237,6 +256,7 @@ stale numbers.
 | ----------------------- | ----------------------- | -------------------------------------------------------- |
 | `HTTP_PORT`             | `4014`                  | every port 4000–4013 is taken                            |
 | `MATCHING_URL`          | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent   |
+| `TRADE_URL`             | `http://localhost:4004` | svc-trade's public market **listing**; no credential     |
 | `NATS_URL`              | `nats://localhost:4222` | bus for `orderFilled` trade tape only                    |
 | `WS_DEPTH_LIMIT`        | `50`                    | levels per side, for both snapshot and delta             |
 | `WS_POLL_INTERVAL_MS`   | `250`                   | one GET per subscribed market per tick                   |

@@ -46,6 +46,29 @@ const schema = baseEnvSchema
       MATCHING_URL: z.string().url().default('http://localhost:4005'),
 
       /**
+       * WHERE THE MARKET LISTING COMES FROM.
+       *
+       * svc-trade's `GET /api/v1/markets` — the same JSON the browser fetches to
+       * draw the market picker, served straight out of `trade.markets` and
+       * explicitly unauthenticated ("No auth — public market data",
+       * `services/svc-trade/src/public-rest.ts`). Reading it costs this process
+       * no credential, so being handed this URL does not weaken the argument in
+       * the omissions above: there is still nothing here to steal.
+       *
+       * Why it exists at all: `MATCHING_URL` alone was the whole bug. The
+       * engine's `/markets` is the books it currently holds, and against the
+       * running fleet its ten journal-replayed ids and svc-trade's sixteen
+       * listed ids had an EMPTY intersection — so every id a browser could
+       * legitimately discover was refused by the socket. See
+       * `depth/registry.ts`.
+       *
+       * Not svc-edge: the edge proxies this exact path to svc-trade unchanged,
+       * so a gateway hop between two services on the same network buys nothing
+       * and adds a component that can be down.
+       */
+      TRADE_URL: z.string().url().default('http://localhost:4004'),
+
+      /**
        * How deep the stream goes, per side.
        *
        * The snapshot AND every delta describe the same top-N window, so a level

@@ -3,6 +3,7 @@ import { JetStreamEventBus, type Subscription } from '@intafaced/events';
 import { env } from './env.js';
 import { DepthHub } from './depth/hub.js';
 import { DepthPoller } from './depth/poller.js';
+import { HttpMarketRegistry, UnionMarketRegistry } from './depth/registry.js';
 import { HttpDepthSource } from './depth/source.js';
 import { registerRoutes } from './routes.js';
 import { TradeHub } from './trade/hub.js';
@@ -43,6 +44,29 @@ const source = new HttpDepthSource({ baseUrl: env.MATCHING_URL });
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL } });
 
+/**
+ * WHAT A CLIENT MAY SUBSCRIBE TO — and why it is not the engine's list.
+ *
+ * Depth still comes from svc-matching and only from svc-matching. This decides
+ * a different question: which market IDS are real. The engine's `/markets` is
+ * the books it holds, which is neither the listing nor a subset of it once
+ * `trade.markets` has been reseeded — on the running fleet the engine's ten
+ * journal-replayed ids and svc-trade's sixteen listed ids did not overlap at
+ * all, so every id the browser could discover was refused with `unknown
+ * market`. `depth/registry.ts` has the full account.
+ *
+ * The listing service comes first because it is the authority; the engine stays
+ * in the union because its ids are provably real and because a listing service
+ * that is down must not take the whole public feed with it.
+ */
+const registry = new UnionMarketRegistry(
+  [
+    { name: 'svc-trade', registry: new HttpMarketRegistry({ baseUrl: env.TRADE_URL }) },
+    { name: 'svc-matching', registry: source },
+  ],
+  app.log,
+);
+
 const hub = new DepthHub(
   source,
   {
@@ -51,6 +75,7 @@ const hub = new DepthHub(
     maxLagTicks: env.WS_MAX_LAG_TICKS,
     maxConnections: env.WS_MAX_CONNECTIONS,
     marketsRefreshMs: env.WS_MARKETS_REFRESH_MS,
+    registry,
   },
   app.log,
 );
@@ -111,12 +136,13 @@ registerRoutes(app, {
  * gateway that has never fetched it would refuse every client and look like a
  * bug in the terminal rather than a boot ordering problem.
  *
- * A failure here is not fatal: svc-matching may simply be starting. The list
- * refreshes on a timer and a connection that misses triggers one refetch.
+ * A failure here is not fatal: an upstream may simply be starting, and the
+ * union only throws when EVERY source failed. The list refreshes on a timer and
+ * a connection that misses triggers one refetch.
  */
 await hub.refreshMarkets().catch((err: unknown) => {
   app.log.warn(
-    { err: String(err), upstream: env.MATCHING_URL },
+    { err: String(err), listing: env.TRADE_URL, engine: env.MATCHING_URL },
     'svc-ws: could not read the market list at boot — will retry on the timer',
   );
 });
@@ -202,6 +228,8 @@ app.log.info(
   {
     port: env.HTTP_PORT,
     upstream: env.MATCHING_URL,
+    listing: env.TRADE_URL,
+    markets: hub.knownMarkets.length,
     depthLimit: env.WS_DEPTH_LIMIT,
     pollMs: env.WS_POLL_INTERVAL_MS,
     trades: tradeSub !== null,

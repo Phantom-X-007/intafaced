@@ -1,5 +1,6 @@
 import { formatAmount } from '@intafaced/ledger-client/money';
 import { bookFromSnapshot, diffDepth, type DepthBook, type DepthDelta, type DepthSnapshot, type WireLevel } from '@intafaced/market-data';
+import type { MarketRegistry } from './registry.js';
 import type { DepthSource } from './source.js';
 
 /**
@@ -80,6 +81,18 @@ export interface DepthHubOptions {
   /** How long a cached market list is trusted before a miss may refetch it. */
   readonly marketsRefreshMs: number;
   /**
+   * WHICH MARKETS A CLIENT MAY SUBSCRIBE TO.
+   *
+   * Defaults to the `DepthSource` itself, which is svc-matching's
+   * `engine.markets`. That default is wrong in production and right in tests:
+   * a test that drives a fake source wants one list, and the fleet wants the
+   * LISTING — the engine's list is the books that have traded, which excluded
+   * every id the browser could actually discover (see `registry.ts` for the
+   * empty-intersection this fixed). `index.ts` passes a `UnionMarketRegistry`
+   * over the listing service and the engine.
+   */
+  readonly registry?: MarketRegistry;
+  /**
    * Deltas that may pile up between registration and the first frame. They are
    * normally all subsumed by the snapshot, so overflowing this is a symptom
    * (an upstream stalled mid-connect), not a loss — the buffer is cleared and
@@ -117,7 +130,8 @@ const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
 
 export class DepthHub {
   readonly #source: DepthSource;
-  readonly #options: Required<DepthHubOptions>;
+  readonly #registry: MarketRegistry;
+  readonly #options: Required<Omit<DepthHubOptions, 'registry'>>;
   readonly #log: HubLogger;
 
   readonly #subscriptions = new Set<Subscription>();
@@ -135,8 +149,10 @@ export class DepthHub {
   #repairs = 0;
 
   constructor(source: DepthSource, options: DepthHubOptions, log: HubLogger = NO_LOG) {
+    const { registry, ...rest } = options;
     this.#source = source;
-    this.#options = { maxPendingDeltas: 512, clock: Date.now, ...options };
+    this.#registry = registry ?? source;
+    this.#options = { maxPendingDeltas: 512, clock: Date.now, ...rest };
     this.#log = log;
   }
 
@@ -194,8 +210,9 @@ export class DepthHub {
   async #open(sub: Subscription): Promise<void> {
     try {
       if (!(await this.ensureKnownMarket(sub.marketId))) {
-        // Never call depth for an id the engine has no book for: that call would
-        // CREATE the book upstream. See `DepthSource.markets`.
+        // Not listed anywhere. This is the only case that earns `unknown
+        // market` — a LISTED market the engine has never traded is a legitimate
+        // subscription that opens on an empty book (`HttpDepthSource.snapshot`).
         this.#evict(sub, CLOSE_POLICY, `unknown market "${sub.marketId}"`);
         return;
       }
@@ -216,7 +233,7 @@ export class DepthHub {
   }
 
   /**
-   * Is this a market the engine knows about?
+   * Is this a market anybody lists?
    *
    * The cached list is refreshed lazily on a miss, at most once per refresh
    * window, so a market listed a moment ago works without waiting for the timer
@@ -240,7 +257,7 @@ export class DepthHub {
 
     const run = (async () => {
       try {
-        const markets = await this.#source.markets();
+        const markets = await this.#registry.markets();
         this.#knownMarkets = new Set(markets);
         this.#marketsFetchedAt = this.#options.clock();
       } finally {
