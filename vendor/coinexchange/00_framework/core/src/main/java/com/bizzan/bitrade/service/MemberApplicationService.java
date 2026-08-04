@@ -1,6 +1,5 @@
 package com.bizzan.bitrade.service;
 
-import com.alibaba.fastjson.JSONObject;
 import com.bizzan.bitrade.constant.*;
 import com.bizzan.bitrade.dao.MemberApplicationDao;
 import com.bizzan.bitrade.dao.MemberDao;
@@ -8,7 +7,6 @@ import com.bizzan.bitrade.entity.*;
 import com.bizzan.bitrade.es.ESUtils;
 import com.bizzan.bitrade.pagination.PageResult;
 import com.bizzan.bitrade.service.Base.BaseService;
-import com.bizzan.bitrade.util.BigDecimalUtils;
 import com.bizzan.bitrade.vendor.provider.SMSProvider;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.jpa.impl.JPAQuery;
@@ -27,7 +25,6 @@ import static com.bizzan.bitrade.constant.RealNameStatus.NOT_CERTIFIED;
 import static com.bizzan.bitrade.constant.RealNameStatus.VERIFIED;
 import static com.bizzan.bitrade.entity.QMemberApplication.memberApplication;
 
-import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
@@ -52,17 +49,10 @@ public class MemberApplicationService extends BaseService {
     @Autowired
     private MemberDao memberDao;
 
-    @Autowired
-    private MemberWalletService memberWalletService ;
-
-    @Autowired
-    private RewardRecordService rewardRecordService ;
-
-    @Autowired
-    private RewardPromotionSettingService rewardPromotionSettingService ;
-
-    @Autowired
-    private MemberTransactionService memberTransactionService ;
+    // No MemberWalletService / RewardRecordService / RewardPromotionSettingService /
+    // MemberTransactionService here on purpose: the reward mints that used them were
+    // deleted (INTAFACED dual-book — `ledger.*` is the only book). Re-injecting a wallet
+    // service into this class is the first step of re-opening a second book.
 
     @Autowired
     private MemberPromotionService memberPromotionService ;
@@ -142,39 +132,12 @@ public class MemberApplicationService extends BaseService {
                 promotion(member1, member);
             }
         }
-        // 实名奖励
-        // 被邀请者本身的奖励
-        RewardPromotionSetting rewardPromotionSetting = null; // dual-book disable mint
-        if (rewardPromotionSetting != null) {
-        	BigDecimal amount1 = JSONObject.parseObject(rewardPromotionSetting.getInfo()).getBigDecimal("one");
-			MemberWallet memberWallet = memberWalletService.findByCoinAndMember(rewardPromotionSetting.getCoin(), member);
-			memberWallet.setBalance(BigDecimalUtils.add(memberWallet.getBalance(), amount1));
-	        memberWalletService.save(memberWallet);
-	        RewardRecord rewardRecord = new RewardRecord();
-	        rewardRecord.setAmount(amount1);
-	        rewardRecord.setCoin(rewardPromotionSetting.getCoin());
-	        rewardRecord.setMember(member);
-	        rewardRecord.setRemark(rewardPromotionSetting.getType().getCnName());
-	        rewardRecord.setType(RewardRecordType.PROMOTION);
-	        rewardRecordService.save(rewardRecord);
-	        MemberTransaction memberTransactionMember = new MemberTransaction();
-	        memberTransactionMember.setFee(BigDecimal.ZERO);
-	        memberTransactionMember.setAmount(amount1);
-	        memberTransactionMember.setSymbol(rewardPromotionSetting.getCoin().getUnit());
-	        memberTransactionMember.setType(TransactionType.PROMOTION_AWARD);
-	        memberTransactionMember.setMemberId(member.getId());
-	        memberTransactionMember.setRealFee("0");
-	        memberTransactionMember.setDiscountFee("0");
-	        memberTransactionMember.setCreateTime(new Date());
-	        memberTransactionService.save(memberTransactionMember);
-	        
-	        // 发送通知
-			try {
-				//smsProvider.sendCustomMessage(member.getMobilePhone(), "恭喜！您的" + amount1.setScale(2, BigDecimal.ROUND_HALF_DOWN) + "BZB注册实名奖励已到账，邀请好友可享更多奖励哦！" );
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-        }
+        // 实名奖励 — REMOVED, not disabled (INTAFACED dual-book).
+        // The real-name reward credited member_wallet directly. `ledger.*` is the only
+        // book, and no ledger recipe exists for this reward yet, so there was nothing to
+        // redirect the write to. It is deleted rather than left behind a `= null` guard
+        // that one line restores. The KYC workflow above is untouched.
+        // Queue: rebuild on a rewardPay recipe when the reward product is specified.
         memberApplicationDao.save(application);
     }
     
@@ -201,101 +164,13 @@ public class MemberApplicationService extends BaseService {
                 memberDao.save(member2);
             }
         }
-        return;
-        // dead dual-book (kept for audit trail — unreachable)
-        RewardPromotionSetting rewardPromotionSetting = rewardPromotionSettingService.findByType(PromotionRewardType.REGISTER);
-        if (rewardPromotionSetting != null) {
-            MemberWallet memberWallet1 = memberWalletService.findByCoinAndMember(rewardPromotionSetting.getCoin(), member1);
-
-            BigDecimal amount1 = JSONObject.parseObject(rewardPromotionSetting.getInfo()).getBigDecimal("one");
-            memberWallet1.setBalance(BigDecimalUtils.add(memberWallet1.getBalance(), amount1));
-            memberWalletService.save(memberWallet1);
-            RewardRecord rewardRecord1 = new RewardRecord();
-            rewardRecord1.setAmount(amount1);
-            rewardRecord1.setCoin(rewardPromotionSetting.getCoin());
-            rewardRecord1.setMember(member1);
-            rewardRecord1.setRemark(rewardPromotionSetting.getType().getCnName());
-            rewardRecord1.setType(RewardRecordType.PROMOTION);
-            rewardRecordService.save(rewardRecord1);
-            MemberTransaction memberTransaction = new MemberTransaction();
-            memberTransaction.setFee(BigDecimal.ZERO);
-            memberTransaction.setAmount(amount1);
-            memberTransaction.setSymbol(rewardPromotionSetting.getCoin().getUnit());
-            memberTransaction.setType(TransactionType.PROMOTION_AWARD);
-            memberTransaction.setMemberId(member1.getId());
-            memberTransaction.setRealFee("0");
-            memberTransaction.setDiscountFee("0");
-            memberTransaction.setCreateTime(new Date());
-            memberTransactionService.save(memberTransaction);
-            
-            // 发送通知
-    		try {
-				//smsProvider.sendCustomMessage(member1.getMobilePhone(), "恭喜！您邀请的" + member.getMobilePhone().substring(0,3) + "****" + member.getMobilePhone().substring(member.getMobilePhone().length() - 4, member.getMobilePhone().length()) + "已完成认证，" + amount1.setScale(2, BigDecimal.ROUND_HALF_DOWN) + "BZB一级推荐奖励已到账！" );
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-        }
-        
-        member1.setFirstLevel(member1.getFirstLevel() + 1);
-
-        MemberPromotion one = new MemberPromotion();
-        one.setInviterId(member1.getId());
-        one.setInviteesId(member.getId());
-        one.setLevel(PromotionLevel.ONE);
-        memberPromotionService.save(one);
-        // 二级赠送配置为开的时候
-        if(promotionSecondLevel == 1) {
-	        if (member1.getInviterId() != null) {
-	            Member member2 = memberDao.findOne(member1.getInviterId());
-	            // 当A推荐B，B推荐C，如果C通过实名认证，则B和A都可以获得奖励
-	            promotionLevelTwo(rewardPromotionSetting, member2, member);
-	        }
-        }
-    }
-
-    private void promotionLevelTwo(RewardPromotionSetting rewardPromotionSetting, Member member2, Member member) {
-        // Dual-book: level-two wallet mints disabled (INTAFACED).
-        return;
-        if (rewardPromotionSetting != null) {
-            MemberWallet memberWallet2 = memberWalletService.findByCoinAndMember(rewardPromotionSetting.getCoin(), member2);
-            BigDecimal amount2 = JSONObject.parseObject(rewardPromotionSetting.getInfo()).getBigDecimal("two");
-            memberWallet2.setBalance(BigDecimalUtils.add(memberWallet2.getBalance(), amount2));
-            memberWalletService.save(memberWallet2);
-            RewardRecord rewardRecord2 = new RewardRecord();
-            rewardRecord2.setAmount(amount2);
-            rewardRecord2.setCoin(rewardPromotionSetting.getCoin());
-            rewardRecord2.setMember(member2);
-            rewardRecord2.setRemark(rewardPromotionSetting.getType().getCnName());
-            rewardRecord2.setType(RewardRecordType.PROMOTION);
-            rewardRecordService.save(rewardRecord2);
-            MemberTransaction memberTransaction = new MemberTransaction();
-            memberTransaction.setFee(BigDecimal.ZERO);
-            memberTransaction.setAmount(amount2);
-            memberTransaction.setSymbol(rewardPromotionSetting.getCoin().getUnit());
-            memberTransaction.setType(TransactionType.PROMOTION_AWARD);
-            memberTransaction.setMemberId(member2.getId());
-            memberTransaction.setRealFee("0");
-            memberTransaction.setDiscountFee("0");
-            memberTransaction.setCreateTime(new Date());
-            memberTransactionService.save(memberTransaction);
-            
-            // 发送通知
-    		try {
-				//smsProvider.sendCustomMessage(member2.getMobilePhone(), "恭喜！您邀请的" + member.getMobilePhone().substring(0,3) + "****" + member.getMobilePhone().substring(member.getMobilePhone().length() - 4, member.getMobilePhone().length()) + "已完成认证，" + amount2.setScale(2, BigDecimal.ROUND_HALF_DOWN) + "BZB二级推荐奖励已到账！" );
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-        }
-        member2.setSecondLevel(member2.getSecondLevel() + 1);
-        MemberPromotion two = new MemberPromotion();
-        two.setInviterId(member2.getId());
-        two.setInviteesId(member.getId());
-        two.setLevel(PromotionLevel.TWO);
-        memberPromotionService.save(two);
-        if (member2.getInviterId() != null) {
-            Member member3 = memberDao.findOne(member2.getInviterId());
-            member3.setThirdLevel(member3.getThirdLevel() + 1);
-        }
+        // Everything that used to follow here was UNREACHABLE — it sat after an
+        // unconditional `return;`, which JLS 14.21 makes a compile error, not a warning.
+        // It was the level-one promotion mint plus a promotionLevelTwo() helper whose
+        // whole body was likewise unreachable; both credited member_wallet directly.
+        // Both are deleted: `ledger.*` is the only book and no reward recipe exists to
+        // redirect them to. The inviter tree counters above are the surviving workflow.
+        // Queue: rebuild both levels on a rewardPay recipe.
     }
 
     public long countAuditing(){

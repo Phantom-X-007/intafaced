@@ -81,6 +81,10 @@ The premise was right: adopting Java money code while nothing gates it makes the
 
 What the widening found bears directly on ADOPT AND ADAPT above. The DAO route and the HTTP-door route were **already shut**. A third route was open and gated by nothing: mutating a managed `MemberWallet` entity, which Hibernate flushes to `member_wallet` at commit without emitting an `UPDATE` anyone could grep for. **27 sites.** Seven are held off only by a `= null` line, and three of those live in a Kafka consumer and two Spring event listeners — **code no HTTP interceptor can reach.** All 63 known write sites now sit on a counted ratchet in `vendor-java-money-scan.mjs`, each with a written reason; that list is the work queue for the seam described above.
 
+**Update 2026-08-04 — the ungated grade is closed.** The eight sites with no runtime gate at all (three in `core:MemberApplicationService`, one in `wallet:MemberConsumer`, two each in `admin:OrderEvent` and `otc-api:OrderEvent`) were registration and promotion reward **mints**. ADOPT AND ADAPT says redirect the balance write — but no reward recipe exists to redirect them to, so there was nothing to adapt them into and they were **deleted**, together with the wallet and reward services those classes injected only in order to mint. The surrounding workflow — KYC status, inviter tree counters, wallet creation at registration, transaction counters — is untouched. Ratchet: **63 → 55** across 26 files, still clean. Grade D is now empty by construction: a new entry there means a new ungated mint, not old debt.
+
+Two of those eight sat after an unconditional `return;` in the same block. That is an unreachable statement, which JLS §14.21 makes a **compile error, not a warning** — so `core` has not compiled since the disabling edit landed, and no build of these jars has ever contained it. Fixed here; a sweep of all 870 Java files found no third instance. Any plan that rebuilds the vendor jars should assume this was the first thing standing in its way.
+
 ---
 
 ## Why the front-end half of this went wrong, recorded so it is not repeated
