@@ -8,6 +8,8 @@
 
 ---
 
+**Ownership note (2026-08-04):** Shehzad is **Protocol Plane + INTACHAIN only** (THREE-WAY + GITHUB-OWNERSHIP-SHEHZAD). Pay/bank/futures/identity residual reclaimed for Nitro agents after #346 handoff. Tip law wins over stale M1–M7 rows below.
+
 ## Deferred X1–X5 (Nitro only / Denon admin)
 
 | ID  | Queued (UTC)      | Issue                                                                                                                                                                                                                             | Sandbox/§13 tried?                        | Status             |
