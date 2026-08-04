@@ -43,9 +43,61 @@ The margin-call sink defaults to `recordOnlyMarginCallSink`, a no-op (`loan-serv
 Two consequences, and the second is the serious one:
 
 1. An operator querying `notified_at IS NOT NULL` concludes borrowers were warned. **Nobody was.**
-2. **The grace clock that gates liquidation runs off that undelivered call.** So a borrower is liquidated after a warning period that began with a notification they never received.
+2. **A borrower is liquidated after a grace period that began with a notification they never received.**
 
 A no-op sink is a fine default. **Stamping `notified_at` after a no-op is the defect** — the column should record delivery, not the attempt. `ops.notifications` already has the right posture to copy: `UnconfiguredChannel` **throws** `channel.not_configured` rather than returning a fake success.
+
+> ### Correction — 2026-08-03. Read this before fixing consequence 2.
+>
+> The original text said the grace clock "runs off that undelivered call", which
+> implied fixing `notified_at` would fix both consequences. **It will not.** The
+> clock is a **different column, written earlier, by a separate statement.**
+>
+> - `loan-service.ts:1162-1166` sets `status='margin_call'` and
+>   `margin_called_at = COALESCE(margin_called_at, now)` — this runs **before**
+>   the `try { … send() }` block at `:1173` and is **not conditional on it**.
+> - `loan-service.ts:1072` feeds `loan.marginCalledAt` into `planLiquidation`.
+> - `risk.ts:430-434` computes `graceEnds` from `marginCalledAt`.
+>
+> So the liquidation clock is **`bank.loans.margin_called_at`**, not
+> `loan_margin_calls.notified_at`. **These are two independent writes and they
+> need two independent fixes.** Fixing only the stamp leaves the serious
+> consequence entirely intact.
+>
+> Three further measurements, all verified:
+>
+> - **`notified_at` has zero production readers.** The only reader is
+>   `loans.test.ts:1362-1366`, which asserts it is NOT null, in a test named
+>   _"raises a margin call, records it, and delivers it"_. **The suite actively
+>   pins the wrong behaviour green.**
+> - **Insolvency waives grace entirely.** `risk.ts:428` —
+>   `graceWaived = ltv >= policy.insolvencyLtvBps` (default 9500). Above that,
+>   a loan is liquidated with no margin call and no grace at all. So "liquidation
+>   only after a delivered warning plus grace" will not be universally true even
+>   after a correct fix, and that carve-out looks deliberate.
+> - **No service can currently ask svc-notify to deliver anything and learn the
+>   outcome.** Every non-health procedure there is scoped to a user principal,
+>   `ctx.service` is permanently null because the context is built without
+>   `internalSecret`, and the only other ingress is the bus — which reports
+>   acceptance, not delivery.
+>
+> And the margin-call event is **fully built on both ends and has never had a
+> publisher.** `bankMarginCalled` is declared in the event catalog and
+> svc-notify's consumer is complete — but nothing publishes it, and svc-bank
+> depends on neither `@intafaced/events` nor `nats`, so the subject has never
+> been produced. The sink signature also omits `calledAt` and `sequence`, both
+> of which the event schema requires.
+>
+> The boot-log symptom this used to produce is **already gone, and the underlying
+> gap is not.** svc-notify's consumer parked on this subject and logged a WARN on
+> every boot from the day it shipped; that is no longer what happens. The event
+> is now recorded in `WIRING_SOCKETS` (`packages/events/src/catalog.ts`) with a
+> written reason, `tooling/ci/event-wiring.mjs` fails on any unwired event that
+> is **not** recorded, and `index.ts:140-145` demotes a consumer parked on a
+> declared socket to `info` — reserving `error` for a consumer that cannot attach
+> and has nothing declaring why. **Do not read the quiet log as the fix.** The
+> publisher is still missing, the socket entry says so, and wiring it in svc-bank
+> is what closes it.
 
 ---
 
