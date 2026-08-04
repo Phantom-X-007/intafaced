@@ -115,6 +115,7 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'createRoom',
         'curriculum',
         'curriculumItem',
+        'curriculumInventory',
         'ambassadorBadge',
         'ambassadors',
         'appointAmbassador',

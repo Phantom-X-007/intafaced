@@ -4,6 +4,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
 import { getCurriculumItem, listCurriculum } from './curriculum/catalog.js';
+import { curriculumInventory } from './curriculum/import-pipeline.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -76,6 +77,20 @@ const curriculumSummaryOut = z.object({
 
 const curriculumItemOut = curriculumSummaryOut.extend({
   body: z.string(),
+});
+
+const curriculumInventoryOut = z.object({
+  contentSource: z.enum(['platform-native-expansion', 'licensed-import-pending']),
+  spine: z.object({
+    total: z.number().int(),
+    playbooks: z.number().int(),
+    workbooks: z.number().int(),
+    lessons: z.number().int(),
+  }),
+  titleTarget: z.object({ playbooks: z.number().int(), workbooks: z.number().int() }),
+  titlePromiseMet: z.boolean(),
+  residualPlaybooks: z.number().int(),
+  residualWorkbooks: z.number().int(),
 });
 
 const ambassadorStatus = z.enum(['active', 'frozen']);
@@ -222,6 +237,14 @@ export function createAcademyRouter(academy: AcademyService) {
           return item;
         }),
       ),
+
+    /**
+     * Stage-1 import pipeline inventory: content source decision + count gate.
+     * titlePromiseMet is false until 20 playbooks + 3 workbooks exist (or product renames).
+     */
+    curriculumInventory: scopedProcedure('academy:read', { module: 'academy' })
+      .output(curriculumInventoryOut)
+      .query(() => curriculumInventory()),
 
     // ── Lobbies ──────────────────────────────────────────────────────────────
 

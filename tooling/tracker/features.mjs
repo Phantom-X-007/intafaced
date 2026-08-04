@@ -706,6 +706,7 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies'],
+    note: 'Stage-1 2026-08-04: import pipeline format + brand checklist + count gate (titlePromiseMet false). Content residual — not tracker done.',
   }),
   f('academy.certs', 'Certifications → XP → real perks', {
     module: 'academy',

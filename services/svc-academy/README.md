@@ -162,3 +162,10 @@ Seasons + ranked standings. **No prize pools.** Kill-switch: `ACADEMY_TOURNAMENT
 Anti-cheat basics: scores only while season `live`; rank = score DESC, earlier `updated_at` wins ties; frozen/ended refuse score writes.
 
 Migration: `drizzle/0002_tournaments.sql`.
+
+## Curriculum import pipeline (Stage-1)
+
+- Content source on tip: **platform-native-expansion** (licensed import pending product/Class X).
+- `curriculumInventory` reports spine counts vs title 20 playbooks + 3 workbooks — `titlePromiseMet` stays false until residual lands.
+- Import records validated by `validateImportRecord` / brand checklist (no outbound URLs, no empty stubs).
+- Do **not** invent proprietary library titles as if the import landed.
