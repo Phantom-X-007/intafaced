@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { trace } from '@opentelemetry/api';
 import { MemoryEventBus } from '@intafaced/events';
 import {
   MemoryLedger,
@@ -872,6 +873,118 @@ if (!available) {
 
       const rows = await sql<Array<{ revenue_total: Record<string, string> }>>`SELECT revenue_total FROM token.buyback_runs`;
       expect(rows[0]?.revenue_total).toEqual({ IFC: '1000', USDT: '0.5', BTC: '0' });
+    });
+  });
+
+  // ── Every money method is traced (§14 DoD) ────────────────────────────────
+  //
+  // `recordBuyback` was the ONLY money method in this service not wrapped in
+  // `withMoneySpan` — stake, unstake, distributeRevenue and mintEpoch all were.
+  // An untraced burn is an irreversible movement with no span to find it by.
+  //
+  // The tracer in tracing.ts is resolved at import time, but @opentelemetry/api
+  // hands out a proxy that resolves the global provider on each call, so a
+  // provider registered here is still seen.
+
+  describe('money-path tracing', () => {
+    // Registered exactly ONCE, and never disabled. `trace.disable()` swaps the
+    // global proxy provider for a fresh one, which orphans the proxy tracer
+    // tracing.ts grabbed at import — after a disable, nothing records again.
+    // So the buffer is cleared per test instead of the provider being reset.
+    const spans: Array<{ name: string; attributes: Record<string, unknown> }> = [];
+
+    const span = {
+      setAttribute(k: string, v: unknown) {
+        spans[spans.length - 1]!.attributes[k] = v;
+        return span;
+      },
+      setAttributes() {
+        return span;
+      },
+      setStatus() {
+        return span;
+      },
+      recordException() {
+        return span;
+      },
+      addEvent() {
+        return span;
+      },
+      updateName() {
+        return span;
+      },
+      isRecording() {
+        return true;
+      },
+      spanContext() {
+        return { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 };
+      },
+      end() {},
+    };
+
+    const tracer = {
+      startActiveSpan(name: string, ...rest: unknown[]) {
+        const fn = rest.find((r) => typeof r === 'function') as (s: unknown) => unknown;
+        spans.push({ name, attributes: {} });
+        return fn(span);
+      },
+      startSpan(name: string) {
+        spans.push({ name, attributes: {} });
+        return span;
+      },
+    };
+
+    trace.setGlobalTracerProvider({ getTracer: () => tracer } as never);
+
+    beforeEach(() => {
+      spans.length = 0;
+    });
+
+    afterAll(() => {
+      trace.disable();
+    });
+
+    it('traces recordBuyback as a money path, like every other money method', async () => {
+      await accrueFees('trade', '2000');
+      await token.distributeRevenue({ windowId: 'w-trace', sources: [{ module: 'trade', amount: amt('2000') }] });
+      await token.recordBuyback({
+        runId: crypto.randomUUID(),
+        revenueWindow: { from: new Date('2026-07-01T00:00:00Z'), to: new Date('2026-08-01T00:00:00Z') },
+        revenueTotal: { IFC: '1000' },
+        tokensBought: amt('1000'),
+      });
+
+      const buyback = spans.find((s) => s.name === 'token.recordBuyback');
+      expect(buyback, `no token.recordBuyback span — saw ${spans.map((s) => s.name).join(', ')}`).toBeDefined();
+      expect(buyback!.attributes['intafaced.money_path']).toBe(true);
+      expect(buyback!.attributes['intafaced.operation']).toBe('buyback');
+      // Amounts go on spans as decimal STRINGS, never numbers (tracing.ts).
+      expect(typeof buyback!.attributes['intafaced.amount']).toBe('string');
+    });
+
+    it('keeps the refusal on the span rather than losing it', async () => {
+      const window = { from: new Date('2026-07-01T00:00:00Z'), to: new Date('2026-08-01T00:00:00Z') };
+
+      await accrueFees('trade', '4000');
+      await token.distributeRevenue({ windowId: 'w-trace-2', sources: [{ module: 'trade', amount: amt('4000') }] });
+      await token.recordBuyback({
+        runId: crypto.randomUUID(),
+        revenueWindow: window,
+        revenueTotal: { IFC: '1000' },
+        tokensBought: amt('1000'),
+      });
+
+      await expect(
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: window,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_window_overlap' });
+
+      // Two attempts, two spans — the refused one is not invisible.
+      expect(spans.filter((s) => s.name === 'token.recordBuyback')).toHaveLength(2);
     });
   });
 
