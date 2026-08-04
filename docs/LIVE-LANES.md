@@ -5,16 +5,17 @@
 **Truth layers:** [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)  
 **Re-derive tip every fire:** `git fetch && git log -1 --oneline origin/main` · `gh pr list`
 
-| Lane id                | Owner session      | Scope                                      | Status                     | PR / proof               | Do not touch                                     |
-| ---------------------- | ------------------ | ------------------------------------------ | -------------------------- | ------------------------ | ------------------------------------------------ |
-| shehzad-protocol-chain | shehzad002         | Protocol Plane + INTACHAIN only            | **HUMAN**                  | blockchain task board    | agents implement protocol/chain/dex self-custody |
-| shehzad-346-handoff    | shehzad002 / nitro | Pay #346 finish **or** Nitro take residual | **OPEN #346**              | handoff comment required | dual-edit until handoff                          |
-| denon-open-integrity   | Phantom-X-007      | His open integrity/money PRs               | **live**                   | `gh pr list` re-derive   | dual-edit those file sets                        |
-| nitro-ws-client        | free / claim       | Shell depth/tape client per #727           | free                       | #727 body                | invent depth / dual Denon open ws if conflicting |
-| nitro-reclaim-pay      | free after handoff | Pay OS residual Class M                    | blocked until #346 handoff | —                        | #346 files while his                             |
-| nitro-reclaim-bank-id  | free / claim       | Bank thin + identity money graph           | free (reclaimed)           | tracker notes            | invent balances                                  |
-| stream-a-ui            | free / claim       | Vendor shell :8090 craft residual          | free                       | —                        | services money spine dual-build                  |
-| afk-residual           | residual-own       | AFK shell wave                             | **drained** freeProduct=0  | residual-register        | re-open only new invent residual                 |
+| Lane id                | Owner session      | Scope                                                                             | Status                     | PR / proof               | Do not touch                                                |
+| ---------------------- | ------------------ | --------------------------------------------------------------------------------- | -------------------------- | ------------------------ | ----------------------------------------------------------- |
+| shehzad-protocol-chain | shehzad002         | Protocol Plane + INTACHAIN only                                                   | **HUMAN**                  | blockchain task board    | agents implement protocol/chain/dex self-custody            |
+| shehzad-346-handoff    | shehzad002 / nitro | Pay #346 finish **or** Nitro take residual                                        | **OPEN #346**              | handoff comment required | dual-edit until handoff                                     |
+| denon-open-integrity   | Phantom-X-007      | His open integrity/money PRs                                                      | **live**                   | `gh pr list` re-derive   | dual-edit those file sets                                   |
+| nitro-ws-client        | free / claim       | Shell depth/tape client per #727                                                  | free                       | #727 body                | invent depth / dual Denon open ws if conflicting            |
+| nitro-reclaim-pay      | free after handoff | Pay OS residual Class M                                                           | blocked until #346 handoff | —                        | #346 files while his                                        |
+| nitro-reclaim-bank-id  | free / claim       | Bank thin + identity money graph                                                  | free (reclaimed)           | tracker notes            | invent balances                                             |
+| stream-a-ui            | free / claim       | Vendor shell :8090 craft residual                                                 | free                       | —                        | services money spine dual-build                             |
+| afk-residual           | residual-own       | AFK shell wave                                                                    | **drained** freeProduct=0  | residual-register        | re-open only new invent residual                            |
+| launch-flags           | this session       | `LAUNCH_DROP` flag honesty — `packages/config` enforcement + `apps/admin` console | **OPEN #436**              | #436                     | `services/svc-edge` · the console freeze path (#447 landed) |
 
 ## Free agent work (re-derive every fire)
 
