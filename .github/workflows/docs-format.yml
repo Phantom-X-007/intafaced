@@ -55,11 +55,11 @@ jobs:
       - name: format:check
         run: pnpm format:check
 
-      # Stamp-mill detector (advisory). Git-only — no gh.
+      # Stamp-mill detector. Git-only — no gh.
       # MUST live here, not gates.mjs: ci.yml paths-ignore docs/** so gates never
-      # run on coordinator PRs. Flip VALUE_GATE_STRICT=1 after clean advisory cycle.
+      # run on coordinator PRs. After one clean cycle: set VALUE_GATE_STRICT=1 and drop ADVISORY.
       # Law: S-CORE §3 · BOARD-CLEAR-PROCESS-LOOPS L0 · SWARM-MANDATE.
-      - name: value-gate (advisory)
+      - name: value gate
         env:
-          VALUE_GATE_STRICT: '0'
+          VALUE_GATE_ADVISORY: '1'
         run: node tooling/ci/value-gate.mjs
