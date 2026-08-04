@@ -1,70 +1,123 @@
-# TRK-trade.ccxt-api
+# TRK-trade.ccxt-api — research / spec pack
 
+**Tracker id:** `trade.ccxt-api`  
 **Title:** CCXT-compatible public API (bots + terminals connect)  
-**Tracker:** `trade.ccxt-api` · module `trade` · phase 2 · status `ready` · owner none  
-**Depends on:** `trade.spot`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `trade`  
+**Status on tip:** `ready` · **owner:** none  
+**Tip freeze:** `origin/main` @ `56696496`  
+**Pack type:** research only — **compatibility surface**, not embedding `ccxt` library in money path.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-1. Bots use a **CCXT-shaped** REST surface (public data + private trading) against this venue.
-2. Errors map via `ccxt-errors.ts`.
-3. Unsupported toggles are **typed unsupported**, not silent missing routes.
-4. OHLCV never invents candles.
+1. External bots/terminals can speak a **CCXT-shaped** public REST/ws surface.
+2. Platform remains the connectivity layer (§27) — **no** `ccxt` package in the money path.
+3. Prices/balances from platform services — never float-normalized invent.
+4. Auth, rate limits, and market metadata honest when empty.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area       | Reality                                                                     |
-| ---------- | --------------------------------------------------------------------------- |
-| Public     | `public-rest.ts` — markets, book, tickers, trades, ohlcv                    |
-| Private    | `private-rest.ts` — orders + placeOrder money path                          |
-| Errors     | `ccxt-errors.ts`                                                            |
-| Tracker    | **partial** — candle materialize job default OFF; futures typed unsupported |
-| npm `ccxt` | **Forbidden** in money path by design (§27)                                 |
+## 2 · Current code state (tip)
+
+### 2.1 What is not this row
+
+| Confusion                    | Truth                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| “via CCXT” venue aggregation | **Stale title language** — §27 forbids third-party connectivity lib in money path; no `ccxt` in workspace by design |
+| Venue fabric                 | `packages/venue-contracts` + `venue-adapter` (Binance spot **public** MD only; trading half not_ready)              |
+| DEX quote router             | Separate row `dex.quote-router` — refuse-or-real                                                                    |
+
+### 2.2 Residual for titled public API
+
+| Gap                               | Reality                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| CCXT-compatible route map         | Not a complete public bot API product on tip                              |
+| Unified order create/cancel shape | Would wrap `svc-trade` / edge honestly                                    |
+| WS parity                         | Platform `svc-ws` stream path — P-WS integrity blocked on Denon #433/#432 |
+
+### 2.3 Venue fabric (related ops)
+
+- `TRADE_VENUE_MARK_VENUE` + symbols default OFF
+- Never invents mid on empty/unmapped
+- Still ready not done: one public venue, trading half not built, vault absent, no live-network CI, M3 risk human
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law          | Implication                                               |
-| ------------ | --------------------------------------------------------- |
-| Money path   | Private place stays existing recipes / Class M discipline |
-| Honesty      | No invented OHLCV                                         |
-| Jurisdiction | Private routes enforce principal + matrix                 |
+| Law           | Implication                                                    |
+| ------------- | -------------------------------------------------------------- |
+| §27           | No ccxt import on money path; parseLevels refuses JSON numbers |
+| Compatibility | “CCXT-compatible” = wire shape, not dependency                 |
+| P-WS          | Depth/stream integrity before promising bot WS parity          |
+| No invent     | Empty markets → empty structures                               |
 
-## 4 · DoD sketch (checkable — staged)
+---
 
-### DoD checks
+## 4 · DoD sketch
 
-- [ ] Supported-methods matrix vs residual
-- [ ] Candle job product decision
-- [ ] Futures/margin remain typed unsupported until law says otherwise
+- [ ] Published OpenAPI of CCXT-like endpoints mapped to monorepo
+- [ ] Auth model + rate limits
+- [ ] Conformance tests against subset bots use
+- [ ] Explicit non-support list (what CCXT methods we refuse)
 
-### Tracker `done` bar
-
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+---
 
 ## 5 · Open questions
 
-1. Is partial REST enough for tracker `done`?
-2. WS parity scope (likely separate).
+1. REST-only v1 vs WS required for title?
+2. Which CCXT version surface year to target?
+3. Blocked on P-WS market-id law?
+
+---
 
 ## 6 · Estimated size
 
-| Slice                        | Size    |
-| ---------------------------- | ------- |
-| Docs matrix + residual flags | **S**   |
-| Candle job default/prod      | **S–M** |
-| Full CCXT method parity      | **L+**  |
+| REST subset wrap | **M–L** |
+| Full bot parity | **XL** |
+
+---
 
 ## 7 · Related docs / code
 
-- `services/svc-trade/src/public-rest.ts`
-- `private-rest.ts`
-- `ccxt-errors.ts`
+- `services/svc-trade/README.md` venue fabric + feature table
+- `packages/venue-adapter` public MD only
+- `dex.quote-router` for quote honesty twin
 
-## 8 · Explicit non-goals for this pack
+---
 
-- No adding npm `ccxt` to money path.
-- No inventing candles.
+## 8 · Explicit non-goals
+
+- No adding `ccxt` dependency.
+- No invent marks for bot happiness.
+- No dual-edit Denon matching while #433 open.
+
+---
+
+## 9 · Mapping sketch (illustrative — not implement)
+
+| CCXT-ish surface | Platform owner                          |
+| ---------------- | --------------------------------------- |
+| fetchMarkets     | trade markets list via edge             |
+| fetchOrderBook   | ws/stream + matching — **P-WS blocked** |
+| createOrder      | trade order path + holds                |
+| fetchBalance     | ledger-backed account APIs              |
+
+Each mapping must preserve decimal strings and refuse invent zeros.
+
+## 10 · Blocked by integrity
+
+P-WS-REPORT still blocked by Denon **#433** matching + **#432** edge. Promising bot WS parity before market-id law is a stamp lie.
+
+## 11 · First PR shape
+
+| PR  | Scope                              |
+| --- | ---------------------------------- |
+| 1   | OpenAPI of REST subset + auth      |
+| 2   | fetchMarkets + fetchTicker only    |
+| 3   | Order paths after money self-audit |
+
+## 12 · One-line residual
+
+CCXT-**compatible** wire shape without `ccxt` dependency; P-WS integrity before bot WS parity claims.
