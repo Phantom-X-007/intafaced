@@ -83,6 +83,8 @@ export type RefusalCode =
   | 'channel.target_unroutable'
   /** Out-of-app sending is switched off by the operator. The inbox still fills. */
   | 'channel.disabled'
+  /** User muted this non-critical channel (preference law). Critical never mutes. */
+  | 'channel.muted'
   /** Attempted the configured maximum times and never succeeded. Terminal by policy. */
   | 'channel.attempts_exhausted';
 
