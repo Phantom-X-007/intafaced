@@ -14,7 +14,7 @@
 
 | Question                               | Answer                                                                                                                                                 |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Do we already hold massive leverage?   | **Yes** — vendored full exchange kit (`vendor/coinexchange`) + full TypeScript spine (`services/*`, `packages/*`) + infra images                       |
+| Do we already hold massive leverage?   | **Yes** — vendored full exchange kit (`vendor/<kit>`) + full TypeScript spine (`services/*`, `packages/*`) + infra images                              |
 | Is product UI law using that leverage? | **Yes, by ADR** — sole product surface = vendor shell `:8090`; `apps/web` retires                                                                      |
 | Are we fully _using_ the kit?          | **No** — shell is primary; **Java money is deliberately not the book**; many Java modules not product-path; wallet RPC **not** live-money until review |
 | Biggest rebuild risk (Nitro)?          | New UI for screens that already exist in `05_Web_Front` / admin; second terminal; ignoring `ledger-client` recipes                                     |
@@ -27,22 +27,22 @@
 
 ## 1 · Prior maps status (E1)
 
-| Prior doc                                                  | Status vs tip                                                                                         | Action                                                    |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `adr/2026-08-02-adopt-vendored-product-keep-our-ledger.md` | **Still law**                                                                                         | Keep                                                      |
-| `adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`      | **Still law**                                                                                         | Keep; port residual named there still open                |
-| `adr/2026-07-28-vendored-exchange-integration.md`          | **Still law** (ledger only)                                                                           | Keep                                                      |
-| `VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md`           | **Mostly true**, paths may say `exchange-tree` / brand tokens — tip tree is **`vendor/coinexchange`** | Treat as map; paths = coinexchange                        |
-| `VENDORED-OVERLAP-AUDIT.md`                                | **Historical** (Jul 30) — Java under-use still directionally true                                     | Do not treat fleet row counts as current without re-probe |
-| `UPSTREAM-ADOPTION-QUEUE-2026-08-02.md`                    | Queue doc — re-check any open items against tip                                                       | Refresh when acting                                       |
-| `REDUNDANT-VS-PORT-2026-08-03.md`                          | Port map for apps/web → shell                                                                         | Still the port checklist                                  |
-| `ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md`                    | Money seam inventory                                                                                  | Use for dual-book / Java residual                         |
+| Prior doc                                                  | Status vs tip                                                                                  | Action                                                    |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `adr/2026-08-02-adopt-vendored-product-keep-our-ledger.md` | **Still law**                                                                                  | Keep                                                      |
+| `adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`      | **Still law**                                                                                  | Keep; port residual named there still open                |
+| `adr/2026-07-28-vendored-exchange-integration.md`          | **Still law** (ledger only)                                                                    | Keep                                                      |
+| `VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md`           | **Mostly true**, paths may say `exchange-tree` / brand tokens — tip tree is **`vendor/<kit>`** | Treat as map; paths = vendored-kit                        |
+| `VENDORED-OVERLAP-AUDIT.md`                                | **Historical** (Jul 30) — Java under-use still directionally true                              | Do not treat fleet row counts as current without re-probe |
+| `UPSTREAM-ADOPTION-QUEUE-2026-08-02.md`                    | Queue doc — re-check any open items against tip                                                | Refresh when acting                                       |
+| `REDUNDANT-VS-PORT-2026-08-03.md`                          | Port map for apps/web → shell                                                                  | Still the port checklist                                  |
+| `ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md`                    | Money seam inventory                                                                           | Use for dual-book / Java residual                         |
 
 ---
 
 ## 2 · Leverage asset register (E2)
 
-### 2.1 Vendored kit (`vendor/coinexchange`) — primary internet leverage
+### 2.1 Vendored kit (`vendor/<kit>`) — primary internet leverage
 
 | Asset ID         | Path                                                                            | Kind                      | Use?                                                           | Owner care                     |
 | ---------------- | ------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------- | ------------------------------ |
@@ -53,7 +53,7 @@
 | **V-DOC**        | `09_DOC`                                                                        | Screenshots / nginx notes | Reference                                                      | —                              |
 | **V-MOBILE**     | `02_App_Android`, `03_APP_IOS`                                                  | Stubs only                | **No source** — not leverage yet                               | Future decision                |
 | **V-ROBOT**      | `06_ExchangeRobot`                                                              | Stub                      | Out of scope                                                   | —                              |
-| **V-COMPOSE**    | `vendor/coinexchange-compose.yml` + monorepo compose `vendor-shell`             | Fleet                     | Shell on **:8090**                                             | Ops                            |
+| **V-COMPOSE**    | `vendor/<kit>-compose.yml` + monorepo compose `vendor-shell`                    | Fleet                     | Shell on **:8090**                                             | Ops                            |
 
 **Overlays already ours (leverage + extension):**  
 `05_Web_Front/.../pages/intafaced/*` — Academy, Agents, Bank, Blueprint, Chain, Dex, Launch, Pay, P2P, Platform, Protocol, Token, NotBuilt, …
@@ -191,7 +191,7 @@ Postgres 16 · Redis 7 · NATS · OTEL collector · vendor-shell image — **do 
 | Resurrect `apps/web` as product because it “has a better terminal” | ADR 2026-08-03            |
 | Agents implementing Shehzad `svc-protocol` contracts               | Ownership                 |
 | Dual-edit Denon open PR files “to help”                            | Collision                 |
-| New npm “exchange kit” while coinexchange sits in tree             | Rebuild of V-SHELL        |
+| New npm “exchange kit” while vendored-kit sits in tree             | Rebuild of V-SHELL        |
 
 ---
 
@@ -213,7 +213,7 @@ Postgres 16 · Redis 7 · NATS · OTEL collector · vendor-shell image — **do 
 | ---------- | --------------------------------------------------------------- | --------------- | ---------------------------------------- |
 | **G-P1-1** | OTC/admin/CMS workflows not fully product-path                  | Nitro after law | Adopt screens; money via ledger adapters |
 | **G-P1-2** | V-ADMIN not primary ops story                                   | Nitro/Denon     | Prefer V-ADMIN over new admin            |
-| **G-P1-3** | Peace maps path names drift (`exchange-tree` vs `coinexchange`) | Agents docs     | When touching maps, fix paths            |
+| **G-P1-3** | Peace maps path names drift (`exchange-tree` vs `vendored-kit`) | Agents docs     | When touching maps, fix paths            |
 | **G-P1-4** | Wallet RPC unused without review                                | Denon           | Security review program before live      |
 
 ### P2 — hygiene
@@ -291,7 +291,7 @@ Search **new** external leverage only for gaps this audit leaves honestly open, 
 - Mobile (no kit source)
 - Card issuer / KYC providers (adapters — Class X content separate)
 - Post-review custody alternatives if wallet_rpc fails review
-- Not: another full exchange Vue kit while coinexchange exists
+- Not: another full exchange Vue kit while vendored-kit exists
 
 ---
 
