@@ -428,10 +428,17 @@ describe('DepthHub — backpressure: degrade, then disconnect', () => {
 
 describe('DepthHub — an unknown market never reaches svc-matching', () => {
   /**
-   * `engine.depth()` upstream goes through `engine.book()`, which CREATES the
-   * book when it is missing. So a depth call for an arbitrary string is not a
-   * 404 — it is an allocation in the engine's map, reachable from any browser
-   * that can open a socket here. The market list is the gate.
+   * A market nobody lists is not a market, and a terminal must not be able to
+   * confuse "nobody is quoting here" with "you asked for something that does
+   * not exist" — an empty ladder drawn for a typo is a market being rendered as
+   * if it were real.
+   *
+   * This was also, historically, a memory-safety gate: `engine.depth()` went
+   * through `engine.book()`, which CREATED the book when it was missing, so a
+   * depth call for an arbitrary string allocated an entry in the engine's map
+   * from any browser that could open a socket here. That hole is closed at the
+   * engine now (`existingBook`, plus a 404 on the depth route), so this pins the
+   * honesty property rather than the allocation one.
    */
   it('refuses the subscription and makes no depth call', async () => {
     const source = new FakeSource([MARKET]);
@@ -578,5 +585,99 @@ describe('DepthHub — book lifecycle', () => {
     for (const message of eth.messages()) expect(message.marketId).toBe(OTHER);
     expect(eth.frames.length).toBe(1);
     expect(canonical(rebuild(btc))).toBe(canonical(hub.bookFor(MARKET) ?? null));
+  });
+});
+
+/**
+ * WHICH LIST DECIDES.
+ *
+ * The bug that made live depth unreachable for twenty-six cycles was not in any
+ * of the fan-out above. It was that this hub asked svc-matching "what are the
+ * markets?", and svc-matching answered with the books it holds — which, after
+ * `trade.markets` was reseeded, had an EMPTY intersection with the ids the
+ * browser fetches to draw the market picker. Sixteen listed, ten in the engine,
+ * nothing in common, every subscription refused with `unknown market`.
+ *
+ * So the hub now takes a registry that is separate from its depth source, and
+ * these are the two facts that must hold: the listing decides, and a listed
+ * market with no book still opens.
+ */
+describe('DepthHub — the listing decides, not the engine', () => {
+  const LISTED = 'fbbe6534-e7af-49a8-a782-bbdd1e1894ba';
+  const ENGINE_ONLY = '2a70a839-aeb6-4c04-a067-2b000f392bdb';
+
+  it('accepts a listed market the engine has never heard of', async () => {
+    // The exact fleet state: the source's own list does not contain it.
+    const source = new FakeSource([ENGINE_ONLY]);
+    source.current.set(LISTED, snapshot(0, [], [], LISTED));
+    const hub = hubFor(source, { registry: { markets: async () => [LISTED, ENGINE_ONLY] } });
+
+    const sink = new FakeSink();
+    hub.attach(LISTED, sink);
+    await settle();
+
+    expect(sink.closed).toBeNull();
+    expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', marketId: LISTED });
+  });
+
+  it('opens an EMPTY BOOK for a listed market that has never traded', async () => {
+    // Six of the sixteen. `HttpDepthSource` turns svc-matching's 404 into this
+    // snapshot; here the shape is what matters — no asks, no bids, sequence 0,
+    // and a live socket rather than a close frame. The shell already renders
+    // exactly this as "No asks / No bids".
+    const source = new FakeSource([]);
+    source.current.set(LISTED, { type: 'snapshot', marketId: LISTED, sequence: 0, bids: [], asks: [] });
+    const hub = hubFor(source, { registry: { markets: async () => [LISTED] } });
+
+    const sink = new FakeSink();
+    hub.attach(LISTED, sink);
+    await settle();
+
+    expect(sink.closed).toBeNull();
+    expect(sink.messages()[0]).toEqual({ type: 'snapshot', marketId: LISTED, sequence: 0, bids: [], asks: [] });
+  });
+
+  it('still refuses an id nobody lists', async () => {
+    const source = new FakeSource([ENGINE_ONLY]);
+    const hub = hubFor(source, { registry: { markets: async () => [LISTED, ENGINE_ONLY] } });
+
+    const sink = new FakeSink();
+    hub.attach('NOT-A-MARKET', sink);
+    await settle();
+
+    expect(sink.closed?.code).toBe(CLOSE_POLICY);
+    expect(sink.closed?.reason).toMatch(/unknown market/);
+    expect(source.snapshotCalls).toEqual([]);
+  });
+
+  it('never asks the depth source for the market list once a registry is given', async () => {
+    // A regression here would silently restore the old behaviour: the engine's
+    // book list back in charge of what a client may watch.
+    const source = new FakeSource([ENGINE_ONLY]);
+    const hub = hubFor(source, { registry: { markets: async () => [LISTED] } });
+
+    await hub.refreshMarkets();
+
+    expect(source.marketCalls).toBe(0);
+    expect(hub.knownMarkets).toEqual([LISTED]);
+  });
+
+  it('keeps the last known list when the registry fails, rather than delisting everything', async () => {
+    let fail = false;
+    const source = new FakeSource([]);
+    const hub = hubFor(source, {
+      registry: {
+        markets: async () => {
+          if (fail) throw new Error('every market registry source failed');
+          return [LISTED];
+        },
+      },
+    });
+
+    await hub.refreshMarkets();
+    fail = true;
+    await expect(hub.refreshMarkets()).rejects.toThrow(/every market registry source failed/);
+
+    expect(hub.knownMarkets).toEqual([LISTED]);
   });
 });
