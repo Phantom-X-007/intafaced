@@ -68,7 +68,11 @@ function findWalletRpc() {
     return null;
   }
   for (const name of entries) {
-    const candidate = join(VENDOR, name, '01_wallet_rpc');
+    // vendor/ may contain files (e.g. .gitignore). join(file, '01_wallet_rpc')
+    // throws ENOTDIR on Node — only descend into directories.
+    const root = join(VENDOR, name);
+    if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) continue;
+    const candidate = join(root, '01_wallet_rpc');
     if (statSync(candidate, { throwIfNoEntry: false })?.isDirectory()) return candidate;
   }
   return null;
