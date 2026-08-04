@@ -10,19 +10,22 @@ export interface DepthSource {
   /**
    * Market ids the engine actually has a book for.
    *
-   * This is not a convenience. `svc-matching`'s `engine.depth()` goes through
-   * `engine.book()`, which **creates the book if it does not exist** — so a
-   * depth read for `"../../etc/passwd"` does not 404, it allocates an entry in
-   * the engine's map and returns an empty book. An anonymous browser that can
-   * make this service call depth for an arbitrary string can therefore grow
-   * svc-matching's memory from the public internet.
-   *
-   * Every subscription is checked against this list before any depth call is
-   * made. That check is the whole reason this method exists.
+   * This is a `MarketRegistry` (see `registry.ts`) and it is one of the two the
+   * hub unions, but it is NOT the authority on what is listed. It is
+   * `engine.markets` — the books the engine currently holds — so it omits every
+   * listed market that has not traded yet, and after a `trade.markets` reseed it
+   * can hold ids that nothing else recognises. The listing service answers "what
+   * may a client watch"; this answers "what has the engine ever seen", which is
+   * a strictly-real subset worth keeping in the union.
    */
   markets(): Promise<readonly string[]>;
 
-  /** Top-N aggregated depth, current as of an engine sequence. */
+  /**
+   * Top-N aggregated depth, current as of an engine sequence.
+   *
+   * A listed market the engine has no book for is not an error here — see
+   * `HttpDepthSource.snapshot`. It is an empty book at sequence 0.
+   */
   snapshot(marketId: string, limit: number): Promise<DepthSnapshot>;
 }
 
@@ -88,28 +91,50 @@ export class HttpDepthSource implements DepthSource {
     this.#fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   }
 
-  async #get(path: string): Promise<unknown> {
+  /** `null` ONLY for a 404, which callers are expected to give meaning to. */
+  async #get(path: string): Promise<unknown | null> {
     let response: Response;
     try {
       response = await this.#fetch(`${this.#baseUrl}${path}`, { signal: AbortSignal.timeout(this.#timeoutMs) });
     } catch (err) {
       throw new DepthSourceError(`svc-matching unreachable: ${err instanceof Error ? err.message : String(err)}`, null);
     }
+    if (response.status === 404) return null;
     if (!response.ok) throw new DepthSourceError(`svc-matching answered ${response.status} for ${path}`, response.status);
     return response.json();
   }
 
   async markets(): Promise<readonly string[]> {
     const body = await this.#get('/markets');
-    const markets = (body as { markets?: unknown }).markets;
+    const markets = (body as { markets?: unknown } | null)?.markets;
     if (!Array.isArray(markets) || markets.some((m) => typeof m !== 'string')) {
       throw new DepthSourceError('svc-matching returned no market list', null);
     }
     return markets as readonly string[];
   }
 
+  /**
+   * A LISTED MARKET WITH NO BOOK IS AN EMPTY BOOK, NOT A FAILURE.
+   *
+   * svc-matching answers 404 for a market it holds no book for, and it is right
+   * to: reading must not create, and the engine will not allocate a book for an
+   * arbitrary string. But "the engine has never seen a trade here" and "that is
+   * not a market" are different facts, and only the listing registry can tell
+   * them apart — which it already has, before this call is ever made.
+   *
+   * So a 404 here becomes `{bids: [], asks: [], sequence: 0}`. Six of the
+   * sixteen listed markets have never traded; refusing to stream them would
+   * make an honest empty ladder look like a broken terminal, and the shell
+   * already renders exactly this as "No asks / No bids".
+   *
+   * Sequence 0 is the truthful number, not a placeholder: nothing has happened.
+   * When the market's first order lands, the engine's sequence is above 0 and
+   * the hub diffs into it normally, so a client watching an untraded market
+   * sees its first quote as a delta and never needs to be told to resnapshot.
+   */
   async snapshot(marketId: string, limit: number): Promise<DepthSnapshot> {
     const body = await this.#get(`/markets/${encodeURIComponent(marketId)}/depth?limit=${limit}`);
+    if (body === null) return { type: 'snapshot', marketId, sequence: 0, bids: [], asks: [] };
     const raw = body as { marketId?: unknown; sequence?: unknown; bids?: unknown; asks?: unknown };
 
     if (typeof raw.sequence !== 'number' || !Number.isInteger(raw.sequence)) {

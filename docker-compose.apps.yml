@@ -355,6 +355,17 @@ services:
       # 4014: 4013 is svc-indexer, and everything below it is taken.
       HTTP_PORT: '4014'
       MATCHING_URL: http://svc-matching:4005
+      # WHICH MARKETS EXIST, as opposed to which ones have traded.
+      #
+      # svc-matching's `/markets` is the books the engine currently holds. It is
+      # not the listing, and after a `trade.markets` reseed it is not even a
+      # subset of it: this fleet had ten journal-replayed engine ids and sixteen
+      # listed ids with an EMPTY intersection, so the socket refused every market
+      # the browser could legitimately discover. svc-trade's
+      # `GET /api/v1/markets` is that listing, and it is unauthenticated public
+      # market data — so svc-ws still holds no credential. See
+      # services/svc-ws/src/depth/registry.ts.
+      TRADE_URL: http://svc-trade:4004
       WS_DEPTH_LIMIT: ${WS_DEPTH_LIMIT:-50}
       WS_POLL_INTERVAL_MS: ${WS_POLL_INTERVAL_MS:-250}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
