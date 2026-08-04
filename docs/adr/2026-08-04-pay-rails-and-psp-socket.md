@@ -58,9 +58,13 @@ Two structural gaps, both ours, neither solved by any vendor.
 
 ## PR #346 lands. It is not closed.
 
-Its conflicts are **entirely in generated board files** — a `features.mjs` row it flips to `done` that main has since rewritten. `git diff $MERGE_BASE origin/main` over its svc-pay paths is empty: in 364 commits nobody touched `payment-service.ts`, `router.ts`, `db/schema.ts` or any test underneath it.
+Its conflicts are **entirely in generated board files** — `features.mjs` (1 hunk), `docs/TRACKER.md` (4), `README.md` (2), `docs/BOARD-CLEAR-SCOREBOARD.md` (3). **Zero source conflicts**, confirmed by running the real merge rather than `merge-tree` alone.
 
-It holds the **only KYB state machine in the repo**, plus `merchant.me`, `payment.list`, and the only card-acquiring E2E. Closing it loses all of that to save a generated-file merge. Resolve the board file and land it.
+State that precisely, because a looser version of it is wrong: main **has** changed `svc-pay` since the merge base — `evm-chain.live.test.ts` and `user-money-service.test.ts` both moved. The conclusion survives because **#346 does not touch either file**. The intersection of "what #346 changed" and "what main changed" is exactly the four board files. It is not that svc-pay stood still.
+
+What closing it would lose, each verified absent from main: `submitKyb` / `decideKybStub` — the only code that **moves** KYB state; `pay.kyb_operator_required` honest-refuse under live-only; `merchant.me`; durable `payment.list`; `getMerchantByUserId`; `card-sandbox-e2e.mjs`; and migration `0005_pay_merchant_kyb`. Note the precise claim: the `kyb_status` enum and column have existed on main since `0000_pay_init`, so "the only KYB state machine" overstates it — **the transitions are what is unique**, and they are what has no substitute.
+
+One of the four hunks is a **decision, not a merge**: `features.mjs` `pay.gateway` is `status: 'done'` on #346 and `status: 'wip'` on main, with the note "Reclaimed 2026-08-04 from Shehzad M1 — Nitro agents after #346 handoff." Someone must rule whether landing #346 closes that row or leaves it reclaimed-wip. That is an owner call, not a conflict resolution.
 
 ---
 
