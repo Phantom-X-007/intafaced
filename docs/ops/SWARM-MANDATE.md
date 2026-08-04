@@ -39,10 +39,12 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | Mechanism                                      | What it does when context degrades                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`tooling/ci/value-gate.mjs` on Docs format** | **Exits 1** (strict) on docs-only + ≥0.80 subject similarity to last 10 ancestors + no `Board-Delta:` trailer. Git-only. **This is enforcement.** |
-| `pnpm swarm:status` ops-churn / Actions 24h    | **Informational only** — prints; does not block                                                                                                   |
+| **`pnpm thrift:check`** (agent preflight)      | **Exits 1** when 24h Actions runs ≥ hard cap (default 400 total or 250 Docs-format). Soft warn ≥200. **Run before every `gh pr create`.**         |
+| **CI / Docs-format triggers**                  | **PR only** (no full matrix / docs job on push to main after merge) — kills double-bill thrash. Manual re-check: `workflow_dispatch`.             |
+| `pnpm swarm:status` ops-churn / Actions 24h    | Prints meter + thrift level; hard level is a **FAIL line** agents must not ignore                                                                 |
 | `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                       |
 
-Self-test (fixtures, no network): `pnpm value-gate:self-test` → near-dup exit-1 path, real work pass.
+Self-test (fixtures, no network): `pnpm value-gate:self-test` · `pnpm thrift:self-test`.
 
 ### F-STANDBY (finish type when freeProduct=0) — corrected
 

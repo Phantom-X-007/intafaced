@@ -22,14 +22,17 @@
 # minute against the full run it deliberately avoids. This is thrift, not an
 # exception to it: the alternative is not "no CI", it is a red `main` and three
 # people debugging their own checkouts.
+#
+# THRIFT 2026-08-04: pull_request ONLY — do not re-run on push to main after merge.
+# Squash/merge already paid for Docs format on the PR; a second main run doubled
+# the mill (~half of 619 Docs-format runs in one thrash day). Local `pnpm verify`
+# still catches unformatted md before the next code PR. Manual: workflow_dispatch.
 name: Docs format
 
 on:
-  push:
-    branches: [main]
-    paths: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
   pull_request:
     paths: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
