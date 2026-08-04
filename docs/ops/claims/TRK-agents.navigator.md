@@ -1,8 +1,8 @@
 # Claim TRK-agents.navigator
 
-**status:** residual-own
-**proof:** docs/ops/trk/agents.navigator.md on tip · research/spec complete · not implement
-**tip:** 04f9b1f2
-**updated:** 2026-08-03
+**status:** pr-open
+**proof:** Stage-1 navigatorAgentGuardrail + tests in services/svc-agents/src/navigator/
+**tip:** ba2e50fd
+**updated:** 2026-08-04
 
-Claim-lock is spawn authority. residual-own = research/spec complete on tip; not an implement swarm.
+Claim-lock is spawn authority. Stage-1 only — not mountain done.
