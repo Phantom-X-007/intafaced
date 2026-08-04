@@ -113,6 +113,8 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `instruments.list`               | `p2p:read`               | The caller's own — **headers only, no field values, ever**                |
 | `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read          |
 | `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                          |
+| `data.export`                    | `p2p:read`               | §0.9 — everything this service holds about **the caller**                 |
+| `data.erase`                     | `p2p:write`              | §0.9 — self-only. Refuses while escrow is live; names what it retained    |
 
 HTTP (`src/index.ts`):
 
@@ -222,6 +224,40 @@ The **number** is an operator decision, not an engineering one, and where a mark
 A taker who genuinely takes an offer becomes a counterparty and is entitled to the seller's destination. Someone willing to open small trades can therefore collect account details from many sellers. That is inherent to P2P — a buyer who cannot see where to pay cannot pay — and it is not solved here. What exists against it is the access log (every look attributed, visible to the seller), the minimum-amount bound on every offer, and the reputation record. It is named here so nobody assumes it was overlooked.
 
 **Not encrypted at rest.** `details` is `jsonb` in Postgres. Envelope encryption is the right next step and it needs a key-management decision that is owner-gated (Class X, `AGENTS.md`); doing it with a key improvised in this service would be the appearance of the protection without the substance. §13 socket: **payment-instrument encryption at rest**.
+
+---
+
+## Export and erasure (§0.9)
+
+Before this, `blueprint.export` / `blueprint.erase` were the only ones in the platform and every statement in them is prefixed `blueprint.` — **no p2p table was covered by anything.** The de facto answers were `instruments.reveal` for export and `instruments.remove` for erase: one instrument at a time, only while active, covering none of the offers, trades, disputes or reputation this service holds about a person.
+
+**Neither procedure takes a `userId`.** The caller is the subject, always. An export endpoint that accepts one is a data-breach endpoint with a friendly name.
+
+`data.export` returns the raw rows — offers, trades, disputes **with their evidence** (including the ones filed _about_ the caller, which is the clearest Art. 15 case in the service), reputation, and instrument **headers**. Not instrument values: those come from `instruments.reveal`, which writes an access-log row in the same statement that reads them, and an export that also served them would be a second way to read an account number with nothing recording that anyone did. `notCovered` names that path, and svc-identity, svc-ledger and blueprint — an export that implies it is the whole platform is a lie told by omission.
+
+`data.erase` is built on two rules.
+
+**1 · It refuses outright while any trade is open or unsettled.** svc-ledger is holding that value. Deleting our copy of who it belongs to does not remove the money; it removes the only record that can explain it, which is the stranded-funds condition this whole service exists to prevent. "The user asked" does not make it safe. The refusal names the count, and nothing is half-done on the way to it — including the destination the buyer is mid-payment to.
+
+**2 · It returns a manifest of what it KEPT, and why.** An erase that silently retains half the record is worse than one that refuses — the person believes something untrue and finds out in a dispute. Every reason is a sentence that would survive being read out loud; a test asserts none of them is the word "compliance".
+
+| Category                                        | What happens                                                                                                            |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| reputation                                      | **erased** — counters keyed on the user id, referenced by no foreign key                                                |
+| offers never traded against                     | **erased** — they never became part of anyone else's record                                                             |
+| payment instrument details                      | **erased** — `status = 'removed'`, which `payment_instruments_details_ck` makes mean `details IS NULL`                  |
+| payment details frozen onto the caller's trades | **erased** — the retention window is how long we keep these when nobody asked; somebody asked                           |
+| offers that were traded against                 | kept — a settled trade references the offer, and the price and terms it was taken at                                    |
+| settled trades                                  | kept — §5 audit trail, and they name a counterparty who did not ask to be erased                                        |
+| disputes and their evidence                     | kept — append-only, filed **by and about** both parties                                                                 |
+| the instrument rows themselves, minus details   | kept — the access log and the snapshots point at them, and the `fingerprint` answers a later appeal                     |
+| the instrument access log                       | kept — append-only by trigger. Erasing it on request deletes the evidence of a leak at the request of whoever caused it |
+
+A **counterparty's** snapshot is never touched: that is their account, on a trade they did not ask to be erased from.
+
+**Stage 3, named rather than discovered later:** settled trades are retained, not pseudonymised. Replacing a user id with a surrogate everywhere it appears is a migration across every referencing row, and getting it half-right leaves a trade whose two sides disagree about who traded. It needs the owner's answer on how long a settled P2P trade must stay attributable.
+
+**There is no cross-service orchestration.** svc-p2p subscribes to no events, so it could not hear an account-deletion signal if one existed. When one does, `data.erase` is what it calls.
 
 ---
 

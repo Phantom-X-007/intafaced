@@ -12,6 +12,7 @@ import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { ANY_COUNTRY, InstrumentError } from './instruments.js';
 import { createP2pRouter } from './router.js';
+import { P2pErasure } from './erasure.js';
 
 /**
  * PAYMENT INSTRUMENTS — disclosure, refusal, and the record of both.
@@ -208,7 +209,10 @@ if (!available) {
       feeBps: 0,
       deadlines: { escrowSeconds: 120, paymentSeconds: 900, releaseSeconds: 1800, disputeSeconds: 604_800 },
     });
-    api = createP2pRouter(p2p, instruments);
+    // The erasure collaborator is wired in so the leak sweep below actually
+    // CALLS `data.export` rather than getting a NOT_IMPLEMENTED that would pass
+    // the scan while proving nothing about it.
+    api = createP2pRouter(p2p, instruments, new P2pErasure(sql));
     await registerMethod();
   });
 
@@ -785,6 +789,15 @@ if (!available) {
         'instruments.update': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id, label: 'mine now' },
         'instruments.remove': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
         'instruments.reveal': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
+        // Considered, and this is the interesting pair. Both are self-only —
+        // neither takes a `userId`, so a stranger calling them gets their own
+        // (empty) record and never the seller's. `data.export` DOES carry
+        // instruments, and carries HEADERS only: the values stay behind
+        // `instruments.reveal`, which access-logs every read. Probed with a
+        // real erasure collaborator wired in, so the canary scan below is a
+        // scan of what `data.export` actually returned.
+        'data.export': undefined,
+        'data.erase': undefined,
       };
 
       const paths = Object.keys((api as unknown as { _def: { procedures: Record<string, unknown> } })._def.procedures);

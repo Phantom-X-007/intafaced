@@ -1,0 +1,330 @@
+import type { Sql } from 'postgres';
+import { transaction } from '@intafaced/db';
+import { P2pError } from './p2p-service.js';
+import { withSpan } from './tracing.js';
+
+/**
+ * P2P EXPORT AND ERASURE — stage 1 (§0.9 · GDPR Art. 15 / Art. 17).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHAT WAS HERE BEFORE: NOTHING.
+ *
+ * `blueprint.export` / `blueprint.erase` are real, self-only and a genuine hard
+ * delete — and every statement in them is prefixed `blueprint.`. No p2p table
+ * is covered by anything. There is no platform-wide erasure orchestrator, no
+ * per-service erase convention, and svc-p2p subscribes to no events at all, so
+ * it could not hear an account-deletion signal if one existed.
+ *
+ * The de facto answers were `instruments.reveal` for export and
+ * `instruments.remove` for erase — one instrument at a time, only while active,
+ * and covering none of the offers, trades, disputes or reputation this service
+ * holds about a person.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE TWO RULES THIS FILE IS BUILT ON
+ *
+ * 1 · **Never erase something the platform still owes an answer about.** A
+ *     trade holding escrow, an open dispute, a decision recorded but not yet
+ *     settled — deleting our copy of the terms while svc-ledger still holds the
+ *     value is how escrow becomes a pile of money with no owner and no
+ *     instruction. That is the exact stranded-funds condition the whole service
+ *     is built to prevent, and "the user asked" does not make it safe.
+ *
+ * 2 · **Say what was kept, and why, in the response.** An erase that silently
+ *     retains half the record is worse than one that refuses: the person
+ *     believes something that is not true, and only finds out in a dispute.
+ *     Every call returns a `retained` manifest naming each category, the count,
+ *     and the reason — and the reasons here are honest ones ("a settled trade
+ *     is the audit trail for a movement of value") rather than "compliance".
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHAT STAGE 1 DOES NOT DO, stated here rather than discovered later:
+ *
+ *   · **Settled trades are retained, not pseudonymised.** Replacing a user id
+ *     with a surrogate everywhere it appears is a migration across every row
+ *     that references it, and getting it half-right leaves a trade whose two
+ *     sides disagree about who traded. Stage 3, and it needs the owner's answer
+ *     on how long a settled P2P trade must remain attributable.
+ *   · **There is no cross-service orchestration.** This is reachable only by
+ *     the person themselves. When a platform-wide erasure signal exists, this
+ *     is what it calls.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * PAYMENT INSTRUMENTS — the thing this file was written before and now covers.
+ *
+ * The first version of this file said instruments were "not yet built". They
+ * are: `payment_instruments` holds the account number a seller is paid at, and
+ * it is the single most sensitive row in the service. An erase that leaves it
+ * there and does not say so is exactly the "silently retains half the record"
+ * failure this file is built to refuse.
+ *
+ * It is erased the way the instrument table already defines erasure — a state
+ * change to `removed`, which the `payment_instruments_details_ck` CHECK turns
+ * into "details IS NULL" at the database. Not a DELETE: the access log and the
+ * frozen trade snapshots both carry foreign keys to the row, and deleting it
+ * would take the record of who looked at the details away with the details.
+ * The `fingerprint` deliberately survives — an appeal can still be told whether
+ * the account a seller now names is the one the buyer was shown, without us
+ * holding the account in order to answer.
+ *
+ * The frozen snapshots on the caller's OWN trades are purged on the same tick
+ * rather than left to `purgeExpiredSnapshots` — the retention window is how
+ * long we keep them when nobody asked; somebody asked. Snapshots owned by a
+ * COUNTERPARTY are not touched: those are that person's account details, on a
+ * trade they did not ask to be erased from.
+ */
+
+/** One category of data, and what happened to it. */
+export interface ErasureLine {
+  readonly category: string;
+  readonly rows: number;
+  /** Why it was kept. Absent on erased categories. */
+  readonly reason?: string;
+}
+
+export interface ErasureReport {
+  readonly userId: string;
+  readonly at: Date;
+  readonly erased: ErasureLine[];
+  readonly retained: ErasureLine[];
+}
+
+export interface P2pExport {
+  readonly userId: string;
+  readonly at: Date;
+  readonly offers: unknown[];
+  readonly trades: unknown[];
+  readonly disputes: unknown[];
+  readonly reputation: unknown | null;
+  /**
+   * The caller's payment destinations — **headers only, never the values.**
+   *
+   * The values are readable, by the owner, through `instruments.reveal`, and
+   * that path writes an access-log row in the same statement that reads them.
+   * Serving them here as well would be a second, unlogged way to read an
+   * account number, which is the one property the instrument design is built
+   * on. `notCovered` names where to get them instead.
+   */
+  readonly instruments: unknown[];
+  /** Named so a reader knows the export is of THIS service, not the platform. */
+  readonly notCovered: string[];
+}
+
+export class P2pErasure {
+  constructor(private readonly sql: Sql) {}
+
+  /**
+   * EVERYTHING THIS SERVICE HOLDS ABOUT ONE PERSON. Self-only at the router.
+   *
+   * Deliberately raw rows rather than the API's output shapes: an export exists
+   * so a person can see what is held, and a view that has already dropped the
+   * fields the API does not serialise is not that. `evidence` in particular is
+   * returned whole for disputes they were party to — it is a record made ABOUT
+   * them, which is the clearest case in the file for Art. 15.
+   */
+  async exportFor(userId: string): Promise<P2pExport> {
+    return withSpan('p2p.export', async () => {
+      const [offers, trades, disputes, reputation, instruments] = await Promise.all([
+        this.sql`SELECT * FROM p2p.offers WHERE maker_id = ${userId} ORDER BY created_at`,
+        this.sql`SELECT * FROM p2p.p2p_trades WHERE seller_id = ${userId} OR buyer_id = ${userId} ORDER BY created_at`,
+        this.sql`
+          SELECT d.* FROM p2p.p2p_disputes d
+            JOIN p2p.p2p_trades t ON t.id = d.trade_id
+           WHERE t.seller_id = ${userId} OR t.buyer_id = ${userId}
+           ORDER BY d.opened_at
+        `,
+        this.sql`SELECT * FROM p2p.p2p_reputation WHERE user_id = ${userId}`,
+        // HEADERS ONLY — the column list is explicit precisely so that `SELECT *`
+        // cannot quietly start returning `details` the day someone adds a
+        // column. `fingerprint` is out too: it is a hash of the account details,
+        // and a hash handed to a caller is an oracle a guessed account number
+        // can be checked against.
+        this.sql`
+          SELECT id, method_id, country, fiat_currency, label, status, created_at, updated_at, removed_at
+            FROM p2p.payment_instruments
+           WHERE owner_id = ${userId}
+           ORDER BY created_at
+        `,
+      ]);
+
+      return {
+        userId,
+        at: new Date(),
+        offers: [...offers],
+        trades: [...trades],
+        disputes: [...disputes],
+        reputation: reputation[0] ?? null,
+        instruments: [...instruments],
+        // An export that implies it is the whole platform is a lie told by
+        // omission. These are the parts a reader must go elsewhere for.
+        notCovered: [
+          'the values inside your payment instruments — `instruments.reveal`, which access-logs every read (this export deliberately is not a second, unlogged way to read them)',
+          'who has looked at your payment instruments (`instruments.accessLog`)',
+          'identity, KYC records and sessions (svc-identity)',
+          'ledger entries for escrow movements (svc-ledger)',
+          'blueprint (blueprint.export)',
+        ],
+      };
+    });
+  }
+
+  /**
+   * ERASE WHAT CAN HONESTLY BE ERASED. Self-only at the router.
+   *
+   * Refuses outright while anything is live. Not "erases what it can and warns
+   * about the rest" — a person mid-trade who asks to be erased is asking a
+   * question the platform cannot answer yet, and the useful reply names the
+   * trades rather than half-deleting around them.
+   */
+  async eraseFor(userId: string): Promise<ErasureReport> {
+    return withSpan('p2p.erase', async () =>
+      transaction(
+        this.sql,
+        async (tx) => {
+          // THE REFUSAL, FIRST. Every state in which svc-ledger might still be
+          // holding this person's value, or in which a decision is recorded and
+          // the post has not happened.
+          const live = await tx<Array<{ id: string; status: string }>>`
+            SELECT id, status FROM p2p.p2p_trades
+             WHERE (seller_id = ${userId} OR buyer_id = ${userId})
+               AND (resolution IS NULL OR settled_at IS NULL)
+             ORDER BY created_at
+          `;
+
+          if (live.length > 0) {
+            throw new P2pError(
+              `Erasure is refused while ${live.length} trade(s) are still open or unsettled — ` +
+                `the escrow they describe is held in the ledger, and deleting the record of who it belongs to ` +
+                `would strand it. Close or settle them first.`,
+              'p2p.erase_blocked',
+            );
+          }
+
+          const erased: ErasureLine[] = [];
+          const retained: ErasureLine[] = [];
+
+          // Reputation: counters keyed on the user id, deriving nothing anyone
+          // else needs and referenced by no foreign key. A genuine delete.
+          const reputation = await tx`DELETE FROM p2p.p2p_reputation WHERE user_id = ${userId} RETURNING user_id`;
+          erased.push({ category: 'reputation', rows: reputation.length });
+
+          // Offers with no trades against them never became part of anyone
+          // else's record. Ones that were traded are load-bearing: a trade row
+          // references its offer, and `writeDecision` puts liquidity back on it.
+          const offers = await tx`
+            DELETE FROM p2p.offers o
+             WHERE o.maker_id = ${userId}
+               AND NOT EXISTS (SELECT 1 FROM p2p.p2p_trades t WHERE t.offer_id = o.id)
+            RETURNING id
+          `;
+          erased.push({ category: 'offers (never traded)', rows: offers.length });
+
+          // THE ACCOUNT NUMBER. Removal is a state change and not a DELETE —
+          // `payment_instruments_details_ck` makes `status = 'removed'` and
+          // `details IS NULL` the same fact at the database, so this cannot
+          // half-happen, and the access log and the frozen snapshots keep
+          // pointing at a row that exists. Same statement `removeInstrument`
+          // runs, written here rather than called because the whole erase is
+          // one transaction and a collaborator with its own connection would
+          // commit outside it.
+          const instruments = await tx`
+            UPDATE p2p.payment_instruments
+               SET status = 'removed', details = NULL, removed_at = now(), updated_at = now()
+             WHERE owner_id = ${userId} AND status = 'active'
+            RETURNING id
+          `;
+          erased.push({ category: 'payment instrument details', rows: instruments.length });
+
+          // The destinations frozen onto the caller's OWN trades. The retention
+          // window is how long these are kept when nobody asked; somebody
+          // asked. Only rows they own — a snapshot owned by a counterparty is
+          // that person's account, on a trade they did not ask to be erased
+          // from.
+          const snapshots = await tx`
+            UPDATE p2p.trade_payment_instruments
+               SET details = NULL, purged_at = now()
+             WHERE owner_id = ${userId} AND purged_at IS NULL
+            RETURNING trade_id
+          `;
+          erased.push({ category: 'payment details frozen onto trades', rows: snapshots.length });
+
+          const tradedOffers = await tx<Array<{ n: string }>>`
+            SELECT count(*) AS n FROM p2p.offers o
+             WHERE o.maker_id = ${userId} AND EXISTS (SELECT 1 FROM p2p.p2p_trades t WHERE t.offer_id = o.id)
+          `;
+          if (Number(tradedOffers[0]!.n) > 0) {
+            retained.push({
+              category: 'offers (traded against)',
+              rows: Number(tradedOffers[0]!.n),
+              reason:
+                'A settled trade references the offer it was taken from, and the price and terms it was taken at. ' +
+                'Deleting the offer would leave the counterparty holding half a contract.',
+            });
+          }
+
+          const trades = await tx<Array<{ n: string }>>`
+            SELECT count(*) AS n FROM p2p.p2p_trades WHERE seller_id = ${userId} OR buyer_id = ${userId}
+          `;
+          if (Number(trades[0]!.n) > 0) {
+            retained.push({
+              category: 'settled trades',
+              rows: Number(trades[0]!.n),
+              reason:
+                'A settled trade is the audit trail for a movement of value that svc-ledger recorded — §5 requires ' +
+                'every movement to be explainable, and it names a counterparty who did not ask to be erased. ' +
+                'Pseudonymisation is the right answer here and is not built (stage 3).',
+            });
+          }
+
+          const disputes = await tx<Array<{ n: string }>>`
+            SELECT count(*) AS n FROM p2p.p2p_disputes d
+              JOIN p2p.p2p_trades t ON t.id = d.trade_id
+             WHERE t.seller_id = ${userId} OR t.buyer_id = ${userId}
+          `;
+          if (Number(disputes[0]!.n) > 0) {
+            retained.push({
+              category: 'disputes and their evidence',
+              rows: Number(disputes[0]!.n),
+              reason:
+                'A dispute is a record of two people disagreeing, and the evidence in it was filed BY and ABOUT ' +
+                'both of them. It is append-only by construction, and one party erasing it would remove the ' +
+                "other party's account of what happened.",
+            });
+          }
+
+          const instrumentShells = await tx<Array<{ n: string }>>`
+            SELECT count(*) AS n FROM p2p.payment_instruments WHERE owner_id = ${userId}
+          `;
+          if (Number(instrumentShells[0]!.n) > 0) {
+            retained.push({
+              category: 'payment instrument records, without their details',
+              rows: Number(instrumentShells[0]!.n),
+              reason:
+                'The account details are gone; what is left is the row, its label and a hash of what it used to be. ' +
+                'The access log and the destinations frozen onto settled trades both point at it, so deleting it ' +
+                'would take away the record of who looked at your details along with the details.',
+            });
+          }
+
+          const accessLog = await tx<Array<{ n: string }>>`
+            SELECT count(*) AS n FROM p2p.instrument_access_log
+             WHERE owner_id = ${userId} OR viewer_id = ${userId}
+          `;
+          if (Number(accessLog[0]!.n) > 0) {
+            retained.push({
+              category: 'payment instrument access log',
+              rows: Number(accessLog[0]!.n),
+              reason:
+                'This is the record of who looked at your account details and when, and it is append-only by a ' +
+                'database trigger — it cannot be edited by this service or by anyone holding a session. ' +
+                'Erasing it on request would delete the evidence of a leak at the request of whoever caused it.',
+            });
+          }
+
+          return { userId, at: new Date(), erased, retained };
+        },
+        { isolation: 'read committed', maxAttempts: 3 },
+      ),
+    );
+  }
+}

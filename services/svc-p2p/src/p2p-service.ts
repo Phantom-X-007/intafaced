@@ -97,7 +97,8 @@ export type P2pErrorCode =
   | 'p2p.dispute_already_resolved'
   | 'p2p.escrow_missing'
   | 'p2p.trading_disabled'
-  | 'p2p.dispute_evidence_rejected';
+  | 'p2p.dispute_evidence_rejected'
+  | 'p2p.erase_blocked';
 
 export class P2pError extends Error {
   constructor(
