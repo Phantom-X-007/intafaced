@@ -22,7 +22,7 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-01** ⚠️ | **partial** | `DIRECTION-2026-07-31.md` §1 — isolated margin only, partial-liquidation posture, MVP done bar. **No ADR.** Mark/funding law still blank.                                      |
 | **D-S-02** ✅ | **done**    | [`SPEC-OTC-RFQ-AND-EARN-2026-08-02.md`](SPEC-OTC-RFQ-AND-EARN-2026-08-02.md) Part A                                                                                            |
 | **D-S-03** ✅ | **done**    | [`SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md). `DIRECTION` §1 marks the old ban superseded by it.                           |
-| **D-S-04** ❌ | **blank**   | Only `DIRECTION` §1: "Algo v1 = TWAP only. Icebergs are OUT."                                                                                                                  |
+| **D-S-04** ✅ | **done**    | [`adr/2026-08-04-algo-execution-law.md`](adr/2026-08-04-algo-execution-law.md), on `DIRECTION` §1 (TWAP only, icebergs out).                                                   |
 | **D-S-05** ⚠️ | **partial** | `DIRECTION` §2 decides the instrument model and says RESUME `feat/multi-asset-instruments`. Enum authority unwritten.                                                          |
 | **D-S-06** ❌ | **blank**   | Nothing anywhere. **Highest agent-unblock value of the blanks.** Needs the fill-finality answer first.                                                                         |
 | **D-S-07** ⚠️ | **half**    | [`SPEC-LENDING-2026-08-02.md`](SPEC-LENDING-2026-08-02.md) §1 for lending. Futures mark side blank — see D-S-01.                                                               |
@@ -31,24 +31,24 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-10** ✅ | **done**    | [`SPEC-PAY-VERTICALS-2026-08-02.md`](SPEC-PAY-VERTICALS-2026-08-02.md) + [`adr/2026-08-04-pay-rails-and-psp-socket.md`](adr/2026-08-04-pay-rails-and-psp-socket.md)            |
 | **D-S-11** ✅ | **done**    | [`SPEC-SUBACCOUNTS-2026-08-02.md`](SPEC-SUBACCOUNTS-2026-08-02.md). Adjacent: [`adr/2026-08-04-authority-and-refusal-shape.md`](adr/2026-08-04-authority-and-refusal-shape.md) |
 | **D-S-12** ❌ | **blank**   | `docs/ops/trk/bridge.canonical.md` is research only and says so explicitly.                                                                                                    |
-| **D-S-13** ❌ | **blank**   | The string appears only on the board.                                                                                                                                          |
+| **D-S-13** ✅ | **done**    | [`adr/2026-08-04-event-socket-vs-broken-promise.md`](adr/2026-08-04-event-socket-vs-broken-promise.md)                                                                         |
 | **D-S-14** ❌ | **blank**   | Nothing current.                                                                                                                                                               |
 | **D-S-15** ❌ | **blank**   | Board rows only.                                                                                                                                                               |
 | **D-S-16** ⚠️ | **partial** | `DIRECTION` §3 — "Class M merge rule — decided" + four carve-outs.                                                                                                             |
 | **D-S-17** ✅ | **done**    | Decision: `DIRECTION` §4 (Option B). Residual: [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)                                        |
 | **D-S-18** ❌ | **blank**   | Board itself says "if in scope".                                                                                                                                               |
 
-**Tally: 6 done · 4 partial · 8 blank.** The board read as 17 blank.
+**Tally: 8 done · 4 partial · 6 blank.** The board read as 17 blank.
 
 ---
 
 ## What this changes for agents, today
 
-**Agents may now implement against D-S-02, 03, 09, 10, 11 and 17 without waiting.** Those six are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
+**Agents may now implement against D-S-02, 03, 04, 09, 10, 11, 13 and 17 without waiting.** Those eight are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
 
 **D-S-01, 05, 07 and 16 are partially law.** Implement the decided part; do not invent the rest. Each row above names which half is which.
 
-**D-S-04, 06, 08, 12, 13, 14, 15, 18 remain genuinely blank.** The invent-ban holds in full. Research is welcome; implementation is not.
+**D-S-06, 08, 12, 14, 15, 18 remain genuinely blank.** The invent-ban holds in full. Research is welcome; implementation is not.
 
 ---
 
