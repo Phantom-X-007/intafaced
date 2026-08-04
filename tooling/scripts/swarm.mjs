@@ -175,32 +175,95 @@ function validateResidualPathHints() {
   }
 }
 
-function loadTrackerFree() {
+/** Money-class ids stay closed until Nitro opens a wave. */
+const MONEY_TRACKER_RE = /^(trade|pay|bank|venue|p2p|market)\./;
+/** Wave-1 exclude even if non-money. */
+const WAVE1_EXCLUDE = new Set(['ops.admin', 'ops.compliance']);
+
+function trkSpecPath(featureId) {
+  return join(OPS, 'trk', `${featureId}.md`);
+}
+
+function trkSpecLineCount(featureId) {
+  const p = trkSpecPath(featureId);
+  if (!existsSync(p)) return 0;
+  return readFileSync(p, 'utf8').split('\n').length;
+}
+
+/**
+ * Compute implementable + non-implementable free tracker rows from features.mjs.
+ * residual-own does not hide implementable (mandate).
+ */
+function loadTrackerRows() {
   try {
-    // Dynamic import sync via pathToFileURL not available — use child node -e
     const out = execFileSync(
       process.execPath,
       [
         '--input-type=module',
         '-e',
         `import { FEATURES } from '${join(ROOT, 'tooling/tracker/features.mjs')}';
-         const free = FEATURES.filter((f) => (f.status === 'ready' || f.status === 'wip') && !f.owner);
-         process.stdout.write(JSON.stringify(free.map((f) => ({
-           id: 'TRK-' + f.id,
-           rank: 300,
-           track: 'TRACKER',
-           title: f.title || f.id,
-           paths: f.requires || [],
-           note: 'features.mjs free-to-start (' + f.status + '); research/spec first unless DoD tiny. Mid-wave claim-file only, not features.mjs edit.',
-           featureId: f.id,
-         }))));`,
+         const byId = Object.fromEntries(FEATURES.map((f) => [f.id, f]));
+         const done = new Set(FEATURES.filter((f) => f.status === 'done').map((f) => f.id));
+         const rows = FEATURES.filter((f) => f.status === 'ready' && !f.owner).map((f) => {
+           const deps = f.dependsOn || [];
+           const depsDone = deps.every((d) => done.has(d));
+           const money = /^(trade|pay|bank|venue|p2p|market)\\./.test(f.id);
+           const wave1ex = ['ops.admin', 'ops.compliance'].includes(f.id);
+           return {
+             featureId: f.id,
+             title: f.title || f.id,
+             paths: f.requires || [],
+             status: f.status,
+             dependsOn: deps,
+             depsDone,
+             money,
+             wave1ex,
+           };
+         });
+         process.stdout.write(JSON.stringify(rows));`,
       ],
       { encoding: 'utf8', cwd: ROOT, maxBuffer: 10 * 1024 * 1024 },
     );
-    return JSON.parse(out);
+    const rows = JSON.parse(out);
+    const implementable = [];
+    const notYet = [];
+    for (const r of rows) {
+      const lines = trkSpecLineCount(r.featureId);
+      const specOk = lines >= 100;
+      const impl = r.depsDone && !r.money && !r.wave1ex && specOk;
+      const claim = {
+        id: 'TRK-' + r.featureId,
+        rank: impl ? 50 : 300,
+        track: impl ? 'IMPLEMENTABLE' : 'TRACKER',
+        title: r.title,
+        paths: r.paths.length ? r.paths : [trkSpecPath(r.featureId).replace(ROOT + '/', '')],
+        featureId: r.featureId,
+        implementable: impl,
+        note: impl
+          ? `implementable TRK (spec ${lines} lines · deps done) — Stage-1 Class N`
+          : [
+              !r.depsDone && 'dep-blocked',
+              r.money && 'money-gated',
+              r.wave1ex && 'wave1-exclude',
+              !specOk && `thin/missing spec (${lines} lines)`,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'not implementable',
+      };
+      if (impl) implementable.push(claim);
+      else notYet.push(claim);
+    }
+    return { implementable, notYet };
   } catch (e) {
-    return { error: String(e.message || e) };
+    return { error: String(e.message || e), implementable: [], notYet: [] };
   }
+}
+
+function loadTrackerFree() {
+  const t = loadTrackerRows();
+  if (t.error) return { error: t.error };
+  // legacy: free tracker = non-implementable ready rows (research backlog)
+  return t.notYet;
 }
 
 function listClaimLocks() {
@@ -229,7 +292,18 @@ function readClaimLock(id) {
 function claimLockCloses(id) {
   const lock = readClaimLock(id);
   if (!lock) return false;
-  return ['residual-own', 'merged', 'retired', 'done', 'closed'].includes(lock.status);
+  if (['merged', 'retired', 'done', 'closed'].includes(lock.status)) return true;
+  // residual-own: hides non-TRK residual (research finished). TRK residual-own = awaiting implement — free board.
+  if (lock.status === 'residual-own' && !String(id).startsWith('TRK-')) return true;
+  return false;
+}
+
+/** Hides free spawn: closed locks OR claimed/pr-open/wip. TRK residual-own does not hide. */
+function claimLockHidesFree(id) {
+  const lock = readClaimLock(id);
+  if (!lock) return false;
+  if (claimLockCloses(id)) return true;
+  return ['claimed', 'pr-open', 'wip'].includes(lock.status);
 }
 
 function claimLockActive(id) {
@@ -532,18 +606,28 @@ function buildModel() {
     });
   }
 
-  const tracker = loadTrackerFree();
-  if (tracker.error) {
+  const trackerRows = loadTrackerRows();
+  if (trackerRows.error) {
     // non-fatal
-  } else if (Array.isArray(tracker)) {
-    const locks = new Set(listClaimLocks());
-    for (const c of tracker) {
+  } else {
+    for (const c of [...(trackerRows.implementable || []), ...(trackerRows.notYet || [])]) {
+      const hides = claimLockHidesFree(c.id);
+      const closed = claimLockCloses(c.id);
+      let status = 'free';
+      let collisions = [];
+      if (closed) {
+        status = 'blocked';
+        collisions = ['claim closed: ' + (readClaimLock(c.id)?.status || '?')];
+      } else if (hides) {
+        status = 'claimed';
+        collisions = ['claim file docs/ops/claims/' + c.id + '.md'];
+      }
       claims.push({
         ...c,
-        status: locks.has(c.id) ? 'claimed' : 'free',
-        collisions: locks.has(c.id) ? ['claim file exists'] : [],
+        status,
+        collisions,
         priority: c.rank,
-        note: c.note + (locks.has(c.id) ? ' · CLAIMED' : ''),
+        note: c.note + (status === 'claimed' ? ' · CLAIMED' : status === 'blocked' ? ' · CLOSED' : ''),
       });
     }
   }
@@ -577,17 +661,22 @@ function buildModel() {
   const free = claims.filter((c) => c.status === 'free');
   const blocked = claims.filter((c) => c.status === 'blocked');
 
-  // P2: anti-under-spawn compares available free product vs active claim locks (spawned).
-  const freeProduct = free.filter((c) => c.track === 'REGROUP' || c.track === 'AFK' || c.track === 'LANDER' || c.track === 'INTEGRITY');
+  // Spawnable free product: shell craft + implementable TRK (SWARM-MANDATE).
+  const freeImplementable = free.filter((c) => c.track === 'IMPLEMENTABLE');
+  const freeProduct = free.filter(
+    (c) => c.track === 'REGROUP' || c.track === 'AFK' || c.track === 'LANDER' || c.track === 'INTEGRITY' || c.track === 'IMPLEMENTABLE',
+  );
   const freeTracker = free.filter((c) => c.track === 'TRACKER');
-  const productIds = new Set(claims.filter((c) => ['REGROUP', 'AFK', 'LANDER', 'INTEGRITY'].includes(c.track)).map((c) => c.id));
-  const activeSpawned = listClaimLocks().filter((id) => productIds.has(id) && claimLockActive(id)).length;
+  const productIds = new Set(
+    claims.filter((c) => ['REGROUP', 'AFK', 'LANDER', 'INTEGRITY', 'IMPLEMENTABLE'].includes(c.track)).map((c) => c.id),
+  );
+  const activeSpawned = listClaimLocks().filter((id) => productIds.has(id) && claimLockHidesFree(id)).length;
   const available = freeProduct.length;
   const underGap = available;
   const underSpawnFail = available > 0;
   const underSpawnNote = underSpawnFail
-    ? `anti-under-spawn FAIL: available=${available} active_spawned_locks=${activeSpawned} gap=${underGap} — spawn or residual-own every free product id (target concurrent width 6–8 path-disjoint).`
-    : `anti-under-spawn OK: available=0 active_spawned_locks=${activeSpawned} gap=0 (shell product empty or blocked-only; tracker free is NOT product — see mandate).`;
+    ? `anti-under-spawn FAIL: available=${available} (implementable=${freeImplementable.length}) active_spawned_locks=${activeSpawned} gap=${underGap} — spawn path-disjoint Class N (width 3–6 TRK / 6–8 shell).`
+    : `anti-under-spawn OK: available=0 implementable=0 active_spawned_locks=${activeSpawned} gap=0.`;
 
   const opsChurn = countOpsOnlyChurn(30);
   const strandedBranches = listStrandedBranches(prs);
@@ -595,7 +684,7 @@ function buildModel() {
   const actionsRuns24h = countActionsRuns24h();
   const fStandby =
     freeProduct.length === 0
-      ? 'F-STANDBY — primary finish met; session continues on P1–P5 only with declared Board-Delta. Idling silently is valid. Do not open a stamp PR.'
+      ? 'F-STANDBY — freeProduct=0 and freeImplementable=0; continue P1–P5 only with Board-Delta. Idle only if every path-clear P1 is named blocked.'
       : null;
 
   return {
@@ -620,6 +709,7 @@ function buildModel() {
     free,
     blocked,
     freeProduct,
+    freeImplementable,
     freeTracker,
     available,
     activeSpawned,
@@ -633,9 +723,14 @@ function buildModel() {
     worktreeOverCap: wtCount > 20,
     actionsRuns24h,
     fStandby,
-    spawnWidthTarget: freeProduct.length > 0 ? '6-8' : '3-6 (P1–P3 only)',
+    spawnWidthTarget:
+      freeImplementable.length > 0 && freeProduct.length === freeImplementable.length
+        ? '3-6 (implementable TRK)'
+        : freeProduct.length > 0
+          ? '6-8'
+          : '3-6 (P1–P3 only)',
     mandate:
-      'SHELL PRODUCT only (REGROUP/AFK/LANDER/INTEGRITY). freeProduct=0 is shell craft drained — NOT whole-platform done. features.mjs TRK-* free are research/spec first unless DoD tiny; not auto-spawn implement swarms.',
+      'freeProduct = REGROUP/AFK/LANDER/INTEGRITY + implementable TRK (non-money, deps done, spec≥100). residual-own does not hide TRK implementable. Money-class closed. Wave1 exclude ops.admin/ops.compliance.',
     // AFK anti-drift (docs/ops/SWARM-MANDATE.md ladder) — freeProduct=0 must not spawn stamp mills
     afkLadder:
       freeProduct.length === 0
@@ -655,7 +750,9 @@ function renderFreezeMd(m) {
   lines.push(`- **Tip:** \`${m.tip}\` — ${m.tipSubject}`);
   lines.push(`- **Generated:** ${m.generatedAt}`);
   lines.push(`- **Open PRs:** ${m.openPrCount}`);
-  lines.push(`- **Free claims:** ${m.free.length} (product ${m.freeProduct.length}) · **Blocked:** ${m.blocked.length}`);
+  lines.push(
+    `- **Free claims:** ${m.free.length} (product ${m.freeProduct.length} · implementable ${(m.freeImplementable || []).length}) · **Blocked:** ${m.blocked.length}`,
+  );
   lines.push(
     `- **Spawn accounting:** available=${m.available ?? m.freeProduct.length} · active_spawned_locks=${m.activeSpawned ?? '?'} · gap=${m.underGap ?? m.freeProduct.length} · width_target=${m.spawnWidthTarget || '6-8'}`,
   );
@@ -771,7 +868,7 @@ function writeFreeze(m) {
 function printStatus(m) {
   console.log(`swarm:status  tip=${m.tip}  openPRs=${m.openPrCount}`);
   console.log(
-    `  free=${m.free.length}  freeProduct=${m.freeProduct.length}  freeTracker=${(m.freeTracker || []).length}  blocked=${m.blocked.length}`,
+    `  free=${m.free.length}  freeProduct=${m.freeProduct.length}  freeImplementable=${(m.freeImplementable || []).length}  freeTracker=${(m.freeTracker || []).length}  blocked=${m.blocked.length}`,
   );
   console.log(
     `  spawn: available=${m.available ?? m.freeProduct.length} active_spawned=${m.activeSpawned ?? '?'} gap=${m.underGap ?? m.freeProduct.length} width_target=${m.spawnWidthTarget || '6-8'}`,
@@ -811,6 +908,7 @@ function printStatus(m) {
     console.log('  actions-24h: (gh unavailable)');
   }
   console.log('  free product ids:', m.freeProduct.map((c) => c.id).join(', ') || '(none)');
+  console.log('  free implementable ids:', (m.freeImplementable || []).map((c) => c.id).join(', ') || '(none)');
   if (m.blocked.length) {
     console.log('  blocked ids:', m.blocked.map((c) => c.id).join(', '));
   }

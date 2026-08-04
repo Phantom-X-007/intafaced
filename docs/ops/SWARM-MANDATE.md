@@ -1,26 +1,45 @@
 # Swarm mandate scope
 
-**Shell product craft** (REGROUP / AFK residual / LANDER / INTEGRITY report) is the swarm free-product board.
+**Shell product craft** (REGROUP / AFK residual / LANDER / INTEGRITY) **plus non-money implementable tracker rows** is the swarm free-product board.
 
-| Signal           | Meaning                                                                                                                                  |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `freeProduct=0`  | Shell craft queue empty or blocked-only — **not** “platform done”                                                                        |
-| `freeTracker≈40` | `features.mjs` ready/unowned platform features (chain, academy, launch, …)                                                               |
-| Tracker free     | **Research/spec first** unless DoD is tiny — implement swarms there are a **new wave** and need a path matrix + Class rules before spawn |
+| Signal              | Meaning                                                                                                         |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `freeProduct`       | Spawnable Class N craft: REGROUP/AFK/LANDER/INTEGRITY **+ implementable TRK**                                   |
+| `freeImplementable` | Tracker rows that pass the implementable gate (counted inside freeProduct)                                      |
+| `freeProduct=0`     | No spawnable craft and no implementable TRK — **not** “platform done”                                           |
+| `freeTracker`       | Ready/unowned tracker rows that are **not** implementable (money-gated, dep-blocked, thin spec, wave-1 exclude) |
+
+### Tracker implementable gate (Nitro approved — open non-money)
+
+A tracker row is **IMPLEMENTABLE** when **all** hold:
+
+1. `status` is `ready`, `owner` is none, every `dependsOn` is `done`
+2. Spec at `docs/ops/trk/<id>.md`, **≥100 lines**, code-grounded
+3. `id` does **not** match `/^(trade|pay|bank|venue|p2p|market)\./` — money stays gated
+
+Implementable rows enter **freeProduct** under normal Class N: path-disjoint, width **3–6**, worktrees, thrift, claim files.
+
+**`residual-own` on a TRK claim** means “spec done, awaiting implement.” It **MUST NOT** hide implementable rows from the free board. Only **`claimed` | `pr-open` | `done`/`merged`/`retired` | money-gated | dep-blocked** hide them.
+
+**Money-class (closed until Nitro opens a wave):** any id matching the money prefix rule (includes futures/otc/copy/forex/algo/ccxt-api, venue.aggregation, pay.\*, p2p.merchants, bank.earn/cards/ramps, market.vendors).
+
+**Wave-1 exclude from auto-spawn** even if non-money: `ops.admin`, `ops.compliance`.
+
+Machine: `pnpm swarm:status` prints `freeImplementable=N` and implementable ids.
 
 ## AFK priority ladder (anti-drift — mandatory)
 
 When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P-WS “cycle N” with identical board).  
-**Re-freeze only on board delta** (new free product, partner PR state change, invent findings >0, new open Nitro Class N).
+**Re-freeze only on board delta** (new free product, implementable TRK, partner PR state change, invent findings >0, new open Nitro Class N).
 
-| Priority | Lane                   | What counts as real work                                                                                       | Ban                                         |
-| -------- | ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| **P0**   | SPAWN_NOW free product | Claim + worktree + ship Class N/P path-disjoint residual                                                       | stamp mill while free product still waits   |
-| **P1**   | Stranded branches      | Rebase/land `origin/feat/*` / `fix/*` with path-intersect clean vs open partner PRs                            | dual-edit Denon file sets                   |
-| **P2**   | Partner unblock        | Exact CI fail extract; one comment when NEW red/conflict; never merge partners                                 | dual-edit / merge Denon·Shehzad             |
-| **P3**   | Tracker research       | Deepen thin `docs/ops/trk/*` for **ready** non-shehzad rows (code-grounded)                                    | auto-implement TRK swarms                   |
-| **P4**   | Integrity              | Invent re-scan **only if** shell code changed since last scan; P-WS report **only if** #433/#432 state changed | cycle stamp every few minutes with no delta |
-| **P5**   | Hygiene                | LIVE-LANES / claims truth when false free rows; Class N merge green Nitro                                      | R07 peace rows for unchanged freeProduct=0  |
+| Priority | Lane                   | What counts as real work                                                                  | Ban                                 |
+| -------- | ---------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------- |
+| **P0**   | SPAWN_NOW free product | Claim + worktree + ship Class N/P path-disjoint residual **or implementable TRK Stage-1** | stamp mill while free product waits |
+| **P1**   | Stranded branches      | Rebase/land `origin/feat/*` / `fix/*` after path-intersect vs open partner PRs            | dual-edit Denon file sets           |
+| **P2**   | Partner unblock        | Exact CI fail extract; one NEW comment only; never merge partners                         | dual-edit / merge Denon·Shehzad     |
+| **P3**   | Tracker                | Deepen thin specs **or** implement Stage-1 from implementable TRK                         | stamp mill; invent money-class      |
+| **P4**   | Integrity              | Invent re-scan only if shell code changed; P-WS only if partner matrix changed            | cycle stamp with no delta           |
+| **P5**   | Hygiene                | Claims truth; Class N merge green Nitro                                                   | R07 peace rows for unchanged board  |
 
 **Night/AFK after freeProduct=0:** P1→P5 above. Class N merge when green. **Not** invent depth UI. **Not** R07 cycle spam.
 
