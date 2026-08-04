@@ -745,34 +745,28 @@ services:
 
   # ── Apps ───────────────────────────────────────────────────────────────────
   #
-  # Both are Next 15, both are served by `next start` from the build already in
-  # the image. Neither declares a `depends_on` on a service, and that is not an
-  # oversight: these are BROWSER-side URLs. The container never calls them, so
-  # ordering the container behind a service would buy nothing — a browser that
-  # loads the page before svc-ws is up sees the panel say so and recovers on the
-  # next render, which is the behaviour we want anyway.
+  # The customer surface is `vendor-shell` below, on :8090. It is the SOLE
+  # product surface — ADR `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`.
   #
-  # `NEXT_PUBLIC_*` values are inlined at BUILD time by Next, so these take
-  # effect only for a build that saw them. They are here so a deployment has one
-  # place to look, and so the defaults in `app/layout.tsx` are visible next to
-  # the services they point at.
-
-  web:
-    <<: *app
-    container_name: intafaced-web
-    command: ['pnpm', '--filter', '@intafaced/web', 'start']
-    environment:
-      NODE_ENV: production
-      PORT: '3000'
-      HOSTNAME: 0.0.0.0
-      HEALTHCHECK_PORT: '3000'
-      HEALTHCHECK_PATH: /
-      # The front door, and the depth stream. Two origins, because svc-edge
-      # buffers and cannot proxy a socket (services/svc-ws/README.md).
-      NEXT_PUBLIC_EDGE_URL: ${NEXT_PUBLIC_EDGE_URL:-http://localhost:4000}
-      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:4014}
-    ports: ['3000:3000']
-    healthcheck: *healthcheck
+  # There WAS a `web` service here (apps/web, Next, `3000:3000`). It is removed,
+  # and removing it is the point rather than a tidy-up: that ADR's own root cause
+  # is that :3000 was the only surface that started, and so it "quietly became
+  # the de-facto product. Nobody decided that." A running port outranks a stated
+  # direction every time, so the port goes with the direction.
+  #
+  # no-deploy: web — `apps/web`, the retired Next scaffold. Deliberate, and this
+  # line is the deliberateness: the gate below is right that an app nobody serves
+  # can be worked on for weeks unseen, and that is precisely the history here —
+  # it was served, on 3000, and that is HOW it became the product against a
+  # stated direction. The answer is not to serve it again; it is to stop working
+  # on it. The directory is still on disk pending an owner go on deletion, and
+  # the tracker row `web.shell` carries the same statement.
+  #
+  # The one Next app still served is `admin` (the operator console, 3100). It
+  # declares no `depends_on`, and that is not an oversight: its service URLs are
+  # BROWSER-side, so ordering the container behind a service would buy nothing —
+  # a browser that loads before a service is up sees the panel say so and
+  # recovers on the next render, which is the behaviour we want anyway.
 
   # The vendored trading shell — the app the product direction has always said
   # we ARE, and which until now could not be run at all.
