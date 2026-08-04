@@ -29,6 +29,7 @@ export interface MarketRow {
   listed_at: Date | null;
   asset_class: Market['assetClass'];
   schedule: Market['schedule'];
+  paper: boolean;
 }
 
 export function toMarket(row: MarketRow): Market {
@@ -49,6 +50,7 @@ export function toMarket(row: MarketRow): Market {
     listedAt: row.listed_at,
     assetClass: row.asset_class,
     schedule: row.schedule,
+    paper: row.paper === true,
   };
 }
 

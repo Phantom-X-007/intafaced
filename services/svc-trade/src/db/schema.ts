@@ -128,6 +128,8 @@ export const markets = trade.table(
     pipSize: amount('pip_size'),
     /** Which calendar this market keeps. Crypto is the only continuous one. */
     schedule: tradingScheduleEnum('schedule').notNull().default('crypto-24x7'),
+    /** Paper/sim market — placeOrder never posts real ledger holds. */
+    paper: boolean('paper').notNull().default(false),
     /**
      * Which plane lists this market (§22, §17.5).
      *

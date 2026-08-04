@@ -1545,4 +1545,79 @@ if (!available) {
       expect(formatAmount(candles[0]!.volume)).toBe('3');
     });
   });
+
+  /**
+   * academy.paper-trading Stage-1 — paper market flag + ledger isolation.
+   * Live markets keep the funded placeOrder path; paper never posts holds.
+   */
+  describe('paper market isolation (Stage-1)', () => {
+    it('lists a paper market with paper=true; live default is false', async () => {
+      expect(btcusdt.paper).toBe(false);
+      const paperMkt = await trade.listMarket({
+        symbol: 'BTC/USDT-PAPER',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: amt('1000'),
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        paper: true,
+      });
+      expect(paperMkt.paper).toBe(true);
+    });
+
+    it('placeOrder on paper never debits real available balances', async () => {
+      const paperMkt = await trade.listMarket({
+        symbol: 'ETH/USDT-PAPER',
+        baseAsset: 'ETH',
+        quoteAsset: 'USDT',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.001'),
+        minQty: amt('0.001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        paper: true,
+      });
+      await fund(ALICE, 'USDT', '10000');
+      const before = await avail(ALICE, 'USDT');
+      const journalBefore = ledger.journal().length;
+
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: paperMkt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('1'),
+        price: amt('100'),
+        clientOrderId: 'paper-buy-1',
+      });
+
+      expect(order.status).toBe('open');
+      expect(formatAmount(order.holdAmount)).toBe('0');
+      expect(await avail(ALICE, 'USDT')).toBe(before);
+      expect(await held(ALICE, 'USDT')).toBe('0');
+      expect(ledger.journal().length).toBe(journalBefore);
+      expect(matching.submitted).toHaveLength(0);
+    });
+
+    it('live market placeOrder still holds real funds (unchanged)', async () => {
+      await fund(ALICE, 'USDT', '5000');
+      matching.script1((req, next) => restsInFull(req, next()));
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('0.01'),
+        price: amt('100'),
+        clientOrderId: 'live-buy-1',
+      });
+      expect(order.status).toBe('open');
+      expect(formatAmount(order.holdAmount)).not.toBe('0');
+      expect(await held(ALICE, 'USDT')).not.toBe('0');
+    });
+  });
 }
