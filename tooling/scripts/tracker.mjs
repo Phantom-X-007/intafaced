@@ -26,6 +26,7 @@ import { FEATURES, PHASE_ORDER, PHASE_NAMES } from '../tracker/features.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUTPUT = join(ROOT, 'docs', 'TRACKER.md');
+const REGISTRY = join(ROOT, 'tooling', 'tracker', 'features.mjs');
 const arg = process.argv[2];
 const checkMode = arg === '--check' || arg === 'check';
 
@@ -33,6 +34,102 @@ const checkMode = arg === '--check' || arg === 'check';
 
 const byId = new Map(FEATURES.map((f) => [f.id, f]));
 const problems = [];
+
+/**
+ * Duplicate object keys in the registry SOURCE.
+ *
+ * This one cannot be caught by looking at `FEATURES`, because by the time the
+ * module has been imported the damage is done and invisible: JavaScript keeps
+ * the LAST value for a repeated key and discards the earlier ones silently, so
+ * a row with two `note:` fields loads as a row with one note and no error
+ * anywhere. That happened — `dex.quote-router` carried two, and the ownership
+ * sentence in the first ("agents babysit only") never reached docs/TRACKER.md
+ * for as long as it was there. Nothing else in this repo would have said so:
+ * there is no root ESLint config, so `no-dupe-keys` never ran over this file.
+ *
+ * So the check has to read the text. Strings and comments are masked first —
+ * every `note:` in this file is prose that mentions colons, braces and the word
+ * "note" — and then bare and quoted keys are collected per object literal.
+ *
+ * @param {string} src
+ * @returns {string[]} one message per duplicate, empty when clean
+ */
+function duplicateKeys(src) {
+  const CODE = 0;
+  const kind = new Uint8Array(src.length); // CODE, or 1 for string/comment body
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+      const block = src[i + 1] === '*';
+      const end = block ? src.indexOf('*/', i + 2) : src.indexOf('\n', i);
+      const stop = end === -1 ? src.length : end + (block ? 2 : 0);
+      for (let j = i; j < stop; j++) if (src[j] !== '\n') kind[j] = 1;
+      i = stop - 1;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1;
+      while (j < src.length && src[j] !== c) j += src[j] === '\\' ? 2 : 1;
+      for (let k = i; k <= Math.min(j, src.length - 1); k++) if (src[k] !== '\n') kind[k] = 1;
+      i = j;
+      continue;
+    }
+  }
+
+  const lineOf = (index) => src.slice(0, index).split('\n').length;
+  const found = [];
+  /** @type {Array<{object: boolean, keys: Map<string, number>}>} */
+  const stack = [];
+  const isIdent = (c) => c !== undefined && /[A-Za-z0-9_$]/.test(c);
+
+  const declare = (name, at) => {
+    const top = stack[stack.length - 1];
+    if (!top?.object) return;
+    if (top.keys.has(name)) {
+      found.push(
+        `duplicate key "${name}" at tooling/tracker/features.mjs:${lineOf(at)} — the one at line ${top.keys.get(name)} is silently discarded`,
+      );
+    } else {
+      top.keys.set(name, lineOf(at));
+    }
+  };
+
+  /** The next code character that is not whitespace or a masked comment. */
+  const nextCode = (from) => {
+    let j = from;
+    while (j < src.length && (kind[j] !== CODE || /\s/.test(src[j]))) j++;
+    return j;
+  };
+
+  for (let i = 0; i < src.length; i++) {
+    if (kind[i] !== CODE) {
+      // A quoted key: the string body is masked, but its bounds are not.
+      const quote = src[i];
+      if (quote === "'" || quote === '"') {
+        let j = i + 1;
+        while (j < src.length && src[j] !== quote) j += src[j] === '\\' ? 2 : 1;
+        const after = nextCode(j + 1);
+        if (src[after] === ':' && src[after + 1] !== ':') declare(src.slice(i + 1, j), i);
+        i = j;
+      }
+      continue;
+    }
+    const c = src[i];
+    if (c === '{') stack.push({ object: true, keys: new Map() });
+    else if (c === '[' || c === '(') stack.push({ object: false, keys: new Map() });
+    else if (c === '}' || c === ']' || c === ')') stack.pop();
+    else if (/[A-Za-z_$]/.test(c) && !isIdent(src[i - 1])) {
+      let j = i;
+      while (isIdent(src[j])) j++;
+      const after = nextCode(j);
+      if (src[after] === ':' && src[after + 1] !== ':') declare(src.slice(i, j), i);
+      i = j - 1;
+    }
+  }
+  return found;
+}
+
+problems.push(...duplicateKeys(readFileSync(REGISTRY, 'utf8')));
 
 for (const feature of FEATURES) {
   for (const dep of feature.dependsOn) {

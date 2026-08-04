@@ -18,7 +18,7 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { touches } from './path-collide.mjs';
 import { evaluateThrift } from '../ci/thrift-preflight.mjs';
@@ -184,6 +184,24 @@ function trkSpecPath(featureId) {
   return join(OPS, 'trk', `${featureId}.md`);
 }
 
+/**
+ * Repo-relative, forward-slashed, for anything that gets WRITTEN DOWN.
+ *
+ * The previous form was `abs.replace(ROOT + '/', '')`, which is a POSIX
+ * assumption: on Windows `ROOT` is `C:\…` with backslashes, so the needle
+ * `C:\…/` never matches, the strip silently no-ops, and the absolute path of
+ * whichever worktree happened to run the generator lands in a committed file.
+ * That is how 34 lines of `C:\Users\…\plug-x-inta-worktrees\<branch>\…` reached
+ * `docs/ops/FREEZE-LIVE.md`.
+ *
+ * It stayed invisible because those rows only appear once the tracker actually
+ * loads — and it did not, on Windows, for a separate path bug in this same file.
+ * Two POSIX assumptions in one script, the second hidden behind the first.
+ */
+function repoRelative(absPath) {
+  return relative(ROOT, absPath).split('\\').join('/');
+}
+
 function trkSpecLineCount(featureId) {
   const p = trkSpecPath(featureId);
   if (!existsSync(p)) return 0;
@@ -196,12 +214,21 @@ function trkSpecLineCount(featureId) {
  */
 function loadTrackerRows() {
   try {
+    // Dynamic import sync is not available — use a child `node -e`. The specifier
+    // MUST be a file:// URL: on Windows an absolute path begins `C:\…`, which the
+    // ESM loader reads as the scheme `c:` and rejects with
+    // ERR_UNSUPPORTED_ESM_URL_SCHEME. That throws into the catch below, so the board
+    // prints `freeTracker=0` — not "the tracker could not be read", but a confident
+    // zero — on every Windows run.
+    //
+    // This was found and fixed once, and the fix was lost: the rewrite that added
+    // depsDone/money/wave1ex went back to the raw path. Do not inline it again.
     const out = execFileSync(
       process.execPath,
       [
         '--input-type=module',
         '-e',
-        `import { FEATURES } from '${join(ROOT, 'tooling/tracker/features.mjs')}';
+        `import { FEATURES } from ${JSON.stringify(pathToFileURL(join(ROOT, 'tooling/tracker/features.mjs')).href)};
          const byId = Object.fromEntries(FEATURES.map((f) => [f.id, f]));
          const done = new Set(FEATURES.filter((f) => f.status === 'done').map((f) => f.id));
          const rows = FEATURES.filter((f) => f.status === 'ready' && !f.owner).map((f) => {
@@ -236,7 +263,7 @@ function loadTrackerRows() {
         rank: impl ? 50 : 300,
         track: impl ? 'IMPLEMENTABLE' : 'TRACKER',
         title: r.title,
-        paths: r.paths.length ? r.paths : [trkSpecPath(r.featureId).replace(ROOT + '/', '')],
+        paths: r.paths.length ? r.paths : [repoRelative(trkSpecPath(r.featureId))],
         featureId: r.featureId,
         implementable: impl,
         note: impl
@@ -1119,7 +1146,7 @@ switch (cmd) {
   case 'freeze': {
     const path = writeFreeze(m);
     printStatus(m);
-    console.log(`  wrote ${path.replace(ROOT + '/', '')}`);
+    console.log(`  wrote ${repoRelative(path)}`);
     console.log(`  wrote docs/ops/FREEZE-LIVE.json`);
     break;
   }
@@ -1131,7 +1158,7 @@ switch (cmd) {
     writeFreeze(m);
     const dir = writeReports(m);
     printStatus(m);
-    console.log(`  wrote reports under ${dir.replace(ROOT + '/', '')}`);
+    console.log(`  wrote reports under ${repoRelative(dir)}`);
     break;
   }
   case 'next': {
