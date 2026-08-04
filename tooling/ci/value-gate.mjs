@@ -2,7 +2,10 @@
 /**
  * value-gate — external stamp-mill detector (git-only, no gh, no network).
  *
- * Fails when ALL of:
+ * Fails when ANY of:
+ *   (0) no-op merge: git merge-tree of origin/main + HEAD equals main's tree
+ *       (branch already landed / empty squash / superseded — #737 class defect)
+ *   OR ALL of:
  *   (a) every changed file is under docs/ or ends with .md
  *   (b) normalised commit subject ≥0.80 similar to any of previous 10 ancestors
  *   (c) no Board-Delta: trailer in the commit body
@@ -18,7 +21,7 @@
  *
  * Law: S-CORE §3 · BOARD-CLEAR-PROCESS-LOOPS L0 · docs/ops/SWARM-MANDATE.md
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -68,6 +71,38 @@ export function isDocsOnly(files) {
 
 export function hasBoardDeltaTrailer(body) {
   return /^Board-Delta:\s*\S+/im.test(body || '');
+}
+
+/**
+ * True when merging `headRef` into `baseRef` produces base's own tree.
+ * That means the branch adds nothing — already on main, empty squash, or superseded.
+ * Uses `git merge-tree --write-tree` (git-only, no network). Conflicts ⇒ not a no-op.
+ *
+ * @param {string} baseRef
+ * @param {string} headRef
+ * @param {(args: string[]) => { failed: boolean, stdout: string }} [run] injectable for tests
+ */
+export function isNoOpOntoBase(baseRef, headRef, run = gitMergeTree) {
+  const main = run(['rev-parse', `${baseRef}^{tree}`]);
+  if (main.failed || !main.stdout.trim()) return false;
+  const mainTree = main.stdout.trim().split('\\n')[0].trim();
+  const merged = run(['merge-tree', '--write-tree', baseRef, headRef]);
+  if (merged.failed) return false;
+  const tree = merged.stdout.trim().split('\\n')[0].trim();
+  return Boolean(tree) && tree === mainTree;
+}
+
+function gitMergeTree(args) {
+  const r = spawnSync('git', args, {
+    encoding: 'utf8',
+    cwd: process.cwd(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return {
+    failed: r.status !== 0,
+    stdout: r.stdout || '',
+    stderr: r.stderr || '',
+  };
 }
 
 /**
@@ -184,16 +219,47 @@ function selfTest() {
     'normalise: cycle/sha/pr collapse',
   );
 
+  // no-op tree: merge result equals main tree → BLOCK (already landed / empty)
+  const mainTree = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  assert(
+    isNoOpOntoBase('main', 'HEAD', (args) => {
+      if (args[0] === 'rev-parse') return { failed: false, stdout: mainTree };
+      if (args[0] === 'merge-tree') return { failed: false, stdout: mainTree + '\n' };
+      return { failed: true, stdout: '' };
+    }) === true,
+    'no-op: equal trees must BLOCK',
+  );
+
+  // real delta: merge-tree returns different tree → not no-op
+  assert(
+    isNoOpOntoBase('main', 'HEAD', (args) => {
+      if (args[0] === 'rev-parse') return { failed: false, stdout: mainTree };
+      if (args[0] === 'merge-tree') return { failed: false, stdout: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' };
+      return { failed: true, stdout: '' };
+    }) === false,
+    'no-op: different trees must PASS',
+  );
+
+  // conflicts (merge-tree fails) → not a pure no-op (real work may still exist)
+  assert(
+    isNoOpOntoBase('main', 'HEAD', (args) => {
+      if (args[0] === 'rev-parse') return { failed: false, stdout: mainTree };
+      return { failed: true, stdout: '' };
+    }) === false,
+    'no-op: conflicts are not no-op',
+  );
+
   if (fails.length) {
     console.error('value-gate --self-test FAIL:');
     for (const f of fails) console.error(`  · ${f}`);
     process.exit(1);
   }
-  console.log('value-gate --self-test OK');
+  console.log('value-gate --self-test OK (5 fixtures)');
   console.log('  fixture near-dup docs-only no Board-Delta → BLOCK (exit 1 path)');
   console.log('  fixture near-dup + Board-Delta → PASS');
   console.log('  fixture code change → PASS');
   console.log('  fixture unique docs title → PASS');
+  console.log('  fixture no-op merge tree equals main → BLOCK');
   process.exit(0);
 }
 
@@ -205,13 +271,26 @@ function mainLive() {
   const result = decide({ files, subject, body, prevSubjects: prev });
 
   const mode = STRICT ? 'strict' : 'advisory';
+  const noOp = isNoOpOntoBase(BASE, 'HEAD');
   console.log(
-    `value-gate: docsOnly=${result.docsOnly} nearDup=${result.nearDup} (best=${result.best.toFixed(3)}) hasBoardDelta=${result.hasDelta} mode=${mode}`,
+    `value-gate: noOp=${noOp} docsOnly=${result.docsOnly} nearDup=${result.nearDup} (best=${result.best.toFixed(3)}) hasBoardDelta=${result.hasDelta} mode=${mode}`,
   );
   console.log(`  subject: ${subject}`);
   if (result.nearDup) console.log(`  similar to (norm): ${result.bestPrev.slice(0, 100)}`);
   if (result.nearDup && result.bestRaw) console.log(`  offending previous subject: ${result.bestRaw}`);
   console.log(`  files (${files.length}): ${files.slice(0, 8).join(', ')}${files.length > 8 ? '…' : ''}`);
+
+  if (noOp) {
+    const msg =
+      `value-gate: ${STRICT ? 'FAIL' : 'WARN'} — branch adds nothing to ${BASE} (merge-tree equals main's tree).\n` +
+      `  Already landed, empty squash, or superseded (e.g. re-landing a partner-merged head).\n` +
+      `  Fix: delete the remote branch; do not open a PR. Pre-check:\n` +
+      `    gh pr list --state merged --search \"head:<branch>\" --limit 5\n` +
+      `    git merge-tree --write-tree origin/main origin/<branch>`;
+    console.error(msg);
+    if (STRICT) process.exit(1);
+    process.exit(0);
+  }
 
   if (result.block) {
     const msg =
