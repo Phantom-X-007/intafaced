@@ -2,7 +2,6 @@
 
 > **Land status 2026-08-04:** code-path fixes ship with the wallet-rpc-auth land PR. Rotation + ADR below remain human/Class X.
 
-
 **Date:** 2026-08-02. **Raised by:** the `fix/wallet-rpc-auth` branch.
 **Companion:** [`A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md`](A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md) §2, §4, §5.
 
