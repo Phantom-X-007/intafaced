@@ -83,6 +83,12 @@ export const GATES = [
     why: 'a committed credential is invisible in review — it reads as a config line',
   },
   {
+    id: 'wallet-rpc-auth',
+    script: 'tooling/ci/wallet-rpc-auth-scan.mjs',
+    doctrine: '§16 / A1.4',
+    why: 'a wallet RPC module must authenticate /rpc/** — the guard on one module is not the guard on every classpath that can boot',
+  },
+  {
     id: 'vendor-shell',
     script: 'tooling/ci/vendor-shell-scan.mjs',
     doctrine: 'vendor residue',
