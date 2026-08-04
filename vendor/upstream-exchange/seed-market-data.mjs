@@ -17,8 +17,8 @@
  * the block above the `docker run` below.
  *
  * Run:
- *   node vendor/coinexchange/seed-market-data.mjs
- *   node vendor/coinexchange/seed-market-data.mjs --restart-market
+ *   node vendor/upstream-exchange/seed-market-data.mjs
+ *   node vendor/upstream-exchange/seed-market-data.mjs --restart-market
  *
  * --restart-market matters more than it looks. The market service does not read
  * /market/symbol-thumb out of Mongo on every call: `ApplicationEvent` builds an
@@ -70,7 +70,7 @@ function run(args, opts = {}) {
 const probe = spawnSync('docker', ['inspect', '-f', '{{.State.Running}}', MONGO], { encoding: 'utf8' });
 if (probe.status !== 0 || probe.stdout.trim() !== 'true') {
   console.error('container "' + MONGO + '" is not running. Start the stack first:');
-  console.error('  docker compose -f vendor/coinexchange-compose.yml up -d');
+  console.error('  docker compose -f vendor/upstream-exchange-compose.yml up -d');
   process.exit(1);
 }
 
@@ -81,7 +81,7 @@ for (const key of PASS_THROUGH) {
 
 /* ── The shell is NOT the one inside the server container, and cannot be ───────
  *
- * The server is pinned to mongo:4.4 (see coinexchange-compose.yml: the vendored
+ * The server is pinned to mongo:4.4 (see upstream-exchange-compose.yml: the vendored
  * Spring Boot 1.5.9 driver speaks OP_QUERY, which MongoDB 5.1 removed). That
  * image ships only the legacy `mongo` shell, whose SpiderMonkey predates
  * BigInt — and this seeder is BigInt throughout, deliberately, because every

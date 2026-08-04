@@ -42,5 +42,5 @@ A team that believes this code is original will not know to check any of the
 above. Removing this file would not make the code safer; it would only make it
 harder to defend.
 
-See docs/adr/2026-07-28-coinexchange-integration.md for the integration
+See docs/adr/2026-07-28-upstream-exchange-integration.md for the integration
 decisions, including the unresolved question of which system owns a balance.

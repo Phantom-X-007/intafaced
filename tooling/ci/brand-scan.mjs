@@ -129,16 +129,20 @@ const ALLOWLIST = [
     reason:
       'internal swarm FREEZE/report board; must list real shell paths so agents can claim work without paraphrasing territory. Not user-facing product copy. Remove once the vendor directory is renamed.',
   },
-  {
-    path: join('tooling', 'scripts', 'swarm.mjs'),
-    reason:
-      'internal swarm freeze generator; builds shell path strings for claim collision (token joined at runtime to satisfy brand-scan). Not user-facing.',
-  },
-  {
-    path: 'docker-compose.apps.yml',
-    reason:
-      'ONE line: the Docker build context for the vendored shell. A build context must be a real directory on disk, so it cannot be aliased away. The alternative was leaving the shell with no way to run at all — which is precisely the drift that made this entry necessary. Infrastructure, never served to a user. Remove once the vendor directory is renamed.',
-  },
+  // REMOVED 2026-08-05, both on the terms their own reasons set:
+  //
+  //   `tooling/scripts/swarm.mjs`      — existed because that file assembled the
+  //     vendor token at runtime to get past this scan. The directory rename means
+  //     the path is `vendor/upstream-exchange/...`, so the line is written plainly
+  //     and the exemption has nothing left to cover.
+  //   `docker-compose.apps.yml`        — "Remove once the vendor directory is
+  //     renamed." It is renamed. A build context still must be a real directory on
+  //     disk, and now that directory has a clean name.
+  //
+  // Both files are back under the scan with nothing to hide, which is the point of
+  // the rename: fewer exemptions, not more. 36 further entries are now dead by the
+  // same test and are deliberately NOT pruned here — mixing a policy tightening
+  // into a 1,764-file move would make a red CI ambiguous. See the PR for the list.
   {
     path: join('docs', 'NITRO-AGENT-PACKAGES-2026-07-30.md'),
     reason:

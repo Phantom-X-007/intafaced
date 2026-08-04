@@ -42,7 +42,7 @@
 # are NOT drop-in for 5.5 and 3.6 — expect schema and driver work. That work is
 # the honest cost of the upgrade, and it is smaller than the cost of running the
 # originals. Anything that will not start here is recorded in
-# docs/adr/coinexchange-integration.md rather than fixed by downgrading.
+# docs/adr/upstream-exchange-integration.md rather than fixed by downgrading.
 
 services:
   coinex-mysql:
@@ -109,7 +109,7 @@ services:
   # So the datastore version and its data directory travel together. The old
   # `coinex-mongo` volume is left in place, not deleted: it holds whatever 6.x
   # wrote, and an operator who wants it can still dump it with a 6 container.
-  # Seed data for the new volume comes from `coinexchange/seed-market-data.mjs`.
+  # Seed data for the new volume comes from `upstream-exchange/seed-market-data.mjs`.
   coinex-mongo:
     image: mongo:4.4
     container_name: intafaced-coinex-mongo
@@ -221,7 +221,7 @@ services:
     container_name: intafaced-coinex-cloud
     working_dir: /app
     volumes:
-      - ./coinexchange/00_framework:/app:ro
+      - ./upstream-exchange/00_framework:/app:ro
     command: ['java', '-Xms256m', '-Xmx512m', '-jar', 'cloud/target/cloud.jar']
     ports:
       - '127.0.0.1:${COINEX_EUREKA_PORT:-7000}:7000'
@@ -233,7 +233,7 @@ services:
     container_name: intafaced-coinex-exchange
     working_dir: /app
     volumes:
-      - ./coinexchange/00_framework:/app:ro
+      - ./upstream-exchange/00_framework:/app:ro
     command: ['java', '-Xms256m', '-Xmx512m', '-jar', 'exchange/target/exchange.jar']
     depends_on:
       coinex-cloud: { condition: service_started }
@@ -264,7 +264,7 @@ services:
     container_name: intafaced-coinex-market
     working_dir: /app
     volumes:
-      - ./coinexchange/00_framework:/app:ro
+      - ./upstream-exchange/00_framework:/app:ro
     command:
       - java
       - -Xms256m
@@ -287,7 +287,7 @@ services:
     container_name: intafaced-coinex-ucenter
     working_dir: /app
     volumes:
-      - ./coinexchange/00_framework:/app:ro
+      - ./upstream-exchange/00_framework:/app:ro
     command:
       - java
       - -Xms256m
@@ -319,7 +319,7 @@ services:
     container_name: intafaced-coinex-exchange-api
     working_dir: /app
     volumes:
-      - ./coinexchange/00_framework:/app:ro
+      - ./upstream-exchange/00_framework:/app:ro
     command:
       - java
       - -Xms256m
@@ -387,7 +387,7 @@ services:
     container_name: intafaced-coinex-otc
     working_dir: /app
     volumes:
-      - ./coinexchange/00_framework:/app:ro
+      - ./upstream-exchange/00_framework:/app:ro
     # PropertiesLauncher rather than `-jar`, so `loader.path` can re-add the
     # system-scope jar the repackager dropped. `-jar` on a Spring Boot fat jar
     # ignores -cp entirely, which is why this is not simply a classpath flag.

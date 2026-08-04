@@ -784,7 +784,7 @@ services:
   # cannot reach our services. Its own Dockerfile builds it and nginx serves it.
   vendor-shell:
     build:
-      context: ./vendor/coinexchange/05_Web_Front
+      context: ./vendor/upstream-exchange/05_Web_Front
       dockerfile: Dockerfile
       target: runtime
     image: intafaced/vendor-shell:dev

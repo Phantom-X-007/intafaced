@@ -3,7 +3,7 @@
 **Status:** **Accepted — 2026-08-04.** Owner decision, stated and confirmed.
 **Decision owner:** repo owner. **Written by:** Denon.
 **Spec id:** D-S-15. **Law only — craft stays Nitro.**
-**Binding:** [`adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`](2026-08-03-retire-apps-web-port-to-vue-shell.md). There is no third surface. The product is the Vue shell at `vendor/coinexchange/05_Web_Front`.
+**Binding:** [`adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`](2026-08-03-retire-apps-web-port-to-vue-shell.md). There is no third surface. The product is the Vue shell at `vendor/upstream-exchange/05_Web_Front`.
 
 ---
 
