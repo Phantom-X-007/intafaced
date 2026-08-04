@@ -1,10 +1,12 @@
 # Docs formatting — the cheap half of CI that docs-only changes still need.
 #
-# WHY THIS EXISTS. `ci.yml` carries `paths-ignore: ['docs/**', '**/*.md', ...]`
-# and that exclusion is correct and worth keeping: a Markdown edit cannot break
-# a typecheck, a test or a doctrine gate, and eight docs-only PRs once burned
-# roughly 90 billable minutes of a 2,000-minute pool running the full matrix to
-# format prose.
+# WHY THIS EXISTS. `ci.yml` excludes `docs/**` and `**/*.md` from the full
+# matrix — expressed as negated `paths:` since coverage-check landed, because
+# INTAFACED_DEFINITIVE_BUILD.md is law rather than documentation and has to be
+# re-included. That exclusion is correct and worth keeping: a Markdown edit
+# cannot break a typecheck, a test or a doctrine gate, and eight docs-only PRs
+# once burned roughly 90 billable minutes of a 2,000-minute pool running the
+# full matrix to format prose.
 #
 # But `format:check` is STEP ONE of `pnpm verify`, and it covers `**/*.md`. So
 # the exclusion had a hole in it: an unformatted Markdown file could land on

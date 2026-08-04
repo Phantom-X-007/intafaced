@@ -303,7 +303,9 @@ capabilities:
 
   # ── §7 PHASE 4 · BLUEPRINT ─────────────────────────────────────────────────
   - id: blueprint.engine
-    capability: svc-blueprint — GMaster Neural Engine consumed as an internal service
+    # The engine vendor's name is what §7:344 calls it; brand-scan (§0.7) forbids
+    # repeating it outside the allowlisted paths, and tooling/ is not one of them.
+    capability: svc-blueprint — the Neural Engine consumed as an internal service
     law: '7:344'
     tracker: [blueprint.onboarding]
   - id: blueprint.flow

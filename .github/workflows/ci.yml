@@ -8,9 +8,33 @@ on:
     # burned the full matrix -- roughly 90 billable minutes spent formatting
     # Markdown, out of a 2,000-minute monthly pool. The gates that DO apply to
     # docs (brand-scan, tracker) are cheap and still run on any PR touching code.
-    paths-ignore: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
+    #
+    # ONE MARKDOWN FILE IS NOT DOCUMENTATION. INTAFACED_DEFINITIVE_BUILD.md is
+    # the law, and coverage-check reads it: a chapter appearing there is exactly
+    # the event that gate exists to catch. Under a blanket `**/*.md` ignore,
+    # adding §39 would skip CI entirely and no gate would ever see it — which is
+    # a fair description of how §27–§37 arrived with nobody noticing. Negation
+    # needs `paths` rather than `paths-ignore`; the last matching pattern wins.
+    #
+    # The two lists below are duplicated rather than shared by a YAML anchor:
+    # GitHub Actions does not support anchors or aliases in workflow files, and
+    # a workflow that silently fails to parse is worse than a repeated list.
+    # KEEP THEM IDENTICAL.
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!**/*.md'
+      - '!NOTICE'
+      - '!LICENSE'
+      - INTAFACED_DEFINITIVE_BUILD.md
   pull_request:
-    paths-ignore: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!**/*.md'
+      - '!NOTICE'
+      - '!LICENSE'
+      - INTAFACED_DEFINITIVE_BUILD.md
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
