@@ -238,3 +238,18 @@ Agents automate process so humans don’t re-learn it: see **Nitro operator mode
 - Plain map (Nitro): [`docs/START-HERE.md`](docs/START-HERE.md)
 - Paste prompt every chat: [`docs/NITRO-SESSION-PROMPT.md`](docs/NITRO-SESSION-PROMPT.md)
 - Paste for Denon: [`docs/MESSAGE-DENON-WORKFLOW.md`](docs/MESSAGE-DENON-WORKFLOW.md)
+
+## Board-Delta trailer (docs / AFK)
+
+When a change is **docs-only**, declare real work in the commit body (git trailer form):
+
+```
+Board-Delta: free product count changed
+```
+
+**Valid:** free product count changed · partner PR changed state · scan finding count changed · new Class N PR opened/merged · a spec gained substantive content.  
+**Not valid:** tip SHA, cycle number, "re-freeze ran".
+
+Enforced by `tooling/ci/value-gate.mjs` on the Docs format workflow (advisory → strict).  
+See `docs/BOARD-CLEAR-PROCESS-LOOPS.md` L0 and `docs/ops/SWARM-MANDATE.md`.
+
