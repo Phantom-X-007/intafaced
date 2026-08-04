@@ -2,8 +2,10 @@ import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
+import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
+import { eventMarginCallSink } from './loans/margin-call-publisher.js';
 import { tickerPriceSource } from './loans/prices.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
 import { createBankRouter, type BankRouter } from './router.js';
@@ -13,10 +15,14 @@ import { verifyServiceHeaders } from '@intafaced/contracts';
 /**
  * svc-bank — multi-currency accounts over the ledger (§8.1).
  *
- * Boot order: env → db → ledger → services → server. There is no bus
- * connection: this service publishes no NATS subject in this PR, because
- * declaring one is a `packages/events` PR that AGENT_PROTOCOL §1 requires to
- * land first. The planned subjects are listed in the README.
+ * Boot order: env → db → ledger → bus → services → server.
+ *
+ * The bus connection is new, and it exists for one subject. `bankMarginCalled`
+ * had a complete svc-notify consumer and no publisher anywhere, so a margin call
+ * started a grace clock that gates liquidation and the borrower was never told —
+ * the outcome `loans/risk.ts` argues against at length. `ownedStreams: ['bank']`
+ * is what creates `INTAFACED_BANK`, which has never existed, and until it does
+ * the consumer on the other side cannot attach at all.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -35,6 +41,19 @@ await sql`SELECT 1 FROM bank.spaces LIMIT 1`.catch(() => {
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const history = createLedgerHistory(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
+/**
+ * `ownedStreams: ['bank']` — this process is responsible for creating
+ * `INTAFACED_BANK`. It carries no money: the only subject on it announces that a
+ * call was RAISED, and value continues to move through svc-ledger and nowhere
+ * else (§0.6). Publishing is not a value movement.
+ */
+const bus = await JetStreamEventBus.connect({
+  servers: env.NATS_URL,
+  producer: env.SERVICE_NAME,
+  streamPrefix: env.NATS_STREAM_PREFIX,
+  ownedStreams: ['bank'],
+});
+
 const bank = createBankServices(sql, ledger, history, {
   nativeAssetId: env.TOKEN_ASSET_ID,
   loans: {
@@ -44,6 +63,9 @@ const bank = createBankServices(sql, ledger, history, {
     // trade, a depth read, and eventually collateral-funded orders — is written
     // out in `loans/prices.ts` rather than assumed to exist.
     priceSource: tickerPriceSource({ baseUrl: env.TRADE_URL }),
+    // The half that was missing. Without this the risk sweep raises calls into
+    // a database column and svc-notify's finished consumer never sees one.
+    marginCalls: eventMarginCallSink(bus),
   },
 });
 
@@ -209,6 +231,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       await app.close();
+      await bus.close();
       await sql.end({ timeout: 5 });
       process.exit(0);
     })();

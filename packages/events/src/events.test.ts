@@ -397,16 +397,49 @@ describe('declared wiring sockets', () => {
   });
 
   /**
-   * The two findings, pinned. If either of these ends gets wired, the assertion
-   * fails and the socket entry has to go with it — which is exactly the point:
-   * a socket must not outlive the gap it describes.
+   * THE TWO FINDINGS THAT STARTED THIS ARE BOTH CLOSED.
+   *
+   * `bankMarginCalled` had no publisher anywhere and svc-bank publishes it now;
+   * `xpEarned` had no consumer and svc-identity consumes it now. Both socket
+   * entries are therefore gone, which is exactly what the old form of this
+   * assertion was written to force: a socket must not outlive the gap it
+   * describes, so the entry going and this flipping to `toBeNull()` are one
+   * event, not two.
    */
-  it('still records the two findings that started this', () => {
-    expect(wiringSocketReason('bankMarginCalled', 'publisher')).toContain('svc-bank');
-    expect(wiringSocketReason('xpEarned', 'subscriber')).toContain('svc-identity');
-    // And says nothing about ends that are wired.
+  it('no longer records either of the two findings that started this — both ends are wired', () => {
+    expect(wiringSocketReason('xpEarned', 'subscriber')).toBeNull();
+    expect(wiringSocketReason('bankMarginCalled', 'publisher')).toBeNull();
+    // And says nothing about ends that were always wired.
     expect(wiringSocketReason('bankMarginCalled', 'subscriber')).toBeNull();
     expect(wiringSocketReason('orderFilled', 'publisher')).toBeNull();
+  });
+
+  /**
+   * THE CLASS IS THE POINT (ADR D-S-13).
+   *
+   * A written reason proves somebody thought about it; the class is where they
+   * say what the answer was. `satisfies readonly WiringSocket[]` already makes a
+   * missing class a compile error — this asserts the runtime value too, because
+   * `tooling/ci/event-wiring.mjs` parses this file as TEXT, and a rule that only
+   * one of those two readers enforces is a rule with a hole in it.
+   */
+  it('classifies every socket A, B or C', () => {
+    for (const socket of WIRING_SOCKETS) {
+      expect(['A', 'B', 'C'], `${socket.event}/${socket.missing}`).toContain(socket.class);
+    }
+  });
+
+  /**
+   * Class B is a DEFECT, not a socket. One remains: `crewMemberCreated`, whose
+   * two consumers ADR D-S-13 puts on the owner rather than on an agent.
+   *
+   * Pinned by name and in order, matching `CLASS_B_AWAITING_A_DECISION` in
+   * `tooling/ci/event-wiring.mjs` — so quietly downgrading it to A to make the
+   * gate green fails here as well as there. Two readers, one rule.
+   */
+  it('keeps the one remaining Class B entry classified as a defect', () => {
+    const b = WIRING_SOCKETS.filter((s) => s.class === 'B').map((s) => s.event);
+    expect(b).toEqual(['crewMemberCreated']);
   });
 });
 

@@ -206,28 +206,56 @@ export function marketMakerVenue(): LiquidationVenue {
 /**
  * Delivery of a margin call.
  *
- * A port because svc-bank has no bus connection: publishing a NATS subject means
- * a `packages/events` change that AGENT_PROTOCOL §1 requires to land as its own PR
- * first. So the CALL is durable here — a `loan_margin_calls` row, and the grace
+ * A port, so that RAISING a call and TELLING the borrower stay two separable
+ * facts. The CALL is durable here — a `loan_margin_calls` row, and the grace
  * clock that gates liquidation reads from it — and DELIVERY is pluggable.
  *
  * The distinction matters and the schema keeps it: `notifiedAt` is separate from
  * `calledAt`, so a call that was raised but never delivered is visible as such
  * rather than indistinguishable from one the borrower read. A borrower disputing
  * a liquidation can be answered from these two columns.
+ *
+ * `eventMarginCallSink` (./margin-call-publisher.ts) is the implementation that
+ * reaches the borrower, and it is what `index.ts` wires. It publishes
+ * `bankMarginCalled` — the subject whose svc-notify consumer was complete and
+ * parked on a publisher that did not exist, which is why this port existed and
+ * delivered nothing for as long as it did.
+ *
+ * `sequence` and `calledAt` are on this input because the CONSUMER needs both:
+ * `<loanId>:<sequence>` is the business key it dedupes on, and a consumer cannot
+ * see a header it was not given.
  */
 export interface MarginCallSink {
   send(input: {
     loanId: string;
     userId: string;
+    /** Per-loan call number, from 1. Half of the business key. */
+    sequence: number;
     ltvBps: number;
     cureCollateralAmount: Amount;
     collateralAssetId: string;
+    /** When this call was raised — the same instant written to the row. */
+    calledAt: Date;
     graceExpiresAt: Date;
   }): Promise<void>;
 }
 
-/** Records the call and nothing else. The default, and honest about it. */
+/**
+ * Records the call and nothing else.
+ *
+ * The fallback for a deployment with no bus, and no longer the production
+ * default — `index.ts` wires `eventMarginCallSink`. Kept because a service that
+ * cannot reach NATS must still be able to raise and enforce a call: the grace
+ * clock gating liquidation is a database fact, and making it depend on a message
+ * broker would mean a broker outage silently stops calling loans that are
+ * already past the threshold.
+ *
+ * Its one dishonesty, named here rather than left to be found: because `send`
+ * resolves, `raiseMarginCall` writes `notified_at`, and under this sink that
+ * timestamp records a handoff to nothing. It is accurate under the event sink,
+ * where it records that JetStream accepted the publish — svc-notify records
+ * per-channel delivery separately, and is allowed to answer "no".
+ */
 export const recordOnlyMarginCallSink: MarginCallSink = { send: async () => undefined };
 
 export interface LoanServiceOptions {
@@ -1174,9 +1202,11 @@ export class LoanService {
       await this.marginCalls.send({
         loanId: loan.id,
         userId: loan.userId,
+        sequence,
         ltvBps: ltv,
         cureCollateralAmount: cure,
         collateralAssetId: loan.collateralAssetId,
+        calledAt: now,
         graceExpiresAt,
       });
       await this.sql`

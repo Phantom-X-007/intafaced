@@ -481,8 +481,11 @@ services:
     expose: ['4009']
     healthcheck: *healthcheck
     depends_on:
-      # No `nats` — svc-bank publishes no subject yet (its index.ts says so).
-      <<: *needs-schema
+      # `nats` is now required. svc-bank owns INTAFACED_BANK and creates it at
+      # boot — the stream has never existed, so svc-notify's finished margin-call
+      # consumer has parked on it since it shipped. A margin call raised with no
+      # transport is a grace clock running against a borrower who was never told.
+      <<: [*needs-schema, *needs-bus]
       svc-ledger:
         condition: service_healthy
 
