@@ -7,14 +7,17 @@ import { Chip } from '@/components/chip';
 import { dropLabel } from '@/lib/drops';
 import { type ControlPlaneState, type KillSwitchSnapshot, postKillSwitch } from '@/lib/control-plane-browser';
 import {
+  CONTROL_EFFECT_LABEL,
   CRITICAL_FLAG_KEY,
   PROVENANCE_LABEL,
+  darkButServing,
   diffStates,
   flagStates,
   groupByModule,
   isCritical,
   isEdgePerimeterModule,
   modulesWithoutKillSwitch,
+  runtimeUnknown,
   type FlagState,
 } from '@/lib/flag-state';
 
@@ -33,7 +36,33 @@ import {
  * flag had been flipped, and on the `ledger.posting` panel — the switch labelled
  * "halts ALL value movement platform-wide" — not at all. So the most dangerous
  * control on the board was also the one whose inertness was hardest to discover.
- * Every preview control now carries the word at the control.
+ * Every preview control now carries the word at the control (#447).
+ *
+ * ── THE OTHER HALF: what a row MEANS, not what its switch does ──────────────
+ *
+ * The paragraph above is about the SWITCH. This one is about the STATE beside
+ * it, and they are different lies with different fixes — knowing that flipping a
+ * row does nothing tells you nothing about whether the capability is running.
+ *
+ * #186 fixed WHERE a flip goes. #447 said what a flip is worth. Neither fixed
+ * what a row REPORTS. Every flag was drawn the same way — a `Live`/`Dark` chip —
+ * and only seven of them are read by anything at all. At the default
+ * `LAUNCH_DROP=0` this board showed `protocol.amm`, `academy.inviteLobbies` and
+ * `edge.gateway` as `Dark` while those procedures served traffic. An operator
+ * does not distinguish "the registry says off" from "the capability is off";
+ * nothing on the page invited them to. A preview switch that correctly says it
+ * changes nothing, sitting beside a chip that says the capability is dark, still
+ * sends an operator away believing the platform is stopped.
+ *
+ * So a row now also carries its `ControlEffect`, and an unenforced row is not
+ * dressed as a control: no `Dark` chip, a disabled switch, and its planned value
+ * shown as a plan. See `flag-state.ts` for the reasoning; see
+ * `kill-switch-board.test.tsx` for the assertions that keep it true.
+ *
+ * This is deliberately NOT the kill-switch. A module kill is an emergency stop
+ * and it is enforced at svc-edge; a launch flag is a staged rollout and mostly
+ * is not enforced anywhere. Merging them would give the operator one lever with
+ * two meanings, which is how the first lie got written.
  */
 
 export interface KillSwitchBoardProps {
@@ -65,6 +94,10 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
   const liveCount = staged.filter((s) => s.enabled).length;
   const offClockCount = staged.filter((s) => s.def.drop === null).length;
   const critical = staged.find((s) => s.def.key === CRITICAL_FLAG_KEY);
+  const enforcedCount = staged.filter((s) => s.effect !== 'none').length;
+  const serving = useMemo(() => darkButServing(staged), [staged]);
+  const unknown = useMemo(() => runtimeUnknown(staged), [staged]);
+  const readFromPlatform = staged.filter((s) => s.stateAuthority === 'perimeter').length;
 
   function setFlag(key: string, value: boolean) {
     setOverrides((prev) => ({ ...prev, [key]: value }));
@@ -121,8 +154,13 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
         <div>
           <h1>Kill-switches</h1>
           <p>
-            {FLAG_COUNT_COPY} Resolution runs through the same <code>resolveAll()</code> the services call, at the drop reported in the
-            header — {dropLabel(drop)}. A <strong>module</strong> kill is live on svc-edge when the control plane is reachable; per-flag
+            {FLAG_COUNT_COPY} Resolved at {dropLabel(drop)} <em>from the registry</em>.{' '}
+            <strong>
+              {enforcedCount} of {staged.length}
+            </strong>{' '}
+            of these flags are read by anything; the rest are §11 launch-plan entries whose capability serves whatever this page says. Of
+            the ones that are enforced, none is enforced <em>from here</em> — they follow a service environment variable this console cannot
+            see. A <strong>module</strong> kill is the exception and is live on svc-edge when the control plane is reachable; per-flag
             overrides stay session-staged until the flag store lands.
           </p>
         </div>
@@ -135,9 +173,22 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
 
       <ControlPlanePanel plane={plane} />
 
+      <ServingWhileDarkPanel states={serving} total={staged.length} />
+
+      <RuntimeUnknownPanel states={unknown} />
+
       <Panel title="Platform state" live>
         <div className="adm-statrow">
-          <StatBlock label="Flags live" value={`${liveCount} / ${staged.length}`} />
+          {/* "Flags live" is a registry count and says so. It was previously the
+              first number on the page and read as a count of live CAPABILITIES,
+              which is what made every other panel plausible. */}
+          <StatBlock label="Flags on in registry" value={`${liveCount} / ${staged.length}`} deltaLabel="not a capability count" />
+          <StatBlock label="Flags anything reads" value={`${enforcedCount} / ${staged.length}`} deltaLabel="the rest gate nothing" />
+          <StatBlock
+            label="States read from the platform"
+            value={`${readFromPlatform} / ${staged.length}`}
+            deltaLabel="the rest are registry values"
+          />
           <StatBlock label="Off the drop clock" value={offClockCount} deltaLabel="never on by default" />
           <StatBlock label="Modules killed (live)" value={disabledModules.length} />
           <StatBlock label="Staged flag changes" value={changes.length} />
@@ -278,6 +329,9 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
                 <th>Description</th>
                 <th>Drop</th>
                 <th>State</th>
+                {/* Added because the four columns to the left described the
+                    registry and nothing described the platform. */}
+                <th>Enforced by</th>
                 <th>Decided by</th>
                 <th>Switch — preview only</th>
               </tr>
@@ -285,7 +339,7 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
             {groups.map((group) => (
               <tbody key={group.module}>
                 <tr>
-                  <td className="adm-subhead" colSpan={6}>
+                  <td className="adm-subhead" colSpan={7}>
                     <span className="adm-subhead__row">
                       <span>{group.module}</span>
                       <span className="adm-meta">
@@ -410,7 +464,9 @@ const FLAG_COUNT_COPY = 'Every flag declared in the registry, grouped by the mod
 const stageNotice =
   'Per-flag switches stage a preview in this browser session and are read by no service — there is no durable flag store yet (§13 socket). ' +
   'The MODULE switch on each group header is the live one: it posts to svc-edge and refuses new commitments at the door. ' +
-  'To halt all value movement use Ledger ops, which writes an attributed freeze row in svc-ledger.';
+  'To halt all value movement use Ledger ops, which writes an attributed freeze row in svc-ledger. ' +
+  'And note that the flag store would change nothing for a flag marked "Not a control": no service resolves flags, ' +
+  'so there is nothing on the far end to push to.';
 
 // ── Rows ────────────────────────────────────────────────────────────────────
 
@@ -428,13 +484,18 @@ function FlagRow({
   onClear: (key: string) => void;
 }) {
   const critical = isCritical(state.def.key);
+  const unenforced = state.effect === 'none';
   // Turning the ledger's posting switch off is the one action on this board with
   // a platform-wide blast radius, so it stays locked until the operator has
   // acknowledged that in the panel above.
-  const locked = moduleKilled || (critical && state.enabled && !criticalArmed);
+  //
+  // `unenforced` joins that list for the opposite reason: not because the action
+  // is dangerous, but because it is inert. A switch that moves and changes
+  // nothing teaches an operator that the board works.
+  const locked = moduleKilled || unenforced || (critical && state.enabled && !criticalArmed);
 
   return (
-    <tr data-critical={critical} data-killed={moduleKilled}>
+    <tr data-critical={critical} data-killed={moduleKilled} data-effect={state.effect}>
       <td className="adm-key">{state.def.key}</td>
       <td className="adm-desc">
         {state.def.description}
@@ -442,7 +503,10 @@ function FlagRow({
       </td>
       <td className="adm-num">{state.def.drop === null ? '—' : state.def.drop}</td>
       <td>
-        <StateChip on={state.enabled} critical={critical && !state.enabled} />
+        <RowStateCell state={state} critical={critical} />
+      </td>
+      <td>
+        <EnforcementCell state={state} />
       </td>
       <td>
         <Chip tone={state.provenance === 'kill-switch' ? 'danger' : state.provenance === 'override' ? 'warn' : 'neutral'}>
@@ -456,6 +520,10 @@ function FlagRow({
             critical={critical}
             disabled={locked}
             preview
+            // Both, and the order matters: `Switch` prefers an explicit `title`
+            // over the generic preview text, so an inert row explains WHY it is
+            // disabled and every other row still says it is preview-only.
+            title={unenforced ? state.note : undefined}
             onLabel="On"
             offLabel="Off"
             onToggle={() => onSet(state.def.key, !state.enabled)}
@@ -469,6 +537,150 @@ function FlagRow({
         </span>
       </td>
     </tr>
+  );
+}
+
+/**
+ * THE `State` CELL — and the one place on this board that must not overclaim.
+ *
+ * `Live` and `Dark` are words about a CAPABILITY. Only one row on this page has
+ * earned them: a module the operator killed, where the killed set was read back
+ * from svc-edge and the perimeter is refusing right now. Everything else is a
+ * `FLAG_REGISTRY` value, and says so:
+ *
+ *   · nothing reads the flag        → `Planned on/off`, and it is serving
+ *   · a service env var reads it    → `Registry on/off`, and we cannot see it
+ *
+ * The second case is the one the enforcement column alone still got wrong.
+ * Naming `NOTIFY_FANOUT_ENABLED` as the real switch is not the same as knowing
+ * which way it is set — it lives on svc-notify, defaults to on, and this
+ * console has never read a service's environment.
+ */
+function RowStateCell({ state, critical }: { state: FlagState; critical: boolean }) {
+  if (state.stateAuthority === 'perimeter') {
+    return (
+      <span className="adm-inline">
+        <StateChip on={state.enabled} critical={critical && !state.enabled} />
+        <span className="adm-meta">read from svc-edge</span>
+      </span>
+    );
+  }
+
+  if (state.effect === 'none') {
+    return (
+      <span className="adm-inline">
+        <Chip tone="neutral" title={state.note}>
+          {state.enabled ? 'Planned on' : 'Planned off'}
+        </Chip>
+        <span className="adm-meta">serving</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="adm-inline">
+      <Chip tone="neutral" title={state.note}>
+        {state.enabled ? 'Registry on' : 'Registry off'}
+      </Chip>
+      <span className="adm-meta">not read from the service</span>
+    </span>
+  );
+}
+
+function EnforcementCell({ state }: { state: FlagState }) {
+  const { enforcement, note } = state;
+
+  if (enforcement.kind === 'none') {
+    return (
+      <Chip tone="warn" title={note}>
+        {CONTROL_EFFECT_LABEL.none}
+      </Chip>
+    );
+  }
+
+  return (
+    <span className="adm-inline">
+      <Chip tone={enforcement.kind === 'operator-api' ? 'live' : 'info'} title={note}>
+        {CONTROL_EFFECT_LABEL[state.effect]}
+      </Chip>
+      <code className="adm-meta">{enforcement.envVar}</code>
+    </span>
+  );
+}
+
+/**
+ * The count an operator needs before trusting anything else on this page.
+ *
+ * Rendered near the top rather than as a footnote: the number this panel
+ * reports was 39 of 46 at the drop the platform actually runs at, and a
+ * footnote-sized disclosure of that is another way of not saying it.
+ */
+function ServingWhileDarkPanel({ states, total }: { states: readonly FlagState[]; total: number }) {
+  if (states.length === 0) {
+    return (
+      <Panel title="Flags that gate nothing">
+        <p className="adm-footnote">Every flag reported off on this page is held off by something. Nothing here is decoration.</p>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title={`${states.length} of ${total} flags read off — and the capability is serving`} className="adm-panel--warn">
+      <div className="adm-stack">
+        <div className="adm-callout" data-tone="warn">
+          <strong>These rows are launch plan, not control</strong>
+          Nothing in <code>services/*</code> resolves a feature flag. For the flags below, <code>isEnabled()</code> returns false and the
+          procedure answers anyway — <code>protocol.amm</code> quotes, <code>academy.inviteLobbies</code> seats users,{' '}
+          <code>edge.gateway</code> proxies every request in the platform. Their switches are disabled here because there is nothing on the
+          other end of them. To actually stop one of these, kill its <strong>module</strong> above (enforced at svc-edge) or take the
+          service down.
+        </div>
+        <div className="adm-inline">
+          {states.map((state) => (
+            <Chip key={state.def.key} tone="dark" title={`${state.def.module} · ${state.def.description}`}>
+              {state.def.key}
+            </Chip>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+/**
+ * The rows with a real switch that this console cannot see the position of.
+ *
+ * Separate from the panel above on purpose. There, the honest answer is "this
+ * will not stop, ever, from here". Here it is "something can stop it, and you
+ * must ask the service which way it is set" — and the two send an operator to
+ * different places. Collapsing them into one "we are not sure" list would lose
+ * the only actionable half.
+ *
+ * `NOTIFY_FANOUT_ENABLED` and `INDEXER_INGEST_ENABLED` both default to on, so
+ * the likeliest reading of a `Dark` chip here was also the wrong one.
+ */
+function RuntimeUnknownPanel({ states }: { states: readonly FlagState[] }) {
+  if (states.length === 0) return null;
+
+  return (
+    <Panel title={`${states.length} flags whose real state this console cannot read`}>
+      <div className="adm-stack">
+        <div className="adm-callout" data-tone="warn">
+          <strong>Enforced, but not from here</strong>
+          Each of these is genuinely gated — by an environment variable read once at that service&rsquo;s boot, defaulting to on. This
+          console reads <code>INTAFACED_FLAG_*</code> off its own process only, so it has never seen those variables. The state beside them
+          is what the registry resolves, not what the service is doing. To learn the truth, read the variable on the service; to change it,
+          set it and restart.
+        </div>
+        <div className="adm-inline">
+          {states.map((state) => (
+            <Chip key={state.def.key} tone="info" title={state.note}>
+              {state.def.key} · {state.enforcement.kind === 'none' ? '—' : state.enforcement.envVar}
+            </Chip>
+          ))}
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -504,6 +716,12 @@ function Switch({
   disabled?: boolean;
   /** True when flipping this changes only this browser session. */
   preview?: boolean;
+  /**
+   * Why this switch is disabled. A dead control must say so on hover, not only
+   * in a panel. Takes precedence over the generic preview text below: "nothing
+   * reads this flag" is more specific than "this is a preview", and the operator
+   * hovering a greyed-out switch is asking the specific question.
+   */
   title?: string;
 }) {
   return (
@@ -546,12 +764,19 @@ function CriticalSwitch({
     <Panel
       title="ledger.posting — platform-wide value movement"
       className="adm-panel--warn"
+      // Two claims to get right, and #447 only fixed the first. "Preview only"
+      // is about the BUTTONS — flipping them changes this browser tab. The chip
+      // beside it is about the STATE, and a bare `StateChip` here would say
+      // HALTED/Live as if the console had asked svc-ledger, which it has not:
+      // `posting_freeze` is a durable row on that service and `Ledger ops` is
+      // what reaches it. `RowStateCell` reports the registry's answer AS the
+      // registry's answer.
       actions={
         <span className="adm-inline">
           <Chip tone="warn" dot>
             Preview only
           </Chip>
-          <StateChip on={state.enabled} critical={!state.enabled} />
+          <RowStateCell state={state} critical />
         </span>
       }
     >

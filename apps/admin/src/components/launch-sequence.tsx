@@ -196,8 +196,9 @@ export function LaunchSequence({ currentDrop, flagEnv }: LaunchSequenceProps) {
                 {offClock.length} of {now.length} flags have <code>drop: null</code>
               </strong>
               Reaching drop V does not turn these on. They are the §13 sockets and the licence-gated surfaces, and each needs an explicit
-              override — from this console or from <code>INTAFACED_FLAG_*</code> — or it stays dark forever. An operator reading only the
-              drop table would not know that.
+              override — from this console or from <code>INTAFACED_FLAG_*</code> — or the registry reports it off forever. That is a
+              statement about the registry and not about the platform: most of these flags are read by nothing, so their capability serves
+              at every drop regardless of what this table says. The Kill-switches page marks which is which.
             </div>
             <div className="adm-inline">
               {offClock.map((flag) => (
