@@ -66,7 +66,14 @@ Debits were never done through a mutator. They were done as `setBalance(x.subtra
 - **Jar count is 32, not 31.** The "31" at `vendor/.gitignore:11` and in the adoption ADR is wrong; `docs/UPSTREAM-ADOPTION-QUEUE-2026-08-02.md` already carries the right figure. Eighteen sit inside `01_wallet_rpc`, including **`bitcoinj-core-0.13-alice-SNAPSHOT.jar`** — a snapshot build of an unnamed fork, on the classpath of the two modules that mint keys with `new ECKey()`.
 - **`*.jar` is not marked binary** in `.gitattributes`; `git check-attr` returns `text: auto` on a wallet jar.
 - **The adoption ADR's "32 call sites are all of this grade" is an overcount.** The Grade B budget is 29; 32 is reached only by including the three Grade A declarations. The new ratchet arithmetic should reconcile to 29.
-- **`core` may not compile from source.** `MemberApplicationService` has a comment, an unconditional `return;`, then a further statement in the same block. Under JLS §14.21 that is an _unreachable statement_ — a compile **error**. Unverified here because nothing in this environment can run `mvn`; verifying it is a precondition for any plan that rebuilds the jars.
+- **`core` did not compile from source — CONFIRMED 2026-08-04, and it was three errors, not one.** All in `MemberApplicationService`:
+  1. `promotionLevelTwo()` — `return;` followed by `if (rewardPromotionSetting != null) {`. JLS §14.21 unreachable statement.
+  2. `promotion()` — `return;` followed by a `RewardPromotionSetting` declaration. Same rule.
+  3. **`promotion()` declared `MemberPromotion one` twice in the same block.** JLS §6.4 duplicate local variable — a compile error regardless of reachability, and one nobody had spotted.
+
+  Note the distinction that makes this a real error rather than a lint opinion: `if (false && …)` elsewhere in the same file is **legal**, because `if` is the one construct §14.21 exempts for conditional compilation. `return;` gets no such exemption.
+
+  **So `core` has not compiled since the disabling campaign landed, and no jar has ever been built from the current source.** That is a stronger statement than the artifact gap above: it is not merely that the jars are stale, it is that the source they would be rebuilt from does not compile. All three are now fixed; a sweep of all 870 Java files found no fourth instance.
 
 ---
 
@@ -97,7 +104,8 @@ This was already proposed twice and corrected twice; the correction is recorded 
 ## Standing rules
 
 - **Do not extend `custody-scan` to Java.** See above. Do not propose it a third time.
-- **The ratchet freezes by exact matched text, never by count.** A count-based ratchet lets one site be removed and another added.
+- **The ratchet freezes by per-file, per-rule count**, keyed on `module:file` — `rules: { 'jpa-entity-balance-mutation': N }`. That is the scan's own documented convention and it is what implementers follow. It is deliberately **not** a global count, which would be near-useless.
+  - **Its one residual weakness, stated rather than hidden:** within a single file and a single rule, removing one site and adding another passes. The blast radius is one file and one rule, which is small — but it is not zero, and a future tightening to exact matched text would close it. Do not describe the current ratchet as text-exact; it is not.
 - **A gate whose walk can be empty must fail loudly.** Applies to every scan in `tooling/ci/`, and is the reason `custody-scan` exits 1 on an empty derivation rather than printing a tick.
 - **Do not add a jar to make something boot.** Stated once for `otc-api`; it holds generally.
 

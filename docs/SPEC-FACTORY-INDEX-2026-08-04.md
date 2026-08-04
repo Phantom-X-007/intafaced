@@ -33,22 +33,22 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-12** ✅ | **done**    | [`adr/2026-08-04-cross-plane-bridge-accounting.md`](adr/2026-08-04-cross-plane-bridge-accounting.md) — accounting law only; chain side is Shehzad S-D7/S-B5.                   |
 | **D-S-13** ✅ | **done**    | [`adr/2026-08-04-event-socket-vs-broken-promise.md`](adr/2026-08-04-event-socket-vs-broken-promise.md)                                                                         |
 | **D-S-14** ❌ | **blank**   | Nothing current.                                                                                                                                                               |
-| **D-S-15** ❌ | **blank**   | Board rows only.                                                                                                                                                               |
+| **D-S-15** ✅ | **done**    | [`adr/2026-08-04-platform-pages-ia.md`](adr/2026-08-04-platform-pages-ia.md) — law only, craft stays Nitro.                                                                    |
 | **D-S-16** ⚠️ | **partial** | `DIRECTION` §3 — "Class M merge rule — decided" + four carve-outs.                                                                                                             |
 | **D-S-17** ✅ | **done**    | Decision: `DIRECTION` §4 (Option B). Residual: [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)                                        |
 | **D-S-18** ❌ | **blank**   | Board itself says "if in scope".                                                                                                                                               |
 
-**Tally: 9 done · 4 partial · 5 blank.** The board read as 17 blank.
+**Tally: 10 done · 4 partial · 4 blank.** The board read as 17 blank.
 
 ---
 
 ## What this changes for agents, today
 
-**Agents may now implement against D-S-02, 03, 04, 09, 10, 11, 12, 13 and 17 without waiting.** Those nine are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
+**Agents may now implement against D-S-02, 03, 04, 09, 10, 11, 12, 13, 15 and 17 without waiting.** Those ten are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
 
 **D-S-01, 05, 07 and 16 are partially law.** Implement the decided part; do not invent the rest. Each row above names which half is which.
 
-**D-S-06, 08, 14, 15, 18 remain genuinely blank.** The invent-ban holds in full. Research is welcome; implementation is not.
+**D-S-06, 08, 14, 18 remain genuinely blank.** The invent-ban holds in full. Research is welcome; implementation is not.
 
 ---
 
