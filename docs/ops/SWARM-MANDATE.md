@@ -22,19 +22,38 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | **P4**   | Integrity              | Invent re-scan **only if** shell code changed since last scan; P-WS report **only if** #433/#432 state changed | cycle stamp every few minutes with no delta |
 | **P5**   | Hygiene                | LIVE-LANES / claims truth when false free rows; Class N merge green Nitro                                      | R07 peace rows for unchanged freeProduct=0  |
 
-**Night/AFK after freeProduct=0:** P1→P5 above. Class N merge when green. **Not** invent depth UI. **Not** R07 cycle spam.  
-**One-pager:** [`AFK-NO-STAMP-MILL.md`](./AFK-NO-STAMP-MILL.md) · **machine:** `pnpm swarm:status` / `swarm:lanes` / `swarm:next` print `afk-ladder` + `stamp-mill: BAN` + Actions 24h run count when freeProduct=0.
+**Night/AFK after freeProduct=0:** P1→P5 above. Class N merge when green. **Not** invent depth UI. **Not** R07 cycle spam.
+
+### Allowed vs forbidden when freeProduct=0
+
+| Allowed                                                   | Forbidden                                               |
+| --------------------------------------------------------- | ------------------------------------------------------- |
+| P1 land stranded branches (path-clean)                    | R07/R01/P-WS cycle PRs with same freeProduct=0 board    |
+| P2 exact partner CI fail comments                         | Merging Denon/Shehzad PRs                               |
+| P3 code-grounded TRK research deepen                      | Dual-edit partner open PR paths                         |
+| P4 invent/P-WS **only if** code or partner matrix changed | Invent/P-WS stamp with no Board-Delta                   |
+| P5 claims truth + merge green Nitro Class N               | freeProduct=0 as session kill **or** as license to spam |
+
+### Machine enforcement (not a banner)
+
+| Mechanism                                      | What it does when context degrades                                                                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`tooling/ci/value-gate.mjs` on Docs format** | **Exits 1** (strict) on docs-only + ≥0.80 subject similarity to last 10 ancestors + no `Board-Delta:` trailer. Git-only. **This is enforcement.** |
+| `pnpm swarm:status` ops-churn / Actions 24h    | **Informational only** — prints; does not block                                                                                                   |
+| `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                       |
+
+Self-test (fixtures, no network): `pnpm value-gate:self-test` → near-dup exit-1 path, real work pass.
 
 ### F-STANDBY (finish type when freeProduct=0)
 
-When the primary board finish is met but the session continues (AFK / “never stop”), the state is **F-STANDBY** (defined in OS harvest `shared/S-CORE.md` §1.1). Rules:
+When the primary board finish is met but the session continues (AFK / “never stop”), the state is **F-STANDBY** (OS harvest `shared/S-CORE.md` §1.1). Rules:
 
-- **Idling silently is valid** — producing a PR is not required to remain in F-STANDBY.
-- Any ship must be a P1–P5 ladder item with a real **Board-Delta** (or code). Value metric: `tooling/ci/value-gate.mjs` (L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`).
+- **Idling silently is valid** — producing a PR is not required.
+- Any ship must be P1–P5 with a real **Board-Delta** (or code). Metric: value-gate (L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`).
 - Re-check cadence 30–45m via `pnpm swarm:freeze` / `swarm:lanes`.
 
-**Spawn width:** target **6–8 concurrent** path-disjoint free product writers when freeProduct>0. When freeProduct=0, spawn **P1–P3** workers (width 3–6), not 6–8 stamp clones. Anti-under-spawn logs `available` / `active_spawned` / `gap`.
+**Spawn width:** target **6–8 concurrent** path-disjoint free product writers when freeProduct>0. When freeProduct=0, spawn **P1–P3** workers (width 3–6), not stamp clones.
 
-**Cold resume (no third file):** regenerate + read [`FREEZE-LIVE.md`](./FREEZE-LIVE.md) · follow [`../COORDINATION-TRUTH-LAYERS.md`](../COORDINATION-TRUTH-LAYERS.md) § Agent cold-start · human inbox [`../BOARD-CLEAR-HUMAN-BLOCKERS.md`](../BOARD-CLEAR-HUMAN-BLOCKERS.md).
+**Cold resume (no third file):** regenerate + read [`FREEZE-LIVE.md`](./FREEZE-LIVE.md) · [`../COORDINATION-TRUTH-LAYERS.md`](../COORDINATION-TRUTH-LAYERS.md) § Agent cold-start · human inbox [`../BOARD-CLEAR-HUMAN-BLOCKERS.md`](../BOARD-CLEAR-HUMAN-BLOCKERS.md).
 
 Forbidden unchanged: Shehzad M1–M7 implement · Denon open-PR dual-edit · invent money/depth · main-checkout · fake visual under NO-FLEET.

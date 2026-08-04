@@ -32,6 +32,7 @@
     "tracker:check": "node tooling/scripts/tracker.mjs --check",
     "scan:agent-autoload": "node tooling/ci/agent-autoload-scan.mjs",
     "gates": "node tooling/ci/gates.mjs",
+    "value-gate:self-test": "node tooling/ci/value-gate.mjs --self-test",
     "verify": "pnpm gates && pnpm format:check && turbo run build typecheck test && node tooling/ci/dod-gate.mjs",
     "gate": "node tooling/ci/dod-gate.mjs",
     "scan:brand": "node tooling/ci/brand-scan.mjs",
