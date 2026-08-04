@@ -510,6 +510,7 @@ export function fakeMarket(partial: {
     listedAt: null,
     assetClass: 'crypto',
     schedule: 'crypto-24x7',
+    paper: false,
   };
 }
 

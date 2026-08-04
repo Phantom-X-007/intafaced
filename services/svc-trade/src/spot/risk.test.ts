@@ -37,6 +37,7 @@ const BTCUSDT: Market = {
   listedAt: new Date(),
   assetClass: 'crypto',
   schedule: 'crypto-24x7',
+  paper: false,
 };
 
 const withMarket = (overrides: Partial<Market>): Market => ({ ...BTCUSDT, ...overrides });

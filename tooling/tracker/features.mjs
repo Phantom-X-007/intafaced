@@ -682,7 +682,12 @@ export const FEATURES = [
     phase: '5',
     dependsOn: ['academy.lobbies', 'trade.spot'],
   }),
-  f('academy.paper-trading', 'Paper-trading market flag for workbooks', { module: 'academy', phase: '5', dependsOn: ['trade.spot'] }),
+  f('academy.paper-trading', 'Paper-trading market flag for workbooks', {
+    module: 'academy',
+    phase: '5',
+    dependsOn: ['trade.spot'],
+    note: 'Stage-1 2026-08-04: trade.markets.paper flag + placeOrder isolation (zero ledger posts on paper). Workbook wire + sim fills Stage-2 residual.',
+  }),
   f('launch.token-factory', 'ERC-20 deploy from audited templates', {
     owner: 'shehzad002',
     module: 'launch',

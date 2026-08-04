@@ -1,8 +1,18 @@
 # Claim TRK-academy.paper-trading
 
-**status:** residual-own
-**proof:** docs/ops/trk/academy.paper-trading.md on tip · research/spec complete · not implement
-**tip:** 04f9b1f2
-**updated:** 2026-08-03
+**status:** pr-open
+**started:** 2026-08-04T00:00:00.000Z
+**heartbeat:** 2026-08-04T00:00:00.000Z
+**title:** Paper market flag + ledger isolation (Stage-1)
+**track:** IMPLEMENTABLE
+**paths:**
 
-Claim-lock is spawn authority. residual-own = research/spec complete on tip; not an implement swarm.
+- services/svc-trade
+
+## Done bar
+
+- [x] paper boolean on trade.markets
+- [x] placeOrder on paper never posts ledger holds
+- [x] live placeOrder unchanged
+- [ ] Stage-2 workbook loop / simulated fills
+- [ ] Stage-3 ops enable/kill

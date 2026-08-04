@@ -184,6 +184,8 @@ export interface ListMarketInput {
   schedule?: Market['schedule'];
   /** Falls back to the symbol; the column carries a NOT-NULL, length > 0 check. */
   displayName?: string;
+  /** Paper market — drills only; placeOrder never posts ledger holds. */
+  paper?: boolean;
 }
 
 export class TradeService {
@@ -229,7 +231,7 @@ export class TradeService {
       INSERT INTO trade.markets (
         symbol, base_asset, quote_asset, kind, tick_size, lot_size,
         min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-        asset_class, schedule, display_name
+        asset_class, schedule, display_name, paper
       ) VALUES (
         ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, 'spot',
         ${formatAmount(input.tickSize)}::numeric, ${formatAmount(input.lotSize)}::numeric,
@@ -238,12 +240,12 @@ export class TradeService {
         ${formatAmount(input.minNotional)}::numeric,
         ${input.status ?? 'active'}, ${input.makerBps}, ${input.takerBps}, now(),
         ${input.assetClass ?? 'crypto'}, ${input.schedule ?? 'crypto-24x7'},
-        ${input.displayName ?? input.symbol}
+        ${input.displayName ?? input.symbol}, ${input.paper === true}
       )
       ON CONFLICT (symbol) DO UPDATE SET updated_at = now()
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
                 min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
     `;
     return toMarket(rows[0] as MarketRow);
   }
@@ -261,7 +263,7 @@ export class TradeService {
       UPDATE trade.markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
                 min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
     `;
     const row = rows[0];
     if (!row) throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
@@ -272,7 +274,7 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
         FROM trade.markets ORDER BY symbol ASC
     `;
     return rows.map(toMarket);
@@ -444,6 +446,14 @@ export class TradeService {
     // ── 2 · RISK CHECKS ─────────────────────────────────────────────────────
     const market = await this.requireMarket(input);
     assertTradable(market);
+
+    // Stage-1 paper isolation (academy.paper-trading): a paper market must never
+    // post orderHold / tradeFill against real available balances. Live markets
+    // keep the funded path below unchanged.
+    if (market.paper) {
+      return this.placePaperOrderIsolated(principal, input, market);
+    }
+
     // Before any hold is taken. A closed venue cannot fill, so funding an order
     // into one locks the user's balance behind a book nobody is matching until
     // the session reopens.
@@ -592,6 +602,62 @@ export class TradeService {
 
     const settled = await this.findOrder(orderId);
     if (!settled) throw new TradeError(`order ${orderId} vanished during settlement`, 'trade.order_not_found');
+    return settled;
+  }
+
+  /**
+   * Paper market place — Stage-1 isolation.
+   *
+   * Records an intent/open order with zero hold and never calls the ledger.
+   * Simulated fills / workbook wiring are Stage-2. Live placeOrder path is
+   * unchanged for non-paper markets.
+   */
+  private async placePaperOrderIsolated(principal: Principal, input: PlaceOrderInput, market: Market): Promise<OrderRecord> {
+    requireScope(principal, 'trade:write');
+    const userId = principal.userId;
+    if (input.subAccountId != null) {
+      await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
+    }
+    assertMarketOpen(market, this.now());
+    const orderType: OrderType = requireSupportedType(input.type);
+    assertQty(market, input.qty);
+    if (orderType === 'limit') {
+      if (input.price == null) throw new TradeError('a limit order requires a price', 'trade.invalid_price');
+      assertPrice(market, input.price);
+      assertNotional(market, input.price, input.qty);
+    }
+    const tif: TimeInForce = input.tif ?? 'GTC';
+    // Schema requires hold columns; paper posts zero amount and never ledger-posts.
+    const holdAsset = input.side === 'buy' ? market.quoteAsset : market.baseAsset;
+    const orderId = input.clientOrderId ? orderIdFor(userId, market.id, input.clientOrderId) : crypto.randomUUID();
+    const existing = await this.findOrder(orderId);
+    if (existing) return existing;
+
+    const inserted = await this.sql<Array<{ id: string }>>`
+      INSERT INTO trade.orders (
+        id, user_id, sub_account_id, market_id, client_order_id, side, type,
+        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
+      ) VALUES (
+        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId ?? null},
+        ${input.side}, ${orderType},
+        ${input.price == null ? null : formatAmount(input.price)}::numeric,
+        ${formatAmount(input.qty)}::numeric, 'open', ${tif},
+        ${holdAsset}, ${formatAmount(0n)}::numeric, 0,
+        null,
+        false
+      )
+      ON CONFLICT (id) DO NOTHING
+      RETURNING id
+    `;
+    if (inserted.length === 0) {
+      const raced = await this.findOrder(orderId);
+      if (raced) return raced;
+      throw new TradeError(`order ${orderId} vanished between insert and read`, 'trade.order_not_found');
+    }
+    // No ledger.post. No matching.submit. Paper residual for Stage-2 fills.
+    const settled = await this.findOrder(orderId);
+    if (!settled) throw new TradeError(`order ${orderId} vanished during paper place`, 'trade.order_not_found');
+    await this.publishOrderUpdated(settled);
     return settled;
   }
 
@@ -1459,7 +1525,7 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
         FROM trade.markets WHERE id = ${marketId}
     `;
     const row = rows[0];
@@ -1470,7 +1536,7 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
         FROM trade.markets WHERE symbol = ${symbol}
     `;
     const row = rows[0];
