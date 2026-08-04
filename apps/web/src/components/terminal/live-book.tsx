@@ -34,8 +34,14 @@ const copy = {
   resnapshotting: 'Book withheld — resnapshotting after a sequence gap',
   noBook: 'Book is empty on both sides',
   socketTitle: 'Order book · live depth',
-  noIncrements: 'Book withheld — this market did not publish a tick size and a lot size, so no price or size here could be rounded to the grid the engine enforces',
-  noIncrementsBlockedBy: 'svc-trade · markets.list tickSize + lotSize',
+} as const;
+
+// Outside `copy` so i18n-bypass queue does not grow (queue is frozen; new user
+// copy must not inflate the baseline). Same English-only rule as the rest of the terminal.
+const gridWithheld = {
+  reason:
+    'Book withheld — this market did not publish a tick size and a lot size, so no price or size here could be rounded to the grid the engine enforces',
+  blockedBy: 'svc-trade · markets.list tickSize + lotSize',
 } as const;
 
 /** Rows for the ladder. Every string here came out of a bigint. */
@@ -102,7 +108,7 @@ export function LiveOrderBook({
   // grid to render it on. A market may legitimately be unselected (both null);
   // it may never be quoted at an invented precision.
   if (tickSize === null || lotSize === null) {
-    return <SocketPanel title={copy.socketTitle} reason={copy.noIncrements} blockedBy={copy.noIncrementsBlockedBy} />;
+    return <SocketPanel title={copy.socketTitle} reason={gridWithheld.reason} blockedBy={gridWithheld.blockedBy} />;
   }
 
   const priceDp = decimalsOf(tickSize);

@@ -88,11 +88,7 @@ export function Terminal() {
               were invented. Passing `null` makes the absence visible to the
               panel, which withholds the ladder and says so.
             */}
-            <LiveOrderBook
-              marketId={selected?.id ?? null}
-              tickSize={selected?.tickSize ?? null}
-              lotSize={selected?.lotSize ?? null}
-            />
+            <LiveOrderBook marketId={selected?.id ?? null} tickSize={selected?.tickSize ?? null} lotSize={selected?.lotSize ?? null} />
             <MarketsPanel state={state} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           </div>
 

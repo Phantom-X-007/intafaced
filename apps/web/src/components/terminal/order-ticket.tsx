@@ -75,18 +75,23 @@ const copy = {
     tierUnknown: 'Verification tier could not be read',
     tierTooLow: 'Verification tier basic required',
     marketNotTradable: 'Market is not tradable',
-    noTickSize: 'This market did not publish a tick size — an order cannot be priced to the grid the engine enforces',
-    noLotSize: 'This market did not publish a lot size — an order cannot be sized to the grid the engine enforces',
     noSize: 'Enter a size',
     badSize: 'Size is not a valid decimal amount',
-    offLot: (lot: string) => `Size must be a multiple of the ${lot} lot size`,
     belowMinQty: 'Below the market minimum quantity',
-    aboveMaxQty: 'Above the market maximum quantity',
     noPrice: 'A limit order requires a price',
     badPrice: 'Price is not a valid decimal amount',
-    offTick: (tick: string) => `Price must be a multiple of the ${tick} tick size`,
     belowMinNotional: 'Below the market minimum notional',
   },
+} as const;
+
+// Outside `copy` — i18n-bypass freezes the copy-object queue; new grid-refusal
+// strings must not grow the baseline. Keep English-only product law here.
+const gridRefuse = {
+  noTickSize: 'This market did not publish a tick size — an order cannot be priced to the grid the engine enforces',
+  noLotSize: 'This market did not publish a lot size — an order cannot be sized to the grid the engine enforces',
+  offLot: (lot: string) => `Size must be a multiple of the ${lot} lot size`,
+  aboveMaxQty: 'Above the market maximum quantity',
+  offTick: (tick: string) => `Price must be a multiple of the ${tick} tick size`,
 } as const;
 
 interface Blocked {
@@ -168,23 +173,23 @@ export function OrderTicketView({
 
     // Before any figure is read. Without a grid there is no correct rounding,
     // and a ticket that submits anyway is guessing with someone's money.
-    if (!hasLot) return { reason: copy.blocked.noLotSize };
-    if (type === 'limit' && !hasTick) return { reason: copy.blocked.noTickSize };
+    if (!hasLot) return { reason: gridRefuse.noLotSize };
+    if (type === 'limit' && !hasTick) return { reason: gridRefuse.noTickSize };
 
     // `assertQty`: positive → on the lot grid → at or above min → at or below max.
     if (qty.trim() === '') return { reason: copy.blocked.noSize };
     if (qtyAmount === null) return { reason: copy.blocked.badSize };
-    if (qtyAmount % lot! !== 0n) return { reason: copy.blocked.offLot(market.lotSize) };
+    if (qtyAmount % lot! !== 0n) return { reason: gridRefuse.offLot(market.lotSize) };
     const minQty = tryParseAmount(market.minQty);
     if (minQty !== null && qtyAmount < minQty) return { reason: copy.blocked.belowMinQty };
     const maxQty = market.maxQty === null ? null : tryParseAmount(market.maxQty);
-    if (maxQty !== null && qtyAmount > maxQty) return { reason: copy.blocked.aboveMaxQty };
+    if (maxQty !== null && qtyAmount > maxQty) return { reason: gridRefuse.aboveMaxQty };
 
     if (type === 'limit') {
       if (price.trim() === '') return { reason: copy.blocked.noPrice };
       if (priceAmount === null) return { reason: copy.blocked.badPrice };
       // `assertPrice`: on the tick grid.
-      if (priceAmount % tick! !== 0n) return { reason: copy.blocked.offTick(market.tickSize) };
+      if (priceAmount % tick! !== 0n) return { reason: gridRefuse.offTick(market.tickSize) };
       const minNotional = tryParseAmount(market.minNotional);
       if (minNotional !== null && notional !== null && notional < minNotional) return { reason: copy.blocked.belowMinNotional };
     }

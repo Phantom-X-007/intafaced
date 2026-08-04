@@ -221,6 +221,6 @@ describe('the terminal source carries no invented increments', () => {
   });
 
   it('does not flag a null default, which is how absence is reported honestly', () => {
-    expect(findInventedIncrements("tickSize={selected?.tickSize ?? null}")).toEqual([]);
+    expect(findInventedIncrements('tickSize={selected?.tickSize ?? null}')).toEqual([]);
   });
 });
