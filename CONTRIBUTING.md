@@ -252,4 +252,3 @@ Board-Delta: free product count changed
 
 Enforced by `tooling/ci/value-gate.mjs` on the Docs format workflow (advisory → strict).  
 See `docs/BOARD-CLEAR-PROCESS-LOOPS.md` L0 and `docs/ops/SWARM-MANDATE.md`.
-
