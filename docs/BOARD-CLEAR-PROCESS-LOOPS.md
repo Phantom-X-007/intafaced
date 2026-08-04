@@ -34,6 +34,8 @@ while true:
   NEVER dual-build paths already open on another live PR
 ```
 
+**Value gate (L0 metric):** docs-only near-duplicate commits without a `Board-Delta:` trailer are stamp-mill (S-CORE §3). Detector: `tooling/ci/value-gate.mjs` on Docs format CI. A tip SHA / cycle number is not a delta.
+
 **Session end rule:** If context will compact or turn ends, last write is `BOARD-CLEAR-NEXT.md` with the exact next command/ship. Ending without NEXT = **failure**.
 
 ---

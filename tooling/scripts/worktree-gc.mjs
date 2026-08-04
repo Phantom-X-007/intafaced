@@ -5,6 +5,7 @@
  *
  *   node tooling/scripts/worktree-gc.mjs --dry-run
  *   node tooling/scripts/worktree-gc.mjs --apply
+ *   node tooling/scripts/worktree-gc.mjs --check   # exit 1 if worktree count > 20
  *
  * Never touches the main checkout. Never removes a dirty worktree.
  * Unpushed unique commits (cherry +) are kept.
@@ -13,7 +14,9 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { basename } from 'node:path';
 
 const apply = process.argv.includes('--apply');
-const dry = !apply;
+const checkOnly = process.argv.includes('--check');
+const dry = !apply && !checkOnly;
+const WT_CAP = 20;
 
 function git(args, opts = {}) {
   const out = execFileSync('git', args, { encoding: 'utf8', ...opts });
@@ -77,8 +80,9 @@ for (const w of wts) {
   }
 }
 
-console.log(`worktree-gc ${dry ? 'DRY-RUN' : 'APPLY'}`);
-console.log(`main=${main.slice(0, 8)} total=${wts.length} safe=${safe.length} dirty=${dirty.length} keep=${keep.length}`);
+const mode = checkOnly ? 'CHECK' : dry ? 'DRY-RUN' : 'APPLY';
+console.log(`worktree-gc ${mode}`);
+console.log(`main=${main.slice(0, 8)} total=${wts.length} safe=${safe.length} dirty=${dirty.length} keep=${keep.length} cap=${WT_CAP}`);
 for (const w of safe) {
   const label = w.branch || w.head?.slice(0, 8);
   console.log(`  SAFE  ${w.reason.padEnd(14)} ${label}  ${w.path}`);
@@ -89,6 +93,15 @@ for (const w of dirty) {
 for (const w of keep) {
   if (w.reason === 'MAIN') continue;
   console.log(`  KEEP  ${w.reason.padEnd(14)} ${w.branch || w.head?.slice(0, 8)}  ${w.path}`);
+}
+
+if (checkOnly) {
+  if (wts.length > WT_CAP) {
+    console.error(`\n✖ worktree count ${wts.length} > cap ${WT_CAP} — run pnpm wt:gc:apply (SAFE only)`);
+    process.exit(1);
+  }
+  console.log(`\n✓ worktree count ${wts.length} ≤ cap ${WT_CAP}`);
+  process.exit(0);
 }
 
 if (dry) {
