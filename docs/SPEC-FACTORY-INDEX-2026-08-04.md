@@ -30,7 +30,7 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-09** ✅ | **done**    | Earn half: `SPEC-OTC-RFQ-AND-EARN` Part B + `DIRECTION` §7. Cards/ramps §13 boundary: [`adr/2026-08-04-bank-vertical-law.md`](adr/2026-08-04-bank-vertical-law.md)             |
 | **D-S-10** ✅ | **done**    | [`SPEC-PAY-VERTICALS-2026-08-02.md`](SPEC-PAY-VERTICALS-2026-08-02.md) + [`adr/2026-08-04-pay-rails-and-psp-socket.md`](adr/2026-08-04-pay-rails-and-psp-socket.md)            |
 | **D-S-11** ✅ | **done**    | [`SPEC-SUBACCOUNTS-2026-08-02.md`](SPEC-SUBACCOUNTS-2026-08-02.md). Adjacent: [`adr/2026-08-04-authority-and-refusal-shape.md`](adr/2026-08-04-authority-and-refusal-shape.md) |
-| **D-S-12** ❌ | **blank**   | `docs/ops/trk/bridge.canonical.md` is research only and says so explicitly.                                                                                                    |
+| **D-S-12** ✅ | **done**    | [`adr/2026-08-04-cross-plane-bridge-accounting.md`](adr/2026-08-04-cross-plane-bridge-accounting.md) — accounting law only; chain side is Shehzad S-D7/S-B5.                   |
 | **D-S-13** ✅ | **done**    | [`adr/2026-08-04-event-socket-vs-broken-promise.md`](adr/2026-08-04-event-socket-vs-broken-promise.md)                                                                         |
 | **D-S-14** ❌ | **blank**   | Nothing current.                                                                                                                                                               |
 | **D-S-15** ❌ | **blank**   | Board rows only.                                                                                                                                                               |
@@ -38,17 +38,17 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 | **D-S-17** ✅ | **done**    | Decision: `DIRECTION` §4 (Option B). Residual: [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)                                        |
 | **D-S-18** ❌ | **blank**   | Board itself says "if in scope".                                                                                                                                               |
 
-**Tally: 8 done · 4 partial · 6 blank.** The board read as 17 blank.
+**Tally: 9 done · 4 partial · 5 blank.** The board read as 17 blank.
 
 ---
 
 ## What this changes for agents, today
 
-**Agents may now implement against D-S-02, 03, 04, 09, 10, 11, 13 and 17 without waiting.** Those eight are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
+**Agents may now implement against D-S-02, 03, 04, 09, 10, 11, 12, 13 and 17 without waiting.** Those nine are law on `main`. The "blocked on Denon" label on them was wrong and is withdrawn.
 
 **D-S-01, 05, 07 and 16 are partially law.** Implement the decided part; do not invent the rest. Each row above names which half is which.
 
-**D-S-06, 08, 12, 14, 15, 18 remain genuinely blank.** The invent-ban holds in full. Research is welcome; implementation is not.
+**D-S-06, 08, 14, 15, 18 remain genuinely blank.** The invent-ban holds in full. Research is welcome; implementation is not.
 
 ---
 
