@@ -16,6 +16,34 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Deepen wave 3b — ops.support + academy/agents residual thins (tip freeze `083ef879`)
+
+After #717 wave3 (trade/ops/p2p residual), remaining shorts under 100 lines were
+`ops.support` plus all `academy.*` / `agents.*` packs. Deepened to code-grounded
+≥120-line research specs. Research only — no implement, no `features.mjs`.
+
+| Id                      | Spec                                                   |
+| ----------------------- | ------------------------------------------------------ |
+| `ops.support`           | [ops.support.md](./ops.support.md)                     |
+| `academy.curriculum`    | [academy.curriculum.md](./academy.curriculum.md)       |
+| `academy.certs`         | [academy.certs.md](./academy.certs.md)                 |
+| `academy.paper-trading` | [academy.paper-trading.md](./academy.paper-trading.md) |
+| `academy.spatial`       | [academy.spatial.md](./academy.spatial.md)             |
+| `academy.tournaments`   | [academy.tournaments.md](./academy.tournaments.md)     |
+| `academy.ambassadors`   | [academy.ambassadors.md](./academy.ambassadors.md)     |
+| `agents.navigator`      | [agents.navigator.md](./agents.navigator.md)           |
+| `agents.support`        | [agents.support.md](./agents.support.md)               |
+| `agents.scanner`        | [agents.scanner.md](./agents.scanner.md)               |
+| `agents.merchant`       | [agents.merchant.md](./agents.merchant.md)             |
+| `agents.copy-intel`     | [agents.copy-intel.md](./agents.copy-intel.md)         |
+
+**Honesty highlights:** curriculum day-one spine (6 items) ≠ 20+3 import; paper
+flag is trade-owned; spatial scene jsonb exists, canvas product residual;
+ambassador/tournament pay Class M; agents routing ≠ product; merchant/copy-intel
+babysit Shehzad M1/M4; support agent needs ops.support KB.
+
+---
+
 ## Deepen wave 3 — trade/ops/p2p residual shorts (tip freeze `56696496`)
 
 In-place deepen of ten short-name packs still thin (~66–72 lines) after wave 2,

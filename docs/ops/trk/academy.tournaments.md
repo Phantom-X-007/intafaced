@@ -1,79 +1,138 @@
-# TRK-academy.tournaments
+# TRK-academy.tournaments — research / spec pack
 
+**Tracker id:** `academy.tournaments`  
 **Title:** Seasonal ladders, IFC prize pools  
-**Tracker:** `academy.tournaments` · module `academy` · phase 5 · status `ready` · owner none  
-**Depends on:** `academy.lobbies` · `trade.spot`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `academy` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
+**Depends on:** `academy.lobbies` (**done**) · `trade.spot` (**done**)  
+**Tip freeze:** `origin/main` @ `083ef879` (re-derive before implement)  
+**Pack type:** research only — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-Title promise for `academy.tournaments` is product-complete, not “a stub route exists.”  
-**Reality check:** Flag `academy.tournament`; prizes via ledger recipes only.
+1. Seasonal tournament **ladders** with clear rules, seasons, and standings.
+2. **IFC prize pools** fund and pay via **ledger recipes** — academy never holds prize balances.
+3. Feature flag gates the product honestly.
+4. Paper vs live tournament modes are explicit.
+5. Results auditable; no silent re-rank after prizes without clawback law.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area       | Reality                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| Service    | `services/svc-academy` — lobbies, host-rights, curriculum catalog, spatial `scene`                            |
-| Curriculum | `curriculum/catalog.ts` thin real catalog; full DERIV//DESK 20+3 residual (see `academy-service.ts` comments) |
-| Edge       | `/api/academy` in `svc-edge`                                                                                  |
-| Flags      | `academy.inviteLobbies`, `academy.tournament`                                                                 |
-| Scopes     | `academy:read` / `academy:write`                                                                              |
-| XP         | `intafaced.identity.xp.earned` named for cert path — consumer wiring residual                                 |
+## 2 · Current code state (tip)
+
+### 2.1 Presence / residual
+
+| Area                      | Reality                                               |
+| ------------------------- | ----------------------------------------------------- |
+| Config flag               | `academy.tournament` (re-verify modules)              |
+| Tournament ladder product | **Not complete** as seasonal ladders + prizes         |
+| Lobbies                   | Done — social venue, not prize engine                 |
+| Trade.spot                | Done — possible performance source; isolate carefully |
+
+### 2.2 Money posture
+
+| Area                  | Reality                                       |
+| --------------------- | --------------------------------------------- |
+| Prize recipes         | Re-grep ledger-client at implement            |
+| Academy ledger client | **None** today — prizes need careful boundary |
+
+`academy-service` defers value-moving features; tournaments are Class M.
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law           | Implication                                                  |
-| ------------- | ------------------------------------------------------------ |
-| Brand         | Education content copy vendor-clean                          |
-| Money         | Tournament prizes / ambassador IFC pay → ledger recipes only |
-| Paper trading | Must not spend real ledger balances                          |
-| Events        | XP must not double-award                                     |
+| Law           | Implication                                  |
+| ------------- | -------------------------------------------- |
+| §0.6          | Prize escrow/payout only via recipes         |
+| Class M       | Self-audit + adversarial on prize automation |
+| Money types   | Decimal strings / bigint                     |
+| Fail closed   | Incomplete season → no auto-pay              |
+| Brand         | Tournament copy vendor-clean                 |
+| No double-pay | Coordinate affiliates/ambassadors            |
+| No dual-edit  | Open money PRs                               |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Stage 1 — ladder without money
 
-- [ ] Spec matches code: live vs residual for **this** id
-- [ ] Smallest vertical slice for this title only
+- [ ] Season/ladder schema + standings API.
+- [ ] Rules doc + anti-cheat basics.
+- [ ] Flag gate.
 
-### Stage 2
+### Stage 2 — prize pool Class M
 
-- [ ] Title-level acceptance tests
-- [ ] i18n for new strings
-- [ ] Money paths (if any) Class M audited
+- [ ] Fund pool recipe; payout recipe; idempotent settle.
+- [ ] Freeze/clawback law.
+- [ ] Operator visibility.
+
+### Stage 3 — seasonal ops
+
+- [ ] Calendar; i18n; shell UX.
 
 ### Tracker `done` bar
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+Flip only when seasonal ladder **and** prize path (or product-cut prizes) match title.
+
+---
 
 ## 5 · Open questions
 
-1. Content licensing for full curriculum import.
-2. Prize pool funding + custody.
-3. Paper market operator controls.
+1. Paper-only v1 vs live PnL tournaments?
+2. Prize funding source?
+3. Ranking metric?
+4. Tax/reporting?
 
-## 6 · Estimated size
+---
 
-| Slice                  | Size          |
-| ---------------------- | ------------- |
-| Catalog/certs progress | **M–L**       |
-| Spatial canvas UI      | **L**         |
-| Tournaments + prizes   | **L** Class M |
-| Ambassadors pay        | **L** Class M |
+## 6 · Gaps (named)
 
-## 7 · Related docs / code
+1. No ladder product.
+2. No prize recipes wired.
+3. Academy non-custodial — money boundary design open.
+4. Anti-cheat residual.
+5. Shell UX residual.
 
-- `services/svc-academy/src/curriculum/catalog.ts`
-- `services/svc-academy/src/academy-service.ts`
-- `packages/contracts` blueprint curriculumPath
-- `packages/ledger-client` tournament prize notes
+---
 
-## 8 · Explicit non-goals for this pack
+## 7 · Risks
 
-- No inventing full 20+3 content without product assets.
-- No real-money paper trading confusion.
+| Risk                                    | Why it hurts        |
+| --------------------------------------- | ------------------- |
+| Invent prize balances in academy tables | Dual book           |
+| Live tournament without isolation       | Real loss incidents |
+| Re-rank after pay                       | Trust/legal         |
+| Double-pay with ambassadors             | Margin leak         |
+
+---
+
+## 8 · Estimated size
+
+| Slice                 | Size          |
+| --------------------- | ------------- |
+| Ladder only           | **M**         |
+| Prize automation      | **L** Class M |
+| Full seasonal product | **L–XL**      |
+
+**First implement PR (when free):** **M** — ladder without money; prizes separate Class M PR.
+
+---
+
+## 9 · Related docs / code
+
+- `services/svc-academy` (lobbies; non-custodial)
+- `packages/ledger-client`
+- `academy.ambassadors` (collision)
+- Config `academy.tournament`
+
+---
+
+## 10 · Explicit non-goals for this pack
+
+- No inventing prize balances.
+- No live high-leverage tournament without product law.
 - No `features.mjs` edit.

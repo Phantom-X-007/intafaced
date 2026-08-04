@@ -1,79 +1,142 @@
-# TRK-academy.spatial
+# TRK-academy.spatial — research / spec pack
 
+**Tracker id:** `academy.spatial`  
 **Title:** 2D navigable room canvas, VR-ready scene state  
-**Tracker:** `academy.spatial` · module `academy` · phase 5 · status `ready` · owner none  
-**Depends on:** `academy.lobbies`  
-**Tip freeze:** `origin/main` @ `04f9b1f2` (re-derive before implement)  
-**Pack type:** thorough research upgrade (`docs/trk-research-pack-drain`) — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
+**Module / phase:** `academy` · phase **5**  
+**Status on tip:** `ready` · **owner:** none  
+**Depends on:** `academy.lobbies` (**done**)  
+**Tip freeze:** `origin/main` @ `083ef879` (re-derive before implement)  
+**Pack type:** research only — no implement swarm; no money invention; no dual-edit Denon open money PRs; no `features.mjs` edit.
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-Title promise for `academy.spatial` is product-complete, not “a stub route exists.”  
-**Reality check:** Schema `scene` for 2D spatial layer exists; full canvas product residual.
+1. Users navigate a **2D room canvas** bound to lobby session scene state.
+2. Scene state is serializable, durable, and VR-ready per §8.3 (not a one-off DOM toy).
+3. Hosts can update scene without breaking seat/presence invariants.
+4. Works with stream provider **none** — no fake SFU credentials.
+5. Shell consumes scene API honestly when A/V is refused.
 
-## 2 · Current code state (tip `04f9b1f2`)
+---
 
-| Area       | Reality                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| Service    | `services/svc-academy` — lobbies, host-rights, curriculum catalog, spatial `scene`                            |
-| Curriculum | `curriculum/catalog.ts` thin real catalog; full DERIV//DESK 20+3 residual (see `academy-service.ts` comments) |
-| Edge       | `/api/academy` in `svc-edge`                                                                                  |
-| Flags      | `academy.inviteLobbies`, `academy.tournament`                                                                 |
-| Scopes     | `academy:read` / `academy:write`                                                                              |
-| XP         | `intafaced.identity.xp.earned` named for cert path — consumer wiring residual                                 |
+## 2 · Current code state (tip)
+
+### 2.1 Lobbies spine (dependency done)
+
+| Area          | Reality                                                                           |
+| ------------- | --------------------------------------------------------------------------------- |
+| Service       | `svc-academy` · `/api/academy`                                                    |
+| Scene field   | Sessions carry serializable jsonb `scene`                                         |
+| Schema        | `db/schema.ts` — scene as §8.3 2D spatial layer                                   |
+| Stream        | `ACADEMY_STREAM_PROVIDER=none` → `NullStreamProvider` **refuses** join credential |
+| Non-custodial | No LEDGER_URL                                                                     |
+
+### 2.2 Spatial product residual
+
+| Area                         | Reality                                                        |
+| ---------------------------- | -------------------------------------------------------------- |
+| Full 2D navigable canvas UI  | **Residual** (state exists; product canvas not title-complete) |
+| VR client                    | Residual                                                       |
+| Scene schema versioning      | Residual                                                       |
+| Concurrent scene edit policy | Re-verify at implement                                         |
+
+### 2.3 Already true
+
+Seats, presence, capacity, host rights work without SFU. Scene is server field, not only localStorage.
+
+---
 
 ## 3 · Doctrine constraints
 
-| Law           | Implication                                                  |
-| ------------- | ------------------------------------------------------------ |
-| Brand         | Education content copy vendor-clean                          |
-| Money         | Tournament prizes / ambassador IFC pay → ledger recipes only |
-| Paper trading | Must not spend real ledger balances                          |
-| Events        | XP must not double-award                                     |
+| Law                       | Implication                                                          |
+| ------------------------- | -------------------------------------------------------------------- |
+| §8.3 VR-ready 2D          | Version scene shape; don’t paint WebGL demo as Done without contract |
+| No fabricated credentials | Stream none refuses — spatial must not depend on fake A/V            |
+| PII in scene              | Don’t store secrets/PII in scene JSON                                |
+| Tracing                   | No scene contents in spans                                           |
+| Brand                     | UI chrome vendor-clean                                               |
+| No dual-edit              | Open academy lobby PRs                                               |
+
+---
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1
+### Stage 1 — scene contract
 
-- [ ] Spec matches code: live vs residual for **this** id
-- [ ] Smallest vertical slice for this title only
+- [ ] Documented scene schema (version field, allowed keys).
+- [ ] Host updateScene API tests + attendee read.
+- [ ] Reject oversized / invalid payloads.
 
-### Stage 2
+### Stage 2 — 2D canvas product
 
-- [ ] Title-level acceptance tests
-- [ ] i18n for new strings
-- [ ] Money paths (if any) Class M audited
+- [ ] Shell canvas navigates from server scene.
+- [ ] Reconnect restores server scene.
+- [ ] Works with stream provider none.
+
+### Stage 3 — VR-ready
+
+- [ ] Scene export for VR adapter (§13 if external).
+- [ ] Performance budget documented.
 
 ### Tracker `done` bar
 
-Flip only when the title’s product promise is true in a real env — not when a stub route or empty skeleton merges.
+Flip only when navigable canvas product uses server scene — jsonb column alone is not the title.
+
+---
 
 ## 5 · Open questions
 
-1. Content licensing for full curriculum import.
-2. Prize pool funding + custody.
-3. Paper market operator controls.
+1. Host authoring templates?
+2. Max scene size / rate limits?
+3. Spectator-only spatial mode?
+4. Link curriculum objects into scene?
 
-## 6 · Estimated size
+---
 
-| Slice                  | Size          |
-| ---------------------- | ------------- |
-| Catalog/certs progress | **M–L**       |
-| Spatial canvas UI      | **L**         |
-| Tournaments + prizes   | **L** Class M |
-| Ambassadors pay        | **L** Class M |
+## 6 · Gaps (named)
 
-## 7 · Related docs / code
+1. Full canvas UI residual.
+2. Scene schema productization residual.
+3. VR client residual.
+4. Concurrent edit policy residual.
+5. Shell integration residual.
 
-- `services/svc-academy/src/curriculum/catalog.ts`
-- `services/svc-academy/src/academy-service.ts`
-- `packages/contracts` blueprint curriculumPath
-- `packages/ledger-client` tournament prize notes
+---
 
-## 8 · Explicit non-goals for this pack
+## 7 · Risks
 
-- No inventing full 20+3 content without product assets.
-- No real-money paper trading confusion.
+| Risk                  | Why it hurts             |
+| --------------------- | ------------------------ |
+| Client-only scene     | Desync / lost room state |
+| PII in scene          | Privacy incident         |
+| Depending on fake SFU | Credential lie           |
+| Unbounded scene JSON  | DoS                      |
+
+---
+
+## 8 · Estimated size
+
+| Slice                        | Size    |
+| ---------------------------- | ------- |
+| Schema contract + API polish | **S–M** |
+| Canvas UI                    | **L**   |
+| VR adapter                   | **L**   |
+
+**First implement PR (when free):** **S–M** — versioned scene schema + tests; UI follow-on.
+
+---
+
+## 9 · Related docs / code
+
+- `services/svc-academy` schema scene, stream provider
+- Tracker `academy.lobbies` note
+- Doctrine §8.3
+
+---
+
+## 10 · Explicit non-goals for this pack
+
+- No fabricating stream join credentials.
+- No money in scene state.
 - No `features.mjs` edit.
