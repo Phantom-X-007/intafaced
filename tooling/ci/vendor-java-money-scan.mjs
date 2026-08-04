@@ -35,10 +35,13 @@
  *     save() either. It was invisible to all three existing gates — check 1
  *     matches SQL text that does not exist here, dual-book-door-scan checks
  *     the interceptor is wired but says nothing about shapes, and custody-scan
- *     never opens a .java file. 27 such call sites are in the tree today,
- *     including in a Kafka consumer and two Spring event listeners that no
- *     HTTP interceptor can reach. Seven of them are held off only by a
- *     `= null` short-circuit a one-line edit restores, with no gate resisting.
+ *     never opens a .java file. 19 such call sites are in the tree today.
+ *     There were 27. Eight of them had no runtime gate whatsoever — held off
+ *     only by a `= null` assignment or an unconditional `return`, in a Kafka
+ *     consumer, two Spring event listeners and a service, none of which an
+ *     HTTP interceptor can reach. Those eight were reward MINTS with no ledger
+ *     recipe to redirect to, so they were DELETED rather than left disabled:
+ *     a short-circuit one line restores is a booby trap, not a control.
  *
  * ── WHY IT DOES NOT CRY WOLF ──────────────────────────────────────────────
  *
@@ -218,8 +221,9 @@ const entryKey = (entry) => `${entry.module}:${entry.file}`;
  * ADR 2026-08-02 "ADOPT AND ADAPT": keep the controller and its business logic,
  * redirect the balance write to `ledger-client` through an adapter.
  *
- * 63 hits across 29 file/rule pairs, all of them pre-existing and all of them
- * verified individually before being listed. Four grades of dead, weakest last:
+ * 55 hits across 26 file/rule pairs, all of them pre-existing and all of them
+ * verified individually before being listed. Three grades of dead, weakest last
+ * — and one grade that is deliberately empty:
  *
  *   A. NO-OP AT THE DAO — the declaration itself. Proved dead by check 2 on
  *      every run, not by this list.
@@ -229,11 +233,20 @@ const entryKey = (entry) => `${entry.module}:${entry.file}`;
  *   C. BEHIND THE 410 DOOR — a controller whose URI fragment is in
  *      DualBookMoneyDoorInterceptor. Runtime-only, and only for HTTP callers.
  *   D. DEAD BY A ONE-LINE EDIT — `= null` short-circuits and code after an
- *      unconditional `return`. THIS IS THE WEAK GRADE and it is why the shape
- *      rule exists: restoring `findByType(...)` on one line re-opens a second
- *      book, and until now no gate resisted it. Grade D is also the grade no
- *      HTTP interceptor covers — a Kafka consumer and two Spring event
- *      listeners are not reachable through a door.
+ *      unconditional `return`. THIS WAS THE WEAK GRADE: no runtime gate at all,
+ *      restorable by one line, and in a Kafka consumer, two Spring event
+ *      listeners and a service that no HTTP door reaches. It is now EMPTY, and
+ *      that is the point — the eight sites were registration/promotion reward
+ *      MINTS with no ledger recipe to redirect to, so ADOPT-AND-ADAPT had
+ *      nothing to adapt them into and they were deleted outright. An entry
+ *      reappearing under this grade means someone wrote a new one.
+ *
+ * A note the deletion turned up, recorded because it changes what "rebuild the
+ * jars" costs: two of those sites sat AFTER an unconditional `return;` in the
+ * same block. JLS 14.21 makes that an unreachable statement — a compile ERROR.
+ * The `core` module could not have compiled since that edit landed, so no build
+ * of these jars has ever included the disabling campaign. Both are gone now,
+ * and a tree-wide sweep found no third instance.
  *
  * @type {{ module: string, file: string, rules: Record<string, number>, reason: string }[]}
  */
@@ -393,43 +406,32 @@ const VENDOR_JAVA_ALLOWLIST = [
     reason: 'Grade C. Returns a business deposit on cancel approval. Door fragment /business/cancel-apply. Queue: escrowRelease.',
   },
 
-  // ── Grade D: dead by a one-line edit, and outside every door ─────────────
-  {
-    module: 'core',
-    file: 'MemberApplicationService.java',
-    rules: { 'jpa-entity-balance-mutation': 3 },
-    reason:
-      'Grade D. Real-name and promotion mints. 151 and 211 sit behind `RewardPromotionSetting … = null; if (… != null)`; ' +
-      '262 sits after an unconditional `return` and is labelled "dead dual-book (kept for audit trail — unreachable)". ' +
-      'A service, not a controller — no HTTP door covers it. Restoring findByType on one line re-opens it. ' +
-      'Queue: delete outright, or rebuild on rewardPay.',
-  },
+  // ── Grade D: EMPTY, and it stays empty ──────────────────────────────────
+  // The four files that used to sit here — core:MemberApplicationService (3),
+  // wallet:MemberConsumer (1 of 3), admin:OrderEvent (2), otc-api:OrderEvent (2) —
+  // held eight reward mints with NO runtime gate: a `= null` assignment or an
+  // unconditional `return`, in a service, a Kafka consumer and two Spring event
+  // listeners that no HTTP door reaches. They were reward MINTS with no ledger
+  // recipe to redirect to, so they were deleted outright, along with the wallet
+  // and reward services those classes injected only in order to mint. The
+  // surrounding workflow — KYC status, inviter tree counters, wallet creation at
+  // registration, transaction counters — is untouched.
+  // Queue (unchanged, now honest): rebuild on a rewardPay recipe when the reward
+  // product is specified. Nothing is disabled-in-place waiting to be re-armed.
+  // A NEW entry under this heading means a new ungated mint, not old debt.
+
+  // ── Not a balance write, but listed rather than excluded by pattern ──────
   {
     module: 'wallet',
     file: 'MemberConsumer.java',
-    rules: { 'jpa-entity-balance-mutation': 3 },
-    reason:
-      'Grade D + zero-init. 108-109 initialise a NEW wallet to zero at registration (harmless, but listed rather than ' +
-      'pattern-excluded so a non-zero value there fails). 149 is a live registration-reward credit held only by ' +
-      '`RewardActivitySetting … = null`. A KAFKA CONSUMER — the 410 interceptor cannot reach it at all. ' +
-      'Queue: delete 149, or rebuild on rewardPay.',
-  },
-  {
-    module: 'admin',
-    file: 'OrderEvent.java',
     rules: { 'jpa-entity-balance-mutation': 2 },
     reason:
-      'Grade D. Two-level OTC promotion rewards on order completion, behind `RewardPromotionSetting … = null`. A Spring ' +
-      'event listener — not reachable through a door. Queue: delete, or rebuild on rewardPay.',
+      'Zero-init of a NEW wallet at member registration: `new MemberWallet()` is constructed in the loop, set to zero, ' +
+      'then saved — the entity is never a row that already exists, so nothing is moved. Was 3: the third was a live ' +
+      'registration-reward credit onto an EXISTING wallet, held off only by `RewardActivitySetting … = null` inside a ' +
+      'KAFKA CONSUMER the 410 interceptor cannot reach. That one is deleted. These two stay listed rather than ' +
+      'pattern-excluded so a non-zero value here fails. Queue: none, unless the constructor moves.',
   },
-  {
-    module: 'otc-api',
-    file: 'OrderEvent.java',
-    rules: { 'jpa-entity-balance-mutation': 2 },
-    reason: 'Grade D. The otc-api twin of the admin OrderEvent above, same shape, same null short-circuit. Queue: same.',
-  },
-
-  // ── Not a balance write, but listed rather than excluded by pattern ──────
   {
     module: 'wallet',
     file: 'CoinConsumer.java',

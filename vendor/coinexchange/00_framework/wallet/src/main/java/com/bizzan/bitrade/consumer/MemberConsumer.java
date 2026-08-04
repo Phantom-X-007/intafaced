@@ -2,14 +2,10 @@ package com.bizzan.bitrade.consumer;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import com.bizzan.bitrade.constant.ActivityRewardType;
 import com.bizzan.bitrade.constant.BooleanEnum;
-import com.bizzan.bitrade.constant.RewardRecordType;
-import com.bizzan.bitrade.constant.TransactionType;
 import com.bizzan.bitrade.entity.*;
 import com.bizzan.bitrade.es.ESUtils;
 import com.bizzan.bitrade.service.*;
-import com.bizzan.bitrade.util.BigDecimalUtils;
 import com.bizzan.bitrade.util.GeneratorUtil;
 import com.bizzan.bitrade.util.MessageResult;
 
@@ -36,14 +32,9 @@ public class MemberConsumer {
     private CoinService coinService;
     @Autowired
     private MemberWalletService memberWalletService;
-    @Autowired
-    private RewardActivitySettingService rewardActivitySettingService;
-    @Autowired
-    private MemberService memberService;
-    @Autowired
-    private RewardRecordService rewardRecordService;
-    @Autowired
-    private MemberTransactionService memberTransactionService;
+    // The registration-reward services (activity setting / member / reward record /
+    // member transaction) were removed with the mint they fed. INTAFACED dual-book:
+    // `ledger.*` is the only book, and this listener is outside every HTTP door.
     @Autowired
     private ESUtils esUtils ;
 
@@ -139,35 +130,13 @@ public class MemberConsumer {
             //保存
             memberWalletService.save(wallet);
         }
-        //注册活动奖励 — dual-book disabled (INTAFACED): do not mint shell balances
-        RewardActivitySetting rewardActivitySetting = null; // was findByType; dual-book disable
-        if (rewardActivitySetting!=null){
-            MemberWallet memberWallet=memberWalletService.findByCoinAndMemberId(rewardActivitySetting.getCoin(),json.getLong("uid"));
-            if (memberWallet==null){return;}
-            // 奖励币
-            BigDecimal amount3=JSONObject.parseObject(rewardActivitySetting.getInfo()).getBigDecimal("amount");
-            memberWallet.setBalance(BigDecimalUtils.add(memberWallet.getBalance(),amount3));
-            memberWalletService.save(memberWallet);
-            // 保存奖励记录
-            Member member = memberService.findOne(json.getLong("uid"));
-            RewardRecord rewardRecord3 = new RewardRecord();
-            rewardRecord3.setAmount(amount3);
-            rewardRecord3.setCoin(rewardActivitySetting.getCoin());
-            rewardRecord3.setMember(member);
-            rewardRecord3.setRemark(rewardActivitySetting.getType().getCnName());
-            rewardRecord3.setType(RewardRecordType.ACTIVITY);
-            rewardRecordService.save(rewardRecord3);
-            // 保存资产变更记录
-            MemberTransaction memberTransaction = new MemberTransaction();
-            memberTransaction.setFee(BigDecimal.ZERO);
-            memberTransaction.setAmount(amount3);
-            memberTransaction.setSymbol(rewardActivitySetting.getCoin().getUnit());
-            memberTransaction.setType(TransactionType.ACTIVITY_AWARD);
-            memberTransaction.setMemberId(member.getId());
-            memberTransaction.setDiscountFee("0");
-            memberTransaction.setRealFee("0");
-            memberTransaction = memberTransactionService.save(memberTransaction);
-        }
-
+        // 注册活动奖励 — REMOVED, not disabled (INTAFACED dual-book).
+        // This credited an EXISTING member_wallet row with a registration reward. Nothing
+        // could stop it at runtime: this is a Kafka listener, so the HTTP 410 dual-book
+        // door never sees it, and it was held off only by a `= null` line. `ledger.*` is
+        // the only book and no reward recipe exists to redirect the credit to, so the
+        // mint is deleted outright. The zero-init of NEW wallets above is untouched —
+        // that creates rows, it does not move value.
+        // Queue: rebuild on a rewardPay recipe when the reward product is specified.
     }
 }
