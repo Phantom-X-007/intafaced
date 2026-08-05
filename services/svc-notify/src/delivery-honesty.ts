@@ -343,3 +343,23 @@ export function fanoutFailedCountLabel(attempts: readonly ChannelDeliveryAttempt
 export function fanoutRefusedCountLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
   return String(countFanoutRefusals(attempts));
 }
+
+/** L3 — accepted channels joined (sorted). Empty → "". */
+export function acceptedChannelsJoined(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return acceptedChannelsSorted(attempts).join(',');
+}
+
+/** L3 — failed channels joined (sorted). Empty → "". */
+export function failedChannelsJoined(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return failedChannelsSorted(attempts).join(',');
+}
+
+/** L3 — refused channels joined (sorted). Empty → "". */
+export function refusedChannelsJoined(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return refusedChannelsSorted(attempts).join(',');
+}
+
+/** L3 — outcomes present joined. Empty → "". */
+export function fanoutOutcomesPresentJoined(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return fanoutOutcomesPresent(attempts).join(',');
+}

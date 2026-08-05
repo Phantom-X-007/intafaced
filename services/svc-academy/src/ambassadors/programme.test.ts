@@ -370,4 +370,22 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.isMajorityFrozenOrTie()).toBe(true);
     expect(desk.activeUserIdsJoined()).toBe(u1);
   });
+
+  it('L3 wave32 joined frozen/all/status + empty flag', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.frozenUserIdsJoined()).toBe('');
+    expect(desk.allUserIdsJoined()).toBe('');
+    expect(desk.statusesPresentJoined()).toBe('');
+    expect(desk.isProgrammeEmptyLabel()).toBe(true);
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.appoint({ userId: u2, appointedBy: op });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    expect(desk.frozenUserIdsJoined()).toBe(u2);
+    expect(desk.allUserIdsJoined().split(',').sort()).toEqual([u1, u2].sort());
+    expect(desk.statusesPresentJoined()).toBe('active,frozen');
+    expect(desk.isProgrammeEmptyLabel()).toBe(false);
+  });
 });

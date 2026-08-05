@@ -340,3 +340,23 @@ export function planHoldCountLabel(plan: readonly DeliveryDecision[]): string {
 export function planSkipCountLabel(plan: readonly DeliveryDecision[]): string {
   return String(planSkipCount(plan));
 }
+
+/** L3 — send channels joined. Empty → "". */
+export function planSendChannelsJoined(plan: readonly DeliveryDecision[]): string {
+  return channelsToSendNow(plan).join(',');
+}
+
+/** L3 — hold channels joined (sorted). Empty → "". */
+export function planHoldChannelsJoined(plan: readonly DeliveryDecision[]): string {
+  return planHoldChannelsSorted(plan).join(',');
+}
+
+/** L3 — skip channels joined (sorted). Empty → "". */
+export function planSkipChannelsJoined(plan: readonly DeliveryDecision[]): string {
+  return planSkipChannelsSorted(plan).join(',');
+}
+
+/** L3 — actions present joined. Empty → "". */
+export function planActionsPresentJoined(plan: readonly DeliveryDecision[]): string {
+  return planActionsPresent(plan).join(',');
+}

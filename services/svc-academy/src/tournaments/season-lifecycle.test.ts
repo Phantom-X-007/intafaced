@@ -52,6 +52,10 @@ import {
   liveSeasonCountLabel,
   seasonIdsJoined,
   liveSeasonIdsJoined,
+  scheduledSeasonIdsJoined,
+  frozenSeasonIdsJoined,
+  endedSeasonIdsJoined,
+  scoreWritableSeasonIdsJoined,
 } from './season-lifecycle.js';
 
 const base = {
@@ -434,5 +438,28 @@ describe('L3 wave31 season labels + joins', () => {
     expect(liveSeasonCountLabel(rows)).toBe('1');
     expect(seasonIdsJoined(rows)).toBe('a,b');
     expect(liveSeasonIdsJoined(rows)).toBe('b');
+  });
+});
+
+describe('L3 wave32 season status id joins', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('joins by status', () => {
+    expect(scheduledSeasonIdsJoined([])).toBe('');
+    expect(frozenSeasonIdsJoined([])).toBe('');
+    expect(endedSeasonIdsJoined([])).toBe('');
+    expect(scoreWritableSeasonIdsJoined([])).toBe('');
+    const rows = [mk('s', 'scheduled'), mk('l', 'live'), mk('f', 'frozen'), mk('e', 'ended')];
+    expect(scheduledSeasonIdsJoined(rows)).toBe('s');
+    expect(frozenSeasonIdsJoined(rows)).toBe('f');
+    expect(endedSeasonIdsJoined(rows)).toBe('e');
+    expect(scoreWritableSeasonIdsJoined(rows)).toBe('l');
   });
 });

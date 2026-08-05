@@ -378,3 +378,23 @@ export function seasonIdsJoined(seasons: readonly SeasonRecord[]): string {
 export function liveSeasonIdsJoined(seasons: readonly SeasonRecord[]): string {
   return listLiveSeasonIds(seasons).join(',');
 }
+
+/** L3 — scheduled ids joined. Empty → "". */
+export function scheduledSeasonIdsJoined(seasons: readonly SeasonRecord[]): string {
+  return listScheduledSeasonIds(seasons).join(',');
+}
+
+/** L3 — frozen ids joined. Empty → "". */
+export function frozenSeasonIdsJoined(seasons: readonly SeasonRecord[]): string {
+  return listFrozenSeasonIds(seasons).join(',');
+}
+
+/** L3 — ended ids joined. Empty → "". */
+export function endedSeasonIdsJoined(seasons: readonly SeasonRecord[]): string {
+  return listEndedSeasonIds(seasons).join(',');
+}
+
+/** L3 — score-writable ids joined. Empty → "". */
+export function scoreWritableSeasonIdsJoined(seasons: readonly SeasonRecord[]): string {
+  return listScoreWritableSeasonIds(seasons).join(',');
+}

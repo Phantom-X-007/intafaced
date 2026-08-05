@@ -380,3 +380,23 @@ export function remainingStepCountLabel(run: DrillRun): string {
 export function fillRefCountLabel(run: DrillRun): string {
   return String(fillRefCount(run));
 }
+
+/** L3 — remaining step ids joined. Empty → "". */
+export function remainingStepIdsJoined(run: DrillRun): string {
+  return remainingStepIds(run).join(',');
+}
+
+/** L3 — completed step ids joined. Empty → "". */
+export function completedStepIdsJoined(run: DrillRun): string {
+  return run.completedStepIds.join(',');
+}
+
+/** L3 — status label string. */
+export function drillStatusLabel(run: DrillRun): string {
+  return run.status;
+}
+
+/** L3 — progress ratio label (fixed 4dp from drillProgress). */
+export function drillRatioLabel(run: DrillRun): string {
+  return drillProgress(run).ratio;
+}

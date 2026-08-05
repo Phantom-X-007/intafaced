@@ -53,6 +53,10 @@ import {
   lessonSlugsJoined,
   playbookSlugsJoined,
   listWorkbookTitles,
+  workbookSlugsJoined,
+  curriculumSlugsJoined,
+  pathsWithContentJoined,
+  kindsWithContentJoined,
 } from './catalog.js';
 
 /**
@@ -294,5 +298,12 @@ describe('curriculum catalog', () => {
     expect(lessonSlugsJoined().split(',').filter(Boolean).length).toBe(lessonCount());
     expect(playbookSlugsJoined().split(',').filter(Boolean).length).toBe(playbookCount());
     expect(listWorkbookTitles().length).toBe(workbookCount());
+  });
+
+  it('L3 wave32 slug/path/kind joins', () => {
+    expect(workbookSlugsJoined().split(',').filter(Boolean).length).toBe(workbookCount());
+    expect(curriculumSlugsJoined().split(',').filter(Boolean).length).toBe(curriculumSpineSize());
+    expect(pathsWithContentJoined().length).toBeGreaterThan(0);
+    expect(kindsWithContentJoined().length).toBeGreaterThan(0);
   });
 });

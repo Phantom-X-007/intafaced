@@ -494,3 +494,23 @@ export function nonMoneyMetricCountLabel(): string {
 export function moneyMetricIdsJoined(): string {
   return listMoneyMetricIds().join(',');
 }
+
+/** L3 — non-money metric ids joined. Empty → "". */
+export function nonMoneyMetricIdsJoined(): string {
+  return listNonMoneyMetricIds().join(',');
+}
+
+/** L3 — ledger metric ids joined. Empty → "". */
+export function ledgerMetricIdsJoined(): string {
+  return listMetricIdsUsingSource('ledger').join(',');
+}
+
+/** L3 — trade metric ids joined. Empty → "". */
+export function tradeMetricIdsJoined(): string {
+  return listMetricIdsUsingSource('trade').join(',');
+}
+
+/** L3 — identity metric ids joined. Empty → "". */
+export function identityMetricIdsJoined(): string {
+  return listMetricIdsUsingSource('identity').join(',');
+}

@@ -64,6 +64,10 @@ import {
   maxScoreLabel,
   minScoreLabel,
   rankedUserIdsJoined,
+  scoresInRankOrderJoined,
+  podiumUserIdsJoined,
+  standingUserIdsJoined,
+  averageScoreLabel,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -326,5 +330,16 @@ describe('L3 standings board helpers', () => {
     expect(maxScoreLabel(rows)).toBe('20');
     expect(minScoreLabel(rows)).toBe('10');
     expect(rankedUserIdsJoined(rows)).toBe('b,a');
+  });
+
+  it('L3 wave32 score/podium joins + average label', () => {
+    expect(scoresInRankOrderJoined([])).toBe('');
+    expect(podiumUserIdsJoined([])).toBe('');
+    expect(standingUserIdsJoined([])).toBe('');
+    expect(averageScoreLabel([])).toBe('');
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(scoresInRankOrderJoined(rows)).toBe('20,10');
+    expect(podiumUserIdsJoined(rows)).toBe('b,a');
+    expect(averageScoreLabel(rows)).toBe('15');
   });
 });
