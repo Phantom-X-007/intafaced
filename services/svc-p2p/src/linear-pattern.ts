@@ -34,51 +34,32 @@
  * not take a binary dependency it cannot read.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THAT RATIONALE IS NOW HALF WRONG, AND THIS FILE SHOULD NOT OUTLIVE IT.
+ * OWNER LOCK (Nitro 2026-08-05) — KEEP THIS FILE FOR OPERATOR PATTERNS
  *
- * The paragraph above was written against the `re2` NATIVE binding. While this
- * branch was open, `origin/main` landed `@intafaced/safe-regex` (FH-SEC-01) —
- * a wrapper over `re2js`, which is a PURE-JAVASCRIPT port of RE2. No node-gyp,
- * no per-ABI binaries, so the dependency objection does not apply to it, and
- * `packages/events` and `packages/exchange-contract` already consume it. The
- * FH-SEC-01 commit deliberately skipped this service, in its own words to avoid
- * PR #428's open paths — not because svc-p2p did not need it.
+ * The native-`re2` dependency objection above is only half the story.
+ * `@intafaced/safe-regex` (FH-SEC-01) wraps **re2js** — pure JS, no node-gyp —
+ * and is already used by engineer-owned parsers (`packages/events`,
+ * `packages/exchange-contract`). That package is available here too.
  *
- * The package is on THIS branch's base as of the rebase onto the current
- * payment-instruments tip, so the swap is not a future possibility — it is
- * available now. It is left undone deliberately, because it is a trade rather
- * than a free win, and that was MEASURED rather than argued.
- *
- * THE SWAP IS ONE FUNCTION. `compilePattern` in `instruments.ts` is the only
- * thing that would change; every caller sees `{ test(value): boolean }` and
- * nothing else. But the two engines do not accept the same language. Both were
- * run against `RegExp` itself over one corpus plus seeded fuzz — ~4,050
- * patterns, ~98,700 match checks each:
+ * It was deliberately NOT swapped into `compilePattern` because the engines
+ * accept different languages. Measured against `RegExp` (~4,050 patterns,
+ * ~98,700 match checks each):
  *
  *     engine             divergences   accepts what JS rejects   refuses what JS accepts
  *     this file               0                  0                1  — [\D]
  *     re2js (FH-SEC-01)       0                  0                2  — \uXXXX, [^]
  *
- * Neither is unsafe, and neither disagrees with `RegExp` about any pattern it
- * will answer for. What differs is the REFUSAL SURFACE, in BOTH directions:
+ * re2js gains `\b` / `\p{…}` / `[\D]`; it loses `\uXXXX` and `[^]` (ordinary JS
+ * non-ASCII spelling). Account identifiers often need that surface.
  *
- *   · RE2 gains `\b`, `\p{…}` and `[\D]`, which this file refuses.
- *   · RE2 loses `\uXXXX` and `[^]`, which this file accepts. `\uXXXX` is the
- *     ordinary JavaScript spelling of a non-ASCII literal — RE2 wants `\x{…}` —
- *     and account identifiers across much of the world are not ASCII. That one
- *     is a real cost, not a curiosity.
+ * **Locked split** (also `docs/INTERNET-LEVERAGE-LAW.md` §3.2):
+ *   · Operator-supplied field patterns (this service) → **this file**
+ *   · Engineer-owned parsers → `@intafaced/safe-regex`
+ *   · Native node-gyp / `node-re2` → still banned on money-adjacent services
  *
- * So it is an owner call and not a tidy-up: it widens the accepted language in
- * one place and narrows it in another, and either way it deletes ~880 lines of
- * parser this repo would otherwise have to keep correct. Changing what an
- * operator is allowed to write is not a decision an agent should make silently
- * on a money service, so the numbers are recorded here and the call is left
- * open.
- *
- * The differential suite in `linear-pattern.test.ts` is what makes the attempt
- * safe whenever it is made: it pins what these patterns MEAN against `RegExp`,
- * so any replacement engine has an executable definition of "same answers" to
- * satisfy.
+ * Agents must not silently re2js-swap this path. Revisit only on an explicit
+ * owner call. Differential suite in `linear-pattern.test.ts` still pins meaning
+ * against `RegExp` if that call is ever made.
  *
  * **A static "is this pattern safe" check at registration.** Pure JS, and it is
  * the answer that ages worst. Detecting catastrophic backtracking exactly is not

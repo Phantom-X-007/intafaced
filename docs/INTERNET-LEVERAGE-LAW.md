@@ -57,7 +57,7 @@ Before the first edit of product code:
 | Dual-edit open Denon/Shehzad PR paths                                                        | Collision — **necessary, not sufficient** (see §3.1)                                               |
 | Treat Phase B shopping as day-1 before Phase A wire                                          | Order of leverage                                                                                  |
 | **Hyperswitch** (or peer PSP orchestrators) in the money path                                | D-S-10 ADR #769: orchestrator ≠ acquirer; Doctrine 5 no third-party connectivity lib in money path |
-| Native node-gyp RE2 on money-adjacent services when pure-JS linear matchers suffice          | Denon: supply-chain/ABI cost on bank-detail services                                               |
+| Native node-gyp / `node-re2` on money-adjacent services                                      | ABI + supply-chain cost on bank-detail paths; pure-JS alternatives exist                           |
 
 Already machine-enforced where possible: dual-book / custody / brand / vendor-shell scans via `pnpm gates`.
 
@@ -67,6 +67,20 @@ File-level / worktree isolation is **not enough**. Suites that migrate at startu
 
 **Law:** use a **dedicated test database per branch** (or equivalent isolation). Do not share one `intafaced_test` across concurrent worktrees.
 
+### 3.2 ReDoS matchers — two tools, two jobs (Nitro locked 2026-08-05)
+
+Denon correction: `@intafaced/safe-regex` is **re2js (pure JS)** — not native node-gyp RE2. The old “avoid RE2 on money paths” line does **not** apply to that package.
+
+It is still **not** a free upgrade for every hot path. Measured (~4,050 patterns / ~99k match checks): both engines are sound on what they accept; **refusal surfaces differ**. re2js gains `\b` / `\p{…}` and loses `\uXXXX` / `[^]` (ordinary JS non-ASCII spelling — account IDs often need this).
+
+| Job                                                                         | Tool                                            | Why                                                                                                     |
+| --------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Operator-supplied** field patterns (`svc-p2p` instruments)                | In-tree `linear-pattern.ts`                     | Full JS surface for non-ASCII account IDs; DB constraint in **0002** (#811 — edited 0001 never re-runs) |
+| **Engineer-owned** parsers (subjects, symbols, controlled pattern language) | `@intafaced/safe-regex` (re2js) — **FH-SEC-01** | Pure JS ReDoS-safe; already on main                                                                     |
+| Native `node-re2` / node-gyp RE2                                            | **Banned** on money-adjacent services           | Same ban as before                                                                                      |
+
+**Agents must not** silently swap P2P operator patterns onto re2js “to tidy” — that narrows what operators may write. Revisit only with an explicit owner call.
+
 ---
 
 ## 4 · Phase B (no thrift ceiling · no Nitro queue pick)
@@ -74,7 +88,7 @@ File-level / worktree isolation is **not enough**. Suites that migrate at startu
 - Full residual map: every open tracker id has a path.
 - **Start order (agents may proceed without asking Nitro):**
   1. Prefer **IN** residual on claimed free paths (decimals, shell honesty, pay residual on `svc-pay` after handoff). Depth E2E is **proven** (Denon fleet rebuild) — not a residual theater item.
-  2. **ReDoS:** pure-JS linear-time matchers (in-tree preferred; `re2js` pure-JS OK) · **Gitleaks** CI.
+  2. **ReDoS:** follow §3.2 split (linear-pattern for operator patterns; `@intafaced/safe-regex` for engineer parsers; no native node-re2) · **Gitleaks** CI.
   3. **Pay:** commercial `socket.psp-partners` / Class X — **not** Hyperswitch (refused).
   4. **Wallet RPC:** treat as **NOW critical** (mainnet dual-broadcast / pre-EIP-155 / pinned mainnet USDT class defects frozen by #763 — unfixed). Not “MID review someday.”
   5. **LAW rows:** Denon D-S board reported **18 done** — implement from specs.
@@ -99,10 +113,10 @@ INTERNET LEVERAGE LAW (binding — do not ask Nitro):
 1. Phase A is finished for NOW residual craft. Prefer in-repo: vendor shell UI, ledger-client money, existing svc-*.
 2. Before code: read docs/INTERNET-LEVERAGE-LAW.md + Phase A audit + full-horizon row for the tracker id.
 3. Never rebuild product SPA, second ledger, or invent prices. Never steal Shehzad chain. Never dual-edit open human PR files. Never share one migrate-on-startup test DB across worktrees.
-4. PR must name leverage used. No Hyperswitch. ReDoS = pure-JS linear matchers preferred. LAW = Denon first. X = human only.
-5. Proceed autonomously on IN / safe EXT (ReDoS pure-JS, Gitleaks). Wallet RPC defects are NOW-critical if you touch custody.
+4. PR must name leverage used. No Hyperswitch. ReDoS = §3.2 split (linear-pattern for operator patterns; @intafaced/safe-regex for engineer parsers; no native node-re2). LAW = Denon first. X = human only.
+5. Proceed autonomously on IN / safe EXT (ReDoS split, Gitleaks). Wallet RPC defects are NOW-critical if you touch custody.
 ```
 
 ---
 
-_Board-Delta: Leverage law aligned to Denon reply — Hyperswitch refuse; pure-JS ReDoS; test-DB isolation; wallet RPC critical_
+_Board-Delta: ReDoS §3.2 locked — operator patterns = linear-pattern; engineer parsers = safe-regex/re2js; native node-re2 still banned_
