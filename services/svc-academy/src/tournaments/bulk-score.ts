@@ -193,3 +193,64 @@ export function parseBulkScoreExportLine(
   if (!Number.isFinite(accepted) || accepted < 0) return null;
   return { status, accepted: Math.floor(accepted), reason };
 }
+
+/** L3 — bulk score status line. */
+export function bulkScoreStatusLine(result: BulkScoreResult): string {
+  const c = bulkScoreBoardCard(result);
+  return `ok=${c.ok ? '1' : '0'} accepted=${c.accepted} refused=${c.refused ? '1' : '0'}`;
+}
+
+/** L3 — true when accepted is 0 and ok. */
+export function bulkScoreStatusLineIsEmptyOk(result: BulkScoreResult): boolean {
+  return isBulkScoreEmptyOk(result);
+}
+
+/** L3 — parse bulk score status. Invalid → null. */
+export function parseBulkScoreStatusLine(
+  line: string,
+): { readonly ok: boolean; readonly accepted: number; readonly refused: boolean } | null {
+  const m = line.trim().match(/^ok=([01]) accepted=(\d+) refused=([01])$/);
+  if (!m) return null;
+  return { ok: m[1] === '1', accepted: Number(m[2]), refused: m[3] === '1' };
+}
+
+/** L3 — true when status matches result. */
+export function bulkScoreStatusLineMatches(result: BulkScoreResult): boolean {
+  const p = parseBulkScoreStatusLine(bulkScoreStatusLine(result));
+  if (!p) return false;
+  const c = bulkScoreBoardCard(result);
+  return p.ok === c.ok && p.accepted === c.accepted && p.refused === c.refused;
+}
+
+/** L3 — true when accepted is within [min,max]. Invalid → false. */
+export function bulkAcceptedInRange(result: BulkScoreResult, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = bulkAcceptedCount(result);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when accepted is at least n. */
+export function bulkAcceptedAtLeast(result: BulkScoreResult, n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return bulkAcceptedCount(result) >= n;
+}
+
+/** L3 — data-line count for bulk export text. */
+export function countBulkScoreExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l !== bulkScoreExportHeader()).length;
+}
+
+/** L3 — true when bulk export has header. */
+export function bulkScoreExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === bulkScoreExportHeader();
+}
+
+/** L3 — round-trip for bulk export. */
+export function bulkScoreExportRoundTripOk(result: BulkScoreResult): boolean {
+  const text = bulkScoreExportText(result);
+  return text.split('\n').filter(Boolean).length === 1 + countBulkScoreExportDataLines(text);
+}

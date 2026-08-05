@@ -8,6 +8,19 @@ import {
   validateImportRecord,
   summarizeImportBatch,
   importBatchRejectedCount,
+  importBatchBoardCard,
+  importBatchStatusLine,
+  importBatchStatusLineIsEmpty,
+  importBatchStatusLineDetailed,
+  parseImportBatchStatusLine,
+  importBatchStatusLineMatches,
+  importBatchStatusLineConsistent,
+  importBatchExportHeader,
+  importBatchExportLine,
+  importBatchExportText,
+  parseImportBatchExportLine,
+  importAcceptedInRange,
+  importRejectedAtMost,
 } from './import-pipeline.js';
 
 const good = {
@@ -79,5 +92,37 @@ describe('L3 summarizeImportBatch', () => {
   it('L3 importBatchRejectedCount from summary', () => {
     expect(importBatchRejectedCount({ total: 2, accepted: 1, rejected: 1, ok: false })).toBe(1);
     expect(importBatchRejectedCount({ total: 0, accepted: 0, rejected: 0, ok: true })).toBe(0);
+  });
+});
+
+describe('L3 wave47 import-pipeline status/export', () => {
+  it('status line matches and consistent', () => {
+    const batch = validateImportBatch([good, { slug: 'x' }]);
+    const summary = summarizeImportBatch(batch);
+    expect(importBatchBoardCard(summary).total).toBe(2);
+    expect(importBatchStatusLine(summary)).toBe(`total=${summary.total} accepted=${summary.accepted} rejected=${summary.rejected}`);
+    expect(importBatchStatusLineMatches(summary)).toBe(true);
+    expect(importBatchStatusLineConsistent(importBatchStatusLine(summary))).toBe(true);
+    expect(parseImportBatchStatusLine('nope')).toBeNull();
+    expect(importBatchStatusLineDetailed(summary)).toContain('ok=0');
+    expect(importBatchStatusLineIsEmpty({ total: 0, accepted: 0, rejected: 0, ok: true })).toBe(true);
+  });
+
+  it('export round-trip and range guards', () => {
+    const batch = validateImportBatch([good]);
+    const summary = summarizeImportBatch(batch);
+    const text = importBatchExportText(summary);
+    expect(text.startsWith(importBatchExportHeader())).toBe(true);
+    expect(parseImportBatchExportLine(importBatchExportLine(summary))).toMatchObject({
+      total: 1,
+      accepted: 1,
+      rejected: 0,
+      ok: true,
+    });
+    expect(parseImportBatchExportLine('bad')).toBeNull();
+    expect(importAcceptedInRange(summary, 0, 5)).toBe(true);
+    expect(importAcceptedInRange(summary, 5, 0)).toBe(false);
+    expect(importRejectedAtMost(summary, 0)).toBe(true);
+    expect(importRejectedAtMost(summary, Number.NaN)).toBe(false);
   });
 });

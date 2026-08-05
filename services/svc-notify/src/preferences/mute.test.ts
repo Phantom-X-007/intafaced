@@ -19,6 +19,18 @@ import {
   muteExportHeader,
   muteExportText,
   parseMuteExportLine,
+  countMuteExportDataLines,
+  muteExportHasHeader,
+  muteExportRoundTripOk,
+  muteStatusLine,
+  muteStatusLineIsEmpty,
+  muteStatusLineDetailed,
+  muteStatusLineTokenCount,
+  parseMuteStatusLine,
+  muteStatusLineMatches,
+  muteStatusLineConsistent,
+  mutedCountInRange,
+  mutedCountAtLeast,
 } from './mute.js';
 
 describe('isChannelMuted — critical never silenced', () => {
@@ -117,5 +129,35 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     const one = applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'email', muted: true });
     expect(muteBoardCard(one).single).toBe(true);
     expect(muteExportText(one)).toContain('email,1');
+  });
+});
+
+describe('L3 wave47 mute export/status', () => {
+  const prefs = { muted: new Set(['email'] as const) };
+
+  it('export round-trip and header', () => {
+    const text = muteExportText(prefs);
+    expect(muteExportHasHeader(text)).toBe(true);
+    expect(countMuteExportDataLines(text)).toBe(3);
+    expect(muteExportRoundTripOk(prefs)).toBe(true);
+    expect(muteExportRoundTripOk(EMPTY_MUTE_PREFS)).toBe(true);
+  });
+
+  it('status line matches and consistent', () => {
+    expect(muteStatusLine(prefs)).toBe('muted=1 unmuted=2');
+    expect(muteStatusLineIsEmpty(EMPTY_MUTE_PREFS)).toBe(true);
+    expect(muteStatusLineMatches(prefs)).toBe(true);
+    expect(muteStatusLineConsistent(muteStatusLine(prefs))).toBe(true);
+    expect(parseMuteStatusLine('nope')).toBeNull();
+    expect(muteStatusLineDetailed(prefs)).toContain('single=1');
+    expect(muteStatusLineTokenCount(prefs)).toBe(4);
+  });
+
+  it('range guards refuse invalid bounds', () => {
+    expect(mutedCountInRange(prefs, 0, 2)).toBe(true);
+    expect(mutedCountInRange(prefs, 2, 0)).toBe(false);
+    expect(mutedCountInRange(prefs, Number.NaN, 2)).toBe(false);
+    expect(mutedCountAtLeast(prefs, 1)).toBe(true);
+    expect(mutedCountAtLeast(prefs, Number.NaN)).toBe(false);
   });
 });

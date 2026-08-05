@@ -183,3 +183,79 @@ export function parseMuteExportLine(line: string): { readonly channel: MuteableC
   if (flag !== '0' && flag !== '1') return null;
   return { channel, muted: flag === '1' };
 }
+
+/** L3 — data-line count in mute export text (excludes header). */
+export function countMuteExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l !== muteExportHeader()).length;
+}
+
+/** L3 — true when text starts with mute export header. */
+export function muteExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === muteExportHeader();
+}
+
+/** L3 — round-trip: line count = 1 header + data lines from export text. */
+export function muteExportRoundTripOk(prefs: ChannelMutePrefs): boolean {
+  return muteExportText(prefs).split('\n').filter(Boolean).length === 1 + countMuteExportDataLines(muteExportText(prefs));
+}
+
+/** L3 — mute status line muted=N unmuted=M. */
+export function muteStatusLine(prefs: ChannelMutePrefs): string {
+  const c = muteBoardCard(prefs);
+  return `muted=${c.mutedCount} unmuted=${c.unmutedCount}`;
+}
+
+/** L3 — true when status line is fully unmuted. */
+export function muteStatusLineIsEmpty(prefs: ChannelMutePrefs): boolean {
+  return muteStatusLine(prefs) === 'muted=0 unmuted=3';
+}
+
+/** L3 — detailed mute status. */
+export function muteStatusLineDetailed(prefs: ChannelMutePrefs): string {
+  const c = muteBoardCard(prefs);
+  return `muted=${c.mutedCount} unmuted=${c.unmutedCount} single=${c.single ? '1' : '0'} full=${c.fullyMuted ? '1' : '0'}`;
+}
+
+/** L3 — token count on detailed mute status. */
+export function muteStatusLineTokenCount(prefs: ChannelMutePrefs): number {
+  return muteStatusLineDetailed(prefs).split(/\s+/).filter(Boolean).length;
+}
+
+/** L3 — parse mute status line. Invalid → null. */
+export function parseMuteStatusLine(line: string): { readonly muted: number; readonly unmuted: number } | null {
+  const m = line.trim().match(/^muted=(\d+) unmuted=(\d+)$/);
+  if (!m) return null;
+  return { muted: Number(m[1]), unmuted: Number(m[2]) };
+}
+
+/** L3 — true when status line matches prefs. */
+export function muteStatusLineMatches(prefs: ChannelMutePrefs): boolean {
+  const p = parseMuteStatusLine(muteStatusLine(prefs));
+  if (!p) return false;
+  const c = muteBoardCard(prefs);
+  return p.muted === c.mutedCount && p.unmuted === c.unmutedCount;
+}
+
+/** L3 — true when muted+unmuted equals 3. */
+export function muteStatusLineConsistent(line: string): boolean {
+  const p = parseMuteStatusLine(line);
+  if (!p) return false;
+  return p.muted + p.unmuted === 3;
+}
+
+/** L3 — true when muted count is within [min,max]. Invalid bounds → false. */
+export function mutedCountInRange(prefs: ChannelMutePrefs, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = countMutedChannels(prefs);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when muted count is at least n. */
+export function mutedCountAtLeast(prefs: ChannelMutePrefs, n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return countMutedChannels(prefs) >= n;
+}

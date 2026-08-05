@@ -15,6 +15,15 @@ import {
   bulkScoreExportLine,
   bulkScoreExportText,
   parseBulkScoreExportLine,
+  bulkScoreStatusLine,
+  bulkScoreStatusLineIsEmptyOk,
+  parseBulkScoreStatusLine,
+  bulkScoreStatusLineMatches,
+  bulkAcceptedInRange,
+  bulkAcceptedAtLeast,
+  countBulkScoreExportDataLines,
+  bulkScoreExportHasHeader,
+  bulkScoreExportRoundTripOk,
 } from './bulk-score.js';
 
 describe('tournament L3 bulk score (no prizes)', () => {
@@ -99,5 +108,36 @@ describe('tournament L3 bulk score (no prizes)', () => {
     expect(parseBulkScoreExportLine('ok,2,')).toEqual({ status: 'ok', accepted: 2, reason: '' });
     expect(parseBulkScoreExportLine('status,accepted,reason')).toBeNull();
     expect(bulkScoreExportText(refused)).toContain('refuse');
+  });
+});
+
+describe('L3 wave47 bulk-score status/export', () => {
+  it('status and round-trip on ok result', () => {
+    const ok = validateBulkScoreWrite({
+      seasonStatus: 'live',
+      seasonId: 's1',
+      patches: [{ userId: 'u1', score: 10 }],
+    });
+    expect(ok.status).toBe('ok');
+    if (ok.status !== 'ok') return;
+    expect(bulkScoreStatusLine(ok)).toMatch(/^ok=1 accepted=\d+ refused=0$/);
+    expect(bulkScoreStatusLineMatches(ok)).toBe(true);
+    expect(parseBulkScoreStatusLine('nope')).toBeNull();
+    const text = bulkScoreExportText(ok);
+    expect(bulkScoreExportHasHeader(text)).toBe(true);
+    expect(countBulkScoreExportDataLines(text)).toBe(1);
+    expect(bulkScoreExportRoundTripOk(ok)).toBe(true);
+    expect(bulkAcceptedInRange(ok, 0, 10)).toBe(true);
+    expect(bulkAcceptedInRange(ok, 10, 0)).toBe(false);
+    expect(bulkAcceptedAtLeast(ok, 1)).toBe(true);
+  });
+
+  it('empty ok status', () => {
+    // empty patches refuse — use applied empty ok if available via summarize path
+    const refused = validateBulkScoreWrite({ seasonStatus: 'live', seasonId: 's1', patches: [] });
+    expect(refused.status).toBe('refuse');
+    if (refused.status !== 'refuse') return;
+    expect(bulkScoreStatusLineMatches(refused)).toBe(true);
+    expect(bulkScoreStatusLine(refused)).toContain('refused=1');
   });
 });
