@@ -529,4 +529,15 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.countProgrammeExportDataLines(desk.programmeExportText())).toBe(1);
     expect(desk.programmeExportRoundTripOk()).toBe(true);
   });
+
+  it('L3 wave44 programme status lines', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    expect(desk.programmeStatusLineIsEmpty()).toBe(true);
+    expect(desk.programmeStatusLineTokenCount()).toBe(3);
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    desk.appoint({ userId: u, appointedBy: op });
+    expect(desk.programmeStatusLine()).toContain('active=1');
+    expect(desk.programmeStatusLineWithRatio()).toContain('activeRatio=');
+  });
 });

@@ -809,4 +809,27 @@ export class MemoryAmbassadorProgramme {
   programmeExportRoundTripOk(): boolean {
     return this.programmeExportLineCount() === 1 + this.countProgrammeExportDataLines(this.programmeExportText());
   }
+
+  /** L3 — one-line operator status: "active=N frozen=M total=T". */
+  programmeStatusLine(): string {
+    const h = this.programmeBoardHeadline();
+    return `active=${h.active} frozen=${h.frozen} total=${h.total}`;
+  }
+
+  /** L3 — true when status line shows empty total. */
+  programmeStatusLineIsEmpty(): boolean {
+    return this.programmeStatusLine().endsWith('total=0');
+  }
+
+  /** L3 — status line with ratio when non-empty. Empty → status without ratio. */
+  programmeStatusLineWithRatio(): string {
+    const h = this.programmeBoardHeadline();
+    if (h.activeRatio === null) return this.programmeStatusLine();
+    return `${this.programmeStatusLine()} activeRatio=${h.activeRatio}`;
+  }
+
+  /** L3 — count words in status line (space-separated tokens). */
+  programmeStatusLineTokenCount(): number {
+    return this.programmeStatusLine().split(/\s+/).filter(Boolean).length;
+  }
 }

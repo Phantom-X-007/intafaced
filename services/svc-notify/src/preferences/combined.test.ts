@@ -88,6 +88,10 @@ import {
   countPlanExportDataLines,
   planExportHasHeader,
   planExportRoundTripOk,
+  planStatusLine,
+  planStatusLineIsEmpty,
+  planStatusLineDetailed,
+  planStatusLineTokenCount,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -399,5 +403,13 @@ describe('notify L3 combined mute + digest', () => {
     expect(planExportHasHeader(text)).toBe(true);
     expect(countPlanExportDataLines(text)).toBe(plan.length);
     expect(planExportRoundTripOk(plan)).toBe(true);
+  });
+
+  it('L3 wave44 plan status lines', () => {
+    expect(planStatusLineIsEmpty([])).toBe(true);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planStatusLine(plan)).toContain('send=');
+    expect(planStatusLineDetailed(plan)).toContain('allSend=');
+    expect(planStatusLineTokenCount(plan)).toBe(6);
   });
 });

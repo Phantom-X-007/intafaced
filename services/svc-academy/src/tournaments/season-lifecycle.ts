@@ -705,3 +705,25 @@ export function seasonsExportHasHeader(text: string): boolean {
 export function seasonsExportRoundTripOk(seasons: readonly SeasonRecord[]): boolean {
   return seasonsExportLineCount(seasons) === 1 + countSeasonsExportDataLines(seasonsExportText(seasons));
 }
+
+/** L3 — one-line season board status. */
+export function seasonStatusLine(seasons: readonly SeasonRecord[]): string {
+  const h = seasonBoardHeadline(seasons);
+  return `total=${h.total} live=${h.live} open=${h.open} ended=${h.ended}`;
+}
+
+/** L3 — true when season status is empty. */
+export function seasonStatusLineIsEmpty(seasons: readonly SeasonRecord[]): boolean {
+  return seasonStatusLine(seasons).startsWith('total=0');
+}
+
+/** L3 — detailed season status. */
+export function seasonStatusLineDetailed(seasons: readonly SeasonRecord[]): string {
+  const h = seasonBoardHeadline(seasons);
+  return `total=${h.total} scheduled=${h.scheduled} live=${h.live} frozen=${h.frozen} ended=${h.ended} writable=${h.hasWritable ? '1' : '0'}`;
+}
+
+/** L3 — token count on detailed season status. */
+export function seasonStatusLineTokenCount(seasons: readonly SeasonRecord[]): number {
+  return seasonStatusLineDetailed(seasons).split(/\s+/).filter(Boolean).length;
+}

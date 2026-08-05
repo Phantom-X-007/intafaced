@@ -872,3 +872,25 @@ export function standingsExportHasHeader(text: string): boolean {
 export function standingsExportRoundTripOk(rows: readonly StandingRecord[]): boolean {
   return standingsExportLineCount(rows) === 1 + countStandingsExportDataLines(standingsExportText(rows));
 }
+
+/** L3 — one-line leaderboard status. */
+export function leaderboardStatusLine(rows: readonly StandingRecord[]): string {
+  const h = leaderboardHeadline(rows);
+  return `count=${h.count} first=${h.first ?? '-'} max=${h.max ?? '-'}`;
+}
+
+/** L3 — true when leaderboard status is empty. */
+export function leaderboardStatusLineIsEmpty(rows: readonly StandingRecord[]): boolean {
+  return leaderboardStatusLine(rows).startsWith('count=0');
+}
+
+/** L3 — detailed status with min/uniqueLeader. */
+export function leaderboardStatusLineDetailed(rows: readonly StandingRecord[]): string {
+  const h = leaderboardHeadline(rows);
+  return `count=${h.count} first=${h.first ?? '-'} last=${h.last ?? '-'} min=${h.min ?? '-'} max=${h.max ?? '-'} unique=${h.uniqueLeader ? '1' : '0'}`;
+}
+
+/** L3 — token count on detailed status. */
+export function leaderboardStatusLineTokenCount(rows: readonly StandingRecord[]): number {
+  return leaderboardStatusLineDetailed(rows).split(/\s+/).filter(Boolean).length;
+}

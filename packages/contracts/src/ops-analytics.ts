@@ -777,3 +777,25 @@ export function metricsExportHasHeader(text: string): boolean {
 export function metricsExportRoundTripOk(): boolean {
   return metricsExportLineCount() === 1 + countMetricsExportDataLines(metricsExportText());
 }
+
+/** L3 — one-line analytics catalog status. */
+export function analyticsStatusLine(): string {
+  const c = analyticsCatalogBoardCard();
+  return `total=${c.total} money=${c.money} nonMoney=${c.nonMoney}`;
+}
+
+/** L3 — true when analytics status is empty. */
+export function analyticsStatusLineIsEmpty(): boolean {
+  return analyticsStatusLine().startsWith('total=0');
+}
+
+/** L3 — detailed analytics status. */
+export function analyticsStatusLineDetailed(): string {
+  const c = analyticsCatalogBoardCard();
+  return `total=${c.total} money=${c.money} nonMoney=${c.nonMoney} multi=${c.multiSource} single=${c.singleSource} sources=${c.sourcesRepresented}`;
+}
+
+/** L3 — token count on detailed analytics status. */
+export function analyticsStatusLineTokenCount(): number {
+  return analyticsStatusLineDetailed().split(/\s+/).filter(Boolean).length;
+}

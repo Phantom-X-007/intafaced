@@ -78,6 +78,10 @@ import {
   countDrillStepsExportDataLines,
   drillStepsExportHasHeader,
   drillStepsExportRoundTripOk,
+  drillStatusLine,
+  drillStatusLineIsFresh,
+  drillStatusLineDetailed,
+  drillStatusLineTokenCount,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -477,5 +481,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(drillStepsExportHasHeader(text)).toBe(true);
     expect(countDrillStepsExportDataLines(text)).toBe(started.run.steps.length);
     expect(drillStepsExportRoundTripOk(started.run)).toBe(true);
+  });
+
+  it('L3 wave44 drill status lines', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w44', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(drillStatusLineIsFresh(started.run)).toBe(true);
+    expect(drillStatusLine(started.run)).toContain('percent=0');
+    expect(drillStatusLineDetailed(started.run)).toContain('workbook=');
+    expect(drillStatusLineTokenCount(started.run)).toBeGreaterThan(4);
   });
 });

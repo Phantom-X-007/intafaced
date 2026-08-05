@@ -747,4 +747,26 @@ export class MemoryResidencyDesk {
   residencyExportRoundTripOk(): boolean {
     return this.residencyExportLineCount() === 1 + this.countResidencyExportDataLines(this.residencyExportText());
   }
+
+  /** L3 — one-line queue status. */
+  residencyStatusLine(): string {
+    const h = this.residencyQueueHeadline();
+    return `open=${h.open} decided=${h.decided} total=${h.total}`;
+  }
+
+  /** L3 — true when queue status is empty. */
+  residencyStatusLineIsEmpty(): boolean {
+    return this.residencyStatusLine().endsWith('total=0');
+  }
+
+  /** L3 — status with accepted/rejected/withdrawn. */
+  residencyStatusLineDetailed(): string {
+    const h = this.residencyQueueHeadline();
+    return `open=${h.open} accepted=${h.accepted} rejected=${h.rejected} withdrawn=${h.withdrawn} total=${h.total}`;
+  }
+
+  /** L3 — token count on detailed status line. */
+  residencyStatusLineTokenCount(): number {
+    return this.residencyStatusLineDetailed().split(/\s+/).filter(Boolean).length;
+  }
 }

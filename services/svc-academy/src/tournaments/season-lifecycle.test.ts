@@ -92,6 +92,10 @@ import {
   countSeasonsExportDataLines,
   seasonsExportHasHeader,
   seasonsExportRoundTripOk,
+  seasonStatusLine,
+  seasonStatusLineIsEmpty,
+  seasonStatusLineDetailed,
+  seasonStatusLineTokenCount,
 } from './season-lifecycle.js';
 
 const base = {
@@ -685,5 +689,24 @@ describe('L3 wave42 seasons export parse', () => {
     expect(seasonsExportHasHeader(text)).toBe(true);
     expect(countSeasonsExportDataLines(text)).toBe(1);
     expect(seasonsExportRoundTripOk(rows)).toBe(true);
+  });
+});
+
+describe('L3 wave44 season status lines', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('status lines', () => {
+    expect(seasonStatusLineIsEmpty([])).toBe(true);
+    const rows = [mk('a', 'live'), mk('b', 'ended')];
+    expect(seasonStatusLine(rows)).toContain('live=1');
+    expect(seasonStatusLineDetailed(rows)).toContain('writable=1');
+    expect(seasonStatusLineTokenCount(rows)).toBe(6);
   });
 });

@@ -1118,3 +1118,25 @@ export function curriculumExportHasHeader(text: string): boolean {
 export function curriculumExportRoundTripOk(): boolean {
   return curriculumExportLineCount() === 1 + countCurriculumExportDataLines(curriculumExportText());
 }
+
+/** L3 — one-line catalog status. */
+export function catalogStatusLine(): string {
+  const h = catalogBoardHeadline();
+  return `spine=${h.spine} lessons=${h.lessons} playbooks=${h.playbooks} workbooks=${h.workbooks}`;
+}
+
+/** L3 — true when catalog status shows empty spine. */
+export function catalogStatusLineIsEmpty(): boolean {
+  return catalogStatusLine().startsWith('spine=0');
+}
+
+/** L3 — detailed catalog status with paths. */
+export function catalogStatusLineDetailed(): string {
+  const h = catalogBoardHeadline();
+  return `${catalogStatusLine()} paths=${h.pathsWithContent} emptyPaths=${h.emptyPaths}`;
+}
+
+/** L3 — token count on detailed catalog status. */
+export function catalogStatusLineTokenCount(): number {
+  return catalogStatusLineDetailed().split(/\s+/).filter(Boolean).length;
+}

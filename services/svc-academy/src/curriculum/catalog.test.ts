@@ -93,6 +93,10 @@ import {
   countCurriculumExportDataLines,
   curriculumExportHasHeader,
   curriculumExportRoundTripOk,
+  catalogStatusLine,
+  catalogStatusLineIsEmpty,
+  catalogStatusLineDetailed,
+  catalogStatusLineTokenCount,
 } from './catalog.js';
 
 /**
@@ -414,5 +418,12 @@ describe('curriculum catalog', () => {
     expect(curriculumExportHasHeader(text)).toBe(true);
     expect(countCurriculumExportDataLines(text)).toBe(curriculumSpineSize());
     expect(curriculumExportRoundTripOk()).toBe(true);
+  });
+
+  it('L3 wave44 catalog status lines', () => {
+    expect(catalogStatusLineIsEmpty()).toBe(false);
+    expect(catalogStatusLine()).toContain('spine=');
+    expect(catalogStatusLineDetailed()).toContain('paths=');
+    expect(catalogStatusLineTokenCount()).toBeGreaterThan(4);
   });
 });

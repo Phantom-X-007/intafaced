@@ -684,3 +684,25 @@ export function drillStepsExportRoundTripOk(run: DrillRun): boolean {
   const expected = 1 + completedStepCount(run) + remainingStepCount(run);
   return expected === 1 + countDrillStepsExportDataLines(drillStepsExportText(run));
 }
+
+/** L3 — one-line drill status. */
+export function drillStatusLine(run: DrillRun): string {
+  const c = drillBoardCard(run);
+  return `status=${c.status} done=${c.completed}/${c.total} percent=${c.percent}`;
+}
+
+/** L3 — true when drill is fresh (0%). */
+export function drillStatusLineIsFresh(run: DrillRun): boolean {
+  return drillStatusLine(run).includes('percent=0') && run.status === 'active';
+}
+
+/** L3 — detailed drill status. */
+export function drillStatusLineDetailed(run: DrillRun): string {
+  const c = drillBoardCard(run);
+  return `status=${c.status} workbook=${c.workbookSlug} market=${c.marketId} done=${c.completed}/${c.total} fills=${c.fills} refused=${c.refused ? '1' : '0'}`;
+}
+
+/** L3 — token count on detailed drill status. */
+export function drillStatusLineTokenCount(run: DrillRun): number {
+  return drillStatusLineDetailed(run).split(/\s+/).filter(Boolean).length;
+}
