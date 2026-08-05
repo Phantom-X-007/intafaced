@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** Stage-1 progress #787 + Stage-2 XP policy map (no ledger) · feat/stage2-support-certs-agents
+**proof:** L3 certs emit shape + notify required channels · feat/l3-certs-emit-notify-required
 **tip:** pending-merge
 **updated:** 2026-08-05
 
-Stage-2 XP intent only — bus emit residual; perks remain identity SoT. No money.
+L3 factory. No L1 invent.
