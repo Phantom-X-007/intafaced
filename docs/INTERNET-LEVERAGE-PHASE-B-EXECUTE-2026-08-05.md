@@ -183,3 +183,15 @@ Did not npm-install. Did not merge adopt code. Did not close Class X. Did not in
 ---
 
 _Board-Delta: Phase B execute post Phase A proper gate — full-horizon + Tier start order_
+
+---
+
+## Denon alignment (2026-08-05)
+
+- **Hyperswitch:** KILL / refused D-S-10 ADR #769 (not §0.6; orchestrator + Doctrine 5).
+- **ReDoS:** prefer pure-JS linear matchers; native node-re2 costed out on money-adjacent services.
+- **Depth E2E:** proven (not residual).
+- **Human dispute desk:** built/in-flight (not GF-pending).
+- **Wallet RPC:** NOW critical defects (#763 freeze; unfixed).
+- **Test DB:** per-branch isolation required beyond file dual-edit ban.
+- **D-S board:** 18 done per Denon.

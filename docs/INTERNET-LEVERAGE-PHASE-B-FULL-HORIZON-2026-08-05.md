@@ -37,7 +37,7 @@
 
 ### Tier A start order (decision order only)
 
-1. `FH-SEC-01` RE2 · 2. `FH-SEC-02` Gitleaks · 3. `web.terminal` / `G-P0-1` / `G-P0-2` wire · 4. `FH-P2P-D` human dispute · 5. Denon `G-P0-4` / D-S factory · 6. pay residual on S-PAY (`pay.*` after #346)
+1. `FH-SEC-01` ReDoS pure-JS · 2. Gitleaks · 3. `G-P0-2` decimals / residual IN · 4. Wallet RPC **critical** (#763) · 5. pay residual IN + Class X acquirer socket (**no Hyperswitch**) · 6. P2P human dispute **built/in-flight**
 
 ### Standing order
 
@@ -62,123 +62,123 @@ Prefer **IN** → **EXT** → **GF**. **LAW** blocks invent. **S** = no Nitro L1
 
 Re-derived from `tooling/tracker/features.mjs` where `status ≠ done`.
 
-| ID                                | Status | Title (short)                                            | Path          | Phase        | External leverage                                               | Owner           | Depends           |
-| --------------------------------- | ------ | -------------------------------------------------------- | ------------- | ------------ | --------------------------------------------------------------- | --------------- | ----------------- |
-| `academy.ambassadors`             | ready  | Residencies, IFC pay, revenue share                      | **IN**        | **MID–LATE** | —                                                               | **N**           | —                 |
-| `academy.certs`                   | ready  | Certifications → XP → real perks                         | **IN**        | **MID–LATE** | —                                                               | **N**           | —                 |
-| `academy.curriculum`              | ready  | DERIV//DESK library import — 20 playbooks + 3 workbooks  | **IN**        | **MID–LATE** | —                                                               | **N**           | —                 |
-| `academy.paper-trading`           | ready  | Paper-trading market flag for workbooks                  | **IN**        | **MID–LATE** | —                                                               | **N**           | —                 |
-| `academy.spatial`                 | ready  | 2D navigable room canvas, VR-ready scene state           | **IN**        | **MID–LATE** | —                                                               | **N**           | —                 |
-| `academy.tournaments`             | ready  | Seasonal ladders, IFC prize pools                        | **IN**        | **MID–LATE** | —                                                               | **N**           | —                 |
-| `agents.copy-intel`               | ready  | Copy-Intel — writes audited leader stats                 | **IN**        | **MID–LATE** | —                                                               | **N**           | guardrails        |
-| `agents.merchant`                 | ready  | Merchant agent — approval-rate watch                     | **IN**        | **MID–LATE** | —                                                               | **N**           | guardrails        |
-| `agents.navigator`                | ready  | Navigator — tool-calling inside user guardrails          | **IN**        | **MID–LATE** | —                                                               | **N**           | guardrails        |
-| `agents.scanner`                  | ready  | Market Scanner — ranked signals by tier                  | **IN**        | **MID–LATE** | —                                                               | **N**           | guardrails        |
-| `agents.support`                  | ready  | Support agent — KB + account-state grounded              | **IN**        | **MID–LATE** | —                                                               | **N**           | guardrails        |
-| `bank.cards`                      | ready  | CardIssuerAdapter + card-sim, <2s auth decision          | **IN+X**      | **MID**      | Card issuer adapter; live issuer Class X                        | **N + Nitro**   | D-S-09            |
-| `bank.ramps`                      | ready  | Fiat on/off ramp reusing svc-pay adapters                | **EXT**       | **MID**      | Moov ACH/Wire/Fed libs + pay adapters; ramp aggregators Class X | **N**           | D-S-09            |
-| `bank.sovereign-card`             | ready  | Self-custody funded card, JIT conversion (§18)           | **IN+S**      | **LATE**     | — SA contracts Shehzad                                          | **N/S**         | protocol SA       |
-| `blueprint.attestations`          | ready  | On-chain rank attestations, zero PII (§19)               | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `bridge.canonical`                | ready  | Canonical IFC bridge + attestations                      | **S**         | **LATE**     | S build + ledger D-S-12 accounting law                          | **S**           | S-D7 + D-S-12     |
-| `chain.evm`                       | ready  | INTAEVM sharing validator set + state                    | **S**         | **LATE**     | REF: CometBFT / Cosmos SDK / dYdX v4-chain pattern              | **S**           | S-D0…             |
-| `chain.governance`                | ready  | Governance parameter handover                            | **S**         | **LATE**     | — S board                                                       | **S**           | S-D0…             |
-| `chain.mainnet`                   | ready  | INTACHAIN — CometBFT + native CLOB module                | **S**         | **LATE**     | REF: CometBFT / Cosmos SDK / dYdX v4-chain pattern              | **S**           | S-D0…             |
-| `chain.rust-core`                 | socket | Rust CLOB execution engine                               | **S**         | **LATE**     | REF: CometBFT / Cosmos SDK / dYdX v4-chain pattern              | **S**           | S-D0…             |
-| `chain.validators`                | ready  | Validator set opening, published schedule                | **S**         | **LATE**     | — S board                                                       | **S**           | S-D0…             |
-| `dex.quote-router`                | ready  | Live cross-venue quote — real prices or a typed refusal  | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `indexer.readmodels`              | ready  | Chain → Postgres read models                             | **IN**        | **MID**      | —                                                               | **N/S**         | chain events      |
-| `infra.i18n`                      | ready  | 100+ languages — keyed from day one (§9)                 | **IN**        | **MID**      | —                                                               | **N**           | —                 |
-| `launch.launchpad`                | ready  | Presale / fair launch, vesting, staked allocation tiers  | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `launch.meme-factory`             | ready  | One-click meme launch + instant market + LP              | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `launch.nft`                      | ready  | NFT mint / list / auction, on-chain royalties            | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `launch.rwa`                      | socket | RWA issuance registry, licence-gated                     | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `launch.token-factory`            | ready  | ERC-20 deploy from audited templates                     | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `market.commerce`                 | ready  | Listings, subscriptions, purchases, house commission     | **IN**        | **MID–LATE** | —                                                               | **N**           | —                 |
-| `market.vendors`                  | ready  | Vendor lifecycle — apply, vet, list, stake-gated slots   | **IN**        | **MID–LATE** | —                                                               | **N**           | —                 |
-| `mining.pool`                     | ready  | Stratum share protocol, PPLNS payouts                    | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `ops.admin`                       | ready  | apps/admin — listings, fee params, treasury, kill-switch | **IN**        | **MID**      | —                                                               | **N/D**         | —                 |
-| `ops.affiliates`                  | ready  | Multi-tier affiliate / IB trees, payout automation       | **GF**        | **MID**      | — no drop-in                                                    | **N**           | —                 |
-| `ops.analytics`                   | ready  | Warehouse — read replica + cube layer                    | **EXT**       | **LATE**     | ClickHouse/cube when funded                                     | **N/D**         | —                 |
-| `ops.compliance`                  | ready  | Screening queues, geo-block, VPN/Tor detection           | **IN+X**      | **MID**      | Screening queues IN; list content Class X                       | **N + Nitro**   | —                 |
-| `ops.notifications`               | ready  | Event-driven fan-out: in-app, push, email, SMS           | **IN**        | **MID**      | —                                                               | **N**           | —                 |
-| `ops.support`                     | ready  | Support desk, tickets, KB                                | **IN**        | **MID**      | —                                                               | **N**           | —                 |
-| `p2p.merchants`                   | ready  | P2P merchant programme — badges, limits, API             | **IN**        | **MID**      | —                                                               | **N**           | D-S-08            |
-| `pay.fraud`                       | ready  | Risk scoring, chargebacks, decline recovery              | **EXT**       | **LATE**     | PSP fraud tools as adapters — not second book                   | **N**           | pay live          |
-| `pay.gateway`                     | wip    | Branded gateway, hosted checkout, payment links          | **IN+EXT**    | **MID**      | Hyperswitch / direct PSP SDK adapters                           | **N**           | D-S-10            |
-| `pay.payfac`                      | ready  | PayFac mode — sub-merchant trees, 14 permission areas    | **LAW→IN/GF** | **MID**      | — after law                                                     | **N after D**   | D-S-10            |
-| `pay.plugins`                     | ready  | Woo / Magento / OpenCart plugins                         | **GF**        | **LATE**     | — no drop-in                                                    | **N**           | pay.public-api    |
-| `pay.psp`                         | ready  | PSP mode — own the merchant, digital KYB, custom pricing | **IN+EXT**    | **MID**      | Hyperswitch / direct PSP SDK adapters                           | **N**           | D-S-10            |
-| `pay.public-api`                  | ready  | Public REST + webhooks + sandbox (§9)                    | **IN**        | **MID**      | —                                                               | **N**           | —                 |
-| `pay.routing`                     | ready  | Smart routing — geo, method, risk, approval rate         | **EXT**       | **MID**      | Hyperswitch trial (Apache-2.0) behind PayRouterPort; ledger SoT | **N**           | D-S-10            |
-| `pay.settlement`                  | ready  | Dual settlement — bank or crypto                         | **IN**        | **MID**      | —                                                               | **N**           | ledger            |
-| `pay.subscriptions`               | ready  | Recurring — card and crypto                              | **IN**        | **LATE**     | —                                                               | **N**           | card rail         |
-| `protocol.amm`                    | ready  | AMM pools from audited templates                         | **S**         | **MID–LATE** | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `protocol.escrow`                 | ready  | Non-custodial P2P escrow contracts                       | **S**         | **MID–LATE** | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `protocol.lending`                | ready  | On-chain lending markets, keeper liquidations            | **S**         | **MID–LATE** | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `protocol.merchant`               | ready  | Lane A merchant contracts — zero KYB (§24)               | **S**         | **MID–LATE** | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `protocol.router`                 | ready  | Sovereign router — book vs pool best execution           | **S**         | **MID–LATE** | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `protocol.smart-accounts`         | ready  | Passkey smart accounts, session keys (§17.4)             | **S**         | **MID–LATE** | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.clob-contracts`           | socket | An audited venue contract emitting the indexed event sur | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.contract-audit`           | socket | External audit of the account + factory suite            | **X**         | **LATE**     | Class X human pick                                              | **Nitro**       | Class X           |
-| `socket.contract-toolchain`       | socket | Foundry + contract test suite in CI                      | **S**         | **MID**      | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.dex-execution`            | socket | Order execution against a quoted venue (§27 vault, §28 O | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.dex-fee-source`           | socket | Authoritative per-venue fee and settlement schedule      | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.dex-venue-set`            | socket | A venue this platform actually quotes                    | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.geo-region-resolution`    | socket | Resolve the caller’s region per request instead of stamp | **EXT**       | **LATE**     | Geo provider adapter                                            | **N**           | —                 |
-| `socket.indexer-stream`           | socket | Live book/tape feed from the projection (§5.2 ws-gateway | **IN**        | **LATE**     | —                                                               | **N/S**         | indexer           |
-| `socket.ledger-sharding`          | socket | Per-asset hash chains with cross-shard anchor            | **GF**        | **LATE**     | — no drop-in                                                    | **D/N**         | —                 |
-| `socket.live-issuer`              | socket | Live card issuer rail                                    | **X**         | **LATE**     | Class X human pick                                              | **Nitro**       | Class X           |
-| `socket.mpc-custody`              | socket | MPC custody for self-custody wallets                     | **EXT**       | **LATE**     | DFNS/Turnkey-class after wallet RPC review                      | **D→N + Nitro** | G-P1-4 review     |
-| `socket.notify-email`             | socket | Email notification channel                               | **EXT**       | **MID**      | SES/etc behind svc-notify                                       | **N**           | —                 |
-| `socket.notify-push`              | socket | Push notification channel (device tokens + provider)     | **EXT**       | **MID**      | FCM/APNs SDK behind svc-notify                                  | **N**           | —                 |
-| `socket.notify-sms`               | socket | SMS notification channel                                 | **EXT**       | **LATE**     | Twilio-class behind svc-notify                                  | **N**           | —                 |
-| `socket.p256-verifier`            | socket | Passkey (P-256) owner verifier contract                  | **S**         | **MID**      | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.psp-partners`             | socket | PayPal / Stripe / live acquiring rails                   | **X**         | **LATE**     | Class X human pick                                              | **Nitro**       | Class X           |
-| `socket.rust-matching`            | socket | Rust port of svc-matching                                | **LAW→S/D**   | **LATE**     | Study only; dual-target D-S-06                                  | **D/S**         | §13 / product yes |
-| `socket.social-recovery`          | socket | Guardian-based account recovery                          | **S**         | **LATE**     | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.stream-provider`          | socket | A real WebRTC SFU behind StreamProvider (§8.3 LiveKit se | **EXT**       | **LATE**     | WebRTC SFU adapter                                              | **N**           | —                 |
-| `socket.userop-differential-test` | socket | getUserOperationHash checked against a live EntryPoint   | **S**         | **MID**      | — (Shehzad plane)                                               | **S**           | S-D0…             |
-| `socket.vr-client`                | socket | VR lobby client                                          | **GF**        | **LATE**     | — no drop-in                                                    | **N**           | —                 |
-| `token.buyback`                   | socket | Operator-recorded burn (no buyback — nothing is bought)  | **GF**        | **MID**      | — no drop-in                                                    | **N**           | D-S-14            |
-| `token.governance`                | socket | Proposals + IFC-weighted ballots — outcome NOT built (§4 | **GF**        | **MID**      | — no drop-in                                                    | **N**           | D-S-14            |
-| `token.yield`                     | socket | Operator-settled staker payout (§4.3 weekly job NOT buil | **GF**        | **MID**      | — no drop-in                                                    | **N**           | D-S-14            |
-| `trade.algo`                      | ready  | TWAP / VWAP / POV execution                              | **LAW→IN/GF** | **MID**      | — after law                                                     | **N after D**   | D-S-04            |
-| `trade.ccxt-api`                  | ready  | CCXT-compatible public API (bots + terminals connect)    | **IN**        | **MID**      | —                                                               | **N**           | doctrine          |
-| `trade.copy`                      | ready  | Copy trading, audited leaders, profit share              | **LAW→IN/GF** | **MID**      | — after law                                                     | **N after D**   | D-S-03            |
-| `trade.forex`                     | ready  | Fiat pairs on the same engine                            | **LAW→IN/GF** | **MID**      | — after law                                                     | **N after D**   | D-S-05            |
-| `trade.futures`                   | ready  | Perps: cross/isolated margin, funding, liquidation ladde | **LAW→IN/GF** | **MID**      | — after law                                                     | **N after D**   | D-S-01            |
-| `trade.mm-bot`                    | ready  | Internal market-maker seeding books at launch            | **IN**        | **MID**      | —                                                               | **N**           | —                 |
-| `trade.options`                   | ready  | European options, cash-settled, full collateral in v1    | **LAW→IN/GF** | **MID**      | — after law                                                     | **N after D**   | D-S-01/05         |
-| `trade.otc`                       | ready  | OTC RFQ desk, staked-tier gate                           | **LAW→IN/GF** | **MID**      | — after law                                                     | **N after D**   | D-S-02            |
-| `venue.aggregation`               | ready  | External venue adapters via CCXT (cross-venue)           | **IN**        | **LATE**     | —                                                               | **N**           | D-S-05            |
-| `web.terminal`                    | wip    | Pro terminal — depth, charts, hotkeys, sub-accounts      | **IN**        | **NOW**      | —                                                               | **N**           | S-WS              |
-| `ws.gateway`                      | wip    | WebSocket fan-out: depth, trades, orders, positions      | **IN**        | **MID**      | —                                                               | **N**           | D-S-01            |
+| ID                                | Status | Title (short)                                            | Path          | Phase        | External leverage                                                  | Owner           | Depends           |
+| --------------------------------- | ------ | -------------------------------------------------------- | ------------- | ------------ | ------------------------------------------------------------------ | --------------- | ----------------- |
+| `academy.ambassadors`             | ready  | Residencies, IFC pay, revenue share                      | **IN**        | **MID–LATE** | —                                                                  | **N**           | —                 |
+| `academy.certs`                   | ready  | Certifications → XP → real perks                         | **IN**        | **MID–LATE** | —                                                                  | **N**           | —                 |
+| `academy.curriculum`              | ready  | DERIV//DESK library import — 20 playbooks + 3 workbooks  | **IN**        | **MID–LATE** | —                                                                  | **N**           | —                 |
+| `academy.paper-trading`           | ready  | Paper-trading market flag for workbooks                  | **IN**        | **MID–LATE** | —                                                                  | **N**           | —                 |
+| `academy.spatial`                 | ready  | 2D navigable room canvas, VR-ready scene state           | **IN**        | **MID–LATE** | —                                                                  | **N**           | —                 |
+| `academy.tournaments`             | ready  | Seasonal ladders, IFC prize pools                        | **IN**        | **MID–LATE** | —                                                                  | **N**           | —                 |
+| `agents.copy-intel`               | ready  | Copy-Intel — writes audited leader stats                 | **IN**        | **MID–LATE** | —                                                                  | **N**           | guardrails        |
+| `agents.merchant`                 | ready  | Merchant agent — approval-rate watch                     | **IN**        | **MID–LATE** | —                                                                  | **N**           | guardrails        |
+| `agents.navigator`                | ready  | Navigator — tool-calling inside user guardrails          | **IN**        | **MID–LATE** | —                                                                  | **N**           | guardrails        |
+| `agents.scanner`                  | ready  | Market Scanner — ranked signals by tier                  | **IN**        | **MID–LATE** | —                                                                  | **N**           | guardrails        |
+| `agents.support`                  | ready  | Support agent — KB + account-state grounded              | **IN**        | **MID–LATE** | —                                                                  | **N**           | guardrails        |
+| `bank.cards`                      | ready  | CardIssuerAdapter + card-sim, <2s auth decision          | **IN+X**      | **MID**      | Card issuer adapter; live issuer Class X                           | **N + Nitro**   | D-S-09            |
+| `bank.ramps`                      | ready  | Fiat on/off ramp reusing svc-pay adapters                | **EXT**       | **MID**      | Moov ACH/Wire/Fed libs + pay adapters; ramp aggregators Class X    | **N**           | D-S-09            |
+| `bank.sovereign-card`             | ready  | Self-custody funded card, JIT conversion (§18)           | **IN+S**      | **LATE**     | — SA contracts Shehzad                                             | **N/S**         | protocol SA       |
+| `blueprint.attestations`          | ready  | On-chain rank attestations, zero PII (§19)               | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `bridge.canonical`                | ready  | Canonical IFC bridge + attestations                      | **S**         | **LATE**     | S build + ledger D-S-12 accounting law                             | **S**           | S-D7 + D-S-12     |
+| `chain.evm`                       | ready  | INTAEVM sharing validator set + state                    | **S**         | **LATE**     | REF: CometBFT / Cosmos SDK / dYdX v4-chain pattern                 | **S**           | S-D0…             |
+| `chain.governance`                | ready  | Governance parameter handover                            | **S**         | **LATE**     | — S board                                                          | **S**           | S-D0…             |
+| `chain.mainnet`                   | ready  | INTACHAIN — CometBFT + native CLOB module                | **S**         | **LATE**     | REF: CometBFT / Cosmos SDK / dYdX v4-chain pattern                 | **S**           | S-D0…             |
+| `chain.rust-core`                 | socket | Rust CLOB execution engine                               | **S**         | **LATE**     | REF: CometBFT / Cosmos SDK / dYdX v4-chain pattern                 | **S**           | S-D0…             |
+| `chain.validators`                | ready  | Validator set opening, published schedule                | **S**         | **LATE**     | — S board                                                          | **S**           | S-D0…             |
+| `dex.quote-router`                | ready  | Live cross-venue quote — real prices or a typed refusal  | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `indexer.readmodels`              | ready  | Chain → Postgres read models                             | **IN**        | **MID**      | —                                                                  | **N/S**         | chain events      |
+| `infra.i18n`                      | ready  | 100+ languages — keyed from day one (§9)                 | **IN**        | **MID**      | —                                                                  | **N**           | —                 |
+| `launch.launchpad`                | ready  | Presale / fair launch, vesting, staked allocation tiers  | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `launch.meme-factory`             | ready  | One-click meme launch + instant market + LP              | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `launch.nft`                      | ready  | NFT mint / list / auction, on-chain royalties            | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `launch.rwa`                      | socket | RWA issuance registry, licence-gated                     | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `launch.token-factory`            | ready  | ERC-20 deploy from audited templates                     | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `market.commerce`                 | ready  | Listings, subscriptions, purchases, house commission     | **IN**        | **MID–LATE** | —                                                                  | **N**           | —                 |
+| `market.vendors`                  | ready  | Vendor lifecycle — apply, vet, list, stake-gated slots   | **IN**        | **MID–LATE** | —                                                                  | **N**           | —                 |
+| `mining.pool`                     | ready  | Stratum share protocol, PPLNS payouts                    | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `ops.admin`                       | ready  | apps/admin — listings, fee params, treasury, kill-switch | **IN**        | **MID**      | —                                                                  | **N/D**         | —                 |
+| `ops.affiliates`                  | ready  | Multi-tier affiliate / IB trees, payout automation       | **GF**        | **MID**      | — no drop-in                                                       | **N**           | —                 |
+| `ops.analytics`                   | ready  | Warehouse — read replica + cube layer                    | **EXT**       | **LATE**     | ClickHouse/cube when funded                                        | **N/D**         | —                 |
+| `ops.compliance`                  | ready  | Screening queues, geo-block, VPN/Tor detection           | **IN+X**      | **MID**      | Screening queues IN; list content Class X                          | **N + Nitro**   | —                 |
+| `ops.notifications`               | ready  | Event-driven fan-out: in-app, push, email, SMS           | **IN**        | **MID**      | —                                                                  | **N**           | —                 |
+| `ops.support`                     | ready  | Support desk, tickets, KB                                | **IN**        | **MID**      | —                                                                  | **N**           | —                 |
+| `p2p.merchants`                   | ready  | P2P merchant programme — badges, limits, API             | **IN**        | **MID**      | —                                                                  | **N**           | D-S-08            |
+| `pay.fraud`                       | ready  | Risk scoring, chargebacks, decline recovery              | **EXT**       | **LATE**     | PSP fraud tools as adapters — not second book                      | **N**           | pay live          |
+| `pay.gateway`                     | wip    | Branded gateway, hosted checkout, payment links          | **IN+X**      | **MID**      | Commercial acquirer / partner — **not** Hyperswitch (D-S-10 #769)  | **N + Nitro**   | D-S-10            |
+| `pay.payfac`                      | ready  | PayFac mode — sub-merchant trees, 14 permission areas    | **LAW→IN/GF** | **MID**      | — after law                                                        | **N after D**   | D-S-10            |
+| `pay.plugins`                     | ready  | Woo / Magento / OpenCart plugins                         | **GF**        | **LATE**     | — no drop-in                                                       | **N**           | pay.public-api    |
+| `pay.psp`                         | ready  | PSP mode — own the merchant, digital KYB, custom pricing | **IN+X**      | **MID**      | Commercial relationship — **not** Hyperswitch (D-S-10 #769)        | **N + Nitro**   | D-S-10            |
+| `pay.public-api`                  | ready  | Public REST + webhooks + sandbox (§9)                    | **IN**        | **MID**      | —                                                                  | **N**           | —                 |
+| `pay.routing`                     | ready  | Smart routing — geo, method, risk, approval rate         | **IN+X**      | **MID**      | Our routing + relationship-backed connectors; **Hyperswitch KILL** | **N + Nitro**   | D-S-10 ADR #769   |
+| `pay.settlement`                  | ready  | Dual settlement — bank or crypto                         | **IN**        | **MID**      | —                                                                  | **N**           | ledger            |
+| `pay.subscriptions`               | ready  | Recurring — card and crypto                              | **IN**        | **LATE**     | —                                                                  | **N**           | card rail         |
+| `protocol.amm`                    | ready  | AMM pools from audited templates                         | **S**         | **MID–LATE** | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `protocol.escrow`                 | ready  | Non-custodial P2P escrow contracts                       | **S**         | **MID–LATE** | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `protocol.lending`                | ready  | On-chain lending markets, keeper liquidations            | **S**         | **MID–LATE** | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `protocol.merchant`               | ready  | Lane A merchant contracts — zero KYB (§24)               | **S**         | **MID–LATE** | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `protocol.router`                 | ready  | Sovereign router — book vs pool best execution           | **S**         | **MID–LATE** | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `protocol.smart-accounts`         | ready  | Passkey smart accounts, session keys (§17.4)             | **S**         | **MID–LATE** | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.clob-contracts`           | socket | An audited venue contract emitting the indexed event sur | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.contract-audit`           | socket | External audit of the account + factory suite            | **X**         | **LATE**     | Class X human pick                                                 | **Nitro**       | Class X           |
+| `socket.contract-toolchain`       | socket | Foundry + contract test suite in CI                      | **S**         | **MID**      | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.dex-execution`            | socket | Order execution against a quoted venue (§27 vault, §28 O | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.dex-fee-source`           | socket | Authoritative per-venue fee and settlement schedule      | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.dex-venue-set`            | socket | A venue this platform actually quotes                    | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.geo-region-resolution`    | socket | Resolve the caller’s region per request instead of stamp | **EXT**       | **LATE**     | Geo provider adapter                                               | **N**           | —                 |
+| `socket.indexer-stream`           | socket | Live book/tape feed from the projection (§5.2 ws-gateway | **IN**        | **LATE**     | —                                                                  | **N/S**         | indexer           |
+| `socket.ledger-sharding`          | socket | Per-asset hash chains with cross-shard anchor            | **GF**        | **LATE**     | — no drop-in                                                       | **D/N**         | —                 |
+| `socket.live-issuer`              | socket | Live card issuer rail                                    | **X**         | **LATE**     | Class X human pick                                                 | **Nitro**       | Class X           |
+| `socket.mpc-custody`              | socket | MPC custody for self-custody wallets                     | **EXT**       | **LATE**     | DFNS/Turnkey-class after wallet RPC review                         | **D→N + Nitro** | G-P1-4 review     |
+| `socket.notify-email`             | socket | Email notification channel                               | **EXT**       | **MID**      | SES/etc behind svc-notify                                          | **N**           | —                 |
+| `socket.notify-push`              | socket | Push notification channel (device tokens + provider)     | **EXT**       | **MID**      | FCM/APNs SDK behind svc-notify                                     | **N**           | —                 |
+| `socket.notify-sms`               | socket | SMS notification channel                                 | **EXT**       | **LATE**     | Twilio-class behind svc-notify                                     | **N**           | —                 |
+| `socket.p256-verifier`            | socket | Passkey (P-256) owner verifier contract                  | **S**         | **MID**      | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.psp-partners`             | socket | PayPal / Stripe / live acquiring rails                   | **X**         | **LATE**     | Class X human pick                                                 | **Nitro**       | Class X           |
+| `socket.rust-matching`            | socket | Rust port of svc-matching                                | **LAW→S/D**   | **LATE**     | Study only; dual-target D-S-06                                     | **D/S**         | §13 / product yes |
+| `socket.social-recovery`          | socket | Guardian-based account recovery                          | **S**         | **LATE**     | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.stream-provider`          | socket | A real WebRTC SFU behind StreamProvider (§8.3 LiveKit se | **EXT**       | **LATE**     | WebRTC SFU adapter                                                 | **N**           | —                 |
+| `socket.userop-differential-test` | socket | getUserOperationHash checked against a live EntryPoint   | **S**         | **MID**      | — (Shehzad plane)                                                  | **S**           | S-D0…             |
+| `socket.vr-client`                | socket | VR lobby client                                          | **GF**        | **LATE**     | — no drop-in                                                       | **N**           | —                 |
+| `token.buyback`                   | socket | Operator-recorded burn (no buyback — nothing is bought)  | **GF**        | **MID**      | — no drop-in                                                       | **N**           | D-S-14            |
+| `token.governance`                | socket | Proposals + IFC-weighted ballots — outcome NOT built (§4 | **GF**        | **MID**      | — no drop-in                                                       | **N**           | D-S-14            |
+| `token.yield`                     | socket | Operator-settled staker payout (§4.3 weekly job NOT buil | **GF**        | **MID**      | — no drop-in                                                       | **N**           | D-S-14            |
+| `trade.algo`                      | ready  | TWAP / VWAP / POV execution                              | **LAW→IN/GF** | **MID**      | — after law                                                        | **N after D**   | D-S-04            |
+| `trade.ccxt-api`                  | ready  | CCXT-compatible public API (bots + terminals connect)    | **IN**        | **MID**      | —                                                                  | **N**           | doctrine          |
+| `trade.copy`                      | ready  | Copy trading, audited leaders, profit share              | **LAW→IN/GF** | **MID**      | — after law                                                        | **N after D**   | D-S-03            |
+| `trade.forex`                     | ready  | Fiat pairs on the same engine                            | **LAW→IN/GF** | **MID**      | — after law                                                        | **N after D**   | D-S-05            |
+| `trade.futures`                   | ready  | Perps: cross/isolated margin, funding, liquidation ladde | **LAW→IN/GF** | **MID**      | — after law                                                        | **N after D**   | D-S-01            |
+| `trade.mm-bot`                    | ready  | Internal market-maker seeding books at launch            | **IN**        | **MID**      | —                                                                  | **N**           | —                 |
+| `trade.options`                   | ready  | European options, cash-settled, full collateral in v1    | **LAW→IN/GF** | **MID**      | — after law                                                        | **N after D**   | D-S-01/05         |
+| `trade.otc`                       | ready  | OTC RFQ desk, staked-tier gate                           | **LAW→IN/GF** | **MID**      | — after law                                                        | **N after D**   | D-S-02            |
+| `venue.aggregation`               | ready  | External venue adapters via CCXT (cross-venue)           | **IN**        | **LATE**     | —                                                                  | **N**           | D-S-05            |
+| `web.terminal`                    | wip    | Pro terminal — depth, charts, hotkeys, sub-accounts      | **IN**        | **NOW**      | —                                                                  | **N**           | S-WS              |
+| `ws.gateway`                      | wip    | WebSocket fan-out: depth, trades, orders, positions      | **IN**        | **MID**      | —                                                                  | **N**           | D-S-01            |
 
 ### Non-tracker rows (Phase A gaps + law + security — still in scope)
 
-| ID                | Need                           | Path       | Phase        | External                            | Owner         | Depends   |
-| ----------------- | ------------------------------ | ---------- | ------------ | ----------------------------------- | ------------- | --------- |
-| `G-P0-1`          | Depth E2E residual after #748  | **IN**     | **NOW**      | —                                   | **N**         | fleet     |
-| `G-P0-2`          | Decimal desk bignumber E2E     | **IN**     | **NOW**      | —                                   | **N**         | —         |
-| `G-P0-3`          | Pay residual after #346        | **IN+EXT** | **MID**      | Hyperswitch when routing            | **N**         | handoff   |
-| `G-P0-4`          | Denon open work (#428)         | **IN**     | **NOW**      | —                                   | **D**         | his PR    |
-| `G-P0-5`          | Engine product law             | **LAW**    | **NOW**      | —                                   | **D**         | D-S-01…05 |
-| `G-P1-1`          | OTC/admin/CMS kit path         | **IN**     | **MID**      | —                                   | **N**         | law       |
-| `G-P1-2`          | V-ADMIN primary ops            | **IN**     | **MID**      | —                                   | **N/D**       | —         |
-| `G-P1-4`          | Wallet RPC review              | **IN→EXT** | **MID**      | MPC after review                    | **D→N**       | review    |
-| `G-P1-5`          | Wire ops.support ↔ svc-support | **IN**     | **MID**      | —                                   | **N**         | —         |
-| `G-P2-2`          | spine-* disposition            | **IN**     | **MID**      | —                                   | **D**         | —         |
-| `FH-SEC-01`       | ReDoS-safe parsers             | **EXT**    | **NOW**      | re2js / node-re2                    | **N/D**       | —         |
-| `FH-SEC-02`       | Secret scanning CI             | **EXT**    | **NOW**      | Gitleaks                            | **N**         | —         |
-| `FH-SEC-04`       | Money SAST                     | **EXT**    | **MID**      | Semgrep patterns                    | **N**         | —         |
-| `FH-SEC-05`       | Property tests money           | **EXT**    | **MID**      | fast-check                          | **N**         | Class M   |
-| `FH-SEC-06`       | Chaos network trade↔match      | **EXT**    | **LATE**     | Toxiproxy                           | **D/N**       | —         |
-| `FH-UI-01`        | Runtime edge validation        | **EXT**    | **MID**      | Zod (or Valibot/ArkType)            | **N**         | —         |
-| `FH-P2P-D`        | Human dispute desk             | **GF**     | **NOW–MID**  | — (Kleros KILL Fiat)                | **N/D**       | D-S-08    |
-| `FH-ID-01`        | Passkeys                       | **EXT**    | **MID**      | SimpleWebAuthn                      | **N**         | D-S-11    |
-| `FH-ID-02`        | KYC providers                  | **EXT+X**  | **MID–LATE** | Sumsub/Persona/… adapters           | **N + Nitro** | Class X   |
-| `D-S-01`…`D-S-18` | Spec factory                   | **LAW**    | **NOW**      | — mandate kit+ledger                | **D**         | —         |
-| `V-MOBILE`        | Mobile apps                    | **GF**     | **LATE**     | Expo/RN or Flutter when product yes | **N**         | product   |
+| ID                | Need                                    | Path       | Phase        | External                                                                               | Owner         | Depends            |
+| ----------------- | --------------------------------------- | ---------- | ------------ | -------------------------------------------------------------------------------------- | ------------- | ------------------ |
+| `G-P0-1`          | Depth E2E (**proven** Denon 2026-08-05) | **IN**     | **DONE**     | — (fleet image trap was real; rebuild from tip)                                        | **N/D**       | closed             |
+| `G-P0-2`          | Decimal desk bignumber E2E              | **IN**     | **NOW**      | —                                                                                      | **N**         | —                  |
+| `G-P0-3`          | Pay residual after #346                 | **IN+X**   | **MID**      | Class X acquirer socket; no Hyperswitch                                                | **N**         | handoff + D-S-10   |
+| `G-P0-4`          | Denon open work (#428)                  | **IN**     | **NOW**      | —                                                                                      | **D**         | his PR             |
+| `G-P0-5`          | Engine product law                      | **LAW**    | **NOW**      | —                                                                                      | **D**         | D-S-01…05          |
+| `G-P1-1`          | OTC/admin/CMS kit path                  | **IN**     | **MID**      | —                                                                                      | **N**         | law                |
+| `G-P1-2`          | V-ADMIN primary ops                     | **IN**     | **MID**      | —                                                                                      | **N/D**       | —                  |
+| `G-P1-4`          | Wallet RPC **critical defects**         | **IN**     | **NOW**      | Fix #763 freezes (mainnet dual-broadcast class) before MPC                             | **D→N**       | #763               |
+| `G-P1-5`          | Wire ops.support ↔ svc-support          | **IN**     | **MID**      | —                                                                                      | **N**         | —                  |
+| `G-P2-2`          | spine-* disposition                     | **IN**     | **MID**      | —                                                                                      | **D**         | —                  |
+| `FH-SEC-01`       | ReDoS-safe parsers                      | **IN/EXT** | **NOW**      | Prefer pure-JS linear matchers; re2js pure-JS OK; avoid native node-re2 on money paths | **N/D**       | Denon pure-JS note |
+| `FH-SEC-02`       | Secret scanning CI                      | **EXT**    | **NOW**      | Gitleaks                                                                               | **N**         | —                  |
+| `FH-SEC-04`       | Money SAST                              | **EXT**    | **MID**      | Semgrep patterns                                                                       | **N**         | —                  |
+| `FH-SEC-05`       | Property tests money                    | **EXT**    | **MID**      | fast-check                                                                             | **N**         | Class M            |
+| `FH-SEC-06`       | Chaos network trade↔match               | **EXT**    | **LATE**     | Toxiproxy                                                                              | **D/N**       | —                  |
+| `FH-UI-01`        | Runtime edge validation                 | **EXT**    | **MID**      | Zod (or Valibot/ArkType)                                                               | **N**         | —                  |
+| `FH-P2P-D`        | Human dispute desk                      | **IN**     | **NOW**      | **Built/in-flight** (not GF); Kleros still KILL Fiat                                   | **N/D**       | D-S-08             |
+| `FH-ID-01`        | Passkeys                                | **EXT**    | **MID**      | SimpleWebAuthn                                                                         | **N**         | D-S-11             |
+| `FH-ID-02`        | KYC providers                           | **EXT+X**  | **MID–LATE** | Sumsub/Persona/… adapters                                                              | **N + Nitro** | Class X            |
+| `D-S-01`…`D-S-18` | Spec factory                            | **LAW**    | **NOW**      | — mandate kit+ledger                                                                   | **D**         | —                  |
+| `V-MOBILE`        | Mobile apps                             | **GF**     | **LATE**     | Expo/RN or Flutter when product yes                                                    | **N**         | product            |
 
 ---
 
@@ -200,29 +200,33 @@ Expect: `missing 0`.
 
 ## 4 · External shortlist (where Path contains EXT) — deep evidence in v2
 
-| External                    | Used by IDs / FH rows             | Action                     |
-| --------------------------- | --------------------------------- | -------------------------- |
-| re2js / node-re2            | FH-SEC-01, P2P parsers            | **Adopt NOW**              |
-| Gitleaks                    | FH-SEC-02                         | **Adopt NOW**              |
-| Hyperswitch                 | pay.routing, pay.gateway, pay.psp | **Trial MID**              |
-| Moov ACH/Wire/Fed           | bank.ramps                        | **Adapt MID**              |
-| SimpleWebAuthn              | FH-ID-01                          | **Trial MID**              |
-| KYC SaaS adapters           | FH-ID-02                          | **Later + X**              |
-| SES/Twilio/FCM/APNs         | notify sockets                    | **Adapt MID–LATE**         |
-| Zod (or Valibot)            | FH-UI-01                          | **Trial MID**              |
-| fast-check                  | FH-SEC-05                         | **Adopt MID**              |
-| Toxiproxy                   | FH-SEC-06                         | **Later**                  |
-| Semgrep                     | FH-SEC-04                         | **Later**                  |
-| DFNS / Turnkey              | socket.mpc-custody                | **Later after review + X** |
-| ClickHouse/cube             | ops.analytics                     | **Later**                  |
-| Meilisearch/Typesense       | ops.admin search residual         | **Later** if needed        |
-| Expo/RN or Flutter          | V-MOBILE                          | **Later** product yes      |
-| CometBFT / Cosmos / dYdX v4 | chain.*                           | **REF S only**             |
-| WebRTC SFU                  | socket.stream-provider            | **Later**                  |
+| External                           | Used by IDs / FH rows             | Action                                              |
+| ---------------------------------- | --------------------------------- | --------------------------------------------------- |
+| pure-JS linear matchers (re2js OK) | FH-SEC-01, P2P parsers            | **Prefer pure-JS; avoid native RE2 on money paths** |
+| Gitleaks                           | FH-SEC-02                         | **Adopt NOW**                                       |
+| Hyperswitch                        | pay.routing, pay.gateway, pay.psp | **KILL** — D-S-10 ADR #769                          |
+| Moov ACH/Wire/Fed                  | bank.ramps                        | **Adapt MID**                                       |
+| SimpleWebAuthn                     | FH-ID-01                          | **Trial MID**                                       |
+| KYC SaaS adapters                  | FH-ID-02                          | **Later + X**                                       |
+| SES/Twilio/FCM/APNs                | notify sockets                    | **Adapt MID–LATE**                                  |
+| Zod (or Valibot)                   | FH-UI-01                          | **Trial MID**                                       |
+| fast-check                         | FH-SEC-05                         | **Adopt MID**                                       |
+| Toxiproxy                          | FH-SEC-06                         | **Later**                                           |
+| Semgrep                            | FH-SEC-04                         | **Later**                                           |
+| DFNS / Turnkey                     | socket.mpc-custody                | **Later after review + X**                          |
+| ClickHouse/cube                    | ops.analytics                     | **Later**                                           |
+| Meilisearch/Typesense              | ops.admin search residual         | **Later** if needed                                 |
+| Expo/RN or Flutter                 | V-MOBILE                          | **Later** product yes                               |
+| CometBFT / Cosmos / dYdX v4        | chain.*                           | **REF S only**                                      |
+| WebRTC SFU                         | socket.stream-provider            | **Later**                                           |
 
 Detail (license, stars, doctrine): see Phase B REPORT v2.
 
 ---
+
+## 4b · Isolation (not path dual-edit alone)
+
+**Dedicated test database per branch** when suites migrate at startup. Shared Postgres contaminates peer worktrees (Denon #428 A/B).
 
 ## 5 · Kill / never (do not “helpfully” reopen)
 

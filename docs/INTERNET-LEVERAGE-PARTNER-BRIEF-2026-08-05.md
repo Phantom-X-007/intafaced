@@ -122,20 +122,20 @@ console.log('open', open.length, 'missing', miss.length);
 **Execute stamp / gate story:** [`INTERNET-LEVERAGE-PHASE-B-EXECUTE-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-EXECUTE-2026-08-05.md)  
 **Plan (hardened):** [`INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md`](INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md)
 
-| Priority | Candidate                                 | Job                     | Owner            | Notes                                        |
-| -------- | ----------------------------------------- | ----------------------- | ---------------- | -------------------------------------------- |
-| NOW      | **RE2** (`re2js` / `node-re2`)            | ReDoS-safe parsers      | N/D              | Pure safety                                  |
-| NOW      | **Gitleaks**                              | Secret scanning CI      | N                | Track A; tip already landed always-on (#786) |
-| MID      | **Hyperswitch** (Apache-2.0)              | Multi-PSP orchestration | N + Class X keys | **Adapter only**; ledger stays SoT           |
-| MID      | **SimpleWebAuthn**                        | Passkeys / step-up      | N                | After D-S-11 as needed                       |
-| MID      | **Moov ACH/Wire/Fed libs**                | US file rails for ramps | N + D-S-09       | Libs, not second book                        |
-| NOW–MID  | **Human P2P dispute desk**                | Fiat disputes           | N/D              | Greenfield; **not** Kleros for Fiat          |
-| MID      | Wallet RPC **security review**            | Custody path            | **D** then N     | Before live / MPC vendors                    |
-| LATE     | DFNS / Turnkey-class                      | MPC custody API         | D→N + X          | After review; adapter only                   |
-| LATE     | Zod (or Valibot)                          | Runtime edge validation | N                | Honesty residual                             |
-| MID      | fast-check                                | Money property tests    | N                | Prior order-route Tier A                     |
-| LATE     | Toxiproxy / Semgrep / analytics warehouse | Ops/chaos               | N/D              | When pain warrants                           |
-| S only   | CometBFT / Cosmos SDK / dYdX v4 pattern   | INTACHAIN refs          | **S**            | Not Nitro L1                                 |
+| Priority    | Candidate                                                                                                                                             | Job                     | Owner                | Notes                                                                                                                                                                                                |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NOW         | **ReDoS-safe matchers** (prefer **pure-JS linear-time** in-tree; `re2js` pure-JS OK; **avoid native `node-re2`/node-gyp** on money-adjacent services) | ReDoS-safe parsers      | N/D                  | Denon: pure-JS may already supersede RE2 dep cost                                                                                                                                                    |
+| NOW         | **Gitleaks**                                                                                                                                          | Secret scanning CI      | N                    | Track A; tip already landed always-on (#786)                                                                                                                                                         |
+| **KILL**    | **Hyperswitch**                                                                                                                                       | Multi-PSP orchestration | —                    | **Refused** ADR `2026-08-04-pay-rails-and-psp-socket` (D-S-10, #769): orchestrator ≠ acquirer; Doctrine 5 no third-party connectivity lib in money path; `socket.psp-partners` is commercial Class X |
+| MID         | **SimpleWebAuthn**                                                                                                                                    | Passkeys / step-up      | N                    | After D-S-11 as needed                                                                                                                                                                               |
+| MID         | **Moov ACH/Wire/Fed libs**                                                                                                                            | US file rails for ramps | N + D-S-09           | Libs, not second book                                                                                                                                                                                |
+| NOW         | **Human P2P dispute desk**                                                                                                                            | Fiat disputes           | N/D                  | **Built / in flight** (not GF-pending): backstop removed, disputes.list, evidence, trigger requires human moderator — Kleros still KILL for Fiat                                                     |
+| **NOW (D)** | **Wallet RPC defects** (not “review later”)                                                                                                           | Custody path            | **D** (+ N residual) | **Critical:** EtherscanApi mainnet hardcode; PaymentHandler dual-broadcast; pre-EIP-155 signs; live mainnet USDT pinned — frozen by gate #763; **none fixed** per Denon 2026-08-05                   |
+| LATE        | DFNS / Turnkey-class                                                                                                                                  | MPC custody API         | D→N + X              | After review; adapter only                                                                                                                                                                           |
+| LATE        | Zod (or Valibot)                                                                                                                                      | Runtime edge validation | N                    | Honesty residual                                                                                                                                                                                     |
+| MID         | fast-check                                                                                                                                            | Money property tests    | N                    | Prior order-route Tier A                                                                                                                                                                             |
+| LATE        | Toxiproxy / Semgrep / analytics warehouse                                                                                                             | Ops/chaos               | N/D                  | When pain warrants                                                                                                                                                                                   |
+| S only      | CometBFT / Cosmos SDK / dYdX v4 pattern                                                                                                               | INTACHAIN refs          | **S**                | Not Nitro L1                                                                                                                                                                                         |
 
 ### 4.3 Explicit kills (do not reopen)
 
@@ -151,8 +151,8 @@ console.log('open', open.length, 'missing', miss.length);
 ### 4.4 Suggested agent start order (no Nitro pick list)
 
 1. **IN** residual on free paths (depth E2E prove, decimals, shell honesty, pay residual on `svc-pay` after handoff).
-2. **Safe EXT already decided:** RE2 hot paths; Gitleaks (landed).
-3. **Trial EXT with doctrine:** Hyperswitch behind port — never balances as SoT.
+2. **Safe EXT already decided:** ReDoS pure-JS linear matchers (or re2js pure-JS); Gitleaks (landed).
+3. **Pay residual:** commercial `socket.psp-partners` / Class X — **not** Hyperswitch (refused D-S-10 ADR #769).
 4. **LAW rows:** Denon D-S-\* first; agents implement from specs or refuse-closed thin.
 5. **X rows:** Nitro human only.
 
@@ -196,8 +196,26 @@ console.log('open', open.length, 'missing', miss.length);
 
 ## 8 · One paragraph you can paste to Denon
 
-We finished an internet-leverage program: Phase A maps everything we already own (vendor shell as product UI, ledger as only book, all svc-*). That is **enough for residual craft now** and is **standing agent law** (agent entry files + protocol + PR checkbox + CI auto-load so it cannot vanish). Phase B is full-scope: every open tracker row has a named path (IN/EXT/GF/LAW/S/X/KILL), plus a shortlist of smart externals (RE2, Gitleaks, Hyperswitch-as-adapter, SimpleWebAuthn, Moov ACH libs, human dispute desk, custody review-first) and hard kills (second kit, second book, invent mids, Kleros for Fiat, Nitro L1). Partner brief + links: `docs/INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md` on tip. Please have your agent self-audit against doctrine and name leverage in D-S specs (kit + ledger + svc) so implementers cannot invent engines.
+We finished an internet-leverage program: Phase A maps everything we already own (vendor shell as product UI, ledger as only book, all svc-*). That is **enough for residual craft now** and is **standing agent law** (agent entry files + protocol + PR checkbox + CI auto-load so it cannot vanish). Phase B is full-scope: every open tracker row has a named path (IN/EXT/GF/LAW/S/X/KILL), plus a shortlist of smart externals (ReDoS pure-JS matchers, Gitleaks, SimpleWebAuthn, Moov ACH libs; human dispute desk built/in-flight; wallet RPC **critical** not mid; **Hyperswitch refused** per D-S-10 ADR) and hard kills (second kit, second book, invent mids, Kleros for Fiat, Nitro L1). Partner brief + links: `docs/INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md` on tip. Please have your agent self-audit against doctrine and name leverage in D-S specs (kit + ledger + svc) so implementers cannot invent engines.
 
 ---
 
-_Board-Delta: Partner brief for internet leverage Phase A+B — Denon/agent full context without compromise_
+---
+
+## 9 · Alignment after Denon review (2026-08-05) — no contradiction with law
+
+| Denon point                   | Decision (locked)                                                                                                                                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase A core + kill list      | **Agree** — remains law                                                                                                                                                      |
+| Enforcement + honest CI limit | **Agree**                                                                                                                                                                    |
+| **Hyperswitch MID**           | **Remove / KILL** — already refused D-S-10 ADR `docs/adr/2026-08-04-pay-rails-and-psp-socket.md` (#769). Brief was wrong; ADR wins. Not reopened.                            |
+| **RE2 NOW**                   | **Refine:** require ReDoS-safe linear matching; **prefer pure-JS** (in-tree / no native addon on money-adjacent services). Native `node-re2` declined for bank-details cost. |
+| Dual-edit files only          | **Necessary not sufficient** — add **per-branch test database isolation** (shared Postgres + migrate-on-startup contamination)                                               |
+| Depth E2E residual            | **Closed / proven** (Denon measured fleet rebuild) — map was behind                                                                                                          |
+| Human dispute desk GF         | **Behind** — built / in flight under human-moderator ruling                                                                                                                  |
+| Wallet RPC MID review         | **Behind** — **NOW critical defects**, #763 freeze, unfixed mainnet dual-broadcast class bugs                                                                                |
+| D-S leverage naming           | **Agree** — Denon reports D-S board **18 done · 0 partial · 0 blank**; e.g. D-S-01 binds futures to existing `prices.ts` vocabulary                                          |
+
+**Doctrine note Denon corrected:** Hyperswitch objection is **not** primarily §0.6 dual-book (no balance columns). It is **orchestrator ≠ acquirer**, **Doctrine 5 / no third-party connectivity library in money path**, and **non-extractable connectors**.
+
+_Board-Delta: Partner brief aligned to Denon reply — Hyperswitch refused; ReDoS pure-JS; test-DB isolation; residual status catch-up_
