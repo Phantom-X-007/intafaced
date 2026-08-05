@@ -22,6 +22,8 @@ import {
   spineItemCount,
   listLessonSlugs,
   playbookCount,
+  workbookCount,
+  lessonCount,
 } from './catalog.js';
 
 /**
@@ -204,5 +206,11 @@ describe('curriculum catalog', () => {
     expect(lessons).toEqual(listCurriculumSlugsByKind('lesson'));
     expect(playbookCount()).toBe(countCurriculumByKind('playbook'));
     expect(playbookCount()).toBeGreaterThan(0);
+  });
+
+  it('L3 workbookCount + lessonCount match inventory', () => {
+    const inv = inventoryCurriculum();
+    expect(workbookCount()).toBe(inv.byKind.workbook);
+    expect(lessonCount()).toBe(inv.byKind.lesson);
   });
 });

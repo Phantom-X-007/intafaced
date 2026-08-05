@@ -260,4 +260,9 @@ export class MemoryResidencyDesk {
   openApplicationCount(userId: string): number {
     return this.openForUser(userId).length;
   }
+
+  /** L3 — alias of rejectedCount. */
+  rejectedApplicationCount(): number {
+    return this.rejectedCount();
+  }
 }

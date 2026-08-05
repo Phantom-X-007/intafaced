@@ -305,3 +305,13 @@ export function countMoneyMetrics(): number {
 export function hasNonMoneyMetrics(): boolean {
   return listNonMoneyMetricIds().length > 0;
 }
+
+/** L3 — count of money/amount metrics in v0 catalog. */
+export function moneyMetricCount(): number {
+  return listMoneyMetricIds().length;
+}
+
+/** L3 — count of non-money metrics in v0 catalog. */
+export function nonMoneyMetricCount(): number {
+  return listNonMoneyMetricIds().length;
+}
