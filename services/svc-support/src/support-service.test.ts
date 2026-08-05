@@ -54,8 +54,11 @@ describe('SupportService Stage-1', () => {
     expect(resolved.status).toBe('resolved');
   });
 
-  it('lists empty KB in Stage-1', async () => {
+  it('lists Stage-2 platform KB spine (i18n keys only)', async () => {
     const svc = new SupportService();
-    expect(await svc.listKb()).toEqual([]);
+    const kb = await svc.listKb();
+    expect(kb.length).toBeGreaterThanOrEqual(5);
+    expect(kb.every((a) => a.titleKey.startsWith('support.kb.'))).toBe(true);
+    expect(kb[0]).not.toHaveProperty('balance');
   });
 });

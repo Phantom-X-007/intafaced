@@ -8,6 +8,7 @@ import type {
   SupportTicket,
   SupportTicketStatus,
 } from '@intafaced/contracts';
+import { listPlatformKb } from './kb-catalog.js';
 import { withSupportSpan } from './tracing.js';
 
 export class SupportError extends Error {
@@ -105,8 +106,8 @@ export class SupportService implements SupportContract {
   }
 
   async listKb(): Promise<SupportKbArticle[]> {
-    // Stage-1: empty KB product catalog. Stage-2 adds i18n-keyed articles.
-    return [];
+    // Stage-2: platform i18n-keyed spine (TRK-ops.support). No vendor names, no money fields.
+    return [...listPlatformKb()];
   }
 
   listComments(ticketId: string): SupportComment[] {
