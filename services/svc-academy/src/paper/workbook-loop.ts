@@ -649,3 +649,38 @@ export function drillStepsExportHeader(): string {
 export function drillStepsExportText(run: DrillRun): string {
   return [drillStepsExportHeader(), ...completedStepsExportLines(run), ...remainingStepsExportLines(run)].join('\n');
 }
+
+/**
+ * L3 — parse "stepId,state". Invalid → null.
+ */
+export function parseDrillStepsExportLine(line: string): { readonly stepId: string; readonly state: 'remaining' | 'completed' } | null {
+  const t = line.trim();
+  if (!t || t === drillStepsExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 2) return null;
+  const stepId = parts[0]!.trim();
+  const state = parts[1]!.trim();
+  if (!stepId) return null;
+  if (state !== 'remaining' && state !== 'completed') return null;
+  return { stepId, state };
+}
+
+/** L3 — count valid drill steps export data lines. */
+export function countDrillStepsExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => parseDrillStepsExportLine(l))
+    .filter((r) => r !== null).length;
+}
+
+/** L3 — true when drill steps export has header. */
+export function drillStepsExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === drillStepsExportHeader();
+}
+
+/** L3 — round-trip drill steps export (completed+remaining+header). */
+export function drillStepsExportRoundTripOk(run: DrillRun): boolean {
+  const expected = 1 + completedStepCount(run) + remainingStepCount(run);
+  return expected === 1 + countDrillStepsExportDataLines(drillStepsExportText(run));
+}

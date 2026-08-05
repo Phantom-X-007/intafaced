@@ -74,6 +74,10 @@ import {
   completedStepsExportLines,
   drillStepsExportHeader,
   drillStepsExportText,
+  parseDrillStepsExportLine,
+  countDrillStepsExportDataLines,
+  drillStepsExportHasHeader,
+  drillStepsExportRoundTripOk,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -458,5 +462,20 @@ describe('paper Stage-2 workbook loop', () => {
     expect(remainingStepsExportLines(started.run).length).toBe(started.run.steps.length);
     expect(completedStepsExportLines(started.run)).toEqual([]);
     expect(drillStepsExportText(started.run)).toContain('remaining');
+  });
+
+  it('L3 wave42 drill steps export parse + round-trip', () => {
+    expect(parseDrillStepsExportLine('stepId,state')).toBeNull();
+    expect(parseDrillStepsExportLine('s1,remaining')).toEqual({ stepId: 's1', state: 'remaining' });
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w42', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    const text = drillStepsExportText(started.run);
+    expect(drillStepsExportHasHeader(text)).toBe(true);
+    expect(countDrillStepsExportDataLines(text)).toBe(started.run.steps.length);
+    expect(drillStepsExportRoundTripOk(started.run)).toBe(true);
   });
 });

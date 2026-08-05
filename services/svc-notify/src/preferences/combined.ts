@@ -605,3 +605,37 @@ export function planExportText(plan: readonly DeliveryDecision[]): string {
 export function planExportLineCount(plan: readonly DeliveryDecision[]): number {
   return 1 + plan.length;
 }
+
+/**
+ * L3 — parse "channel,action". Invalid → null.
+ * inapp_only rows use channel inapp.
+ */
+export function parsePlanExportLine(line: string): { readonly channel: string; readonly action: string } | null {
+  const t = line.trim();
+  if (!t || t === planExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 2) return null;
+  const channel = parts[0]!.trim();
+  const action = parts[1]!.trim();
+  if (!channel || !action) return null;
+  return { channel, action };
+}
+
+/** L3 — count valid plan export data lines. */
+export function countPlanExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => parsePlanExportLine(l))
+    .filter((r) => r !== null).length;
+}
+
+/** L3 — true when plan export has header. */
+export function planExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === planExportHeader();
+}
+
+/** L3 — round-trip plan export line count. */
+export function planExportRoundTripOk(plan: readonly DeliveryDecision[]): boolean {
+  return planExportLineCount(plan) === 1 + countPlanExportDataLines(planExportText(plan));
+}

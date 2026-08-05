@@ -515,4 +515,18 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.programmeExportText()).toContain(u);
     expect(desk.programmeExportLineCount()).toBe(2);
   });
+
+  it('L3 wave42 programme export parse + round-trip', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    expect(desk.parseProgrammeExportLine('userId,status')).toBeNull();
+    expect(desk.parseProgrammeExportLine('bad')).toBeNull();
+    expect(desk.programmeExportHasHeader(desk.programmeExportText())).toBe(true);
+    expect(desk.programmeExportRoundTripOk()).toBe(true);
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    desk.appoint({ userId: u, appointedBy: op });
+    expect(desk.parseProgrammeExportLine(`${u},active`)).toEqual({ userId: u, status: 'active' });
+    expect(desk.countProgrammeExportDataLines(desk.programmeExportText())).toBe(1);
+    expect(desk.programmeExportRoundTripOk()).toBe(true);
+  });
 });

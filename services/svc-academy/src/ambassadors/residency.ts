@@ -712,4 +712,39 @@ export class MemoryResidencyDesk {
   residencyExportLineCount(): number {
     return 1 + this.applicationCount();
   }
+
+  /**
+   * L3 — parse "id,status,cohortSlug". Invalid → null.
+   */
+  parseResidencyExportLine(line: string): { readonly id: string; readonly status: ResidencyStatus; readonly cohortSlug: string } | null {
+    const t = line.trim();
+    if (!t || t === this.residencyExportHeader()) return null;
+    const parts = t.split(',');
+    if (parts.length !== 3) return null;
+    const id = parts[0]!.trim();
+    const status = parts[1]!.trim();
+    const cohortSlug = parts[2]!.trim();
+    if (!id || !cohortSlug) return null;
+    if (status !== 'applied' && status !== 'accepted' && status !== 'rejected' && status !== 'withdrawn') return null;
+    return { id, status, cohortSlug };
+  }
+
+  /** L3 — count valid residency export data lines. */
+  countResidencyExportDataLines(text: string): number {
+    return text
+      .split('\n')
+      .map((l) => this.parseResidencyExportLine(l))
+      .filter((r) => r !== null).length;
+  }
+
+  /** L3 — true when export text has correct header first line. */
+  residencyExportHasHeader(text: string): boolean {
+    const first = text.split('\n')[0]?.trim() ?? '';
+    return first === this.residencyExportHeader();
+  }
+
+  /** L3 — round-trip line count check. */
+  residencyExportRoundTripOk(): boolean {
+    return this.residencyExportLineCount() === 1 + this.countResidencyExportDataLines(this.residencyExportText());
+  }
 }

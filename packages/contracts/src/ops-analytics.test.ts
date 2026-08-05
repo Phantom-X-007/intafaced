@@ -94,6 +94,10 @@ import {
   metricsExportHeader,
   metricsExportText,
   metricsExportLineCount,
+  parseMetricsExportLine,
+  countMetricsExportDataLines,
+  metricsExportHasHeader,
+  metricsExportRoundTripOk,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -429,5 +433,17 @@ describe('L3 wave41 metrics export', () => {
     expect(metricsExportLines().length).toBe(analyticsMetricCatalogSize());
     expect(metricsExportLineCount()).toBe(1 + analyticsMetricCatalogSize());
     expect(metricsExportText()).toContain('id,kind,money');
+  });
+});
+
+describe('L3 wave42 metrics export parse + round-trip', () => {
+  it('parse + header + round-trip', () => {
+    expect(parseMetricsExportLine('id,kind,money')).toBeNull();
+    const line = metricsExportLines()[0]!;
+    expect(parseMetricsExportLine(line)).not.toBeNull();
+    const text = metricsExportText();
+    expect(metricsExportHasHeader(text)).toBe(true);
+    expect(countMetricsExportDataLines(text)).toBe(analyticsMetricCatalogSize());
+    expect(metricsExportRoundTripOk()).toBe(true);
   });
 });

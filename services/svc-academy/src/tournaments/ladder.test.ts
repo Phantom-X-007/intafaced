@@ -100,6 +100,10 @@ import {
   standingsExportHeader,
   standingsExportText,
   standingsExportLineCount,
+  parseStandingsExportLine,
+  countStandingsExportDataLines,
+  standingsExportHasHeader,
+  standingsExportRoundTripOk,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -457,5 +461,16 @@ describe('L3 standings board helpers', () => {
     expect(standingsExportLines(rows)[0]).toBe('1,b,30');
     expect(standingsExportText(rows)).toContain('userId');
     expect(standingsExportLineCount(rows)).toBe(3);
+  });
+
+  it('L3 wave42 standings export parse + round-trip', () => {
+    expect(parseStandingsExportLine('rank,userId,score')).toBeNull();
+    expect(parseStandingsExportLine('1,a,10')).toEqual({ rank: 1, userId: 'a', score: 10 });
+    expect(standingsExportRoundTripOk([])).toBe(true);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    const text = standingsExportText(rows);
+    expect(standingsExportHasHeader(text)).toBe(true);
+    expect(countStandingsExportDataLines(text)).toBe(2);
+    expect(standingsExportRoundTripOk(rows)).toBe(true);
   });
 });
