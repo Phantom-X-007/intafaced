@@ -5,7 +5,8 @@ import {
   countCommissionRowsByHop,
   decimalMul,
   DEFAULT_ACCRUAL_TIERS,
-  listCommissionBeneficiaryIds, maxCommissionHop,
+  listCommissionBeneficiaryIds,
+  maxCommissionHop,
   summarizeCommissionRows,
 } from './commission.js';
 

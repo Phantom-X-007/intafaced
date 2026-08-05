@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { applyBulkScorePatches, isBulkScoreOk, summarizeBulkScoreResult, validateBulkScoreWrite, bulkAcceptedCount, bulkRefuseReason } from './bulk-score.js';
+import {
+  applyBulkScorePatches,
+  isBulkScoreOk,
+  summarizeBulkScoreResult,
+  validateBulkScoreWrite,
+  bulkAcceptedCount,
+  bulkRefuseReason,
+} from './bulk-score.js';
 
 describe('tournament L3 bulk score (no prizes)', () => {
   it('refuses non-live season and empty patches', () => {
@@ -52,7 +59,10 @@ describe('tournament L3 bulk score (no prizes)', () => {
     expect(bulkRefuseReason(bad)).not.toBeNull();
     const ok = validateBulkScoreWrite({
       seasonStatus: 'live',
-      patches: [{ userId: 'a', score: 1 }, { userId: 'b', score: 2 }],
+      patches: [
+        { userId: 'a', score: 1 },
+        { userId: 'b', score: 2 },
+      ],
     });
     if (ok.status === 'ok') {
       expect(bulkAcceptedCount(ok)).toBe(2);

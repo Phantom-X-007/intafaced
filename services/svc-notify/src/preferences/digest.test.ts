@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assertMayDigest,
+import {
+  assertMayDigest,
   DEFAULT_DIGEST_PREFS,
   DigestError,
   digestWindowMs,
@@ -8,7 +9,9 @@ import { assertMayDigest,
   mayEnterDigest,
   MemoryDigestStore,
   shouldSendImmediate,
-  applyDigestCadence, holdingDigestCadences } from './digest.js';
+  applyDigestCadence,
+  holdingDigestCadences,
+} from './digest.js';
 
 describe('notify L3 digest cadence (non-critical only)', () => {
   it('defaults off → everything immediate', () => {

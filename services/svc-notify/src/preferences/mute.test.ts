@@ -6,7 +6,8 @@ import {
   applyMuteToggle,
   countMutedChannels,
   isChannelMuted,
-  allMuteableMuted, listMutedChannels,
+  allMuteableMuted,
+  listMutedChannels,
 } from './mute.js';
 
 describe('isChannelMuted — critical never silenced', () => {
