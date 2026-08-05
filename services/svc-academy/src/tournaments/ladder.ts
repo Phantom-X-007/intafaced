@@ -113,3 +113,12 @@ export function standingOfUser(rows: readonly StandingRecord[], userId: string):
   if (!id) return null;
   return rankStandings(rows).find((r) => r.userId === id) ?? null;
 }
+
+/**
+ * L3 — top-N ranked standings. n≤0 → empty (never invent a podium).
+ */
+export function topNStandings(rows: readonly StandingRecord[], n: number): readonly RankedStanding[] {
+  const limit = Math.floor(n);
+  if (limit <= 0) return [];
+  return rankStandings(rows).slice(0, limit);
+}

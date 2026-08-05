@@ -183,4 +183,13 @@ export class MemoryAmbassadorProgramme {
     }
     return { active, frozen, total: active + frozen };
   }
+
+  /**
+   * L3 — active ambassador user ids (sorted). Empty store → empty list.
+   */
+  listActiveUserIds(): readonly string[] {
+    return this.list('active')
+      .map((r) => r.userId)
+      .sort();
+  }
 }

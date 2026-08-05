@@ -101,3 +101,8 @@ export function summarizeBulkScoreResult(result: BulkScoreResult): BulkScoreSumm
   }
   return { accepted: 0, refused: true, reason: result.reason };
 }
+
+/** L3 — pure ok check for bulk gate (no invent patches). */
+export function isBulkScoreOk(result: BulkScoreResult): result is BulkScoreOk {
+  return result.status === 'ok';
+}

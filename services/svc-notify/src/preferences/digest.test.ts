@@ -5,6 +5,7 @@ import {
   DigestError,
   digestWindowMs,
   isDigestFlushDue,
+  isDigestHolding,
   mayEnterDigest,
   MemoryDigestStore,
   shouldSendImmediate,
@@ -65,5 +66,10 @@ describe('notify L3 digest cadence (non-critical only)', () => {
     expect(store.get('u1').cadence).toBe('off');
     expect(store.setCadence('u1', 'daily').cadence).toBe('daily');
     expect(store.get('u1').cadence).toBe('daily');
+  });
+
+  it('L3 isDigestHolding is false for off', () => {
+    expect(isDigestHolding('off')).toBe(false);
+    expect(isDigestHolding('hourly')).toBe(true);
   });
 });

@@ -46,4 +46,12 @@ describe('affiliates L3 freeze store (non-pay)', () => {
     store.freeze({ beneficiaryId: 'u-ref', frozenBy: 'op', reason: 'policy hold' });
     expect(store.freezeCount()).toBe(1);
   });
+
+  it('L3 listFrozenBeneficiaryIds sorted without invent', () => {
+    const store = new MemoryFreezeStore();
+    expect(store.listFrozenBeneficiaryIds()).toEqual([]);
+    store.freeze({ beneficiaryId: 'z-ref', frozenBy: 'op', reason: 'policy hold' });
+    store.freeze({ beneficiaryId: 'a-ref', frozenBy: 'op', reason: 'policy hold' });
+    expect(store.listFrozenBeneficiaryIds()).toEqual(['a-ref', 'z-ref']);
+  });
 });

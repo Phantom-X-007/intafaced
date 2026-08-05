@@ -87,6 +87,13 @@ export function isDigestFlushDue(input: { cadence: DigestCadence; lastFlushAt: D
   return now - input.lastFlushAt.getTime() >= window;
 }
 
+/**
+ * L3 — whether cadence holds non-critical messages. off → false (no invent hold).
+ */
+export function isDigestHolding(cadence: DigestCadence): boolean {
+  return cadence !== 'off';
+}
+
 /** In-memory digest prefs for tests / Stage process store. */
 export class MemoryDigestStore {
   private readonly byUser = new Map<string, DigestCadence>();

@@ -51,6 +51,13 @@ export class MemoryFreezeStore {
     return this.byId.size;
   }
 
+  /**
+   * L3 — frozen beneficiary ids sorted. Empty store → empty list.
+   */
+  listFrozenBeneficiaryIds(): readonly string[] {
+    return [...this.byId.keys()].sort();
+  }
+
   list(): readonly FreezeRecord[] {
     return [...this.byId.values()].sort((a, b) => a.frozenAt.getTime() - b.frozenAt.getTime());
   }
