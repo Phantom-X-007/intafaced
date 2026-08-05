@@ -175,4 +175,65 @@ export class MemoryCertStore {
   listCerts(userId: string): CertGrantRecord[] {
     return [...this.grants.values()].filter((g) => g.userId === userId);
   }
+
+  /** L3 progress snapshot for one cert — missing items named, no invent grant. */
+  progressOf(userId: string, certId: string): ProgressReport {
+    return progressReport({
+      userId,
+      cert: this.certs.get(certId) ?? null,
+      completedSlugs: this.completedSet(userId),
+      existingGrant: this.grants.get(certIdempotencyKey(userId, certId)) ?? null,
+    });
+  }
+}
+
+/**
+ * Stage-2 L3 — pure progress report (no XP, no money).
+ * completed/required are counts; ratio is decimal string 0…1 (not a percent invent UI).
+ */
+export type ProgressReport = {
+  readonly userId: string;
+  readonly certId: string;
+  readonly title: string;
+  readonly requiredCount: number;
+  readonly completedCount: number;
+  /** Decimal string fraction complete, e.g. "0.5000". Empty cert → refuse earlier. */
+  readonly ratio: string;
+  readonly missingItemSlugs: readonly string[];
+  readonly complete: boolean;
+  readonly granted: boolean;
+  readonly grantIdempotencyKey: string | null;
+};
+
+export function progressReport(input: {
+  userId: string;
+  cert: CertDefinition | null;
+  completedSlugs: ReadonlySet<string>;
+  existingGrant: CertGrantRecord | null;
+}): ProgressReport {
+  if (!input.cert) {
+    throw new CertError('Unknown certification', 'academy.cert_not_found');
+  }
+  if (input.cert.requiredItemSlugs.length === 0) {
+    throw new CertError('Cert definition has no required items', 'academy.cert_invalid');
+  }
+  const required = input.cert.requiredItemSlugs;
+  const missing = required.filter((s) => !input.completedSlugs.has(s));
+  const completedCount = required.length - missing.length;
+  const requiredCount = required.length;
+  // Fixed 4dp ratio string — progress UI key, not money.
+  const ratio = (completedCount / requiredCount).toFixed(4);
+  const complete = missing.length === 0;
+  return {
+    userId: input.userId,
+    certId: input.cert.id,
+    title: input.cert.title,
+    requiredCount,
+    completedCount,
+    ratio,
+    missingItemSlugs: missing,
+    complete,
+    granted: input.existingGrant !== null,
+    grantIdempotencyKey: input.existingGrant?.idempotencyKey ?? null,
+  };
 }
