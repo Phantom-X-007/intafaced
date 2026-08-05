@@ -10,14 +10,14 @@
 
 ## 0 · What Nitro wanted (intent)
 
-| #      | Intent                                                                                     | What we did                                                                                     |
-| ------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| **A1** | Check that **already-owned** leverage is what agents should use for residual craft **now** | **Phase A** audit of in-repo assets (kit + services + ledger)                                   |
-| **A2** | Stop agents **missing** that leverage and vibe-coding rebuilds                             | **Standing law** + agent auto-load + PR checklist + CI scan so cold agents cannot drop the duty |
-| **A3** | Stop **drift** (agents forgetting shell/ledger/svc ownership)                              | Law home + AGENTS/CLAUDE/protocol chain + gates that already ban second book / invent money     |
-| **B1** | **Full-scope** future residual: for every open product row, what path to use               | **Full-horizon map** — 89/89 open tracker IDs as **named rows** (not thrift “top 5 only”)       |
-| **B2** | Smart **new external** leverage where Phase A leaves real holes                            | **Phase B research** (shortlist + kills + doctrine filters)                                     |
-| **P**  | Pack for **partner agent** with full context, no compromise                                | **This brief** + links below                                                                    |
+| #      | Intent                                                                                     | What we did                                                                                                         |
+| ------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| **A1** | Check that **already-owned** leverage is what agents should use for residual craft **now** | **Phase A** audit of in-repo assets (kit + services + ledger)                                                       |
+| **A2** | Stop agents **missing** that leverage and vibe-coding rebuilds                             | **Standing law** + agent auto-load + PR checklist + CI scan so cold agents cannot drop the duty                     |
+| **A3** | Stop **drift** (agents forgetting shell/ledger/svc ownership)                              | Law home + AGENTS.md / agent-instruction entry / protocol chain + gates that already ban second book / invent money |
+| **B1** | **Full-scope** future residual: for every open product row, what path to use               | **Full-horizon map** — 89/89 open tracker IDs as **named rows** (not thrift “top 5 only”)                           |
+| **B2** | Smart **new external** leverage where Phase A leaves real holes                            | **Phase B research** (shortlist + kills + doctrine filters)                                                         |
+| **P**  | Pack for **partner agent** with full context, no compromise                                | **This brief** + links below                                                                                        |
 
 ---
 
@@ -77,7 +77,7 @@ Agents should not wait for a new kit or new ledger. Default:
 | Mechanism                                                       | What it does                                                         |
 | --------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `docs/INTERNET-LEVERAGE-LAW.md`                                 | Standing rule: prefer IN; PR names leverage                          |
-| `AGENTS.md` + `CLAUDE.md`                                       | Cold start loads leverage duty                                       |
+| `AGENTS.md` + agent-instruction entry file                      | Cold start loads leverage duty                                       |
 | `AGENT_PROTOCOL.md`                                             | Hard bans: second SPA, second book, invent prices, skip leverage     |
 | PR template checkbox                                            | Leverage named on every PR                                           |
 | `tooling/ci/agent-autoload-scan.mjs` (in `pnpm gates` / verify) | **CI fails** if leverage law is stripped from auto-load chain        |
@@ -196,7 +196,7 @@ console.log('open', open.length, 'missing', miss.length);
 
 ## 8 · One paragraph you can paste to Denon
 
-We finished an internet-leverage program: Phase A maps everything we already own (vendor shell as product UI, ledger as only book, all svc-*). That is **enough for residual craft now** and is **standing agent law** (AGENTS/CLAUDE/protocol + PR checkbox + CI auto-load so it cannot vanish). Phase B is full-scope: every open tracker row has a named path (IN/EXT/GF/LAW/S/X/KILL), plus a shortlist of smart externals (RE2, Gitleaks, Hyperswitch-as-adapter, SimpleWebAuthn, Moov ACH libs, human dispute desk, custody review-first) and hard kills (second kit, second book, invent mids, Kleros for Fiat, Nitro L1). Partner brief + links: `docs/INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md` on tip. Please have your agent self-audit against doctrine and name leverage in D-S specs (kit + ledger + svc) so implementers cannot invent engines.
+We finished an internet-leverage program: Phase A maps everything we already own (vendor shell as product UI, ledger as only book, all svc-*). That is **enough for residual craft now** and is **standing agent law** (AGENTS.md + agent-instruction entry + protocol + PR checkbox + CI auto-load so it cannot vanish). Phase B is full-scope: every open tracker row has a named path (IN/EXT/GF/LAW/S/X/KILL), plus a shortlist of smart externals (RE2, Gitleaks, Hyperswitch-as-adapter, SimpleWebAuthn, Moov ACH libs, human dispute desk, custody review-first) and hard kills (second kit, second book, invent mids, Kleros for Fiat, Nitro L1). Partner brief + links: `docs/INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md` on tip. Please have your agent self-audit against doctrine and name leverage in D-S specs (kit + ledger + svc) so implementers cannot invent engines.
 
 ---
 
