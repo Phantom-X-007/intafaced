@@ -32,6 +32,10 @@ import {
   planInappSendChannels,
   planSendsInapp,
   planOutOfAppSends,
+  planOnlySendsOrEmpty,
+  planHoldChannelsSorted,
+  planSkipChannelsSorted,
+  planActionHistogram,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -202,5 +206,20 @@ describe('notify L3 combined mute + digest', () => {
     expect(planInappSendChannels(plan)).toEqual(['inapp']);
     expect(planOutOfAppSends(plan)).toContain('email');
     expect(planIsAllDeferred(plan)).toBe(false);
+  });
+
+  it('L3 wave28 only-sends + sorted hold/skip + histogram', () => {
+    expect(planOnlySendsOrEmpty([])).toBe(true);
+    expect(planHoldChannelsSorted([])).toEqual([]);
+    expect(planSkipChannelsSorted([])).toEqual([]);
+    expect(planActionHistogram([])).toEqual({ send_now: 0, hold_digest: 0, skip_muted: 0 });
+    const muted = applyMuteToggle(DEFAULT_COMBINED_PREFS.mute, { channel: 'email', muted: true });
+    const digest = applyDigestCadence(DEFAULT_COMBINED_PREFS.digest, 'hourly');
+    const plan = planFanoutDelivery({ mute: muted, digest }, ['inapp', 'email', 'sms'], 'info');
+    expect(planActionHistogram(plan).send_now + planActionHistogram(plan).hold_digest + planActionHistogram(plan).skip_muted).toBe(
+      plan.length,
+    );
+    expect([...planHoldChannelsSorted(plan)]).toEqual([...planHoldChannelsSorted(plan)].sort());
+    expect([...planSkipChannelsSorted(plan)]).toEqual([...planSkipChannelsSorted(plan)].sort());
   });
 });

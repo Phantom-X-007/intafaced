@@ -298,4 +298,23 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.hasSingleFrozen()).toBe(true);
     expect(desk.inactiveProgrammeCount()).toBe(1);
   });
+
+  it('L3 wave28 first frozen + majority + last active', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.firstFrozenUserId()).toBeNull();
+    expect(desk.majorityActive()).toBe(false);
+    expect(desk.majorityFrozen()).toBe(false);
+    expect(desk.lastActiveUserId()).toBeNull();
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.appoint({ userId: u2, appointedBy: op });
+    expect(desk.majorityActive()).toBe(true);
+    expect(desk.lastActiveUserId()).toBe(u2);
+    desk.freeze({ userId: u1, frozenBy: op, reason: 'hold' });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    expect(desk.majorityFrozen()).toBe(true);
+    expect(desk.firstFrozenUserId()).toBe(u1);
+  });
 });

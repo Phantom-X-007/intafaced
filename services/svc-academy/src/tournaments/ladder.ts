@@ -425,3 +425,40 @@ export function hasUniqueLeader(rows: readonly StandingRecord[]): boolean {
   if (max === null) return false;
   return rows.filter((r) => r.score === max).length === 1;
 }
+
+/**
+ * L3 — gap between first and second score. Need ≥2 → null otherwise.
+ */
+export function firstSecondScoreGap(rows: readonly StandingRecord[]): number | null {
+  const ranked = rankStandings(rows);
+  if (ranked.length < 2) return null;
+  return ranked[0]!.score - ranked[1]!.score;
+}
+
+/**
+ * L3 — user ids tied at max score (sorted). Empty → [].
+ */
+export function tiedForLeadUserIds(rows: readonly StandingRecord[]): readonly string[] {
+  const max = maxScore(rows);
+  if (max === null) return [];
+  return rows
+    .filter((r) => r.score === max)
+    .map((r) => r.userId)
+    .sort();
+}
+
+/** L3 — true when score range is zero (all equal). Empty → false. */
+export function allScoresEqual(rows: readonly StandingRecord[]): boolean {
+  const spread = scoreSpread(rows);
+  return spread !== null && spread === 0;
+}
+
+/**
+ * L3 — rank depth needed to cover top score mass of at least k users. Empty → null.
+ */
+export function minRankForTopK(rows: readonly StandingRecord[], k: number): number | null {
+  if (!Number.isFinite(k) || k < 1) return null;
+  const ranked = rankStandings(rows);
+  if (ranked.length < Math.floor(k)) return null;
+  return ranked[Math.floor(k) - 1]!.rank;
+}

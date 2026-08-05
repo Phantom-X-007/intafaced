@@ -37,6 +37,10 @@ import {
   foundationsItemCount,
   marketsItemCount,
   builderItemCount,
+  sovereignItemCount,
+  hasFoundationsPath,
+  hasMarketsPath,
+  hasBuilderPath,
 } from './catalog.js';
 
 /**
@@ -250,5 +254,12 @@ describe('curriculum catalog', () => {
     expect(foundationsItemCount()).toBe(countCurriculumByPath('foundations'));
     expect(marketsItemCount()).toBe(countCurriculumByPath('markets'));
     expect(builderItemCount()).toBe(countCurriculumByPath('builder'));
+  });
+
+  it('L3 wave28 sovereign count + path presence', () => {
+    expect(sovereignItemCount()).toBe(countCurriculumByPath('sovereign'));
+    expect(hasFoundationsPath()).toBe(hasCurriculumPath('foundations'));
+    expect(hasMarketsPath()).toBe(hasCurriculumPath('markets'));
+    expect(hasBuilderPath()).toBe(hasCurriculumPath('builder'));
   });
 });

@@ -364,4 +364,29 @@ export class MemoryResidencyDesk {
   decidedApplicationCount(): number {
     return this.acceptedCount() + this.rejectedCount() + this.withdrawnCount();
   }
+
+  /** L3 — true when any application is withdrawn. Empty → false. */
+  hasWithdrawnApplication(): boolean {
+    return this.withdrawnCount() > 0;
+  }
+
+  /**
+   * L3 — decided/total as fixed 4dp. Empty → null.
+   */
+  decidedApplicationRatio(): string | null {
+    const total = this.rows.size;
+    if (total === 0) return null;
+    return (this.decidedApplicationCount() / total).toFixed(4);
+  }
+
+  /** L3 — true when desk has only applied (no decisions yet). Empty → false. */
+  isAllOpen(): boolean {
+    return this.rows.size > 0 && this.openCount() === this.rows.size;
+  }
+
+  /** L3 — first open application id (sorted). None → null. */
+  firstOpenApplicationId(): string | null {
+    const ids = this.openApplicationIds();
+    return ids[0] ?? null;
+  }
 }

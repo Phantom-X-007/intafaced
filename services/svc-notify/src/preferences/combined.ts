@@ -241,3 +241,31 @@ export function planSendsInapp(plan: readonly DeliveryDecision[]): boolean {
 export function planOutOfAppSends(plan: readonly DeliveryDecision[]): readonly MuteableChannel[] {
   return channelsToSendNow(plan).filter((c): c is MuteableChannel => c !== 'inapp');
 }
+
+/** L3 — true when plan has zero decisions that are not send_now. Empty → false. */
+export function planOnlySendsOrEmpty(plan: readonly DeliveryDecision[]): boolean {
+  return plan.length === 0 || planIsAllSendNow(plan);
+}
+
+/** L3 — hold channels sorted for stable UI. Empty → []. */
+export function planHoldChannelsSorted(plan: readonly DeliveryDecision[]): readonly MuteableChannel[] {
+  return [...channelsHeldForDigest(plan)].sort();
+}
+
+/** L3 — skip channels sorted. Empty → []. */
+export function planSkipChannelsSorted(plan: readonly DeliveryDecision[]): readonly MuteableChannel[] {
+  return [...channelsSkippedMuted(plan)].sort();
+}
+
+/** L3 — decision count by action. Empty zeros. */
+export function planActionHistogram(plan: readonly DeliveryDecision[]): {
+  readonly send_now: number;
+  readonly hold_digest: number;
+  readonly skip_muted: number;
+} {
+  return {
+    send_now: planSendCount(plan),
+    hold_digest: planHoldCount(plan),
+    skip_muted: planSkipCount(plan),
+  };
+}

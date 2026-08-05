@@ -48,6 +48,10 @@ import {
   isTiedForFirst,
   countAboveScore,
   hasUniqueLeader,
+  firstSecondScoreGap,
+  tiedForLeadUserIds,
+  allScoresEqual,
+  minRankForTopK,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -261,5 +265,19 @@ describe('L3 standings board helpers', () => {
     expect(countAboveScore(rows, 10)).toBe(2);
     const uniq = [row('a', 30, '2026-08-01T12:00:00Z'), row('b', 10, '2026-08-01T13:00:00Z')];
     expect(hasUniqueLeader(uniq)).toBe(true);
+  });
+
+  it('L3 wave28 score gap + ties + equal + minRank', () => {
+    expect(firstSecondScoreGap([])).toBeNull();
+    expect(tiedForLeadUserIds([])).toEqual([]);
+    expect(allScoresEqual([])).toBe(false);
+    expect(minRankForTopK([], 1)).toBeNull();
+    const rows = [row('a', 20, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 5, '2026-08-01T11:00:00Z')];
+    expect(firstSecondScoreGap(rows)).toBe(0);
+    expect(tiedForLeadUserIds(rows)).toEqual(['a', 'b']);
+    expect(allScoresEqual(rows)).toBe(false);
+    expect(minRankForTopK(rows, 2)).toBe(2);
+    const equal = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 10, '2026-08-01T13:00:00Z')];
+    expect(allScoresEqual(equal)).toBe(true);
   });
 });

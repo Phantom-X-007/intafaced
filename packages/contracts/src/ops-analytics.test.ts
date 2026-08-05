@@ -42,6 +42,10 @@ import {
   tradeSourceMetricCount,
   identitySourceMetricCount,
   singleSourceMetricRatio,
+  hasLedgerSourceMetrics,
+  hasTradeSourceMetrics,
+  hasIdentitySourceMetrics,
+  ledgerSourceShare,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -248,6 +252,17 @@ describe('L3 wave27 source counts + single-source ratio', () => {
     expect(tradeSourceMetricCount()).toBe(countMetricsUsingSource('trade'));
     expect(identitySourceMetricCount()).toBe(countMetricsUsingSource('identity'));
     const r = singleSourceMetricRatio();
+    expect(r).not.toBeNull();
+    expect(r).toMatch(/^\d+\.\d{4}$/);
+  });
+});
+
+describe('L3 wave28 source presence + ledger share', () => {
+  it('hasLedger/Trade/Identity + ledgerSourceShare', () => {
+    expect(typeof hasLedgerSourceMetrics()).toBe('boolean');
+    expect(typeof hasTradeSourceMetrics()).toBe('boolean');
+    expect(typeof hasIdentitySourceMetrics()).toBe('boolean');
+    const r = ledgerSourceShare();
     expect(r).not.toBeNull();
     expect(r).toMatch(/^\d+\.\d{4}$/);
   });

@@ -422,4 +422,26 @@ export class MemoryAmbassadorProgramme {
     const ids = this.listActiveUserIds();
     return ids[0] ?? null;
   }
+
+  /** L3 — first frozen user id (sorted). None → null. */
+  firstFrozenUserId(): string | null {
+    const ids = this.listFrozenUserIds();
+    return ids[0] ?? null;
+  }
+
+  /** L3 — true when active count exceeds frozen count. Empty → false. */
+  majorityActive(): boolean {
+    return this.activeCount() > this.frozenCount() && this.totalCount() > 0;
+  }
+
+  /** L3 — true when frozen count exceeds active count. Empty → false. */
+  majorityFrozen(): boolean {
+    return this.frozenCount() > this.activeCount() && this.totalCount() > 0;
+  }
+
+  /** L3 — last appointed active id (sorted last). None → null. */
+  lastActiveUserId(): string | null {
+    const ids = this.listActiveUserIds();
+    return ids.length ? ids[ids.length - 1]! : null;
+  }
 }

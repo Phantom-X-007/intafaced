@@ -293,3 +293,27 @@ export function drillWorkbookSlug(run: DrillRun): string {
 export function hasPartialProgress(run: DrillRun): boolean {
   return run.status === 'active' && completedStepCount(run) > 0 && remainingStepCount(run) > 0;
 }
+
+/** L3 — true when fill refs exist. */
+export function hasFillRefs(run: DrillRun): boolean {
+  return run.fillRefs.length > 0;
+}
+
+/** L3 — first remaining step id. None → null. */
+export function firstRemainingStepId(run: DrillRun): string | null {
+  const rem = remainingStepIds(run);
+  return rem[0] ?? null;
+}
+
+/** L3 — last remaining step id. None → null. */
+export function lastRemainingStepId(run: DrillRun): string | null {
+  const rem = remainingStepIds(run);
+  return rem.length ? rem[rem.length - 1]! : null;
+}
+
+/**
+ * L3 — progress ratio as number 0..1 from fixed string. Pure parse of drillProgress.
+ */
+export function drillCompletionRatioNumber(run: DrillRun): number {
+  return Number(drillProgress(run).ratio);
+}
