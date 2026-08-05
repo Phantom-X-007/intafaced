@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TournamentError } from './ladder.js';
-import { isScoreWritable, transitionSeason } from './season-lifecycle.js';
+import { TournamentError, type StandingRecord } from './ladder.js';
+import { freezeSeasonWithSnapshot, isScoreWritable, snapshotStandingsAtFreeze, transitionSeason } from './season-lifecycle.js';
 
 const base = {
   id: 's1',
@@ -10,6 +10,13 @@ const base = {
   startsAt: new Date('2026-08-01T00:00:00.000Z'),
   endsAt: null,
 };
+
+const row = (userId: string, score: number, t: string): StandingRecord => ({
+  seasonId: 's1',
+  userId,
+  score,
+  updatedAt: new Date(t),
+});
 
 describe('tournament Stage-2 season lifecycle (no prizes)', () => {
   it('scheduled → live → frozen → ended', () => {
@@ -31,5 +38,35 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
   it('ended is terminal', () => {
     const s = { ...base, status: 'ended' as const };
     expect(() => transitionSeason(s, 'live')).toThrow(TournamentError);
+  });
+
+  it('freeze snapshot ranks standings with no money fields', () => {
+    const live = { ...base, status: 'live' as const };
+    const rows = [
+      row('a', 10, '2026-08-01T12:00:00Z'),
+      row('b', 50, '2026-08-01T13:00:00Z'),
+      row('other-season', 99, '2026-08-01T10:00:00Z'),
+    ];
+    // foreign seasonId should be ignored by filter
+    rows[2] = { ...rows[2]!, seasonId: 'other' };
+    const snap = snapshotStandingsAtFreeze({
+      seasonId: 's1',
+      status: 'live',
+      rows,
+      frozenAt: new Date('2026-08-05T00:00:00.000Z'),
+    });
+    expect(snap.standings.map((r) => r.userId)).toEqual(['b', 'a']);
+    expect(snap.standings[0]).toMatchObject({ rank: 1, score: 50, userId: 'b' });
+    expect(snap).not.toHaveProperty('prize');
+    expect(snap).not.toHaveProperty('payout');
+    expect(() => snapshotStandingsAtFreeze({ seasonId: 's1', status: 'scheduled', rows: [] })).toThrow(TournamentError);
+  });
+
+  it('freezeSeasonWithSnapshot freezes + captures rank table', () => {
+    const live = { ...base, status: 'live' as const };
+    const { season, snapshot } = freezeSeasonWithSnapshot(live, [row('z', 1, '2026-08-01T00:00:00Z')]);
+    expect(season.status).toBe('frozen');
+    expect(snapshot.standings).toHaveLength(1);
+    expect(isScoreWritable(season.status)).toBe(false);
   });
 });

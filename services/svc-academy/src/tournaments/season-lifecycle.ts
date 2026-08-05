@@ -3,11 +3,12 @@
  *
  * Spec: prize pools = Class M (NOT here). This slice only advances season
  * status: scheduled → live → frozen → ended. Score writes still gated by
- * assertMayWriteScore (live only).
+ * assertMayWriteScore (live only). Freeze may capture an immutable ranked
+ * snapshot for operator audit — still zero money fields.
  */
 
-import type { SeasonRecord, SeasonStatus } from './ladder.js';
-import { TournamentError } from './ladder.js';
+import type { RankedStanding, SeasonRecord, SeasonStatus, StandingRecord } from './ladder.js';
+import { rankStandings, TournamentError } from './ladder.js';
 
 const ALLOWED: Readonly<Record<SeasonStatus, readonly SeasonStatus[]>> = {
   scheduled: ['live', 'ended'],
@@ -31,4 +32,65 @@ export function transitionSeason(season: SeasonRecord, next: SeasonStatus): Seas
 /** Pure: seasons an operator may still write scores for. */
 export function isScoreWritable(status: SeasonStatus): boolean {
   return status === 'live';
+}
+
+/** Freeze may only be taken from a live season (same edge as transitionSeason). */
+export function assertMayFreeze(status: SeasonStatus): void {
+  if (status !== 'live') {
+    throw new TournamentError(`Cannot freeze snapshot from status ${status} — season must be live`, 'academy.season_invalid');
+  }
+}
+
+/**
+ * Immutable standings snapshot at freeze time.
+ * No prize amount, no IFC, no payout flags — rank + score only for audit UI.
+ */
+export type FreezeStandingsSnapshot = {
+  readonly seasonId: string;
+  readonly frozenAt: Date;
+  readonly standings: readonly RankedStanding[];
+};
+
+/**
+ * Capture ranked standings for freeze. Caller still must transitionSeason → frozen.
+ * Does not invent empty winners — empty standings list is allowed (no entries yet).
+ */
+export function snapshotStandingsAtFreeze(input: {
+  seasonId: string;
+  status: SeasonStatus;
+  rows: readonly StandingRecord[];
+  frozenAt?: Date;
+}): FreezeStandingsSnapshot {
+  assertMayFreeze(input.status);
+  if (!input.seasonId?.trim()) {
+    throw new TournamentError('seasonId required for freeze snapshot', 'academy.season_invalid');
+  }
+  const forSeason = input.rows.filter((r) => r.seasonId === input.seasonId);
+  return {
+    seasonId: input.seasonId,
+    frozenAt: input.frozenAt ?? new Date(),
+    standings: rankStandings(forSeason),
+  };
+}
+
+/**
+ * Live → frozen in one pure step with optional snapshot.
+ * Still no money; snapshot is rank table only.
+ */
+export function freezeSeasonWithSnapshot(
+  season: SeasonRecord,
+  rows: readonly StandingRecord[],
+  frozenAt?: Date,
+): { season: SeasonRecord; snapshot: FreezeStandingsSnapshot } {
+  assertMayFreeze(season.status);
+  const snapshot = snapshotStandingsAtFreeze({
+    seasonId: season.id,
+    status: season.status,
+    rows,
+    frozenAt,
+  });
+  return {
+    season: transitionSeason(season, 'frozen'),
+    snapshot,
+  };
 }
