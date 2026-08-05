@@ -237,4 +237,9 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     const desk = new MemoryAmbassadorProgramme();
     expect(desk.programmeUserCount()).toBe(0);
   });
+
+  it('L3 frozenProgrammeCount aliases frozenCount', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    expect(desk.frozenProgrammeCount()).toBe(0);
+  });
 });

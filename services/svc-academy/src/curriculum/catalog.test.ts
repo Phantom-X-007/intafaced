@@ -24,6 +24,7 @@ import {
   playbookCount,
   workbookCount,
   lessonCount,
+  pathCountWithContent,
 } from './catalog.js';
 
 /**
@@ -212,5 +213,9 @@ describe('curriculum catalog', () => {
     const inv = inventoryCurriculum();
     expect(workbookCount()).toBe(inv.byKind.workbook);
     expect(lessonCount()).toBe(inv.byKind.lesson);
+  });
+
+  it('L3 pathCountWithContent positive on tip', () => {
+    expect(pathCountWithContent()).toBeGreaterThan(0);
   });
 });

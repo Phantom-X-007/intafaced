@@ -319,3 +319,13 @@ export function firstPlaceUser(rows: readonly StandingRecord[]): string | null {
   const ranked = rankStandings(rows);
   return ranked[0]?.userId ?? null;
 }
+
+/**
+ * L3 — score at 1-based rank. Missing rank → null (never invent score).
+ */
+export function scoreAtRank(rows: readonly StandingRecord[], rank: number): number | null {
+  if (!Number.isFinite(rank) || rank < 1) return null;
+  const ranked = rankStandings(rows);
+  const i = Math.floor(rank) - 1;
+  return ranked[i]?.score ?? null;
+}

@@ -333,4 +333,9 @@ export class MemoryAmbassadorProgramme {
   programmeUserCount(): number {
     return this.totalCount();
   }
+
+  /** L3 — alias of frozenCount. */
+  frozenProgrammeCount(): number {
+    return this.frozenCount();
+  }
 }
