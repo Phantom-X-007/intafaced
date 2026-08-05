@@ -23,14 +23,14 @@ describe('curriculumInventory — honest count gate', () => {
     expect(CURRICULUM_CONTENT_SOURCE).toBe('platform-native-expansion');
   });
 
-  it('reports spine below the 20 playbook title promise (workbooks may already meet 3)', () => {
+  it('reports spine playbook count honestly against the 20 title promise', () => {
     const inv = curriculumInventory();
     expect(inv.titleTarget).toEqual({ playbooks: CURRICULUM_TITLE_PLAYBOOKS, workbooks: CURRICULUM_TITLE_WORKBOOKS });
     expect(inv.spine.total).toBeGreaterThan(0);
-    // Stage-2 expansion grows platform-native content; proprietary 20 playbooks still residual.
-    expect(inv.spine.playbooks).toBeLessThan(CURRICULUM_TITLE_PLAYBOOKS);
-    expect(inv.titlePromiseMet).toBe(false);
-    expect(inv.residualPlaybooks).toBeGreaterThan(0);
+    // L3 platform-native expansion may close residual without licensed invent.
+    expect(inv.spine.playbooks).toBeGreaterThanOrEqual(11);
+    expect(inv.spine.playbooks).toBeLessThanOrEqual(CURRICULUM_TITLE_PLAYBOOKS);
+    expect(inv.residualPlaybooks).toBe(Math.max(0, CURRICULUM_TITLE_PLAYBOOKS - inv.spine.playbooks));
     // Workbook outline set may already hit the title count of 3 without painting playbooks done.
     expect(inv.spine.workbooks).toBeGreaterThanOrEqual(1);
   });
