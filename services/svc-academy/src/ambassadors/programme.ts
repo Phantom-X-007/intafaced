@@ -510,4 +510,24 @@ export class MemoryAmbassadorProgramme {
   activeUserIdsJoined(): string {
     return this.listActiveUserIds().join(',');
   }
+
+  /** L3 — frozen user ids joined. Empty → "". */
+  frozenUserIdsJoined(): string {
+    return this.listFrozenUserIds().join(',');
+  }
+
+  /** L3 — all user ids joined. Empty → "". */
+  allUserIdsJoined(): string {
+    return this.listAllUserIds().join(',');
+  }
+
+  /** L3 — statuses present joined. Empty → "". */
+  statusesPresentJoined(): string {
+    return this.listStatusesPresent().join(',');
+  }
+
+  /** L3 — true when density is zero. */
+  isProgrammeEmptyLabel(): boolean {
+    return this.isEmpty();
+  }
 }

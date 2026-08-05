@@ -42,6 +42,10 @@ import {
   fanoutAcceptedCountLabel,
   fanoutFailedCountLabel,
   fanoutRefusedCountLabel,
+  acceptedChannelsJoined,
+  failedChannelsJoined,
+  refusedChannelsJoined,
+  fanoutOutcomesPresentJoined,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -275,5 +279,21 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutAcceptedCountLabel(attempts)).toBe('1');
     expect(fanoutFailedCountLabel(attempts)).toBe('1');
     expect(fanoutRefusedCountLabel(attempts)).toBe('1');
+  });
+
+  it('L3 wave32 fanout channel/outcome joins', () => {
+    expect(acceptedChannelsJoined([])).toBe('');
+    expect(failedChannelsJoined([])).toBe('');
+    expect(refusedChannelsJoined([])).toBe('');
+    expect(fanoutOutcomesPresentJoined([])).toBe('');
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+      { channel: 'sms' as const, outcome: 'refused' as const, code: 'n' },
+    ];
+    expect(acceptedChannelsJoined(attempts)).toBe('email');
+    expect(failedChannelsJoined(attempts)).toBe('push');
+    expect(refusedChannelsJoined(attempts)).toBe('sms');
+    expect(fanoutOutcomesPresentJoined(attempts)).toBe('accepted,refused,failed');
   });
 });

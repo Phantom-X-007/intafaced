@@ -58,6 +58,10 @@ import {
   moneyMetricCountLabel,
   nonMoneyMetricCountLabel,
   moneyMetricIdsJoined,
+  nonMoneyMetricIdsJoined,
+  ledgerMetricIdsJoined,
+  tradeMetricIdsJoined,
+  identityMetricIdsJoined,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -305,5 +309,14 @@ describe('L3 wave31 catalog labels + money ids join', () => {
     expect(moneyMetricCountLabel()).toBe(String(moneyMetricCount()));
     expect(nonMoneyMetricCountLabel()).toBe(String(nonMoneyMetricCount()));
     expect(moneyMetricIdsJoined().split(',').filter(Boolean).length).toBe(moneyMetricCount());
+  });
+});
+
+describe('L3 wave32 metric id joins by partition/source', () => {
+  it('non-money + source joins non-empty on tip', () => {
+    expect(nonMoneyMetricIdsJoined().split(',').filter(Boolean).length).toBe(nonMoneyMetricCount());
+    expect(typeof ledgerMetricIdsJoined()).toBe('string');
+    expect(typeof tradeMetricIdsJoined()).toBe('string');
+    expect(typeof identityMetricIdsJoined()).toBe('string');
   });
 });

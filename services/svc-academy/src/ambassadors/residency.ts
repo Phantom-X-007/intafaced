@@ -456,4 +456,24 @@ export class MemoryResidencyDesk {
   openApplicationIdsJoined(): string {
     return this.openApplicationIds().join(',');
   }
+
+  /** L3 — accepted ids joined. Empty → "". */
+  acceptedApplicationIdsJoined(): string {
+    return this.acceptedApplicationIds().join(',');
+  }
+
+  /** L3 — rejected ids joined. Empty → "". */
+  rejectedApplicationIdsJoined(): string {
+    return this.rejectedApplicationIds().join(',');
+  }
+
+  /** L3 — withdrawn ids joined. Empty → "". */
+  withdrawnApplicationIdsJoined(): string {
+    return this.withdrawnApplicationIds().join(',');
+  }
+
+  /** L3 — known cohorts joined. Empty → "". */
+  knownCohortsJoined(): string {
+    return this.knownCohortSlugsSorted().join(',');
+  }
 }

@@ -38,6 +38,10 @@ import {
   completedStepCountLabel,
   remainingStepCountLabel,
   fillRefCountLabel,
+  remainingStepIdsJoined,
+  completedStepIdsJoined,
+  drillStatusLabel,
+  drillRatioLabel,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -293,5 +297,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(completedStepCountLabel(started.run)).toBe('0');
     expect(remainingStepCountLabel(started.run)).toBe(String(started.run.steps.length));
     expect(fillRefCountLabel(started.run)).toBe('0');
+  });
+
+  it('L3 wave32 step joins + status/ratio labels', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w32', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(remainingStepIdsJoined(started.run).split(',').filter(Boolean).length).toBe(started.run.steps.length);
+    expect(completedStepIdsJoined(started.run)).toBe('');
+    expect(drillStatusLabel(started.run)).toBe('active');
+    expect(drillRatioLabel(started.run)).toBe('0.0000');
   });
 });

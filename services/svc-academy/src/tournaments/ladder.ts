@@ -555,3 +555,24 @@ export function rankedUserIdsJoined(rows: readonly StandingRecord[]): string {
     .map((r) => r.userId)
     .join(',');
 }
+
+/** L3 — scores in rank order joined. Empty → "". */
+export function scoresInRankOrderJoined(rows: readonly StandingRecord[]): string {
+  return scoresInRankOrder(rows).join(',');
+}
+
+/** L3 — podium user ids joined. Empty → "". */
+export function podiumUserIdsJoined(rows: readonly StandingRecord[]): string {
+  return podiumUserIds(rows).join(',');
+}
+
+/** L3 — standing user ids joined (unsorted source order). Empty → "". */
+export function standingUserIdsJoined(rows: readonly StandingRecord[]): string {
+  return listStandingUserIds(rows).join(',');
+}
+
+/** L3 — average score label or empty. */
+export function averageScoreLabel(rows: readonly StandingRecord[]): string {
+  const a = averageScore(rows);
+  return a === null ? '' : String(a);
+}

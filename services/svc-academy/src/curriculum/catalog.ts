@@ -791,3 +791,23 @@ export function playbookSlugsJoined(): string {
 export function listWorkbookTitles(): readonly string[] {
   return listCurriculumTitlesByKind('workbook');
 }
+
+/** L3 — workbook slugs joined. Empty → "". */
+export function workbookSlugsJoined(): string {
+  return listWorkbookSlugs().join(',');
+}
+
+/** L3 — all spine slugs joined. Empty → "". */
+export function curriculumSlugsJoined(): string {
+  return listCurriculumSlugs().join(',');
+}
+
+/** L3 — paths with content joined. Empty → "". */
+export function pathsWithContentJoined(): string {
+  return listPathsWithContent().join(',');
+}
+
+/** L3 — kinds with content joined. Empty → "". */
+export function kindsWithContentJoined(): string {
+  return listKindsWithContent().join(',');
+}
