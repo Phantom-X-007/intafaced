@@ -498,3 +498,17 @@ export function inventoryCurriculum(): CurriculumInventory {
 export function hasCurriculumSlug(slug: string): boolean {
   return BY_SLUG.has(slug.trim());
 }
+
+/**
+ * L3 — sorted spine slugs only. Never invents residual library titles.
+ */
+export function listCurriculumSlugs(): readonly string[] {
+  return [...BY_SLUG.keys()].sort();
+}
+
+/**
+ * L3 — count items on one path. Unknown path key still returns 0 via filter.
+ */
+export function countCurriculumByPath(path: CurriculumPath): number {
+  return SPINE.filter((item) => item.path === path).length;
+}

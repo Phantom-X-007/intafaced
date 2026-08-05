@@ -192,4 +192,23 @@ export class MemoryAmbassadorProgramme {
       .map((r) => r.userId)
       .sort();
   }
+
+  /**
+   * L3 — sorted frozen user ids for operator freeze board.
+   * Empty programme → [] (never invent freezes).
+   */
+  frozenUserIds(): readonly string[] {
+    return this.list('frozen')
+      .map((r) => r.userId)
+      .sort();
+  }
+
+  /**
+   * L3 — freeze reason for one user. Missing or not frozen → null (no invent).
+   */
+  freezeReasonOf(userId: string): string | null {
+    const row = this.get(userId.trim());
+    if (!row || row.status !== 'frozen') return null;
+    return row.freezeReason;
+  }
 }

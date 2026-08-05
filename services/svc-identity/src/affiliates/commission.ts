@@ -185,6 +185,14 @@ export function countCommissionRowsByHop(rows: readonly CommissionRow[]): Readon
   return out;
 }
 
+/**
+ * L3 — distinct beneficiary ids from dry-run rows (sorted). Empty → [].
+ * Does not invent payouts or rates.
+ */
+export function listCommissionBeneficiaryIds(rows: readonly CommissionRow[]): readonly string[] {
+  return [...new Set(rows.map((r) => r.beneficiaryId))].sort();
+}
+
 /** Add two non-negative decimal strings (truncate to 18dp). */
 export function decimalAdd(a: string, b: string, dp = 18): string {
   const aa = assertAmount(a, 'commission.fee');

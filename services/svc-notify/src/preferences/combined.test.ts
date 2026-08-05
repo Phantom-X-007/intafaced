@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  channelsToSendNow,
   criticalAlwaysImmediate,
   decideChannelDelivery,
   DEFAULT_COMBINED_PREFS,
@@ -49,5 +50,13 @@ describe('notify L3 combined mute + digest', () => {
     const plan = planFanoutDelivery({ mute, digest }, ['inapp', 'email', 'sms'], 'info');
     expect(summarizeFanoutPlan(plan)).toEqual({ sendNow: 1, holdDigest: 1, skipMuted: 1, total: 3 });
     expect(summarizeFanoutPlan([])).toEqual({ sendNow: 0, holdDigest: 0, skipMuted: 0, total: 0 });
+  });
+
+  it('L3 channelsToSendNow lists only immediate channels', () => {
+    const digest = applyDigestCadence(DEFAULT_COMBINED_PREFS.digest, 'hourly');
+    const mute = applyMuteToggle(DEFAULT_COMBINED_PREFS.mute, { channel: 'sms', muted: true });
+    const plan = planFanoutDelivery({ mute, digest }, ['inapp', 'email', 'sms'], 'info');
+    expect(channelsToSendNow(plan)).toEqual(['inapp']);
+    expect(channelsToSendNow([])).toEqual([]);
   });
 });

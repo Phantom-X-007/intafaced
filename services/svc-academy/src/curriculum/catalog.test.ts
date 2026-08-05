@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CURRICULUM_PATHS, getCurriculumItem, hasCurriculumSlug, inventoryCurriculum, listCurriculum } from './catalog.js';
+import {
+  countCurriculumByPath,
+  CURRICULUM_PATHS,
+  getCurriculumItem,
+  hasCurriculumSlug,
+  inventoryCurriculum,
+  listCurriculum,
+  listCurriculumSlugs,
+} from './catalog.js';
 
 /**
  * Curriculum catalog — pure, no database.
@@ -73,6 +81,20 @@ describe('curriculum catalog', () => {
   it('L3 hasCurriculumSlug false for residual invent titles', () => {
     expect(hasCurriculumSlug('foundations-risk-first')).toBe(true);
     expect(hasCurriculumSlug('not-a-real-deriv-desk-title')).toBe(false);
+  });
+  it('L3 listCurriculumSlugs is spine-only and sorted', () => {
+    const slugs = listCurriculumSlugs();
+    expect(slugs.length).toBe(listCurriculum().length);
+    expect(slugs).toEqual([...slugs].sort());
+    expect(slugs).toContain('foundations-risk-first');
+    expect(slugs).not.toContain('not-a-real-deriv-desk-title');
+  });
+
+  it('L3 countCurriculumByPath matches inventory', () => {
+    const inv = inventoryCurriculum();
+    for (const path of CURRICULUM_PATHS) {
+      expect(countCurriculumByPath(path)).toBe(inv.byPath[path]);
+    }
   });
 
   it('spine bodies use platform vocabulary (Identity Blueprint appears; bodies are non-empty)', () => {

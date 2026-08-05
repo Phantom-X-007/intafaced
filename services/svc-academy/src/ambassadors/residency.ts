@@ -174,4 +174,19 @@ export class MemoryResidencyDesk {
     this.rows.set(next.id, next);
     return next;
   }
+
+  /**
+   * L3 — distinct cohort slugs that have any application (any status).
+   * Empty desk → [] (never invent cohorts).
+   */
+  knownCohortSlugs(): readonly string[] {
+    const set = new Set<string>();
+    for (const r of this.rows.values()) set.add(r.cohortSlug);
+    return [...set].sort();
+  }
+
+  /** L3 — open (applied) count across all cohorts — operator queue depth. */
+  openCount(): number {
+    return this.listOpen().length;
+  }
 }

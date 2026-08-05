@@ -135,3 +135,13 @@ export function countSeasonsByStatus(seasons: readonly SeasonRecord[]): SeasonSt
 export function listScoreWritableSeasons(seasons: readonly SeasonRecord[]): readonly SeasonRecord[] {
   return seasons.filter((s) => isScoreWritable(s.status));
 }
+
+/** L3 — legal next statuses from current (operator UI). Ended → empty. */
+export function allowedNextStatuses(status: SeasonStatus): readonly SeasonStatus[] {
+  return ALLOWED[status];
+}
+
+/** L3 — filter seasons to one status. Empty if none (not invent). */
+export function filterSeasonsByStatus(seasons: readonly SeasonRecord[], status: SeasonStatus): readonly SeasonRecord[] {
+  return seasons.filter((s) => s.status === status);
+}

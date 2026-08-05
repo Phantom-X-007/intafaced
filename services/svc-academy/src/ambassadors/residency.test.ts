@@ -79,4 +79,22 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     desk.decide({ id: a.id, operatorId: 'op', decision: 'accepted' });
     expect(desk.openForUser('u1')).toEqual([]);
   });
+
+  it('L3 knownCohortSlugs + openCount without invent cohorts', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.knownCohortSlugs()).toEqual([]);
+    expect(desk.openCount()).toBe(0);
+    desk.apply({
+      userId: 'u1',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+    });
+    desk.apply({
+      userId: 'u2',
+      cohortSlug: 'lisbon-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+    });
+    expect(desk.knownCohortSlugs()).toEqual(['bali-2026', 'lisbon-2026']);
+    expect(desk.openCount()).toBe(2);
+  });
 });

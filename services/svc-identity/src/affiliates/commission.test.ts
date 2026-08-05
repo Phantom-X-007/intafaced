@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryReferralTree } from './referral-tree.js';
-import { accrueCommission, countCommissionRowsByHop, decimalMul, DEFAULT_ACCRUAL_TIERS, summarizeCommissionRows } from './commission.js';
+import {
+  accrueCommission,
+  countCommissionRowsByHop,
+  decimalMul,
+  DEFAULT_ACCRUAL_TIERS,
+  listCommissionBeneficiaryIds,
+  summarizeCommissionRows,
+} from './commission.js';
 
 describe('affiliates Slice B — commission accrual (no payout)', () => {
   it('decimalMul truncates to 18dp without float', () => {
@@ -92,5 +99,7 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
     expect(s.asset).toBe('USDT');
     expect(countCommissionRowsByHop(rows)).toEqual({ 0: 1 });
     expect(countCommissionRowsByHop([])).toEqual({});
+    expect(listCommissionBeneficiaryIds(rows)).toEqual(['u1']);
+    expect(listCommissionBeneficiaryIds([])).toEqual([]);
   });
 });

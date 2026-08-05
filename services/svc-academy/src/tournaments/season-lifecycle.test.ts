@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { TournamentError, type StandingRecord } from './ladder.js';
 import {
+  allowedNextStatuses,
   countSeasonsByStatus,
+  filterSeasonsByStatus,
   freezeSeasonWithSnapshot,
   isScoreWritable,
   listScoreWritableSeasons,
@@ -104,5 +106,21 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
     ]);
     expect(list.map((s) => s.id)).toEqual(['b']);
     expect(listScoreWritableSeasons([])).toEqual([]);
+  });
+
+  it('L3 allowedNextStatuses ends empty; live may freeze', () => {
+    expect(allowedNextStatuses('ended')).toEqual([]);
+    expect(allowedNextStatuses('live')).toContain('frozen');
+    expect(allowedNextStatuses('scheduled')).toContain('live');
+  });
+
+  it('L3 filterSeasonsByStatus does not invent rows', () => {
+    const seasons = [
+      { ...base, id: 'a', status: 'scheduled' as const },
+      { ...base, id: 'b', status: 'live' as const },
+    ];
+    expect(filterSeasonsByStatus(seasons, 'live').map((s) => s.id)).toEqual(['b']);
+    expect(filterSeasonsByStatus(seasons, 'ended')).toEqual([]);
+    expect(filterSeasonsByStatus([], 'live')).toEqual([]);
   });
 });

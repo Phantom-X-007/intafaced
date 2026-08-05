@@ -122,3 +122,24 @@ export function topNStandings(rows: readonly StandingRecord[], n: number): reado
   if (limit <= 0) return [];
   return rankStandings(rows).slice(0, limit);
 }
+
+/**
+ * L3 — rank neighbors for UI (self + optional above/below).
+ * Missing user → null (never invent a place on the ladder).
+ */
+export type StandingNeighbors = {
+  readonly self: RankedStanding;
+  readonly above: RankedStanding | null;
+  readonly below: RankedStanding | null;
+};
+
+export function standingNeighbors(rows: readonly StandingRecord[], userId: string): StandingNeighbors | null {
+  const ranked = rankStandings(rows);
+  const idx = ranked.findIndex((r) => r.userId === userId.trim());
+  if (idx < 0) return null;
+  return {
+    self: ranked[idx]!,
+    above: idx > 0 ? ranked[idx - 1]! : null,
+    below: idx < ranked.length - 1 ? ranked[idx + 1]! : null,
+  };
+}

@@ -6,6 +6,7 @@ import {
   assertSeasonSlug,
   pageStandings,
   rankStandings,
+  standingNeighbors,
   standingOfUser,
   topNStandings,
   type StandingRecord,
@@ -62,4 +63,13 @@ describe('validators', () => {
     expect(topNStandings(rows, 1).map((r) => r.userId)).toEqual(['b']);
     expect(topNStandings(rows, 0)).toEqual([]);
   });
+});
+
+it('L3 standingNeighbors never invents missing place', () => {
+  const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+  expect(standingNeighbors(rows, 'missing')).toBeNull();
+  const n = standingNeighbors(rows, 'c');
+  expect(n?.self.userId).toBe('c');
+  expect(n?.above?.userId).toBe('b');
+  expect(n?.below?.userId).toBe('a');
 });
