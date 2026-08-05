@@ -153,15 +153,15 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 
 ### Speed / autonomy preserved (explicit)
 
-- **Parallel agents are allowed** — many open PRs only while `thrift: ok|soft`; **hard thrift stops new CI-starting opens**.
+- **Parallel agents are allowed** — many open PRs under soft/ok thrift. **Docs thrash** and **re-push waste** hard-stop; CI volume alone does not stop NEW opens.
 - **No new human approval** beyond existing asymmetric review + green CI.
 - **Remote CI stays the merge seal** (full matrix green). Local `pnpm verify` is the filter so we do not pay for “push to discover red.”
 - Budget stop-at-cap is Denon’s **high fuse** (infra), not a reason to open fewer PRs.
 
 ### Do
 
-1. **`pnpm thrift:check` before any push/PR that starts Actions** (also in `.githooks/pre-push`). Hard-fails at default **≥220 runs/24h** or **Docs≥120** or **CI≥80**. Soft-warns ≥120. Open PRs via **`pnpm pr -- …`** (fail-closed wrap of `gh pr create`). Override only `THRIFT_ALLOW=1` + PR note.
-2. **AFK batch law:** parallel code in worktrees is fine; **do not** open one micro-PR per claim when thrift is soft/hard — batch path-clusters into fat PRs (see SWARM-MANDATE).
+1. **`pnpm thrift:check` before any push/PR that starts Actions** (also in `.githooks/pre-push`). **Docs thrash hard-fails** (Docs≥120). **CI/total volume soft-warns** (soft≥120, total hard ref≥220, CI soft ref≥160) — **new work is never blocked by CI volume alone**. **Re-push waste hard-fails** when this branch already has **≥2 CI runs/24h** unless you ran `pnpm verify` and push with **`THRIFT_LOCAL_GREEN=1`**. Open PRs via **`pnpm pr -- …`**. Override only `THRIFT_ALLOW=1` + PR note.
+2. **AFK batch law:** parallel code in worktrees is fine; **do not** open one micro-PR per claim — batch path-clusters into fat PRs (see SWARM-MANDATE). **Push once after local green** — never re-push to watch CI.
 3. **`pnpm verify` green locally** before the push that opens or updates a **code** PR.
 4. **Batch** coherent change-sets; avoid push storms (push → CI → push 2 min later → cancel → repeat) while iterating without local green.
 5. Prefer **pure docs/markdown** when docs-only (full CI skipped; Docs format **PR only**, skips FREEZE/claims meters).

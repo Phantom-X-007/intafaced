@@ -1,7 +1,9 @@
 #!/bin/sh
 #
 # Refuse direct push to main + require format:check before any push.
-# THRIFT: thrift-preflight hard-fail when 24h Actions meter is red (unless THRIFT_ALLOW=1).
+# THRIFT: thrift-preflight — docs thrash hard-fail; re-push waste gate
+# (branch with ≥2 CI runs/24h needs THRIFT_LOCAL_GREEN=1 after pnpm verify).
+# NEW work is never blocked by CI volume alone. THRIFT_ALLOW=1 overrides.
 # Safety net only — --no-verify bypasses; real enforcement is branch protection (needs Pro).
 #
 # P1: format:check covers tooling/scripts/*.mjs (what red-trunked main via #471).
@@ -9,15 +11,18 @@
 
 TOP=$(git rev-parse --show-toplevel)
 
-# --- thrift meter (agent AFK spend brake) ---
-# Skip when no node (cannot run) or when only tags are pushed with empty stdin later.
+# --- thrift meter (runs-per-unit-of-work, never units of work) ---
 if command -v node >/dev/null 2>&1 && [ -f "$TOP/tooling/ci/thrift-preflight.mjs" ]; then
   if ! (CDPATH= cd -- "$TOP" && node tooling/ci/thrift-preflight.mjs); then
     cat >&2 <<'THRIFT'
 
-  ✖ thrift-preflight refused this push (24h Actions hard cap).
+  ✖ thrift-preflight refused this push.
 
-    AFK rule: batch more, open fewer PRs, wait for the window to cool.
+    Docs thrash hard-cap, OR re-push waste (branch already had ≥2 CI runs/24h
+    without local green). NEW work is not blocked by CI volume alone.
+
+    After pnpm verify:
+      THRIFT_LOCAL_GREEN=1 git push
     Emergency only (note why in PR):
       THRIFT_ALLOW=1 git push
 
