@@ -4,6 +4,7 @@ import {
   completeDrillStep,
   drillProgress,
   isDrillComplete,
+  completedStepCount,
   remainingStepIds,
   listPaperFillRefs,
   startPaperDrill,
@@ -130,5 +131,21 @@ describe('paper Stage-2 workbook loop', () => {
     }
     expect(remainingStepIds(run)).toEqual([]);
     expect(isDrillComplete(run)).toBe(true);
+  });
+
+  it('L3 completedStepCount tracks progress without invent', () => {
+    const start = startPaperDrill({
+      workbookSlug: 'wb',
+      market: { marketId: 'p1', paper: true, symbol: 'PAPER/USD' },
+      steps: [
+        { id: 's1', instruction: 'one' },
+        { id: 's2', instruction: 'two' },
+      ],
+    });
+    if (!start.ok) throw new Error('expected ok');
+    expect(completedStepCount(start.run)).toBe(0);
+    const mid = completeDrillStep(start.run, 's1');
+    if (!mid.ok) throw new Error('expected ok');
+    expect(completedStepCount(mid.run)).toBe(1);
   });
 });

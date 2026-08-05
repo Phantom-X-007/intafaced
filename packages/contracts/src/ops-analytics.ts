@@ -162,6 +162,11 @@ export function listMoneyMetricIds(): readonly string[] {
   return ANALYTICS_METRICS_V0.filter((m) => m.money || m.kind === 'amount').map((m) => m.id);
 }
 
+/** L3 — total v0 metric definitions (catalog size, no invent series). */
+export function analyticsMetricCatalogSize(): number {
+  return ANALYTICS_METRICS_V0.length;
+}
+
 /** Validate a consumer point — amount metrics require decimal strings. */
 export function assertMetricPoint(metricId: string, value: string | number): { ok: true } | { ok: false; reason: string } {
   const def = metricById(metricId);

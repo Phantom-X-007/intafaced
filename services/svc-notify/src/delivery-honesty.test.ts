@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countFanoutOutcomes, deliveryHonesty, fanoutHonesty, missingCredentialHonesty } from './delivery-honesty.js';
+import { countFanoutOutcomes, hasFanoutFailure, deliveryHonesty, fanoutHonesty, missingCredentialHonesty } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
   it('accepted out-of-app may start grace but not claim inbox-read', () => {
@@ -57,5 +57,11 @@ describe('notify Stage-2 delivery honesty', () => {
         { channel: 'sms', outcome: 'refused', code: 'missing' },
       ]),
     ).toEqual({ accepted: 1, refused: 1, failed: 1, total: 3 });
+  });
+
+  it('L3 hasFanoutFailure detects failed outcomes only', () => {
+    expect(hasFanoutFailure([])).toBe(false);
+    expect(hasFanoutFailure([{ channel: 'email', outcome: 'accepted', code: '2xx' }])).toBe(false);
+    expect(hasFanoutFailure([{ channel: 'email', outcome: 'failed', code: 'timeout' }])).toBe(true);
   });
 });

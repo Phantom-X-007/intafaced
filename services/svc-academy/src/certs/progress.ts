@@ -257,3 +257,10 @@ export function missingItemCount(report: ProgressReport): number {
 export function isGrantReady(report: ProgressReport): boolean {
   return report.complete && !report.granted;
 }
+
+/**
+ * L3 — already granted flag from report (no invent grant id).
+ */
+export function isAlreadyGranted(report: ProgressReport): boolean {
+  return report.granted;
+}

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { CertError, MemoryCertStore, decideGrant, isComplete, isGrantReady, missingItemCount, progressReport } from './progress.js';
+import {
+  CertError,
+  MemoryCertStore,
+  decideGrant,
+  isComplete,
+  isGrantReady,
+  isAlreadyGranted,
+  missingItemCount,
+  progressReport,
+} from './progress.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -107,5 +116,22 @@ describe('academy.certs Stage-1 progress spine', () => {
     const ready = store.progressOf('u1', 'foundations-v1');
     expect(missingItemCount(ready)).toBe(0);
     expect(isGrantReady(ready)).toBe(true);
+  });
+
+  it('L3 isAlreadyGranted mirrors report.granted', () => {
+    const base = {
+      userId: 'u',
+      certId: 'c',
+      title: 't',
+      requiredCount: 1,
+      completedCount: 1,
+      ratio: '1.0000',
+      missingItemSlugs: [] as string[],
+      complete: true,
+      granted: true,
+      grantIdempotencyKey: 'k',
+    };
+    expect(isAlreadyGranted(base)).toBe(true);
+    expect(isAlreadyGranted({ ...base, granted: false, grantIdempotencyKey: null })).toBe(false);
   });
 });

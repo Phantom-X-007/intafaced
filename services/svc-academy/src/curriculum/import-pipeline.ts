@@ -203,5 +203,12 @@ export function summarizeImportBatch(batch: {
   };
 }
 
+/**
+ * L3 — rejected count from summary (honest zero when all accepted).
+ */
+export function importBatchRejectedCount(summary: ImportBatchSummary): number {
+  return summary.rejected;
+}
+
 /** Type helper: import record shape matches catalog item. */
 export type ImportedCurriculumItem = CurriculumItem;

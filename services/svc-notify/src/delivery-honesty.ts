@@ -103,3 +103,10 @@ export function countFanoutOutcomes(attempts: readonly ChannelDeliveryAttempt[])
   }
   return { accepted, refused, failed, total: attempts.length };
 }
+
+/**
+ * L3 — true if any channel failed (not refused). Empty → false.
+ */
+export function hasFanoutFailure(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return attempts.some((a) => a.outcome === 'failed');
+}
