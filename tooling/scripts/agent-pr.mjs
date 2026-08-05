@@ -1,32 +1,32 @@
 #!/usr/bin/env node
 /**
- * agent-pr — fail-closed PR open for agents (thrift first, then gh).
+ * agent-pr — PR open for agents (thrift meter first, then gh).
  *
  *   pnpm pr -- --title "…" --body "…"
  *   node tooling/scripts/agent-pr.mjs create …   # any gh pr create args after --
  *
- * Runs thrift-preflight (hard fail unless THRIFT_ALLOW=1), then `gh pr create`.
- * Prefer this over bare `gh pr create` in AFK / swarm workers.
+ * Runs thrift-preflight (meter + WARN only — never blocks on run counts), then
+ * `gh pr create`. Prefer this over bare `gh pr create` in AFK / swarm workers
+ * so the Actions meter stays visible. Do not open coordination-only PRs
+ * (SWARM-MANDATE / AGENTS thrift).
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const thrift = join(ROOT, 'tooling/ci/thrift-preflight.mjs');
 
-const thriftRun = spawnSync(process.execPath, [thrift], {
+// Meter only — thrift always exits 0 on run-count signals (local-first law).
+spawnSync(process.execPath, [thrift], {
   cwd: ROOT,
   env: process.env,
   stdio: 'inherit',
 });
-if (thriftRun.status !== 0) {
-  console.error('agent-pr: thrift-preflight blocked PR open. Batch work or wait for 24h cool-down.');
-  console.error('  Emergency only: THRIFT_ALLOW=1 pnpm pr -- …');
-  process.exit(thriftRun.status || 1);
-}
 
-const args = process.argv.slice(2);
+let args = process.argv.slice(2);
+// pnpm pr -- --title …  leaves a leading "--" that gh rejects as unknown.
+while (args[0] === '--') args = args.slice(1);
 // strip optional leading "create"
 const ghArgs = args[0] === 'create' ? args.slice(1) : args;
 const r = spawnSync('gh', ['pr', 'create', ...ghArgs], {

@@ -88,13 +88,14 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 
 ### Machine enforcement (not a banner)
 
-| Mechanism                                      | What it does when context degrades                                                                                                                |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`tooling/ci/value-gate.mjs` on Docs format** | **Exits 1** (strict) on docs-only + ≥0.80 subject similarity to last 10 ancestors + no `Board-Delta:` trailer. Git-only. **This is enforcement.** |
-| **`pnpm thrift:check` / `pnpm pr` / pre-push** | **Exits 1** at hard caps (default 220 total / 120 Docs / 80 CI). Soft ≥120. **`pnpm pr` fail-closes open.**                                       |
-| **CI / Docs-format triggers**                  | **PR only** (no push:main). Docs-format skips FREEZE/claims/R00–R02/DASHBOARD-only. Manual: `workflow_dispatch`.                                  |
-| `pnpm swarm:status` ops-churn / Actions 24h    | Prints meter + thrift level; hard level is a **FAIL line** agents must not ignore                                                                 |
-| `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                       |
+| Mechanism                                      | What it does when context degrades                                                                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`tooling/ci/value-gate.mjs` on Docs format** | **Exits 1** (strict) on docs-only + ≥0.80 subject similarity to last 10 ancestors + no `Board-Delta:` trailer. Git-only. **This is stamp enforcement.** |
+| **`pnpm thrift:check` / `pnpm pr` / pre-push** | **Meter + WARN only** — never exit-1 on run counts. Delivery is never blocked by a volume number.                                                       |
+| **CI / Docs-format triggers**                  | **PR only** (no push:main). Docs-format skips FREEZE/claims/R00–R02/DASHBOARD-only. Manual: `workflow_dispatch`.                                        |
+| **Coordination PR ban**                        | No PR whose sole job is R07/peace/cycle/FREEZE tip-bump/claims meter/status. Those stay files; ship only with a real product/law delta.                 |
+| `pnpm swarm:status` ops-churn / Actions 24h    | Prints meter + thrift level (soft/ok) — informational                                                                                                   |
+| `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                             |
 
 Self-test (fixtures, no network): `pnpm value-gate:self-test` · `pnpm thrift:self-test`.
 
@@ -120,15 +121,16 @@ When the primary board finish is met but the session continues (AFK / “never s
 
 ### AFK PR batch law (Actions thrift — mandatory)
 
-Parallel **coding** is free. Parallel **CI-starting PR opens** are not.
+Parallel **coding** is free. GitHub is the **merge seal**, not the workshop or the chat log.
 
-| Rule               | Detail                                                                                                                             |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Fat PRs**        | Prefer **one PR per coherent path-cluster**, not one PR per residual id when ids share a service or can land together.             |
-| **Max CI-starts**  | Soft target: **≤5 new code PRs / hour** per coordinator wave; when `thrift: soft                                                   | hard`, **≤1** until cool. |
-| **Open path**      | `pnpm thrift:check` then `pnpm pr -- …` (wraps thrift + `gh pr create`). Bare `gh pr create` is a thrift hole — do not use in AFK. |
-| **Push path**      | `.githooks/pre-push` runs thrift-preflight (hard fail). `THRIFT_ALLOW=1` only with PR note.                                        |
-| **Caps (default)** | soft≥120 · hard≥220 total · docs≥120 · ci≥80 (24h). Env override only for measured incidents.                                      |
+| Rule                      | Detail                                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Local-first**           | Finish a unit locally; push once. Never re-push only to watch CI.                                                                      |
+| **No coordination PRs**   | Forbidden: R07 / peace / cycle N / FREEZE-only / claims-only / “board unchanged” PRs. Files stay local until a real product/law delta. |
+| **Path-cluster batching** | Soft prefer **one PR per coherent path-cluster** when residual ids share a service — not a hard “one PR per day” gate.                 |
+| **Open path**             | `pnpm thrift:check` (warn meter) then `pnpm pr -- …`.                                                                                  |
+| **Push path**             | `.githooks/pre-push` runs thrift meter (never blocks on counts) + format:check.                                                        |
+| **Caps**                  | Warn-only refs (soft≥120 · total≥220 · docs≥120 · ci≥160). **No exit-1 on volume.** Stamp mill = value-gate.                           |
 
 **Cold resume (no third file):** regenerate + read [`FREEZE-LIVE.md`](./FREEZE-LIVE.md) · [`../COORDINATION-TRUTH-LAYERS.md`](../COORDINATION-TRUTH-LAYERS.md) § Agent cold-start · human inbox [`../BOARD-CLEAR-HUMAN-BLOCKERS.md`](../BOARD-CLEAR-HUMAN-BLOCKERS.md).
 

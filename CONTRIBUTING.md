@@ -83,9 +83,10 @@ Two agents on two worktrees can run at the same time with zero coordination. Tha
 
 ---
 
-## 3 · Pull requests are the coordination layer
+## 3 · Pull requests are the product review layer
 
-We are not going to maintain a project board. PRs are where coordination happens.
+We are not going to maintain a project board. **Product** coordination (what changed, why, how you know) lives on PRs.  
+**Not** a chat log: do not open PRs whose only job is status, R07/peace, FREEZE tip-bump, claims meter, or “board unchanged.” Those stay files; see `AGENTS.md` thrift · `docs/ops/SWARM-MANDATE.md`.
 
 **Small and focused.** One service per PR (§15.1). If a PR needs the word "and" to describe it, it is two PRs. A 200-line PR gets a real review; a 2,000-line PR gets "LGTM" and a bug in production.
 
@@ -170,13 +171,13 @@ Every PR runs, and all of it must be green to merge:
 | `Tests`              | every package's suite, against real Postgres/Redis/NATS                 |
 | `Definition of Done` | the §14 gate per service                                                |
 
-Run the same thing locally before pushing — it is faster than waiting for CI, and it is **required thrift** on this private repo (Actions is metered after free minutes):
+Run the same thing locally before pushing — it is faster than waiting for CI, and it is **required thrift** (Actions is metered on private Free plans after free minutes; public standard runners are free — visibility is a business decision, not thrift):
 
 ```bash
 pnpm verify    # build · typecheck · test · DoD gate
 ```
 
-**Actions thrift (both of you / all agents):** local green first; batch coherent pushes — do not use remote CI as a debugger (push storms still bill partial minutes when cancelled). Parallel PRs stay allowed. Docs-only changes skip full CI via `paths-ignore` in `.github/workflows/ci.yml`. Full law: [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md) · `AGENTS.md`. Does **not** add a review gate or cap how many PRs you open.
+**Actions thrift (both of you / all agents):** local workshop first; one push per unit — do not use remote CI as a debugger (push storms still bill partial minutes when cancelled). Parallel **product** PRs stay allowed; coordination-only PRs are banned. Docs-only changes skip full CI via path filters in `.github/workflows/ci.yml`. Full law: [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md) · `AGENTS.md`. Does **not** add a review gate or hard-cap how many product PRs you open.
 
 Because merging is not _blocked_ on CI (see §1), reading the checks before you approve is a real responsibility rather than a formality. A green tick you did not look at is the same as no CI at all.
 

@@ -37,7 +37,7 @@ We only stop paying for **waste** (remote CI used as a debugger, push storms, do
 | Why it spiked                         | Free pool empty + dual-agent **thrash** (push → CI → cancel → push) + late failures after almost full matrix.                            |
 | Proper solution                       | **(1) Agent hygiene** + **(2) cheaper managed runners** for heavy jobs. Stacked target ~**85–95%** off thrash $ without cutting quality. |
 | Limits speed / parallel / automation? | **No** when rules are the neutralized set below.                                                                                         |
-| Leave GitHub / public repo?           | **No.**                                                                                                                                  |
+| Leave GitHub / public repo?           | **Business/IP decision — not thrift.** Public = free standard Actions minutes. Agents never flip visibility.                             |
 
 ---
 
@@ -56,24 +56,27 @@ We only stop paying for **waste** (remote CI used as a debugger, push storms, do
 
 ### Binding agent rules (both Nitro and Denon agents)
 
-1. **`pnpm thrift:check` / `pnpm pr` / pre-push before every CI-starting open/push.**  
-   Hard-fails at default **≥220 runs/24h** or **Docs≥120** or **CI≥80** (`tooling/ci/thrift-preflight.mjs`). Soft-warns ≥120. Emergency only: `THRIFT_ALLOW=1` + PR note. [MECHANICAL 2026-08-04 deep]
+1. **`pnpm thrift:check` / `pnpm pr` / pre-push** — **meter + WARN only.** Never exit-1 on run counts (`tooling/ci/thrift-preflight.mjs`). [MECHANICAL 2026-08-05 local-first]
 
-2. **Local is the filter; remote is the seal.**  
-   `pnpm verify` **green** before the push that **opens or updates** a code PR. Remote CI proves merge; it is not the first debugger.
+2. **Local is the workshop; remote is the seal.**  
+   Push once per finished unit. Do not use CI as the first debugger. If Docker is missing, `pnpm verify` may be **INCOMPLETE** — do not call that full green. Bootstrap: `tooling/scripts/local-infra-bootstrap.sh`.
 
-3. **Prefer batching, not push storms.**  
-   Finish a coherent change-set (or real fix bundle), then push. Mid-debug: stay local until green. Soft preference — not “one push per day.”
+3. **Prefer batching product work, not push storms.**  
+   Finish a coherent change-set, then push. Soft preference — not “one push per day” as a gate.
 
-4. **If you already started CI, don’t spam re-pushes** for every tiny local edit until the next coherent fix is ready. Concurrency cancel still bills partial minutes.
+4. **No re-push spam** for every tiny local edit. Concurrency cancel still bills partial minutes.
 
-5. **Parallel PRs are fine** when thrift level is ok/soft. Hard thrift → stop opening new CI-starting PRs until the 24h window cools.
+5. **Parallel product PRs are fine.** Volume soft-warns do not stop new opens.
 
-6. **Docs-only:** pure `docs/**` / markdown skips full CI; Docs format runs on **PR only** (not again on main merge). Stamp mill: value-gate STRICT.
+6. **No coordination-only PRs** (status / R07 / peace / FREEZE tip-bump alone). Stamp mill: value-gate STRICT on Docs format.
 
-7. **Re-run all jobs** only for flake or known infra fix — not curiosity.
+7. **Docs-only:** pure `docs/**` / markdown skips full CI; Docs format runs on **PR only**.
 
-8. **Never “save money” by:** public repo, skipping money/doctrine tests, claiming green without verify, or disabling required checks.
+8. **Re-run all jobs** only for flake or known infra fix — not curiosity.
+
+9. **Never “save money” by integrity fraud:** skipping money/doctrine tests, claiming green without honest verify, or disabling required checks.
+
+10. **Public vs private** is owner business/IP — not thrift. Agents do not flip visibility.
 
 ### Workflow thrift (shipped — do not silently revert)
 
@@ -81,9 +84,9 @@ We only stop paying for **waste** (remote CI used as a debugger, push storms, do
 | -------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `ci.yml`             | **`pull_request` + `workflow_dispatch` only** — no `push: main` full matrix | Merge used to re-run ~11–12 min billable job-sum on every land |
 | `docs-format.yml`    | **PR only** + exclude FREEZE/claims/R00–R02/DASHBOARD                       | Post-merge doubles + claim-file spam                           |
-| value-gate           | STRICT on Docs format                                                       | Stops freeProduct=0 tip-bump mill                              |
-| pre-push + `pnpm pr` | thrift hard-fail                                                            | Agents cannot forget the meter on push/open                    |
-| Caps                 | soft 120 / hard 220 / docs 120 / ci 80                                      | Tighter AFK thrift wave                                        |
+| value-gate           | STRICT on Docs format                                                       | Stops freeProduct=0 tip-bump mill (content, not run-count)     |
+| pre-push + `pnpm pr` | thrift meter + WARN only (never exit-1 on counts)                           | Visible habit signal; never a delivery gate                    |
+| Caps                 | soft/warn refs only (120 / 220 / docs 120 / ci 160)                         | Loud meter — no hard stop                                      |
 
 [VERIFIED 2026-08-04] Prior thrash window ~776–785 runs / ~$15–20 list; double-bill + micro-PR mill were first-class root causes.
 
@@ -101,7 +104,7 @@ We only stop paying for **waste** (remote CI used as a debugger, push storms, do
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | A    | Billing: payment OK; Actions budget **~$50–80/mo**; **stop when reached ON**; alerts 75/90/100%                                                                                        | High fuse, no surprise infinite bill            |
 | B    | Wire **cheaper managed runners** (e.g. Ubicloud standard ~$0.0010/min or premium ~$0.0016/min vs GH ~$0.006/min) for heavy jobs (`Typecheck & build`, `Tests`); optional all four jobs | ~**6×** cheaper remaining minutes; often faster |
-| C    | Keep full green CI required to merge; keep private; keep main CI for now                                                                                                               | Critical zone                                   |
+| C    | Keep full green CI required to merge; **visibility = business decision**; keep PR-only triggers (no push:main double-bill)                                                             | Critical zone                                   |
 | D    | First week: confirm invoice (runner $ + any GH platform fee on third-party minutes)                                                                                                    | Ground truth                                    |
 
 Self-host = optional later only if still expensive after thrift + cheap runners. **Not** week-1 requirement.
