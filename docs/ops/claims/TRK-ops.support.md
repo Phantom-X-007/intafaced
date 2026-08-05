@@ -1,20 +1,9 @@
 # Claim TRK-ops.support
 
-**status:** pr-open
-**started:** 2026-08-04T00:00:00.000Z
-**heartbeat:** 2026-08-04T00:00:00.000Z
-**title:** Support desk Stage-1 ticket spine
-**track:** IMPLEMENTABLE
-**paths:**
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** Stage-1 ticket spine + empty KB (memory svc-support) · PR #752
+**tip:** 344011e2
+**updated:** 2026-08-05
 
-- services/svc-support
-- packages/contracts/src/support.ts
-- packages/auth/src/scopes.ts
-
-## Done bar
-
-- [x] contracts ticket create/list/comment/status + empty KB
-- [x] thin svc-support (memory) + auth mount tests
-- [x] edge route + fleet wire
-- [ ] Stage-2 operator queue UI
-- [ ] Stage-3 optional agent
+Stage-1 Class N landed on main. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.

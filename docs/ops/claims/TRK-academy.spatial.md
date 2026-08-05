@@ -1,8 +1,9 @@
 # Claim TRK-academy.spatial
 
-**status:** pr-open
-**proof:** Stage-1 Scene v1 schema + tests; updateScene asserts
-**tip:** 0067e047
-**updated:** 2026-08-04
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** Stage-1 Scene v1 schema + size gate + tests · PR #762
+**tip:** 344011e2
+**updated:** 2026-08-05
 
-Claim-lock is spawn authority. Stage-1 only — not mountain done.
+Stage-1 Class N landed on main. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.

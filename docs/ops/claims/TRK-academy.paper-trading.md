@@ -1,18 +1,9 @@
 # Claim TRK-academy.paper-trading
 
-**status:** pr-open
-**started:** 2026-08-04T00:00:00.000Z
-**heartbeat:** 2026-08-04T00:00:00.000Z
-**title:** Paper market flag + ledger isolation (Stage-1)
-**track:** IMPLEMENTABLE
-**paths:**
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** paper market flag + ledger isolation (no holds on paper) · PR #751
+**tip:** 344011e2
+**updated:** 2026-08-05
 
-- services/svc-trade
-
-## Done bar
-
-- [x] paper boolean on trade.markets
-- [x] placeOrder on paper never posts ledger holds
-- [x] live placeOrder unchanged
-- [ ] Stage-2 workbook loop / simulated fills
-- [ ] Stage-3 ops enable/kill
+Stage-1 Class N landed on main. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.
