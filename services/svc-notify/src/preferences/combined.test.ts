@@ -11,6 +11,7 @@ import {
   planFanoutDelivery,
   summarizeFanoutPlan,
   countSkippedMuted,
+  planHasNoMutes,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -91,5 +92,11 @@ describe('notify L3 combined mute + digest', () => {
     const mute = applyMuteToggle(DEFAULT_COMBINED_PREFS.mute, { channel: 'email', muted: true });
     const plan = planFanoutDelivery({ mute, digest: DEFAULT_COMBINED_PREFS.digest }, ['email', 'inapp'], 'info');
     expect(countSkippedMuted(plan)).toBe(1);
+  });
+
+  it('L3 planHasNoMutes true when none skipped', () => {
+    expect(planHasNoMutes([])).toBe(true);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planHasNoMutes(plan)).toBe(true);
   });
 });

@@ -250,6 +250,13 @@ export function hasMoneyMetrics(): boolean {
 }
 
 /**
+ * L3 — how many v0 metrics declare more than one source DB. Empty catalog → 0.
+ */
+export function multiSourceMetricCount(): number {
+  return ANALYTICS_METRICS_V0.filter((m) => m.sources.length > 1).length;
+}
+
+/**
  * L3 — per-source metric counts (catalog only; no invent series).
  */
 export function metricCountBySource(): Readonly<Record<AnalyticsSourceDb, number>> {

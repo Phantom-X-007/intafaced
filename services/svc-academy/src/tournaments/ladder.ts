@@ -257,6 +257,13 @@ export function scoreSpread(rows: readonly StandingRecord[]): number | null {
 }
 
 /**
+ * L3 — score range (max−min). Empty/single → null (same law as scoreSpread).
+ */
+export function scoreRange(rows: readonly StandingRecord[]): number | null {
+  return scoreSpread(rows);
+}
+
+/**
  * L3 — true when user has a standing row. Missing → false (never invent).
  */
 export function hasStanding(rows: readonly StandingRecord[], userId: string): boolean {

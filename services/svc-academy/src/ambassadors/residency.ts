@@ -233,4 +233,14 @@ export class MemoryResidencyDesk {
       .map((r) => r.id)
       .sort();
   }
+
+  /**
+   * L3 — sorted withdrawn application ids. Empty → [] (never invent).
+   */
+  withdrawnApplicationIds(): readonly string[] {
+    return [...this.rows.values()]
+      .filter((r) => r.status === 'withdrawn')
+      .map((r) => r.id)
+      .sort();
+  }
 }

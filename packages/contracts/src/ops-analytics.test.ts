@@ -20,6 +20,7 @@ import {
   hasMoneyMetrics,
   countMetricsUsingSource,
   metricCountBySource,
+  multiSourceMetricCount,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -156,5 +157,10 @@ describe('L3 wave16 analytics money/source helpers', () => {
     const by = metricCountBySource();
     expect(by.ledger + by.trade + by.identity).toBeGreaterThan(0);
     expect(by.trade).toBe(countMetricsUsingSource('trade'));
+  });
+
+  it('L3 multiSourceMetricCount is non-negative catalog count', () => {
+    expect(multiSourceMetricCount()).toBeGreaterThanOrEqual(0);
+    expect(multiSourceMetricCount()).toBeLessThanOrEqual(analyticsMetricCatalogSize());
   });
 });
