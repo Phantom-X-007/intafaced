@@ -23,6 +23,7 @@ import {
   listEndedSeasonIds,
   endedSeasonCount,
   hasLiveSeason,
+  scheduledSeasonCount,
 } from './season-lifecycle.js';
 
 const base = {
@@ -237,5 +238,14 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
     expect(hasLiveSeason(seasons)).toBe(true);
     expect(hasLiveSeason([])).toBe(false);
     expect(endedSeasonCount([])).toBe(0);
+  });
+
+  it('L3 scheduledSeasonCount without invent', () => {
+    expect(scheduledSeasonCount([])).toBe(0);
+    const seasons = [
+      { ...base, id: 'a', status: 'scheduled' as const },
+      { ...base, id: 'b', status: 'live' as const },
+    ];
+    expect(scheduledSeasonCount(seasons)).toBe(1);
   });
 });

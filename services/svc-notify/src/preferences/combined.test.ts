@@ -18,6 +18,7 @@ import {
   planHasSkips,
   countSendNow,
   planSkipCount,
+  planHoldCount,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -139,5 +140,9 @@ describe('notify L3 combined mute + digest', () => {
 
   it('L3 planSkipCount aliases countSkippedMuted', () => {
     expect(planSkipCount([])).toBe(0);
+  });
+
+  it('L3 planHoldCount aliases countHoldingChannels', () => {
+    expect(planHoldCount([])).toBe(0);
   });
 });

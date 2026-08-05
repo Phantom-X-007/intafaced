@@ -217,3 +217,8 @@ export function endedSeasonCount(seasons: readonly SeasonRecord[]): number {
 export function hasLiveSeason(seasons: readonly SeasonRecord[]): boolean {
   return liveSeasonCount(seasons) > 0;
 }
+
+/** L3 — count of scheduled seasons. Empty → 0. */
+export function scheduledSeasonCount(seasons: readonly SeasonRecord[]): number {
+  return filterSeasonsByStatus(seasons, 'scheduled').length;
+}

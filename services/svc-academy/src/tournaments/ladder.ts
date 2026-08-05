@@ -311,3 +311,11 @@ export function lastPlaceUser(rows: readonly StandingRecord[]): string | null {
   if (ranked.length === 0) return null;
   return ranked[ranked.length - 1]!.userId;
 }
+
+/**
+ * L3 — user id at rank 1. Empty standings → null (never invent podium).
+ */
+export function firstPlaceUser(rows: readonly StandingRecord[]): string | null {
+  const ranked = rankStandings(rows);
+  return ranked[0]?.userId ?? null;
+}
