@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { criticalAlwaysImmediate, decideChannelDelivery, DEFAULT_COMBINED_PREFS } from './combined.js';
+import { criticalAlwaysImmediate, decideChannelDelivery, DEFAULT_COMBINED_PREFS, planFanoutDelivery } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
 
@@ -24,5 +24,16 @@ describe('notify L3 combined mute + digest', () => {
     const prefs = { mute: DEFAULT_COMBINED_PREFS.mute, digest };
     expect(decideChannelDelivery(prefs, 'push', 'info')).toEqual({ action: 'hold_digest', channel: 'push' });
     expect(decideChannelDelivery(prefs, 'push', 'critical')).toEqual({ action: 'send_now', channel: 'push' });
+  });
+
+  it('L3 planFanoutDelivery maps each channel without invent', () => {
+    const digest = applyDigestCadence(DEFAULT_COMBINED_PREFS.digest, 'hourly');
+    const mute = applyMuteToggle(DEFAULT_COMBINED_PREFS.mute, { channel: 'sms', muted: true });
+    const plan = planFanoutDelivery({ mute, digest }, ['inapp', 'email', 'sms'], 'info');
+    expect(plan).toEqual([
+      { action: 'send_now', channel: 'inapp' },
+      { action: 'hold_digest', channel: 'email' },
+      { action: 'skip_muted', channel: 'sms' },
+    ]);
   });
 });

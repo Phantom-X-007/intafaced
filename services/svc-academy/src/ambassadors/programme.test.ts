@@ -48,4 +48,15 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.badge(u).isAmbassador).toBe(true);
     expect(() => desk.appoint({ userId: u, appointedBy: op })).toThrow(AmbassadorProgrammeError);
   });
+
+  it('L3 badgesOf + activeCount without invent', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    desk.appoint({ userId: u, appointedBy: op });
+    const badges = desk.badgesOf([u, '33333333-3333-4333-8333-333333333333']);
+    expect(badges[0]!.isAmbassador).toBe(true);
+    expect(badges[1]!.isAmbassador).toBe(false);
+    expect(desk.activeCount()).toBe(1);
+  });
 });

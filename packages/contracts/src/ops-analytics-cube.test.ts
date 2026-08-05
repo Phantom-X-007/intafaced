@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUBE_VIEWS_V0, evaluateCubeFixtures, sumCountFixtures } from './ops-analytics-cube.js';
+import { CUBE_VIEWS_V0, evaluateCubeFixtures, filterCubeFactsByDim, sumCountFixtures } from './ops-analytics-cube.js';
 import { ANALYTICS_METRICS_V0 } from './ops-analytics.js';
 
 describe('analytics Slice B — cube views + fixtures', () => {
@@ -55,5 +55,14 @@ describe('analytics Slice B — cube views + fixtures', () => {
   it('refuses sumCountFixtures on money metrics', () => {
     const r = sumCountFixtures([{ metricId: 'ledger.volume.notional', value: '1' }], 'ledger.volume.notional');
     expect(r.status).toBe('refuse');
+  });
+
+  it('L3 filterCubeFactsByDim scopes facts without invent', () => {
+    const facts = [
+      { metricId: 'trade.fills.count', value: '2', dim: 'BTC' },
+      { metricId: 'trade.fills.count', value: '3', dim: 'ETH' },
+    ];
+    expect(filterCubeFactsByDim(facts, ['BTC'])).toHaveLength(1);
+    expect(filterCubeFactsByDim(facts, ['SOL'])).toEqual([]);
   });
 });

@@ -50,3 +50,15 @@ export function criticalAlwaysImmediate(prefs: CombinedNotifyPrefs, channel: Mut
   const d = decideChannelDelivery(prefs, channel, 'critical');
   return d.action === 'send_now';
 }
+
+/**
+ * L3 — plan delivery for a multi-channel fanout in one pass.
+ * Channels list is caller-owned; missing channels are not invented.
+ */
+export function planFanoutDelivery(
+  prefs: CombinedNotifyPrefs,
+  channels: readonly (MuteableChannel | 'inapp')[],
+  severity: NotifySeverity,
+): readonly DeliveryDecision[] {
+  return channels.map((ch) => decideChannelDelivery(prefs, ch, severity));
+}
