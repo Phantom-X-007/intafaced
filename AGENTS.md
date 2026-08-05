@@ -165,6 +165,8 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 
 ---
 
+**L3 slice factory (Nitro):** when freeProduct=0, mint Stage-N slices from existing L1 — not idle, not wait for Denon re-spec. Law: [`docs/NITRO-L3-SLICE-FACTORY-LAW.md`](docs/NITRO-L3-SLICE-FACTORY-LAW.md).
+
 ## GitHub Actions thrift (mandatory — Nitro and Denon agents)
 
 **Intent:** cut **wasted** Actions spend without slowing delivery. GitHub is the **merge seal**, not the workshop.  

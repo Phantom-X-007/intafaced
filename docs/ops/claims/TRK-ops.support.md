@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** Stage-1 tickets #752 + Stage-2 operator queue · feat/stage2-support-certs-agents
+**proof:** L3 slice batch · feat/l3-factory-law-and-slices
 **tip:** pending-merge
 **updated:** 2026-08-05
 
-Stage-2 operator queue Class N. Money tools still banned.
+L3 factory slice. Does not invent L1. Further residual remains.

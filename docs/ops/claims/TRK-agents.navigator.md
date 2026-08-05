@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** Stage-1 navigatorAgentGuardrail (read tools + plan/select) · PR #761
-**tip:** 344011e2
+**proof:** L3 slice batch · feat/l3-factory-law-and-slices
+**tip:** pending-merge
 **updated:** 2026-08-05
 
-Stage-1 Class N landed on main. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.
+L3 factory slice. Does not invent L1. Further residual remains.
