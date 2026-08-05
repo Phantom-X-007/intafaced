@@ -12,7 +12,7 @@ We already have enough **in-repo** building blocks for what agents should ship *
 Agents must **wire and extend those**, not invent a second shell, second money book, or random new stack.  
 **Phase B** is only the residual map (when to use an external tool later) — **not** an excuse to ignore Phase A.
 
-**Enforced how:** written into `AGENTS.md` / `CLAUDE.md` / `AGENT_PROTOCOL` + PR checklist + **CI auto-load scan** so the law cannot silently disappear from cold starts.
+**Enforced how:** written into `AGENTS.md` / project instruction brief / `AGENT_PROTOCOL` + PR checklist + **CI auto-load scan** so the law cannot silently disappear from cold starts.
 
 ---
 
@@ -77,7 +77,7 @@ Agents **do not** wait for Nitro to “pick the Top 5.”
 ## 5 · Stale map hygiene (agents own it)
 
 When tip drifts (vendor path, deleted apps, new `svc-*`, tracker status flip): update Phase A or full-horizon **in the same PR wave**, not a sticky note to Nitro.  
-`pnpm verify` / agent-autoload fails if this law vanishes from AGENTS/CLAUDE/protocol.
+`pnpm verify` / agent-autoload fails if this law vanishes from AGENTS / project instruction brief / protocol.
 
 ---
 

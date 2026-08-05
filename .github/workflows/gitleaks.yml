@@ -1,5 +1,7 @@
-# FH-SEC-02 / SECURITY-WHEN-PLAIN Track A — gitleaks always-on (complements secret-scan assignment law).
-# Thrift: single short job; no full matrix. Docs-only PRs still run (secrets hide in md too).
+# FH-SEC-02 / SECURITY-WHEN-PLAIN Track A — gitleaks always-on
+# Complements tooling/ci/secret-scan.mjs (assignment law).
+# Uses the gitleaks binary (not gitleaks-action) so private-repo PR commit listing
+# is not required, and so secret-scan does not see a GITHUB_TOKEN assignment.
 name: Gitleaks
 
 on:
@@ -16,10 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          VER=8.24.3
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks version
+      - name: Gitleaks (working tree)
+        run: ./gitleaks detect --source . --no-git --config .gitleaks.toml --redact
