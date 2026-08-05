@@ -94,3 +94,37 @@ export function freezeSeasonWithSnapshot(
     snapshot,
   };
 }
+
+/**
+ * L3 — season status histogram for operator boards.
+ * Empty input → zeros (no invented seasons).
+ */
+export type SeasonStatusHistogram = {
+  readonly scheduled: number;
+  readonly live: number;
+  readonly frozen: number;
+  readonly ended: number;
+  readonly total: number;
+  readonly scoreWritable: number;
+};
+
+export function countSeasonsByStatus(seasons: readonly SeasonRecord[]): SeasonStatusHistogram {
+  let scheduled = 0;
+  let live = 0;
+  let frozen = 0;
+  let ended = 0;
+  for (const s of seasons) {
+    if (s.status === 'scheduled') scheduled += 1;
+    else if (s.status === 'live') live += 1;
+    else if (s.status === 'frozen') frozen += 1;
+    else if (s.status === 'ended') ended += 1;
+  }
+  return {
+    scheduled,
+    live,
+    frozen,
+    ended,
+    total: scheduled + live + frozen + ended,
+    scoreWritable: live,
+  };
+}

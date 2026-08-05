@@ -462,3 +462,32 @@ export function getCurriculumItem(slug: string): CurriculumItem | null {
 
 /** Stable set of paths the catalog recognises — matches Blueprint curriculumPath. */
 export const CURRICULUM_PATHS: readonly CurriculumPath[] = ['foundations', 'markets', 'builder', 'sovereign'];
+
+/**
+ * L3 — inventory of seeded spine only. Never invents DERIV//DESK residual titles.
+ * Empty path → zero counts (honest emptiness, not a fabricated library).
+ */
+export type CurriculumInventory = {
+  readonly total: number;
+  readonly byPath: Readonly<Record<CurriculumPath, number>>;
+  readonly byKind: Readonly<Record<CurriculumKind, number>>;
+};
+
+export function inventoryCurriculum(): CurriculumInventory {
+  const byPath: Record<CurriculumPath, number> = {
+    foundations: 0,
+    markets: 0,
+    builder: 0,
+    sovereign: 0,
+  };
+  const byKind: Record<CurriculumKind, number> = {
+    playbook: 0,
+    workbook: 0,
+    lesson: 0,
+  };
+  for (const item of SPINE) {
+    byPath[item.path] += 1;
+    byKind[item.kind] += 1;
+  }
+  return { total: SPINE.length, byPath, byKind };
+}

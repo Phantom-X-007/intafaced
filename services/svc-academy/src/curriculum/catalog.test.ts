@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CURRICULUM_PATHS, getCurriculumItem, listCurriculum } from './catalog.js';
+import { CURRICULUM_PATHS, getCurriculumItem, inventoryCurriculum, listCurriculum } from './catalog.js';
 
 /**
  * Curriculum catalog — pure, no database.
@@ -60,6 +60,14 @@ describe('curriculum catalog', () => {
     for (const path of CURRICULUM_PATHS) {
       expect(paths.has(path)).toBe(true);
     }
+  });
+
+  it('L3 inventoryCurriculum counts spine only — no invent residual library', () => {
+    const inv = inventoryCurriculum();
+    expect(inv.total).toBe(listCurriculum().length);
+    expect(inv.byPath.foundations + inv.byPath.markets + inv.byPath.builder + inv.byPath.sovereign).toBe(inv.total);
+    expect(inv.byKind.playbook + inv.byKind.workbook + inv.byKind.lesson).toBe(inv.total);
+    expect(inv.total).toBeGreaterThan(0);
   });
 
   it('spine bodies use platform vocabulary (Identity Blueprint appears; bodies are non-empty)', () => {

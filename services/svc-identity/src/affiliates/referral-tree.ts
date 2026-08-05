@@ -168,4 +168,21 @@ export class MemoryReferralTree {
     }
     return out.sort();
   }
+
+  /**
+   * L3 — hop-0 downline counts for many referrers in one pass.
+   * Unknown referrers → 0 (never invent edges).
+   */
+  directDownlineCounts(referrerIds: readonly string[]): Readonly<Record<string, number>> {
+    const out: Record<string, number> = {};
+    for (const id of referrerIds) {
+      out[id] = 0;
+    }
+    for (const r of this.parent.values()) {
+      if (Object.prototype.hasOwnProperty.call(out, r)) {
+        out[r] = (out[r] ?? 0) + 1;
+      }
+    }
+    return out;
+  }
 }
