@@ -82,6 +82,10 @@ import {
   drillStatusLineIsFresh,
   drillStatusLineDetailed,
   drillStatusLineTokenCount,
+  parseDrillStatusLine,
+  drillStatusLineMatches,
+  parseDrillStatusLineDetailed,
+  drillStatusLineConsistent,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -494,5 +498,17 @@ describe('paper Stage-2 workbook loop', () => {
     expect(drillStatusLine(started.run)).toContain('percent=0');
     expect(drillStatusLineDetailed(started.run)).toContain('workbook=');
     expect(drillStatusLineTokenCount(started.run)).toBeGreaterThan(4);
+  });
+
+  it('L3 wave45 drill status parse + match', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w45', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(drillStatusLineMatches(started.run)).toBe(true);
+    expect(drillStatusLineConsistent(drillStatusLine(started.run))).toBe(true);
+    expect(parseDrillStatusLineDetailed(drillStatusLineDetailed(started.run))?.market).toBe('m-w45');
   });
 });

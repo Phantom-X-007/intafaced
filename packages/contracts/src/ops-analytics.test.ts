@@ -102,6 +102,10 @@ import {
   analyticsStatusLineIsEmpty,
   analyticsStatusLineDetailed,
   analyticsStatusLineTokenCount,
+  parseAnalyticsStatusLine,
+  analyticsStatusLineMatches,
+  parseAnalyticsStatusLineDetailed,
+  analyticsStatusLineConsistent,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -458,5 +462,14 @@ describe('L3 wave44 analytics status lines', () => {
     expect(analyticsStatusLine()).toContain('total=');
     expect(analyticsStatusLineDetailed()).toContain('sources=');
     expect(analyticsStatusLineTokenCount()).toBe(6);
+  });
+});
+
+describe('L3 wave45 analytics status parse + match', () => {
+  it('parse + match + consistent', () => {
+    expect(analyticsStatusLineMatches()).toBe(true);
+    expect(analyticsStatusLineConsistent(analyticsStatusLine())).toBe(true);
+    expect(parseAnalyticsStatusLine(analyticsStatusLine())).not.toBeNull();
+    expect(parseAnalyticsStatusLineDetailed(analyticsStatusLineDetailed())).not.toBeNull();
   });
 });

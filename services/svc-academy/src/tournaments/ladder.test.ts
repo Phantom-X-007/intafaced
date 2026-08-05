@@ -108,6 +108,10 @@ import {
   leaderboardStatusLineIsEmpty,
   leaderboardStatusLineDetailed,
   leaderboardStatusLineTokenCount,
+  parseLeaderboardStatusLine,
+  leaderboardStatusLineMatches,
+  parseLeaderboardStatusLineDetailed,
+  leaderboardStatusLineDetailedConsistent,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -484,5 +488,13 @@ describe('L3 standings board helpers', () => {
     expect(leaderboardStatusLine(rows)).toContain('count=2');
     expect(leaderboardStatusLineDetailed(rows)).toContain('unique=1');
     expect(leaderboardStatusLineTokenCount(rows)).toBeGreaterThan(3);
+  });
+
+  it('L3 wave45 leaderboard status parse + match', () => {
+    expect(parseLeaderboardStatusLine('count=0 first=- max=-')).toEqual({ count: 0, first: null, max: null });
+    expect(leaderboardStatusLineMatches([])).toBe(true);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    expect(leaderboardStatusLineMatches(rows)).toBe(true);
+    expect(leaderboardStatusLineDetailedConsistent(leaderboardStatusLineDetailed(rows))).toBe(true);
   });
 });

@@ -799,3 +799,48 @@ export function analyticsStatusLineDetailed(): string {
 export function analyticsStatusLineTokenCount(): number {
   return analyticsStatusLineDetailed().split(/\s+/).filter(Boolean).length;
 }
+
+/** L3 — parse analytics status line. Invalid → null. */
+export function parseAnalyticsStatusLine(
+  line: string,
+): { readonly total: number; readonly money: number; readonly nonMoney: number } | null {
+  const m = line.trim().match(/^total=(\d+) money=(\d+) nonMoney=(\d+)$/);
+  if (!m) return null;
+  return { total: Number(m[1]), money: Number(m[2]), nonMoney: Number(m[3]) };
+}
+
+/** L3 — true when status line matches catalog. */
+export function analyticsStatusLineMatches(): boolean {
+  const p = parseAnalyticsStatusLine(analyticsStatusLine());
+  if (!p) return false;
+  const c = analyticsCatalogBoardCard();
+  return p.total === c.total && p.money === c.money && p.nonMoney === c.nonMoney;
+}
+
+/** L3 — parse detailed analytics status. Invalid → null. */
+export function parseAnalyticsStatusLineDetailed(line: string): {
+  readonly total: number;
+  readonly money: number;
+  readonly nonMoney: number;
+  readonly multi: number;
+  readonly single: number;
+  readonly sources: number;
+} | null {
+  const m = line.trim().match(/^total=(\d+) money=(\d+) nonMoney=(\d+) multi=(\d+) single=(\d+) sources=(\d+)$/);
+  if (!m) return null;
+  return {
+    total: Number(m[1]),
+    money: Number(m[2]),
+    nonMoney: Number(m[3]),
+    multi: Number(m[4]),
+    single: Number(m[5]),
+    sources: Number(m[6]),
+  };
+}
+
+/** L3 — true when money+nonMoney equals total. */
+export function analyticsStatusLineConsistent(line: string): boolean {
+  const p = parseAnalyticsStatusLine(line);
+  if (!p) return false;
+  return p.total === p.money + p.nonMoney;
+}

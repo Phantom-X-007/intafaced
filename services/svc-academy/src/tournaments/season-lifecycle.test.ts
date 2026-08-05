@@ -96,6 +96,10 @@ import {
   seasonStatusLineIsEmpty,
   seasonStatusLineDetailed,
   seasonStatusLineTokenCount,
+  parseSeasonStatusLine,
+  seasonStatusLineMatches,
+  parseSeasonStatusLineDetailed,
+  seasonStatusLineDetailedConsistent,
 } from './season-lifecycle.js';
 
 const base = {
@@ -708,5 +712,24 @@ describe('L3 wave44 season status lines', () => {
     expect(seasonStatusLine(rows)).toContain('live=1');
     expect(seasonStatusLineDetailed(rows)).toContain('writable=1');
     expect(seasonStatusLineTokenCount(rows)).toBe(6);
+  });
+});
+
+describe('L3 wave45 season status parse', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('parse + match + consistent', () => {
+    expect(parseSeasonStatusLine('total=0 live=0 open=0 ended=0')).toEqual({ total: 0, live: 0, open: 0, ended: 0 });
+    expect(seasonStatusLineMatches([])).toBe(true);
+    const rows = [mk('a', 'live'), mk('b', 'ended')];
+    expect(seasonStatusLineMatches(rows)).toBe(true);
+    expect(seasonStatusLineDetailedConsistent(seasonStatusLineDetailed(rows))).toBe(true);
   });
 });

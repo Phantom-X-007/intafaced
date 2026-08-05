@@ -706,3 +706,50 @@ export function drillStatusLineDetailed(run: DrillRun): string {
 export function drillStatusLineTokenCount(run: DrillRun): number {
   return drillStatusLineDetailed(run).split(/\s+/).filter(Boolean).length;
 }
+
+/** L3 — parse "status=S done=C/T percent=P". Invalid → null. */
+export function parseDrillStatusLine(
+  line: string,
+): { readonly status: string; readonly completed: number; readonly total: number; readonly percent: number } | null {
+  const m = line.trim().match(/^status=(\S+) done=(\d+)\/(\d+) percent=(\d+)$/);
+  if (!m) return null;
+  return { status: m[1]!, completed: Number(m[2]), total: Number(m[3]), percent: Number(m[4]) };
+}
+
+/** L3 — true when status line matches run. */
+export function drillStatusLineMatches(run: DrillRun): boolean {
+  const p = parseDrillStatusLine(drillStatusLine(run));
+  if (!p) return false;
+  const c = drillBoardCard(run);
+  return p.status === c.status && p.completed === c.completed && p.total === c.total && p.percent === c.percent;
+}
+
+/** L3 — parse detailed drill status. Invalid → null. */
+export function parseDrillStatusLineDetailed(line: string): {
+  readonly status: string;
+  readonly workbook: string;
+  readonly market: string;
+  readonly completed: number;
+  readonly total: number;
+  readonly fills: number;
+  readonly refused: boolean;
+} | null {
+  const m = line.trim().match(/^status=(\S+) workbook=(\S+) market=(\S+) done=(\d+)\/(\d+) fills=(\d+) refused=([01])$/);
+  if (!m) return null;
+  return {
+    status: m[1]!,
+    workbook: m[2]!,
+    market: m[3]!,
+    completed: Number(m[4]),
+    total: Number(m[5]),
+    fills: Number(m[6]),
+    refused: m[7] === '1',
+  };
+}
+
+/** L3 — true when done counts are within total. */
+export function drillStatusLineConsistent(line: string): boolean {
+  const p = parseDrillStatusLine(line);
+  if (!p) return false;
+  return p.completed <= p.total && p.percent >= 0 && p.percent <= 100;
+}
