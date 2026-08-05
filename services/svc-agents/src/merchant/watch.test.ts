@@ -58,4 +58,13 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
     const r = watchApprovalFixtures([pt({ railId: 'x', approvalRate: '1.5' })], { now: NOW });
     expect(r.status).toBe('unavailable');
   });
+
+  it('Stage-2: pay plane dark → refuse without inventing rates', () => {
+    const r = watchApprovalFixtures([pt({ railId: 'card-a' })], { now: NOW, payPlane: 'dark' });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'pay_plane_dark',
+    });
+  });
 });

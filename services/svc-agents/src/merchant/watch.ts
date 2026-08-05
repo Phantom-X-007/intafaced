@@ -52,10 +52,16 @@ export type WatchEmpty = {
 export type WatchUnavailable = {
   readonly status: 'unavailable';
   readonly userMessageKey: 'agents.merchant.unavailable';
-  readonly reason: 'stale' | 'no_metrics';
+  readonly reason: 'stale' | 'no_metrics' | 'pay_plane_dark';
 };
 
 export type WatchResult = WatchOk | WatchEmpty | WatchUnavailable;
+
+/**
+ * Stage-2: when the pay plane is dark (no metrics API / routing residual),
+ * refuse rather than invent approval rates. Does not change rails.
+ */
+export type PayPlaneState = 'live' | 'dark';
 
 function parseRate(s: string): number | null {
   if (!/^(0(\.\d+)?|1(\.0+)?)$/.test(s)) return null;
@@ -75,10 +81,19 @@ function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
  */
 export function watchApprovalFixtures(
   points: readonly ApprovalRatePoint[],
-  options: { now?: Date; /** decimal fraction string, default "0.85" */ threshold?: string } = {},
+  options: {
+    now?: Date;
+    /** decimal fraction string, default "0.85" */
+    threshold?: string;
+    /** Stage-2: dark pay plane → typed refuse, never invent rates */
+    payPlane?: PayPlaneState;
+  } = {},
 ): WatchResult {
   const now = options.now ?? new Date();
   const nowMs = now.getTime();
+  if (options.payPlane === 'dark') {
+    return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'pay_plane_dark' };
+  }
   const thresholdStr = options.threshold ?? '0.85';
   const threshold = parseRate(thresholdStr);
   if (threshold == null) {
