@@ -177,3 +177,26 @@ export function fanoutAcceptanceRatio(attempts: readonly ChannelDeliveryAttempt[
   const accepted = attempts.filter((a) => a.outcome === 'accepted').length;
   return (accepted / attempts.length).toFixed(4);
 }
+
+/** L3 — count of accepted channel attempts. Empty → 0. */
+export function countFanoutAccepted(attempts: readonly ChannelDeliveryAttempt[]): number {
+  return attempts.filter((a) => a.outcome === 'accepted').length;
+}
+
+/**
+ * L3 — failed/total as fixed 4dp string. Empty → null (never invent 0 failure).
+ */
+export function fanoutFailureRatio(attempts: readonly ChannelDeliveryAttempt[]): string | null {
+  if (attempts.length === 0) return null;
+  return (countFanoutFailures(attempts) / attempts.length).toFixed(4);
+}
+
+/** L3 — true when fanout attempt list is empty. */
+export function fanoutIsEmpty(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return attempts.length === 0;
+}
+
+/** L3 — total attempt count. Empty → 0. */
+export function fanoutAttemptCount(attempts: readonly ChannelDeliveryAttempt[]): number {
+  return attempts.length;
+}

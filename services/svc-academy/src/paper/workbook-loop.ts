@@ -226,3 +226,26 @@ export function completedStepCount(run: DrillRun): number {
 export function fillRefCount(run: DrillRun): number {
   return run.fillRefs.length;
 }
+
+/** L3 — true when drill was refused (no invent progress). */
+export function isDrillRefused(run: DrillRun): boolean {
+  return run.status === 'refused';
+}
+
+/** L3 — remaining step count. Refused → all steps remaining. */
+export function remainingStepCount(run: DrillRun): number {
+  return remainingStepIds(run).length;
+}
+
+/** L3 — total step count on the run (never invents steps). */
+export function totalStepCount(run: DrillRun): number {
+  return run.steps.length;
+}
+
+/**
+ * L3 — true when run is open (in_progress) with remaining steps.
+ * Refused / complete → false.
+ */
+export function isDrillInProgress(run: DrillRun): boolean {
+  return run.status === 'active' && remainingStepIds(run).length > 0;
+}

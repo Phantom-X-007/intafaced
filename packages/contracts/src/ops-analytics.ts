@@ -325,3 +325,23 @@ export function catalogHasMoney(): boolean {
 export function catalogIsNonEmpty(): boolean {
   return !isMetricCatalogEmpty();
 }
+
+/** L3 — alias of analyticsMetricCatalogSize. */
+export function catalogMetricCount(): number {
+  return analyticsMetricCatalogSize();
+}
+
+/** L3 — count of ratio-kind metrics in v0 catalog. */
+export function ratioMetricCount(): number {
+  return countMetricsByKind('ratio');
+}
+
+/** L3 — count of amount-kind metrics in v0 catalog. */
+export function amountMetricCount(): number {
+  return countMetricsByKind('amount');
+}
+
+/** L3 — count of count-kind metrics in v0 catalog. */
+export function countKindMetricCount(): number {
+  return countMetricsByKind('count');
+}
