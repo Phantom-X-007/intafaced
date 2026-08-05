@@ -81,6 +81,10 @@ import {
   curriculumPathCountDelta,
   curriculumKindsSameSize,
   curriculumPathsSameSize,
+  safePageCurriculumSlugs,
+  clampCurriculumPageIndex,
+  curriculumSlugsAtPage,
+  isValidCurriculumPage,
 } from './catalog.js';
 
 /**
@@ -377,5 +381,13 @@ describe('curriculum catalog', () => {
     expect(typeof curriculumPathCountDelta('foundations', 'markets')).toBe('number');
     expect(typeof curriculumKindsSameSize('lesson', 'workbook')).toBe('boolean');
     expect(typeof curriculumPathsSameSize('foundations', 'builder')).toBe('boolean');
+  });
+
+  it('L3 wave40 curriculum safe paging', () => {
+    expect(safePageCurriculumSlugs(0, 1)).toHaveLength(1);
+    expect(clampCurriculumPageIndex(99, 1)).toBeGreaterThanOrEqual(0);
+    expect(curriculumSlugsAtPage(0, 1)).toHaveLength(1);
+    expect(isValidCurriculumPage(0, 5)).toBe(true);
+    expect(isValidCurriculumPage(-1, 5)).toBe(false);
   });
 });

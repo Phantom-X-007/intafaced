@@ -617,3 +617,37 @@ export function liveSeasonCountDelta(left: readonly SeasonRecord[], right: reado
 export function seasonsSameSize(left: readonly SeasonRecord[], right: readonly SeasonRecord[]): boolean {
   return totalSeasonCount(left) === totalSeasonCount(right);
 }
+
+/** L3 — safe page season ids with clamped bounds. */
+export function safePageSeasonIds(seasons: readonly SeasonRecord[], offset: number, limit: number): readonly string[] {
+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+  const all = listSeasonIds(seasons);
+  const o = Math.max(0, Math.min(all.length, Math.floor(offset)));
+  const l = Math.max(0, Math.min(all.length - o, Math.floor(limit)));
+  return all.slice(o, o + l);
+}
+
+/** L3 — clamp season list page index. */
+export function clampSeasonPageIndex(seasons: readonly SeasonRecord[], pageIndex: number, pageSize: number): number {
+  const pages = seasonListPageCount(seasons, pageSize);
+  if (pages === 0) return 0;
+  if (!Number.isFinite(pageIndex)) return 0;
+  return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+}
+
+/** L3 — season ids at clamped page. */
+export function seasonIdsAtPage(seasons: readonly SeasonRecord[], pageIndex: number, pageSize: number): readonly string[] {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+  const idx = clampSeasonPageIndex(seasons, pageIndex, pageSize);
+  const size = Math.floor(pageSize);
+  return safePageSeasonIds(seasons, idx * size, size);
+}
+
+/** L3 — true when season page is valid. */
+export function isValidSeasonPage(seasons: readonly SeasonRecord[], pageIndex: number, pageSize: number): boolean {
+  const pages = seasonListPageCount(seasons, pageSize);
+  if (pages === 0) return false;
+  if (!Number.isFinite(pageIndex)) return false;
+  const i = Math.floor(pageIndex);
+  return i >= 0 && i < pages;
+}

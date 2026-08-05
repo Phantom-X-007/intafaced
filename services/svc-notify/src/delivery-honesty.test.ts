@@ -70,6 +70,10 @@ import {
   fanoutAcceptedCountDelta,
   fanoutsSameSize,
   fanoutsSameOutcomeHistogram,
+  safePageFanoutAttempts,
+  clampFanoutPageIndex,
+  fanoutAttemptsAtPage,
+  isValidFanoutPage,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -395,5 +399,18 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutAcceptedCountDelta(left, right)).toBe(0);
     expect(fanoutsSameSize(left, right)).toBe(false);
     expect(fanoutsSameOutcomeHistogram(left, left)).toBe(true);
+  });
+
+  it('L3 wave40 fanout safe paging', () => {
+    expect(safePageFanoutAttempts([], 0, 1)).toEqual([]);
+    expect(isValidFanoutPage([], 0, 1)).toBe(false);
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    expect(safePageFanoutAttempts(attempts, 0, 1)).toHaveLength(1);
+    expect(clampFanoutPageIndex(attempts, 99, 1)).toBe(1);
+    expect(fanoutAttemptsAtPage(attempts, 0, 1)).toHaveLength(1);
+    expect(isValidFanoutPage(attempts, 0, 1)).toBe(true);
   });
 });

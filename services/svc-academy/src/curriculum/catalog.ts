@@ -1023,3 +1023,37 @@ export function curriculumKindsSameSize(a: CurriculumKind, b: CurriculumKind): b
 export function curriculumPathsSameSize(a: CurriculumPath, b: CurriculumPath): boolean {
   return countCurriculumByPath(a) === countCurriculumByPath(b);
 }
+
+/** L3 — safe page spine slugs with clamped bounds. */
+export function safePageCurriculumSlugs(offset: number, limit: number): readonly string[] {
+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+  const all = listCurriculumSlugs();
+  const o = Math.max(0, Math.min(all.length, Math.floor(offset)));
+  const l = Math.max(0, Math.min(all.length - o, Math.floor(limit)));
+  return all.slice(o, o + l);
+}
+
+/** L3 — clamp curriculum page index. */
+export function clampCurriculumPageIndex(pageIndex: number, pageSize: number): number {
+  const pages = curriculumSpinePageCount(pageSize);
+  if (pages === 0) return 0;
+  if (!Number.isFinite(pageIndex)) return 0;
+  return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+}
+
+/** L3 — spine slugs at clamped page. */
+export function curriculumSlugsAtPage(pageIndex: number, pageSize: number): readonly string[] {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+  const idx = clampCurriculumPageIndex(pageIndex, pageSize);
+  const size = Math.floor(pageSize);
+  return safePageCurriculumSlugs(idx * size, size);
+}
+
+/** L3 — true when curriculum page is valid. */
+export function isValidCurriculumPage(pageIndex: number, pageSize: number): boolean {
+  const pages = curriculumSpinePageCount(pageSize);
+  if (pages === 0) return false;
+  if (!Number.isFinite(pageIndex)) return false;
+  const i = Math.floor(pageIndex);
+  return i >= 0 && i < pages;
+}

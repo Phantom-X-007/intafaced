@@ -784,3 +784,37 @@ export function scoreDeltaForUser(left: readonly StandingRecord[], right: readon
 export function standingsSameSize(left: readonly StandingRecord[], right: readonly StandingRecord[]): boolean {
   return standingCount(left) === standingCount(right);
 }
+
+/** L3 — safe page ranked standings with clamped bounds. */
+export function safePageRankedStandings(rows: readonly StandingRecord[], offset: number, limit: number): readonly RankedStanding[] {
+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+  const ranked = rankStandings(rows);
+  const o = Math.max(0, Math.min(ranked.length, Math.floor(offset)));
+  const l = Math.max(0, Math.min(ranked.length - o, Math.floor(limit)));
+  return ranked.slice(o, o + l);
+}
+
+/** L3 — clamp standings page index. */
+export function clampStandingsPageIndex(rows: readonly StandingRecord[], pageIndex: number, pageSize: number): number {
+  const pages = standingsPageCount(rows, pageSize);
+  if (pages === 0) return 0;
+  if (!Number.isFinite(pageIndex)) return 0;
+  return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+}
+
+/** L3 — ranked standings at clamped page. */
+export function rankedStandingsAtPage(rows: readonly StandingRecord[], pageIndex: number, pageSize: number): readonly RankedStanding[] {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+  const idx = clampStandingsPageIndex(rows, pageIndex, pageSize);
+  const size = Math.floor(pageSize);
+  return safePageRankedStandings(rows, idx * size, size);
+}
+
+/** L3 — true when standings page index is valid. */
+export function isValidStandingsPage(rows: readonly StandingRecord[], pageIndex: number, pageSize: number): boolean {
+  const pages = standingsPageCount(rows, pageSize);
+  if (pages === 0) return false;
+  if (!Number.isFinite(pageIndex)) return false;
+  const i = Math.floor(pageIndex);
+  return i >= 0 && i < pages;
+}

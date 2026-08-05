@@ -92,6 +92,10 @@ import {
   standingUserIdsInBoth,
   scoreDeltaForUser,
   standingsSameSize,
+  safePageRankedStandings,
+  clampStandingsPageIndex,
+  rankedStandingsAtPage,
+  isValidStandingsPage,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -429,5 +433,15 @@ describe('L3 standings board helpers', () => {
     expect(scoreDeltaForUser(left, right, 'b')).toBe(10);
     expect(scoreDeltaForUser(left, right, 'a')).toBeNull();
     expect(standingsSameSize(left, right)).toBe(true);
+  });
+
+  it('L3 wave40 safe standings paging', () => {
+    expect(safePageRankedStandings([], 0, 1)).toEqual([]);
+    expect(isValidStandingsPage([], 0, 1)).toBe(false);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    expect(safePageRankedStandings(rows, 0, 1)).toHaveLength(1);
+    expect(clampStandingsPageIndex(rows, 99, 1)).toBe(1);
+    expect(rankedStandingsAtPage(rows, 0, 1)[0]!.userId).toBe('b');
+    expect(isValidStandingsPage(rows, 0, 1)).toBe(true);
   });
 });

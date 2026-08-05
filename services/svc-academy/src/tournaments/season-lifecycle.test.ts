@@ -80,6 +80,10 @@ import {
   seasonIdsInBoth,
   liveSeasonCountDelta,
   seasonsSameSize,
+  safePageSeasonIds,
+  clampSeasonPageIndex,
+  seasonIdsAtPage,
+  isValidSeasonPage,
 } from './season-lifecycle.js';
 
 const base = {
@@ -611,5 +615,26 @@ describe('L3 wave39 season diffs', () => {
     expect(seasonIdsInBoth(left, right)).toEqual(['b']);
     expect(liveSeasonCountDelta(left, right)).toBe(0);
     expect(seasonsSameSize(left, right)).toBe(true);
+  });
+});
+
+describe('L3 wave40 season safe paging', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('safe page + clamp + at page + valid', () => {
+    expect(safePageSeasonIds([], 0, 1)).toEqual([]);
+    expect(isValidSeasonPage([], 0, 1)).toBe(false);
+    const rows = [mk('a', 'live'), mk('b', 'ended')];
+    expect(safePageSeasonIds(rows, 0, 1)).toHaveLength(1);
+    expect(clampSeasonPageIndex(rows, 99, 1)).toBe(1);
+    expect(seasonIdsAtPage(rows, 0, 1)).toHaveLength(1);
+    expect(isValidSeasonPage(rows, 0, 1)).toBe(true);
   });
 });

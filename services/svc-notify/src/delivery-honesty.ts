@@ -559,3 +559,44 @@ export function fanoutsSameOutcomeHistogram(left: readonly ChannelDeliveryAttemp
   const b = fanoutOutcomeHistogram(right);
   return a.accepted === b.accepted && a.refused === b.refused && a.failed === b.failed;
 }
+
+/** L3 — safe page fanout attempts with clamped bounds. */
+export function safePageFanoutAttempts(
+  attempts: readonly ChannelDeliveryAttempt[],
+  offset: number,
+  limit: number,
+): readonly ChannelDeliveryAttempt[] {
+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+  const o = Math.max(0, Math.min(attempts.length, Math.floor(offset)));
+  const l = Math.max(0, Math.min(attempts.length - o, Math.floor(limit)));
+  return attempts.slice(o, o + l);
+}
+
+/** L3 — clamp fanout page index. */
+export function clampFanoutPageIndex(attempts: readonly ChannelDeliveryAttempt[], pageIndex: number, pageSize: number): number {
+  const pages = fanoutPageCount(attempts, pageSize);
+  if (pages === 0) return 0;
+  if (!Number.isFinite(pageIndex)) return 0;
+  return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+}
+
+/** L3 — fanout attempts at clamped page. */
+export function fanoutAttemptsAtPage(
+  attempts: readonly ChannelDeliveryAttempt[],
+  pageIndex: number,
+  pageSize: number,
+): readonly ChannelDeliveryAttempt[] {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+  const idx = clampFanoutPageIndex(attempts, pageIndex, pageSize);
+  const size = Math.floor(pageSize);
+  return safePageFanoutAttempts(attempts, idx * size, size);
+}
+
+/** L3 — true when fanout page is valid. */
+export function isValidFanoutPage(attempts: readonly ChannelDeliveryAttempt[], pageIndex: number, pageSize: number): boolean {
+  const pages = fanoutPageCount(attempts, pageSize);
+  if (pages === 0) return false;
+  if (!Number.isFinite(pageIndex)) return false;
+  const i = Math.floor(pageIndex);
+  return i >= 0 && i < pages;
+}

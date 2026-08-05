@@ -86,6 +86,10 @@ import {
   metricIdsOnlyInKind,
   moneyMinusNonMoneyCount,
   multiEqualsSingleSourceCount,
+  safePageMetricIds,
+  clampMetricPageIndex,
+  metricIdsAtPage,
+  isValidMetricPage,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -402,5 +406,15 @@ describe('L3 wave39 analytics compare helpers', () => {
     expect(metricIdsOnlyInKind('count', 'amount').length).toBe(countKindMetricCount());
     expect(typeof moneyMinusNonMoneyCount()).toBe('number');
     expect(typeof multiEqualsSingleSourceCount()).toBe('boolean');
+  });
+});
+
+describe('L3 wave40 metric safe paging', () => {
+  it('safe page + clamp + at page + valid', () => {
+    expect(safePageMetricIds(0, 1)).toHaveLength(1);
+    expect(clampMetricPageIndex(99, 1)).toBeGreaterThanOrEqual(0);
+    expect(metricIdsAtPage(0, 1)).toHaveLength(1);
+    expect(isValidMetricPage(0, 5)).toBe(true);
+    expect(isValidMetricPage(-1, 5)).toBe(false);
   });
 });

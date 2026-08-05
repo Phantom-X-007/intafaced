@@ -687,3 +687,37 @@ export function moneyMinusNonMoneyCount(): number {
 export function multiEqualsSingleSourceCount(): boolean {
   return multiSourceMetricCount() === singleSourceMetricCount();
 }
+
+/** L3 — safe page metric ids with clamped bounds. */
+export function safePageMetricIds(offset: number, limit: number): readonly string[] {
+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+  const all = ANALYTICS_METRICS_V0.map((m) => m.id).sort();
+  const o = Math.max(0, Math.min(all.length, Math.floor(offset)));
+  const l = Math.max(0, Math.min(all.length - o, Math.floor(limit)));
+  return all.slice(o, o + l);
+}
+
+/** L3 — clamp metric catalog page index. */
+export function clampMetricPageIndex(pageIndex: number, pageSize: number): number {
+  const pages = metricCatalogPageCount(pageSize);
+  if (pages === 0) return 0;
+  if (!Number.isFinite(pageIndex)) return 0;
+  return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+}
+
+/** L3 — metric ids at clamped page. */
+export function metricIdsAtPage(pageIndex: number, pageSize: number): readonly string[] {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+  const idx = clampMetricPageIndex(pageIndex, pageSize);
+  const size = Math.floor(pageSize);
+  return safePageMetricIds(idx * size, size);
+}
+
+/** L3 — true when metric catalog page is valid. */
+export function isValidMetricPage(pageIndex: number, pageSize: number): boolean {
+  const pages = metricCatalogPageCount(pageSize);
+  if (pages === 0) return false;
+  if (!Number.isFinite(pageIndex)) return false;
+  const i = Math.floor(pageIndex);
+  return i >= 0 && i < pages;
+}
