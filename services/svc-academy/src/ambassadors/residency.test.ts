@@ -30,4 +30,22 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     const desk = new MemoryResidencyDesk();
     expect(() => desk.apply({ userId: 'u1', cohortSlug: 'xx', statement: 'hi' })).toThrow(ResidencyError);
   });
+
+  it('withdraw while applied; listAccepted after accept', () => {
+    const desk = new MemoryResidencyDesk();
+    const a = desk.apply({
+      userId: 'u1',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+    });
+    const w = desk.withdraw({ id: a.id, userId: 'u1' });
+    expect(w.status).toBe('withdrawn');
+    const b = desk.apply({
+      userId: 'u2',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+    });
+    desk.decide({ id: b.id, operatorId: 'op', decision: 'accepted' });
+    expect(desk.listAccepted('bali-2026')).toHaveLength(1);
+  });
 });

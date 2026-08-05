@@ -107,4 +107,29 @@ export class MemoryResidencyDesk {
   listOpen(cohortSlug?: string): ResidencyApplication[] {
     return [...this.rows.values()].filter((r) => r.status === 'applied' && (cohortSlug ? r.cohortSlug === cohortSlug : true));
   }
+
+  listAccepted(cohortSlug?: string): ResidencyApplication[] {
+    return [...this.rows.values()].filter((r) => r.status === 'accepted' && (cohortSlug ? r.cohortSlug === cohortSlug : true));
+  }
+
+  /** Applicant withdraws while still applied — no invent accept. */
+  withdraw(input: { id: string; userId: string; now?: Date }): ResidencyApplication {
+    const row = this.rows.get(input.id);
+    if (!row) throw new ResidencyError('Application not found', 'academy.residency_not_found');
+    if (row.userId !== input.userId.trim()) {
+      throw new ResidencyError('Application not found', 'academy.residency_not_found');
+    }
+    if (row.status !== 'applied') {
+      throw new ResidencyError(`Application is ${row.status}`, 'academy.residency_not_pending');
+    }
+    const next: ResidencyApplication = {
+      ...row,
+      status: 'withdrawn',
+      decidedAt: input.now ?? new Date(),
+      decidedBy: input.userId.trim(),
+      decisionNote: 'withdrawn by applicant',
+    };
+    this.rows.set(next.id, next);
+    return next;
+  }
 }

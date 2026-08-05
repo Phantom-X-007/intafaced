@@ -4,7 +4,7 @@ import { parseAmount } from '@intafaced/ledger-client/money';
 import { MatchingEngine } from './engine/engine.js';
 import { MemoryJournal } from './engine/journal.js';
 import type { EngineLiveOrder, EngineOrder } from './engine/types.js';
-import { reconcile, type CounterpartOrder } from './reconcile.js';
+import { reconcile, type CounterpartOrder, summarizeReconcile } from './reconcile.js';
 
 /**
  * ENGINE ↔ COUNTERPART RECONCILE.
@@ -417,5 +417,13 @@ describe('EngineLiveOrder carries amounts as strings', () => {
     expect(typeof live.remaining).toBe('string');
     // The 18th decimal place survives, which is the reason for the rule.
     expect(live.remaining).toBe('0.000000000000000001');
+  });
+
+  it('summarizeReconcile counts by case without invent', () => {
+    const report = reconcile([], []);
+    const s = summarizeReconcile(report);
+    expect(s.ok).toBe(true);
+    expect(s.refusals).toBe(0);
+    expect(s.byCase).toEqual({});
   });
 });
