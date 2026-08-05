@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   allChannelsRefused,
+  allChannelsAccepted,
   countFanoutFailures,
   countFanoutOutcomes,
   hasFanoutFailure,
@@ -89,5 +90,16 @@ describe('notify Stage-2 delivery honesty', () => {
       ]),
     ).toBe(true);
     expect(allChannelsRefused([{ channel: 'email', outcome: 'accepted', code: '2xx' }])).toBe(false);
+  });
+
+  it('L3 allChannelsAccepted false on empty', () => {
+    expect(allChannelsAccepted([])).toBe(false);
+    expect(allChannelsAccepted([{ channel: 'email', outcome: 'accepted', code: '2xx' }])).toBe(true);
+    expect(
+      allChannelsAccepted([
+        { channel: 'email', outcome: 'accepted', code: '2xx' },
+        { channel: 'push', outcome: 'failed', code: 'x' },
+      ]),
+    ).toBe(false);
   });
 });

@@ -528,3 +528,12 @@ export function listCurriculumSlugsByKind(kind: CurriculumKind): readonly string
     .map((item) => item.slug)
     .sort();
 }
+
+/**
+ * L3 — paths that have at least one spine item (sorted). Empty catalog → [].
+ */
+export function listPathsWithContent(): readonly CurriculumPath[] {
+  const set = new Set<CurriculumPath>();
+  for (const item of SPINE) set.add(item.path);
+  return CURRICULUM_PATHS.filter((p) => set.has(p));
+}

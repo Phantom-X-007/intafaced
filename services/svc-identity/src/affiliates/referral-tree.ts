@@ -213,4 +213,11 @@ export class MemoryReferralTree {
     if (!id) return false;
     return this.parent.has(id);
   }
+
+  /**
+   * L3 — unique referrer ids currently in the tree (sorted). Empty → [].
+   */
+  listReferrerIds(): readonly string[] {
+    return [...new Set(this.parent.values())].sort();
+  }
 }

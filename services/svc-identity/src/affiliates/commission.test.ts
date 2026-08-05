@@ -6,6 +6,7 @@ import {
   decimalMul,
   DEFAULT_ACCRUAL_TIERS,
   listCommissionBeneficiaryIds,
+  maxCommissionHop,
   summarizeCommissionRows,
 } from './commission.js';
 
@@ -101,5 +102,7 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
     expect(countCommissionRowsByHop([])).toEqual({});
     expect(listCommissionBeneficiaryIds(rows)).toEqual(['u1']);
     expect(listCommissionBeneficiaryIds([])).toEqual([]);
+    expect(maxCommissionHop(rows)).toBe(0);
+    expect(maxCommissionHop([])).toBeNull();
   });
 });

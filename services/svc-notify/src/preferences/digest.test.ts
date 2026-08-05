@@ -10,6 +10,7 @@ import {
   MemoryDigestStore,
   shouldSendImmediate,
   applyDigestCadence,
+  holdingDigestCadences,
 } from './digest.js';
 
 describe('notify L3 digest cadence (non-critical only)', () => {
@@ -71,5 +72,10 @@ describe('notify L3 digest cadence (non-critical only)', () => {
   it('L3 isDigestHolding is false for off', () => {
     expect(isDigestHolding('off')).toBe(false);
     expect(isDigestHolding('hourly')).toBe(true);
+  });
+
+  it('L3 holdingDigestCadences excludes off', () => {
+    expect(holdingDigestCadences()).toEqual(['hourly', 'daily']);
+    expect(holdingDigestCadences()).not.toContain('off');
   });
 });

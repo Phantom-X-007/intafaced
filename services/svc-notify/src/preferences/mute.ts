@@ -53,6 +53,11 @@ export function listMutedChannels(prefs: ChannelMutePrefs): readonly MuteableCha
   return (['email', 'push', 'sms'] as const).filter((c) => prefs.muted.has(c));
 }
 
+/** L3 — true when all three muteable channels are muted. Empty → false. */
+export function allMuteableMuted(prefs: ChannelMutePrefs): boolean {
+  return listMutedChannels(prefs).length === 3;
+}
+
 /** Apply a mute toggle. Refuses any API that claims to mute "critical" as a channel. */
 export function applyMuteToggle(current: ChannelMutePrefs, input: { channel: string; muted: boolean }): ChannelMutePrefs {
   const ch = input.channel;

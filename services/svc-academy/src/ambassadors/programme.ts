@@ -230,4 +230,13 @@ export class MemoryAmbassadorProgramme {
     }
     return [...set].sort();
   }
+
+  /**
+   * L3 — frozen ambassador user ids (sorted). Empty → [].
+   */
+  listFrozenUserIds(): readonly string[] {
+    return this.list('frozen')
+      .map((r) => r.userId)
+      .sort();
+  }
 }

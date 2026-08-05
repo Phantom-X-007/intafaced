@@ -94,6 +94,13 @@ export function isDigestHolding(cadence: DigestCadence): boolean {
   return cadence !== 'off';
 }
 
+/**
+ * L3 — holding cadences only (excludes off). Stable list for operator UI.
+ */
+export function holdingDigestCadences(): readonly DigestCadence[] {
+  return ['hourly', 'daily'];
+}
+
 /** In-memory digest prefs for tests / Stage process store. */
 export class MemoryDigestStore {
   private readonly byUser = new Map<string, DigestCadence>();

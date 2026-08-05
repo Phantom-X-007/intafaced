@@ -5,6 +5,7 @@ import {
   ANALYTICS_SOURCE_DBS,
   assertMetricPoint,
   countMetricsByKind,
+  listMetricIdsByKind,
   hasAnalyticsMetric,
   lagFreshness,
   listMoneyMetricIds,
@@ -106,5 +107,13 @@ describe('L3 wave10 analytics catalog helpers', () => {
     const ratios = countMetricsByKind('ratio');
     expect(counts + amounts + ratios).toBe(ANALYTICS_METRICS_V0.length);
     expect(counts).toBeGreaterThan(0);
+  });
+
+  it('L3 listMetricIdsByKind returns only that kind', () => {
+    const ids = listMetricIdsByKind('count');
+    expect(ids.length).toBe(countMetricsByKind('count'));
+    for (const id of ids) {
+      expect(metricById(id)!.kind).toBe('count');
+    }
   });
 });

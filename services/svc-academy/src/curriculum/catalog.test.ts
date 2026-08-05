@@ -9,6 +9,7 @@ import {
   listCurriculum,
   listCurriculumSlugs,
   listCurriculumSlugsByKind,
+  listPathsWithContent,
 } from './catalog.js';
 
 /**
@@ -121,5 +122,14 @@ describe('curriculum catalog', () => {
     const playbooks = listCurriculumSlugsByKind('playbook');
     expect(playbooks.length).toBe(inv.byKind.playbook);
     expect(playbooks).toEqual([...playbooks].sort());
+  });
+
+  it('L3 listPathsWithContent covers spine paths only', () => {
+    const paths = listPathsWithContent();
+    expect(paths.length).toBeGreaterThan(0);
+    for (const p of paths) {
+      expect(CURRICULUM_PATHS).toContain(p);
+      expect(countCurriculumByPath(p)).toBeGreaterThan(0);
+    }
   });
 });

@@ -106,3 +106,17 @@ export function summarizeBulkScoreResult(result: BulkScoreResult): BulkScoreSumm
 export function isBulkScoreOk(result: BulkScoreResult): result is BulkScoreOk {
   return result.status === 'ok';
 }
+
+/**
+ * L3 — accepted patch count from bulk result. Refuse → 0 (no invent).
+ */
+export function bulkAcceptedCount(result: BulkScoreResult): number {
+  return result.status === 'ok' ? result.patches.length : 0;
+}
+
+/**
+ * L3 — refuse reason or null when ok.
+ */
+export function bulkRefuseReason(result: BulkScoreResult): string | null {
+  return result.status === 'ok' ? null : result.reason;
+}

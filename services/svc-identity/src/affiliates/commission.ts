@@ -193,6 +193,18 @@ export function listCommissionBeneficiaryIds(rows: readonly CommissionRow[]): re
   return [...new Set(rows.map((r) => r.beneficiaryId))].sort();
 }
 
+/**
+ * L3 — max hop index present in dry-run rows. Empty → null (not invent hop 0).
+ */
+export function maxCommissionHop(rows: readonly CommissionRow[]): number | null {
+  if (rows.length === 0) return null;
+  let max = rows[0]!.hop;
+  for (const r of rows) {
+    if (r.hop > max) max = r.hop;
+  }
+  return max;
+}
+
 /** Add two non-negative decimal strings (truncate to 18dp). */
 export function decimalAdd(a: string, b: string, dp = 18): string {
   const aa = assertAmount(a, 'commission.fee');
