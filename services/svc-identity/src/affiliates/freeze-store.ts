@@ -92,6 +92,13 @@ export class MemoryFreezeStore {
     return rec?.reason ?? null;
   }
 
+  /**
+   * L3 — true when at least one freeze is active. Empty store → false.
+   */
+  hasAnyFreeze(): boolean {
+    return this.byId.size > 0;
+  }
+
   /** Accrue commissions while applying this store's freeze set. */
   accrue(input: { fee: FeeEvent; parent: ReadonlyMap<string, string>; tiers?: readonly TierRate[]; maxDepth?: number }): CommissionRow[] {
     return accrueWithFreezes({

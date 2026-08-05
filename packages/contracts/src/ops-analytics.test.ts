@@ -6,6 +6,7 @@ import {
   assertMetricPoint,
   lagFreshness,
   listMoneyMetricIds,
+  analyticsMetricCatalogSize,
   listNonMoneyMetricIds,
   mayLabelLive,
   metricById,
@@ -82,5 +83,10 @@ describe('analytics metric catalogue v0', () => {
     const money = listMoneyMetricIds();
     expect(money).toContain('ledger.volume.notional');
     expect(money).not.toContain('trade.fills.count');
+  });
+
+  it('L3 analyticsMetricCatalogSize is stable catalog length', () => {
+    expect(analyticsMetricCatalogSize()).toBe(ANALYTICS_METRICS_V0.length);
+    expect(analyticsMetricCatalogSize()).toBeGreaterThan(0);
   });
 });

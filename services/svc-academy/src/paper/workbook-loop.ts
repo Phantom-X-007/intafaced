@@ -213,3 +213,11 @@ export function remainingStepIds(run: DrillRun): readonly string[] {
 export function isDrillComplete(run: DrillRun): boolean {
   return run.status === 'complete' && remainingStepIds(run).length === 0;
 }
+
+/**
+ * L3 — completed step count. Refused run → 0 (never invent progress).
+ */
+export function completedStepCount(run: DrillRun): number {
+  if (run.status === 'refused') return 0;
+  return run.completedStepIds.length;
+}

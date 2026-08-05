@@ -7,6 +7,7 @@ import {
   validateImportBatch,
   validateImportRecord,
   summarizeImportBatch,
+  importBatchRejectedCount,
 } from './import-pipeline.js';
 
 const good = {
@@ -73,5 +74,10 @@ describe('L3 summarizeImportBatch', () => {
       rejected: 0,
       ok: true,
     });
+  });
+
+  it('L3 importBatchRejectedCount from summary', () => {
+    expect(importBatchRejectedCount({ total: 2, accepted: 1, rejected: 1, ok: false })).toBe(1);
+    expect(importBatchRejectedCount({ total: 0, accepted: 0, rejected: 0, ok: true })).toBe(0);
   });
 });
