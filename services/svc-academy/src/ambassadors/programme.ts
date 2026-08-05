@@ -156,4 +156,17 @@ export class MemoryAmbassadorProgramme {
     this.byUser.set(input.userId, row);
     return row;
   }
+
+  /**
+   * L3 — badges for many users in one pass (shell directory).
+   * Missing rows → isAmbassador false (never invent appointment).
+   */
+  badgesOf(userIds: readonly string[]): readonly AmbassadorBadge[] {
+    return userIds.map((id) => this.badge(id.trim()));
+  }
+
+  /** Active-only count for operator dashboard. */
+  activeCount(): number {
+    return this.list('active').length;
+  }
 }

@@ -58,4 +58,15 @@ describe('MemoryReferralTree Slice A', () => {
     expect(() => tree.attribute({ userId: U(2), referrerId: U(9), knownUserIds: known })).toThrow(ReferralError);
     expect(tree.attribute({ userId: U(2), referrerId: U(1), knownUserIds: known }).referrerId).toBe(U(1));
   });
+
+  it('L3 directDownline is hop-0 only — no invent multi-tier', () => {
+    const tree = new MemoryReferralTree();
+    tree.attribute({ userId: U(2), referrerId: U(1) });
+    tree.attribute({ userId: U(3), referrerId: U(1) });
+    tree.attribute({ userId: U(4), referrerId: U(2) });
+    expect(tree.directDownlineCount(U(1))).toBe(2);
+    expect(tree.directDownline(U(1))).toEqual([U(2), U(3)]);
+    expect(tree.directDownlineCount(U(2))).toBe(1);
+    expect(tree.directDownlineCount(U(9))).toBe(0);
+  });
 });

@@ -64,6 +64,20 @@ export type CubeResult =
  * Refuses unknown metrics and money-as-number (via assertMetricPoint).
  * Missing metric in fixtures → no point (not a zero invent unless caller supplies 0).
  */
+/**
+ * L3 — filter cube facts by optional dim allowlist before evaluate.
+ * Empty dims → no filter. Unknown dim after filter → empty result (not invent).
+ */
+export function filterCubeFactsByDim(
+  facts: readonly CubeFactRow[],
+  dims: ReadonlySet<string> | readonly string[] | undefined,
+): readonly CubeFactRow[] {
+  if (!dims) return facts;
+  const set = dims instanceof Set ? dims : new Set(dims);
+  if (set.size === 0) return facts;
+  return facts.filter((f) => f.dim != null && set.has(f.dim));
+}
+
 export function evaluateCubeFixtures(facts: readonly CubeFactRow[]): CubeResult {
   const points: CubePoint[] = [];
   for (const row of facts) {

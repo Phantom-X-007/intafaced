@@ -147,4 +147,25 @@ export class MemoryReferralTree {
       attributedAt: this.at.get(userId)!,
     }));
   }
+
+  /**
+   * L3 — direct downline count for a referrer (hop-0 only).
+   * Does not invent multi-tier expansion as "followers".
+   */
+  directDownlineCount(referrerId: string): number {
+    let n = 0;
+    for (const r of this.parent.values()) {
+      if (r === referrerId) n += 1;
+    }
+    return n;
+  }
+
+  /** Direct children user ids (hop-0). */
+  directDownline(referrerId: string): readonly string[] {
+    const out: string[] = [];
+    for (const [userId, r] of this.parent.entries()) {
+      if (r === referrerId) out.push(userId);
+    }
+    return out.sort();
+  }
 }
