@@ -85,3 +85,8 @@ export function summarizeFanoutPlan(plan: readonly DeliveryDecision[]): FanoutPl
   }
   return { sendNow, holdDigest, skipMuted, total: plan.length };
 }
+
+/** L3 — channels that should send immediately (no invent missing channels). */
+export function channelsToSendNow(plan: readonly DeliveryDecision[]): readonly (MuteableChannel | 'inapp')[] {
+  return plan.filter((d): d is { action: 'send_now'; channel: MuteableChannel | 'inapp' } => d.action === 'send_now').map((d) => d.channel);
+}

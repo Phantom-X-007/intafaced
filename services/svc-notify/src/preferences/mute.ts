@@ -46,6 +46,13 @@ export function countMutedChannels(prefs: ChannelMutePrefs): number {
   return prefs.muted.size;
 }
 
+/**
+ * L3 — sorted muteable channels currently muted. Empty prefs → [] (no invent).
+ */
+export function listMutedChannels(prefs: ChannelMutePrefs): readonly MuteableChannel[] {
+  return (['email', 'push', 'sms'] as const).filter((c) => prefs.muted.has(c));
+}
+
 /** Apply a mute toggle. Refuses any API that claims to mute "critical" as a channel. */
 export function applyMuteToggle(current: ChannelMutePrefs, input: { channel: string; muted: boolean }): ChannelMutePrefs {
   const ch = input.channel;
