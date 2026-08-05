@@ -53,3 +53,31 @@ export function missingCredentialHonesty(channel: 'email' | 'push' | 'sms'): Del
     code: `notify.${channel}.credentials_missing`,
   });
 }
+
+export type ChannelDeliveryAttempt = {
+  readonly channel: 'inapp' | 'email' | 'push' | 'sms';
+  readonly outcome: DeliveryOutcome;
+  readonly code: string;
+};
+
+/**
+ * L3 — fanout honesty summary. Grace clock only if ANY channel accepted.
+ * Inbox-visible only if inapp accepted. Never invents acceptance.
+ */
+export type FanoutHonesty = {
+  readonly channels: readonly DeliveryHonesty[];
+  readonly anyAccepted: boolean;
+  readonly mayStartGraceClock: boolean;
+  readonly mayMarkUserVisibleInbox: boolean;
+};
+
+export function fanoutHonesty(attempts: readonly ChannelDeliveryAttempt[]): FanoutHonesty {
+  const channels = attempts.map((a) => deliveryHonesty({ outcome: a.outcome, channel: a.channel, code: a.code }));
+  const anyAccepted = channels.some((c) => c.outcome === 'accepted');
+  return {
+    channels,
+    anyAccepted,
+    mayStartGraceClock: anyAccepted,
+    mayMarkUserVisibleInbox: channels.some((c) => c.mayMarkUserVisibleInbox),
+  };
+}

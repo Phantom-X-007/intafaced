@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   attachPaperFillRef,
   completeDrillStep,
+  drillProgress,
   listPaperFillRefs,
   startPaperDrill,
   startPaperDrillForCatalogItem,
@@ -91,5 +92,23 @@ describe('paper Stage-2 workbook loop', () => {
     // type has no amount/price — money stays on trade
     expect(listPaperFillRefs(ok.run)[0]).not.toHaveProperty('amount');
     expect(listPaperFillRefs(ok.run)[0]).not.toHaveProperty('price');
+  });
+
+  it('L3 drillProgress reports ratio without invent complete', () => {
+    const start = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'p1', paper: true, symbol: 'PAPER/USD' },
+    });
+    if (!start.ok) return;
+    const p0 = drillProgress(start.run);
+    expect(p0.completedCount).toBe(0);
+    expect(p0.ratio).toBe('0.0000');
+    const step = start.run.steps[0]!;
+    const next = completeDrillStep(start.run, step.id);
+    if (!next.ok) return;
+    const p1 = drillProgress(next.run);
+    expect(p1.completedCount).toBe(1);
+    expect(Number(p1.ratio)).toBeGreaterThan(0);
+    expect(p1.status).toBe('active');
   });
 });
