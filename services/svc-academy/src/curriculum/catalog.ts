@@ -594,3 +594,8 @@ export function listCurriculumTitlesByPath(path: CurriculumPath): readonly strin
     .map((item) => item.title)
     .sort();
 }
+
+/** L3 — alias of hasCurriculumSlug (spine existence only). */
+export function isSpineSlug(slug: string): boolean {
+  return hasCurriculumSlug(slug);
+}

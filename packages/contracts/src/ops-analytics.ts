@@ -266,3 +266,10 @@ export function metricCountBySource(): Readonly<Record<AnalyticsSourceDb, number
     identity: countMetricsUsingSource('identity'),
   };
 }
+
+/**
+ * L3 — how many v0 metrics declare exactly one source. Empty → 0.
+ */
+export function singleSourceMetricCount(): number {
+  return ANALYTICS_METRICS_V0.filter((m) => m.sources.length === 1).length;
+}

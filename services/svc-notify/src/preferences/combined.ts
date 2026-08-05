@@ -122,3 +122,11 @@ export function countSkippedMuted(plan: readonly DeliveryDecision[]): number {
 export function planHasNoMutes(plan: readonly DeliveryDecision[]): boolean {
   return countSkippedMuted(plan) === 0;
 }
+
+/**
+ * L3 — true when every decision is send_now. Empty plan → false (not invent all-send).
+ */
+export function planIsAllSendNow(plan: readonly DeliveryDecision[]): boolean {
+  if (plan.length === 0) return false;
+  return plan.every((d) => d.action === 'send_now');
+}

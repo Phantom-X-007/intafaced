@@ -282,4 +282,13 @@ export class MemoryAmbassadorProgramme {
   isEmpty(): boolean {
     return this.byUser.size === 0;
   }
+
+  /**
+   * L3 — active / total as fixed 4dp string. Empty store → null (never invent 0 ratio).
+   */
+  activeRatio(): string | null {
+    const total = this.byUser.size;
+    if (total === 0) return null;
+    return (this.activeCount() / total).toFixed(4);
+  }
 }

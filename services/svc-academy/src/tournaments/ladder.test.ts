@@ -26,6 +26,7 @@ import {
   scoreSpread,
   hasStanding,
   scoreRange,
+  rankOfUser,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -156,5 +157,11 @@ describe('L3 standings board helpers', () => {
     expect(scoreRange([])).toBeNull();
     const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
     expect(scoreRange(rows)).toBe(20);
+  });
+
+  it('L3 rankOfUser null when missing', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(rankOfUser(rows, 'missing')).toBeNull();
+    expect(rankOfUser(rows, 'b')).toBe(1);
   });
 });

@@ -17,6 +17,7 @@ import {
   curriculumSpineSize,
   listCurriculumTitlesByPath,
   isLessonSlug,
+  isSpineSlug,
 } from './catalog.js';
 
 /**
@@ -178,5 +179,10 @@ describe('curriculum catalog', () => {
     expect(isLessonSlug('not-real')).toBe(false);
     const lesson = listCurriculum({ kind: 'lesson' })[0];
     if (lesson) expect(isLessonSlug(lesson.slug)).toBe(true);
+  });
+
+  it('L3 isSpineSlug matches hasCurriculumSlug', () => {
+    expect(isSpineSlug('not-real')).toBe(false);
+    expect(isSpineSlug('foundations-risk-first')).toBe(hasCurriculumSlug('foundations-risk-first'));
   });
 });
