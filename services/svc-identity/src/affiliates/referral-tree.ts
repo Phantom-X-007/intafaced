@@ -185,4 +185,16 @@ export class MemoryReferralTree {
     }
     return out;
   }
+
+  /**
+   * L3 — max hop-0 downline among referrers (0 if none / empty input).
+   */
+  maxDirectDownline(referrerIds: readonly string[]): number {
+    const counts = this.directDownlineCounts(referrerIds);
+    let max = 0;
+    for (const n of Object.values(counts)) {
+      if (n > max) max = n;
+    }
+    return max;
+  }
 }

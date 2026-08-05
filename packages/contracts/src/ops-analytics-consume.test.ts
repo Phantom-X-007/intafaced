@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { consumeCubePoints, consumeCubePointsForMetrics } from './ops-analytics-consume.js';
+import { consumeCubePoints, consumeCubePointsForMetrics, summarizeConsumeResult } from './ops-analytics-consume.js';
 
 describe('analytics L3 consumeCubePoints', () => {
   it('empty series is empty — not invent zeros', () => {
@@ -32,5 +32,7 @@ describe('analytics L3 consumeCubePoints', () => {
     if (r.status !== 'ok') return;
     expect(r.points).toHaveLength(1);
     expect(r.points[0]!.metricId).toBe('trade.fills.count');
+    expect(summarizeConsumeResult(r)).toEqual({ status: 'ok', pointCount: 1, reason: null });
+    expect(summarizeConsumeResult({ status: 'empty' })).toEqual({ status: 'empty', pointCount: 0, reason: null });
   });
 });

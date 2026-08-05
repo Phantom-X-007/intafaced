@@ -4,6 +4,7 @@ import {
   countSeasonsByStatus,
   freezeSeasonWithSnapshot,
   isScoreWritable,
+  listScoreWritableSeasons,
   snapshotStandingsAtFreeze,
   transitionSeason,
 } from './season-lifecycle.js';
@@ -93,5 +94,15 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
       { ...base, id: 'e', status: 'ended' },
     ]);
     expect(h).toEqual({ scheduled: 1, live: 2, frozen: 1, ended: 1, total: 5, scoreWritable: 2 });
+  });
+
+  it('L3 listScoreWritableSeasons is live-only', () => {
+    const list = listScoreWritableSeasons([
+      { ...base, id: 'a', status: 'scheduled' },
+      { ...base, id: 'b', status: 'live' },
+      { ...base, id: 'c', status: 'frozen' },
+    ]);
+    expect(list.map((s) => s.id)).toEqual(['b']);
+    expect(listScoreWritableSeasons([])).toEqual([]);
   });
 });

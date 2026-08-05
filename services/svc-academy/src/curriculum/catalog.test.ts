@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CURRICULUM_PATHS, getCurriculumItem, inventoryCurriculum, listCurriculum } from './catalog.js';
+import { CURRICULUM_PATHS, getCurriculumItem, hasCurriculumSlug, inventoryCurriculum, listCurriculum } from './catalog.js';
 
 /**
  * Curriculum catalog — pure, no database.
@@ -68,6 +68,11 @@ describe('curriculum catalog', () => {
     expect(inv.byPath.foundations + inv.byPath.markets + inv.byPath.builder + inv.byPath.sovereign).toBe(inv.total);
     expect(inv.byKind.playbook + inv.byKind.workbook + inv.byKind.lesson).toBe(inv.total);
     expect(inv.total).toBeGreaterThan(0);
+  });
+
+  it('L3 hasCurriculumSlug false for residual invent titles', () => {
+    expect(hasCurriculumSlug('foundations-risk-first')).toBe(true);
+    expect(hasCurriculumSlug('not-a-real-deriv-desk-title')).toBe(false);
   });
 
   it('spine bodies use platform vocabulary (Identity Blueprint appears; bodies are non-empty)', () => {

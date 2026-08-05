@@ -491,3 +491,10 @@ export function inventoryCurriculum(): CurriculumInventory {
   }
   return { total: SPINE.length, byPath, byKind };
 }
+
+/**
+ * L3 — slug existence on spine only. Unknown → false (never invent residual titles).
+ */
+export function hasCurriculumSlug(slug: string): boolean {
+  return BY_SLUG.has(slug.trim());
+}

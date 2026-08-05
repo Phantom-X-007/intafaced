@@ -174,6 +174,17 @@ export function summarizeCommissionRows(rows: readonly CommissionRow[]): Commiss
   return { rowCount: rows.length, byBeneficiary, totalCommission: total, asset };
 }
 
+/**
+ * L3 — hop histogram for dry-run rows (no payout). Empty → empty map.
+ */
+export function countCommissionRowsByHop(rows: readonly CommissionRow[]): Readonly<Record<number, number>> {
+  const out: Record<number, number> = {};
+  for (const r of rows) {
+    out[r.hop] = (out[r.hop] ?? 0) + 1;
+  }
+  return out;
+}
+
 /** Add two non-negative decimal strings (truncate to 18dp). */
 export function decimalAdd(a: string, b: string, dp = 18): string {
   const aa = assertAmount(a, 'commission.fee');
