@@ -1,8 +1,9 @@
 # Internet leverage — Phase B plan (new external candidates)
 
-**Status:** PLAN / SPEC — **executed** (v1 thin #772; **v2 all-out** report is canonical)  
+**Status:** PLAN / SPEC — **executed**; operator correction 2026-08-05  
 **Depends on:** Phase A complete on tip — [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md)  
-**Canonical report:** [`INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md)  
+**Canonical decision surface:** [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — **full future-project map**, no max-5 thrift cap  
+**Research evidence (v2 tables still valid):** [`INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md)  
 **Term:** **Internet leverage** = already-built systems we adopt/wire/wrap instead of rebuilding.
 
 **Phase B is not shopping for fun.** It is a disciplined landscape of **candidates that fill real gaps** left after Phase A, filtered by doctrine, ownership, cost, and dual-build risk.
@@ -11,16 +12,16 @@
 
 ## 0 · High-level overview (what good looks like)
 
-| Dimension     | Good job                                                                                                 | Failure (lazy / dangerous)                     |
-| ------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| **Scope**     | New leverage **outside** monorepo (or not yet adopted) for Nitro + Denon work                            | Re-auditing prior kits as if new               |
-| **Anchor**    | Every search lane starts from a **named gap** (Phase A G-\* + tracker ready + Denon D-S-\* / hard board) | “Cool projects on GitHub” with no job          |
-| **Planes**    | Fiat vs Protocol vs shell clearly labeled                                                                | Handing Shizu UI kits or agents chain L1 cores |
-| **Doctrine**  | Ledger-only money; no dual-book; no invent prices; partner names in adapters                             | “Just use their wallet balances”               |
-| **Ownership** | Candidate → who would adopt (N / D / S)                                                                  | Agents invent futures risk via a random lib    |
-| **Depth**     | Multi-source (docs, license, maturity, ops, security)                                                    | One README screenshot                          |
-| **Output**    | Ranked shortlist + kill list + next 90-day adopt queue                                                   | 200-link dump nobody can act on                |
-| **Peace**     | You can see: adopt / adapt / reject / later for each                                                     | “We should look into X someday”                |
+| Dimension     | Good job                                                                                                       | Failure (lazy / dangerous)                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Scope**     | New leverage **outside** monorepo (or not yet adopted) for Nitro + Denon work                                  | Re-auditing prior kits as if new                                              |
+| **Anchor**    | Every search lane starts from a **named gap** (Phase A G-\* + tracker ready + Denon D-S-\* / hard board)       | “Cool projects on GitHub” with no job                                         |
+| **Planes**    | Fiat vs Protocol vs shell clearly labeled                                                                      | Handing Shizu UI kits or agents chain L1 cores                                |
+| **Doctrine**  | Ledger-only money; no dual-book; no invent prices; partner names in adapters                                   | “Just use their wallet balances”                                              |
+| **Ownership** | Candidate → who would adopt (N / D / S)                                                                        | Agents invent futures risk via a random lib                                   |
+| **Depth**     | Multi-source (docs, license, maturity, ops, security)                                                          | One README screenshot                                                         |
+| **Output**    | Ranked shortlist + kill list + **full-horizon** map (every open mountain/socket/D-S; phase NOW/MID/LATE/NEVER) | 200-link dump **or** artificial max-5 thrift cap as if only five levers exist |
+| **Peace**     | You can see: adopt / adapt / reject / later for each                                                           | “We should look into X someday”                                               |
 
 **Unspoken needs (inferred):**
 
@@ -214,16 +215,16 @@ For each Top item:
 - **Later** — after D-S-x or Class X
 - **Reject** — reason
 
-Plus **90-day queue** (max 5 active adopt tracks) so all-out research doesn’t become all-out implement thrash.
+Plus a **full-horizon phased map** (NOW / MID / LATE / NEVER) covering every open residual — **not** a max-5 implement thrift queue. Ranking = decision order only. (Operator correction 2026-08-05: Phase B is whole-future scope.)
 
 ---
 
 ### B7 — Deliverable
 
 **Primary:** `docs/INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-XX.md` on tip (one PR)  
-**Must include:** gap backlog · lane map · kill list · ranked shortlist · 90-day queue · explicit non-goals · Phase A non-regression checklist
+**Must include:** gap backlog · lane map · kill list · ranked shortlist · **full-horizon map** · explicit non-goals · Phase A non-regression checklist
 
-**Chat to you:** one screen — Top 5 + decisions you must make (Class X / Denon seal).
+**Chat to you:** one screen — how to read the map + Tier A start order + Class X decisions (not “only five levers forever”).
 
 ---
 
@@ -255,10 +256,11 @@ Implement only after you pick (or standing order “trial top 3 spikes”).
 - [ ] Kill list ≥ shortlist (proves filtering)
 - [ ] No full-UI kit competitor recommended without explicit “replace shell” decision (default: reject)
 - [ ] No second ledger recommended
-- [ ] Top 5 have owner + next action ≤ 1 sprint each
+- [ ] Full-horizon map: every open tracker mountain/socket + D-S has path type + phase (no silent drop)
+- [ ] Ranking present for decision order — **not** a hard implement ceiling of 5
 - [ ] Class X items listed separately for you only
 - [ ] Durable report on tip or harvest+PR
-- [ ] You can decide Top 5 in <10 minutes from one screen
+- [ ] You can see Tier A start order in <10 minutes from one screen
 
 ---
 
@@ -270,7 +272,7 @@ Implement only after you pick (or standing order “trial top 3 spikes”).
 - [ ] Raw caps respected; kills reasoned
 - [ ] Deep cards for shortlist
 - [ ] Rank weights stated
-- [ ] 90-day adopt queue ≤5
+- [ ] Full-horizon phased map (NOW/MID/LATE/NEVER) — **not** max-5 thrift queue as sole output
 - [ ] Collision with open Denon PRs noted
 - [ ] Shizu chain refs isolated
 - [ ] Non-regression: Phase A kit + ledger-only restated
