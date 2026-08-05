@@ -585,7 +585,10 @@ export function isValidPlanPage(plan: readonly DeliveryDecision[], pageIndex: nu
 
 /** L3 — export lines: channel,action. Empty → []. */
 export function planExportLines(plan: readonly DeliveryDecision[]): readonly string[] {
-  return plan.map((d) => `${d.channel},${d.action}`);
+  return plan.map((d) => {
+    if (d.action === 'inapp_only') return 'inapp,inapp_only';
+    return `${d.channel},${d.action}`;
+  });
 }
 
 /** L3 — plan export header. */
