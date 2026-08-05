@@ -202,3 +202,8 @@ export function listFrozenSeasonIds(seasons: readonly SeasonRecord[]): readonly 
 export function liveSeasonCount(seasons: readonly SeasonRecord[]): number {
   return filterSeasonsByStatus(seasons, 'live').length;
 }
+
+/** L3 — count of frozen seasons. Empty → 0. */
+export function frozenSeasonCount(seasons: readonly SeasonRecord[]): number {
+  return filterSeasonsByStatus(seasons, 'frozen').length;
+}

@@ -255,4 +255,9 @@ export class MemoryResidencyDesk {
   hasOpenApplication(userId: string): boolean {
     return this.openForUser(userId).length > 0;
   }
+
+  /** L3 — open application count for one user. Missing → 0. */
+  openApplicationCount(userId: string): number {
+    return this.openForUser(userId).length;
+  }
 }

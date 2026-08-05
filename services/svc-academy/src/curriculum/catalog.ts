@@ -606,3 +606,8 @@ export function isSpineSlug(slug: string): boolean {
 export function hasCurriculumPath(path: CurriculumPath): boolean {
   return countCurriculumByPath(path) > 0;
 }
+
+/** L3 — total spine items (same as inventory total). */
+export function spineItemCount(): number {
+  return inventoryCurriculum().total;
+}

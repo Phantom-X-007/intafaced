@@ -28,6 +28,7 @@ import {
   scoreRange,
   rankOfUser,
   isTopScorer,
+  secondPlaceUser,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -171,5 +172,12 @@ describe('L3 standings board helpers', () => {
     expect(isTopScorer(rows, 'missing')).toBe(false);
     expect(isTopScorer(rows, 'b')).toBe(true);
     expect(isTopScorer(rows, 'a')).toBe(false);
+  });
+
+  it('L3 secondPlaceUser null without podium', () => {
+    expect(secondPlaceUser([])).toBeNull();
+    expect(secondPlaceUser([row('a', 10, '2026-08-01T12:00:00Z')])).toBeNull();
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(secondPlaceUser(rows)).toBe('a');
   });
 });
