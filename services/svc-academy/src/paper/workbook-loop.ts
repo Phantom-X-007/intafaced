@@ -147,6 +147,33 @@ export function listPaperFillRefs(run: DrillRun): readonly PaperFillRef[] {
   return run.fillRefs;
 }
 
+/**
+ * L3 — pure drill progress snapshot (no invent complete status).
+ * ratio is fixed 4dp decimal string; refused runs report ratio "0.0000".
+ */
+export type DrillProgress = {
+  readonly workbookSlug: string;
+  readonly status: DrillRun['status'];
+  readonly stepCount: number;
+  readonly completedCount: number;
+  readonly ratio: string;
+  readonly fillCount: number;
+};
+
+export function drillProgress(run: DrillRun): DrillProgress {
+  const stepCount = run.steps.length;
+  const completedCount = run.status === 'refused' ? 0 : run.completedStepIds.length;
+  const ratio = stepCount === 0 ? '0.0000' : (completedCount / stepCount).toFixed(4);
+  return {
+    workbookSlug: run.workbookSlug,
+    status: run.status,
+    stepCount,
+    completedCount,
+    ratio,
+    fillCount: run.fillRefs.length,
+  };
+}
+
 /** Catalog kind gate — only workbook slugs may start paper drills. */
 export function assertWorkbookKind(kind: string | null | undefined): boolean {
   return kind === 'workbook';

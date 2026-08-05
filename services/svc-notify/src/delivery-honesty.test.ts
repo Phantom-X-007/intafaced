@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deliveryHonesty, missingCredentialHonesty } from './delivery-honesty.js';
+import { deliveryHonesty, fanoutHonesty, missingCredentialHonesty } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
   it('accepted out-of-app may start grace but not claim inbox-read', () => {
@@ -28,5 +28,23 @@ describe('notify Stage-2 delivery honesty', () => {
     const h = deliveryHonesty({ outcome: 'failed', channel: 'push', code: 'transport.timeout' });
     expect(h.outcome).toBe('failed');
     expect(h.mayStartGraceClock).toBe(false);
+  });
+
+  it('L3 fanoutHonesty: grace only if any accepted; inbox only if inapp accepted', () => {
+    const allFail = fanoutHonesty([
+      { channel: 'email', outcome: 'refused', code: 'missing' },
+      { channel: 'push', outcome: 'failed', code: 'timeout' },
+    ]);
+    expect(allFail.anyAccepted).toBe(false);
+    expect(allFail.mayStartGraceClock).toBe(false);
+    expect(allFail.mayMarkUserVisibleInbox).toBe(false);
+
+    const mixed = fanoutHonesty([
+      { channel: 'email', outcome: 'accepted', code: '2xx' },
+      { channel: 'inapp', outcome: 'accepted', code: 'inbox' },
+    ]);
+    expect(mixed.anyAccepted).toBe(true);
+    expect(mixed.mayStartGraceClock).toBe(true);
+    expect(mixed.mayMarkUserVisibleInbox).toBe(true);
   });
 });
