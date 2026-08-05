@@ -26,6 +26,10 @@ import {
   fanoutHasNoRefusals,
   fanoutSuccessRatio,
   fanoutHasRefusal,
+  acceptedChannelsSorted,
+  failedChannelsSorted,
+  refusedChannelsSorted,
+  fanoutFullyAccepted,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -202,5 +206,21 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutHasNoRefusals(attempts)).toBe(false);
     expect(fanoutHasRefusal(attempts)).toBe(true);
     expect(fanoutSuccessRatio(attempts)).toBe('0.5000');
+  });
+
+  it('L3 wave28 sorted channels + fully accepted', () => {
+    expect(acceptedChannelsSorted([])).toEqual([]);
+    expect(failedChannelsSorted([])).toEqual([]);
+    expect(refusedChannelsSorted([])).toEqual([]);
+    expect(fanoutFullyAccepted([])).toBe(false);
+    const attempts = [
+      { channel: 'sms' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    expect(acceptedChannelsSorted(attempts)).toEqual(['email', 'sms']);
+    expect(failedChannelsSorted(attempts)).toEqual(['push']);
+    expect(fanoutFullyAccepted(attempts)).toBe(false);
+    expect(fanoutFullyAccepted(attempts.filter((a) => a.outcome === 'accepted'))).toBe(true);
   });
 });

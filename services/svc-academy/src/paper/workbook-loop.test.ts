@@ -22,6 +22,10 @@ import {
   drillSymbol,
   drillWorkbookSlug,
   hasPartialProgress,
+  hasFillRefs,
+  firstRemainingStepId,
+  lastRemainingStepId,
+  drillCompletionRatioNumber,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -219,5 +223,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(mid.ok).toBe(true);
     if (!mid.ok) return;
     expect(hasPartialProgress(mid.run)).toBe(true);
+  });
+
+  it('L3 wave28 fill refs + remaining ends + ratio number', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w28', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(hasFillRefs(started.run)).toBe(false);
+    expect(firstRemainingStepId(started.run)).toBe(started.run.steps[0]!.id);
+    expect(lastRemainingStepId(started.run)).toBe(started.run.steps[started.run.steps.length - 1]!.id);
+    expect(drillCompletionRatioNumber(started.run)).toBe(0);
   });
 });

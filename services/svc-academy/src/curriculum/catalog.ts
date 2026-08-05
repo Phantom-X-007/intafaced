@@ -708,3 +708,23 @@ export function marketsItemCount(): number {
 export function builderItemCount(): number {
   return countCurriculumByPath('builder');
 }
+
+/** L3 — sovereign path item count. */
+export function sovereignItemCount(): number {
+  return countCurriculumByPath('sovereign');
+}
+
+/** L3 — true when foundations path has content. */
+export function hasFoundationsPath(): boolean {
+  return hasCurriculumPath('foundations');
+}
+
+/** L3 — true when markets path has content. */
+export function hasMarketsPath(): boolean {
+  return hasCurriculumPath('markets');
+}
+
+/** L3 — true when builder path has content. */
+export function hasBuilderPath(): boolean {
+  return hasCurriculumPath('builder');
+}

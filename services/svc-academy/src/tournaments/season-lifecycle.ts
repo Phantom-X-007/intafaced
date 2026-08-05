@@ -289,3 +289,26 @@ export function allSeasonsEnded(seasons: readonly SeasonRecord[]): boolean {
   if (seasons.length === 0) return false;
   return seasons.every((s) => s.status === 'ended');
 }
+
+/** L3 — non-terminal season count (not ended). Empty → 0. */
+export function openSeasonCount(seasons: readonly SeasonRecord[]): number {
+  return seasons.filter((s) => !isSeasonTerminal(s.status)).length;
+}
+
+/** L3 — true when any season is score-writable. Empty → false. */
+export function hasScoreWritableSeason(seasons: readonly SeasonRecord[]): boolean {
+  return scoreWritableSeasonCount(seasons) > 0;
+}
+
+/**
+ * L3 — open (non-ended)/total as fixed 4dp. Empty → null.
+ */
+export function openSeasonRatio(seasons: readonly SeasonRecord[]): string | null {
+  if (seasons.length === 0) return null;
+  return (openSeasonCount(seasons) / seasons.length).toFixed(4);
+}
+
+/** L3 — sorted ids of score-writable seasons. Empty → []. */
+export function listScoreWritableSeasonIds(seasons: readonly SeasonRecord[]): readonly string[] {
+  return listSeasonIds(listScoreWritableSeasons(seasons));
+}

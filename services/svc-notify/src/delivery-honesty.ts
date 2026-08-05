@@ -249,3 +249,23 @@ export function fanoutSuccessRatio(attempts: readonly ChannelDeliveryAttempt[]):
 export function fanoutHasRefusal(attempts: readonly ChannelDeliveryAttempt[]): boolean {
   return countFanoutRefusals(attempts) > 0;
 }
+
+/** L3 — sorted accepted channel names. Empty → []. */
+export function acceptedChannelsSorted(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt['channel'][] {
+  return [...acceptedChannels(attempts)].sort();
+}
+
+/** L3 — sorted failed channel names. Empty → []. */
+export function failedChannelsSorted(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt['channel'][] {
+  return [...failedChannels(attempts)].sort();
+}
+
+/** L3 — sorted refused channel names. Empty → []. */
+export function refusedChannelsSorted(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt['channel'][] {
+  return [...refusedChannels(attempts)].sort();
+}
+
+/** L3 — true when accepted count equals attempt count (all accepted). Empty → false. */
+export function fanoutFullyAccepted(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return allChannelsAccepted(attempts);
+}

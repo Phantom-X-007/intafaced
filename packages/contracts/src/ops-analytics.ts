@@ -393,3 +393,27 @@ export function singleSourceMetricRatio(): string | null {
   if (total === 0) return null;
   return (singleSourceMetricCount() / total).toFixed(4);
 }
+
+/** L3 — true when ledger is used by any metric. */
+export function hasLedgerSourceMetrics(): boolean {
+  return countMetricsUsingSource('ledger') > 0;
+}
+
+/** L3 — true when trade is used by any metric. */
+export function hasTradeSourceMetrics(): boolean {
+  return countMetricsUsingSource('trade') > 0;
+}
+
+/** L3 — true when identity is used by any metric. */
+export function hasIdentitySourceMetrics(): boolean {
+  return countMetricsUsingSource('identity') > 0;
+}
+
+/**
+ * L3 — ledger/total share as fixed 4dp (by source membership, not exclusive). Empty → null.
+ */
+export function ledgerSourceShare(): string | null {
+  const total = analyticsMetricCatalogSize();
+  if (total === 0) return null;
+  return (countMetricsUsingSource('ledger') / total).toFixed(4);
+}
