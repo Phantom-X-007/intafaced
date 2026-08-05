@@ -1,56 +1,56 @@
 # R-P-WS-INTEGRITY — WS market-ID + `/ws`→`/stream` blocker
 
-| Field                | Value                                                                                                                                                                                                                                                                                                                                                     |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Claim**            | `P-WS-REPORT` (integrity report only) — **STILL BLOCKED** (no implement craft)                                                                                                                                                                                                                                                                            |
-| **Class**            | N (docs)                                                                                                                                                                                                                                                                                                                                                  |
-| **Proof mode**       | **NO-FLEET** — `docker` not available on this host; live counts not re-probed this session                                                                                                                                                                                                                                                                |
-| **Tip when written** | `54317448` `docs(ops): R07 cycle105 freeProduct=0 + tip 47f3c85c (#705)` (`origin/main` @ AFK cycle106 2026-08-03T23:26Z)                                                                                                                                                                                                                                 |
-| **Upgrade**          | AFK integrity **cycle106** on tip `54317448`. Freeze **still true**: open **#433** matching + **#432** edge (re-verified OPEN). **#424** / **#422** remain MERGED. Prior stamps: `1abfb5ae` (cycle103 / #700), `e6f16890` (cycle101 / #696), `41fd94de` (cycle100 / #693), `182635f8` (cycle97 / #685). **NO implement** / **NO-FLEET**. **No depth UI.** |
-| **Sources**          | Code on tip + prior live probe in [`docs/REGROUP-2026-08-03.md`](../REGROUP-2026-08-03.md) §3 + Denon board [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) **D-P0-WS**                                                                                                            |
-| **Dual-edit**        | **None.** This residual is `docs/ops/` only. Did **not** edit matching/edge/ws/nginx. Collisions (do not dual-edit): **#433** `services/svc-matching/**`, **#432** `services/svc-edge/src/env.ts` + `index.ts`.                                                                                                                                           |
-| **Landed (cleared)** | **#424** MERGED — edge CORS (`services/svc-edge` cors/* + index) no longer open collision. **#422** MERGED — scan/custody (no P-WS path intersect; noted for tip context).                                                                                                                                                                                |
-| **Still blocking**   | **#433** @Phantom-X-007 matching reconcile (OPEN, MERGEABLE, CI green) · **#432** @Phantom-X-007 screening/edge env (OPEN, CONFLICTING, CI green). Re-freeze after either merges or closes before claiming craft.                                                                                                                                         |
+| Field                    | Value                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Claim**                | `P-WS-REPORT` (integrity report only) — **PATH-CLEAR vs open partners**; still **NO implement craft** / **no depth UI** until D-P0-WS product law + fleet proof                                                                                                                                                                                                                     |
+| **Class**                | N (docs)                                                                                                                                                                                                                                                                                                                                                                            |
+| **Proof mode**           | **NO-FLEET** — `docker` not on host; live market-set intersection not re-probed (`proof_missing: fleet-blocked`)                                                                                                                                                                                                                                                                    |
+| **Tip when written**     | `9e863d7b` `feat: Stage-1 residual batch + FH-SEC-01 safe-regex (RE2) (#787)` (`origin/main` @ AFK 2026-08-05T04:22Z)                                                                                                                                                                                                                                                               |
+| **Upgrade**              | **Board-Delta (real):** Denon **#433** matching + **#432** edge are **closed/gone** from open matrix. Open partners only **#428** (p2p instruments) + **#346** (pay gateway) — **zero path intersect** with `services/svc-ws`, `services/svc-matching`, `services/svc-edge`, nginx. nginx `/ws/` rewrite **already on tip** (see §1). Prior cycle106 stamp was stale on both facts. |
+| **Sources**              | Code on tip + prior live probe in [`docs/REGROUP-2026-08-03.md`](../REGROUP-2026-08-03.md) §3 + Denon board [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) **D-P0-WS**                                                                                                                                      |
+| **Dual-edit**            | **None.** This residual is `docs/ops/` only. Did **not** edit matching/edge/ws/nginx. Open partner paths: `services/svc-p2p/**`, `services/svc-pay/**`, tracker/docs scoreboard — not P-WS craft paths.                                                                                                                                                                             |
+| **Landed (cleared)**     | **#424** CORS · **#422** scan/custody · **#433** / **#432** no longer open · nginx rewrite on tip · Stage-1 TRK batch through **#787** (unrelated to WS path)                                                                                                                                                                                                                       |
+| **Still blocking depth** | **D-P0-WS product law** (which string is public depth market key) + **fleet proof** that trade market ids ∩ matching books is non-empty + shell client contract. **Not** partner path-intersect.                                                                                                                                                                                    |
 
-**Purpose:** freeze the platform-integrity facts so depth/tape work is not started against a path that cannot work. **Does not** implement nginx, market authority, depth UI, or invent markets.
+**Purpose:** freeze the platform-integrity facts so depth/tape work is not started against a path that cannot work. **Does not** implement market authority, depth UI, or invent markets.
 
-### AFK status (2026-08-03T23:26Z — tip `54317448` · cycle106)
+### AFK status (2026-08-05T04:22Z — tip `9e863d7b`)
 
-| Metric      | Value                                                                                           |
-| ----------- | ----------------------------------------------------------------------------------------------- |
-| freeProduct | **0** — shell drained; this residual is **report-only OPS**, not product spawn                  |
-| freeTracker | **0** (shell mandate; TRK research is not product spawn)                                        |
-| P-WS-REPORT | **BLOCKED** — path intersect open Denon **#433** (matching) + **#432** (edge); **NO implement** |
-| Free OPS    | BABYSIT-MATRIX · REPORTS only                                                                   |
-| NO-FLEET    | **Yes** — no live re-probe; structural facts only                                               |
-| Depth UI    | **NOT free** — still not a residual until D-P0-WS path + market-id law                          |
+| Metric      | Value                                                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| freeProduct | **1** shell = `P-WS-REPORT` only · freeImplementable **0** (Stage-1 TRK claims `merged`)                                |
+| openPRs     | **#428** Denon p2p CONFLICTING red Prettier+Typecheck · **#346** Shehzad pay CONFLICTING CI green                       |
+| P-WS paths  | **PATH-CLEAR** vs both open partners — report refresh free; **implement still gated** on D-P0-WS + fleet, not dual-edit |
+| nginx       | **Fixed on tip** — `location ^~ /ws/` → `proxy_pass http://svc-ws:4014/;` (trailing slash rewrite to `/stream`)         |
+| NO-FLEET    | **Yes** — no live re-probe of market intersection                                                                       |
+| Depth UI    | **NOT free** — frontend is HUMAN `nitro-frontend-all`; product law + fleet proof still open                             |
 
 ---
 
 ## 1 · nginx `/ws` vs svc-ws `/stream` — path fact
 
-### What the shell proxies
+### What the shell proxies (tip `9e863d7b`)
 
 `vendor/upstream-exchange/05_Web_Front/nginx.conf` (compose maps host `:8090` → container `:80`):
 
-| Location         | Lines | Behaviour                                                                                  |
-| ---------------- | ----- | ------------------------------------------------------------------------------------------ |
-| `location /`     | 55–57 | SPA `try_files $uri $uri/ /index.html`                                                     |
-| `location /api/` | 64–71 | `proxy_pass http://svc-edge:4000`                                                          |
-| `location /ws`   | 76–83 | `proxy_pass http://svc-ws:4014` **with no URI rewrite** + `Upgrade` / `Connection` headers |
+| Location           | Lines  | Behaviour                                                                                                   |
+| ------------------ | ------ | ----------------------------------------------------------------------------------------------------------- |
+| `location /`       | SPA    | `try_files $uri $uri/ /index.html`                                                                          |
+| `location /api/`   | ~76–83 | `proxy_pass http://svc-edge:4000`                                                                           |
+| `location ^~ /ws/` | ~118–  | `proxy_pass http://svc-ws:4014/;` **with trailing slash** — prefix strip so `/ws/stream` → svc-ws `/stream` |
 
-```76:83:vendor/upstream-exchange/05_Web_Front/nginx.conf
-    location /ws {
-        proxy_pass http://svc-ws:4014;
+**Board-Delta vs cycle106:** the old stamp claimed `location /ws` with **no** URI rewrite (browser `/ws` arrived as `/ws` → 404). On current tip the block is `^~ /ws/` + `proxy_pass …4014/;` with an explicit comment that the trailing slash is the fix. **Path plumbing residual for nginx is closed on tip**; remaining depth blockers are market-id law + fleet ∩ + client contract + HUMAN front-end lane.
+
+```118:124:vendor/upstream-exchange/05_Web_Front/nginx.conf
+    location ^~ /ws/ {
+        proxy_pass http://svc-ws:4014/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade    $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host       $host;
-        proxy_read_timeout 3600s;
-    }
 ```
 
-`proxy_pass` without a URI path → request URI is forwarded **unchanged**. Browser `GET /ws?…` arrives at svc-ws as **`/ws`**.
+`proxy_pass` **with** a URI (`/`) → matched prefix is replaced. Browser `GET /ws/stream?market=…` arrives at svc-ws as **`/stream?market=…`**. (Historical cycle106 stamp described the broken no-slash form — superseded.)
 
 ### What svc-ws accepts
 
@@ -300,7 +300,7 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 - No depth/tape **UI** polish in the same change unless path + namespace already green.
 - No inventing mid/prices/candles to make books look full.
-- No dual-edit of open money PR paths without path-intersect (`#433` matching reconcile, `#432` screening/edge env — different concerns; do not hitch-hike). `#424` CORS **landed** — no longer a dual-edit risk.
+- No dual-edit of open partner money PR paths (`#428` p2p instruments, `#346` pay gateway — different concerns; do not hitch-hike). Matching/edge dual-edit blocks **#433/#432** are closed.
 
 ### Suggested acceptance checklist (Denon self-audit)
 
@@ -313,14 +313,14 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 ## 4 · Explicitly NOT free
 
-| Item                                                       | Why blocked / reserved                                                                                                                    |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Depth UI / live book port into shell**                   | Blocked on D-P0-WS (§1 + §2). REGROUP §3 + swarm orient: depth/tape **not** free product residual.                                        |
-| **Tape / public trades channel UI**                        | Same `/stream` path + same market key.                                                                                                    |
-| **Inventing markets, mids, or seed depth for screenshots** | Honesty law; fabricated-money ratchet; NO-FLEET does not authorize fake books.                                                            |
-| **Implementing inside open Denon PRs**                     | `#433` `services/svc-matching/**` · `#432` edge env/index + screening — babysit / residual report only. `#424` CORS **merged** (cleared). |
-| **Treating nginx-only fix as “depth done”**                | Path fix alone leaves ∩ = 0 (or unknown market closes).                                                                                   |
-| **apps/web as product surface**                            | Retired; port targets vendor shell. Depth state machine in apps/web is reference, not the live desk.                                      |
+| Item                                                       | Why blocked / reserved                                                                                                     |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Depth UI / live book port into shell**                   | Blocked on D-P0-WS (§1 + §2). REGROUP §3 + swarm orient: depth/tape **not** free product residual.                         |
+| **Tape / public trades channel UI**                        | Same `/stream` path + same market key.                                                                                     |
+| **Inventing markets, mids, or seed depth for screenshots** | Honesty law; fabricated-money ratchet; NO-FLEET does not authorize fake books.                                             |
+| **Implementing inside open partner PRs**                   | `#428` p2p · `#346` pay — path-clear for WS but **never dual-edit**. Matching/edge open dual-edit (**#433/#432**) cleared. |
+| **Treating nginx-only fix as “depth done”**                | Path fix alone leaves ∩ = 0 (or unknown market closes).                                                                    |
+| **apps/web as product surface**                            | Retired; port targets vendor shell. Depth state machine in apps/web is reference, not the live desk.                       |
 
 **Free for Nitro residual (unchanged by this report):** shell money call sites (RP1), landing honesty (RP2), announce (RP3), wire adopt (RP4), AFK residuals — **not** depth.
 
@@ -343,17 +343,17 @@ Platform-integrity lane. Agents **do not** invent the authority rule ([DENON har
 
 ## 6 · This report’s verification
 
-| Check                            | Result                                                                            |
-| -------------------------------- | --------------------------------------------------------------------------------- |
-| Tip SHA stamped                  | `54317448` (`origin/main` @ 2026-08-03T23:26Z · cycle106)                         |
-| Denon #424 / #422                | **MERGED** (no longer open collisions for this claim)                             |
-| Freeze collisions remaining      | **#433** matching (OPEN, MERGEABLE) · **#432** edge env/index (OPEN, CONFLICTING) |
-| nginx `/ws` + SPA `/`            | Unchanged structural fact (prior stamp; NO-FLEET, no re-probe)                    |
-| svc-ws `/stream` only            | Unchanged structural fact                                                         |
-| trade UUID → matching            | Unchanged structural fact                                                         |
-| Live 16/10/∩0 re-probe           | **No** — NO-FLEET; cite REGROUP                                                   |
-| Code changes to matching/edge/ws | **None** (dual-edit ban; claim blocked; report-only OPS)                          |
-| freeProduct                      | **0** — shell drained; no implement craft this residual                           |
-| Depth UI                         | **Not started** (not free; D-P0-WS handoff §3 still the gate)                     |
+| Check                            | Result                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| Tip SHA stamped                  | `9e863d7b` (`origin/main` @ 2026-08-05T04:22Z · AFK keep-alive)                            |
+| Denon #424 / #422 / #433 / #432  | **Not open** — partner matrix is **#428** + **#346** only                                  |
+| P-WS path ∩ open partners        | **∅** — p2p/pay only; ws/matching/edge/nginx clear                                         |
+| nginx `/ws/` rewrite             | **On tip** — `^~ /ws/` + `proxy_pass …4014/;` (cycle106 “no rewrite” stamp **superseded**) |
+| svc-ws `/stream` only            | Unchanged — `STREAM_PATH = '/stream'`                                                      |
+| trade UUID → matching            | Unchanged structural fact; fleet ∩ **not** re-probed                                       |
+| Live market-set re-probe         | **No** — NO-FLEET; cite REGROUP for last live numbers                                      |
+| Code changes to matching/edge/ws | **None** (report-only; dual-edit ban; front-end HUMAN)                                     |
+| freeProduct (this freeze)        | **1** = P-WS-REPORT shell only; freeImplementable **0**                                    |
+| Depth UI                         | **Not free** — D-P0-WS + fleet + HUMAN `nitro-frontend-all`                                |
 
-**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. Structural path + ownership facts remain code-backed (prior stamp on tip history through `54317448`). Claim **P-WS-REPORT** remains **blocked** — **NO-FLEET**, **NO implement** until **#433** (matching) and **#432** (edge) land or close without path intersect — then residual may re-open as report-only refresh, still **no depth UI**. Cycle106 re-confirmed both PRs still open (no implement craft).
+**Stamp:** `proof_missing: fleet-blocked` for live market-set intersection. **Partner path-intersect is no longer the block.** Residual for craft: D-P0-WS market-key product law + fleet proof + client contract; depth UI remains HUMAN / not free residual. Claim **P-WS-REPORT** → residual-own after this refresh (report done; not mountain done).
