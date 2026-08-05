@@ -34,6 +34,10 @@ import {
   ratioMetricCount,
   amountMetricCount,
   countKindMetricCount,
+  hasRatioMetrics,
+  hasAmountMetrics,
+  hasCountKindMetrics,
+  multiSourceMetricRatio,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -220,5 +224,16 @@ describe('L3 wave25 catalog kind counts', () => {
   it('catalogMetricCount + kind partitions sum to catalog', () => {
     expect(catalogMetricCount()).toBe(analyticsMetricCatalogSize());
     expect(ratioMetricCount() + amountMetricCount() + countKindMetricCount()).toBe(analyticsMetricCatalogSize());
+  });
+});
+
+describe('L3 wave26 kind presence + multi-source ratio', () => {
+  it('hasRatio/Amount/Count + multiSourceMetricRatio', () => {
+    expect(typeof hasRatioMetrics()).toBe('boolean');
+    expect(typeof hasAmountMetrics()).toBe('boolean');
+    expect(typeof hasCountKindMetrics()).toBe('boolean');
+    const r = multiSourceMetricRatio();
+    expect(r).not.toBeNull();
+    expect(r).toMatch(/^\d+\.\d{4}$/);
   });
 });

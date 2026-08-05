@@ -200,3 +200,30 @@ export function fanoutIsEmpty(attempts: readonly ChannelDeliveryAttempt[]): bool
 export function fanoutAttemptCount(attempts: readonly ChannelDeliveryAttempt[]): number {
   return attempts.length;
 }
+
+/**
+ * L3 — refused/total as fixed 4dp. Empty → null (never invent 0 refusal).
+ */
+export function fanoutRefusalRatio(attempts: readonly ChannelDeliveryAttempt[]): string | null {
+  if (attempts.length === 0) return null;
+  return (countFanoutRefusals(attempts) / attempts.length).toFixed(4);
+}
+
+/** L3 — true when any attempt failed. Alias surface of hasFanoutFailure. */
+export function fanoutHasFailure(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return hasFanoutFailure(attempts);
+}
+
+/** L3 — true when fanout has mixed outcomes. Empty → false. */
+export function fanoutIsMixed(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  if (attempts.length === 0) return false;
+  const first = attempts[0]!.outcome;
+  return attempts.some((a) => a.outcome !== first);
+}
+
+/** L3 — outcomes present in stable order accepted, refused, failed. Empty → []. */
+export function fanoutOutcomesPresent(attempts: readonly ChannelDeliveryAttempt[]): readonly DeliveryOutcome[] {
+  const order: DeliveryOutcome[] = ['accepted', 'refused', 'failed'];
+  const present = new Set(attempts.map((a) => a.outcome));
+  return order.filter((o) => present.has(o));
+}

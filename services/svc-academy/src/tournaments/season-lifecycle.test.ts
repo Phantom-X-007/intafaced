@@ -28,6 +28,10 @@ import {
   hasEndedSeason,
   hasScheduledSeason,
   totalSeasonCount,
+  hasTerminalSeason,
+  scoreWritableSeasonCount,
+  liveSeasonRatio,
+  isSeasonListEmpty,
 } from './season-lifecycle.js';
 
 const base = {
@@ -275,5 +279,29 @@ describe('L3 wave25 season presence helpers', () => {
     expect(hasEndedSeason(rows)).toBe(true);
     expect(hasScheduledSeason(rows)).toBe(true);
     expect(totalSeasonCount(rows)).toBe(3);
+  });
+});
+
+describe('L3 wave26 season ratios + terminal', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'stage-1 non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+
+  it('terminal + writable count + live ratio + empty', () => {
+    expect(isSeasonListEmpty([])).toBe(true);
+    expect(hasTerminalSeason([])).toBe(false);
+    expect(scoreWritableSeasonCount([])).toBe(0);
+    expect(liveSeasonRatio([])).toBeNull();
+    const rows = [mk('s1', 'live'), mk('s2', 'ended'), mk('s3', 'scheduled')];
+    expect(isSeasonListEmpty(rows)).toBe(false);
+    expect(hasTerminalSeason(rows)).toBe(true);
+    expect(scoreWritableSeasonCount(rows)).toBe(1);
+    expect(liveSeasonRatio(rows)).toBe('0.3333');
   });
 });

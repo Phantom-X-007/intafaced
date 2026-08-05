@@ -24,6 +24,10 @@ import {
   planDecisionCount,
   planSendRatio,
   planIsMixed,
+  planHoldRatio,
+  planSkipRatio,
+  planHasNoHolds,
+  planActionsPresent,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -168,5 +172,19 @@ describe('notify L3 combined mute + digest', () => {
     expect(planSendRatio(plan)).toMatch(/^\d+\.\d{4}$/);
     expect(typeof planHasSends(plan)).toBe('boolean');
     expect(typeof planIsMixed(plan)).toBe('boolean');
+  });
+
+  it('L3 wave26 hold/skip ratios + no holds + actions present', () => {
+    expect(planHoldRatio([])).toBeNull();
+    expect(planSkipRatio([])).toBeNull();
+    expect(planHasNoHolds([])).toBe(true);
+    expect(planActionsPresent([])).toEqual([]);
+    const muted = applyMuteToggle(DEFAULT_COMBINED_PREFS.mute, { channel: 'email', muted: true });
+    const digest = applyDigestCadence(DEFAULT_COMBINED_PREFS.digest, 'hourly');
+    const plan = planFanoutDelivery({ mute: muted, digest }, ['inapp', 'email', 'sms'], 'info');
+    expect(planHoldRatio(plan)).toMatch(/^\d+\.\d{4}$/);
+    expect(planSkipRatio(plan)).toMatch(/^\d+\.\d{4}$/);
+    expect(typeof planHasNoHolds(plan)).toBe('boolean');
+    expect(planActionsPresent(plan).length).toBeGreaterThan(0);
   });
 });

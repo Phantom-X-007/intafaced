@@ -360,3 +360,32 @@ export function isEmptyStandings(rows: readonly StandingRecord[]): boolean {
 export function hasAnyStanding(rows: readonly StandingRecord[]): boolean {
   return rows.length > 0;
 }
+
+/**
+ * L3 — user id at last rank (alias surface of lastPlaceUser). Empty → null.
+ */
+export function bottomUser(rows: readonly StandingRecord[]): string | null {
+  return lastPlaceUser(rows);
+}
+
+/**
+ * L3 — scores in rank order (DESC). Empty → [].
+ */
+export function scoresInRankOrder(rows: readonly StandingRecord[]): readonly number[] {
+  return rankStandings(rows).map((r) => r.score);
+}
+
+/**
+ * L3 — true when podium has at least n ranked users. Empty → false.
+ */
+export function hasPodiumDepth(rows: readonly StandingRecord[], n: number): boolean {
+  if (!Number.isFinite(n) || n < 1) return false;
+  return rankStandings(rows).length >= Math.floor(n);
+}
+
+/**
+ * L3 — rank count (same as standingCount after rank). Empty → 0.
+ */
+export function rankedCount(rows: readonly StandingRecord[]): number {
+  return rankStandings(rows).length;
+}

@@ -242,3 +242,26 @@ export function hasScheduledSeason(seasons: readonly SeasonRecord[]): boolean {
 export function totalSeasonCount(seasons: readonly SeasonRecord[]): number {
   return seasons.length;
 }
+
+/** L3 — true when any season is terminal (ended). Empty → false. */
+export function hasTerminalSeason(seasons: readonly SeasonRecord[]): boolean {
+  return seasons.some((s) => isSeasonTerminal(s.status));
+}
+
+/** L3 — count of score-writable (live) seasons. Empty → 0. */
+export function scoreWritableSeasonCount(seasons: readonly SeasonRecord[]): number {
+  return listScoreWritableSeasons(seasons).length;
+}
+
+/**
+ * L3 — live/total as fixed 4dp. Empty → null (never invent 0 live).
+ */
+export function liveSeasonRatio(seasons: readonly SeasonRecord[]): string | null {
+  if (seasons.length === 0) return null;
+  return (liveSeasonCount(seasons) / seasons.length).toFixed(4);
+}
+
+/** L3 — true when seasons list is empty. */
+export function isSeasonListEmpty(seasons: readonly SeasonRecord[]): boolean {
+  return seasons.length === 0;
+}

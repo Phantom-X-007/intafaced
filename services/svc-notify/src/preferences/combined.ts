@@ -192,3 +192,31 @@ export function planIsMixed(plan: readonly DeliveryDecision[]): boolean {
   const first = plan[0]!.action;
   return plan.some((d) => d.action !== first);
 }
+
+/**
+ * L3 — hold/total as fixed 4dp. Empty plan → null (never invent 0 hold).
+ */
+export function planHoldRatio(plan: readonly DeliveryDecision[]): string | null {
+  if (plan.length === 0) return null;
+  return (planHoldCount(plan) / plan.length).toFixed(4);
+}
+
+/**
+ * L3 — skip/total as fixed 4dp. Empty → null.
+ */
+export function planSkipRatio(plan: readonly DeliveryDecision[]): string | null {
+  if (plan.length === 0) return null;
+  return (planSkipCount(plan) / plan.length).toFixed(4);
+}
+
+/** L3 — true when plan has zero holds. Empty → true. */
+export function planHasNoHolds(plan: readonly DeliveryDecision[]): boolean {
+  return planHoldCount(plan) === 0;
+}
+
+/** L3 — unique actions present (stable order send_now, hold_digest, skip_muted). Empty → []. */
+export function planActionsPresent(plan: readonly DeliveryDecision[]): readonly DeliveryDecision['action'][] {
+  const order: DeliveryDecision['action'][] = ['send_now', 'hold_digest', 'skip_muted'];
+  const present = new Set(plan.map((d) => d.action));
+  return order.filter((a) => present.has(a));
+}

@@ -14,6 +14,10 @@ import {
   listPaperFillRefs,
   startPaperDrill,
   startPaperDrillForCatalogItem,
+  isDrillStatusComplete,
+  isDrillStatusActive,
+  drillCompletionRatio,
+  drillMarketId,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -180,5 +184,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(totalStepCount(started.run)).toBe(started.run.steps.length);
     expect(remainingStepCount(started.run)).toBe(started.run.steps.length);
     expect(isDrillInProgress(started.run)).toBe(true);
+  });
+
+  it('L3 wave26 status flags + completion ratio + market id', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w26', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(isDrillStatusActive(started.run)).toBe(true);
+    expect(isDrillStatusComplete(started.run)).toBe(false);
+    expect(drillCompletionRatio(started.run)).toBe('0.0000');
+    expect(drillMarketId(started.run)).toBe('m-w26');
   });
 });

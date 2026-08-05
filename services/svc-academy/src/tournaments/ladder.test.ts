@@ -40,6 +40,10 @@ import {
   podiumUserIds,
   isEmptyStandings,
   hasAnyStanding,
+  bottomUser,
+  scoresInRankOrder,
+  hasPodiumDepth,
+  rankedCount,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -227,5 +231,18 @@ describe('L3 standings board helpers', () => {
     expect(podiumUserIds(rows)).toEqual(['b', 'c', 'a']);
     expect(isEmptyStandings(rows)).toBe(false);
     expect(hasAnyStanding(rows)).toBe(true);
+  });
+
+  it('L3 wave26 bottomUser + scores order + podium depth + rankedCount', () => {
+    expect(bottomUser([])).toBeNull();
+    expect(scoresInRankOrder([])).toEqual([]);
+    expect(hasPodiumDepth([], 1)).toBe(false);
+    expect(rankedCount([])).toBe(0);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+    expect(bottomUser(rows)).toBe('a');
+    expect(scoresInRankOrder(rows)).toEqual([20, 15, 10]);
+    expect(hasPodiumDepth(rows, 3)).toBe(true);
+    expect(hasPodiumDepth(rows, 4)).toBe(false);
+    expect(rankedCount(rows)).toBe(3);
   });
 });

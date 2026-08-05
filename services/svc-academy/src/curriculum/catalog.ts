@@ -664,3 +664,27 @@ export function kindCountWithContent(): number {
 export function emptyPathCount(): number {
   return listEmptyCurriculumPaths().length;
 }
+
+/**
+ * L3 — sorted titles for one kind. None → [].
+ */
+export function listCurriculumTitlesByKind(kind: CurriculumKind): readonly string[] {
+  return SPINE.filter((item) => item.kind === kind)
+    .map((item) => item.title)
+    .sort();
+}
+
+/** L3 — true when spine has at least one playbook. */
+export function hasPlaybook(): boolean {
+  return playbookCount() > 0;
+}
+
+/** L3 — true when spine has at least one workbook. */
+export function hasWorkbook(): boolean {
+  return workbookCount() > 0;
+}
+
+/** L3 — true when spine has at least one lesson. */
+export function hasLesson(): boolean {
+  return lessonCount() > 0;
+}

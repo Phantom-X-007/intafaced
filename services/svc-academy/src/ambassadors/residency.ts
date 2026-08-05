@@ -304,4 +304,38 @@ export class MemoryResidencyDesk {
   hasAnyApplication(): boolean {
     return this.rows.size > 0;
   }
+
+  /**
+   * L3 — true when desk has zero open (applied) apps. Empty → true.
+   */
+  hasNoOpenApplications(): boolean {
+    return this.openCount() === 0;
+  }
+
+  /**
+   * L3 — accepted/total as fixed 4dp. Empty desk → null (never invent 0 accept).
+   */
+  acceptedApplicationRatio(): string | null {
+    const total = this.rows.size;
+    if (total === 0) return null;
+    return (this.acceptedCount() / total).toFixed(4);
+  }
+
+  /**
+   * L3 — rejected/total as fixed 4dp. Empty → null.
+   */
+  rejectedApplicationRatio(): string | null {
+    const total = this.rows.size;
+    if (total === 0) return null;
+    return (this.rejectedCount() / total).toFixed(4);
+  }
+
+  /**
+   * L3 — sorted cohort slugs that appear in any application. Empty → [].
+   */
+  knownCohortSlugsSorted(): readonly string[] {
+    const set = new Set<string>();
+    for (const r of this.rows.values()) set.add(r.cohortSlug);
+    return [...set].sort();
+  }
 }

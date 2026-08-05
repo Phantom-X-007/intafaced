@@ -345,3 +345,27 @@ export function amountMetricCount(): number {
 export function countKindMetricCount(): number {
   return countMetricsByKind('count');
 }
+
+/** L3 — true when catalog has any ratio-kind metric. */
+export function hasRatioMetrics(): boolean {
+  return countMetricsByKind('ratio') > 0;
+}
+
+/** L3 — true when catalog has any amount-kind metric. */
+export function hasAmountMetrics(): boolean {
+  return countMetricsByKind('amount') > 0;
+}
+
+/** L3 — true when catalog has any count-kind metric. */
+export function hasCountKindMetrics(): boolean {
+  return countMetricsByKind('count') > 0;
+}
+
+/**
+ * L3 — multi-source / total as fixed 4dp. Empty catalog → null.
+ */
+export function multiSourceMetricRatio(): string | null {
+  const total = analyticsMetricCatalogSize();
+  if (total === 0) return null;
+  return (multiSourceMetricCount() / total).toFixed(4);
+}
