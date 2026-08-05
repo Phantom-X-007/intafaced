@@ -757,3 +757,30 @@ export function standingsPageCount(rows: readonly StandingRecord[], pageSize: nu
 export function reverseRankedStandings(rows: readonly StandingRecord[]): readonly RankedStanding[] {
   return [...rankStandings(rows)].reverse();
 }
+
+/** L3 — user ids only in left standings. Empty right → all left ids. */
+export function standingUserIdsOnlyLeft(left: readonly StandingRecord[], right: readonly StandingRecord[]): readonly string[] {
+  const r = new Set(listStandingUserIds(right));
+  return listStandingUserIds(left).filter((id) => !r.has(id));
+}
+
+/** L3 — user ids in both standings sets. */
+export function standingUserIdsInBoth(left: readonly StandingRecord[], right: readonly StandingRecord[]): readonly string[] {
+  const r = new Set(listStandingUserIds(right));
+  return listStandingUserIds(left).filter((id) => r.has(id));
+}
+
+/**
+ * L3 — score delta for user (left - right). Missing either side → null.
+ */
+export function scoreDeltaForUser(left: readonly StandingRecord[], right: readonly StandingRecord[], userId: string): number | null {
+  const a = scoreOfUser(left, userId);
+  const b = scoreOfUser(right, userId);
+  if (a === null || b === null) return null;
+  return a - b;
+}
+
+/** L3 — true when standings counts equal. */
+export function standingsSameSize(left: readonly StandingRecord[], right: readonly StandingRecord[]): boolean {
+  return standingCount(left) === standingCount(right);
+}

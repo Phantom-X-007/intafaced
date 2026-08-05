@@ -635,4 +635,27 @@ export class MemoryResidencyDesk {
     if (n === 0) return 0;
     return Math.ceil(n / Math.floor(pageSize));
   }
+
+  /** L3 — application ids only here vs other id list. */
+  applicationIdsOnlyHere(otherIds: readonly string[]): readonly string[] {
+    const other = new Set(otherIds);
+    return [...this.rows.keys()].filter((id) => !other.has(id)).sort();
+  }
+
+  /** L3 — open ids only here vs other open list. */
+  openIdsOnlyHere(otherOpenIds: readonly string[]): readonly string[] {
+    const other = new Set(otherOpenIds);
+    return this.openApplicationIds().filter((id) => !other.has(id));
+  }
+
+  /** L3 — true when open counts equal. */
+  openCountEquals(otherOpenCount: number): boolean {
+    return this.openCount() === otherOpenCount;
+  }
+
+  /** L3 — cohort set only here vs other cohorts. */
+  cohortsOnlyHere(otherCohorts: readonly string[]): readonly string[] {
+    const other = new Set(otherCohorts);
+    return this.knownCohortSlugsSorted().filter((c) => !other.has(c));
+  }
 }

@@ -88,6 +88,10 @@ import {
   pageRankedUserIds,
   standingsPageCount,
   reverseRankedStandings,
+  standingUserIdsOnlyLeft,
+  standingUserIdsInBoth,
+  scoreDeltaForUser,
+  standingsSameSize,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -415,5 +419,15 @@ describe('L3 standings board helpers', () => {
     expect(pageRankedUserIds(rows, { offset: 0, limit: 2 })).toEqual(['b', 'c']);
     expect(standingsPageCount(rows, 2)).toBe(2);
     expect(reverseRankedStandings(rows)[0]!.userId).toBe('a');
+  });
+
+  it('L3 wave39 standings diffs + score delta', () => {
+    const left = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    const right = [row('b', 20, '2026-08-01T13:00:00Z'), row('c', 5, '2026-08-01T11:00:00Z')];
+    expect(standingUserIdsOnlyLeft(left, right)).toEqual(['a']);
+    expect(standingUserIdsInBoth(left, right)).toEqual(['b']);
+    expect(scoreDeltaForUser(left, right, 'b')).toBe(10);
+    expect(scoreDeltaForUser(left, right, 'a')).toBeNull();
+    expect(standingsSameSize(left, right)).toBe(true);
   });
 });

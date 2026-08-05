@@ -523,3 +523,29 @@ export function planPageCount(plan: readonly DeliveryDecision[], pageSize: numbe
 export function reversePlanDecisions(plan: readonly DeliveryDecision[]): readonly DeliveryDecision[] {
   return [...plan].reverse();
 }
+
+/** L3 — send channels only in left plan. */
+export function planSendChannelsOnlyLeft(
+  left: readonly DeliveryDecision[],
+  right: readonly DeliveryDecision[],
+): readonly (MuteableChannel | 'inapp')[] {
+  const r = new Set(channelsToSendNow(right));
+  return channelsToSendNow(left).filter((c) => !r.has(c));
+}
+
+/** L3 — send count delta (left - right). */
+export function planSendCountDelta(left: readonly DeliveryDecision[], right: readonly DeliveryDecision[]): number {
+  return planSendCount(left) - planSendCount(right);
+}
+
+/** L3 — true when plans same length. */
+export function plansSameSize(left: readonly DeliveryDecision[], right: readonly DeliveryDecision[]): boolean {
+  return left.length === right.length;
+}
+
+/** L3 — true when plans have same action multiset sizes (histogram equal). */
+export function plansSameActionHistogram(left: readonly DeliveryDecision[], right: readonly DeliveryDecision[]): boolean {
+  const a = planActionHistogram(left);
+  const b = planActionHistogram(right);
+  return a.send_now === b.send_now && a.hold_digest === b.hold_digest && a.skip_muted === b.skip_muted;
+}

@@ -533,3 +533,29 @@ export function fanoutPageCount(attempts: readonly ChannelDeliveryAttempt[], pag
 export function reverseFanoutAttempts(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt[] {
   return [...attempts].reverse();
 }
+
+/** L3 — accepted channels only in left fanout. */
+export function acceptedChannelsOnlyLeft(
+  left: readonly ChannelDeliveryAttempt[],
+  right: readonly ChannelDeliveryAttempt[],
+): readonly ChannelDeliveryAttempt['channel'][] {
+  const r = new Set(acceptedChannels(right));
+  return acceptedChannels(left).filter((c) => !r.has(c));
+}
+
+/** L3 — accepted count delta (left - right). */
+export function fanoutAcceptedCountDelta(left: readonly ChannelDeliveryAttempt[], right: readonly ChannelDeliveryAttempt[]): number {
+  return countFanoutAccepted(left) - countFanoutAccepted(right);
+}
+
+/** L3 — true when fanouts same size. */
+export function fanoutsSameSize(left: readonly ChannelDeliveryAttempt[], right: readonly ChannelDeliveryAttempt[]): boolean {
+  return left.length === right.length;
+}
+
+/** L3 — true when outcome histograms equal. */
+export function fanoutsSameOutcomeHistogram(left: readonly ChannelDeliveryAttempt[], right: readonly ChannelDeliveryAttempt[]): boolean {
+  const a = fanoutOutcomeHistogram(left);
+  const b = fanoutOutcomeHistogram(right);
+  return a.accepted === b.accepted && a.refused === b.refused && a.failed === b.failed;
+}

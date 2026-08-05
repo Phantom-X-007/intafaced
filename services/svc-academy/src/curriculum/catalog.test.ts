@@ -77,6 +77,10 @@ import {
   pageLessonSlugs,
   curriculumSpinePageCount,
   reverseCurriculumSlugs,
+  curriculumSlugsOnlyInKind,
+  curriculumPathCountDelta,
+  curriculumKindsSameSize,
+  curriculumPathsSameSize,
 } from './catalog.js';
 
 /**
@@ -366,5 +370,12 @@ describe('curriculum catalog', () => {
     expect(pageLessonSlugs({ limit: 100 }).length).toBe(lessonCount());
     expect(curriculumSpinePageCount(5)).toBeGreaterThan(0);
     expect(reverseCurriculumSlugs()[0]).toBe(listCurriculumSlugs()[listCurriculumSlugs().length - 1]);
+  });
+
+  it('L3 wave39 curriculum kind/path compare', () => {
+    expect(curriculumSlugsOnlyInKind('lesson', 'playbook').length).toBe(lessonCount());
+    expect(typeof curriculumPathCountDelta('foundations', 'markets')).toBe('number');
+    expect(typeof curriculumKindsSameSize('lesson', 'workbook')).toBe('boolean');
+    expect(typeof curriculumPathsSameSize('foundations', 'builder')).toBe('boolean');
   });
 });

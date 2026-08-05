@@ -62,6 +62,10 @@ import {
   pageCompletedStepIds,
   remainingStepsPageCount,
   reverseRemainingStepIds,
+  remainingStepsOnlyLeft,
+  completedStepsOnlyLeft,
+  drillPercentDelta,
+  drillsSameStatus,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -399,5 +403,26 @@ describe('paper Stage-2 workbook loop', () => {
     expect(remainingStepsPageCount(started.run, 1)).toBe(started.run.steps.length);
     expect(reverseRemainingStepIds(started.run)[0]).toBe(started.run.steps[started.run.steps.length - 1]!.id);
     expect(pageCompletedStepIds(started.run, { limit: 5 })).toEqual([]);
+  });
+
+  it('L3 wave39 drill compare', () => {
+    const a = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w39a', paper: true, symbol: 'BTC/USDT' },
+    });
+    const b = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w39b', paper: true, symbol: 'ETH/USDT' },
+    });
+    expect(a.ok && b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+    expect(drillsSameStatus(a.run, b.run)).toBe(true);
+    expect(drillPercentDelta(a.run, b.run)).toBe(0);
+    const step = a.run.steps[0]!.id;
+    const a2 = completeDrillStep(a.run, step);
+    expect(a2.ok).toBe(true);
+    if (!a2.ok) return;
+    expect(completedStepsOnlyLeft(a2.run, b.run)).toContain(step);
+    expect(remainingStepsOnlyLeft(b.run, a2.run)).toContain(step);
   });
 });

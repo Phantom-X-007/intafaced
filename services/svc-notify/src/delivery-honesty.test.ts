@@ -66,6 +66,10 @@ import {
   pageAcceptedChannels,
   fanoutPageCount,
   reverseFanoutAttempts,
+  acceptedChannelsOnlyLeft,
+  fanoutAcceptedCountDelta,
+  fanoutsSameSize,
+  fanoutsSameOutcomeHistogram,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -379,5 +383,17 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(pageAcceptedChannels(attempts, { limit: 10 })).toEqual(['email', 'sms']);
     expect(fanoutPageCount(attempts, 2)).toBe(2);
     expect(reverseFanoutAttempts(attempts)[0]!.channel).toBe('sms');
+  });
+
+  it('L3 wave39 fanout compare', () => {
+    const left = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    const right = [{ channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' }];
+    expect(acceptedChannelsOnlyLeft(left, right)).toEqual([]);
+    expect(fanoutAcceptedCountDelta(left, right)).toBe(0);
+    expect(fanoutsSameSize(left, right)).toBe(false);
+    expect(fanoutsSameOutcomeHistogram(left, left)).toBe(true);
   });
 });
