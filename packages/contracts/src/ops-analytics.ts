@@ -534,3 +534,39 @@ export function multiSourceMetricRatioLabel(): string {
 export function singleSourceMetricRatioLabel(): string {
   return singleSourceMetricRatio() ?? '';
 }
+
+/** L3 — money partition snapshot. */
+export function catalogMoneySnapshot(): {
+  readonly money: number;
+  readonly nonMoney: number;
+  readonly total: number;
+} {
+  return metricMoneyPartition();
+}
+
+/** L3 — true when money partition sums. */
+export function catalogMoneyCountsConsistent(): boolean {
+  const s = catalogMoneySnapshot();
+  return s.total === s.money + s.nonMoney;
+}
+
+/** L3 — kind partition snapshot. */
+export function catalogKindSnapshot(): {
+  readonly count: number;
+  readonly amount: number;
+  readonly ratio: number;
+  readonly total: number;
+} {
+  return {
+    count: countKindMetricCount(),
+    amount: amountMetricCount(),
+    ratio: ratioMetricCount(),
+    total: analyticsMetricCatalogSize(),
+  };
+}
+
+/** L3 — true when kind partition sums to catalog size. */
+export function catalogKindCountsConsistent(): boolean {
+  const s = catalogKindSnapshot();
+  return s.total === s.count + s.amount + s.ratio;
+}

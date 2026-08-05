@@ -496,4 +496,41 @@ export class MemoryResidencyDesk {
   withdrawnApplicationRatioLabel(): string {
     return this.withdrawnApplicationRatio() ?? '';
   }
+
+  /** L3 — status count snapshot. Empty zeros. */
+  applicationStatusSnapshot(): {
+    readonly open: number;
+    readonly accepted: number;
+    readonly rejected: number;
+    readonly withdrawn: number;
+    readonly total: number;
+  } {
+    return {
+      open: this.openCount(),
+      accepted: this.acceptedCount(),
+      rejected: this.rejectedCount(),
+      withdrawn: this.withdrawnCount(),
+      total: this.applicationCount(),
+    };
+  }
+
+  /** L3 — true when snapshot parts sum to total. */
+  applicationCountsConsistent(): boolean {
+    const s = this.applicationStatusSnapshot();
+    return s.total === s.open + s.accepted + s.rejected + s.withdrawn;
+  }
+
+  /** L3 — open share percent. Empty → null. */
+  openSharePercent(): number | null {
+    const r = this.openApplicationRatio();
+    if (r === null) return null;
+    return Math.round(Number(r) * 100);
+  }
+
+  /** L3 — decided share percent. Empty → null. */
+  decidedSharePercent(): number | null {
+    const r = this.decidedApplicationRatio();
+    if (r === null) return null;
+    return Math.round(Number(r) * 100);
+  }
 }

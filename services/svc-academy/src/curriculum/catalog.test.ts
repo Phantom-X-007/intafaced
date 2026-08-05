@@ -61,6 +61,10 @@ import {
   kindCountWithContentLabel,
   emptyPathCountLabel,
   firstCurriculumSlugLabel,
+  curriculumKindSnapshot,
+  curriculumKindCountsConsistent,
+  curriculumPathSnapshot,
+  curriculumPathCountsConsistent,
 } from './catalog.js';
 
 /**
@@ -316,5 +320,12 @@ describe('curriculum catalog', () => {
     expect(kindCountWithContentLabel()).toBe(String(kindCountWithContent()));
     expect(emptyPathCountLabel()).toBe(String(emptyPathCount()));
     expect(firstCurriculumSlugLabel().length).toBeGreaterThan(0);
+  });
+
+  it('L3 wave34 kind/path snapshots consistent', () => {
+    expect(curriculumKindCountsConsistent()).toBe(true);
+    expect(curriculumPathCountsConsistent()).toBe(true);
+    expect(curriculumKindSnapshot().total).toBe(curriculumSpineSize());
+    expect(curriculumPathSnapshot().foundations).toBe(foundationsItemCount());
   });
 });

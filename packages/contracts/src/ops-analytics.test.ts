@@ -66,6 +66,10 @@ import {
   nonMoneyMetricRatioLabel,
   multiSourceMetricRatioLabel,
   singleSourceMetricRatioLabel,
+  catalogMoneySnapshot,
+  catalogMoneyCountsConsistent,
+  catalogKindSnapshot,
+  catalogKindCountsConsistent,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -331,5 +335,14 @@ describe('L3 wave33 analytics ratio labels', () => {
     expect(nonMoneyMetricRatioLabel()).toMatch(/^\d+\.\d{4}$/);
     expect(multiSourceMetricRatioLabel()).toMatch(/^\d+\.\d{4}$/);
     expect(singleSourceMetricRatioLabel()).toMatch(/^\d+\.\d{4}$/);
+  });
+});
+
+describe('L3 wave34 catalog money/kind snapshots', () => {
+  it('money + kind partitions consistent', () => {
+    expect(catalogMoneyCountsConsistent()).toBe(true);
+    expect(catalogKindCountsConsistent()).toBe(true);
+    expect(catalogMoneySnapshot().total).toBe(analyticsMetricCatalogSize());
+    expect(catalogKindSnapshot().total).toBe(analyticsMetricCatalogSize());
   });
 });

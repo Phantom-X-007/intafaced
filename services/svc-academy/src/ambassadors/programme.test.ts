@@ -405,4 +405,21 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.programmeActiveRatioLabel()).toBe('0.5000');
     expect(desk.hasInactiveRows()).toBe(true);
   });
+
+  it('L3 wave34 count snapshot + share percent', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.programmeCountSnapshot()).toEqual({ active: 0, frozen: 0, total: 0 });
+    expect(desk.programmeCountsConsistent()).toBe(true);
+    expect(desk.activeSharePercent()).toBeNull();
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.appoint({ userId: u2, appointedBy: op });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    expect(desk.programmeCountSnapshot()).toEqual({ active: 1, frozen: 1, total: 2 });
+    expect(desk.programmeCountsConsistent()).toBe(true);
+    expect(desk.activeSharePercent()).toBe(50);
+    expect(desk.frozenSharePercent()).toBe(50);
+  });
 });

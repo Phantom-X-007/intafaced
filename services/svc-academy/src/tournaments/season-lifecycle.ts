@@ -418,3 +418,47 @@ export function endedSeasonRatioLabel(seasons: readonly SeasonRecord[]): string 
 export function openSeasonRatioLabel(seasons: readonly SeasonRecord[]): string {
   return openSeasonRatio(seasons) ?? '';
 }
+
+/** L3 — status count snapshot. Empty zeros. */
+export function seasonStatusSnapshot(seasons: readonly SeasonRecord[]): {
+  readonly scheduled: number;
+  readonly live: number;
+  readonly frozen: number;
+  readonly ended: number;
+  readonly total: number;
+} {
+  return {
+    scheduled: scheduledSeasonCount(seasons),
+    live: liveSeasonCount(seasons),
+    frozen: frozenSeasonCount(seasons),
+    ended: endedSeasonCount(seasons),
+    total: totalSeasonCount(seasons),
+  };
+}
+
+/** L3 — true when status counts sum to total. */
+export function seasonCountsConsistent(seasons: readonly SeasonRecord[]): boolean {
+  const s = seasonStatusSnapshot(seasons);
+  return s.total === s.scheduled + s.live + s.frozen + s.ended;
+}
+
+/** L3 — open vs ended partition. */
+export function seasonOpenEndedPartition(seasons: readonly SeasonRecord[]): {
+  readonly open: number;
+  readonly ended: number;
+} {
+  return { open: openSeasonCount(seasons), ended: endedSeasonCount(seasons) };
+}
+
+/** L3 — writable presence snapshot. */
+export function seasonWritableSnapshot(seasons: readonly SeasonRecord[]): {
+  readonly writableCount: number;
+  readonly hasWritable: boolean;
+  readonly writableIds: readonly string[];
+} {
+  return {
+    writableCount: scoreWritableSeasonCount(seasons),
+    hasWritable: hasScoreWritableSeason(seasons),
+    writableIds: listScoreWritableSeasonIds(seasons),
+  };
+}

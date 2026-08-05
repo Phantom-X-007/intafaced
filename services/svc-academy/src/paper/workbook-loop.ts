@@ -420,3 +420,48 @@ export function drillWorkbookSlugLabel(run: DrillRun): string {
 export function drillCompletionPercentLabel(run: DrillRun): string {
   return String(drillCompletionPercent(run));
 }
+
+/** L3 — progress snapshot for operator UI. */
+export function drillProgressSnapshot(run: DrillRun): {
+  readonly status: DrillRun['status'];
+  readonly total: number;
+  readonly completed: number;
+  readonly remaining: number;
+  readonly ratio: string;
+  readonly percent: number;
+  readonly fills: number;
+} {
+  return {
+    status: run.status,
+    total: totalStepCount(run),
+    completed: completedStepCount(run),
+    remaining: remainingStepCount(run),
+    ratio: drillProgress(run).ratio,
+    percent: drillCompletionPercent(run),
+    fills: fillRefCount(run),
+  };
+}
+
+/** L3 — true when completed + remaining equals total (refused: remaining = total). */
+export function drillStepCountsConsistent(run: DrillRun): boolean {
+  const s = drillProgressSnapshot(run);
+  return s.total === s.completed + s.remaining || run.status === 'refused';
+}
+
+/** L3 — identity snapshot. */
+export function drillIdentitySnapshot(run: DrillRun): {
+  readonly marketId: string;
+  readonly symbol: string;
+  readonly workbookSlug: string;
+} {
+  return {
+    marketId: run.marketId,
+    symbol: run.symbol,
+    workbookSlug: run.workbookSlug,
+  };
+}
+
+/** L3 — true when drill is active with zero completion. */
+export function isFreshActiveDrill(run: DrillRun): boolean {
+  return run.status === 'active' && completedStepCount(run) === 0;
+}

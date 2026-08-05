@@ -550,4 +550,29 @@ export class MemoryAmbassadorProgramme {
   hasInactiveRows(): boolean {
     return this.frozenCount() > 0;
   }
+
+  /** L3 — snapshot counts for operator board. Empty zeros. */
+  programmeCountSnapshot(): { readonly active: number; readonly frozen: number; readonly total: number } {
+    return { active: this.activeCount(), frozen: this.frozenCount(), total: this.totalCount() };
+  }
+
+  /** L3 — true when snapshot total equals active + frozen. */
+  programmeCountsConsistent(): boolean {
+    const s = this.programmeCountSnapshot();
+    return s.total === s.active + s.frozen;
+  }
+
+  /** L3 — active share percent 0..100 integer. Empty → null. */
+  activeSharePercent(): number | null {
+    const r = this.activeRatio();
+    if (r === null) return null;
+    return Math.round(Number(r) * 100);
+  }
+
+  /** L3 — frozen share percent 0..100 integer. Empty → null. */
+  frozenSharePercent(): number | null {
+    const r = this.frozenRatio();
+    if (r === null) return null;
+    return Math.round(Number(r) * 100);
+  }
 }
