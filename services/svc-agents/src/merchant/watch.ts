@@ -76,6 +76,26 @@ function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
 }
 
 /**
+ * Stage-2 L3: optional rail allowlist. Empty/missing → all points.
+ * Out-of-scope rails skipped (not invent alerts for unknown rails).
+ */
+export function filterRailsByAllowlist(
+  points: readonly ApprovalRatePoint[],
+  allowlist: ReadonlySet<string> | readonly string[] | undefined,
+): { readonly kept: readonly ApprovalRatePoint[]; readonly skippedNotAllowed: number } {
+  if (!allowlist) return { kept: points, skippedNotAllowed: 0 };
+  const set = allowlist instanceof Set ? allowlist : new Set(allowlist);
+  if (set.size === 0) return { kept: points, skippedNotAllowed: 0 };
+  const kept: ApprovalRatePoint[] = [];
+  let skippedNotAllowed = 0;
+  for (const p of points) {
+    if (set.has(p.railId)) kept.push(p);
+    else skippedNotAllowed += 1;
+  }
+  return { kept, skippedNotAllowed };
+}
+
+/**
  * Watch fixture approval-rate series. Emit alerts when rate < threshold.
  * Never invents rates; never changes rails.
  */
@@ -87,6 +107,8 @@ export function watchApprovalFixtures(
     threshold?: string;
     /** Stage-2: dark pay plane → typed refuse, never invent rates */
     payPlane?: PayPlaneState;
+    /** Stage-2 L3: only watch these rail ids when provided and non-empty. */
+    railAllowlist?: ReadonlySet<string> | readonly string[];
   } = {},
 ): WatchResult {
   const now = options.now ?? new Date();
@@ -100,15 +122,17 @@ export function watchApprovalFixtures(
     return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'no_metrics' };
   }
 
-  if (points.length === 0) {
+  const { kept: scoped, skippedNotAllowed } = filterRailsByAllowlist(points, options.railAllowlist);
+
+  if (scoped.length === 0) {
     return { status: 'empty', userMessageKey: 'agents.merchant.empty' };
   }
 
   let skippedStale = 0;
-  let skippedIncomplete = 0;
+  let skippedIncomplete = skippedNotAllowed;
   const alerts: MerchantAlert[] = [];
 
-  for (const p of points) {
+  for (const p of scoped) {
     if (!p.railId) {
       skippedIncomplete += 1;
       continue;
@@ -141,12 +165,12 @@ export function watchApprovalFixtures(
     }
   }
 
-  const usable = points.length - skippedStale - skippedIncomplete;
+  const usable = scoped.length - skippedStale - (skippedIncomplete - skippedNotAllowed);
   if (usable === 0 && alerts.length === 0) {
-    if (skippedStale > 0 && skippedIncomplete === 0) {
+    if (skippedStale > 0 && skippedIncomplete === skippedNotAllowed) {
       return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'stale' };
     }
-    if (skippedIncomplete > 0 || skippedStale > 0) {
+    if (skippedIncomplete > skippedNotAllowed || skippedStale > 0) {
       return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'no_metrics' };
     }
     return { status: 'empty', userMessageKey: 'agents.merchant.empty' };
@@ -155,7 +179,7 @@ export function watchApprovalFixtures(
   return {
     status: 'ok',
     watchedAt: now.toISOString(),
-    considered: points.length,
+    considered: scoped.length + skippedNotAllowed,
     skippedStale,
     skippedIncomplete,
     alerts,

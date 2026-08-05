@@ -67,4 +67,16 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
       reason: 'pay_plane_dark',
     });
   });
+
+  it('Stage-2 L3: rail allowlist scopes watch — no invent out-of-scope alerts', () => {
+    const r = watchApprovalFixtures([pt({ railId: 'card-a', approvalRate: '0.5' }), pt({ railId: 'card-b', approvalRate: '0.5' })], {
+      now: NOW,
+      railAllowlist: ['card-b'],
+      threshold: '0.85',
+    });
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.alerts.map((a) => a.railId)).toEqual(['card-b']);
+    expect(r.skippedIncomplete).toBe(1);
+  });
 });
