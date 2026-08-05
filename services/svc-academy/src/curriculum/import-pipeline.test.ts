@@ -6,6 +6,7 @@ import {
   curriculumInventory,
   validateImportBatch,
   validateImportRecord,
+  summarizeImportBatch,
 } from './import-pipeline.js';
 
 const good = {
@@ -54,5 +55,23 @@ describe('validateImportBatch', () => {
     const batch = validateImportBatch([good, { ...good, slug: 'BAD SLUG' }]);
     expect(batch.accepted).toBe(1);
     expect(batch.ok).toBe(false);
+  });
+});
+
+describe('L3 summarizeImportBatch', () => {
+  it('counts accepted/rejected without invent', () => {
+    const batch = validateImportBatch([good, { ...good, slug: 'BAD SLUG' }]);
+    expect(summarizeImportBatch(batch)).toEqual({
+      total: 2,
+      accepted: 1,
+      rejected: 1,
+      ok: false,
+    });
+    expect(summarizeImportBatch(validateImportBatch([]))).toEqual({
+      total: 0,
+      accepted: 0,
+      rejected: 0,
+      ok: true,
+    });
   });
 });

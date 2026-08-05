@@ -185,6 +185,13 @@ export class MemoryCertStore {
       existingGrant: this.grants.get(certIdempotencyKey(userId, certId)) ?? null,
     });
   }
+
+  /**
+   * L3 — defined cert ids (sorted). Empty registry → [] (never invent catalog).
+   */
+  listCertIds(): readonly string[] {
+    return [...this.certs.keys()].sort();
+  }
 }
 
 /**
@@ -236,4 +243,17 @@ export function progressReport(input: {
     granted: input.existingGrant !== null,
     grantIdempotencyKey: input.existingGrant?.idempotencyKey ?? null,
   };
+}
+
+/** L3 — missing item count from a progress report (no invent). */
+export function missingItemCount(report: ProgressReport): number {
+  return report.missingItemSlugs.length;
+}
+
+/**
+ * L3 — whether progress is grantable now (complete + not already granted).
+ * Does not invent a grant — pure readiness check.
+ */
+export function isGrantReady(report: ProgressReport): boolean {
+  return report.complete && !report.granted;
 }

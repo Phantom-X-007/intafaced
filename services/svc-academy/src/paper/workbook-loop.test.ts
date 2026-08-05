@@ -3,6 +3,8 @@ import {
   attachPaperFillRef,
   completeDrillStep,
   drillProgress,
+  isDrillComplete,
+  remainingStepIds,
   listPaperFillRefs,
   startPaperDrill,
   startPaperDrillForCatalogItem,
@@ -110,5 +112,23 @@ describe('paper Stage-2 workbook loop', () => {
     expect(p1.completedCount).toBe(1);
     expect(Number(p1.ratio)).toBeGreaterThan(0);
     expect(p1.status).toBe('active');
+  });
+
+  it('L3 remainingStepIds + isDrillComplete without invent steps', () => {
+    const start = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'p1', paper: true, symbol: 'PAPER/USD' },
+    });
+    if (!start.ok) return;
+    expect(remainingStepIds(start.run).length).toBe(start.run.steps.length);
+    expect(isDrillComplete(start.run)).toBe(false);
+    let run = start.run;
+    for (const step of start.run.steps) {
+      const next = completeDrillStep(run, step.id);
+      if (!next.ok) return;
+      run = next.run;
+    }
+    expect(remainingStepIds(run)).toEqual([]);
+    expect(isDrillComplete(run)).toBe(true);
   });
 });

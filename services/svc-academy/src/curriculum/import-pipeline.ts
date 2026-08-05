@@ -178,5 +178,30 @@ export function validateImportBatch(raw: unknown): { ok: boolean; accepted: numb
   return { ok: results.every((r) => r.ok), accepted, results };
 }
 
+/**
+ * L3 — operator summary of a batch validation. Does not invent accepted rows.
+ */
+export type ImportBatchSummary = {
+  readonly total: number;
+  readonly accepted: number;
+  readonly rejected: number;
+  readonly ok: boolean;
+};
+
+export function summarizeImportBatch(batch: {
+  readonly ok: boolean;
+  readonly accepted: number;
+  readonly results: readonly ImportValidationResult[];
+}): ImportBatchSummary {
+  const total = batch.results.length;
+  const accepted = batch.accepted;
+  return {
+    total,
+    accepted,
+    rejected: Math.max(0, total - accepted),
+    ok: batch.ok,
+  };
+}
+
 /** Type helper: import record shape matches catalog item. */
 export type ImportedCurriculumItem = CurriculumItem;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deliveryHonesty, fanoutHonesty, missingCredentialHonesty } from './delivery-honesty.js';
+import { countFanoutOutcomes, deliveryHonesty, fanoutHonesty, missingCredentialHonesty } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
   it('accepted out-of-app may start grace but not claim inbox-read', () => {
@@ -46,5 +46,16 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(mixed.anyAccepted).toBe(true);
     expect(mixed.mayStartGraceClock).toBe(true);
     expect(mixed.mayMarkUserVisibleInbox).toBe(true);
+  });
+
+  it('L3 countFanoutOutcomes zeros when empty; no invent accept', () => {
+    expect(countFanoutOutcomes([])).toEqual({ accepted: 0, refused: 0, failed: 0, total: 0 });
+    expect(
+      countFanoutOutcomes([
+        { channel: 'email', outcome: 'accepted', code: '2xx' },
+        { channel: 'push', outcome: 'failed', code: 'timeout' },
+        { channel: 'sms', outcome: 'refused', code: 'missing' },
+      ]),
+    ).toEqual({ accepted: 1, refused: 1, failed: 1, total: 3 });
   });
 });

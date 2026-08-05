@@ -84,6 +84,14 @@ export class MemoryFreezeStore {
     return rec;
   }
 
+  /**
+   * L3 — freeze reason for one beneficiary. Not frozen → null (no invent).
+   */
+  freezeReasonOf(beneficiaryId: string): string | null {
+    const rec = this.byId.get(beneficiaryId.trim());
+    return rec?.reason ?? null;
+  }
+
   /** Accrue commissions while applying this store's freeze set. */
   accrue(input: { fee: FeeEvent; parent: ReadonlyMap<string, string>; tiers?: readonly TierRate[]; maxDepth?: number }): CommissionRow[] {
     return accrueWithFreezes({
