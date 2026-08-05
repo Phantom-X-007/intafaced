@@ -1,6 +1,6 @@
 # Internet leverage — Phase A current audit (in-repo)
 
-**Status:** PHASE A PROPER · **refreshed 2026-08-05** (closes methodology audit gates)  
+**Status:** PHASE A PROPER · **finished for NOW residual craft** · enforced via [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md) (agents · CI auto-load)  
 **Original execute:** 2026-08-04 · **Refresh tip:** re-derive `origin/main` at refresh  
 **Plan law:** harvest `INTERNET-LEVERAGE-CURRENT-AUDIT-PLAN-2026-08-04.md` §8  
 **Methodology audit:** [`INTERNET-LEVERAGE-METHODOLOGY-AUDIT-2026-08-05.md`](INTERNET-LEVERAGE-METHODOLOGY-AUDIT-2026-08-05.md)  

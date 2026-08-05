@@ -15,9 +15,10 @@ Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURR
 
 ---
 
-- **Internet leverage (Phase A — in-repo reuse):** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md) — vendored kit + services; no rebuild map for Nitro+Denon.
-- **Internet leverage Phase B plan:** [`INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md`](INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md) — external candidates; gap-first (after Phase A).
-- **Internet leverage Phase B report:** [`INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-05.md) — external shortlist + 90-day queue.
+- **Internet leverage LAW (agents must obey — you do not pick):** [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md) — Phase A is enough for **now**; wire shell + ledger + services; no rebuild.
+- **Phase A map (what we already own):** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md).
+- **Full residual paths (every open tracker row):** [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — not a thrift “top 5 only” list.
+- **You do not manage this day-to-day.** Agents load it from `AGENTS.md`; CI fails if that chain is removed.
 
 ## What we are building (one breath)
 

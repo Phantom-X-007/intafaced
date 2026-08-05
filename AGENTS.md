@@ -56,14 +56,32 @@ export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
 1. [`INTAFACED_DEFINITIVE_BUILD.md`](INTAFACED_DEFINITIVE_BUILD.md) — the law.
 2. [`tooling/agent-protocol/AGENT_PROTOCOL.md`](tooling/agent-protocol/AGENT_PROTOCOL.md) — hard prohibitions.
 3. [`docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md) — who directs vs executes vs merges (durable).
-4. The target service's `README.md`.
-5. [`CONTRIBUTING.md`](CONTRIBUTING.md) — branch, PR, worktree workflow.
-6. If orienting Nitro (status / plan / “where are we”): [`docs/START-HERE.md`](docs/START-HERE.md). Live swarm board: [`docs/ops/README.md`](docs/ops/README.md) (`pnpm swarm:freeze` / `status` / `lanes`).
-7. Before multi-agent code: [`docs/LIVE-LANES.md`](docs/LIVE-LANES.md) + residual campaign on tip.
-8. Multi-dev / claim / “what’s free”: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md) — product tracker vs campaign NEXT vs session lanes (do not collapse).
-9. **Shehzad Protocol Plane + INTACHAIN (sole human chain owner):** [`docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) · [`docs/THREE-WAY-DISTRIBUTION-2026-08-04.md`](docs/THREE-WAY-DISTRIBUTION-2026-08-04.md) · reclaim non-chain for agents.
-10. **All-out swarms / max parallel (Nitro go all-out):** [`docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md`](docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md) · **AFK ladder / no stamp mill:** [`docs/ops/SWARM-MANDATE.md`](docs/ops/SWARM-MANDATE.md) · `pnpm swarm:freeze` / `swarm:next` / `swarm:report` · Denon queue [`docs/REGROUP-2026-08-03.md`](docs/REGROUP-2026-08-03.md) · residual-register · `pnpm claim:check` before edit. Specs = main **+** open PRs **+** branches. When `freeProduct=0`, do **P1–P3 real work** (stranded branches, partner unblock, TRK research) — **not** R07/R01 tip-bump cycle spam.
+4. **Internet leverage (mandatory before product code):** [`docs/INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md) · Phase A [`docs/INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](docs/INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md) · residual paths [`docs/INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](docs/INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md). **Do not ask Nitro** — Phase A is finished for NOW residual craft; prefer in-repo shell + ledger + `svc-*`.
+5. The target service's `README.md`.
+6. [`CONTRIBUTING.md`](CONTRIBUTING.md) — branch, PR, worktree workflow.
+7. If orienting Nitro (status / plan / “where are we”): [`docs/START-HERE.md`](docs/START-HERE.md). Live swarm board: [`docs/ops/README.md`](docs/ops/README.md) (`pnpm swarm:freeze` / `status` / `lanes`).
+8. Before multi-agent code: [`docs/LIVE-LANES.md`](docs/LIVE-LANES.md) + residual campaign on tip.
+9. Multi-dev / claim / “what’s free”: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md) — product tracker vs campaign NEXT vs session lanes (do not collapse).
+10. **Shehzad Protocol Plane + INTACHAIN (sole human chain owner):** [`docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) · [`docs/THREE-WAY-DISTRIBUTION-2026-08-04.md`](docs/THREE-WAY-DISTRIBUTION-2026-08-04.md) · reclaim non-chain for agents.
+11. **All-out swarms / max parallel (Nitro go all-out):** [`docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md`](docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md) · **AFK ladder / no stamp mill:** [`docs/ops/SWARM-MANDATE.md`](docs/ops/SWARM-MANDATE.md) · `pnpm swarm:freeze` / `swarm:next` / `swarm:report` · Denon queue [`docs/REGROUP-2026-08-03.md`](docs/REGROUP-2026-08-03.md) · residual-register · `pnpm claim:check` before edit. Specs = main **+** open PRs **+** branches. When `freeProduct=0`, do **P1–P3 real work** (stranded branches, partner unblock, TRK research) — **not** R07/R01 tip-bump cycle spam.
     9b. **Denon hard tasks (not agent free craft):** [`docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — mega hard board + product-law spec factory (D-S-*); money Class M under his open PRs; Nitro agents babysit his open files only.
+
+---
+
+## Internet leverage law (mandatory — no Nitro pick list)
+
+**Auto-load.** Cold agents read this via `AGENTS.md` / `CLAUDE.md`. Home: [`docs/INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md).
+
+| Rule                                        | Agent duty                                                                                                                      |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Phase A **finished for NOW** residual craft | Prefer vendor shell UI + `ledger-client` + existing `svc-*` — **wire/extend, do not rebuild**                                   |
+| Before first product edit                   | Open Phase A audit + full-horizon **named row** for the tracker id                                                              |
+| PR body                                     | Name **which leverage** you used (path) or justify greenfield in one line                                                       |
+| Forbidden rebuilds                          | Second product SPA · second money book · invent mids/depth · full new exchange kit while shell exists                           |
+| Phase B                                     | Residual **path map** only — not an excuse to skip Phase A; safe EXT (e.g. RE2, Gitleaks) agents may start without asking Nitro |
+| Class X / LAW / S                           | X = never agent-close · LAW = Denon first · S = Shehzad babysit                                                                 |
+
+**CI:** `agent-autoload-scan` fails if this section or the law home disappears from the auto-load chain.
 
 ---
 
@@ -103,13 +121,14 @@ Nitro does not know GitHub workflow. **You run the whole loop.** Do not hand him
 ### Every task — do this without asking him to do it
 
 1. **Claim** — LIVE-LANES session row + tracker mountain if free (owner/wip in `features.mjs` on first PR for that mountain). Shehzad chain mountains (protocol/INTACHAIN) → babysit only; pay/bank reclaimed for agents after #346 handoff. See COORDINATION-TRUTH-LAYERS.
-2. **Worktree** — ensure work is on `feat/|fix/|chore/|docs/…`, never on `main` checkout.
-3. **Implement** — surgical; match repo style; no drive-by refactors.
-4. **`pnpm verify`** — run it; paste real output. Not “should pass.”
-5. **Commit** if he asked to ship / open a PR, residual campaign / “go all out” is active, or he already authorized autonomous ship for this program (shipping implies commit).
-6. **Push + open PR** with the template filled (what / why / how you know). Title: `type(scope): …`
-7. **Merge when Class matrix gates pass** (ownership law) — do not wait for Denon Approve on Class N/P/M-gated work. Post self-audit on money. Never merge Class X as agent-done.
-8. **Reply to him in plain language only:** what changed, PR link, CI green/red / merged, anything **he** must decide (Class X only). No raw git lesson unless he asks “why.”
+2. **Leverage** — Phase A first ([`INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md)): name in-repo asset (shell / ledger / `svc-*`) or full-horizon path before writing product code. Do **not** ask Nitro for a leverage pick list.
+3. **Worktree** — ensure work is on `feat/|fix/|chore/|docs/…`, never on `main` checkout.
+4. **Implement** — surgical; match repo style; no drive-by refactors.
+5. **`pnpm verify`** — run it; paste real output. Not “should pass.”
+6. **Commit** if he asked to ship / open a PR, residual campaign / “go all out” is active, or he already authorized autonomous ship for this program (shipping implies commit).
+7. **Push + open PR** with the template filled (what / why / how you know + **leverage used**). Title: `type(scope): …`
+8. **Merge when Class matrix gates pass** (ownership law) — do not wait for Denon Approve on Class N/P/M-gated work. Post self-audit on money. Never merge Class X as agent-done.
+9. **Reply to him in plain language only:** what changed, PR link, CI green/red / merged, anything **he** must decide (Class X only). No raw git lesson unless he asks “why.”
 
 ### Never put on Nitro
 
@@ -180,7 +199,7 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 
 ---
 
-## The six that get a PR rejected
+## The seven that get a PR rejected
 
 1. Writing SQL against another service's tables. Use `packages/contracts` or `packages/events`.
 2. Moving value outside `packages/ledger-client`. Add a recipe instead.
@@ -188,6 +207,7 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 4. Storing money in a `number`.
 5. Naming a partner or model vendor in user-facing copy.
 6. Leaving anything "temporary" without a §13 socket entry.
+7. **Rebuilding product UI kit / second money book / inventing live prices** while Phase A leverage exists — use shell + ledger + `svc-*` (see Internet leverage law).
 
 ---
 

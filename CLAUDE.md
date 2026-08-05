@@ -15,5 +15,6 @@ The non-negotiables (money + process), repeated because they cost real money or 
 3. **Never store money in a `number`.** Decimal strings on the wire, scaled bigint in memory.
 4. **Run `pnpm verify` before claiming done**, and report what it actually printed.
 5. **Multi-dev claim law (automatic — do not wait for Nitro to remind you):** before code, LIVE-LANES + tracker free/owner check; never implement Shehzad chain mountains (protocol/INTACHAIN; tracker owner shehzad002); on mountain claim/handoff/done update `features.mjs` (not every craft PR). Home: `docs/COORDINATION-TRUTH-LAYERS.md`.
+6. **Internet leverage law (automatic):** before product code, load [`docs/INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md) + Phase A audit — prefer vendor shell + ledger + existing `svc-*`; do **not** rebuild the product SPA or second book; do **not** ask Nitro for a leverage pick list. Residual paths: full-horizon map.
 
 The law is [`INTAFACED_DEFINITIVE_BUILD.md`](INTAFACED_DEFINITIVE_BUILD.md). The rules are [`tooling/agent-protocol/AGENT_PROTOCOL.md`](tooling/agent-protocol/AGENT_PROTOCOL.md). On ambiguity, the doctrine (§0) decides; if it does not, stop and ask.

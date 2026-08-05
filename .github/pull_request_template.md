@@ -30,6 +30,7 @@ Keep it small. One service per PR (§15.1). If describing it needs the word
 - [ ] Cross-service calls go through `packages/contracts` or `packages/events` (§2)
 - [ ] Migrations have a `.down.sql` reversal (§14)
 - [ ] Nothing "temporary" without a §13 socket entry (§0.1)
+- [ ] **Internet leverage:** named Phase A asset used (shell / ledger / `svc-*`) or full-horizon path + greenfield justification — not a silent rebuild (`docs/INTERNET-LEVERAGE-LAW.md`)
 
 ## Money paths
 
