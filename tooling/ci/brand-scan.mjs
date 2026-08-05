@@ -45,7 +45,36 @@ const FORBIDDEN = [
   { pattern: /\bPayKwik\b/i, reason: 'rail partner name' },
   { pattern: /\bNTG\b/, reason: 'rail partner name' },
   { pattern: /\bAnthropic\b/i, reason: 'model provider — agents are "Sovereign Intelligence"' },
-  { pattern: /\bClaude\b/i, reason: 'model provider' },
+  // NOT `CLAUDE.md`. That filename is mandated by this repo's own root
+  // instructions and is cited by name in AGENTS.md, the agent protocol, and
+  // every coordination doc — so the bare pattern fired on documents whose only
+  // offence was naming a file we require. A false positive that recurs on every
+  // new doc is a gate people learn to route around, and that costs more than the
+  // rule protects. The provider name on its own is still forbidden.
+  // All-caps `CLAUDE` is the FILENAME this repo's own root instructions mandate,
+  // and it is cited constantly — `CLAUDE.md`, and bare in slash-lists like
+  // "AGENTS/CLAUDE/protocol". The bare pattern fired on documents whose only
+  // offence was naming a file we require, which made this gate red on main twice
+  // in two days. A false positive that recurs on every new doc is a gate people
+  // learn to route around, and that costs more than the rule protects.
+  //
+  // The distinction is reliable because the two are written differently: the file
+  // is CLAUDE, the model is Claude. Every other casing stays forbidden.
+  // CASE-SENSITIVE ON PURPOSE, and the `i` flag must not come back.
+  //
+  // All-caps `CLAUDE` is the FILENAME this repo's own root instructions mandate.
+  // It is cited constantly — `CLAUDE.md`, and bare in slash-lists like
+  // "AGENTS/CLAUDE/protocol". The case-insensitive pattern fired on documents
+  // whose only offence was naming a file we require, and it turned main red twice
+  // in two days. A false positive that recurs on every new doc is a gate people
+  // learn to route around, which costs more than the rule protects.
+  //
+  // The distinction is reliable because the two are spelled differently: the file
+  // is CLAUDE, the model is Claude. Written as alternation rather than a negative
+  // lookahead — `(?!CLAUDE\b)…/i` looks correct and is not: under `i` the
+  // lookahead matches every casing too, so it excludes everything and the rule
+  // silently stops firing. That version was written, tested, and caught here.
+  { pattern: /\b(?:Claude|claude)\b/, reason: 'model provider' },
   { pattern: /\bOpenAI\b/i, reason: 'model provider' },
   { pattern: /\bGPT-\d/i, reason: 'model provider' },
 
