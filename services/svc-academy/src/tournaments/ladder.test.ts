@@ -7,6 +7,7 @@ import {
   pageStandings,
   rankStandings,
   standingOfUser,
+  topNStandings,
   type StandingRecord,
 } from './ladder.js';
 
@@ -54,5 +55,11 @@ describe('validators', () => {
     expect(standingOfUser(rows, 'b')?.rank).toBe(1);
     expect(standingOfUser(rows, 'missing')).toBeNull();
     expect(standingOfUser(rows, '  ')).toBeNull();
+  });
+
+  it('L3 topNStandings clamps without invent podium', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(topNStandings(rows, 1).map((r) => r.userId)).toEqual(['b']);
+    expect(topNStandings(rows, 0)).toEqual([]);
   });
 });

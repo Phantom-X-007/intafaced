@@ -155,6 +155,13 @@ export function listNonMoneyMetricIds(): readonly string[] {
   return ANALYTICS_METRICS_V0.filter((m) => !m.money && m.kind !== 'amount').map((m) => m.id);
 }
 
+/**
+ * L3 — money / amount metric ids only (must use decimal strings).
+ */
+export function listMoneyMetricIds(): readonly string[] {
+  return ANALYTICS_METRICS_V0.filter((m) => m.money || m.kind === 'amount').map((m) => m.id);
+}
+
 /** Validate a consumer point — amount metrics require decimal strings. */
 export function assertMetricPoint(metricId: string, value: string | number): { ok: true } | { ok: false; reason: string } {
   const def = metricById(metricId);

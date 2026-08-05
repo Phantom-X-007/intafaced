@@ -5,6 +5,7 @@ import {
   ANALYTICS_SOURCE_DBS,
   assertMetricPoint,
   lagFreshness,
+  listMoneyMetricIds,
   listNonMoneyMetricIds,
   mayLabelLive,
   metricById,
@@ -75,5 +76,11 @@ describe('analytics metric catalogue v0', () => {
     expect(ids.length).toBeGreaterThan(0);
     expect(ids).toContain('trade.fills.count');
     expect(ids).not.toContain('ledger.volume.notional');
+  });
+
+  it('L3 listMoneyMetricIds is money-only complement', () => {
+    const money = listMoneyMetricIds();
+    expect(money).toContain('ledger.volume.notional');
+    expect(money).not.toContain('trade.fills.count');
   });
 });
