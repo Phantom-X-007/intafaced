@@ -919,29 +919,6 @@ export const WIRING_SOCKETS = [
       "svc-token publishes each structural buyback-and-burn run. The flywheel it describes is settled by svc-token through the ledger before the event is published, so no consumer is load-bearing; the subject exists so the public burn record (§17.3) can be built from the stream rather than from a query against another service's tables.",
   },
   {
-    event: 'crewMemberCreated',
-    missing: 'subscriber',
-    /**
-     * CLASS B, and the one an agent cannot close.
-     *
-     * The description above names two consumers — "svc-academy routes the lobby,
-     * svc-agents opens the crew channel" — and NEITHER EXISTS. The catalog kept
-     * that description deliberately, as the specification those services owe, and
-     * that instinct is right: an owed specification is a WORK ITEM, not a socket.
-     * A socket says nothing is broken. This says two services owe a behaviour the
-     * catalog states in the present tense.
-     *
-     * Not reclassifiable to C by an agent: C requires the gap disclosed in code at
-     * every surface a user could be misled by, and ADR D-S-13 puts these two
-     * consumers on the owner ("services with their own scope questions"). It stays
-     * B and stays red until the owner rules. Deliberately not softened — see the
-     * SocketClass docstring.
-     */
-    class: 'B',
-    reason:
-      'The description above names two consumers — "svc-academy routes the lobby, svc-agents opens the crew channel" — and NEITHER EXISTS. svc-academy does not depend on @intafaced/events at all, and svc-agents only publishes. Recorded rather than reworded: the description is the specification those two services owe, and softening it to match today\'s code would delete the requirement instead of tracking it.',
-  },
-  {
     event: 'orderAccepted',
     missing: 'subscriber',
     /**

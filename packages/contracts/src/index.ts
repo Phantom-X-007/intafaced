@@ -14,3 +14,4 @@ export * from './blueprint.js';
 export * from './example-router.js';
 export * from './support.js';
 export * from './ops-analytics.js';
+export * from './ops-analytics-cube.js';
