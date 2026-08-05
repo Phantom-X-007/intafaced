@@ -19,6 +19,16 @@ export type DrillStep = {
   readonly instruction: string;
 };
 
+/**
+ * Opaque fill reference supplied by trade — academy never invents price/size.
+ * amount/price fields are intentionally absent here (money truth stays on trade).
+ */
+export type PaperFillRef = {
+  readonly fillId: string;
+  readonly marketId: string;
+  readonly recordedAt: Date;
+};
+
 export type DrillRun = {
   readonly workbookSlug: string;
   readonly marketId: string;
@@ -26,12 +36,18 @@ export type DrillRun = {
   readonly steps: readonly DrillStep[];
   readonly completedStepIds: readonly string[];
   readonly status: 'active' | 'complete' | 'refused';
-  readonly refuseReason?: 'not_paper' | 'no_market' | 'unknown_step';
+  readonly refuseReason?: 'not_paper' | 'no_market' | 'unknown_step' | 'bad_fill';
+  /** Trade-supplied fill ids only — never academy-invented fills. */
+  readonly fillRefs: readonly PaperFillRef[];
 };
 
 export type DrillResult =
   | { readonly ok: true; readonly run: DrillRun }
-  | { readonly ok: false; readonly reason: 'not_paper' | 'no_market' | 'unknown_step'; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly reason: 'not_paper' | 'no_market' | 'unknown_step' | 'bad_fill';
+      readonly message: string;
+    };
 
 /** Default foundations paper workbook outline steps (catalog shell). */
 export const FOUNDATIONS_PAPER_STEPS: readonly DrillStep[] = [
@@ -65,6 +81,7 @@ export function startPaperDrill(input: { workbookSlug: string; market: PaperMark
       steps,
       completedStepIds: [],
       status: 'active',
+      fillRefs: [],
     },
   };
 }
@@ -86,6 +103,48 @@ export function completeDrillStep(run: DrillRun, stepId: string): DrillResult {
     ok: true,
     run: { ...run, completedStepIds, status },
   };
+}
+
+/**
+ * Attach a trade-supplied fill id to the drill run.
+ * Refuses empty fillId, market mismatch, and invent of amount/price (not in type).
+ * Idempotent on fillId.
+ */
+export function attachPaperFillRef(run: DrillRun, input: { fillId: string; marketId: string; recordedAt?: Date }): DrillResult {
+  if (run.status === 'refused') {
+    return { ok: false, reason: run.refuseReason ?? 'not_paper', message: 'Run already refused.' };
+  }
+  const fillId = input.fillId?.trim() ?? '';
+  if (fillId.length < 1 || fillId.length > 128) {
+    return { ok: false, reason: 'bad_fill', message: 'fillId required (1–128 chars) — no invent fill.' };
+  }
+  if (!input.marketId?.trim()) {
+    return { ok: false, reason: 'bad_fill', message: 'marketId required on fill ref.' };
+  }
+  if (input.marketId !== run.marketId) {
+    return {
+      ok: false,
+      reason: 'bad_fill',
+      message: `Fill market ${input.marketId} does not match drill market ${run.marketId}`,
+    };
+  }
+  if (run.fillRefs.some((f) => f.fillId === fillId)) {
+    return { ok: true, run }; // idempotent
+  }
+  const ref: PaperFillRef = {
+    fillId,
+    marketId: input.marketId,
+    recordedAt: input.recordedAt ?? new Date(),
+  };
+  return {
+    ok: true,
+    run: { ...run, fillRefs: [...run.fillRefs, ref] },
+  };
+}
+
+/** Read-only fill history — ids only, no PnL invent. */
+export function listPaperFillRefs(run: DrillRun): readonly PaperFillRef[] {
+  return run.fillRefs;
 }
 
 /** Catalog kind gate — only workbook slugs may start paper drills. */

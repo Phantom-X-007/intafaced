@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { emptyScene } from './scene.js';
-import { clampToStage, ensureStage, listPresence, moveAvatar, CanvasError } from './canvas.js';
+import {
+  clampToStage,
+  ensureStage,
+  listPresence,
+  moveAvatar,
+  placeAvatar,
+  placeProp,
+  removeAvatar,
+  removeProp,
+  CanvasError,
+} from './canvas.js';
 
 describe('spatial Stage-2 2D canvas', () => {
   it('ensureStage adds default dimensions', () => {
@@ -31,5 +41,27 @@ describe('spatial Stage-2 2D canvas', () => {
   it('clampToStage uses stage bounds', () => {
     const s = ensureStage(emptyScene(), { width: 50, height: 40 });
     expect(clampToStage(s, -1, 99)).toEqual({ x: 0, y: 40 });
+  });
+
+  it('placeAvatar + removeAvatar host path; duplicate/missing refuse', () => {
+    let s = ensureStage(emptyScene(), { width: 100, height: 100 });
+    s = placeAvatar(s, { avatarId: 'a1', participantId: 'seat-1', x: 200, y: -5 });
+    expect(s.avatars).toHaveLength(1);
+    expect(s.avatars![0]!.position).toEqual({ x: 100, y: 0 });
+    expect(() => placeAvatar(s, { avatarId: 'a1', participantId: 'seat-2', x: 1, y: 1 })).toThrow(CanvasError);
+    s = removeAvatar(s, 'a1');
+    expect(s.avatars).toEqual([]);
+    expect(() => removeAvatar(s, 'a1')).toThrow(CanvasError);
+  });
+
+  it('placeProp + removeProp host path; duplicate/missing refuse', () => {
+    let s = ensureStage(emptyScene());
+    s = placeProp(s, { propId: 'p1', kind: 'desk', x: 10, y: 20 });
+    expect(s.props).toHaveLength(1);
+    expect(s.props![0]!.kind).toBe('desk');
+    expect(() => placeProp(s, { propId: 'p1', kind: 'chair', x: 0, y: 0 })).toThrow(CanvasError);
+    s = removeProp(s, 'p1');
+    expect(s.props).toEqual([]);
+    expect(() => removeProp(s, 'p1')).toThrow(CanvasError);
   });
 });
