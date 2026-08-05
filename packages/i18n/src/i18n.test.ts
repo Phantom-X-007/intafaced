@@ -68,9 +68,11 @@ beforeEach(() => {
 describe('catalog — the key set is closed and complete', () => {
   it('carries a realistic starter set across every launch surface', () => {
     expect(MESSAGE_KEYS.length).toBeGreaterThanOrEqual(60);
-    expect(MESSAGE_KEYS.length).toBeLessThanOrEqual(120);
+    // Stage-2 product surfaces (support KB, agents refuse copy) expand the set;
+    // still capped so the catalog cannot silently balloon.
+    expect(MESSAGE_KEYS.length).toBeLessThanOrEqual(160);
 
-    for (const surface of ['common.', 'auth.', 'trade.', 'wallet.', 'p2p.', 'notify.', 'error.']) {
+    for (const surface of ['common.', 'auth.', 'trade.', 'wallet.', 'p2p.', 'notify.', 'error.', 'support.', 'agents.']) {
       expect(
         MESSAGE_KEYS.some((k) => k.startsWith(surface)),
         surface,
