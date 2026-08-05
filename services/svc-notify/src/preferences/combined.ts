@@ -88,19 +88,15 @@ export function summarizeFanoutPlan(plan: readonly DeliveryDecision[]): FanoutPl
 
 /** L3 — channels that should send immediately (no invent missing channels). */
 export function channelsToSendNow(plan: readonly DeliveryDecision[]): readonly (MuteableChannel | 'inapp')[] {
-  return plan.filter((d): d is { action: 'send_now'; channel: MuteableChannel | 'inapp' } => d.action === 'send_now').map((d) => d.channel);
+  return plan.filter((d): d is Extract<DeliveryDecision, { action: 'send_now' }> => d.action === 'send_now').map((d) => d.channel);
 }
 
-/** L3 — channels held for digest (no invent). */
-export function channelsHeldForDigest(plan: readonly DeliveryDecision[]): readonly (MuteableChannel | 'inapp')[] {
-  return plan
-    .filter((d): d is { action: 'hold_digest'; channel: MuteableChannel | 'inapp' } => d.action === 'hold_digest')
-    .map((d) => d.channel);
+/** L3 — channels held for digest (no invent; never inapp). */
+export function channelsHeldForDigest(plan: readonly DeliveryDecision[]): readonly MuteableChannel[] {
+  return plan.filter((d): d is Extract<DeliveryDecision, { action: 'hold_digest' }> => d.action === 'hold_digest').map((d) => d.channel);
 }
 
-/** L3 — channels skipped as muted (no invent). */
-export function channelsSkippedMuted(plan: readonly DeliveryDecision[]): readonly (MuteableChannel | 'inapp')[] {
-  return plan
-    .filter((d): d is { action: 'skip_muted'; channel: MuteableChannel | 'inapp' } => d.action === 'skip_muted')
-    .map((d) => d.channel);
+/** L3 — channels skipped as muted (no invent; never inapp). */
+export function channelsSkippedMuted(plan: readonly DeliveryDecision[]): readonly MuteableChannel[] {
+  return plan.filter((d): d is Extract<DeliveryDecision, { action: 'skip_muted' }> => d.action === 'skip_muted').map((d) => d.channel);
 }
