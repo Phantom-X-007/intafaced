@@ -50,6 +50,7 @@ export const COPY_KEYS = [
   'agents.copy_intel.empty',
   'agents.copy_intel.unavailable',
   'agents.navigator.unavailable',
+  'agents.support.unavailable',
 ] as const;
 
 export type CopyKey = (typeof COPY_KEYS)[number];
@@ -95,6 +96,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.copy_intel.empty': 'No leader performance samples were provided.',
   'agents.copy_intel.unavailable': 'Leader stats are unavailable — samples are incomplete or the window is invalid.',
   'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
+  'agents.support.unavailable': 'Support knowledge is unavailable right now — the desk will not invent an answer.',
 };
 
 const KEY_SET: ReadonlySet<string> = new Set(COPY_KEYS);
