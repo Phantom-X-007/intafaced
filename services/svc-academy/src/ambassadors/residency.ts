@@ -112,6 +112,39 @@ export class MemoryResidencyDesk {
     return [...this.rows.values()].filter((r) => r.status === 'accepted' && (cohortSlug ? r.cohortSlug === cohortSlug : true));
   }
 
+  /**
+   * L3 — cohort counts by status. Empty cohort → zeros (not invent applicants).
+   */
+  cohortSummary(cohortSlug: string): {
+    readonly cohortSlug: string;
+    readonly applied: number;
+    readonly accepted: number;
+    readonly rejected: number;
+    readonly withdrawn: number;
+    readonly total: number;
+  } {
+    const slug = assertCohortSlug(cohortSlug);
+    let applied = 0;
+    let accepted = 0;
+    let rejected = 0;
+    let withdrawn = 0;
+    for (const r of this.rows.values()) {
+      if (r.cohortSlug !== slug) continue;
+      if (r.status === 'applied') applied += 1;
+      else if (r.status === 'accepted') accepted += 1;
+      else if (r.status === 'rejected') rejected += 1;
+      else if (r.status === 'withdrawn') withdrawn += 1;
+    }
+    return {
+      cohortSlug: slug,
+      applied,
+      accepted,
+      rejected,
+      withdrawn,
+      total: applied + accepted + rejected + withdrawn,
+    };
+  }
+
   /** Applicant withdraws while still applied — no invent accept. */
   withdraw(input: { id: string; userId: string; now?: Date }): ResidencyApplication {
     const row = this.rows.get(input.id);

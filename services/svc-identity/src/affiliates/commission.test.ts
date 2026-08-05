@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryReferralTree } from './referral-tree.js';
-import { accrueCommission, decimalMul, DEFAULT_ACCRUAL_TIERS } from './commission.js';
+import { accrueCommission, decimalMul, DEFAULT_ACCRUAL_TIERS, summarizeCommissionRows } from './commission.js';
 
 describe('affiliates Slice B — commission accrual (no payout)', () => {
   it('decimalMul truncates to 18dp without float', () => {
@@ -68,5 +68,27 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
       tiers: DEFAULT_ACCRUAL_TIERS,
     });
     expect(rows).toEqual([]);
+  });
+
+  it('L3 summarizeCommissionRows dry-run totals as decimal strings', () => {
+    expect(summarizeCommissionRows([])).toEqual({
+      rowCount: 0,
+      byBeneficiary: {},
+      totalCommission: '0',
+      asset: null,
+    });
+    const tree = new MemoryReferralTree();
+    tree.attribute({ userId: 'u2', referrerId: 'u1' });
+    const parent = new Map(tree.listEdges().map((e) => [e.userId, e.referrerId]));
+    const rows = accrueCommission({
+      fee: { feeEventId: 'f1', userId: 'u2', feeAmount: '100', asset: 'USDT', at: new Date() },
+      parent,
+      tiers: DEFAULT_ACCRUAL_TIERS,
+    });
+    const s = summarizeCommissionRows(rows);
+    expect(s.rowCount).toBe(1);
+    expect(s.totalCommission).toBe('10');
+    expect(s.byBeneficiary['u1']).toBe('10');
+    expect(s.asset).toBe('USDT');
   });
 });

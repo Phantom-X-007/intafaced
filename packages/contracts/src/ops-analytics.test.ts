@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ANALYTICS_METRICS_V0, ANALYTICS_SOURCE_DBS, assertMetricPoint, lagFreshness, mayLabelLive, metricById } from './ops-analytics.js';
+import {
+  aggregateSourceLags,
+  ANALYTICS_METRICS_V0,
+  ANALYTICS_SOURCE_DBS,
+  assertMetricPoint,
+  lagFreshness,
+  mayLabelLive,
+  metricById,
+} from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
   it('names the three source DBs', () => {
@@ -16,6 +24,32 @@ describe('analytics Slice A — sources + lag fail-closed', () => {
     expect(mayLabelLive(45)).toBe(false);
     expect(lagFreshness(120)).toBe('stale');
     expect(mayLabelLive(120)).toBe(false);
+  });
+
+  it('L3 aggregateSourceLags: all live required for overall live', () => {
+    const live = aggregateSourceLags([
+      { source: 'ledger', lagSeconds: 5 },
+      { source: 'trade', lagSeconds: 8 },
+      { source: 'identity', lagSeconds: 2 },
+    ]);
+    expect(live.overall).toBe('live');
+    expect(live.mayLabelLive).toBe(true);
+    expect(live.worstLagSeconds).toBe(8);
+
+    const oneUnknown = aggregateSourceLags([
+      { source: 'ledger', lagSeconds: 5 },
+      { source: 'trade', lagSeconds: null },
+    ]);
+    expect(oneUnknown.overall).toBe('unknown');
+    expect(oneUnknown.mayLabelLive).toBe(false);
+
+    const stale = aggregateSourceLags([
+      { source: 'ledger', lagSeconds: 5 },
+      { source: 'trade', lagSeconds: 200 },
+      { source: 'identity', lagSeconds: 5 },
+    ]);
+    expect(stale.overall).toBe('stale');
+    expect(stale.mayLabelLive).toBe(false);
   });
 });
 
