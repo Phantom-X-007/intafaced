@@ -24,7 +24,9 @@ spawnSync(process.execPath, [thrift], {
   stdio: 'inherit',
 });
 
-const args = process.argv.slice(2);
+let args = process.argv.slice(2);
+// pnpm pr -- --title …  leaves a leading "--" that gh rejects as unknown.
+while (args[0] === '--') args = args.slice(1);
 // strip optional leading "create"
 const ghArgs = args[0] === 'create' ? args.slice(1) : args;
 const r = spawnSync('gh', ['pr', 'create', ...ghArgs], {
