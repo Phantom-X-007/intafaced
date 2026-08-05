@@ -54,10 +54,7 @@ export function badgeOf(userId: string, row: AmbassadorRecord | null): Ambassado
 export function assertFreezeReason(reason: string): string {
   const trimmed = reason.trim();
   if (trimmed.length < 3) {
-    throw new AmbassadorProgrammeError(
-      'Freeze reason must name why (min 3 characters after trim)',
-      'academy.ambassador_invalid',
-    );
+    throw new AmbassadorProgrammeError('Freeze reason must name why (min 3 characters after trim)', 'academy.ambassador_invalid');
   }
   if (trimmed.length > 500) {
     throw new AmbassadorProgrammeError('Freeze reason max 500 characters', 'academy.ambassador_invalid');
@@ -66,10 +63,7 @@ export function assertFreezeReason(reason: string): string {
 }
 
 export type AmbassadorProgrammeErrorCode =
-  | 'academy.ambassador_not_found'
-  | 'academy.ambassador_already_active'
-  | 'academy.ambassador_already_frozen'
-  | 'academy.ambassador_invalid';
+  'academy.ambassador_not_found' | 'academy.ambassador_already_active' | 'academy.ambassador_already_frozen' | 'academy.ambassador_invalid';
 
 export class AmbassadorProgrammeError extends Error {
   constructor(

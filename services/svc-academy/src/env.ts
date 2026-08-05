@@ -69,9 +69,7 @@ const schema = serviceEnvSchema
       ACADEMY_TOURNAMENT_ENABLED: z
         .union([z.boolean(), z.string()])
         .default(true)
-        .transform((v) =>
-          typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase()),
-        ),
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase()))),
     }),
   );
 

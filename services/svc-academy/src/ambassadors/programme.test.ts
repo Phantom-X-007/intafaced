@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  AmbassadorProgrammeError,
-  assertFreezeReason,
-  badgeOf,
-  type AmbassadorRecord,
-} from './programme.js';
+import { AmbassadorProgrammeError, assertFreezeReason, badgeOf, type AmbassadorRecord } from './programme.js';
 
 const base = (overrides: Partial<AmbassadorRecord> = {}): AmbassadorRecord => ({
   userId: '11111111-1111-4111-8111-111111111111',
@@ -24,9 +19,7 @@ describe('badgeOf — public label', () => {
 
   it('isAmbassador only when active', () => {
     expect(badgeOf('u', base()).isAmbassador).toBe(true);
-    expect(badgeOf('u', base({ status: 'frozen', frozenAt: new Date(), frozenBy: 'op', freezeReason: 'pause' })).isAmbassador).toBe(
-      false,
-    );
+    expect(badgeOf('u', base({ status: 'frozen', frozenAt: new Date(), frozenBy: 'op', freezeReason: 'pause' })).isAmbassador).toBe(false);
   });
 });
 

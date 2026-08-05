@@ -37,8 +37,7 @@ export interface CurriculumImportRecord {
   body: string;
 }
 
-export type ImportValidationIssue =
-  | { field: string; code: 'missing' | 'invalid' | 'brand' | 'path'; message: string };
+export type ImportValidationIssue = { field: string; code: 'missing' | 'invalid' | 'brand' | 'path'; message: string };
 
 export interface ImportValidationResult {
   ok: boolean;

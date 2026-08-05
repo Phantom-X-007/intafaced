@@ -397,16 +397,12 @@ export function createAcademyRouter(academy: AcademyService) {
     ambassadors: scopedProcedure('admin:read', { module: 'academy' })
       .input(z.object({ status: ambassadorStatus.optional() }).optional())
       .output(z.array(ambassadorOut))
-      .query(({ input }) =>
-        guard(async () => academy.listAmbassadors({ ...(input?.status ? { status: input.status } : {}) })),
-      ),
+      .query(({ input }) => guard(async () => academy.listAmbassadors({ ...(input?.status ? { status: input.status } : {}) }))),
 
     appointAmbassador: scopedProcedure('admin:write', { module: 'academy' })
       .input(z.object({ userId: z.string().uuid() }))
       .output(ambassadorOut)
-      .mutation(({ input, ctx }) =>
-        guard(() => academy.appointAmbassador({ userId: input.userId, operatorId: ctx.principal!.userId })),
-      ),
+      .mutation(({ input, ctx }) => guard(() => academy.appointAmbassador({ userId: input.userId, operatorId: ctx.principal!.userId }))),
 
     freezeAmbassador: scopedProcedure('admin:write', { module: 'academy' })
       .input(z.object({ userId: z.string().uuid(), reason: z.string().min(1).max(500) }))
@@ -430,9 +426,7 @@ export function createAcademyRouter(academy: AcademyService) {
     seasons: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ status: seasonStatus.optional() }).optional())
       .output(z.array(seasonOut))
-      .query(({ input }) =>
-        guard(async () => academy.listSeasons({ ...(input?.status ? { status: input.status } : {}) })),
-      ),
+      .query(({ input }) => guard(async () => academy.listSeasons({ ...(input?.status ? { status: input.status } : {}) }))),
 
     season: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ seasonId: z.string().uuid() }))
@@ -476,8 +470,6 @@ export function createAcademyRouter(academy: AcademyService) {
       .input(z.object({ seasonId: z.string().uuid(), userId: z.string().uuid(), score: z.number().int() }))
       .output(standingOut.omit({ rank: true }))
       .mutation(({ input }) => guard(() => academy.setStanding(input))),
-
-
   });
 }
 

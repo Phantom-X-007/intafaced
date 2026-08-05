@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  TournamentError,
-  assertMayWriteScore,
-  assertScore,
-  assertSeasonSlug,
-  rankStandings,
-  type StandingRecord,
-} from './ladder.js';
+import { TournamentError, assertMayWriteScore, assertScore, assertSeasonSlug, rankStandings, type StandingRecord } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
   seasonId: 's',

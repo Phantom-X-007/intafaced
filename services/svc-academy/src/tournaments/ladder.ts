@@ -63,10 +63,7 @@ export function rankStandings(rows: StandingRecord[]): RankedStanding[] {
 export function assertSeasonSlug(slug: string): string {
   const s = slug.trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/.test(s)) {
-    throw new TournamentError(
-      'Season slug must be 3–64 chars, lowercase alphanumeric + hyphen',
-      'academy.season_invalid',
-    );
+    throw new TournamentError('Season slug must be 3–64 chars, lowercase alphanumeric + hyphen', 'academy.season_invalid');
   }
   return s;
 }
@@ -80,9 +77,6 @@ export function assertScore(score: number): number {
 
 export function assertMayWriteScore(status: SeasonStatus): void {
   if (status !== 'live') {
-    throw new TournamentError(
-      `Season is ${status} — scores only write while live`,
-      'academy.season_not_live',
-    );
+    throw new TournamentError(`Season is ${status} — scores only write while live`, 'academy.season_not_live');
   }
 }

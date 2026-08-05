@@ -455,8 +455,6 @@ export class AcademyService {
     return toSession(rows[0]!);
   }
 
-
-
   // ── Tournament ladders Stage-1 (NO PRIZE MONEY) ────────────────────────────
 
   private assertTournamentEnabled(): void {
@@ -734,10 +732,7 @@ export class AcademyService {
   async appointAmbassador(input: { userId: string; operatorId: string }): Promise<AmbassadorRecord> {
     const existing = await this.ambassadorOf(input.userId);
     if (existing?.status === 'active') {
-      throw new AcademyError(
-        `User ${input.userId} is already an active ambassador`,
-        'academy.ambassador_already_active',
-      );
+      throw new AcademyError(`User ${input.userId} is already an active ambassador`, 'academy.ambassador_already_active');
     }
 
     const rows = await this.sql<
@@ -766,11 +761,7 @@ export class AcademyService {
     return this.toAmbassador(rows[0]!);
   }
 
-  async freezeAmbassador(input: {
-    userId: string;
-    operatorId: string;
-    reason: string;
-  }): Promise<AmbassadorRecord> {
+  async freezeAmbassador(input: { userId: string; operatorId: string; reason: string }): Promise<AmbassadorRecord> {
     let reason: string;
     try {
       reason = assertFreezeReason(input.reason);

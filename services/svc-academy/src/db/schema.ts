@@ -147,7 +147,6 @@ export const sessionAttendees = academy.table(
   (t) => [uniqueIndex('session_attendees_pk').on(t.sessionId, t.userId), index('session_attendees_live_idx').on(t.sessionId, t.leftAt)],
 );
 
-
 /**
  * Ambassador / residency programme membership (Stage-1 status only).
  *
@@ -171,7 +170,6 @@ export const ambassadors = academy.table(
   (t) => [index('ambassadors_status_idx').on(t.status, t.appointedAt)],
 );
 
-
 /** Tournament seasons — Stage-1 ladder metadata (no prize balances). */
 export const seasonStatusEnum = academy.enum('season_status', ['scheduled', 'live', 'frozen', 'ended']);
 
@@ -188,10 +186,7 @@ export const tournamentSeasons = academy.table(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [
-    uniqueIndex('tournament_seasons_slug_idx').on(t.slug),
-    index('tournament_seasons_status_idx').on(t.status, t.startsAt),
-  ],
+  (t) => [uniqueIndex('tournament_seasons_slug_idx').on(t.slug), index('tournament_seasons_status_idx').on(t.status, t.startsAt)],
 );
 
 export const tournamentStandings = academy.table(
@@ -219,5 +214,3 @@ export const schema = {
   tournamentSeasons,
   tournamentStandings,
 };
-
-
