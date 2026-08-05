@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CertError, MemoryCertStore, decideGrant, isComplete } from './progress.js';
+import { CertError, MemoryCertStore, decideGrant, isComplete, progressReport } from './progress.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -61,5 +61,31 @@ describe('academy.certs Stage-1 progress spine', () => {
   it('unknown cert refuses', () => {
     const store = new MemoryCertStore();
     expect(() => store.grant('u1', 'missing')).toThrow(CertError);
+  });
+
+  it('L3 progressReport names missing items; does not invent grant', () => {
+    const r = progressReport({
+      userId: 'u1',
+      cert: FOUNDATIONS,
+      completedSlugs: new Set(['foundations-intro']),
+      existingGrant: null,
+    });
+    expect(r.complete).toBe(false);
+    expect(r.granted).toBe(false);
+    expect(r.missingItemSlugs).toEqual(['foundations-risk']);
+    expect(r.ratio).toBe('0.5000');
+    expect(r.completedCount).toBe(1);
+    expect(r.requiredCount).toBe(2);
+
+    const store = new MemoryCertStore();
+    store.registerCert(FOUNDATIONS);
+    store.markComplete('u1', 'foundations-intro', NOW);
+    store.markComplete('u1', 'foundations-risk', NOW);
+    store.grant('u1', 'foundations-v1', NOW);
+    const done = store.progressOf('u1', 'foundations-v1');
+    expect(done.complete).toBe(true);
+    expect(done.granted).toBe(true);
+    expect(done.missingItemSlugs).toEqual([]);
+    expect(done.ratio).toBe('1.0000');
   });
 });
