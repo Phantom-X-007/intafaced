@@ -41,12 +41,22 @@
  *     `TransactionEncoder.signMessage(rawTx, credentials)` — the pre-EIP-155
  *     form, with NO chain id — so the signature it produces is valid on every
  *     EVM chain simultaneously, mainnet included, whatever `coin.rpc` names.
- *   · The same withdrawal is then broadcast a SECOND time to a hardcoded
- *     `https://api.etherscan.io/api` proxy, which is Ethereum mainnet and is
- *     not configurable at all. Pointing the node at a testnet does not stop
- *     this path; it just means the mainnet copy is the one that lands.
+ *     STILL TRUE. Fixing it changes the bytes that get signed, and there is no
+ *     JDK here to compile or test that change, so it is specified rather than
+ *     applied: docs/SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md.
+ *   · The same withdrawal was then broadcast a SECOND time to a hardcoded
+ *     `https://api.etherscan.io/api` proxy, which is Ethereum mainnet and was
+ *     not configurable at all. NO LONGER TRUE — that second broadcast was
+ *     deleted (PR on fix/wallet-rpc-criticals). It was the one defect here that
+ *     could be removed without a compiler, because deleting a redundant relay
+ *     of already-signed bytes cannot change how a transaction is signed or
+ *     built. The endpoint literal survives on `checkEventLog`, a read-only
+ *     deposit-watcher path, and stays frozen under M2.
  *
- * So "point it at a testnet" is not available as a mitigation, and the real
+ * Removing that relay narrows the hole; it does not close it. A testnet-signed
+ * withdrawal from this tree is STILL a valid mainnet withdrawal, because the
+ * signature still carries no chain id — anyone who observes it can replay it.
+ * So "point it at a testnet" is still not available as a mitigation, and the real
  * invariant is narrower and harder: **nothing in this repository may be able to
  * build, boot or ship any module of this tree, and no NEW mainnet constant may
  * be added to it,** until a human completes the review that §A4 requires.
@@ -87,15 +97,30 @@
  *
  *   M2  No hardcoded public chain endpoint in Java. A URL literal whose host is
  *       routable off-box is a network selector that no properties file can
- *       override.
+ *       override. Scheme set is http/https/ws/wss — web3j reaches a node
+ *       through `HttpService` OR `WebSocketService`, and `wss://` is the
+ *       canonical form of every hosted mainnet endpoint with a subscription
+ *       API, so an https-only rule is two characters from being bypassed.
  *
- *   M3  No chain-id-less EVM signature. Two-argument `signMessage` is
- *       pre-EIP-155: the resulting transaction is replay-valid on mainnet no
- *       matter which node signed the nonce.
+ *   M3  No chain-id-less EVM signature, in any of the shapes web3j offers.
+ *       Two-argument `signMessage` is pre-EIP-155: the resulting transaction is
+ *       replay-valid on mainnet no matter which node signed the nonce. Arity on
+ *       that one call was the original rule, and it answers the wrong question
+ *       — "was an argument passed" rather than "was a real chain id passed".
+ *       Also caught: `ChainId.NONE` (web3j's no-chain-id sentinel, which
+ *       SATISFIES the arity rule and is exactly what someone applying the
+ *       EIP-155 fix without a compiler reaches for), the two-argument
+ *       `RawTransactionManager` (chain-id-less on web3j 3.x without the word
+ *       signMessage appearing), and `Transfer.sendFunds` (whose manager this
+ *       gate cannot inspect without a JDK, so it refuses to assume the safe
+ *       answer).
  *
  *   M4  No mainnet-shaped value in .properties — a public chain endpoint, a
  *       non-zero chain start height, a literal address, or a keystore filename
- *       embedding an account.
+ *       embedding an account. An address is recognised by the KEY (`*address`,
+ *       which carries every non-EVM chain here) OR by the VALUE (exactly 0x +
+ *       40 hex, under any key at all). The key rule alone is defeated by
+ *       renaming: `contract.token=0xdac17…` is the same live mainnet pin.
  *
  *   M5  No Dockerfile, and no build/run script, that can package a module here.
  *   M6  No compose service that references this tree.
@@ -104,6 +129,12 @@
  *       M5-M7 are the three incidental barriers, restated as invariants. They
  *       are ABSENCE assertions and each names its own denominator, so "nothing
  *       found" can never be confused with "nothing looked" — see the walk guard.
+ *
+ *   M8  No live EVM address pinned in Java. M4 only ever read .properties, so
+ *       the mainnet contract this tree used to pin could be re-pinned by moving
+ *       it one file sideways into a Java constant, and nothing here would have
+ *       said a word. 40 hex digits is an account or a contract and nothing else
+ *       — a 64-hex event topic does not match, and neither does a txid.
  *
  * ── THE RATCHET, BY EXACT TEXT ─────────────────────────────────────────────
  *
@@ -145,6 +176,21 @@
  * matches nothing, the rules do not quietly go green — the entries that rule
  * held go stale and the gate fails. That is proof-of-life per rule, not just
  * per scan: M3 has exactly one entry, so blinding M3 alone still goes red.
+ *
+ * And a third half, because the baseline has a limit that only shows up when
+ * the gate is WIDENED. Proof-of-life by baseline works only for rules that
+ * currently match something. Every rule added to close a hole is, by
+ * construction, a rule with nothing to freeze — the tree has no `wss://`
+ * endpoint, no `ChainId.NONE`, no `RawTransactionManager`, and after this branch
+ * no EVM address under a non-address key. On a green run those are
+ * indistinguishable from rules that were deleted. So RULE_PROBES near the
+ * bottom pushes synthetic fixtures through the SAME scanJavaSource /
+ * scanPropertiesSource the tree goes through — the functions, not a copy of the
+ * regexes — and asserts which fire and which must NOT. Blinding a rule breaks
+ * its probe; widening one until it fires on a private host, an event topic or a
+ * correctly-chain-id'd signMessage breaks a negative probe. That second half
+ * matters as much: a gate that cries wolf is switched off, and then the real
+ * finding goes through it unnoticed.
  *
  * Exit 0 = this tree cannot reach mainnet, and gained no new way to try.
  * Exit 1 = it can, or something that was watching it stopped watching.
@@ -430,7 +476,30 @@ function classifyAddress(value) {
  * basename, `text` the exact matched string. See the header for why the key is
  * shaped this way.
  *
- * @type {{ rule: string, module: string, file: string, text: string, reason: string }[]}
+ * `occurrences` pins HOW MANY TIMES that exact string appears, and defaults to
+ * 1. It exists because pinning text alone left the gate blind to the single
+ * most likely way this tree gets worse, and blind to it in the exact places the
+ * reasons below claimed to be watching:
+ *
+ *   · btm, eos and xmr carry `MainNetParams` as an IMPORT ONLY. The reason on
+ *     the btm entry says it is frozen "precisely BECAUSE it is unused: an
+ *     unused mainnet import in a wallet controller is one line from being the
+ *     live selector". Adding that line adds a SECOND occurrence of the same
+ *     string in the same file — which, without a count, incremented a counter
+ *     nobody read and printed a tick. The gate did not catch the one transition
+ *     its own baseline said it was there for.
+ *   · The M3 entry says "Both call sites are the identical string, so one
+ *     frozen entry covers them; a THIRD would fail". It would not have. It
+ *     would have been a third increment and a green run.
+ *   · And the second Etherscan broadcast deleted on this branch could be pasted
+ *     back tomorrow, restoring the same literal in the same file, with nothing
+ *     to say so.
+ *
+ * Defaulting to 1 is the safe default rather than a convenience: an entry added
+ * for a string that appears twice fails until its author writes the number
+ * down, which makes multiplicity a decision instead of an accident.
+ *
+ * @type {{ rule: string, module: string, file: string, text: string, occurrences?: number, reason: string }[]}
  */
 const FROZEN = [
   // ── M1: mainnet network parameters in the key-minting controllers ────────
@@ -439,6 +508,7 @@ const FROZEN = [
     module: 'bch',
     file: 'WalletController.java',
     text: 'MainNetParams',
+    occurrences: 2,
     reason:
       'GET /rpc/address/{account} mints a fresh secp256k1 key and derives a BCH MAINNET address from it, then writes ' +
       'the key to an unencrypted wallet file. Appears twice — the import and the live NetworkParameters assignment — ' +
@@ -449,6 +519,7 @@ const FROZEN = [
     module: 'bsv',
     file: 'WalletController.java',
     text: 'MainNetParams',
+    occurrences: 2,
     reason: 'Identical shape to bch: import plus a live MainNetParams.get() in the address-minting controller. Same queue.',
   },
   {
@@ -456,6 +527,7 @@ const FROZEN = [
     module: 'ltc',
     file: 'WalletController.java',
     text: 'MainNetParams',
+    occurrences: 2,
     reason:
       'Identical shape to bch, via the litecoinj fork rather than bitcoinj — which is why M1 matches the class name and ' +
       'not the package. Import plus live assignment. Same queue.',
@@ -492,11 +564,16 @@ const FROZEN = [
     file: 'EtherscanApi.java',
     text: 'https://api.etherscan.io/api',
     reason:
-      'THE WORST ONE IN THE TREE. This is the Ethereum MAINNET Etherscan proxy, hardcoded, with no property behind it. ' +
-      'It is reached from PaymentHandler on both the ether and the token withdrawal path: after broadcasting to ' +
-      'coin.rpc, the SAME signed transaction is POSTed here as eth_sendRawTransaction. So aiming coin.rpc at a testnet ' +
-      'node does not make the withdrawal a testnet withdrawal — it makes the mainnet copy the one that lands. ' +
-      'Owner queue: this must become a property, or the second broadcast must be deleted.',
+      'The Ethereum MAINNET Etherscan proxy, hardcoded, with no property behind it. It WAS the worst one in the tree: ' +
+      'PaymentHandler reached it on both the ether and the token withdrawal path, POSTing the SAME signed transaction ' +
+      'here as eth_sendRawTransaction after already broadcasting it to coin.rpc — so aiming coin.rpc at a testnet node ' +
+      'did not make the withdrawal a testnet withdrawal, it made the mainnet copy the one that landed. THAT SECOND ' +
+      'BROADCAST IS DELETED (fix/wallet-rpc-criticals); sendRawTransaction and both call sites are gone. What remains, ' +
+      'and what this entry now freezes, is the same literal on checkEventLog — a READ-ONLY path the erc-token and ' +
+      'erc-eusdt deposit watchers use to confirm an ERC-20 Transfer event. It broadcasts nothing and signs nothing. ' +
+      'Still frozen because a read against mainnet is still a mainnet reach, and because the cheapest way to restore ' +
+      'the write path would be to add a method beside it. Owner queue: make it a property. UNVERIFIED — no JDK on this ' +
+      'host, so the deletion was reasoned from call-graph reachability, not compiled.',
   },
   {
     rule: 'M2',
@@ -523,12 +600,19 @@ const FROZEN = [
     module: 'eth-support',
     file: 'PaymentHandler.java',
     text: 'TransactionEncoder.signMessage(rawTransaction, payment.getCredentials())',
+    occurrences: 2,
     reason:
       'Pre-EIP-155 signing on BOTH withdrawal paths (ether transfer and ERC-20 transfer) — the two-argument form takes ' +
-      'no chain id, so the signature is valid on every EVM chain at once, mainnet included. This is why "just point it ' +
-      'at a testnet" is not an available mitigation for this tree: a testnet-signed withdrawal here is also a valid ' +
-      'mainnet withdrawal, and the Etherscan path above will happily relay it. Both call sites are the identical string, ' +
-      'so one frozen entry covers them; a THIRD would fail, and so would changing either. Owner queue: pass a chain id.',
+      'no chain id, so the signature is valid on every EVM chain at once, mainnet included. STILL UNFIXED, and ' +
+      'deliberately so: adding a chain id changes the bytes that get signed, and there is no JDK, JRE or Maven on this ' +
+      'host, so the change could not be compiled, let alone tested against a known-good signed-transaction fixture. ' +
+      'Applying it blind to a withdrawal path is how money gets stranded by a change that looks obviously right. The ' +
+      'exact diff, the chain-id source, every call site and the tests that must pass first are specified in ' +
+      'docs/SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md. This is why "just point it at a testnet" is STILL not an ' +
+      'available mitigation for this tree, even with the Etherscan relay deleted: a testnet-signed withdrawal here is ' +
+      'also a valid mainnet withdrawal, and anyone who sees it can replay it themselves. Both call sites are the ' +
+      'identical string, so one frozen entry covers them; a THIRD would fail, and so would changing either. Note that ' +
+      'M3 now also catches ChainId.NONE, which would satisfy this rule’s arity test while changing nothing.',
   },
 
   // ── M4: mainnet-shaped values in .properties ─────────────────────────────
@@ -728,16 +812,13 @@ const FROZEN = [
       'address key holds no literal", and carving out "except when it looks fake" is how a real value arrives disguised ' +
       'as a placeholder. A real EOS account here would be a different string and would fail.',
   },
-  {
-    rule: 'M4-address',
-    module: 'erc-eusdt',
-    file: 'application.properties',
-    text: 'address=0xdac17f958d2ee523a2206206994597c13d831ec7',
-    reason:
-      'THE LIVE ETHEREUM MAINNET TETHER (USDT) CONTRACT — 40 valid hex digits, unmangled, correct. This one is real. The ' +
-      'module watches and transfers against it. Nothing else in the tree pins a mainnet contract this precisely. Owner ' +
-      'queue: highest priority of the M4 entries.',
-  },
+  // The erc-eusdt entry that used to sit here held THE LIVE ETHEREUM MAINNET
+  // TETHER (USDT) CONTRACT — 40 valid hex digits, unmangled, correct, and the
+  // most precise mainnet pin anywhere in the tree. It is GONE, not moved: the
+  // property is now `contract.address=${EUSDT_CONTRACT_ADDRESS}`, an unresolved
+  // placeholder this gate skips by design, so there is no literal left to
+  // freeze. The baseline shrank, which is the only direction it is allowed to
+  // move. Its erc-token twin below is still frozen, and still mangled.
   {
     rule: 'M4-address',
     module: 'erc-token',
@@ -776,6 +857,24 @@ const FROZEN = [
     reason:
       'A second, different keystore filename — a distinct account from the eth one, and the only entry carrying the ' +
       '.json suffix. Same queue.',
+  },
+
+  // ── M8: live EVM addresses pinned in Java ────────────────────────────────
+  {
+    rule: 'M8',
+    module: 'eth-support',
+    file: 'EtherscanApi.java',
+    text: '0x0b42c73446e4090a7c1db8ac00ad46a38ccbc2ac',
+    reason:
+      'A 40-hex Ethereum MAINNET contract address, hardcoded as the `address` argument of a checkEventLog call inside a ' +
+      'developer scratch `main()` that shipped, alongside a mainnet block height and a mainnet txid. Surfaced by M8, ' +
+      'which is new on this branch — no rule here had ever read a bare address literal out of Java, only out of ' +
+      '.properties and only under a key ending in "address". FROZEN rather than deleted, following the precedent ' +
+      'OWNER-ACTIONS §A3 set for the credentialed URL in ActClientTest: surefire never runs a main(), the value is in ' +
+      'git history either way, and deleting the line would buy nothing while editing unreviewed key-handling code. ' +
+      'What freezing buys is that the read-only Etherscan client cannot be quietly re-pointed at a different contract, ' +
+      'and that M8 has a live finding to prove it still sees — proof-of-life this rule would otherwise lack, since the ' +
+      'one other 40-hex literal in the tree was the erc-eusdt Tether pin and that is now a placeholder.',
   },
 ];
 
@@ -827,27 +926,55 @@ const record = (rule, file, text, line, detail) =>
     detail,
   });
 
-// ── M1 / M2 / M3 over Java ─────────────────────────────────────────────────
-for (const file of javaFiles) {
-  const source = readFileSync(file, 'utf8');
+/**
+ * Every Java rule, over one file's source. Returns findings rather than
+ * recording them, so the probe harness at the bottom can run the REAL matchers
+ * against synthetic fixtures instead of a second copy of them that could drift.
+ * That indirection is the whole point: a rule with no live finding in the tree
+ * has no proof-of-life from the frozen baseline, and a copy-pasted probe would
+ * prove only that the copy still works.
+ *
+ * @returns {{ rule: string, text: string, line: number, detail: string }[]}
+ */
+function scanJavaSource(source) {
+  const out = [];
   const code = stripJavaComments(source);
+  const add = (rule, text, index, detail) => out.push({ rule, text, line: lineAt(code, index), detail });
 
+  // M1 — mainnet network-parameter selectors.
   for (const { re, reason } of JAVA_NETWORK_SELECTORS) {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(code)) !== null) {
-      record('M1', file, m[0], lineAt(code, m.index), reason);
+      add('M1', m[0], m.index, reason);
       if (m.index === re.lastIndex) re.lastIndex++;
     }
   }
 
-  for (const m of code.matchAll(/"(https?:\/\/[^"\s]+)"/g)) {
+  // M2 — hardcoded endpoint literal at a routable host.
+  //
+  // The scheme set is `http`, `https`, `ws` and `wss`, not just the two. web3j
+  // reaches a node through EITHER `HttpService` (what this tree uses today) or
+  // `WebSocketService`, and `wss://` is the canonical form of every hosted
+  // mainnet endpoint that offers a subscription API. A rule that read only
+  // `https?://` would have called a switch to `wss://mainnet.<provider>/ws/v3/KEY`
+  // clean — the same endpoint, the same chain, past the gate on the strength of
+  // two characters. The properties half of this gate never had that hole,
+  // because `hostOf` there is scheme-agnostic; only the Java half did.
+  for (const m of code.matchAll(/"((?:https?|wss?):\/\/[^"\s]+)"/g)) {
     const url = m[1];
     const host = hostOf(url);
     if (host === null || !isOffBoxHost(host)) continue;
-    record('M2', file, url, lineAt(code, m.index), `hardcoded endpoint at a routable host (${host}) — no property can override it`);
+    add('M2', url, m.index, `hardcoded endpoint at a routable host (${host}) — no property can override it`);
   }
 
+  // M3 — chain-id-less EVM signing, in all the shapes web3j 3.3.1 offers.
+  //
+  // Arity on `signMessage` was the original rule and it is necessary but not
+  // sufficient: it answers "was a chain id passed", and the question that
+  // actually decides replayability is "was a REAL chain id passed, by any of the
+  // routes that sign". Three additions, all of which produce exactly the
+  // pre-EIP-155 signature the two-argument form does:
   for (const m of code.matchAll(/\bsignMessage\s*\(/g)) {
     const open = m.index + m[0].length - 1;
     // Three arguments is `signMessage(tx, chainId, credentials)` — EIP-155, and
@@ -861,13 +988,82 @@ for (const file of javaFiles) {
       .replace(/^[\s\S]*?(\b[\w.]*signMessage\s*\()/, '$1')
       .replace(/\s+/g, ' ')
       .trim();
-    record('M3', file, text, lineAt(code, m.index), 'two-argument signMessage carries no chain id (pre-EIP-155) — replay-valid on mainnet');
+    add('M3', text, m.index, 'two-argument signMessage carries no chain id (pre-EIP-155) — replay-valid on mainnet');
   }
+
+  // M3, and the most important of the three, because it is the one that LOOKS
+  // FIXED. `ChainId.NONE` is web3j's literal "no chain id" sentinel (0). Passed
+  // as the chain-id argument of the three-argument signMessage it satisfies the
+  // arity rule above and produces a byte-identical pre-EIP-155 signature. An
+  // agent or engineer applying the EIP-155 fix without a compiler, reaching for
+  // the named constant that is already imported, writes exactly this.
+  for (const m of code.matchAll(/\bChainId\s*\.\s*NONE\b/g)) {
+    add(
+      'M3',
+      m[0],
+      m.index,
+      "ChainId.NONE is web3j's no-chain-id sentinel — it satisfies the three-argument signMessage signature while " +
+        'producing the same replayable transaction the two-argument form does',
+    );
+  }
+
+  // M3 — the two-argument `RawTransactionManager(web3j, credentials)`. In web3j
+  // 3.3.1 (the version this reactor pins) that constructor delegates to the
+  // three-argument one with ChainId.NONE, so every transaction it sends is
+  // pre-EIP-155 without the word `signMessage` appearing anywhere.
+  for (const m of code.matchAll(/\bRawTransactionManager\s*\(/g)) {
+    const open = m.index + m[0].length - 1;
+    if (argumentCount(code, open) !== 2) continue;
+    add(
+      'M3',
+      'RawTransactionManager(<2 args>)',
+      m.index,
+      'the two-argument RawTransactionManager defaults to ChainId.NONE in web3j 3.x — it signs pre-EIP-155 without ' +
+        'naming signMessage at all',
+    );
+  }
+
+  // M3 — `Transfer.sendFunds`. Flagged rather than trusted: in web3j 3.x it
+  // builds its own TransactionManager, and whether that manager carries a chain
+  // id is a property of the version resolved at build time. This gate cannot
+  // resolve a jar (there is no JDK here by design, M7), so it refuses to assume
+  // the safe answer. If a reviewer WITH a compiler establishes that the call is
+  // EIP-155 on the pinned version, that belongs in FROZEN with the evidence.
+  for (const m of code.matchAll(/\bTransfer\s*\.\s*sendFunds\s*\(/g)) {
+    add(
+      'M3',
+      'Transfer.sendFunds(...)',
+      m.index,
+      'Transfer.sendFunds signs through a TransactionManager this gate cannot inspect without a JDK; on web3j 3.x the ' +
+        'default is chain-id-less. Prove it EIP-155 at review or do not use it',
+    );
+  }
+
+  // M8 — a live EVM address pinned in Java rather than in config.
+  //
+  // M4-address only ever looked at .properties, and only at keys whose last
+  // segment ends in `address`. Both limits are real holes: the mainnet Tether
+  // contract this branch just removed from erc-eusdt could be re-pinned by
+  // moving it one file sideways into a Java constant, and no rule here would
+  // have said a word. 40 hex digits is an EVM account or contract and nothing
+  // else — a 64-hex event topic does not match, and neither does a txid.
+  for (const m of code.matchAll(/"(0x[0-9a-fA-F]{40})"/g)) {
+    add('M8', m[1], m.index, `${classifyAddress(m[1])} pinned in Java — no property can override a literal`);
+  }
+
+  return out;
 }
 
-// ── M4 over .properties ────────────────────────────────────────────────────
-for (const file of propsFiles) {
-  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+/**
+ * Every .properties rule, over one file's text. Same contract as
+ * scanJavaSource, and for the same reason.
+ *
+ * @returns {{ rule: string, text: string, line: number, detail: string }[]}
+ */
+function scanPropertiesSource(content) {
+  const out = [];
+  const lines = content.split(/\r?\n/);
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (/^\s*[#!]/.test(line) || !line.includes('=')) continue;
@@ -877,26 +1073,51 @@ for (const file of propsFiles) {
     // Last dot-segment only — see the header on why the full key cannot be used.
     const leaf = key.slice(key.lastIndexOf('.') + 1);
     const text = `${leaf}=${value}`;
+    const add = (rule, detail) => out.push({ rule, text, line: i + 1, detail });
 
     if (CHAIN_ENDPOINT_KEYS.has(leaf.toLowerCase())) {
       const host = hostOf(value);
       if (host !== null && isOffBoxHost(host)) {
-        record('M4-endpoint', file, text, i + 1, `chain endpoint at a routable host (${host})`);
+        add('M4-endpoint', `chain endpoint at a routable host (${host})`);
       }
     }
 
     if (leaf.toLowerCase() === 'init-block-height' && /^\d+$/.test(value) && Number(value) > 0) {
-      record('M4-height', file, text, i + 1, 'non-zero chain start height — a statement about one live chain’s history');
+      add('M4-height', 'non-zero chain start height — a statement about one live chain’s history');
     }
 
-    if (/address$/i.test(leaf) && isAddressLike(value)) {
-      record('M4-address', file, text, i + 1, classifyAddress(value));
+    // Two independent ways to be an address, joined so one line can only ever
+    // produce one M4-address finding:
+    //
+    //   · the KEY says so   — `*address`, whatever the value looks like. This is
+    //     the original rule and it carries every non-EVM chain in the tree.
+    //   · the VALUE says so — exactly 0x + 40 hex, under ANY key. Added because
+    //     the key rule is defeated by renaming: `contract.token=0xdac17…` or
+    //     `usdt.contract=0xdac17…` is the same live mainnet pin under a key that
+    //     does not end in "address", and it read clean. A value of this exact
+    //     shape is an EVM account or contract and cannot be anything else.
+    const keySaysAddress = /address$/i.test(leaf) && isAddressLike(value);
+    const valueIsEvmAddress = /^0x[0-9a-fA-F]{40}$/.test(value);
+    if (keySaysAddress || valueIsEvmAddress) {
+      add('M4-address', keySaysAddress ? classifyAddress(value) : `${classifyAddress(value)}, under a key that does not name one`);
     }
 
     if (KEYSTORE_FILENAME.test(value)) {
-      record('M4-keystore', file, text, i + 1, 'go-ethereum keystore filename — it embeds the account whose key it holds');
+      add('M4-keystore', 'go-ethereum keystore filename — it embeds the account whose key it holds');
     }
   }
+
+  return out;
+}
+
+// ── M1 / M2 / M3 / M8 over Java ────────────────────────────────────────────
+for (const file of javaFiles) {
+  for (const f of scanJavaSource(readFileSync(file, 'utf8'))) record(f.rule, file, f.text, f.line, f.detail);
+}
+
+// ── M4 over .properties ────────────────────────────────────────────────────
+for (const file of propsFiles) {
+  for (const f of scanPropertiesSource(readFileSync(file, 'utf8'))) record(f.rule, file, f.text, f.line, f.detail);
 }
 
 // ── M5 / M6 / M7: the three incidental barriers, as invariants ─────────────
@@ -1027,8 +1248,17 @@ for (const file of workflowFiles) {
 // example — it walks zero services today and its silence reads as coverage.
 const emptyWalks = [];
 if (moduleDirs.length === 0) emptyWalks.push('found 0 module directories in the wallet RPC tree');
-if (javaFiles.length === 0) emptyWalks.push('walked 0 Java files — M1, M2 and M3 asserted nothing');
+if (javaFiles.length === 0) emptyWalks.push('walked 0 Java files — M1, M2, M3 and M8 asserted nothing');
 if (propsFiles.length === 0) emptyWalks.push('walked 0 .properties files — M4 asserted nothing');
+// M5 had a denominator and did not assert it: the summary line has always
+// printed "N Dockerfile(s) checked" and N was never required to be non-zero. A
+// collector that returned nothing — a rename, a new skip-dir, a depth limit
+// tripped by a re-root — would have printed "0 Dockerfile(s) ... none builds
+// this tree", which is the repo's named recurring defect stated as a tick. The
+// repo has 2 today, so this asserts a fact rather than a hope.
+if (dockerfilesInspected === 0) {
+  emptyWalks.push('opened 0 Dockerfiles — M5 asserted nothing about images (the in-tree script sweep is a different, narrower check)');
+}
 if (composeInspected === 0) emptyWalks.push('opened 0 compose files — M6 asserted nothing (this is exactly how W3 became vacuous)');
 if (workflowsInspected === 0) emptyWalks.push('opened 0 workflow files — M7 asserted nothing');
 if (FROZEN.length === 0) emptyWalks.push('the frozen baseline is empty — it is the proof-of-life for every rule here');
@@ -1039,6 +1269,172 @@ if (emptyWalks.length > 0) {
     '',
     'This is not a clean tree; it is a scan that opened nothing, and a scan that opened nothing must never',
     'print a tick. Fix the discovery above, or delete the rule that can no longer see its subject.',
+  ]);
+}
+
+// ── Walk guard, part 3: proof-of-life for rules with nothing to find ───────
+//
+// The frozen baseline is proof-of-life ONLY for rules that currently match
+// something. Every rule added to widen this gate is, by construction, a rule
+// with no live finding — the tree has no `wss://` endpoint, no `ChainId.NONE`,
+// no `RawTransactionManager`, and after this branch no EVM contract address
+// under a non-address key. Those rules are therefore indistinguishable, on a
+// green run, from rules that were deleted or typo'd into never matching. The
+// baseline cannot tell them apart because there is nothing to freeze.
+//
+// So they are exercised, on every run, against synthetic fixtures pushed
+// through the SAME scanJavaSource / scanPropertiesSource the tree goes through.
+// Not a copy of the regexes: the functions themselves. Blinding a rule breaks
+// its probe, and the gate goes red naming the rule.
+//
+// The negative probes matter as much as the positive ones. A rule widened until
+// it fires on a private host, a 64-hex event topic or a correctly-chain-id'd
+// signMessage is a rule that will be switched off within the week, and then the
+// real finding goes through it unnoticed — the precedent this gate's own header
+// cites about `prefer-ip-address` and `workspace-sync`.
+const RULE_PROBES = [
+  // ── M2: the scheme widening ────────────────────────────────────────────
+  {
+    rule: 'M2',
+    kind: 'java',
+    fires: true,
+    source: 'class P { String n = "wss://mainnet.example-provider.io/ws/v3/KEY"; }',
+    note: 'a websocket mainnet endpoint — the hole before this branch, when M2 read only https?://',
+  },
+  {
+    rule: 'M2',
+    kind: 'java',
+    fires: true,
+    source: 'class P { String n = "https://api.example-chain.io/v1"; }',
+    note: 'the original https form still fires',
+  },
+  {
+    rule: 'M2',
+    kind: 'java',
+    fires: false,
+    source: 'class P { String n = "ws://127.0.0.1:8546"; }',
+    note: 'loopback is not a mainnet reach, whatever the scheme',
+  },
+  {
+    rule: 'M2',
+    kind: 'java',
+    fires: false,
+    source: 'class P { String n = "wss://${NODE_HOST}"; }',
+    note: 'a host the environment decides is not a hardcoded endpoint',
+  },
+
+  // ── M3: the shapes arity alone does not catch ──────────────────────────
+  {
+    rule: 'M3',
+    kind: 'java',
+    fires: true,
+    source: 'class P { void f() { byte[] s = TransactionEncoder.signMessage(tx, ChainId.NONE, credentials); } }',
+    note: 'THE ONE THAT LOOKS FIXED — three arguments, so the arity rule passes it, and the signature is still pre-EIP-155',
+  },
+  {
+    rule: 'M3',
+    kind: 'java',
+    fires: true,
+    source: 'class P { void f() { TransactionManager m = new RawTransactionManager(web3j, credentials); } }',
+    note: 'signs pre-EIP-155 on web3j 3.x without the word signMessage appearing',
+  },
+  {
+    rule: 'M3',
+    kind: 'java',
+    fires: true,
+    source: 'class P { void f() { Transfer.sendFunds(web3j, credentials, to, amount, Convert.Unit.ETHER); } }',
+    note: 'chain-id behaviour depends on a jar this gate cannot resolve — flagged, not assumed safe',
+  },
+  {
+    rule: 'M3',
+    kind: 'java',
+    fires: true,
+    source: 'class P { void f() { byte[] s = TransactionEncoder.signMessage(tx, credentials); } }',
+    note: 'the original two-argument form still fires',
+  },
+  {
+    rule: 'M3',
+    kind: 'java',
+    fires: false,
+    source: 'class P { void f() { byte[] s = TransactionEncoder.signMessage(tx, chainId, credentials); } }',
+    note: 'a real chain id is the fix — this must NOT fire, or the gate blocks its own remediation',
+  },
+  {
+    rule: 'M3',
+    kind: 'java',
+    fires: false,
+    source: 'class P { void f() { TransactionManager m = new RawTransactionManager(web3j, credentials, chainId); } }',
+    note: 'the three-argument manager carries a chain id',
+  },
+
+  // ── M8: an EVM address pinned in Java ──────────────────────────────────
+  {
+    rule: 'M8',
+    kind: 'java',
+    fires: true,
+    source: 'class P { static final String C = "0xdAC17F958D2ee523a2206206994597C13D831ec7"; }',
+    note: 'the mainnet Tether contract moved one file sideways out of .properties, mixed-case — no rule saw this before',
+  },
+  {
+    rule: 'M8',
+    kind: 'java',
+    fires: false,
+    source: 'class P { String t = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"; }',
+    note: 'a 64-hex event topic is not an address',
+  },
+
+  // ── M4-address: the value-shaped branch ────────────────────────────────
+  {
+    rule: 'M4-address',
+    kind: 'properties',
+    fires: true,
+    source: 'contract.token=0xdac17f958d2ee523a2206206994597c13d831ec7',
+    note: 'the same live mainnet pin under a key that does not end in "address" — clean before this branch',
+  },
+  {
+    rule: 'M4-address',
+    kind: 'properties',
+    fires: true,
+    source: 'coin.withdraw-address=1QDEimf6f4VrDqCSBmgfh1ReW9L2vHvvg',
+    note: 'the original key-shaped branch still fires, and still covers non-EVM chains',
+  },
+  {
+    rule: 'M4-address',
+    kind: 'properties',
+    fires: false,
+    source: 'eureka.instance.prefer-ip-address=true',
+    note: 'the boolean in all 13 files must stay silent — a gate that cries wolf gets switched off',
+  },
+  {
+    rule: 'M4-address',
+    kind: 'properties',
+    fires: false,
+    source: 'contract.address=${EUSDT_CONTRACT_ADDRESS}',
+    note: 'an unresolved placeholder is a decision the environment makes, not a pin in this tree',
+  },
+];
+
+const probeFailures = [];
+for (const probe of RULE_PROBES) {
+  const found = (probe.kind === 'java' ? scanJavaSource(probe.source) : scanPropertiesSource(probe.source)).some(
+    (f) => f.rule === probe.rule,
+  );
+  if (found !== probe.fires) {
+    probeFailures.push(
+      `[${probe.rule}] expected ${probe.fires ? 'a finding' : 'NO finding'}, got ${found ? 'a finding' : 'none'}` +
+        `\n      fixture: ${probe.source}` +
+        `\n      why it exists: ${probe.note}`,
+    );
+  }
+}
+
+if (probeFailures.length > 0) {
+  die('a rule stopped doing what it says it does', [
+    ...probeFailures.map((p) => `· ${p}\n`),
+    'These fixtures are the only proof-of-life some rules here have: they match nothing in the tree, so the',
+    'frozen baseline cannot tell a working rule from a deleted one. A failure means either the rule was',
+    'narrowed until it went blind, or it was widened until it fires on something correct. Both are how a',
+    'gate becomes decoration. Fix the rule — do not relax the fixture.',
   ]);
 }
 
@@ -1063,6 +1459,19 @@ for (const finding of findings) {
 }
 
 const stale = [...frozenIndex.values()].filter((v) => v.seen === 0).map((v) => v.entry);
+
+/** Recorded multiplicity for an entry. Absent means 1 — see the FROZEN header. */
+const expectedCount = (entry) => entry.occurrences ?? 1;
+
+// A malformed count is a broken baseline, not a finding: it must be a positive
+// integer or nobody can tell what the entry claims.
+const malformedCounts = FROZEN.filter((e) => !Number.isInteger(expectedCount(e)) || expectedCount(e) < 1);
+
+// Text still matches, but not as many times as recorded. Both directions are a
+// failure and they mean opposite things, so they are reported separately.
+const countDrift = [...frozenIndex.values()]
+  .filter((v) => v.seen > 0 && v.seen !== expectedCount(v.entry))
+  .map((v) => ({ entry: v.entry, seen: v.seen, expected: expectedCount(v.entry) }));
 
 // ── Verdict ────────────────────────────────────────────────────────────────
 
@@ -1102,6 +1511,31 @@ if (stale.length > 0) {
   problems.push('');
 }
 
+if (malformedCounts.length > 0) {
+  problems.push('  ── frozen entries with a broken occurrence count ──');
+  for (const e of malformedCounts) problems.push(`  [${e.rule}]  ${e.module}:${e.file}  occurrences=${JSON.stringify(e.occurrences)}`);
+  problems.push('    `occurrences` must be a positive integer, or omitted to mean 1.');
+  problems.push('');
+}
+
+if (countDrift.length > 0) {
+  problems.push('  ── a frozen string changed how many times it appears ──');
+  for (const d of countDrift) {
+    problems.push(`  [${d.entry.rule}]  ${d.entry.module}:${d.entry.file}`);
+    problems.push(`    text:     ${d.entry.text}`);
+    problems.push(`    recorded: ${d.expected}    found: ${d.seen}`);
+    problems.push(
+      d.seen > d.expected
+        ? '    → ANOTHER ONE APPEARED. The text was already frozen, so nothing here is "new" by string — but a second ' +
+            'copy of a mainnet constant is a second place it acts from. This is the shape of an unused mainnet import ' +
+            'becoming a live selector, of a third chain-id-less signing call, and of a deleted broadcast pasted back.'
+        : '    → ONE WENT AWAY. If that was the fix, lower `occurrences` in the same commit so the baseline records ' +
+            'the ground it gained and cannot silently give it back. If it was not deliberate, the rule may be going blind.',
+    );
+    problems.push('');
+  }
+}
+
 if (barrierBreaks.length > 0) {
   problems.push('  ── an incidental barrier became a real one and was crossed ──');
   for (const b of barrierBreaks) {
@@ -1123,9 +1557,14 @@ const ruleSummary = Object.entries(frozenByRule)
   .map(([rule, n]) => `${rule}:${n}`)
   .join(' ');
 
+const probesFiring = RULE_PROBES.filter((p) => p.fires).length;
+const frozenOccurrences = FROZEN.reduce((n, e) => n + expectedCount(e), 0);
+
 console.log(
   `✓ wallet-rpc-mainnet-scan clean — ${moduleDirs.length} module(s), ${javaFiles.length} Java + ${propsFiles.length} properties file(s) ` +
-    `walked; ${FROZEN.length} frozen mainnet constant(s) all still exactly as recorded (${ruleSummary}); ` +
-    `no new one added. Barriers held: ${dockerfilesInspected} Dockerfile(s), ${composeInspected} compose file(s) and ` +
-    `${workflowsInspected} workflow(s) checked — none builds, composes or boots this tree.`,
+    `walked; ${FROZEN.length} frozen mainnet constant(s) in ${frozenOccurrences} recorded occurrence(s), all still exactly ` +
+    `as recorded (${ruleSummary}); no new one added, and none gained a copy. Barriers held: ${dockerfilesInspected} Dockerfile(s), ${composeInspected} compose file(s) and ` +
+    `${workflowsInspected} workflow(s) checked — none builds, composes or boots this tree. ` +
+    `${RULE_PROBES.length} rule probe(s) passed (${probesFiring} must fire, ${RULE_PROBES.length - probesFiring} must not) — ` +
+    `proof-of-life for the rules the tree gives nothing to freeze.`,
 );

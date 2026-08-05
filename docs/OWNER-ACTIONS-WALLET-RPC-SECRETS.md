@@ -90,6 +90,35 @@ evidence of what this vendored tree ships with.
 
 ---
 
+## A3b — the withdrawal signature carries no chain id · **needs a JDK, not an owner**
+
+|            |                                                                                                                                    |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Where**  | `01_wallet_rpc/eth-support/…/service/PaymentHandler.java:158` and `:193`                                                           |
+| **What**   | Both ETH-family withdrawal paths sign with the two-argument, pre-EIP-155 `TransactionEncoder.signMessage(rawTx, credentials)`.     |
+| **Effect** | A withdrawal signed against a testnet is **also a valid mainnet transaction**, and anyone who can see it can replay it to mainnet. |
+| **Status** | **UNFIXED, deliberately.** Specified in full, not applied.                                                                         |
+
+On this page because it is the reason "just point it at a testnet" is not
+available to you as a mitigation, and because it is the one of the three
+`01_wallet_rpc` criticals that an agent must not fix. Adding a chain id changes
+the bytes that get signed; there is no JDK, JRE or Maven on the host, so the
+change could not be compiled, let alone checked against a known-answer signed
+transaction. On a withdrawal path that is how money gets stranded by a change
+that looks obviously right.
+
+The exact diff, the chain-id source, both call sites, the wrong fix that looks
+right (`ChainId.NONE`), and the fixture tests that must pass first are in
+[`SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md`](SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md).
+It also flags a blocker to check before any code is written: web3j is pinned at
+3.3.1, whose chain-id parameter is believed to be a `byte`, which cannot express
+most modern testnet chain ids at all.
+
+**Not urgent, and not yours.** It is latent — nothing in this repo can build or
+boot the module — and it sits behind the A4 review and a working reactor build.
+
+---
+
 ## A4 — do not deploy `01_wallet_rpc` against real value yet
 
 Not a secret, but it belongs on this page because it is the constraint the rest sits under.
@@ -108,14 +137,15 @@ somebody has read it.
 
 ## What is already enforced, so you do not have to remember it
 
-| Guard                                                                          | Effect                                                                                                  |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `RpcSecurityConfig` in all 13 bootable modules                                 | No `WALLET_RPC_AUTH_TOKEN` (or one under 32 chars) → the service **does not start**.                    |
-| `EctWithdrawSecretConfig`                                                      | No `ECT_WITHDRAW_WALLET_SECRET`, or the old disclosed one → ECT **does not start**.                     |
-| `tooling/ci/wallet-rpc-auth-scan.mjs` (wired into `pnpm gate` / `pnpm verify`) | A module that can boot without the guard on its classpath fails CI. So does an unread `rpc.auth-token`. |
-| Same scan, rule W3                                                             | Any future compose entry publishing a `01_wallet_rpc` port off `127.0.0.1` fails CI.                    |
-| `tooling/ci/secret-scan.mjs`                                                   | `withdraw-wallet` keys must be `${VAR}` or a keystore filename. The ECT literal now fails the gate.     |
-| `tooling/ci/wallet-rpc-mainnet-scan.mjs` (gate id `wallet-rpc-mainnet`)        | A4 above, made executable. See below.                                                                   |
+| Guard                                                                          | Effect                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RpcSecurityConfig` in all 13 bootable modules                                 | No `WALLET_RPC_AUTH_TOKEN` (or one under 32 chars) → the service **does not start**.                                                                                                                             |
+| `EctWithdrawSecretConfig`                                                      | No `ECT_WITHDRAW_WALLET_SECRET`, or the old disclosed one → ECT **does not start**.                                                                                                                              |
+| `tooling/ci/wallet-rpc-auth-scan.mjs` (wired into `pnpm gate` / `pnpm verify`) | A module that can boot without the guard on its classpath fails CI. So does an unread `rpc.auth-token`.                                                                                                          |
+| Same scan, rule W3                                                             | Any future compose entry publishing a `01_wallet_rpc` port off `127.0.0.1` fails CI.                                                                                                                             |
+| `tooling/ci/secret-scan.mjs`                                                   | `withdraw-wallet` keys must be `${VAR}` or a keystore filename. The ECT literal now fails the gate.                                                                                                              |
+| `tooling/ci/wallet-rpc-mainnet-scan.mjs`                                       | Nothing in this repo may build, containerise, compose or boot a module here (M5–M7), and no new mainnet constant may be added. 38 existing ones are frozen by exact text **and by how many times each appears**. |
+| `tooling/ci/wallet-rpc-mainnet-scan.mjs` (gate id `wallet-rpc-mainnet`)        | A4 above, made executable. See below.                                                                                                                                                                            |
 
 Nothing in `01_wallet_rpc` publishes a port today — no compose file defines one of these
 services at all. W3 exists so that stays true by accident-proofing rather than by memory.

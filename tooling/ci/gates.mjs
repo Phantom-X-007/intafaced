@@ -123,7 +123,11 @@ export const GATES = [
       'a service STARTS, not which chain it talks to. Supply the environment and every other gate here still printed ' +
       'clean. Ordered next to wallet-rpc-auth because they fence the same tree and answer different questions: auth ' +
       'asks whether a bootable module authenticates, this asks whether anything can boot one at all, and whether a ' +
-      'new mainnet constant appeared. 38 existing constants are frozen by exact text, so the baseline can only shrink.',
+      'new mainnet constant appeared. 38 existing constants are frozen by exact text AND by how many times each ' +
+      'appears, so the baseline can only shrink — text alone left the gate blind to an unused mainnet import becoming ' +
+      'a live selector, and to a deleted broadcast being pasted back. Rules that match nothing in the tree (the ' +
+      'wss:// scheme, ChainId.NONE, RawTransactionManager, an EVM address under a non-address key) have no baseline ' +
+      'to prove them alive, so 16 fixtures run through the real matchers on every invocation instead.',
   },
   {
     id: 'vendor-shell',
