@@ -51,9 +51,7 @@ export function mayLabelLive(lagSeconds: number | null | undefined): boolean {
 }
 
 /** Decimal amount on the wire — never number. */
-export const analyticsAmountString = z
-  .string()
-  .regex(/^-?\d+(\.\d{1,18})?$/, 'analytics amounts are decimal strings (max 18dp)');
+export const analyticsAmountString = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'analytics amounts are decimal strings (max 18dp)');
 
 export const analyticsMetricKind = z.enum(['count', 'amount', 'ratio']);
 
@@ -107,10 +105,7 @@ export function metricById(id: string): AnalyticsMetricDef | undefined {
 }
 
 /** Validate a consumer point — amount metrics require decimal strings. */
-export function assertMetricPoint(
-  metricId: string,
-  value: string | number,
-): { ok: true } | { ok: false; reason: string } {
+export function assertMetricPoint(metricId: string, value: string | number): { ok: true } | { ok: false; reason: string } {
   const def = metricById(metricId);
   if (!def) return { ok: false, reason: `unknown metric ${metricId}` };
   if (def.money || def.kind === 'amount') {

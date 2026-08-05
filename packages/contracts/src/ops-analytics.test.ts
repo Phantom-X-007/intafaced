@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ANALYTICS_METRICS_V0,
-  ANALYTICS_SOURCE_DBS,
-  assertMetricPoint,
-  lagFreshness,
-  mayLabelLive,
-  metricById,
-} from './ops-analytics.js';
+import { ANALYTICS_METRICS_V0, ANALYTICS_SOURCE_DBS, assertMetricPoint, lagFreshness, mayLabelLive, metricById } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
   it('names the three source DBs', () => {
