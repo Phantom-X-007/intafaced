@@ -337,3 +337,29 @@ export function reconcile(engine: readonly EngineLiveOrder[], counterpart: reado
 
   return { checked: seen.size + findings.filter((f) => f.case === 'engine_only').length, agreed, findings, refusals, ok: refusals === 0 };
 }
+
+/**
+ * L3 — operator-facing summary of a reconcile report.
+ * Counts by case; never invents findings. Empty findings → empty byCase.
+ */
+export type ReconcileSummary = {
+  readonly ok: boolean;
+  readonly checked: number;
+  readonly agreed: number;
+  readonly refusals: number;
+  readonly byCase: Readonly<Record<string, number>>;
+};
+
+export function summarizeReconcile(report: ReconcileReport): ReconcileSummary {
+  const byCase: Record<string, number> = {};
+  for (const f of report.findings) {
+    byCase[f.case] = (byCase[f.case] ?? 0) + 1;
+  }
+  return {
+    ok: report.ok,
+    checked: report.checked,
+    agreed: report.agreed,
+    refusals: report.refusals,
+    byCase,
+  };
+}
