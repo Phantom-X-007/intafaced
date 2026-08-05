@@ -279,4 +279,23 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.listPartitionedUserIds().active).toEqual([u1]);
     expect(desk.listPartitionedUserIds().frozen).toEqual([u2]);
   });
+
+  it('L3 wave27 single active/frozen + firstActive + inactive count', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.hasSingleActive()).toBe(false);
+    expect(desk.hasSingleFrozen()).toBe(false);
+    expect(desk.firstActiveUserId()).toBeNull();
+    expect(desk.inactiveProgrammeCount()).toBe(0);
+    desk.appoint({ userId: u1, appointedBy: op });
+    expect(desk.hasSingleActive()).toBe(true);
+    expect(desk.firstActiveUserId()).toBe(u1);
+    desk.appoint({ userId: u2, appointedBy: op });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    expect(desk.hasSingleActive()).toBe(true);
+    expect(desk.hasSingleFrozen()).toBe(true);
+    expect(desk.inactiveProgrammeCount()).toBe(1);
+  });
 });

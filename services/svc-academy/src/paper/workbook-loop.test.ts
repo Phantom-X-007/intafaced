@@ -18,6 +18,10 @@ import {
   isDrillStatusActive,
   drillCompletionRatio,
   drillMarketId,
+  hasNoFillRefs,
+  drillSymbol,
+  drillWorkbookSlug,
+  hasPartialProgress,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -197,5 +201,23 @@ describe('paper Stage-2 workbook loop', () => {
     expect(isDrillStatusComplete(started.run)).toBe(false);
     expect(drillCompletionRatio(started.run)).toBe('0.0000');
     expect(drillMarketId(started.run)).toBe('m-w26');
+  });
+
+  it('L3 wave27 fill refs + symbol + slug + partial progress', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w27', paper: true, symbol: 'ETH/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(hasNoFillRefs(started.run)).toBe(true);
+    expect(drillSymbol(started.run)).toBe('ETH/USDT');
+    expect(drillWorkbookSlug(started.run)).toBe('foundations-paper-workbook');
+    expect(hasPartialProgress(started.run)).toBe(false);
+    const step = started.run.steps[0]!.id;
+    const mid = completeDrillStep(started.run, step);
+    expect(mid.ok).toBe(true);
+    if (!mid.ok) return;
+    expect(hasPartialProgress(mid.run)).toBe(true);
   });
 });

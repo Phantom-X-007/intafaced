@@ -33,6 +33,10 @@ import {
   hasPlaybook,
   hasWorkbook,
   hasLesson,
+  catalogSpineNonEmpty,
+  foundationsItemCount,
+  marketsItemCount,
+  builderItemCount,
 } from './catalog.js';
 
 /**
@@ -239,5 +243,12 @@ describe('curriculum catalog', () => {
     expect(hasPlaybook()).toBe(playbookCount() > 0);
     expect(hasWorkbook()).toBe(workbookCount() > 0);
     expect(hasLesson()).toBe(lessonCount() > 0);
+  });
+
+  it('L3 wave27 spine non-empty + path item counts', () => {
+    expect(catalogSpineNonEmpty()).toBe(true);
+    expect(foundationsItemCount()).toBe(countCurriculumByPath('foundations'));
+    expect(marketsItemCount()).toBe(countCurriculumByPath('markets'));
+    expect(builderItemCount()).toBe(countCurriculumByPath('builder'));
   });
 });

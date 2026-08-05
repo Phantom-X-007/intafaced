@@ -220,3 +220,24 @@ export function planActionsPresent(plan: readonly DeliveryDecision[]): readonly 
   const present = new Set(plan.map((d) => d.action));
   return order.filter((a) => present.has(a));
 }
+
+/** L3 — true when plan has only holds and/or skips (no send). Empty → false. */
+export function planIsAllDeferred(plan: readonly DeliveryDecision[]): boolean {
+  if (plan.length === 0) return false;
+  return plan.every((d) => d.action === 'hold_digest' || d.action === 'skip_muted');
+}
+
+/** L3 — inapp channels in send_now list. Empty → []. */
+export function planInappSendChannels(plan: readonly DeliveryDecision[]): readonly 'inapp'[] {
+  return channelsToSendNow(plan).filter((c): c is 'inapp' => c === 'inapp');
+}
+
+/** L3 — true when inapp is scheduled send_now. Empty → false. */
+export function planSendsInapp(plan: readonly DeliveryDecision[]): boolean {
+  return planInappSendChannels(plan).length > 0;
+}
+
+/** L3 — non-inapp send_now channels. Empty → []. */
+export function planOutOfAppSends(plan: readonly DeliveryDecision[]): readonly MuteableChannel[] {
+  return channelsToSendNow(plan).filter((c): c is MuteableChannel => c !== 'inapp');
+}

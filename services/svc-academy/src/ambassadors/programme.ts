@@ -397,4 +397,29 @@ export class MemoryAmbassadorProgramme {
   listPartitionedUserIds(): { readonly active: readonly string[]; readonly frozen: readonly string[] } {
     return { active: this.listActiveUserIds(), frozen: this.listFrozenUserIds() };
   }
+
+  /** L3 — true when active count is exactly one. Empty → false. */
+  hasSingleActive(): boolean {
+    return this.activeCount() === 1;
+  }
+
+  /** L3 — true when frozen count is exactly one. Empty → false. */
+  hasSingleFrozen(): boolean {
+    return this.frozenCount() === 1;
+  }
+
+  /**
+   * L3 — inactive (frozen) count alias for operator copy. Empty → 0.
+   */
+  inactiveProgrammeCount(): number {
+    return this.frozenCount();
+  }
+
+  /**
+   * L3 — first active user id (sorted). None → null (never invent).
+   */
+  firstActiveUserId(): string | null {
+    const ids = this.listActiveUserIds();
+    return ids[0] ?? null;
+  }
 }

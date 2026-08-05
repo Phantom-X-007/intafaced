@@ -338,4 +338,30 @@ export class MemoryResidencyDesk {
     for (const r of this.rows.values()) set.add(r.cohortSlug);
     return [...set].sort();
   }
+
+  /** L3 — true when any application is accepted. Empty → false. */
+  hasAcceptedApplication(): boolean {
+    return this.acceptedCount() > 0;
+  }
+
+  /** L3 — true when any application is rejected. Empty → false. */
+  hasRejectedApplication(): boolean {
+    return this.rejectedCount() > 0;
+  }
+
+  /**
+   * L3 — withdrawn/total as fixed 4dp. Empty → null.
+   */
+  withdrawnApplicationRatio(): string | null {
+    const total = this.rows.size;
+    if (total === 0) return null;
+    return (this.withdrawnCount() / total).toFixed(4);
+  }
+
+  /**
+   * L3 — decided count (accepted+rejected+withdrawn). Empty → 0.
+   */
+  decidedApplicationCount(): number {
+    return this.acceptedCount() + this.rejectedCount() + this.withdrawnCount();
+  }
 }

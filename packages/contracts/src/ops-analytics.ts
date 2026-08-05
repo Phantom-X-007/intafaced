@@ -369,3 +369,27 @@ export function multiSourceMetricRatio(): string | null {
   if (total === 0) return null;
   return (multiSourceMetricCount() / total).toFixed(4);
 }
+
+/** L3 — ledger-source metric count. */
+export function ledgerSourceMetricCount(): number {
+  return countMetricsUsingSource('ledger');
+}
+
+/** L3 — trade-source metric count. */
+export function tradeSourceMetricCount(): number {
+  return countMetricsUsingSource('trade');
+}
+
+/** L3 — identity-source metric count. */
+export function identitySourceMetricCount(): number {
+  return countMetricsUsingSource('identity');
+}
+
+/**
+ * L3 — single-source / total as fixed 4dp. Empty → null.
+ */
+export function singleSourceMetricRatio(): string | null {
+  const total = analyticsMetricCatalogSize();
+  if (total === 0) return null;
+  return (singleSourceMetricCount() / total).toFixed(4);
+}

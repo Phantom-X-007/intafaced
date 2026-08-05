@@ -44,6 +44,10 @@ import {
   scoresInRankOrder,
   hasPodiumDepth,
   rankedCount,
+  averageTopNScore,
+  isTiedForFirst,
+  countAboveScore,
+  hasUniqueLeader,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -244,5 +248,18 @@ describe('L3 standings board helpers', () => {
     expect(hasPodiumDepth(rows, 3)).toBe(true);
     expect(hasPodiumDepth(rows, 4)).toBe(false);
     expect(rankedCount(rows)).toBe(3);
+  });
+
+  it('L3 wave27 averageTopN + tied first + unique leader', () => {
+    expect(averageTopNScore([], 3)).toBeNull();
+    expect(isTiedForFirst([], 'a')).toBe(false);
+    expect(hasUniqueLeader([])).toBe(false);
+    const rows = [row('a', 20, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 10, '2026-08-01T11:00:00Z')];
+    expect(averageTopNScore(rows, 2)).toBe(20);
+    expect(isTiedForFirst(rows, 'a')).toBe(true);
+    expect(hasUniqueLeader(rows)).toBe(false);
+    expect(countAboveScore(rows, 10)).toBe(2);
+    const uniq = [row('a', 30, '2026-08-01T12:00:00Z'), row('b', 10, '2026-08-01T13:00:00Z')];
+    expect(hasUniqueLeader(uniq)).toBe(true);
   });
 });
