@@ -54,7 +54,9 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     getTicket: vi.fn(),
     comment: vi.fn(),
     setStatus: vi.fn(),
-    listKb: vi.fn(async () => []),
+    listKb: vi.fn(async () => [
+      { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
+    ]),
     listComments: vi.fn(() => []),
     ...overrides,
   } as unknown as SupportService;
@@ -90,8 +92,10 @@ describe('svc-support mount', () => {
     expect(support.createTicket).toHaveBeenCalled();
   });
 
-  it('listKb is public and empty Stage-1', async () => {
+  it('listKb is public and returns Stage-2 spine from service', async () => {
     const support = stubSupport();
-    await expect(createSupportRouter(support).createCaller(anonymous()).listKb()).resolves.toEqual([]);
+    const kb = await createSupportRouter(support).createCaller(anonymous()).listKb();
+    expect(kb).toHaveLength(1);
+    expect(kb[0]!.titleKey).toMatch(/^support\.kb\./);
   });
 });
