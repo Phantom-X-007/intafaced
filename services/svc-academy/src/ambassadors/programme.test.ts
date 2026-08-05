@@ -112,4 +112,17 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.isActiveAmbassador(u1)).toBe(false);
     expect(desk.appointingOperators()).toEqual([opA, opB]);
   });
+
+  it('L3 listFrozenUserIds sorted without invent', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.listFrozenUserIds()).toEqual([]);
+    desk.appoint({ userId: u2, appointedBy: op });
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    desk.freeze({ userId: u1, frozenBy: op, reason: 'hold' });
+    expect(desk.listFrozenUserIds()).toEqual([u1, u2]);
+  });
 });

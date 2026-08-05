@@ -145,3 +145,15 @@ export function allowedNextStatuses(status: SeasonStatus): readonly SeasonStatus
 export function filterSeasonsByStatus(seasons: readonly SeasonRecord[], status: SeasonStatus): readonly SeasonRecord[] {
   return seasons.filter((s) => s.status === status);
 }
+
+/** L3 — ended is terminal (no further transitions). */
+export function isSeasonTerminal(status: SeasonStatus): boolean {
+  return status === 'ended';
+}
+
+/**
+ * L3 — sorted season ids. Empty input → [] (never invent seasons).
+ */
+export function listSeasonIds(seasons: readonly SeasonRecord[]): readonly string[] {
+  return seasons.map((s) => s.id).sort();
+}

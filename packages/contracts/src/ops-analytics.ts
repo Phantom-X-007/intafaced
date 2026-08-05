@@ -202,3 +202,12 @@ export function hasAnalyticsMetric(metricId: string): boolean {
 export function countMetricsByKind(kind: 'count' | 'amount' | 'ratio'): number {
   return ANALYTICS_METRICS_V0.filter((m) => m.kind === kind).length;
 }
+
+/**
+ * L3 — metric ids of one kind (sorted). Empty kind → [].
+ */
+export function listMetricIdsByKind(kind: 'count' | 'amount' | 'ratio'): readonly string[] {
+  return ANALYTICS_METRICS_V0.filter((m) => m.kind === kind)
+    .map((m) => m.id)
+    .sort();
+}

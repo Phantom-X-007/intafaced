@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  assertMayDigest,
+import { assertMayDigest,
   DEFAULT_DIGEST_PREFS,
   DigestError,
   digestWindowMs,
@@ -9,8 +8,7 @@ import {
   mayEnterDigest,
   MemoryDigestStore,
   shouldSendImmediate,
-  applyDigestCadence,
-} from './digest.js';
+  applyDigestCadence, holdingDigestCadences } from './digest.js';
 
 describe('notify L3 digest cadence (non-critical only)', () => {
   it('defaults off → everything immediate', () => {
@@ -71,5 +69,10 @@ describe('notify L3 digest cadence (non-critical only)', () => {
   it('L3 isDigestHolding is false for off', () => {
     expect(isDigestHolding('off')).toBe(false);
     expect(isDigestHolding('hourly')).toBe(true);
+  });
+
+  it('L3 holdingDigestCadences excludes off', () => {
+    expect(holdingDigestCadences()).toEqual(['hourly', 'daily']);
+    expect(holdingDigestCadences()).not.toContain('off');
   });
 });

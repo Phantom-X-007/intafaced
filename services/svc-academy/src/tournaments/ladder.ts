@@ -162,3 +162,10 @@ export function countStandingsAboveScore(rows: readonly StandingRecord[], score:
   if (!Number.isFinite(score)) return 0;
   return rows.filter((r) => r.score > score).length;
 }
+
+/**
+ * L3 — standing count (empty → 0). Never invents competitors.
+ */
+export function standingCount(rows: readonly StandingRecord[]): number {
+  return rows.length;
+}

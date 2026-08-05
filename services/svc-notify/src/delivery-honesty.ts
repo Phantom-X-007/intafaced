@@ -125,3 +125,11 @@ export function allChannelsRefused(attempts: readonly ChannelDeliveryAttempt[]):
   if (attempts.length === 0) return false;
   return attempts.every((a) => a.outcome === 'refused');
 }
+
+/**
+ * L3 — true when every attempt accepted. Empty → false (no invent success).
+ */
+export function allChannelsAccepted(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  if (attempts.length === 0) return false;
+  return attempts.every((a) => a.outcome === 'accepted');
+}

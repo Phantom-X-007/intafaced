@@ -90,3 +90,17 @@ export function summarizeFanoutPlan(plan: readonly DeliveryDecision[]): FanoutPl
 export function channelsToSendNow(plan: readonly DeliveryDecision[]): readonly (MuteableChannel | 'inapp')[] {
   return plan.filter((d): d is { action: 'send_now'; channel: MuteableChannel | 'inapp' } => d.action === 'send_now').map((d) => d.channel);
 }
+
+/** L3 — channels held for digest (no invent). */
+export function channelsHeldForDigest(plan: readonly DeliveryDecision[]): readonly (MuteableChannel | 'inapp')[] {
+  return plan
+    .filter((d): d is { action: 'hold_digest'; channel: MuteableChannel | 'inapp' } => d.action === 'hold_digest')
+    .map((d) => d.channel);
+}
+
+/** L3 — channels skipped as muted (no invent). */
+export function channelsSkippedMuted(plan: readonly DeliveryDecision[]): readonly (MuteableChannel | 'inapp')[] {
+  return plan
+    .filter((d): d is { action: 'skip_muted'; channel: MuteableChannel | 'inapp' } => d.action === 'skip_muted')
+    .map((d) => d.channel);
+}
