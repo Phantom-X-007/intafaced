@@ -1,8 +1,9 @@
 # Claim TRK-blueprint.ownership
 
-**status:** pr-open
-**proof:** Stage A honesty — tracker note + svc-blueprint README match identity consumer on tip; mountain done
-**tip:** 99b1e8aa
-**updated:** 2026-08-04
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** Stage A honesty — tracker note + svc-blueprint README match identity consumer · PR #753
+**tip:** 79a1f2ed
+**updated:** 2026-08-05
 
-Claim-lock is spawn authority. Stage A mountain event for blueprint.ownership.
+Stage A mountain event landed on main — not free re-implement.

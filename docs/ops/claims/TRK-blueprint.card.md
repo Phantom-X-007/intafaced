@@ -1,18 +1,9 @@
 # Claim TRK-blueprint.card
 
-**status:** pr-open
-**started:** 2026-08-04T00:00:00.000Z
-**heartbeat:** 2026-08-04T00:00:00.000Z
-**title:** Share card render — Stage-1 SVG product acceptance
-**track:** IMPLEMENTABLE
-**paths:**
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** Stage-1 shareMode SVG product acceptance (mountain done; PNG rail residual) · PR #750
+**tip:** 79a1f2ed
+**updated:** 2026-08-05
 
-- services/svc-blueprint
-- packages/contracts/src/blueprint.ts
-- tooling/tracker/features.mjs
-
-## Done bar
-
-- [x] shareMode on CardRender (svg | png)
-- [x] Stage-1 SVG accepted as share artifact (mountain done)
-- [ ] Stage-2 PNG rail residual (BLUEPRINT_CARD_RENDERER_URL + storage)
+Stage-1 Class N landed on main. Stage-2 PNG rail residual is optional later — not free re-implement of Stage-1.
