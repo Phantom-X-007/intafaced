@@ -115,3 +115,10 @@ export function countSendNowChannels(plan: readonly DeliveryDecision[]): number 
 export function countSkippedMuted(plan: readonly DeliveryDecision[]): number {
   return channelsSkippedMuted(plan).length;
 }
+
+/**
+ * L3 — true when plan has zero skip_muted decisions. Empty plan → true.
+ */
+export function planHasNoMutes(plan: readonly DeliveryDecision[]): boolean {
+  return countSkippedMuted(plan) === 0;
+}

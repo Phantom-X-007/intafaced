@@ -20,8 +20,12 @@ import {
   topNStandings,
   type StandingRecord,
   averageScore,
+  hasStanding,
+  scoreSpread,
+  scoreRange,
   scoreSpread,
   hasStanding,
+  scoreRange,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -137,14 +141,20 @@ describe('L3 standings board helpers', () => {
     const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
     expect(averageScore(rows)).toBe(15);
   });
-});
 
-it('L3 wave16 scoreSpread + hasStanding', () => {
-  expect(scoreSpread([])).toBeNull();
-  expect(scoreSpread([row('a', 10, '2026-08-01T12:00:00Z')])).toBeNull();
-  const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
-  expect(scoreSpread(rows)).toBe(10);
-  expect(hasStanding(rows, 'a')).toBe(true);
-  expect(hasStanding(rows, 'missing')).toBe(false);
-  expect(hasStanding(rows, '  ')).toBe(false);
+  it('L3 wave16 scoreSpread + hasStanding', () => {
+    expect(scoreSpread([])).toBeNull();
+    expect(scoreSpread([row('a', 10, '2026-08-01T12:00:00Z')])).toBeNull();
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+    expect(scoreSpread(rows)).toBe(10);
+    expect(hasStanding(rows, 'a')).toBe(true);
+    expect(hasStanding(rows, 'missing')).toBe(false);
+    expect(hasStanding(rows, '  ')).toBe(false);
+  });
+
+  it('L3 scoreRange matches scoreSpread', () => {
+    expect(scoreRange([])).toBeNull();
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    expect(scoreRange(rows)).toBe(20);
+  });
 });

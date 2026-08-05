@@ -277,4 +277,9 @@ export class MemoryAmbassadorProgramme {
   totalCount(): number {
     return this.byUser.size;
   }
+
+  /** L3 — true when programme store has no rows. */
+  isEmpty(): boolean {
+    return this.byUser.size === 0;
+  }
 }

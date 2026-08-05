@@ -537,6 +537,14 @@ export function isPlaybookSlug(slug: string): boolean {
 }
 
 /**
+ * L3 — true when slug exists and is a lesson. Unknown/non-lesson → false.
+ */
+export function isLessonSlug(slug: string): boolean {
+  const item = BY_SLUG.get(slug.trim());
+  return item?.kind === 'lesson';
+}
+
+/**
  * L3 — sorted slugs for one kind. Empty kind → [].
  */
 export function listCurriculumSlugsByKind(kind: CurriculumKind): readonly string[] {

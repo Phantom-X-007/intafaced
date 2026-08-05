@@ -172,4 +172,11 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.totalCount()).toBe(2);
     expect(desk.listAllUserIds()).toEqual([u1, u2]);
   });
+
+  it('L3 isEmpty without invent', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    expect(desk.isEmpty()).toBe(true);
+    desk.appoint({ userId: '11111111-1111-4111-8111-111111111111', appointedBy: '22222222-2222-4222-8222-222222222222' });
+    expect(desk.isEmpty()).toBe(false);
+  });
 });
