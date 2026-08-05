@@ -269,3 +269,34 @@ export function refusedChannelsSorted(attempts: readonly ChannelDeliveryAttempt[
 export function fanoutFullyAccepted(attempts: readonly ChannelDeliveryAttempt[]): boolean {
   return allChannelsAccepted(attempts);
 }
+
+/** L3 — outcome histogram. Empty zeros. */
+export function fanoutOutcomeHistogram(attempts: readonly ChannelDeliveryAttempt[]): {
+  readonly accepted: number;
+  readonly refused: number;
+  readonly failed: number;
+} {
+  return {
+    accepted: countFanoutAccepted(attempts),
+    refused: countFanoutRefusals(attempts),
+    failed: countFanoutFailures(attempts),
+  };
+}
+
+/** L3 — true when histogram has only accepted. Empty → false. */
+export function fanoutHistogramOnlyAccepted(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  const h = fanoutOutcomeHistogram(attempts);
+  return h.accepted > 0 && h.refused === 0 && h.failed === 0;
+}
+
+/** L3 — true when histogram has only failed. Empty → false. */
+export function fanoutHistogramOnlyFailed(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  const h = fanoutOutcomeHistogram(attempts);
+  return h.failed > 0 && h.accepted === 0 && h.refused === 0;
+}
+
+/** L3 — true when histogram has only refused. Empty → false. */
+export function fanoutHistogramOnlyRefused(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  const h = fanoutOutcomeHistogram(attempts);
+  return h.refused > 0 && h.accepted === 0 && h.failed === 0;
+}

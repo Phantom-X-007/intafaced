@@ -462,3 +462,38 @@ export function minRankForTopK(rows: readonly StandingRecord[], k: number): numb
   if (ranked.length < Math.floor(k)) return null;
   return ranked[Math.floor(k) - 1]!.rank;
 }
+
+/**
+ * L3 — second-to-third score gap. Need ≥3 ranks → null otherwise.
+ */
+export function secondThirdScoreGap(rows: readonly StandingRecord[]): number | null {
+  const ranked = rankStandings(rows);
+  if (ranked.length < 3) return null;
+  return ranked[1]!.score - ranked[2]!.score;
+}
+
+/**
+ * L3 — users with score strictly below threshold (sorted ids). Empty → [].
+ */
+export function userIdsBelowScore(rows: readonly StandingRecord[], score: number): readonly string[] {
+  return rows
+    .filter((r) => r.score < score)
+    .map((r) => r.userId)
+    .sort();
+}
+
+/**
+ * L3 — users with score at or above threshold (sorted ids). Empty → [].
+ */
+export function userIdsAtOrAboveScore(rows: readonly StandingRecord[], score: number): readonly string[] {
+  return rows
+    .filter((r) => r.score >= score)
+    .map((r) => r.userId)
+    .sort();
+}
+
+/** L3 — true when top two scores differ. Need ≥2 → false otherwise. */
+export function hasClearLeader(rows: readonly StandingRecord[]): boolean {
+  const gap = firstSecondScoreGap(rows);
+  return gap !== null && gap > 0;
+}

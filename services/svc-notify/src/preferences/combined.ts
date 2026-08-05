@@ -269,3 +269,31 @@ export function planActionHistogram(plan: readonly DeliveryDecision[]): {
     skip_muted: planSkipCount(plan),
   };
 }
+
+/** L3 — true when histogram has only send_now > 0. Empty → false. */
+export function planHistogramOnlySends(plan: readonly DeliveryDecision[]): boolean {
+  const h = planActionHistogram(plan);
+  return h.send_now > 0 && h.hold_digest === 0 && h.skip_muted === 0;
+}
+
+/** L3 — true when histogram has only skips. Empty → false. */
+export function planHistogramOnlySkips(plan: readonly DeliveryDecision[]): boolean {
+  const h = planActionHistogram(plan);
+  return h.skip_muted > 0 && h.send_now === 0 && h.hold_digest === 0;
+}
+
+/** L3 — true when histogram has only holds. Empty → false. */
+export function planHistogramOnlyHolds(plan: readonly DeliveryDecision[]): boolean {
+  const h = planActionHistogram(plan);
+  return h.hold_digest > 0 && h.send_now === 0 && h.skip_muted === 0;
+}
+
+/** L3 — action kinds with count > 0. Empty → []. */
+export function planNonZeroActions(plan: readonly DeliveryDecision[]): readonly DeliveryDecision['action'][] {
+  const h = planActionHistogram(plan);
+  const out: DeliveryDecision['action'][] = [];
+  if (h.send_now > 0) out.push('send_now');
+  if (h.hold_digest > 0) out.push('hold_digest');
+  if (h.skip_muted > 0) out.push('skip_muted');
+  return out;
+}

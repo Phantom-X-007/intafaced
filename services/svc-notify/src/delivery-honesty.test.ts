@@ -30,6 +30,10 @@ import {
   failedChannelsSorted,
   refusedChannelsSorted,
   fanoutFullyAccepted,
+  fanoutOutcomeHistogram,
+  fanoutHistogramOnlyAccepted,
+  fanoutHistogramOnlyFailed,
+  fanoutHistogramOnlyRefused,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -222,5 +226,16 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(failedChannelsSorted(attempts)).toEqual(['push']);
     expect(fanoutFullyAccepted(attempts)).toBe(false);
     expect(fanoutFullyAccepted(attempts.filter((a) => a.outcome === 'accepted'))).toBe(true);
+  });
+
+  it('L3 wave29 outcome histogram purity', () => {
+    expect(fanoutOutcomeHistogram([])).toEqual({ accepted: 0, refused: 0, failed: 0 });
+    expect(fanoutHistogramOnlyAccepted([])).toBe(false);
+    const ok = [{ channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' }];
+    expect(fanoutHistogramOnlyAccepted(ok)).toBe(true);
+    const fail = [{ channel: 'push' as const, outcome: 'failed' as const, code: 'x' }];
+    expect(fanoutHistogramOnlyFailed(fail)).toBe(true);
+    const ref = [{ channel: 'sms' as const, outcome: 'refused' as const, code: 'n' }];
+    expect(fanoutHistogramOnlyRefused(ref)).toBe(true);
   });
 });

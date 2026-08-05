@@ -317,3 +317,24 @@ export function lastRemainingStepId(run: DrillRun): string | null {
 export function drillCompletionRatioNumber(run: DrillRun): number {
   return Number(drillProgress(run).ratio);
 }
+
+/** L3 — first completed step id. None → null. */
+export function firstCompletedStepId(run: DrillRun): string | null {
+  return run.completedStepIds[0] ?? null;
+}
+
+/** L3 — last completed step id. None → null. */
+export function lastCompletedStepId(run: DrillRun): string | null {
+  const ids = run.completedStepIds;
+  return ids.length ? ids[ids.length - 1]! : null;
+}
+
+/** L3 — true when no steps remain (complete or empty steps). */
+export function hasNoRemainingSteps(run: DrillRun): boolean {
+  return remainingStepCount(run) === 0;
+}
+
+/** L3 — true when zero steps on the run. */
+export function isStepListEmpty(run: DrillRun): boolean {
+  return run.steps.length === 0;
+}

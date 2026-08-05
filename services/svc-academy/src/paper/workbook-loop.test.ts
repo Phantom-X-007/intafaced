@@ -26,6 +26,10 @@ import {
   firstRemainingStepId,
   lastRemainingStepId,
   drillCompletionRatioNumber,
+  firstCompletedStepId,
+  lastCompletedStepId,
+  hasNoRemainingSteps,
+  isStepListEmpty,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -236,5 +240,24 @@ describe('paper Stage-2 workbook loop', () => {
     expect(firstRemainingStepId(started.run)).toBe(started.run.steps[0]!.id);
     expect(lastRemainingStepId(started.run)).toBe(started.run.steps[started.run.steps.length - 1]!.id);
     expect(drillCompletionRatioNumber(started.run)).toBe(0);
+  });
+
+  it('L3 wave29 completed ends + remaining empty + step list', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w29', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(firstCompletedStepId(started.run)).toBeNull();
+    expect(lastCompletedStepId(started.run)).toBeNull();
+    expect(hasNoRemainingSteps(started.run)).toBe(false);
+    expect(isStepListEmpty(started.run)).toBe(false);
+    const step = started.run.steps[0]!.id;
+    const mid = completeDrillStep(started.run, step);
+    expect(mid.ok).toBe(true);
+    if (!mid.ok) return;
+    expect(firstCompletedStepId(mid.run)).toBe(step);
+    expect(lastCompletedStepId(mid.run)).toBe(step);
   });
 });

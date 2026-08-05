@@ -312,3 +312,26 @@ export function openSeasonRatio(seasons: readonly SeasonRecord[]): string | null
 export function listScoreWritableSeasonIds(seasons: readonly SeasonRecord[]): readonly string[] {
   return listSeasonIds(listScoreWritableSeasons(seasons));
 }
+
+/** L3 — true when every season is live. Empty → false. */
+export function allSeasonsLive(seasons: readonly SeasonRecord[]): boolean {
+  if (seasons.length === 0) return false;
+  return seasons.every((s) => s.status === 'live');
+}
+
+/** L3 — true when every season is scheduled. Empty → false. */
+export function allSeasonsScheduled(seasons: readonly SeasonRecord[]): boolean {
+  if (seasons.length === 0) return false;
+  return seasons.every((s) => s.status === 'scheduled');
+}
+
+/** L3 — true when every season is frozen. Empty → false. */
+export function allSeasonsFrozen(seasons: readonly SeasonRecord[]): boolean {
+  if (seasons.length === 0) return false;
+  return seasons.every((s) => s.status === 'frozen');
+}
+
+/** L3 — distinct status count present. Empty → 0. */
+export function distinctSeasonStatusCount(seasons: readonly SeasonRecord[]): number {
+  return new Set(seasons.map((s) => s.status)).size;
+}

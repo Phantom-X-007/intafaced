@@ -41,6 +41,10 @@ import {
   hasFoundationsPath,
   hasMarketsPath,
   hasBuilderPath,
+  hasSovereignPath,
+  emptyCurriculumPathCount,
+  allPathsHaveContent,
+  firstCurriculumSlug,
 } from './catalog.js';
 
 /**
@@ -261,5 +265,12 @@ describe('curriculum catalog', () => {
     expect(hasFoundationsPath()).toBe(hasCurriculumPath('foundations'));
     expect(hasMarketsPath()).toBe(hasCurriculumPath('markets'));
     expect(hasBuilderPath()).toBe(hasCurriculumPath('builder'));
+  });
+
+  it('L3 wave29 sovereign + empty path count + all paths + first slug', () => {
+    expect(hasSovereignPath()).toBe(hasCurriculumPath('sovereign'));
+    expect(emptyCurriculumPathCount()).toBe(emptyPathCount());
+    expect(typeof allPathsHaveContent()).toBe('boolean');
+    expect(firstCurriculumSlug()).not.toBeNull();
   });
 });
