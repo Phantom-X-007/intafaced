@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBulkScorePatches, validateBulkScoreWrite } from './bulk-score.js';
+import { applyBulkScorePatches, summarizeBulkScoreResult, validateBulkScoreWrite } from './bulk-score.js';
 
 describe('tournament L3 bulk score (no prizes)', () => {
   it('refuses non-live season and empty patches', () => {
@@ -39,5 +39,8 @@ describe('tournament L3 bulk score (no prizes)', () => {
     const rows = applyBulkScorePatches('s1', [], v.patches, now);
     expect(rows).toHaveLength(2);
     expect(rows.find((r) => r.userId === 'b')?.score).toBe(20);
+    expect(summarizeBulkScoreResult(v)).toEqual({ accepted: 2, refused: false, reason: null });
+    const refused = validateBulkScoreWrite({ seasonStatus: 'frozen', seasonId: 's1', patches: [{ userId: 'u', score: 1 }] });
+    expect(summarizeBulkScoreResult(refused)).toEqual({ accepted: 0, refused: true, reason: 'season_not_live' });
   });
 });

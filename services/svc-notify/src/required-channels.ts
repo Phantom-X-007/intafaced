@@ -71,3 +71,11 @@ export function fanoutReadiness(input: { requiredRaw: string | undefined; appEnv
   }
   return { ok: true, config: parsed.config };
 }
+
+/**
+ * L3 — required channel count for operator honesty boards.
+ * mode none → 0 (honest: no out-of-app requirement).
+ */
+export function requiredChannelCount(config: RequiredChannelsConfig): number {
+  return config.mode === 'none' ? 0 : config.channels.length;
+}

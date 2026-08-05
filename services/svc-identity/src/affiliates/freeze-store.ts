@@ -46,6 +46,11 @@ export class MemoryFreezeStore {
     return new Set(this.byId.keys());
   }
 
+  /** L3 — freeze count for operator board (empty store → 0, not invent). */
+  freezeCount(): number {
+    return this.byId.size;
+  }
+
   list(): readonly FreezeRecord[] {
     return [...this.byId.values()].sort((a, b) => a.frozenAt.getTime() - b.frozenAt.getTime());
   }

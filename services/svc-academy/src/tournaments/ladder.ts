@@ -104,3 +104,12 @@ export function pageStandings(rows: readonly StandingRecord[], options: { offset
     standings: ranked.slice(offset, offset + limit),
   };
 }
+
+/**
+ * L3 — look up one user's rank. Missing user → null (never invent a standing).
+ */
+export function standingOfUser(rows: readonly StandingRecord[], userId: string): RankedStanding | null {
+  const id = userId.trim();
+  if (!id) return null;
+  return rankStandings(rows).find((r) => r.userId === id) ?? null;
+}

@@ -84,3 +84,20 @@ export function applyBulkScorePatches(
   }
   return [...byUser.values()];
 }
+
+/**
+ * L3 — summarize a successful bulk result for operator boards.
+ * Refuse results → zeros (never invent accepted patches).
+ */
+export type BulkScoreSummary = {
+  readonly accepted: number;
+  readonly refused: boolean;
+  readonly reason: string | null;
+};
+
+export function summarizeBulkScoreResult(result: BulkScoreResult): BulkScoreSummary {
+  if (result.status === 'ok') {
+    return { accepted: result.patches.length, refused: false, reason: null };
+  }
+  return { accepted: 0, refused: true, reason: result.reason };
+}

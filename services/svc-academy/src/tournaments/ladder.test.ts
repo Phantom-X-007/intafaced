@@ -6,6 +6,7 @@ import {
   assertSeasonSlug,
   pageStandings,
   rankStandings,
+  standingOfUser,
   type StandingRecord,
 } from './ladder.js';
 
@@ -46,5 +47,12 @@ describe('validators', () => {
     expect(page.standings).toHaveLength(1);
     expect(page.standings[0]!.userId).toBe('c');
     expect(pageStandings(rows, { offset: 50, limit: 10 }).standings).toEqual([]);
+  });
+
+  it('L3 standingOfUser returns null when missing — never invent', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(standingOfUser(rows, 'b')?.rank).toBe(1);
+    expect(standingOfUser(rows, 'missing')).toBeNull();
+    expect(standingOfUser(rows, '  ')).toBeNull();
   });
 });

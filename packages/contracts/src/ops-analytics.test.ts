@@ -5,6 +5,7 @@ import {
   ANALYTICS_SOURCE_DBS,
   assertMetricPoint,
   lagFreshness,
+  listNonMoneyMetricIds,
   mayLabelLive,
   metricById,
 } from './ops-analytics.js';
@@ -67,5 +68,12 @@ describe('analytics metric catalogue v0', () => {
   it('accepts integer counts', () => {
     expect(assertMetricPoint('trade.fills.count', 3)).toEqual({ ok: true });
     expect(assertMetricPoint('trade.fills.count', -1).ok).toBe(false);
+  });
+
+  it('L3 listNonMoneyMetricIds excludes money notional', () => {
+    const ids = listNonMoneyMetricIds();
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids).toContain('trade.fills.count');
+    expect(ids).not.toContain('ledger.volume.notional');
   });
 });
