@@ -40,6 +40,43 @@ import java.util.List;
 
 /**
  * ETH与Token付款模块，支持同步任务与异步任务，在单地址可能出现连续付款的情况的下，使用异步阶列
+ *
+ * UNVERIFIED — there is no JDK, JRE or Maven on this host. Nothing in this file
+ * has been compiled, run or tested. The change below is a DELETION only.
+ *
+ * ── WHAT WAS REMOVED, AND WHY IT IS A DELETION AND NOT A BEHAVIOUR CHANGE ──
+ *
+ * Both withdrawal paths — transferEth and transferToken — used to broadcast the
+ * SAME signed transaction TWICE:
+ *
+ *   1. web3j.ethSendRawTransaction(hexValue)   → the configured coin.rpc node
+ *   2. etherscanApi.sendRawTransaction(hexValue) → https://api.etherscan.io/api,
+ *      hardcoded, Ethereum MAINNET, with no property behind it
+ *
+ * The second hop is now gone, along with the EtherscanApi field that reached it.
+ *
+ * It is safe to remove without a compiler because it touched nothing that
+ * builds or signs the transaction. `hexValue` is already-signed bytes by the
+ * time either call sees it; the second call read it and did not produce it. The
+ * txid this method returns has always come from the FIRST broadcast — the
+ * Etherscan response was logged and discarded, its return type is void, and
+ * both call sites sat inside `if (etherscanApi != null)`, so the whole path was
+ * already optional at runtime and every caller already had to work without it.
+ * Nothing downstream — the notify/kafka path, checkJob, the task queue — ever
+ * read anything the deleted lines produced.
+ *
+ * What it DID do was defeat containment. Aiming coin.rpc at a testnet node
+ * never contained a withdrawal, because the mainnet relay got an identical copy
+ * of the same signed bytes and that copy is the one that lands. Removing it does
+ * not make the signature safe — the signature is still chain-id-less and still
+ * replay-valid on mainnet, which is a SEPARATE and UNFIXED defect; see
+ * docs/SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md, which specifies that fix
+ * and deliberately does not apply it. It removes the path that made the network
+ * selector irrelevant.
+ *
+ * EtherscanApi itself is NOT deleted: its checkEventLog method is a live
+ * read-only path used by the erc-token and erc-eusdt deposit watchers, and the
+ * @Bean in EthConfig stays for them.
  */
 @Component
 public class PaymentHandler {
@@ -54,8 +91,6 @@ public class PaymentHandler {
     private Coin coin;
     @Autowired
     private KafkaTemplate<String,String> kafkaTemplate;
-    @Autowired(required = false)
-    private EtherscanApi etherscanApi;
     private Payment current;
     private LinkedList<Payment> tasks = new LinkedList<>();
     private int checkTimes = 0;
@@ -129,10 +164,8 @@ public class PaymentHandler {
                 return new MessageResult(500, "发送交易失败");
             }
             else {
-                if(etherscanApi != null){
-                    logger.info("=====发送Etherscan广播交易======");
-                    etherscanApi.sendRawTransaction(hexValue);
-                }
+                // The second, mainnet Etherscan broadcast of this same signed
+                // transaction was here and was deleted — see the class note.
                 MessageResult mr = new MessageResult(0, "success");
                 mr.setData(transactionHash);
                 return mr;
@@ -167,10 +200,8 @@ public class PaymentHandler {
                 return new MessageResult(500, "发送交易失败");
             }
             else {
-                if(etherscanApi != null){
-                    logger.info("=====发送Etherscan广播交易======");
-                    etherscanApi.sendRawTransaction(hexValue);
-                }
+                // The second, mainnet Etherscan broadcast of this same signed
+                // transaction was here and was deleted — see the class note.
                 payment.setTxid(transactionHash);
                 MessageResult mr = new MessageResult(0, "success");
                 mr.setData(transactionHash);
