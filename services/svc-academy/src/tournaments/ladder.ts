@@ -52,7 +52,7 @@ export class TournamentError extends Error {
 }
 
 /** Pure: order standings into ranks (1-based). Stable on equal score by earlier update wins? Spec: score DESC, updated_at ASC (first to score keeps rank). */
-export function rankStandings(rows: StandingRecord[]): RankedStanding[] {
+export function rankStandings(rows: readonly StandingRecord[]): RankedStanding[] {
   const sorted = [...rows].sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return a.updatedAt.getTime() - b.updatedAt.getTime();
