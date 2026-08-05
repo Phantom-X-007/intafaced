@@ -1,8 +1,9 @@
 # Claim TRK-agents.navigator
 
-**status:** pr-open
-**proof:** Stage-1 navigatorAgentGuardrail + tests in services/svc-agents/src/navigator/
-**tip:** ba2e50fd
-**updated:** 2026-08-04
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** Stage-1 navigatorAgentGuardrail (read tools + plan/select) · PR #761
+**tip:** 344011e2
+**updated:** 2026-08-05
 
-Claim-lock is spawn authority. Stage-1 only — not mountain done.
+Stage-1 Class N landed on main. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.
