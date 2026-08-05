@@ -1,8 +1,9 @@
 # Claim TRK-academy.certs
 
-**status:** residual-own
-**proof:** docs/ops/trk/academy.certs.md on tip · research/spec complete · not implement
-**tip:** 04f9b1f2
-**updated:** 2026-08-03
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** Stage-1 progress spine + idempotent grant (no XP/perk yet) · feat/stage1-residual-sec-batch
+**tip:** pending-merge
+**updated:** 2026-08-05
 
-Claim-lock is spawn authority. residual-own = research/spec complete on tip; not an implement swarm.
+Stage-1 Class N landed on main with this PR. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.

@@ -204,6 +204,13 @@ export const DEFAULT_ROUTING_TABLE: RoutingTable = parseRoutingTable({
       maxOutputTokens: 1024,
       price: { inputPerMillion: '0.25', outputPerMillion: '1.25' },
     },
+    {
+      task: 'copy_intel.stats',
+      providerId: 'primary',
+      model: 'reasoning-md',
+      maxOutputTokens: 2048,
+      price: { inputPerMillion: '1', outputPerMillion: '5' },
+    },
 
     // Retrieval.
     {
