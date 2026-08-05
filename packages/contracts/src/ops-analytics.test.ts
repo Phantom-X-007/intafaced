@@ -21,6 +21,7 @@ import {
   countMetricsUsingSource,
   metricCountBySource,
   multiSourceMetricCount,
+  singleSourceMetricCount,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -162,5 +163,12 @@ describe('L3 wave16 analytics money/source helpers', () => {
   it('L3 multiSourceMetricCount is non-negative catalog count', () => {
     expect(multiSourceMetricCount()).toBeGreaterThanOrEqual(0);
     expect(multiSourceMetricCount()).toBeLessThanOrEqual(analyticsMetricCatalogSize());
+  });
+
+  it('L3 singleSourceMetricCount partitions with multi', () => {
+    const s = singleSourceMetricCount();
+    const m = multiSourceMetricCount();
+    expect(s + m).toBeLessThanOrEqual(analyticsMetricCatalogSize());
+    expect(s).toBeGreaterThanOrEqual(0);
   });
 });

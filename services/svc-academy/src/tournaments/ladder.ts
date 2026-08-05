@@ -271,3 +271,11 @@ export function hasStanding(rows: readonly StandingRecord[], userId: string): bo
   if (!id) return false;
   return rows.some((r) => r.userId === id);
 }
+
+/**
+ * L3 — rank for one user (1-based). Missing → null (never invent place).
+ */
+export function rankOfUser(rows: readonly StandingRecord[], userId: string): number | null {
+  const s = standingOfUser(rows, userId);
+  return s?.rank ?? null;
+}

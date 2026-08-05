@@ -12,6 +12,7 @@ import {
   summarizeFanoutPlan,
   countSkippedMuted,
   planHasNoMutes,
+  planIsAllSendNow,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -98,5 +99,11 @@ describe('notify L3 combined mute + digest', () => {
     expect(planHasNoMutes([])).toBe(true);
     const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
     expect(planHasNoMutes(plan)).toBe(true);
+  });
+
+  it('L3 planIsAllSendNow false when empty', () => {
+    expect(planIsAllSendNow([])).toBe(false);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planIsAllSendNow(plan)).toBe(true);
   });
 });

@@ -243,4 +243,9 @@ export class MemoryResidencyDesk {
       .map((r) => r.id)
       .sort();
   }
+
+  /** L3 — total applications any status. Empty → 0. */
+  applicationCount(): number {
+    return this.rows.size;
+  }
 }

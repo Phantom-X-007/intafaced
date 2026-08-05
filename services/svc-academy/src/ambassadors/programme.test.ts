@@ -179,4 +179,15 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     desk.appoint({ userId: '11111111-1111-4111-8111-111111111111', appointedBy: '22222222-2222-4222-8222-222222222222' });
     expect(desk.isEmpty()).toBe(false);
   });
+
+  it('L3 activeRatio null when empty', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    expect(desk.activeRatio()).toBeNull();
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    desk.appoint({ userId: u, appointedBy: op });
+    expect(desk.activeRatio()).toBe('1.0000');
+    desk.freeze({ userId: u, frozenBy: op, reason: 'policy hold' });
+    expect(desk.activeRatio()).toBe('0.0000');
+  });
 });
