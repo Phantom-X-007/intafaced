@@ -140,8 +140,7 @@ Full raw/kill tables: **v2 report** (multi-source web + `gh api` metadata + X sa
 
 ## 6 · B6 — Full-horizon
 
-Canonical table: **FULL-HORIZON doc** (re-derived: Phase A gaps G-P0-1 wording, svc-support, open PRs, apps/web closed, vendor path).  
-**~89 tracker open rows** mapped by domain — no max-5 drop.
+Canonical table: **FULL-HORIZON doc** — **89/89 tracker IDs as named rows** (done-done, no wildcards). Non-tracker gaps in §3 of that doc.
 
 ---
 
