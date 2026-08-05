@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fanoutReadiness, missingRequiredCredentials, parseRequiredChannels } from './required-channels.js';
+import { fanoutReadiness, missingRequiredCredentials, parseRequiredChannels, requiredChannelCount } from './required-channels.js';
 
 describe('notify L3 required channels honesty', () => {
   it('prod refuses empty declaration', () => {
@@ -32,5 +32,10 @@ describe('notify L3 required channels honesty', () => {
         present: { email: false, push: false, sms: false },
       }),
     ).toEqual({ ok: true, config: { mode: 'none' } });
+  });
+
+  it('L3 requiredChannelCount is zero for mode none', () => {
+    expect(requiredChannelCount({ mode: 'none' })).toBe(0);
+    expect(requiredChannelCount({ mode: 'list', channels: ['email', 'push'] })).toBe(2);
   });
 });

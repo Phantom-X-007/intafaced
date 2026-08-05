@@ -145,6 +145,15 @@ export class MemoryResidencyDesk {
     };
   }
 
+  /**
+   * L3 — open (applied) applications for one user. Missing user → empty list.
+   */
+  openForUser(userId: string): readonly ResidencyApplication[] {
+    const id = userId.trim();
+    if (!id) return [];
+    return [...this.rows.values()].filter((r) => r.userId === id && r.status === 'applied');
+  }
+
   /** Applicant withdraws while still applied — no invent accept. */
   withdraw(input: { id: string; userId: string; now?: Date }): ResidencyApplication {
     const row = this.rows.get(input.id);

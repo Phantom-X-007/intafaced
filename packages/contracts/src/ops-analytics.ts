@@ -147,6 +147,14 @@ export function metricById(id: string): AnalyticsMetricDef | undefined {
   return ANALYTICS_METRICS_V0.find((m) => m.id === id);
 }
 
+/**
+ * L3 — non-money metric ids only (safe for integer cube helpers).
+ * Money metrics stay out so operators cannot mis-sum notional as count.
+ */
+export function listNonMoneyMetricIds(): readonly string[] {
+  return ANALYTICS_METRICS_V0.filter((m) => !m.money && m.kind !== 'amount').map((m) => m.id);
+}
+
 /** Validate a consumer point — amount metrics require decimal strings. */
 export function assertMetricPoint(metricId: string, value: string | number): { ok: true } | { ok: false; reason: string } {
   const def = metricById(metricId);
