@@ -1,11 +1,20 @@
-# Internet leverage — Phase B report (external candidates)
+# Internet leverage — Phase B report (external candidates) — v1 historical
 
-**Status:** COMPLETE · research only (no dependency install / adopt implement)  
-**Date:** 2026-08-05  
+**Status:** SUPERSEDED · do not use for decisions  
+**Superseded by:** [`INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md)  
+**Why:** v1 was thin (narrow fan-out, missed prior SECURITY/ORDER-ROUTE terrain, weak kill list, no methodology audit). v2 is the all-out gap-first report.
+
+**Date:** 2026-08-05 (v1)  
 **Tip at research:** re-derive `origin/main`  
 **Plan law:** [`INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md`](INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md)  
 **Phase A:** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md)  
 **Term:** Internet leverage = already-built systems we adopt/wire/wrap instead of rebuild.
+
+---
+
+> **Operators:** read **v2 only**. Body below is historical for PR #772 audit trail.
+
+---
 
 **Non-regression (Phase A):** vendor shell = sole product UI · `ledger-client` = only book · no second full exchange kit · no Java dual-book.
 
