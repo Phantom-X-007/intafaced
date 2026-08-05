@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** Stage-1 ticket spine + empty KB (memory svc-support) · PR #752
-**tip:** 344011e2
+**proof:** Stage-1 tickets #752 + Stage-2 operator queue · feat/stage2-support-certs-agents
+**tip:** pending-merge
 **updated:** 2026-08-05
 
-Stage-1 Class N landed on main. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.
+Stage-2 operator queue Class N. Money tools still banned.
