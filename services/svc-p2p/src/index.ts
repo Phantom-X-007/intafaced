@@ -5,6 +5,7 @@ import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { P2pService } from './p2p-service.js';
+import { InstrumentService } from './instrument-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
 
@@ -45,7 +46,13 @@ const bus = await JetStreamEventBus.connect({
 // service's tables (Doctrine §0.6). This client is the only path.
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
+// Where the buyer is told to send the fiat, and the record of who ever looked.
+// Constructed before P2pService because a P2pService without one would lock
+// escrow against a payment nobody could make.
+const instruments = new InstrumentService(sql, { retentionDays: env.P2P_INSTRUMENT_RETENTION_DAYS });
+
 const p2p = new P2pService(sql, ledger, bus, {
+  instruments,
   feeBps: env.P2P_FEE_BPS,
   tradingEnabled: env.P2P_TRADING_ENABLED,
   deadlines: {
@@ -60,7 +67,7 @@ const p2p = new P2pService(sql, ledger, bus, {
   // when its mark-price surface lands.
 });
 
-export const appRouter = createP2pRouter(p2p);
+export const appRouter = createP2pRouter(p2p, instruments);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -122,6 +129,14 @@ async function sweep(): Promise<void> {
   try {
     const settled = await p2p.sweepSettlements();
     const swept = await p2p.sweepDeadlines();
+
+    // Data retention, on the same tick. It runs last on purpose: it only ever
+    // touches trades that are already terminal, so it can never take work away
+    // from the two sweeps that keep escrow moving.
+    const purged = await instruments.purgeExpiredSnapshots();
+    if (purged.purged > 0) {
+      app.log.info({ purged: purged.purged }, 'p2p purged payment details from closed trades past the retention window');
+    }
 
     // EVERY FAILURE, WITH ITS REASON, ONE LINE EACH. The sweep used to return
     // a count and discard the error object, so "2 failed" was the whole story

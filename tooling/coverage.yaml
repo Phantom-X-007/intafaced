@@ -741,7 +741,12 @@ capabilities:
     law: '25:649'
     plane: B
     phase: 3
-    tracker: [p2p.offers, infra.config]
+    # "any payment method" is two halves and only one of them was on the board.
+    # `p2p.offers` + `infra.config` carry the currency registry and the method
+    # NAME on an offer; `p2p.payment-instruments` carries the destination the
+    # buyer actually sends money to. Without the second, a trade could reach
+    # every terminal state and still never complete.
+    tracker: [p2p.offers, infra.config, p2p.payment-instruments]
   - id: m.p2p.reputation
     capability: Reputation system on the same XP graph
     law: '25:650'

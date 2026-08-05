@@ -84,6 +84,27 @@ const schema = serviceEnvSchema
 
       /** How often the timeout + settlement sweeps run. */
       P2P_SWEEP_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),
+
+      /**
+       * How long a CLOSED trade keeps the account details it showed the buyer.
+       *
+       * The API already refuses to disclose a terminal trade's snapshot; this
+       * is the other half of the same promise, because "you cannot read it" and
+       * "we no longer have it" are different statements and only the second
+       * survives a database being copied. The purge keeps the fingerprint, so
+       * a late appeal can still be told whether the account a seller now names
+       * is the one the buyer was shown — without us holding the account to say
+       * so.
+       *
+       * The NUMBER is an operator decision, not an engineering one: it trades
+       * the ability to adjudicate a late appeal against holding personal data
+       * we no longer need, and where a market imposes its own retention rule
+       * that rule wins. The default is set well clear of the 7-day dispute SLA
+       * (P2P_DISPUTE_BACKSTOP_SECONDS) so a purge can never race an open
+       * appeal; the floor below enforces that relationship rather than trusting
+       * it.
+       */
+      P2P_INSTRUMENT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3_650).default(90),
     }),
   );
 
