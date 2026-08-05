@@ -191,19 +191,39 @@ export const p2pDisputes = p2p.table(
       .references(() => p2pTrades.id),
     openedBy: text('opened_by').notNull(),
     reason: text('reason').notNull().default(''),
+    /**
+     * APPEND-ONLY, and the database enforces it
+     * (`p2p_disputes_evidence_append_only_trg`). A jsonb array of attributed
+     * envelopes: `{ seq, submittedBy, submittedAt, item }`. Evidence that can be
+     * edited after the fact is not a record of a dispute, it is a draft.
+     */
     evidence: jsonb('evidence').notNull().default([]),
     moderatorId: text('moderator_id'),
     resolution: disputeResolutionEnum('resolution'),
     resolutionNotes: text('resolution_notes'),
     status: disputeStatusEnum('status').notNull().default('open'),
-    /** Moderator SLA. Past it, the backstop decides — see the migration comment. */
+    /**
+     * Moderator SLA. Past it the dispute ESCALATES — it is never resolved by a
+     * clock. A disputed escrow terminates only on a ruling attributed to a
+     * human (`p2p_trades_disputed_needs_ruling_trg`).
+     */
     deadlineAt: tstz('deadline_at').notNull(),
     openedAt: tstz('opened_at').notNull().defaultNow(),
     resolvedAt: tstz('resolved_at'),
+    /**
+     * Written by the statement that SERVES this row to a moderator, and by
+     * nothing else. "A queue exists" and "a human reached this dispute" are
+     * different claims, and only one of them is a fact about the world.
+     */
+    lastSeenByModeratorAt: tstz('last_seen_by_moderator_at'),
+    moderatorViews: integer('moderator_views').notNull().default(0),
+    /** SLA breached: re-armed and raised, never disposed of. */
+    escalatedAt: tstz('escalated_at'),
+    escalations: integer('escalations').notNull().default(0),
   },
   (t) => [
     uniqueIndex('p2p_disputes_trade_idx').on(t.tradeId),
-    /** The moderator queue, and the backstop sweep. */
+    /** THE MODERATOR QUEUE — `disputes.list` orders by exactly this. */
     index('p2p_disputes_open_idx').on(t.status, t.deadlineAt),
   ],
 );

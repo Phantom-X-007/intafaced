@@ -16,10 +16,16 @@
 -- The "p2p" schema itself is left in place — the bootstrap owns it, not this
 -- migration (§2), and this role has no DROP SCHEMA privilege anyway.
 
+DROP TRIGGER IF EXISTS "p2p_disputes_evidence_append_only_trg" ON "p2p"."p2p_disputes";
+DROP TRIGGER IF EXISTS "p2p_trades_disputed_needs_ruling_trg" ON "p2p"."p2p_trades";
+
 DROP TABLE IF EXISTS "p2p"."p2p_reputation";
 DROP TABLE IF EXISTS "p2p"."p2p_disputes";
 DROP TABLE IF EXISTS "p2p"."p2p_trades";
 DROP TABLE IF EXISTS "p2p"."offers";
+
+DROP FUNCTION IF EXISTS "p2p"."p2p_disputes_evidence_append_only"();
+DROP FUNCTION IF EXISTS "p2p"."p2p_trades_disputed_needs_ruling"();
 
 DROP TYPE IF EXISTS "p2p"."dispute_resolution";
 DROP TYPE IF EXISTS "p2p"."dispute_status";

@@ -5,6 +5,8 @@ import {
   TERMINAL_STATUSES,
   TRADE_STATUSES,
   TradeStateError,
+  VALUE_MOVING_TIMEOUT_ACTIONS,
+  escalationDeadline,
   assertTransition,
   canTransition,
   deadlineFor,
@@ -184,8 +186,29 @@ describe('timeouts', () => {
     expect(timeoutActionFor('escrowed')).toBe('refund');
   });
 
-  it('backstops a dispute nobody ruled on', () => {
-    expect(timeoutActionFor('disputed')).toBe('backstop_resolve');
+  it('ESCALATES a dispute nobody ruled on — it does not rule on it', () => {
+    expect(timeoutActionFor('disputed')).toBe('escalate_dispute');
+  });
+
+  /**
+   * THE RULE, AS A SET.
+   *
+   * A clock may unwind a stall, because unwinding is what everybody's silence
+   * meant. It may not adjudicate a disagreement: there is nothing there to
+   * infer, and the timer this replaced inferred "refund" and wrote it down as a
+   * resolution. Anyone adding a value-moving action to `disputed` comes through
+   * this line first.
+   */
+  it('no timeout action that moves value is reachable from `disputed`', () => {
+    const action = timeoutActionFor('disputed');
+    expect(action).not.toBeNull();
+    expect(VALUE_MOVING_TIMEOUT_ACTIONS.has(action!), 'a clock ruled on a dispute').toBe(false);
+    expect([...VALUE_MOVING_TIMEOUT_ACTIONS].sort()).toEqual(['refund', 'settle_or_void']);
+  });
+
+  it('re-arms an escalated dispute rather than letting its clock run out', () => {
+    const at = new Date('2026-08-04T00:00:00.000Z');
+    expect(escalationDeadline(at, DEFAULT_DEADLINES).getTime()).toBe(at.getTime() + DEFAULT_DEADLINES.escalationRecheckSeconds * 1000);
   });
 });
 
