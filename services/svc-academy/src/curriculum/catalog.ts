@@ -521,6 +521,14 @@ export function countCurriculumByKind(kind: CurriculumKind): number {
 }
 
 /**
+ * L3 — true when slug exists and is a workbook. Unknown/non-workbook → false.
+ */
+export function isWorkbookSlug(slug: string): boolean {
+  const item = BY_SLUG.get(slug.trim());
+  return item?.kind === 'workbook';
+}
+
+/**
  * L3 — sorted slugs for one kind. Empty kind → [].
  */
 export function listCurriculumSlugsByKind(kind: CurriculumKind): readonly string[] {

@@ -11,6 +11,7 @@ import {
   hasAnalyticsMetric,
   lagFreshness,
   listMoneyMetricIds,
+  metricMoneyPartition,
   analyticsMetricCatalogSize,
   listNonMoneyMetricIds,
   mayLabelLive,
@@ -132,5 +133,12 @@ describe('L3 wave13 analytics source catalog helpers', () => {
       const def = metricById(id)!;
       expect(def.sources).toContain('trade');
     }
+  });
+
+  it('L3 metricMoneyPartition partitions catalog', () => {
+    const p = metricMoneyPartition();
+    expect(p.total).toBe(p.money + p.nonMoney);
+    expect(p.total).toBe(analyticsMetricCatalogSize());
+    expect(p.money).toBeGreaterThan(0);
   });
 });

@@ -132,4 +132,16 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     desk.withdraw({ id: b.id, userId: 'u2' });
     expect(desk.withdrawnCount()).toBe(1);
   });
+
+  it('L3 rejectedApplicationIds sorted without invent', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.rejectedApplicationIds()).toEqual([]);
+    const a = desk.apply({
+      userId: 'u1',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+    });
+    desk.decide({ id: a.id, operatorId: 'op', decision: 'rejected' });
+    expect(desk.rejectedApplicationIds()).toEqual([a.id]);
+  });
 });

@@ -139,4 +139,14 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.countAppointedBy(opB)).toBe(1);
     expect(desk.countAppointedBy('')).toBe(0);
   });
+
+  it('L3 frozenCount without invent', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.frozenCount()).toBe(0);
+    desk.appoint({ userId: u, appointedBy: op });
+    desk.freeze({ userId: u, frozenBy: op, reason: 'policy hold' });
+    expect(desk.frozenCount()).toBe(1);
+  });
 });

@@ -7,6 +7,7 @@ import {
   countMutedChannels,
   isChannelMuted,
   allMuteableMuted,
+  hasAnyMute,
   listMutedChannels,
 } from './mute.js';
 
@@ -63,5 +64,11 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     prefs = applyMuteToggle(prefs, { channel: 'push', muted: true });
     prefs = applyMuteToggle(prefs, { channel: 'sms', muted: true });
     expect(allMuteableMuted(prefs)).toBe(true);
+  });
+
+  it('L3 hasAnyMute false when empty', () => {
+    expect(hasAnyMute(EMPTY_MUTE_PREFS)).toBe(false);
+    const m = applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'email', muted: true });
+    expect(hasAnyMute(m)).toBe(true);
   });
 });

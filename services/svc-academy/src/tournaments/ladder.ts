@@ -202,6 +202,30 @@ export function isInTopN(rows: readonly StandingRecord[], userId: string, n: num
 }
 
 /**
+ * L3 — max score among rows. Empty → null (never invent 0).
+ */
+export function maxScore(rows: readonly StandingRecord[]): number | null {
+  if (rows.length === 0) return null;
+  let max = rows[0]!.score;
+  for (const r of rows) {
+    if (r.score > max) max = r.score;
+  }
+  return max;
+}
+
+/**
+ * L3 — min score among rows. Empty → null (never invent 0).
+ */
+export function minScore(rows: readonly StandingRecord[]): number | null {
+  if (rows.length === 0) return null;
+  let min = rows[0]!.score;
+  for (const r of rows) {
+    if (r.score < min) min = r.score;
+  }
+  return min;
+}
+
+/**
  * L3 — distinct user ids in standings (sorted). Empty → [].
  */
 export function listStandingUserIds(rows: readonly StandingRecord[]): readonly string[] {

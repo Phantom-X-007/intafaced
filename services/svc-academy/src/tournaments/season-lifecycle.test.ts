@@ -8,6 +8,7 @@ import {
   listEndedSeasons,
   listFrozenSeasons,
   listLiveSeasonIds,
+  listLiveSeasons,
   listScheduledSeasons,
   listSeasonIds,
   freezeSeasonWithSnapshot,
@@ -162,5 +163,14 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
     expect(listFrozenSeasons(seasons).map((s) => s.id)).toEqual(['b']);
     expect(listLiveSeasonIds(seasons)).toEqual(['a']);
     expect(listFrozenSeasons([])).toEqual([]);
+  });
+
+  it('L3 listLiveSeasons without invent', () => {
+    const seasons = [
+      { ...base, id: 'a', status: 'live' as const },
+      { ...base, id: 'b', status: 'scheduled' as const },
+    ];
+    expect(listLiveSeasons(seasons).map((s) => s.id)).toEqual(['a']);
+    expect(listLiveSeasons([])).toEqual([]);
   });
 });

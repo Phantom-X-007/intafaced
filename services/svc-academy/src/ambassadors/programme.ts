@@ -252,4 +252,9 @@ export class MemoryAmbassadorProgramme {
     }
     return n;
   }
+
+  /** L3 — frozen programme row count. Empty → 0. */
+  frozenCount(): number {
+    return this.list('frozen').length;
+  }
 }

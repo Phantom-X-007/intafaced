@@ -6,7 +6,9 @@ import {
   assertSeasonSlug,
   countStandingsAboveScore,
   bottomNStandings,
+  maxScore,
   medianScore,
+  minScore,
   standingCount,
   pageStandings,
   rankStandings,
@@ -119,4 +121,12 @@ it('L3 medianScore null when empty; never invent 0', () => {
   expect(medianScore([])).toBeNull();
   const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 30, '2026-08-01T11:00:00Z')];
   expect(medianScore(rows)).toBe(20);
+
+  it('L3 maxScore/minScore null when empty', () => {
+    expect(maxScore([])).toBeNull();
+    expect(minScore([])).toBeNull();
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z'), row('c', 20, '2026-08-01T11:00:00Z')];
+    expect(maxScore(rows)).toBe(30);
+    expect(minScore(rows)).toBe(10);
+  });
 });

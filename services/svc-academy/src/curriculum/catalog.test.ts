@@ -7,6 +7,7 @@ import {
   hasCurriculumSlug,
   inventoryCurriculum,
   listCurriculum,
+  isWorkbookSlug,
   listCurriculumSlugs,
   listCurriculumSlugsByKind,
   listPathsWithContent,
@@ -148,5 +149,11 @@ describe('curriculum catalog', () => {
     for (const k of kinds) {
       expect(inv.byKind[k]).toBeGreaterThan(0);
     }
+  });
+
+  it('L3 isWorkbookSlug false for non-workbook / unknown', () => {
+    expect(isWorkbookSlug('not-a-real-slug')).toBe(false);
+    const wb = listCurriculum({ kind: 'workbook' })[0];
+    if (wb) expect(isWorkbookSlug(wb.slug)).toBe(true);
   });
 });
