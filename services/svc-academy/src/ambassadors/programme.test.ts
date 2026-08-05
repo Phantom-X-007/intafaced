@@ -422,4 +422,22 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.activeSharePercent()).toBe(50);
     expect(desk.frozenSharePercent()).toBe(50);
   });
+
+  it('L3 wave36 programme board headline + rows + missing', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.programmeBoardHeadline().empty).toBe(true);
+    expect(desk.isProgrammeMissing(u1)).toBe(true);
+    expect(desk.listProgrammeRowSummaries()).toEqual([]);
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.appoint({ userId: u2, appointedBy: op });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    expect(desk.programmeBoardHeadline()).toMatchObject({ total: 2, active: 1, frozen: 1, empty: false });
+    expect(desk.programmeRowSummary(u1).status).toBe('active');
+    expect(desk.programmeRowSummary(u2).status).toBe('frozen');
+    expect(desk.listProgrammeRowSummaries()).toHaveLength(2);
+    expect(desk.isProgrammeMissing(u1)).toBe(false);
+  });
 });

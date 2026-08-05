@@ -426,3 +426,48 @@ export function fanoutChannelLists(attempts: readonly ChannelDeliveryAttempt[]):
     refused: refusedChannels(attempts),
   };
 }
+
+/** L3 — fanout honesty board card. */
+export function fanoutBoardCard(attempts: readonly ChannelDeliveryAttempt[]): {
+  readonly total: number;
+  readonly accepted: number;
+  readonly refused: number;
+  readonly failed: number;
+  readonly empty: boolean;
+  readonly fullyAccepted: boolean;
+  readonly mixed: boolean;
+  readonly acceptanceRatio: string | null;
+  readonly outcomes: readonly DeliveryOutcome[];
+} {
+  const s = fanoutOutcomeSnapshot(attempts);
+  return {
+    total: s.total,
+    accepted: s.accepted,
+    refused: s.refused,
+    failed: s.failed,
+    empty: fanoutIsEmpty(attempts),
+    fullyAccepted: fanoutFullyAccepted(attempts),
+    mixed: fanoutIsMixed(attempts),
+    acceptanceRatio: fanoutAcceptanceRatio(attempts),
+    outcomes: fanoutOutcomesPresent(attempts),
+  };
+}
+
+/** L3 — true when fanout board has failures. */
+export function fanoutBoardHasFailures(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return fanoutBoardCard(attempts).failed > 0;
+}
+
+/** L3 — true when fanout board is empty. */
+export function fanoutBoardIsEmpty(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return fanoutBoardCard(attempts).empty;
+}
+
+/** L3 — channel lists for fanout board. */
+export function fanoutBoardChannels(attempts: readonly ChannelDeliveryAttempt[]): {
+  readonly accepted: readonly ChannelDeliveryAttempt['channel'][];
+  readonly failed: readonly ChannelDeliveryAttempt['channel'][];
+  readonly refused: readonly ChannelDeliveryAttempt['channel'][];
+} {
+  return fanoutChannelLists(attempts);
+}

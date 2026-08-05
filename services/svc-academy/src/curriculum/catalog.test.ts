@@ -65,6 +65,10 @@ import {
   curriculumKindCountsConsistent,
   curriculumPathSnapshot,
   curriculumPathCountsConsistent,
+  catalogBoardHeadline,
+  curriculumSlugCard,
+  curriculumPathCard,
+  curriculumSlugPresent,
 } from './catalog.js';
 
 /**
@@ -327,5 +331,16 @@ describe('curriculum catalog', () => {
     expect(curriculumPathCountsConsistent()).toBe(true);
     expect(curriculumKindSnapshot().total).toBe(curriculumSpineSize());
     expect(curriculumPathSnapshot().foundations).toBe(foundationsItemCount());
+  });
+
+  it('L3 wave36 catalog board + slug/path cards', () => {
+    const h = catalogBoardHeadline();
+    expect(h.spine).toBe(curriculumSpineSize());
+    expect(h.nonEmpty).toBe(true);
+    const slug = listCurriculumSlugs()[0]!;
+    expect(curriculumSlugCard(slug).present).toBe(true);
+    expect(curriculumSlugPresent(slug)).toBe(true);
+    expect(curriculumSlugPresent('no-such-slug-wave36')).toBe(false);
+    expect(curriculumPathCard('foundations').count).toBe(foundationsItemCount());
   });
 });

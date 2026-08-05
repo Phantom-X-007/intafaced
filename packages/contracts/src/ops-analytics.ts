@@ -570,3 +570,46 @@ export function catalogKindCountsConsistent(): boolean {
   const s = catalogKindSnapshot();
   return s.total === s.count + s.amount + s.ratio;
 }
+
+/** L3 — analytics catalog board card. */
+export function analyticsCatalogBoardCard(): {
+  readonly total: number;
+  readonly money: number;
+  readonly nonMoney: number;
+  readonly multiSource: number;
+  readonly singleSource: number;
+  readonly nonEmpty: boolean;
+  readonly moneyRatio: string | null;
+  readonly sourcesRepresented: number;
+} {
+  return {
+    total: analyticsMetricCatalogSize(),
+    money: moneyMetricCount(),
+    nonMoney: nonMoneyMetricCount(),
+    multiSource: multiSourceMetricCount(),
+    singleSource: singleSourceMetricCount(),
+    nonEmpty: catalogIsNonEmpty(),
+    moneyRatio: moneyMetricRatio(),
+    sourcesRepresented: representedSourceCount(),
+  };
+}
+
+/** L3 — true when catalog board is non-empty. */
+export function analyticsCatalogBoardNonEmpty(): boolean {
+  return analyticsCatalogBoardCard().nonEmpty;
+}
+
+/** L3 — money partition for board. */
+export function analyticsMoneyBoard(): { readonly money: number; readonly nonMoney: number; readonly total: number } {
+  return catalogMoneySnapshot();
+}
+
+/** L3 — kind partition for board. */
+export function analyticsKindBoard(): {
+  readonly count: number;
+  readonly amount: number;
+  readonly ratio: number;
+  readonly total: number;
+} {
+  return catalogKindSnapshot();
+}

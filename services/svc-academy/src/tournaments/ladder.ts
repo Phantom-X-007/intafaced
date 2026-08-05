@@ -645,3 +645,58 @@ export function standingDepthSnapshot(rows: readonly StandingRecord[]): {
     hasPodium3: hasPodiumDepth(rows, 3),
   };
 }
+
+/** L3 — operator leaderboard headline. */
+export function leaderboardHeadline(rows: readonly StandingRecord[]): {
+  readonly count: number;
+  readonly empty: boolean;
+  readonly first: string | null;
+  readonly last: string | null;
+  readonly max: number | null;
+  readonly min: number | null;
+  readonly uniqueLeader: boolean;
+} {
+  return {
+    count: standingCount(rows),
+    empty: isEmptyStandings(rows),
+    first: firstPlaceUser(rows),
+    last: lastPlaceUser(rows),
+    max: maxScore(rows),
+    min: minScore(rows),
+    uniqueLeader: hasUniqueLeader(rows),
+  };
+}
+
+/** L3 — one user standing card. Missing → nulls. */
+export function userStandingCard(
+  rows: readonly StandingRecord[],
+  userId: string,
+): {
+  readonly userId: string;
+  readonly present: boolean;
+  readonly rank: number | null;
+  readonly score: number | null;
+  readonly isTop: boolean;
+} {
+  const id = userId.trim();
+  return {
+    userId: id,
+    present: hasStanding(rows, id),
+    rank: rankOfUser(rows, id),
+    score: scoreOfUser(rows, id),
+    isTop: isTopScorer(rows, id),
+  };
+}
+
+/** L3 — top-N user cards. */
+export function topNStandingCards(
+  rows: readonly StandingRecord[],
+  n: number,
+): readonly { readonly userId: string; readonly rank: number; readonly score: number }[] {
+  return topNStandings(rows, n).map((r) => ({ userId: r.userId, rank: r.rank, score: r.score }));
+}
+
+/** L3 — true when user card is present. */
+export function userStandingPresent(rows: readonly StandingRecord[], userId: string): boolean {
+  return userStandingCard(rows, userId).present;
+}

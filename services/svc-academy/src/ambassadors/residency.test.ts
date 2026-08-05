@@ -420,4 +420,22 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     expect(desk.applicationCountsConsistent()).toBe(true);
     expect(desk.decidedSharePercent()).toBe(100);
   });
+
+  it('L3 wave36 residency queue headline + status of', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.residencyQueueHeadline().empty).toBe(true);
+    expect(desk.applicationStatusOf('x')).toBeNull();
+    const a = desk.apply({
+      userId: 'u-w36',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    expect(desk.residencyQueueHeadline().open).toBe(1);
+    expect(desk.isApplicationOpen(a.id)).toBe(true);
+    expect(desk.isApplicationDecided(a.id)).toBe(false);
+    desk.decide({ id: a.id, operatorId: 'op1', decision: 'accepted', now: NOW });
+    expect(desk.isApplicationDecided(a.id)).toBe(true);
+    expect(desk.applicationStatusOf(a.id)).toBe('accepted');
+  });
 });

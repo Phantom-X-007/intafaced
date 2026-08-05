@@ -60,6 +60,10 @@ import {
   planActionCountsConsistent,
   planRatioSnapshot,
   planChannelPartition,
+  planBoardCard,
+  planBoardHasSends,
+  planBoardIsEmpty,
+  planBoardChannels,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -305,5 +309,14 @@ describe('notify L3 combined mute + digest', () => {
     expect(planActionCountsConsistent(plan)).toBe(true);
     expect(planActionSnapshot(plan).total).toBe(plan.length);
     expect(planChannelPartition(plan).send.length).toBeGreaterThan(0);
+  });
+
+  it('L3 wave36 plan board card', () => {
+    expect(planBoardIsEmpty([])).toBe(true);
+    expect(planBoardHasSends([])).toBe(false);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planBoardCard(plan).allSend).toBe(true);
+    expect(planBoardHasSends(plan)).toBe(true);
+    expect(planBoardChannels(plan).send.length).toBeGreaterThan(0);
   });
 });

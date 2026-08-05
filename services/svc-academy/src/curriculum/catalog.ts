@@ -873,3 +873,66 @@ export function curriculumPathCountsConsistent(): boolean {
   const s = curriculumPathSnapshot();
   return curriculumSpineSize() === s.foundations + s.markets + s.builder + s.sovereign;
 }
+
+/** L3 — catalog board headline. */
+export function catalogBoardHeadline(): {
+  readonly spine: number;
+  readonly lessons: number;
+  readonly playbooks: number;
+  readonly workbooks: number;
+  readonly pathsWithContent: number;
+  readonly emptyPaths: number;
+  readonly nonEmpty: boolean;
+} {
+  return {
+    spine: curriculumSpineSize(),
+    lessons: lessonCount(),
+    playbooks: playbookCount(),
+    workbooks: workbookCount(),
+    pathsWithContent: pathCountWithContent(),
+    emptyPaths: emptyPathCount(),
+    nonEmpty: catalogSpineNonEmpty(),
+  };
+}
+
+/** L3 — one slug card. Missing → null kind. */
+export function curriculumSlugCard(slug: string): {
+  readonly slug: string;
+  readonly present: boolean;
+  readonly kind: CurriculumKind | null;
+  readonly isLesson: boolean;
+  readonly isPlaybook: boolean;
+  readonly isWorkbook: boolean;
+} {
+  const s = slug.trim();
+  const item = getCurriculumItem(s);
+  if (!item) {
+    return { slug: s, present: false, kind: null, isLesson: false, isPlaybook: false, isWorkbook: false };
+  }
+  return {
+    slug: s,
+    present: true,
+    kind: item.kind,
+    isLesson: item.kind === 'lesson',
+    isPlaybook: item.kind === 'playbook',
+    isWorkbook: item.kind === 'workbook',
+  };
+}
+
+/** L3 — path content card. */
+export function curriculumPathCard(path: CurriculumPath): {
+  readonly path: CurriculumPath;
+  readonly count: number;
+  readonly hasContent: boolean;
+} {
+  return {
+    path,
+    count: countCurriculumByPath(path),
+    hasContent: hasCurriculumPath(path),
+  };
+}
+
+/** L3 — true when slug card is present. */
+export function curriculumSlugPresent(slug: string): boolean {
+  return curriculumSlugCard(slug).present;
+}
