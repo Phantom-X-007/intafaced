@@ -1,8 +1,10 @@
 # Internet leverage — Phase B report v2 (external candidates, all-out)
 
-**Status:** COMPLETE · research only (no dependency install / adopt implement)  
+**Status:** RESEARCH EVIDENCE COMPLETE · **decision surface superseded**  
 **Date:** 2026-08-05  
-**Supersedes:** [`INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-05.md) (v1 / #772) — keep v1 for history; **decisions live here**  
+**Decisions live in:** [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) (whole future project; **no max-5 thrift cap**)  
+**Supersedes:** [`INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-05.md) (v1 / #772) for research depth  
+**Note:** Fan-out tables / kill lists / deep cards below remain valid evidence. The “90-day max ≤5 tracks” line was **plan thrift, not operator law** — do not treat it as the Phase B product.  
 **Tip at research:** `origin/main` re-derived at write (post-#772 tip)  
 **Plan law:** [`INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md`](INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md)  
 **Phase A:** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md)  
@@ -36,7 +38,7 @@
 3. Do **not** buy another full exchange UI kit.
 4. Do **not** replace `ledger-client` with Formance / TigerBeetle / Blnk (study only).
 
-**90-day max tracks (≤5):** RE2 · Gitleaks · Hyperswitch spike · P2P human dispute path · wallet RPC review. Everything else is later or Shehzad-only.
+**Superseded thrift line (ignore):** old “90-day max ≤5” — full map is [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md).
 
 ---
 
