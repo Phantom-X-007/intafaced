@@ -8,6 +8,11 @@ import {
   isAlreadyGranted,
   missingItemCount,
   progressReport,
+  completedItemCount,
+  requiredItemCount,
+  progressRatioLabel,
+  progressIsGrantable,
+  missingItemSlugsJoined,
 } from './progress.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
@@ -152,5 +157,20 @@ describe('academy.certs Stage-1 progress spine', () => {
     store.markComplete('u1', 'foundations-risk', NOW);
     store.markComplete('u1', 'foundations-intro', NOW);
     expect(store.listCompletedItemSlugs('u1')).toEqual(['foundations-intro', 'foundations-risk']);
+  });
+
+  it('L3 wave35 progress report field helpers', () => {
+    const cert = { id: 'c1', title: 'T', requiredItemSlugs: ['a', 'b'] };
+    const report = progressReport({
+      userId: 'u1',
+      cert,
+      completedSlugs: new Set(['a']),
+      existingGrant: null,
+    });
+    expect(completedItemCount(report)).toBe(1);
+    expect(requiredItemCount(report)).toBe(2);
+    expect(progressRatioLabel(report)).toBe('0.5000');
+    expect(progressIsGrantable(report)).toBe(false);
+    expect(missingItemSlugsJoined(report)).toBe('b');
   });
 });

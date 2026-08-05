@@ -110,3 +110,23 @@ export class MemoryMuteStore {
     return this.get(userId).muted.size;
   }
 }
+
+/** L3 — all muteable channel ids in stable order. */
+export function allMuteableChannels(): readonly MuteableChannel[] {
+  return ['email', 'push', 'sms'];
+}
+
+/** L3 — unmuted channels only. Empty mutes → all three. */
+export function listUnmutedChannels(prefs: ChannelMutePrefs): readonly MuteableChannel[] {
+  return allMuteableChannels().filter((c) => !prefs.muted.has(c));
+}
+
+/** L3 — muted/total as fixed 4dp. Always 3 muteable channels. */
+export function mutedChannelRatio(prefs: ChannelMutePrefs): string {
+  return (countMutedChannels(prefs) / allMuteableChannels().length).toFixed(4);
+}
+
+/** L3 — true when exactly one channel muted. */
+export function hasSingleMute(prefs: ChannelMutePrefs): boolean {
+  return countMutedChannels(prefs) === 1;
+}

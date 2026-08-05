@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { decideGrant, MemoryCertStore } from './progress.js';
-import { xpIntentFromGrant, xpPolicyFor, listXpPolicyCertIds, xpDeltaForCert, hasXpPolicy } from './xp-policy.js';
+import {
+  xpIntentFromGrant,
+  xpPolicyFor,
+  listXpPolicyCertIds,
+  xpDeltaForCert,
+  hasXpPolicy,
+  xpPolicyCount,
+  hasAnyXpPolicy,
+  xpPolicyCertIdsJoined,
+  hasAtLeastXpPolicies,
+} from './xp-policy.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -54,5 +64,12 @@ describe('academy.certs Stage-2 XP policy (no money)', () => {
   it('L3 hasXpPolicy false for unknown', () => {
     expect(hasXpPolicy('foundations-v1')).toBe(true);
     expect(hasXpPolicy('nope')).toBe(false);
+  });
+
+  it('L3 wave35 xp policy catalog helpers', () => {
+    expect(xpPolicyCount()).toBeGreaterThanOrEqual(0);
+    expect(typeof hasAnyXpPolicy()).toBe('boolean');
+    expect(typeof xpPolicyCertIdsJoined()).toBe('string');
+    expect(hasAtLeastXpPolicies(0)).toBe(true);
   });
 });

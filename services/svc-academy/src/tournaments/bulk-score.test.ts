@@ -6,6 +6,10 @@ import {
   validateBulkScoreWrite,
   bulkAcceptedCount,
   bulkRefuseReason,
+  isBulkScoreRefused,
+  bulkAcceptedCountLabel,
+  bulkRefuseReasonLabel,
+  isBulkScoreEmptyOk,
 } from './bulk-score.js';
 
 describe('tournament L3 bulk score (no prizes)', () => {
@@ -68,5 +72,15 @@ describe('tournament L3 bulk score (no prizes)', () => {
       expect(bulkAcceptedCount(ok)).toBe(2);
       expect(bulkRefuseReason(ok)).toBeNull();
     }
+  });
+
+  it('L3 wave35 bulk result labels + empty ok', () => {
+    const refused = { status: 'refuse' as const, reason: 'season_not_live' as const, message: 'x' };
+    expect(isBulkScoreRefused(refused)).toBe(true);
+    expect(bulkRefuseReasonLabel(refused)).toBe('season_not_live');
+    expect(bulkAcceptedCountLabel(refused)).toBe('0');
+    const emptyOk = { status: 'ok' as const, patches: [] as const };
+    expect(isBulkScoreEmptyOk(emptyOk)).toBe(true);
+    expect(isBulkScoreRefused(emptyOk)).toBe(false);
   });
 });

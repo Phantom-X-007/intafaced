@@ -282,3 +282,28 @@ export function isGrantReady(report: ProgressReport): boolean {
 export function isAlreadyGranted(report: ProgressReport): boolean {
   return report.granted;
 }
+
+/** L3 — completed count from report. */
+export function completedItemCount(report: ProgressReport): number {
+  return report.completedCount;
+}
+
+/** L3 — required count from report. */
+export function requiredItemCount(report: ProgressReport): number {
+  return report.requiredCount;
+}
+
+/** L3 — ratio label from report. */
+export function progressRatioLabel(report: ProgressReport): string {
+  return report.ratio;
+}
+
+/** L3 — true when report is complete and not granted. Alias of isGrantReady. */
+export function progressIsGrantable(report: ProgressReport): boolean {
+  return isGrantReady(report);
+}
+
+/** L3 — missing slugs joined. Empty → "". */
+export function missingItemSlugsJoined(report: ProgressReport): string {
+  return report.missingItemSlugs.join(',');
+}
