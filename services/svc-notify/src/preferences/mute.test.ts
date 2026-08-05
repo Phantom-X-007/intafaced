@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  EMPTY_MUTE_PREFS,
-  MemoryMuteStore,
-  MuteUpdateError,
-  applyMuteToggle,
-  isChannelMuted,
-} from './mute.js';
+import { EMPTY_MUTE_PREFS, MemoryMuteStore, MuteUpdateError, applyMuteToggle, isChannelMuted } from './mute.js';
 
 describe('isChannelMuted — critical never silenced', () => {
   const mutedEmail = { muted: new Set(['email'] as const) };
@@ -31,9 +25,7 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
   });
 
   it('refuses unknown channels', () => {
-    expect(() => applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'carrier-pigeon', muted: true })).toThrow(
-      MuteUpdateError,
-    );
+    expect(() => applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'carrier-pigeon', muted: true })).toThrow(MuteUpdateError);
   });
 
   it('stores per user', () => {

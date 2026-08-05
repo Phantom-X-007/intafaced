@@ -22,11 +22,7 @@ export const EMPTY_MUTE_PREFS: ChannelMutePrefs = { muted: new Set() };
  * Pure: may we attempt out-of-app delivery given severity + prefs?
  * In-app is never muted by this law (inbox always lands).
  */
-export function isChannelMuted(
-  prefs: ChannelMutePrefs,
-  channel: MuteableChannel,
-  severity: NotifySeverity,
-): boolean {
+export function isChannelMuted(prefs: ChannelMutePrefs, channel: MuteableChannel, severity: NotifySeverity): boolean {
   if (severity === 'critical') return false;
   return prefs.muted.has(channel);
 }
@@ -44,10 +40,7 @@ export class MuteUpdateError extends Error {
 }
 
 /** Apply a mute toggle. Refuses any API that claims to mute "critical" as a channel. */
-export function applyMuteToggle(
-  current: ChannelMutePrefs,
-  input: { channel: string; muted: boolean },
-): ChannelMutePrefs {
+export function applyMuteToggle(current: ChannelMutePrefs, input: { channel: string; muted: boolean }): ChannelMutePrefs {
   const ch = input.channel;
   if (ch !== 'email' && ch !== 'push' && ch !== 'sms') {
     throw new MuteUpdateError(`Channel ${ch} is not muteable`, 'preference.invalid_channel');
