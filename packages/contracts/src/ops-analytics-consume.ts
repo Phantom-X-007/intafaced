@@ -40,3 +40,18 @@ export function consumeCubePoints(points: readonly CubePoint[]): ConsumeResult {
   }
   return { status: 'ok', points: out };
 }
+
+/**
+ * L3: filter points to an allowlist of metric ids, then consume.
+ * Missing metrics after filter → empty (not invent zeros for absent series).
+ * Unknown metrics still refuse via assertMetricPoint inside consume.
+ */
+export function consumeCubePointsForMetrics(
+  points: readonly CubePoint[],
+  metricIds: ReadonlySet<string> | readonly string[],
+): ConsumeResult {
+  const set = metricIds instanceof Set ? metricIds : new Set(metricIds);
+  if (set.size === 0) return { status: 'empty' };
+  const filtered = points.filter((p) => set.has(p.metricId));
+  return consumeCubePoints(filtered);
+}
