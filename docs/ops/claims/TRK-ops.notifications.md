@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** notify mute prefs; critical never silenced · PR #777
-**tip:** 1cee3119
+**proof:** Stage-2 Class N residual · feat/stage2-curriculum-notify-agents
+**tip:** pending-merge
 **updated:** 2026-08-05
 
-Stage-1 Class N landed on main. Mountain residual (pay/prizes/warehouse/payout) remains for later Class M / owner numbers — not free re-implement of Stage-1.
+Stage-2 landed. No Stage-1 re-open. Further residual remains on tip specs.

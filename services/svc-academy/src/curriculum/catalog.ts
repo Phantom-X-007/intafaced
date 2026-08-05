@@ -38,9 +38,16 @@ export interface CurriculumItem extends CurriculumItemSummary {
 }
 
 /**
- * Day-one spine. One item per path is enough to prove the content path;
- * foundations carries a short playbook + lesson so list + detail both have
- * something non-trivial to return.
+ * Shared short body for Stage-2 platform-native expansion.
+ * Not a licensed third-party library import — residual title counts still apply.
+ */
+function seedBody(title: string, bullets: string[]): string {
+  return ['# ' + title, '', ...bullets.map((b) => '- ' + b), '', 'No money moves in this item. No partner brand names.'].join('\n');
+}
+
+/**
+ * Day-one spine + Stage-2 platform-native expansion (TRK-academy.curriculum).
+ * Title promise (20 playbooks + 3 workbooks) remains residual when counts lag.
  */
 const SPINE: readonly CurriculumItem[] = [
   {
@@ -193,6 +200,132 @@ const SPINE: readonly CurriculumItem[] = [
       'No simulated fills here. No balances. No XP. Completing those needs the paper',
       'market and the certification path — both named elsewhere on the tracker.',
     ].join('\n'),
+  },
+  // ── Stage-2 platform-native expansion (not licensed library invent) ───────
+  {
+    slug: 'foundations-position-sizing',
+    title: 'Position sizing without invent',
+    kind: 'playbook',
+    path: 'foundations',
+    order: 20,
+    summary: 'Size from invalidation distance and account risk — never from a green candle.',
+    body: seedBody('Position sizing without invent', [
+      'Write the invalidation first; size is a consequence of distance and risk budget.',
+      'If you cannot name the loss if wrong, do not place the order.',
+      'Paper first when the paper market flag is on.',
+    ]),
+  },
+  {
+    slug: 'foundations-journal-discipline',
+    title: 'Trade journal discipline',
+    kind: 'playbook',
+    path: 'foundations',
+    order: 25,
+    summary: 'What you write before and after a trade so the next one is not amnesia.',
+    body: seedBody('Trade journal discipline', [
+      'Thesis, invalidation, size, and why this time — before the order.',
+      'After: what the book did, not what you hoped it would do.',
+      'No retroactive thesis edits that invent skill.',
+    ]),
+  },
+  {
+    slug: 'markets-spread-and-slippage',
+    title: 'Spread and slippage honesty',
+    kind: 'playbook',
+    path: 'markets',
+    order: 20,
+    summary: 'When the book is thin, the fill is not the mid you stared at.',
+    body: seedBody('Spread and slippage honesty', [
+      'Mid is not a promise; the next tradeable level is.',
+      'Market orders pay for urgency — name the urgency or use a limit.',
+      'Empty books are a true state, not a UI failure.',
+    ]),
+  },
+  {
+    slug: 'markets-session-structure',
+    title: 'Session structure',
+    kind: 'playbook',
+    path: 'markets',
+    order: 25,
+    summary: 'Open, mid, and close behaviours without inventing a regime label.',
+    body: seedBody('Session structure', [
+      'Liquidity and noise change by session — observe before you name a pattern.',
+      'Do not paste a vendor calendar as if it were platform law.',
+    ]),
+  },
+  {
+    slug: 'builder-kill-switch-drill',
+    title: 'Kill-switch drill',
+    kind: 'playbook',
+    path: 'builder',
+    order: 20,
+    summary: 'Prove you can stop a run from a surface you control.',
+    body: seedBody('Kill-switch drill', [
+      'Name the button or command that stops the strategy before you start it.',
+      'Paper run that stop once on purpose; a stop never tested is decoration.',
+    ]),
+  },
+  {
+    slug: 'builder-logs-not-vibes',
+    title: 'Logs not vibes',
+    kind: 'playbook',
+    path: 'builder',
+    order: 25,
+    summary: 'What an automation must record so a human can audit it later.',
+    body: seedBody('Logs not vibes', [
+      'Every decision needs a timestamp, inputs, and the rule that fired.',
+      'Missing logs are not privacy — they are unprovable behaviour.',
+    ]),
+  },
+  {
+    slug: 'sovereign-rail-map',
+    title: 'Rail map',
+    kind: 'playbook',
+    path: 'sovereign',
+    order: 20,
+    summary: 'Custodial ledger vs self-custody rails — ask who holds the keys.',
+    body: seedBody('Rail map', [
+      'For each balance: house custody under the ledger, or a wallet you control?',
+      'If the process dies, whose money is stranded and how does it return?',
+    ]),
+  },
+  {
+    slug: 'sovereign-withdrawal-hygiene',
+    title: 'Withdrawal hygiene',
+    kind: 'playbook',
+    path: 'sovereign',
+    order: 25,
+    summary: 'Address check, small test send, no urgency theatre.',
+    body: seedBody('Withdrawal hygiene', [
+      'Verify the address offline; urgency is how people send to the wrong rail.',
+      'Test size first when the rail is new to you.',
+    ]),
+  },
+  {
+    slug: 'markets-tape-reading-workbook',
+    title: 'Tape reading (outline workbook)',
+    kind: 'workbook',
+    path: 'markets',
+    order: 30,
+    summary: 'Outline drills for reading public prints without inventing volume.',
+    body: seedBody('Tape reading (outline workbook)', [
+      'Drill: mark aggressor side only when the print carries it.',
+      'Drill: empty tape is empty — do not paint green for silence.',
+      'Fills stay paper until the paper market path is on.',
+    ]),
+  },
+  {
+    slug: 'builder-automation-workbook',
+    title: 'Automation checklist (outline workbook)',
+    kind: 'workbook',
+    path: 'builder',
+    order: 30,
+    summary: 'Outline workbook for pre-flight of a paper automation.',
+    body: seedBody('Automation checklist (outline workbook)', [
+      'Kill-switch named and tested.',
+      'Max loss and max size written before arming.',
+      'No live keys in paper mode.',
+    ]),
   },
 ] as const;
 

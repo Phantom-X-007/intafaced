@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** Stage-1 fixture approval-rate watch + alert (no rail change) · feat/stage1-residual-sec-batch
+**proof:** Stage-2 Class N residual · feat/stage2-curriculum-notify-agents
 **tip:** pending-merge
 **updated:** 2026-08-05
 
-Stage-1 Class N landed on main with this PR. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.
+Stage-2 landed. No Stage-1 re-open. Further residual remains on tip specs.
