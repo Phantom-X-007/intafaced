@@ -462,3 +462,72 @@ export function seasonWritableSnapshot(seasons: readonly SeasonRecord[]): {
     writableIds: listScoreWritableSeasonIds(seasons),
   };
 }
+
+/** L3 — season board headline. */
+export function seasonBoardHeadline(seasons: readonly SeasonRecord[]): {
+  readonly total: number;
+  readonly live: number;
+  readonly scheduled: number;
+  readonly frozen: number;
+  readonly ended: number;
+  readonly open: number;
+  readonly empty: boolean;
+  readonly hasWritable: boolean;
+} {
+  return {
+    total: totalSeasonCount(seasons),
+    live: liveSeasonCount(seasons),
+    scheduled: scheduledSeasonCount(seasons),
+    frozen: frozenSeasonCount(seasons),
+    ended: endedSeasonCount(seasons),
+    open: openSeasonCount(seasons),
+    empty: isSeasonListEmpty(seasons),
+    hasWritable: hasScoreWritableSeason(seasons),
+  };
+}
+
+/** L3 — one season card. Missing → null status. */
+export function seasonCard(
+  seasons: readonly SeasonRecord[],
+  seasonId: string,
+): {
+  readonly id: string;
+  readonly present: boolean;
+  readonly status: SeasonStatus | null;
+  readonly terminal: boolean;
+  readonly writable: boolean;
+} {
+  const id = seasonId.trim();
+  const row = seasons.find((s) => s.id === id);
+  if (!row) return { id, present: false, status: null, terminal: false, writable: false };
+  return {
+    id,
+    present: true,
+    status: row.status,
+    terminal: isSeasonTerminal(row.status),
+    writable: isScoreWritable(row.status),
+  };
+}
+
+/** L3 — cards for all seasons (sorted ids). */
+export function listSeasonCards(seasons: readonly SeasonRecord[]): readonly {
+  readonly id: string;
+  readonly status: SeasonStatus;
+  readonly terminal: boolean;
+  readonly writable: boolean;
+}[] {
+  return listSeasonIds(seasons).map((id) => {
+    const row = seasons.find((s) => s.id === id)!;
+    return {
+      id,
+      status: row.status,
+      terminal: isSeasonTerminal(row.status),
+      writable: isScoreWritable(row.status),
+    };
+  });
+}
+
+/** L3 — true when season card is present. */
+export function seasonPresent(seasons: readonly SeasonRecord[], seasonId: string): boolean {
+  return seasonCard(seasons, seasonId).present;
+}

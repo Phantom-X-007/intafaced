@@ -465,3 +465,58 @@ export function drillIdentitySnapshot(run: DrillRun): {
 export function isFreshActiveDrill(run: DrillRun): boolean {
   return run.status === 'active' && completedStepCount(run) === 0;
 }
+
+/** L3 — drill board card. */
+export function drillBoardCard(run: DrillRun): {
+  readonly status: DrillRun['status'];
+  readonly workbookSlug: string;
+  readonly marketId: string;
+  readonly symbol: string;
+  readonly total: number;
+  readonly completed: number;
+  readonly remaining: number;
+  readonly percent: number;
+  readonly ratio: string;
+  readonly fills: number;
+  readonly fresh: boolean;
+  readonly complete: boolean;
+  readonly refused: boolean;
+} {
+  const snap = drillProgressSnapshot(run);
+  return {
+    status: snap.status,
+    workbookSlug: run.workbookSlug,
+    marketId: run.marketId,
+    symbol: run.symbol,
+    total: snap.total,
+    completed: snap.completed,
+    remaining: snap.remaining,
+    percent: snap.percent,
+    ratio: snap.ratio,
+    fills: snap.fills,
+    fresh: isFreshActiveDrill(run),
+    complete: isDrillComplete(run),
+    refused: isDrillRefused(run),
+  };
+}
+
+/** L3 — step progress bar fields only. */
+export function drillStepBar(run: DrillRun): {
+  readonly completed: number;
+  readonly remaining: number;
+  readonly total: number;
+  readonly percent: number;
+} {
+  const c = drillBoardCard(run);
+  return { completed: c.completed, remaining: c.remaining, total: c.total, percent: c.percent };
+}
+
+/** L3 — true when drill card is refused. */
+export function drillCardIsRefused(run: DrillRun): boolean {
+  return drillBoardCard(run).refused;
+}
+
+/** L3 — true when drill card is fresh active. */
+export function drillCardIsFresh(run: DrillRun): boolean {
+  return drillBoardCard(run).fresh;
+}

@@ -423,3 +423,47 @@ export function planChannelPartition(plan: readonly DeliveryDecision[]): {
     skip: channelsSkippedMuted(plan),
   };
 }
+
+/** L3 — fanout plan board card. */
+export function planBoardCard(plan: readonly DeliveryDecision[]): {
+  readonly total: number;
+  readonly send: number;
+  readonly hold: number;
+  readonly skip: number;
+  readonly empty: boolean;
+  readonly allSend: boolean;
+  readonly mixed: boolean;
+  readonly sendRatio: string | null;
+  readonly actions: readonly DeliveryDecision['action'][];
+} {
+  return {
+    total: planDecisionCount(plan),
+    send: planSendCount(plan),
+    hold: planHoldCount(plan),
+    skip: planSkipCount(plan),
+    empty: planIsEmpty(plan),
+    allSend: planIsAllSendNow(plan),
+    mixed: planIsMixed(plan),
+    sendRatio: planSendRatio(plan),
+    actions: planActionsPresent(plan),
+  };
+}
+
+/** L3 — true when plan board has sends. */
+export function planBoardHasSends(plan: readonly DeliveryDecision[]): boolean {
+  return planBoardCard(plan).send > 0;
+}
+
+/** L3 — true when plan board is empty. */
+export function planBoardIsEmpty(plan: readonly DeliveryDecision[]): boolean {
+  return planBoardCard(plan).empty;
+}
+
+/** L3 — channel lists for plan board. */
+export function planBoardChannels(plan: readonly DeliveryDecision[]): {
+  readonly send: readonly (MuteableChannel | 'inapp')[];
+  readonly hold: readonly MuteableChannel[];
+  readonly skip: readonly MuteableChannel[];
+} {
+  return planChannelPartition(plan);
+}

@@ -70,6 +70,10 @@ import {
   catalogMoneyCountsConsistent,
   catalogKindSnapshot,
   catalogKindCountsConsistent,
+  analyticsCatalogBoardCard,
+  analyticsCatalogBoardNonEmpty,
+  analyticsMoneyBoard,
+  analyticsKindBoard,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -344,5 +348,15 @@ describe('L3 wave34 catalog money/kind snapshots', () => {
     expect(catalogKindCountsConsistent()).toBe(true);
     expect(catalogMoneySnapshot().total).toBe(analyticsMetricCatalogSize());
     expect(catalogKindSnapshot().total).toBe(analyticsMetricCatalogSize());
+  });
+});
+
+describe('L3 wave36 analytics catalog board', () => {
+  it('board card + money/kind boards', () => {
+    expect(analyticsCatalogBoardNonEmpty()).toBe(true);
+    const c = analyticsCatalogBoardCard();
+    expect(c.total).toBe(analyticsMetricCatalogSize());
+    expect(analyticsMoneyBoard().total).toBe(c.total);
+    expect(analyticsKindBoard().total).toBe(c.total);
   });
 });

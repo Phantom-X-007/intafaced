@@ -575,4 +575,58 @@ export class MemoryAmbassadorProgramme {
     if (r === null) return null;
     return Math.round(Number(r) * 100);
   }
+
+  /** L3 — board row for one programme (null if missing). */
+  programmeRowSummary(userId: string): {
+    readonly userId: string;
+    readonly status: 'active' | 'frozen' | 'missing';
+    readonly isActive: boolean;
+    readonly isFrozen: boolean;
+  } {
+    const id = userId.trim();
+    if (!id) return { userId: '', status: 'missing', isActive: false, isFrozen: false };
+    if (this.isActiveAmbassador(id)) return { userId: id, status: 'active', isActive: true, isFrozen: false };
+    if (this.isAmbassadorFrozen(id)) return { userId: id, status: 'frozen', isActive: false, isFrozen: true };
+    return { userId: id, status: 'missing', isActive: false, isFrozen: false };
+  }
+
+  /** L3 — board rows for all users (sorted ids). Empty → []. */
+  listProgrammeRowSummaries(): readonly {
+    readonly userId: string;
+    readonly status: 'active' | 'frozen';
+    readonly isActive: boolean;
+    readonly isFrozen: boolean;
+  }[] {
+    return this.listAllUserIds().map((userId) => {
+      const frozen = this.isAmbassadorFrozen(userId);
+      return {
+        userId,
+        status: frozen ? ('frozen' as const) : ('active' as const),
+        isActive: !frozen,
+        isFrozen: frozen,
+      };
+    });
+  }
+
+  /** L3 — operator board headline counts. */
+  programmeBoardHeadline(): {
+    readonly total: number;
+    readonly active: number;
+    readonly frozen: number;
+    readonly empty: boolean;
+    readonly activeRatio: string | null;
+  } {
+    return {
+      total: this.totalCount(),
+      active: this.activeCount(),
+      frozen: this.frozenCount(),
+      empty: this.isEmpty(),
+      activeRatio: this.activeRatio(),
+    };
+  }
+
+  /** L3 — true when user summary is missing. */
+  isProgrammeMissing(userId: string): boolean {
+    return this.programmeRowSummary(userId).status === 'missing';
+  }
 }

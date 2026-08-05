@@ -76,6 +76,10 @@ import {
   podiumSnapshot,
   scoreExtremumConsistent,
   standingDepthSnapshot,
+  leaderboardHeadline,
+  userStandingCard,
+  topNStandingCards,
+  userStandingPresent,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -372,5 +376,16 @@ describe('L3 standings board helpers', () => {
     expect(scoreExtremumConsistent(rows)).toBe(true);
     expect(podiumSnapshot(rows).first).toBe('b');
     expect(standingDepthSnapshot(rows).hasPodium3).toBe(true);
+  });
+
+  it('L3 wave36 leaderboard headline + user card + topN', () => {
+    expect(leaderboardHeadline([]).empty).toBe(true);
+    expect(userStandingCard([], 'a').present).toBe(false);
+    expect(topNStandingCards([], 3)).toEqual([]);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    expect(leaderboardHeadline(rows).first).toBe('b');
+    expect(userStandingCard(rows, 'b').isTop).toBe(true);
+    expect(userStandingPresent(rows, 'a')).toBe(true);
+    expect(topNStandingCards(rows, 1)[0]!.userId).toBe('b');
   });
 });

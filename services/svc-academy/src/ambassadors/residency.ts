@@ -533,4 +533,42 @@ export class MemoryResidencyDesk {
     if (r === null) return null;
     return Math.round(Number(r) * 100);
   }
+
+  /** L3 — operator queue headline. */
+  residencyQueueHeadline(): {
+    readonly total: number;
+    readonly open: number;
+    readonly decided: number;
+    readonly accepted: number;
+    readonly rejected: number;
+    readonly withdrawn: number;
+    readonly empty: boolean;
+  } {
+    return {
+      total: this.applicationCount(),
+      open: this.openCount(),
+      decided: this.decidedApplicationCount(),
+      accepted: this.acceptedCount(),
+      rejected: this.rejectedCount(),
+      withdrawn: this.withdrawnCount(),
+      empty: this.applicationCount() === 0,
+    };
+  }
+
+  /** L3 — one application status for operator row (null if missing). */
+  applicationStatusOf(id: string): 'applied' | 'accepted' | 'rejected' | 'withdrawn' | null {
+    const row = this.rows.get(id);
+    return row?.status ?? null;
+  }
+
+  /** L3 — true when application id is open. Missing → false. */
+  isApplicationOpen(id: string): boolean {
+    return this.applicationStatusOf(id) === 'applied';
+  }
+
+  /** L3 — true when application id is decided (not open). Missing → false. */
+  isApplicationDecided(id: string): boolean {
+    const s = this.applicationStatusOf(id);
+    return s !== null && s !== 'applied';
+  }
 }

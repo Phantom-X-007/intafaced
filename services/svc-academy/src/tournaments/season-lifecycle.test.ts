@@ -64,6 +64,10 @@ import {
   seasonCountsConsistent,
   seasonOpenEndedPartition,
   seasonWritableSnapshot,
+  seasonBoardHeadline,
+  seasonCard,
+  listSeasonCards,
+  seasonPresent,
 } from './season-lifecycle.js';
 
 const base = {
@@ -511,5 +515,27 @@ describe('L3 wave34 season snapshots', () => {
     expect(seasonStatusSnapshot(rows).live).toBe(1);
     expect(seasonOpenEndedPartition(rows)).toEqual({ open: 2, ended: 1 });
     expect(seasonWritableSnapshot(rows).hasWritable).toBe(true);
+  });
+});
+
+describe('L3 wave36 season board cards', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('headline + card + list + present', () => {
+    expect(seasonBoardHeadline([]).empty).toBe(true);
+    expect(seasonCard([], 'x').present).toBe(false);
+    expect(listSeasonCards([])).toEqual([]);
+    const rows = [mk('a', 'live'), mk('b', 'ended')];
+    expect(seasonBoardHeadline(rows).live).toBe(1);
+    expect(seasonCard(rows, 'a').writable).toBe(true);
+    expect(listSeasonCards(rows)).toHaveLength(2);
+    expect(seasonPresent(rows, 'b')).toBe(true);
   });
 });

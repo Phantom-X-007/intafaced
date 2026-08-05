@@ -50,6 +50,10 @@ import {
   drillStepCountsConsistent,
   drillIdentitySnapshot,
   isFreshActiveDrill,
+  drillBoardCard,
+  drillStepBar,
+  drillCardIsRefused,
+  drillCardIsFresh,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -344,5 +348,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(drillStepCountsConsistent(started.run)).toBe(true);
     expect(drillIdentitySnapshot(started.run).marketId).toBe('m-w34');
     expect(isFreshActiveDrill(started.run)).toBe(true);
+  });
+
+  it('L3 wave36 drill board card + step bar', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w36', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(drillBoardCard(started.run).fresh).toBe(true);
+    expect(drillCardIsFresh(started.run)).toBe(true);
+    expect(drillCardIsRefused(started.run)).toBe(false);
+    expect(drillStepBar(started.run).percent).toBe(0);
   });
 });
