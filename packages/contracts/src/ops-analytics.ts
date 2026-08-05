@@ -228,6 +228,11 @@ export function metricMoneyPartition(): { readonly money: number; readonly nonMo
   return { money, nonMoney, total: money + nonMoney };
 }
 
+/** L3 — true when v0 catalog has zero metrics (should not happen on tip). */
+export function isMetricCatalogEmpty(): boolean {
+  return analyticsMetricCatalogSize() === 0;
+}
+
 /**
  * L3 — sorted metric ids that touch a source. Unknown source key still returns [] via filter.
  */

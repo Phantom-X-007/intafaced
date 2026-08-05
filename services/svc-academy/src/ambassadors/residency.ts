@@ -223,4 +223,14 @@ export class MemoryResidencyDesk {
       .map((r) => r.id)
       .sort();
   }
+
+  /**
+   * L3 — sorted accepted application ids. Empty → [] (never invent).
+   */
+  acceptedApplicationIds(): readonly string[] {
+    return [...this.rows.values()]
+      .filter((r) => r.status === 'accepted')
+      .map((r) => r.id)
+      .sort();
+  }
 }

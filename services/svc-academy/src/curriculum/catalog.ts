@@ -529,6 +529,14 @@ export function isWorkbookSlug(slug: string): boolean {
 }
 
 /**
+ * L3 — true when slug exists and is a playbook. Unknown/non-playbook → false.
+ */
+export function isPlaybookSlug(slug: string): boolean {
+  const item = BY_SLUG.get(slug.trim());
+  return item?.kind === 'playbook';
+}
+
+/**
  * L3 — sorted slugs for one kind. Empty kind → [].
  */
 export function listCurriculumSlugsByKind(kind: CurriculumKind): readonly string[] {

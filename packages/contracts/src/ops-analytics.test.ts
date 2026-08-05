@@ -16,6 +16,7 @@ import {
   listNonMoneyMetricIds,
   mayLabelLive,
   metricById,
+  isMetricCatalogEmpty,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -140,5 +141,8 @@ describe('L3 wave13 analytics source catalog helpers', () => {
     expect(p.total).toBe(p.money + p.nonMoney);
     expect(p.total).toBe(analyticsMetricCatalogSize());
     expect(p.money).toBeGreaterThan(0);
+  });
+  it('L3 isMetricCatalogEmpty false on tip catalog', () => {
+    expect(isMetricCatalogEmpty()).toBe(false);
   });
 });

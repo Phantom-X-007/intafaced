@@ -9,6 +9,7 @@ import {
   allMuteableMuted,
   hasAnyMute,
   listMutedChannels,
+  isFullyUnmuted,
 } from './mute.js';
 
 describe('isChannelMuted — critical never silenced', () => {
@@ -70,5 +71,10 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     expect(hasAnyMute(EMPTY_MUTE_PREFS)).toBe(false);
     const m = applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'email', muted: true });
     expect(hasAnyMute(m)).toBe(true);
+  });
+  it('L3 isFullyUnmuted true when empty', () => {
+    expect(isFullyUnmuted(EMPTY_MUTE_PREFS)).toBe(true);
+    const m = applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'sms', muted: true });
+    expect(isFullyUnmuted(m)).toBe(false);
   });
 });

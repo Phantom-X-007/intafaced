@@ -257,4 +257,10 @@ export class MemoryAmbassadorProgramme {
   frozenCount(): number {
     return this.list('frozen').length;
   }
+
+  /** L3 — true when stored row is frozen. Missing → false (never invent). */
+  isAmbassadorFrozen(userId: string): boolean {
+    const row = this.get(userId.trim());
+    return row?.status === 'frozen';
+  }
 }

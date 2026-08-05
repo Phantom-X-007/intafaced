@@ -231,3 +231,13 @@ export function minScore(rows: readonly StandingRecord[]): number | null {
 export function listStandingUserIds(rows: readonly StandingRecord[]): readonly string[] {
   return [...new Set(rows.map((r) => r.userId))].sort();
 }
+
+/**
+ * L3 — arithmetic mean score. Empty → null (never invent 0).
+ */
+export function averageScore(rows: readonly StandingRecord[]): number | null {
+  if (rows.length === 0) return null;
+  let sum = 0;
+  for (const r of rows) sum += r.score;
+  return sum / rows.length;
+}
