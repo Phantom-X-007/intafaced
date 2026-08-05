@@ -320,3 +320,23 @@ export function lastSendChannel(plan: readonly DeliveryDecision[]): (MuteableCha
   const ch = channelsToSendNow(plan);
   return ch.length ? ch[ch.length - 1]! : null;
 }
+
+/** L3 — plan length label. */
+export function planDecisionCountLabel(plan: readonly DeliveryDecision[]): string {
+  return String(planDecisionCount(plan));
+}
+
+/** L3 — send count label. */
+export function planSendCountLabel(plan: readonly DeliveryDecision[]): string {
+  return String(planSendCount(plan));
+}
+
+/** L3 — hold count label. */
+export function planHoldCountLabel(plan: readonly DeliveryDecision[]): string {
+  return String(planHoldCount(plan));
+}
+
+/** L3 — skip count label. */
+export function planSkipCountLabel(plan: readonly DeliveryDecision[]): string {
+  return String(planSkipCount(plan));
+}

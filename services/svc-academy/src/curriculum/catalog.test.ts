@@ -49,6 +49,10 @@ import {
   hasAtLeastSpineItems,
   listLessonTitles,
   listPlaybookTitles,
+  spineSizeLabel,
+  lessonSlugsJoined,
+  playbookSlugsJoined,
+  listWorkbookTitles,
 } from './catalog.js';
 
 /**
@@ -283,5 +287,12 @@ describe('curriculum catalog', () => {
     expect(hasAtLeastSpineItems(1)).toBe(true);
     expect(listLessonTitles().length).toBe(lessonCount());
     expect(listPlaybookTitles().length).toBe(playbookCount());
+  });
+
+  it('L3 wave31 spine label + slug joins + workbook titles', () => {
+    expect(spineSizeLabel()).toBe(String(curriculumSpineSize()));
+    expect(lessonSlugsJoined().split(',').filter(Boolean).length).toBe(lessonCount());
+    expect(playbookSlugsJoined().split(',').filter(Boolean).length).toBe(playbookCount());
+    expect(listWorkbookTitles().length).toBe(workbookCount());
   });
 });

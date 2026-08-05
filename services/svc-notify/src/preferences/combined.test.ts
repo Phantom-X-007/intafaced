@@ -44,6 +44,10 @@ import {
   planSendMinusHold,
   firstSendChannel,
   lastSendChannel,
+  planDecisionCountLabel,
+  planSendCountLabel,
+  planHoldCountLabel,
+  planSkipCountLabel,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -250,5 +254,15 @@ describe('notify L3 combined mute + digest', () => {
     expect(planSendMinusHold(plan)).toBe(planSendCount(plan));
     expect(firstSendChannel(plan)).toBe('inapp');
     expect(lastSendChannel(plan)).toBe('email');
+  });
+
+  it('L3 wave31 plan count labels', () => {
+    expect(planDecisionCountLabel([])).toBe('0');
+    expect(planSendCountLabel([])).toBe('0');
+    expect(planHoldCountLabel([])).toBe('0');
+    expect(planSkipCountLabel([])).toBe('0');
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planDecisionCountLabel(plan)).toBe(String(plan.length));
+    expect(planSendCountLabel(plan)).toBe(String(planSendCount(plan)));
   });
 });

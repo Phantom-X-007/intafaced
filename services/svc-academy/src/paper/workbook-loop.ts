@@ -360,3 +360,23 @@ export function remainingStepRatio(run: DrillRun): string {
   if (total === 0) return '0.0000';
   return (remainingStepCount(run) / total).toFixed(4);
 }
+
+/** L3 — step count label. */
+export function totalStepCountLabel(run: DrillRun): string {
+  return String(totalStepCount(run));
+}
+
+/** L3 — completed count label. */
+export function completedStepCountLabel(run: DrillRun): string {
+  return String(completedStepCount(run));
+}
+
+/** L3 — remaining count label. */
+export function remainingStepCountLabel(run: DrillRun): string {
+  return String(remainingStepCount(run));
+}
+
+/** L3 — fill ref count label. */
+export function fillRefCountLabel(run: DrillRun): string {
+  return String(fillRefCount(run));
+}

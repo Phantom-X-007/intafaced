@@ -529,3 +529,29 @@ export function midRankUser(rows: readonly StandingRecord[]): string | null {
 export function totalScoreSum(rows: readonly StandingRecord[]): number {
   return rows.reduce((a, r) => a + r.score, 0);
 }
+
+/** L3 — standing count label. */
+export function standingCountLabel(rows: readonly StandingRecord[]): string {
+  return String(standingCount(rows));
+}
+
+/** L3 — max score label or empty when missing. */
+export function maxScoreLabel(rows: readonly StandingRecord[]): string {
+  const m = maxScore(rows);
+  return m === null ? '' : String(m);
+}
+
+/** L3 — min score label or empty when missing. */
+export function minScoreLabel(rows: readonly StandingRecord[]): string {
+  const m = minScore(rows);
+  return m === null ? '' : String(m);
+}
+
+/**
+ * L3 — comma-joined user ids in rank order. Empty → "".
+ */
+export function rankedUserIdsJoined(rows: readonly StandingRecord[]): string {
+  return rankStandings(rows)
+    .map((r) => r.userId)
+    .join(',');
+}

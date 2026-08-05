@@ -434,4 +434,26 @@ export class MemoryResidencyDesk {
   openMinusDecided(): number {
     return this.openCount() - this.decidedApplicationCount();
   }
+
+  /** L3 — application count label. */
+  applicationCountLabel(): string {
+    return String(this.applicationCount());
+  }
+
+  /** L3 — open count label. */
+  openCountLabel(): string {
+    return String(this.openCount());
+  }
+
+  /** L3 — true when open ratio is at least half. Empty → false. */
+  isMajorityOpenOrTie(): boolean {
+    const r = this.openApplicationRatio();
+    if (r === null) return false;
+    return Number(r) >= 0.5;
+  }
+
+  /** L3 — comma-joined open application ids. Empty → "". */
+  openApplicationIdsJoined(): string {
+    return this.openApplicationIds().join(',');
+  }
 }
