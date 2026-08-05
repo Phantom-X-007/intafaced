@@ -78,4 +78,13 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
     const r = rankFixtures([row({ marketId: 'X', last: 'not-a-number', volume24h: '1e999' })], { now: NOW });
     expect(r.status).toBe('unavailable');
   });
+
+  it('Stage-2: market plane dark → refuse invent signals', () => {
+    const r = rankFixtures([row({ marketId: 'BTC-USD' })], { now: NOW, marketPlane: 'dark' });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.scanner.unavailable',
+      reason: 'market_plane_dark',
+    });
+  });
 });

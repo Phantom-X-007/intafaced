@@ -64,10 +64,13 @@ export type IntelEmpty = {
 export type IntelUnavailable = {
   readonly status: 'unavailable';
   readonly userMessageKey: 'agents.copy_intel.unavailable';
-  readonly reason: 'no_data' | 'invalid_window';
+  readonly reason: 'no_data' | 'invalid_window' | 'copy_plane_dark';
 };
 
 export type IntelResult = IntelOk | IntelEmpty | IntelUnavailable;
+
+/** Stage-2: trade.copy product plane. Dark → refuse invent PnL. */
+export type CopyPlaneState = 'live' | 'dark';
 
 function parseDecimal(s: string): number | null {
   if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
@@ -87,10 +90,13 @@ function winRate(closed: number, winning: number): string | null {
  */
 export function buildLeaderStats(
   fixtures: readonly LeaderPerformanceFixture[],
-  options: { now?: Date; idPrefix?: string } = {},
+  options: { now?: Date; idPrefix?: string; copyPlane?: CopyPlaneState } = {},
 ): IntelResult {
   const now = options.now ?? new Date();
   const idPrefix = options.idPrefix ?? 'ci';
+  if (options.copyPlane === 'dark') {
+    return { status: 'unavailable', userMessageKey: 'agents.copy_intel.unavailable', reason: 'copy_plane_dark' };
+  }
 
   if (fixtures.length === 0) {
     return { status: 'empty', userMessageKey: 'agents.copy_intel.empty' };
