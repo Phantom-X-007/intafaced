@@ -639,3 +639,25 @@ export function planExportHasHeader(text: string): boolean {
 export function planExportRoundTripOk(plan: readonly DeliveryDecision[]): boolean {
   return planExportLineCount(plan) === 1 + countPlanExportDataLines(planExportText(plan));
 }
+
+/** L3 — one-line plan status. */
+export function planStatusLine(plan: readonly DeliveryDecision[]): string {
+  const c = planBoardCard(plan);
+  return `total=${c.total} send=${c.send} hold=${c.hold} skip=${c.skip}`;
+}
+
+/** L3 — true when plan status is empty. */
+export function planStatusLineIsEmpty(plan: readonly DeliveryDecision[]): boolean {
+  return planStatusLine(plan).startsWith('total=0');
+}
+
+/** L3 — detailed plan status. */
+export function planStatusLineDetailed(plan: readonly DeliveryDecision[]): string {
+  const c = planBoardCard(plan);
+  return `total=${c.total} send=${c.send} hold=${c.hold} skip=${c.skip} mixed=${c.mixed ? '1' : '0'} allSend=${c.allSend ? '1' : '0'}`;
+}
+
+/** L3 — token count on detailed plan status. */
+export function planStatusLineTokenCount(plan: readonly DeliveryDecision[]): number {
+  return planStatusLineDetailed(plan).split(/\s+/).filter(Boolean).length;
+}

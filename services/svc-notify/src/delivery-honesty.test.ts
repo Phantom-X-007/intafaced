@@ -82,6 +82,10 @@ import {
   countFanoutExportDataLines,
   fanoutExportHasHeader,
   fanoutExportRoundTripOk,
+  fanoutStatusLine,
+  fanoutStatusLineIsEmpty,
+  fanoutStatusLineDetailed,
+  fanoutStatusLineTokenCount,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -439,5 +443,16 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutExportHasHeader(text)).toBe(true);
     expect(countFanoutExportDataLines(text)).toBe(1);
     expect(fanoutExportRoundTripOk(attempts)).toBe(true);
+  });
+
+  it('L3 wave44 fanout status lines', () => {
+    expect(fanoutStatusLineIsEmpty([])).toBe(true);
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    expect(fanoutStatusLine(attempts)).toContain('accepted=1');
+    expect(fanoutStatusLineDetailed(attempts)).toContain('mixed=1');
+    expect(fanoutStatusLineTokenCount(attempts)).toBe(6);
   });
 });

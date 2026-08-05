@@ -98,6 +98,10 @@ import {
   countMetricsExportDataLines,
   metricsExportHasHeader,
   metricsExportRoundTripOk,
+  analyticsStatusLine,
+  analyticsStatusLineIsEmpty,
+  analyticsStatusLineDetailed,
+  analyticsStatusLineTokenCount,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -445,5 +449,14 @@ describe('L3 wave42 metrics export parse + round-trip', () => {
     expect(metricsExportHasHeader(text)).toBe(true);
     expect(countMetricsExportDataLines(text)).toBe(analyticsMetricCatalogSize());
     expect(metricsExportRoundTripOk()).toBe(true);
+  });
+});
+
+describe('L3 wave44 analytics status lines', () => {
+  it('status lines non-empty on tip', () => {
+    expect(analyticsStatusLineIsEmpty()).toBe(false);
+    expect(analyticsStatusLine()).toContain('total=');
+    expect(analyticsStatusLineDetailed()).toContain('sources=');
+    expect(analyticsStatusLineTokenCount()).toBe(6);
   });
 });

@@ -79,3 +79,58 @@ export function fanoutReadiness(input: { requiredRaw: string | undefined; appEnv
 export function requiredChannelCount(config: RequiredChannelsConfig): number {
   return config.mode === 'none' ? 0 : config.channels.length;
 }
+
+/** L3 — all out-of-app channels stable order. */
+export function allOutOfAppChannels(): readonly OutOfAppChannel[] {
+  return ['email', 'push', 'sms'];
+}
+
+/** L3 — true when config mode is none. */
+export function isRequiredChannelsNone(config: RequiredChannelsConfig): boolean {
+  return config.mode === 'none';
+}
+
+/** L3 — true when config mode is list. */
+export function isRequiredChannelsList(config: RequiredChannelsConfig): boolean {
+  return config.mode === 'list';
+}
+
+/** L3 — channels present as true. Empty → []. */
+export function presentOutOfAppChannels(present: CredentialPresence): readonly OutOfAppChannel[] {
+  return allOutOfAppChannels().filter((c) => present[c] === true);
+}
+
+/** L3 — channels missing credentials (false). Empty → []. */
+export function absentOutOfAppChannels(present: CredentialPresence): readonly OutOfAppChannel[] {
+  return allOutOfAppChannels().filter((c) => present[c] !== true);
+}
+
+/** L3 — readiness board card. */
+export function fanoutReadinessBoardCard(input: { requiredRaw: string | undefined; appEnv: string; present: CredentialPresence }): {
+  readonly ready: boolean;
+  readonly missing: readonly OutOfAppChannel[];
+  readonly missingCount: number;
+  readonly presentCount: number;
+} {
+  const r = fanoutReadiness(input);
+  const presentCount = presentOutOfAppChannels(input.present).length;
+  if (r.ok) {
+    return { ready: true, missing: [], missingCount: 0, presentCount };
+  }
+  return {
+    ready: false,
+    missing: r.missing,
+    missingCount: r.missing.length,
+    presentCount,
+  };
+}
+
+/** L3 — export lines channel,present(0|1). */
+export function credentialPresenceExportLines(present: CredentialPresence): readonly string[] {
+  return allOutOfAppChannels().map((c) => `${c},${present[c] ? '1' : '0'}`);
+}
+
+/** L3 — credential presence export header. */
+export function credentialPresenceExportHeader(): string {
+  return 'channel,present';
+}

@@ -655,3 +655,25 @@ export function fanoutExportHasHeader(text: string): boolean {
 export function fanoutExportRoundTripOk(attempts: readonly ChannelDeliveryAttempt[]): boolean {
   return fanoutExportLineCount(attempts) === 1 + countFanoutExportDataLines(fanoutExportText(attempts));
 }
+
+/** L3 — one-line fanout status. */
+export function fanoutStatusLine(attempts: readonly ChannelDeliveryAttempt[]): string {
+  const c = fanoutBoardCard(attempts);
+  return `total=${c.total} accepted=${c.accepted} refused=${c.refused} failed=${c.failed}`;
+}
+
+/** L3 — true when fanout status is empty. */
+export function fanoutStatusLineIsEmpty(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return fanoutStatusLine(attempts).startsWith('total=0');
+}
+
+/** L3 — detailed fanout status. */
+export function fanoutStatusLineDetailed(attempts: readonly ChannelDeliveryAttempt[]): string {
+  const c = fanoutBoardCard(attempts);
+  return `total=${c.total} accepted=${c.accepted} refused=${c.refused} failed=${c.failed} mixed=${c.mixed ? '1' : '0'} fullOk=${c.fullyAccepted ? '1' : '0'}`;
+}
+
+/** L3 — token count on detailed fanout status. */
+export function fanoutStatusLineTokenCount(attempts: readonly ChannelDeliveryAttempt[]): number {
+  return fanoutStatusLineDetailed(attempts).split(/\s+/).filter(Boolean).length;
+}

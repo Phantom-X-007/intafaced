@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { fanoutReadiness, missingRequiredCredentials, parseRequiredChannels, requiredChannelCount } from './required-channels.js';
+import {
+  fanoutReadiness,
+  missingRequiredCredentials,
+  parseRequiredChannels,
+  requiredChannelCount,
+  allOutOfAppChannels,
+  isRequiredChannelsNone,
+  isRequiredChannelsList,
+  presentOutOfAppChannels,
+  absentOutOfAppChannels,
+  fanoutReadinessBoardCard,
+  credentialPresenceExportLines,
+  credentialPresenceExportHeader,
+} from './required-channels.js';
 
 describe('notify L3 required channels honesty', () => {
   it('prod refuses empty declaration', () => {
@@ -37,5 +50,19 @@ describe('notify L3 required channels honesty', () => {
   it('L3 requiredChannelCount is zero for mode none', () => {
     expect(requiredChannelCount({ mode: 'none' })).toBe(0);
     expect(requiredChannelCount({ mode: 'list', channels: ['email', 'push'] })).toBe(2);
+  });
+
+  it('L3 wave44 required channels board helpers', () => {
+    expect(allOutOfAppChannels()).toEqual(['email', 'push', 'sms']);
+    expect(isRequiredChannelsNone({ mode: 'none' })).toBe(true);
+    expect(isRequiredChannelsList({ mode: 'list', channels: ['email'] })).toBe(true);
+    const present = { email: true, push: false, sms: false };
+    expect(presentOutOfAppChannels(present)).toEqual(['email']);
+    expect(absentOutOfAppChannels(present)).toEqual(['push', 'sms']);
+    expect(credentialPresenceExportHeader()).toBe('channel,present');
+    expect(credentialPresenceExportLines(present)).toContain('email,1');
+    const card = fanoutReadinessBoardCard({ requiredRaw: undefined, appEnv: 'test', present });
+    expect(typeof card.ready).toBe('boolean');
+    expect(card.presentCount).toBe(1);
   });
 });
