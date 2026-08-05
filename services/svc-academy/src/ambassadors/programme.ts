@@ -369,4 +369,32 @@ export class MemoryAmbassadorProgramme {
     if (this.frozenCount() > 0) out.push('frozen');
     return out;
   }
+
+  /**
+   * L3 — true when programme is fully frozen (no active). Empty → false (not invent all-frozen).
+   */
+  isFullyFrozen(): boolean {
+    return this.totalCount() > 0 && this.activeCount() === 0;
+  }
+
+  /**
+   * L3 — true when programme is fully active (no frozen). Empty → false.
+   */
+  isFullyActive(): boolean {
+    return this.totalCount() > 0 && this.frozenCount() === 0;
+  }
+
+  /**
+   * L3 — active/total as fixed 4dp (alias surface for operator UI). Empty → null.
+   */
+  programmeActiveRatio(): string | null {
+    return this.activeRatio();
+  }
+
+  /**
+   * L3 — partitioned active then frozen user ids. Empty partitions → [].
+   */
+  listPartitionedUserIds(): { readonly active: readonly string[]; readonly frozen: readonly string[] } {
+    return { active: this.listActiveUserIds(), frozen: this.listFrozenUserIds() };
+  }
 }

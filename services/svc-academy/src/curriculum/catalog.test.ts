@@ -29,6 +29,10 @@ import {
   listWorkbookSlugs,
   kindCountWithContent,
   emptyPathCount,
+  listCurriculumTitlesByKind,
+  hasPlaybook,
+  hasWorkbook,
+  hasLesson,
 } from './catalog.js';
 
 /**
@@ -228,5 +232,12 @@ describe('curriculum catalog', () => {
     expect(listWorkbookSlugs().length).toBe(workbookCount());
     expect(kindCountWithContent()).toBeGreaterThan(0);
     expect(emptyPathCount()).toBe(listEmptyCurriculumPaths().length);
+  });
+
+  it('L3 wave26 titles by kind + has playbook/workbook/lesson', () => {
+    expect(listCurriculumTitlesByKind('playbook').length).toBe(playbookCount());
+    expect(hasPlaybook()).toBe(playbookCount() > 0);
+    expect(hasWorkbook()).toBe(workbookCount() > 0);
+    expect(hasLesson()).toBe(lessonCount() > 0);
   });
 });

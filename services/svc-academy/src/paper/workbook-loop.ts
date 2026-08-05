@@ -249,3 +249,25 @@ export function totalStepCount(run: DrillRun): number {
 export function isDrillInProgress(run: DrillRun): boolean {
   return run.status === 'active' && remainingStepIds(run).length > 0;
 }
+
+/** L3 — true when drill status is complete. */
+export function isDrillStatusComplete(run: DrillRun): boolean {
+  return run.status === 'complete';
+}
+
+/** L3 — true when drill status is active. */
+export function isDrillStatusActive(run: DrillRun): boolean {
+  return run.status === 'active';
+}
+
+/**
+ * L3 — completed/total as fixed 4dp. Refused → "0.0000". Zero steps → "0.0000".
+ */
+export function drillCompletionRatio(run: DrillRun): string {
+  return drillProgress(run).ratio;
+}
+
+/** L3 — market id on the run (never invent). */
+export function drillMarketId(run: DrillRun): string {
+  return run.marketId;
+}

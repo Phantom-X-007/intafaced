@@ -18,6 +18,10 @@ import {
   fanoutFailureRatio,
   fanoutIsEmpty,
   fanoutAttemptCount,
+  fanoutRefusalRatio,
+  fanoutHasFailure,
+  fanoutIsMixed,
+  fanoutOutcomesPresent,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -163,5 +167,21 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutFailureRatio(attempts)).toBe('0.3333');
     expect(fanoutIsEmpty(attempts)).toBe(false);
     expect(fanoutAttemptCount(attempts)).toBe(3);
+  });
+
+  it('L3 wave26 refusal ratio + mixed + outcomes present', () => {
+    expect(fanoutRefusalRatio([])).toBeNull();
+    expect(fanoutHasFailure([])).toBe(false);
+    expect(fanoutIsMixed([])).toBe(false);
+    expect(fanoutOutcomesPresent([])).toEqual([]);
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'timeout' },
+      { channel: 'sms' as const, outcome: 'refused' as const, code: 'no_cred' },
+    ];
+    expect(fanoutRefusalRatio(attempts)).toBe('0.3333');
+    expect(fanoutHasFailure(attempts)).toBe(true);
+    expect(fanoutIsMixed(attempts)).toBe(true);
+    expect(fanoutOutcomesPresent(attempts)).toEqual(['accepted', 'refused', 'failed']);
   });
 });
