@@ -19,6 +19,7 @@ import {
   isLessonSlug,
   isSpineSlug,
   hasCurriculumPath,
+  spineItemCount,
 } from './catalog.js';
 
 /**
@@ -189,5 +190,10 @@ describe('curriculum catalog', () => {
 
   it('L3 hasCurriculumPath for foundations', () => {
     expect(hasCurriculumPath('foundations')).toBe(true);
+  });
+
+  it('L3 spineItemCount matches inventory total', () => {
+    expect(spineItemCount()).toBe(inventoryCurriculum().total);
+    expect(spineItemCount()).toBeGreaterThan(0);
   });
 });

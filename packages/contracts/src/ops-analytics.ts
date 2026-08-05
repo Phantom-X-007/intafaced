@@ -282,3 +282,12 @@ export function moneyMetricRatio(): string | null {
   if (part.total === 0) return null;
   return (part.money / part.total).toFixed(4);
 }
+
+/**
+ * L3 — non-money/total as fixed 4dp string. Empty catalog → null.
+ */
+export function nonMoneyMetricRatio(): string | null {
+  const part = metricMoneyPartition();
+  if (part.total === 0) return null;
+  return (part.nonMoney / part.total).toFixed(4);
+}

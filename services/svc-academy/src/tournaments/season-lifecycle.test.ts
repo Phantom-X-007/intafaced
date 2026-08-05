@@ -7,6 +7,7 @@ import {
   isSeasonTerminal,
   listEndedSeasons,
   listFrozenSeasonIds,
+  frozenSeasonCount,
   listFrozenSeasons,
   listLiveSeasonIds,
   listLiveSeasons,
@@ -213,5 +214,14 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
       { ...base, id: 'c', status: 'ended' as const },
     ];
     expect(liveSeasonCount(seasons)).toBe(2);
+  });
+
+  it('L3 frozenSeasonCount without invent', () => {
+    expect(frozenSeasonCount([])).toBe(0);
+    const seasons = [
+      { ...base, id: 'a', status: 'frozen' as const },
+      { ...base, id: 'b', status: 'live' as const },
+    ];
+    expect(frozenSeasonCount(seasons)).toBe(1);
   });
 });

@@ -135,3 +135,8 @@ export function planIsAllSendNow(plan: readonly DeliveryDecision[]): boolean {
 export function planIsEmpty(plan: readonly DeliveryDecision[]): boolean {
   return plan.length === 0;
 }
+
+/** L3 — true when any decision is hold_digest. Empty → false. */
+export function planHasHolds(plan: readonly DeliveryDecision[]): boolean {
+  return countHoldingChannels(plan) > 0;
+}

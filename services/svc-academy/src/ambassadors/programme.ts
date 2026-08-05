@@ -298,4 +298,11 @@ export class MemoryAmbassadorProgramme {
   frozenProgrammeIds(): readonly string[] {
     return this.listFrozenUserIds();
   }
+
+  /**
+   * L3 — alias of isActiveAmbassador for operator copy.
+   */
+  isProgrammeActive(userId: string): boolean {
+    return this.isActiveAmbassador(userId);
+  }
 }

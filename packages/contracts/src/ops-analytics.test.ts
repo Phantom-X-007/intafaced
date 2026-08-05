@@ -23,6 +23,7 @@ import {
   multiSourceMetricCount,
   singleSourceMetricCount,
   moneyMetricRatio,
+  nonMoneyMetricRatio,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -175,6 +176,12 @@ describe('L3 wave16 analytics money/source helpers', () => {
 
   it('L3 moneyMetricRatio fixed 4dp on tip catalog', () => {
     const r = moneyMetricRatio();
+    expect(r).not.toBeNull();
+    expect(r).toMatch(/^\d+\.\d{4}$/);
+  });
+
+  it('L3 nonMoneyMetricRatio fixed 4dp', () => {
+    const r = nonMoneyMetricRatio();
     expect(r).not.toBeNull();
     expect(r).toMatch(/^\d+\.\d{4}$/);
   });

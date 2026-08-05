@@ -286,3 +286,11 @@ export function rankOfUser(rows: readonly StandingRecord[], userId: string): num
 export function isTopScorer(rows: readonly StandingRecord[], userId: string): boolean {
   return rankOfUser(rows, userId) === 1;
 }
+
+/**
+ * L3 — user id at rank 2. Missing podium → null (never invent second place).
+ */
+export function secondPlaceUser(rows: readonly StandingRecord[]): string | null {
+  const ranked = rankStandings(rows);
+  return ranked[1]?.userId ?? null;
+}
