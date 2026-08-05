@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** Stage-1 money-tool refuse guardrail · PR #758
-**tip:** 344011e2
+**proof:** L3 Stage-2 · feat/l3-support-agent-affiliates
+**tip:** pending-merge
 **updated:** 2026-08-05
 
-Stage-1 Class N landed on main. Mountain residual remains for later stages / Class M where money applies — not free re-implement of Stage-1.
+L3 factory. No L1 invent. Payout remains Class M residual for affiliates.

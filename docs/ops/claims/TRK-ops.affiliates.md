@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** Stage-2 / Slice B Class N · feat/stage2-analytics-affiliates-crew
+**proof:** L3 Stage-2 · feat/l3-support-agent-affiliates
 **tip:** pending-merge
 **updated:** 2026-08-05
 
-Slice B landed. Further residual (warehouse process / payout Class M) remains — not free re-Stage-1.
+L3 factory. No L1 invent. Payout remains Class M residual for affiliates.
