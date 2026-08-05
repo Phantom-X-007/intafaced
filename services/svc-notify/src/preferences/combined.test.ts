@@ -76,6 +76,10 @@ import {
   planSendCountDelta,
   plansSameSize,
   plansSameActionHistogram,
+  safePagePlanDecisions,
+  clampPlanPageIndex,
+  planDecisionsAtPage,
+  isValidPlanPage,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -358,5 +362,15 @@ describe('notify L3 combined mute + digest', () => {
     expect(planSendCountDelta(left, right)).toBe(1);
     expect(plansSameSize(left, left)).toBe(true);
     expect(plansSameActionHistogram(left, left)).toBe(true);
+  });
+
+  it('L3 wave40 plan safe paging', () => {
+    expect(safePagePlanDecisions([], 0, 1)).toEqual([]);
+    expect(isValidPlanPage([], 0, 1)).toBe(false);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email', 'sms'], 'critical');
+    expect(safePagePlanDecisions(plan, 0, 2)).toHaveLength(2);
+    expect(clampPlanPageIndex(plan, 99, 2)).toBe(1);
+    expect(planDecisionsAtPage(plan, 0, 2)).toHaveLength(2);
+    expect(isValidPlanPage(plan, 0, 2)).toBe(true);
   });
 });

@@ -486,4 +486,20 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.activeIdsOnlyHere([])).toEqual([u1, u2].sort());
     expect(desk.programmeSameSize(2)).toBe(true);
   });
+
+  it('L3 wave40 safe page + clamp page index', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.safePageProgrammeUserIds(-1, 5)).toEqual([]);
+    expect(desk.isValidProgrammePage(0, 1)).toBe(false);
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.appoint({ userId: u2, appointedBy: op });
+    expect(desk.safePageProgrammeUserIds(0, 1)).toHaveLength(1);
+    expect(desk.clampProgrammePageIndex(99, 1)).toBe(1);
+    expect(desk.programmeUserIdsAtPage(0, 1)).toHaveLength(1);
+    expect(desk.isValidProgrammePage(0, 1)).toBe(true);
+    expect(desk.isValidProgrammePage(5, 1)).toBe(false);
+  });
 });

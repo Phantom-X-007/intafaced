@@ -595,3 +595,37 @@ export function drillPercentDelta(left: DrillRun, right: DrillRun): number {
 export function drillsSameStatus(left: DrillRun, right: DrillRun): boolean {
   return left.status === right.status;
 }
+
+/** L3 — safe page remaining steps with clamped bounds. */
+export function safePageRemainingStepIds(run: DrillRun, offset: number, limit: number): readonly string[] {
+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+  const all = remainingStepIds(run);
+  const o = Math.max(0, Math.min(all.length, Math.floor(offset)));
+  const l = Math.max(0, Math.min(all.length - o, Math.floor(limit)));
+  return all.slice(o, o + l);
+}
+
+/** L3 — clamp remaining-steps page index. */
+export function clampRemainingStepsPageIndex(run: DrillRun, pageIndex: number, pageSize: number): number {
+  const pages = remainingStepsPageCount(run, pageSize);
+  if (pages === 0) return 0;
+  if (!Number.isFinite(pageIndex)) return 0;
+  return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+}
+
+/** L3 — remaining step ids at clamped page. */
+export function remainingStepIdsAtPage(run: DrillRun, pageIndex: number, pageSize: number): readonly string[] {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+  const idx = clampRemainingStepsPageIndex(run, pageIndex, pageSize);
+  const size = Math.floor(pageSize);
+  return safePageRemainingStepIds(run, idx * size, size);
+}
+
+/** L3 — true when remaining-steps page is valid. */
+export function isValidRemainingStepsPage(run: DrillRun, pageIndex: number, pageSize: number): boolean {
+  const pages = remainingStepsPageCount(run, pageSize);
+  if (pages === 0) return false;
+  if (!Number.isFinite(pageIndex)) return false;
+  const i = Math.floor(pageIndex);
+  return i >= 0 && i < pages;
+}

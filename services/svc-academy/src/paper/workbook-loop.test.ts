@@ -66,6 +66,10 @@ import {
   completedStepsOnlyLeft,
   drillPercentDelta,
   drillsSameStatus,
+  safePageRemainingStepIds,
+  clampRemainingStepsPageIndex,
+  remainingStepIdsAtPage,
+  isValidRemainingStepsPage,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -424,5 +428,18 @@ describe('paper Stage-2 workbook loop', () => {
     if (!a2.ok) return;
     expect(completedStepsOnlyLeft(a2.run, b.run)).toContain(step);
     expect(remainingStepsOnlyLeft(b.run, a2.run)).toContain(step);
+  });
+
+  it('L3 wave40 drill remaining safe paging', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w40', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(safePageRemainingStepIds(started.run, 0, 1)).toHaveLength(1);
+    expect(clampRemainingStepsPageIndex(started.run, 99, 1)).toBe(started.run.steps.length - 1);
+    expect(remainingStepIdsAtPage(started.run, 0, 1)).toHaveLength(1);
+    expect(isValidRemainingStepsPage(started.run, 0, 1)).toBe(true);
   });
 });

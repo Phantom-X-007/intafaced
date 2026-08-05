@@ -492,4 +492,26 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     expect(desk.openCountEquals(1)).toBe(true);
     expect(desk.cohortsOnlyHere([])).toEqual(['bali-2026']);
   });
+
+  it('L3 wave40 safe open queue paging', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.safePageOpenApplicationIds(0, 1)).toEqual([]);
+    expect(desk.isValidOpenQueuePage(0, 1)).toBe(false);
+    desk.apply({
+      userId: 'u-w40a',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    desk.apply({
+      userId: 'u-w40b',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    expect(desk.safePageOpenApplicationIds(0, 1)).toHaveLength(1);
+    expect(desk.clampOpenQueuePageIndex(99, 1)).toBe(1);
+    expect(desk.openApplicationIdsAtPage(1, 1)).toHaveLength(1);
+    expect(desk.isValidOpenQueuePage(0, 1)).toBe(true);
+  });
 });

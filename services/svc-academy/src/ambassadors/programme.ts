@@ -715,4 +715,41 @@ export class MemoryAmbassadorProgramme {
   programmeSameSize(otherTotal: number): boolean {
     return this.totalCount() === otherTotal;
   }
+
+  /**
+   * L3 — safe page: clamps offset into [0, total], limit into [0, total-offset].
+   * Negative/NaN → empty page.
+   */
+  safePageProgrammeUserIds(offset: number, limit: number): readonly string[] {
+    if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+    const all = this.listAllUserIds();
+    const o = Math.max(0, Math.min(all.length, Math.floor(offset)));
+    const l = Math.max(0, Math.min(all.length - o, Math.floor(limit)));
+    return all.slice(o, o + l);
+  }
+
+  /** L3 — clamp page index into valid range [0, pageCount-1]. Empty → 0. */
+  clampProgrammePageIndex(pageIndex: number, pageSize: number): number {
+    const pages = this.programmePageCount(pageSize);
+    if (pages === 0) return 0;
+    if (!Number.isFinite(pageIndex)) return 0;
+    return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+  }
+
+  /** L3 — page by clamped page index. */
+  programmeUserIdsAtPage(pageIndex: number, pageSize: number): readonly string[] {
+    if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+    const idx = this.clampProgrammePageIndex(pageIndex, pageSize);
+    const size = Math.floor(pageSize);
+    return this.safePageProgrammeUserIds(idx * size, size);
+  }
+
+  /** L3 — true when page index is in range. Empty store → false for any index. */
+  isValidProgrammePage(pageIndex: number, pageSize: number): boolean {
+    const pages = this.programmePageCount(pageSize);
+    if (pages === 0) return false;
+    if (!Number.isFinite(pageIndex)) return false;
+    const i = Math.floor(pageIndex);
+    return i >= 0 && i < pages;
+  }
 }

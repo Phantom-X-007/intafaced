@@ -549,3 +549,36 @@ export function plansSameActionHistogram(left: readonly DeliveryDecision[], righ
   const b = planActionHistogram(right);
   return a.send_now === b.send_now && a.hold_digest === b.hold_digest && a.skip_muted === b.skip_muted;
 }
+
+/** L3 — safe page plan decisions with clamped bounds. */
+export function safePagePlanDecisions(plan: readonly DeliveryDecision[], offset: number, limit: number): readonly DeliveryDecision[] {
+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+  const o = Math.max(0, Math.min(plan.length, Math.floor(offset)));
+  const l = Math.max(0, Math.min(plan.length - o, Math.floor(limit)));
+  return plan.slice(o, o + l);
+}
+
+/** L3 — clamp plan page index. */
+export function clampPlanPageIndex(plan: readonly DeliveryDecision[], pageIndex: number, pageSize: number): number {
+  const pages = planPageCount(plan, pageSize);
+  if (pages === 0) return 0;
+  if (!Number.isFinite(pageIndex)) return 0;
+  return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+}
+
+/** L3 — plan decisions at clamped page. */
+export function planDecisionsAtPage(plan: readonly DeliveryDecision[], pageIndex: number, pageSize: number): readonly DeliveryDecision[] {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+  const idx = clampPlanPageIndex(plan, pageIndex, pageSize);
+  const size = Math.floor(pageSize);
+  return safePagePlanDecisions(plan, idx * size, size);
+}
+
+/** L3 — true when plan page is valid. */
+export function isValidPlanPage(plan: readonly DeliveryDecision[], pageIndex: number, pageSize: number): boolean {
+  const pages = planPageCount(plan, pageSize);
+  if (pages === 0) return false;
+  if (!Number.isFinite(pageIndex)) return false;
+  const i = Math.floor(pageIndex);
+  return i >= 0 && i < pages;
+}
