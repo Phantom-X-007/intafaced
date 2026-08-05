@@ -363,3 +363,17 @@ export function summarizeReconcile(report: ReconcileReport): ReconcileSummary {
     byCase,
   };
 }
+
+/**
+ * L3 — filter findings to selected cases for operator focus.
+ * Empty allowlist → empty list (not invent full report).
+ * Does not re-run reconcile or invent findings.
+ */
+export function filterFindingsByCase(
+  report: ReconcileReport,
+  cases: ReadonlySet<ReconcileCase> | readonly ReconcileCase[],
+): readonly ReconcileReport['findings'][number][] {
+  const set = cases instanceof Set ? cases : new Set(cases);
+  if (set.size === 0) return [];
+  return report.findings.filter((f) => set.has(f.case));
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RANK_TIERS, MAX_RANK, perksFor, rankForXp, tierFor, xpToNextRank, XP_AWARDS, xpFor } from './thresholds.js';
+import { RANK_TIERS, MAX_RANK, perksFor, rankForXp, rankProgress, tierFor, xpToNextRank, XP_AWARDS, xpFor } from './thresholds.js';
 
 describe('the rank ladder', () => {
   it('starts at 0 XP so every user has a rank from the moment they exist', () => {
@@ -53,6 +53,19 @@ describe('the rank ladder', () => {
     expect(xpToNextRank(499n)).toBe(1n);
     expect(xpToNextRank(500n)).toBe(1_000n);
     expect(xpToNextRank(150_000n)).toBeNull();
+  });
+
+  it('L3 rankProgress is string-safe and does not invent max rank', () => {
+    const mid = rankProgress(500n);
+    expect(mid.rank).toBe(1);
+    expect(mid.xp).toBe('500');
+    expect(mid.xpToNext).toBe('1000');
+    expect(mid.nextRank).toBe(2);
+    expect(mid.atMax).toBe(false);
+    const top = rankProgress(150_000n);
+    expect(top.atMax).toBe(true);
+    expect(top.xpToNext).toBeNull();
+    expect(top.nextRank).toBeNull();
   });
 
   it('falls back to rank 0 for an unknown rank rather than throwing', () => {

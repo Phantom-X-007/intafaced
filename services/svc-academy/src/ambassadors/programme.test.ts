@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AmbassadorProgrammeError, assertFreezeReason, badgeOf, type AmbassadorRecord } from './programme.js';
+import { AmbassadorProgrammeError, assertFreezeReason, badgeOf, MemoryAmbassadorProgramme, type AmbassadorRecord } from './programme.js';
 
 const base = (overrides: Partial<AmbassadorRecord> = {}): AmbassadorRecord => ({
   userId: '11111111-1111-4111-8111-111111111111',
@@ -31,5 +31,21 @@ describe('assertFreezeReason', () => {
   it('refuses empty / short reasons', () => {
     expect(() => assertFreezeReason('  x  ')).toThrow(AmbassadorProgrammeError);
     expect(() => assertFreezeReason('')).toThrow(AmbassadorProgrammeError);
+  });
+});
+
+describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
+  it('appoint → freeze → unfreeze; badge tracks active only', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    desk.appoint({ userId: u, appointedBy: op, now: new Date('2026-08-05T00:00:00Z') });
+    expect(desk.badge(u).isAmbassador).toBe(true);
+    desk.freeze({ userId: u, frozenBy: op, reason: 'policy hold' });
+    expect(desk.badge(u).isAmbassador).toBe(false);
+    expect(desk.list('frozen')).toHaveLength(1);
+    desk.unfreeze({ userId: u });
+    expect(desk.badge(u).isAmbassador).toBe(true);
+    expect(() => desk.appoint({ userId: u, appointedBy: op })).toThrow(AmbassadorProgrammeError);
   });
 });
