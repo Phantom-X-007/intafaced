@@ -3,6 +3,25 @@ import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import { assertScene } from './spatial/scene.js';
+import {
+  assertFreezeReason,
+  badgeOf,
+  AmbassadorProgrammeError,
+  type AmbassadorBadge,
+  type AmbassadorRecord,
+  type AmbassadorStatus,
+} from './ambassadors/programme.js';
+import {
+  assertMayWriteScore,
+  assertScore,
+  assertSeasonSlug,
+  rankStandings,
+  TournamentError,
+  type RankedStanding,
+  type SeasonRecord,
+  type SeasonStatus,
+  type StandingRecord,
+} from './tournaments/ladder.js';
 import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from './access/room-access.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
@@ -117,6 +136,8 @@ const toSession = (row: SessionRow): SessionRecord => ({
 export interface AcademyServiceOptions {
   /** Operational ceiling on a room's own capacity — see env.ts. */
   maxRoomCapacity: number;
+  /** Stage-1 tournament ladder kill-switch (`ACADEMY_TOURNAMENT_ENABLED`). */
+  tournamentEnabled?: boolean;
 }
 
 export class AcademyService {
@@ -432,6 +453,351 @@ export class AcademyService {
       UPDATE academy.sessions SET scene = ${this.sql.json(scene as never)}, updated_at = now() WHERE id = ${session.id} RETURNING *
     `;
     return toSession(rows[0]!);
+  }
+
+  // ── Tournament ladders Stage-1 (NO PRIZE MONEY) ────────────────────────────
+
+  private assertTournamentEnabled(): void {
+    if (this.options.tournamentEnabled === false) {
+      throw new AcademyError('Tournament ladder is disabled', 'academy.tournament_disabled');
+    }
+  }
+
+  private mapTournamentErr(err: unknown): never {
+    if (err instanceof TournamentError) {
+      throw new AcademyError(err.message, err.code);
+    }
+    throw err;
+  }
+
+  private toSeason(row: {
+    id: string;
+    slug: string;
+    title: string;
+    status: SeasonStatus;
+    rules_summary: string;
+    starts_at: Date;
+    ends_at: Date | null;
+  }): SeasonRecord {
+    return {
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      status: row.status,
+      rulesSummary: row.rules_summary,
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+    };
+  }
+
+  async createSeason(input: {
+    slug: string;
+    title: string;
+    rulesSummary: string;
+    startsAt: Date;
+    endsAt?: Date | null;
+  }): Promise<SeasonRecord> {
+    this.assertTournamentEnabled();
+    let slug: string;
+    try {
+      slug = assertSeasonSlug(input.slug);
+    } catch (e) {
+      this.mapTournamentErr(e);
+    }
+    const title = input.title.trim();
+    const rules = input.rulesSummary.trim();
+    if (title.length < 3 || title.length > 160) {
+      throw new AcademyError('Season title 3–160 characters', 'academy.season_invalid');
+    }
+    if (rules.length < 8 || rules.length > 4000) {
+      throw new AcademyError('Rules summary 8–4000 characters', 'academy.season_invalid');
+    }
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        slug: string;
+        title: string;
+        status: SeasonStatus;
+        rules_summary: string;
+        starts_at: Date;
+        ends_at: Date | null;
+      }>
+    >`
+      INSERT INTO academy.tournament_seasons (slug, title, status, rules_summary, starts_at, ends_at)
+      VALUES (${slug}, ${title}, 'scheduled', ${rules}, ${input.startsAt}, ${input.endsAt ?? null})
+      RETURNING id, slug, title, status, rules_summary, starts_at, ends_at
+    `;
+    return this.toSeason(rows[0]!);
+  }
+
+  async season(seasonId: string): Promise<SeasonRecord> {
+    this.assertTournamentEnabled();
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        slug: string;
+        title: string;
+        status: SeasonStatus;
+        rules_summary: string;
+        starts_at: Date;
+        ends_at: Date | null;
+      }>
+    >`SELECT id, slug, title, status, rules_summary, starts_at, ends_at FROM academy.tournament_seasons WHERE id = ${seasonId}`;
+    if (!rows[0]) throw new AcademyError(`Season ${seasonId} not found`, 'academy.season_not_found');
+    return this.toSeason(rows[0]);
+  }
+
+  async listSeasons(filter: { status?: SeasonStatus } = {}): Promise<SeasonRecord[]> {
+    this.assertTournamentEnabled();
+    const rows = filter.status
+      ? await this.sql<
+          Array<{
+            id: string;
+            slug: string;
+            title: string;
+            status: SeasonStatus;
+            rules_summary: string;
+            starts_at: Date;
+            ends_at: Date | null;
+          }>
+        >`
+          SELECT id, slug, title, status, rules_summary, starts_at, ends_at
+            FROM academy.tournament_seasons WHERE status = ${filter.status}
+            ORDER BY starts_at DESC
+        `
+      : await this.sql<
+          Array<{
+            id: string;
+            slug: string;
+            title: string;
+            status: SeasonStatus;
+            rules_summary: string;
+            starts_at: Date;
+            ends_at: Date | null;
+          }>
+        >`
+          SELECT id, slug, title, status, rules_summary, starts_at, ends_at
+            FROM academy.tournament_seasons ORDER BY starts_at DESC
+        `;
+    return rows.map((r) => this.toSeason(r));
+  }
+
+  async setSeasonStatus(input: { seasonId: string; status: SeasonStatus }): Promise<SeasonRecord> {
+    this.assertTournamentEnabled();
+    await this.season(input.seasonId);
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        slug: string;
+        title: string;
+        status: SeasonStatus;
+        rules_summary: string;
+        starts_at: Date;
+        ends_at: Date | null;
+      }>
+    >`
+      UPDATE academy.tournament_seasons
+         SET status = ${input.status}, updated_at = now()
+       WHERE id = ${input.seasonId}
+       RETURNING id, slug, title, status, rules_summary, starts_at, ends_at
+    `;
+    return this.toSeason(rows[0]!);
+  }
+
+  async setStanding(input: { seasonId: string; userId: string; score: number }): Promise<StandingRecord> {
+    this.assertTournamentEnabled();
+    const season = await this.season(input.seasonId);
+    try {
+      assertMayWriteScore(season.status);
+      assertScore(input.score);
+    } catch (e) {
+      this.mapTournamentErr(e);
+    }
+    const rows = await this.sql<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
+      INSERT INTO academy.tournament_standings (season_id, user_id, score, updated_at)
+      VALUES (${input.seasonId}, ${input.userId}, ${input.score}, now())
+      ON CONFLICT (season_id, user_id) DO UPDATE SET score = EXCLUDED.score, updated_at = now()
+      RETURNING season_id, user_id, score, updated_at
+    `;
+    const r = rows[0]!;
+    return { seasonId: r.season_id, userId: r.user_id, score: r.score, updatedAt: r.updated_at };
+  }
+
+  async standings(seasonId: string): Promise<RankedStanding[]> {
+    this.assertTournamentEnabled();
+    await this.season(seasonId);
+    const rows = await this.sql<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
+      SELECT season_id, user_id, score, updated_at FROM academy.tournament_standings
+       WHERE season_id = ${seasonId}
+    `;
+    return rankStandings(
+      rows.map((r) => ({
+        seasonId: r.season_id,
+        userId: r.user_id,
+        score: r.score,
+        updatedAt: r.updated_at,
+      })),
+    );
+  }
+
+  // ── Ambassador programme (Stage-1 status only — NO PAY) ───────────────────
+
+  private toAmbassador(row: {
+    user_id: string;
+    status: AmbassadorStatus;
+    appointed_by: string;
+    appointed_at: Date;
+    frozen_at: Date | null;
+    frozen_by: string | null;
+    freeze_reason: string | null;
+  }): AmbassadorRecord {
+    return {
+      userId: row.user_id,
+      status: row.status,
+      appointedBy: row.appointed_by,
+      appointedAt: row.appointed_at,
+      frozenAt: row.frozen_at,
+      frozenBy: row.frozen_by,
+      freezeReason: row.freeze_reason,
+    };
+  }
+
+  private mapAmbassadorErr(err: unknown): never {
+    if (err instanceof AmbassadorProgrammeError) {
+      throw new AcademyError(err.message, err.code);
+    }
+    throw err;
+  }
+
+  async ambassadorOf(userId: string): Promise<AmbassadorRecord | null> {
+    const rows = await this.sql<
+      Array<{
+        user_id: string;
+        status: AmbassadorStatus;
+        appointed_by: string;
+        appointed_at: Date;
+        frozen_at: Date | null;
+        frozen_by: string | null;
+        freeze_reason: string | null;
+      }>
+    >`
+      SELECT user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+        FROM academy.ambassadors WHERE user_id = ${userId}
+    `;
+    return rows[0] ? this.toAmbassador(rows[0]) : null;
+  }
+
+  async ambassadorBadge(userId: string): Promise<AmbassadorBadge> {
+    return badgeOf(userId, await this.ambassadorOf(userId));
+  }
+
+  async listAmbassadors(filter: { status?: AmbassadorStatus } = {}): Promise<AmbassadorRecord[]> {
+    const rows = filter.status
+      ? await this.sql<
+          Array<{
+            user_id: string;
+            status: AmbassadorStatus;
+            appointed_by: string;
+            appointed_at: Date;
+            frozen_at: Date | null;
+            frozen_by: string | null;
+            freeze_reason: string | null;
+          }>
+        >`
+          SELECT user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+            FROM academy.ambassadors WHERE status = ${filter.status}
+            ORDER BY appointed_at DESC
+        `
+      : await this.sql<
+          Array<{
+            user_id: string;
+            status: AmbassadorStatus;
+            appointed_by: string;
+            appointed_at: Date;
+            frozen_at: Date | null;
+            frozen_by: string | null;
+            freeze_reason: string | null;
+          }>
+        >`
+          SELECT user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+            FROM academy.ambassadors ORDER BY status ASC, appointed_at DESC
+        `;
+    return rows.map((r) => this.toAmbassador(r));
+  }
+
+  /**
+   * Operator appoint. Idempotent re-appoint of a frozen row reactivates.
+   * Already-active is refused so double-click does not rewrite appointed_by silently.
+   */
+  async appointAmbassador(input: { userId: string; operatorId: string }): Promise<AmbassadorRecord> {
+    const existing = await this.ambassadorOf(input.userId);
+    if (existing?.status === 'active') {
+      throw new AcademyError(`User ${input.userId} is already an active ambassador`, 'academy.ambassador_already_active');
+    }
+
+    const rows = await this.sql<
+      Array<{
+        user_id: string;
+        status: AmbassadorStatus;
+        appointed_by: string;
+        appointed_at: Date;
+        frozen_at: Date | null;
+        frozen_by: string | null;
+        freeze_reason: string | null;
+      }>
+    >`
+      INSERT INTO academy.ambassadors (user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason, updated_at)
+      VALUES (${input.userId}, 'active', ${input.operatorId}, now(), NULL, NULL, NULL, now())
+      ON CONFLICT (user_id) DO UPDATE SET
+        status = 'active',
+        appointed_by = EXCLUDED.appointed_by,
+        appointed_at = now(),
+        frozen_at = NULL,
+        frozen_by = NULL,
+        freeze_reason = NULL,
+        updated_at = now()
+      RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+    `;
+    return this.toAmbassador(rows[0]!);
+  }
+
+  async freezeAmbassador(input: { userId: string; operatorId: string; reason: string }): Promise<AmbassadorRecord> {
+    let reason: string;
+    try {
+      reason = assertFreezeReason(input.reason);
+    } catch (err) {
+      this.mapAmbassadorErr(err);
+    }
+
+    const existing = await this.ambassadorOf(input.userId);
+    if (!existing) {
+      throw new AcademyError(`No ambassador programme row for ${input.userId}`, 'academy.ambassador_not_found');
+    }
+    if (existing.status === 'frozen') {
+      throw new AcademyError(`Ambassador ${input.userId} is already frozen`, 'academy.ambassador_already_frozen');
+    }
+
+    const rows = await this.sql<
+      Array<{
+        user_id: string;
+        status: AmbassadorStatus;
+        appointed_by: string;
+        appointed_at: Date;
+        frozen_at: Date | null;
+        frozen_by: string | null;
+        freeze_reason: string | null;
+      }>
+    >`
+      UPDATE academy.ambassadors
+         SET status = 'frozen',
+             frozen_at = now(),
+             frozen_by = ${input.operatorId},
+             freeze_reason = ${reason},
+             updated_at = now()
+       WHERE user_id = ${input.userId}
+       RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+    `;
+    return this.toAmbassador(rows[0]!);
   }
 
   private async liveInvite(roomId: string, userId: string): Promise<{ expiresAt: Date | null } | null> {

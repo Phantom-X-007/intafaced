@@ -52,6 +52,7 @@ const stream: StreamProvider = new NullStreamProvider();
 
 const academy = new AcademyService(sql, stakes, hostRights, stream, {
   maxRoomCapacity: env.ACADEMY_MAX_ROOM_CAPACITY,
+  tournamentEnabled: env.ACADEMY_TOURNAMENT_ENABLED,
 });
 
 export const appRouter = createAcademyRouter(academy);

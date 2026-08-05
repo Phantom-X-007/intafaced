@@ -4,6 +4,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
 import { getCurriculumItem, listCurriculum } from './curriculum/catalog.js';
+import { curriculumInventory } from './curriculum/import-pipeline.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -78,6 +79,54 @@ const curriculumItemOut = curriculumSummaryOut.extend({
   body: z.string(),
 });
 
+const curriculumInventoryOut = z.object({
+  contentSource: z.enum(['platform-native-expansion', 'licensed-import-pending']),
+  spine: z.object({
+    total: z.number().int(),
+    playbooks: z.number().int(),
+    workbooks: z.number().int(),
+    lessons: z.number().int(),
+  }),
+  titleTarget: z.object({ playbooks: z.number().int(), workbooks: z.number().int() }),
+  titlePromiseMet: z.boolean(),
+  residualPlaybooks: z.number().int(),
+  residualWorkbooks: z.number().int(),
+});
+
+const ambassadorStatus = z.enum(['active', 'frozen']);
+const ambassadorOut = z.object({
+  userId: z.string().uuid(),
+  status: ambassadorStatus,
+  appointedBy: z.string().uuid(),
+  appointedAt: z.date(),
+  frozenAt: z.date().nullable(),
+  frozenBy: z.string().uuid().nullable(),
+  freezeReason: z.string().nullable(),
+});
+const ambassadorBadgeOut = z.object({
+  userId: z.string().uuid(),
+  isAmbassador: z.boolean(),
+  status: ambassadorStatus.nullable(),
+});
+
+const seasonStatus = z.enum(['scheduled', 'live', 'frozen', 'ended']);
+const seasonOut = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  title: z.string(),
+  status: seasonStatus,
+  rulesSummary: z.string(),
+  startsAt: z.date(),
+  endsAt: z.date().nullable(),
+});
+const standingOut = z.object({
+  seasonId: z.string().uuid(),
+  userId: z.string().uuid(),
+  score: z.number().int(),
+  updatedAt: z.date(),
+  rank: z.number().int(),
+});
+
 const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room, minStake: formatAmount(room.minStake) });
 
 /**
@@ -110,7 +159,29 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
 
     case 'academy.scene_invalid':
-      // Client sent a scene that fails Stage-1 schema or size gate.
+    case 'academy.ambassador_invalid':
+      // Client sent a scene that fails Stage-1 schema or size gate /
+      // freeze reason that fails Stage-1 programme rules.
+      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+
+    case 'academy.ambassador_not_found':
+      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+
+    case 'academy.ambassador_already_active':
+    case 'academy.ambassador_already_frozen':
+      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+
+    case 'academy.season_not_found':
+      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+
+    case 'academy.tournament_disabled':
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+
+    case 'academy.season_not_live':
+      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+
+    case 'academy.season_invalid':
+    case 'academy.standing_invalid':
       return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
 
     case 'academy.stake_unavailable':
@@ -166,6 +237,14 @@ export function createAcademyRouter(academy: AcademyService) {
           return item;
         }),
       ),
+
+    /**
+     * Stage-1 import pipeline inventory: content source decision + count gate.
+     * titlePromiseMet is false until 20 playbooks + 3 workbooks exist (or product renames).
+     */
+    curriculumInventory: scopedProcedure('academy:read', { module: 'academy' })
+      .output(curriculumInventoryOut)
+      .query(() => curriculumInventory()),
 
     // ── Lobbies ──────────────────────────────────────────────────────────────
 
@@ -304,6 +383,93 @@ export function createAcademyRouter(academy: AcademyService) {
       .mutation(({ ctx, input }) =>
         guard(() => academy.updateScene({ sessionId: input.sessionId, hostId: ctx.principal.userId, scene: input.scene })),
       ),
+
+    // ── Ambassador programme Stage-1 (status only — NO PAY / Class M residual) ─
+    //
+    // Public badge is academy:read. Appoint/freeze are operator admin:write —
+    // programme control is not a user self-serve action.
+
+    ambassadorBadge: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ userId: z.string().uuid() }))
+      .output(ambassadorBadgeOut)
+      .query(({ input }) => guard(() => academy.ambassadorBadge(input.userId))),
+
+    ambassadors: scopedProcedure('admin:read', { module: 'academy' })
+      .input(z.object({ status: ambassadorStatus.optional() }).optional())
+      .output(z.array(ambassadorOut))
+      .query(({ input }) => guard(async () => academy.listAmbassadors({ ...(input?.status ? { status: input.status } : {}) }))),
+
+    appointAmbassador: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ userId: z.string().uuid() }))
+      .output(ambassadorOut)
+      .mutation(({ input, ctx }) => guard(() => academy.appointAmbassador({ userId: input.userId, operatorId: ctx.principal!.userId }))),
+
+    freezeAmbassador: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ userId: z.string().uuid(), reason: z.string().min(1).max(500) }))
+      .output(ambassadorOut)
+      .mutation(({ input, ctx }) =>
+        guard(() =>
+          academy.freezeAmbassador({
+            userId: input.userId,
+            operatorId: ctx.principal!.userId,
+            reason: input.reason,
+          }),
+        ),
+      ),
+
+    // ── Tournament ladders Stage-1 (NO PRIZE MONEY) ───────────────────────────
+    //
+    // Gated by ACADEMY_TOURNAMENT_ENABLED. Operator creates/starts seasons;
+    // standings are readable by academy:read. Score writes are admin:write until
+    // a paper/live source is product-lawed (Stage-2+).
+
+    seasons: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ status: seasonStatus.optional() }).optional())
+      .output(z.array(seasonOut))
+      .query(({ input }) => guard(async () => academy.listSeasons({ ...(input?.status ? { status: input.status } : {}) }))),
+
+    season: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid() }))
+      .output(seasonOut)
+      .query(({ input }) => guard(() => academy.season(input.seasonId))),
+
+    standings: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid() }))
+      .output(z.array(standingOut))
+      .query(({ input }) => guard(() => academy.standings(input.seasonId))),
+
+    createSeason: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          slug: z.string().min(3).max(64),
+          title: z.string().min(3).max(160),
+          rulesSummary: z.string().min(8).max(4000),
+          startsAt: z.coerce.date(),
+          endsAt: z.coerce.date().nullable().optional(),
+        }),
+      )
+      .output(seasonOut)
+      .mutation(({ input }) =>
+        guard(() =>
+          academy.createSeason({
+            slug: input.slug,
+            title: input.title,
+            rulesSummary: input.rulesSummary,
+            startsAt: input.startsAt,
+            endsAt: input.endsAt ?? null,
+          }),
+        ),
+      ),
+
+    setSeasonStatus: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid(), status: seasonStatus }))
+      .output(seasonOut)
+      .mutation(({ input }) => guard(() => academy.setSeasonStatus(input))),
+
+    setStanding: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid(), userId: z.string().uuid(), score: z.number().int() }))
+      .output(standingOut.omit({ rank: true }))
+      .mutation(({ input }) => guard(() => academy.setStanding(input))),
   });
 }
 
