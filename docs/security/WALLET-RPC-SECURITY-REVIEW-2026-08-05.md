@@ -162,6 +162,33 @@ Same class of latent risk in `act/.../component/JsonrpcClient.java:21`, where Lo
 
 **Caveat — this is an inference, not an observation.** `org.web3j:core:3.3.1` is a Maven dependency, not a jar in this tree, so I could not open it; the `getEcKeyPair()` / `getPrivateKey()` accessors are taken from web3j's published API for that generation. Likewise fastjson's getter-walking is documented behaviour I could not execute. Both would take about two minutes to confirm on a host with a JDK, and confirming them is the single highest-value follow-up in this document.
 
+#### F3 follow-up, 2026-08-05 (PR "wallet RPC gate gaps") — half answered, and it stays an inference
+
+This finding depends on **two** libraries. One of them turned out to be readable on this host after all; the other is not, and no JDK appeared. So the honest position is that the inference is now **shorter, not resolved**.
+
+**Confirmed — fastjson serialises through public getters, and recurses.** `com.alibaba:fastjson:1.2.31` is present in the host's local Maven repository at `~/.m2/repository/com/alibaba/fastjson/1.2.31/fastjson-1.2.31.jar`, and its SHA-1 (`1ca964122c53f03f6fc3938b58c16d63b40490ab`) matches the `.sha1` recorded beside it. A jar is a zip, and a `.class` file's constant pool and `Code` attribute can be decoded without a JVM. Reading the shipped bytecode of the exact artifact the tree pins:
+
+```
+JSON.toJSON(Object)
+  → JSON.toJSON(Object, SerializeConfig)
+      → SerializeConfig.getObjectWriter(Class)
+      → JavaBeanSerializer.getFieldValuesMap(Object)
+          → FieldSerializer.getPropertyValue(Object)
+              → FieldInfo.get(Object)
+                  → java.lang.reflect.Method.invoke(...)      ← the getter, reflectively
+      → JSON.toJSON(Object)  on every value it collected      ← and it RECURSES
+```
+
+That is read out of the class files, not out of documentation. `TypeUtils.computeGetters` is present and carries the `get` / `is` prefix constants and the `getName` / `getParameterTypes` / `getReturnType` / `getModifiers` reflection calls, so a public no-arg `getX()` with a matching field is collected by default with no annotation required.
+
+And nothing in `Payment` opts out: the class carries only Lombok `@Builder`, `getCredentials()` at `:28` is public, the backing field is not `transient`, and there is no `@JSONField(serialize = false)`, no `@JSONType` and no `SerializeFilter` anywhere in the tree.
+
+**Not confirmed — the web3j half.** `org.web3j:core:3.3.1` is **not** in that local repository (it holds fastjson, Spring, Lombok, Mongo and the rest, but no `org/web3j` directory at all), it is not one of the three committed jars, and there is no network. There is also no in-repo compile-time evidence to fall back on: `getEcKeyPair`, `getPrivateKey` and `ECKeyPair` **appear nowhere in the 228 Java files**, so the tree never demonstrates the accessor shape it would compile against. Whether `Credentials` exposes a public getter chain ending at the secp256k1 private key is exactly as unverified as this review left it.
+
+**Verdict: still an inference.** The conditional has not moved, only narrowed — from "two libraries behave as documented" to "one class in one library exposes one public getter". The consequence remains asymmetric and unattractive: if it does, the ETH hot-wallet private key is written to the log as a decimal integer every thirty seconds for up to fifty minutes per unconfirmed withdrawal; if it does not, the line is harmless. Nothing available in this repository decides it, and it is not recorded as a finding.
+
+Confirming it still needs `org.web3j:core:3.3.1` on disk. It does **not** need a working build — the same bytecode read used above would answer it in minutes, so the follow-up is "obtain the jar", not "make this tree compile".
+
 **Same file, definitely true, no inference needed:** `PaymentHandler.java:162` — `logger.info("hexRawValue={}", hexValue)` — logs the complete signed raw transaction on the token withdrawal path. Because that signature carries no chain id ([F4](#f4)), anyone with log-read access holds a transaction that is **valid and replayable on every EVM chain simultaneously**.
 
 **Remediation direction:** never pass an object holding `Credentials` to a serialiser; log the txid and business id only.

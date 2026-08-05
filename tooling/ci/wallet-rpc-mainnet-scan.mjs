@@ -70,7 +70,7 @@
  * allowlist, no per-value state, and its whole output is a single sentence
  * about authentication. This gate asks a content question over Java, a value
  * question over .properties, and three ABSENCE questions over deployment
- * artefacts, and it carries a 38-entry frozen baseline. Merging them would
+ * artefacts, and it carries a 54-entry frozen baseline. Merging them would
  * produce one script with two unrelated failure headlines and a ratchet the
  * auth scan has no concept of — and, because `gates.mjs` prints one line and
  * one doctrine per gate id, a red would no longer say which prohibition broke.
@@ -116,11 +116,12 @@
  *       answer).
  *
  *   M4  No mainnet-shaped value in .properties — a public chain endpoint, a
- *       non-zero chain start height, a literal address, or a keystore filename
- *       embedding an account. An address is recognised by the KEY (`*address`,
- *       which carries every non-EVM chain here) OR by the VALUE (exactly 0x +
- *       40 hex, under any key at all). The key rule alone is defeated by
- *       renaming: `contract.token=0xdac17…` is the same live mainnet pin.
+ *       non-zero chain start height, a literal address, a keystore filename
+ *       embedding an account, or an EVM event-topic filter (M4-topic). An
+ *       address is recognised by the KEY (`*address`, which carries every
+ *       non-EVM chain here) OR by the VALUE (exactly 0x + 40 hex, under any key
+ *       at all). The key rule alone is defeated by renaming:
+ *       `contract.token=0xdac17…` is the same live mainnet pin.
  *
  *   M5  No Dockerfile, and no build/run script, that can package a module here.
  *   M6  No compose service that references this tree.
@@ -135,6 +136,55 @@
  *       it one file sideways into a Java constant, and nothing here would have
  *       said a word. 40 hex digits is an account or a contract and nothing else
  *       — a 64-hex event topic does not match, and neither does a txid.
+ *
+ *   M9  No credential-bearing value reaching a log or print sink. Three services
+ *       here write a live spending credential to stdout on an ordinary success
+ *       path, which makes the security boundary of the hot wallets the read
+ *       permission on the log files. This catches the fourth.
+ *
+ *   M10 Every EVM deposit credit is classified by whether the method that builds
+ *       it ever fetches the transaction receipt, and the classification is part
+ *       of the frozen key — so a path that LOSES its success check fails, not
+ *       just a path added without one.
+ *
+ * ── WHAT THE 2026-08-05 SECURITY REVIEW ADDED, AND WHY IT IS FROZEN ────────
+ *
+ * `docs/security/WALLET-RPC-SECURITY-REVIEW-2026-08-05.md` is the first read of
+ * this tree that opened every file. It found three classes of thing this ratchet
+ * did not cover. All three are frozen rather than fixed, for the same reason the
+ * chain-id fix is specified rather than applied: editing `01_wallet_rpc` without
+ * a compiler is how money gets stranded by a change that looks obviously right.
+ *
+ *   · **A control that works by accident.** `contract.event-topic0` is 63 hex
+ *     digits in both erc modules where a keccak topic is 64, so the Transfer-log
+ *     check the upstream added "to prevent fake deposits" never matches and no
+ *     deposit is credited at all. It fails CLOSED, which is not the same as
+ *     working. It is NOT fixed here and must not be: correcting it activates a
+ *     filter that has never fired, in a deposit-crediting path, on a host with no
+ *     JDK — a behaviour change that needs a build and a deposit fixture test.
+ *     Deleting the line is worse; it removes the guard entirely. Frozen so that
+ *     neither edit can happen unread. (M4-topic, and note the probe: the CORRECT
+ *     64-digit topic fires too. This rule freezes the filter either way.)
+ *   · **Credential-logging sites** — M9, eight of them, each stating in its
+ *     reason what it does and does not prove.
+ *   · **Unverified deposit credits** — M10. `EthWatcher` credits from block
+ *     fields with no receipt fetch; the erc watchers have the check present and
+ *     COMMENTED OUT in the scheduled path and live in the replay path, which is
+ *     why M10 is method-scoped: a file-scope rule reads those two modules as safe.
+ *
+ * One thing the review flagged is deliberately NOT a rule here.
+ * `PaymentHandler` passes a `Payment` — which has a public `getCredentials()` —
+ * to `JSON.toJSON` every thirty seconds, which would log the ETH private key on a
+ * timer IF fastjson serialises getters and IF web3j's accessor chain is what its
+ * published API says. The fastjson half is now CONFIRMED, from the shipped
+ * bytecode of the pinned 1.2.31 jar rather than from documentation (see the F3
+ * follow-up in the review). The web3j half is not: that artifact is nowhere on
+ * this host, and the tree never calls the accessors itself. So §F3 remains an
+ * INFERENCE, and M9 correctly does not reach it — `current` is a field, not a
+ * credential-named local. That is the intended outcome. A gate must not promote
+ * an inference to a finding by pattern-matching it; the day somebody reads
+ * `org.web3j:core:3.3.1` is the day this becomes a finding, and it will be added
+ * then, by a human, with a reason.
  *
  * ── THE RATCHET, BY EXACT TEXT ─────────────────────────────────────────────
  *
@@ -171,7 +221,7 @@
  * the same discipline as `custody-scan.mjs`, which exits 1 rather than scan an
  * empty derived service list.
  *
- * The frozen baseline is the second, stronger half of that guard: 38 entries
+ * The frozen baseline is the second, stronger half of that guard: 54 entries
  * that must ALL be re-found on every run. If someone narrows a regex until it
  * matches nothing, the rules do not quietly go green — the entries that rule
  * held go stale and the gate fails. That is proof-of-life per rule, not just
@@ -410,6 +460,181 @@ function argumentCount(text, open) {
   return -1;
 }
 
+// ── M9 / M10 support: method scope, and a tiny taint model ─────────────────
+
+/**
+ * The comment-stripped source with string CONTENTS blanked, offsets preserved.
+ *
+ * `stripJavaComments` keeps string contents on purpose — M2 has to see the
+ * hardcoded mainnet endpoint, which lives inside a literal. But M9 and M10 need
+ * to know where methods begin and end, and this tree is full of lines like
+ * `logger.info("received coin {} at height {}", …)`. Counting braces over source
+ * that still contains those literals puts every later method at the wrong
+ * nesting depth. Two views over the same offsets is the cheapest correct answer:
+ * structure is read here, content is read from the other.
+ */
+function blankStringContents(code) {
+  let out = '';
+  let i = 0;
+  while (i < code.length) {
+    const c = code[i];
+    if (c === '"' || c === "'") {
+      out += c;
+      i++;
+      while (i < code.length && code[i] !== c) {
+        if (code[i] === '\\') {
+          out += '  ';
+          i += 2;
+          continue;
+        }
+        if (code[i] === '\n') break;
+        out += ' ';
+        i++;
+      }
+      if (i < code.length && code[i] === c) {
+        out += c;
+        i++;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+/** Index of the `}` closing the `{` at `open`, over the structural view. */
+function matchBrace(struct, open) {
+  let depth = 0;
+  for (let i = open; i < struct.length; i++) {
+    if (struct[i] === '{') depth++;
+    else if (struct[i] === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return struct.length - 1;
+}
+
+/**
+ * Method bodies, by brace depth. A method is a `{` opened at depth 1 — inside the
+ * class body — whose preceding text ends in `name(args)`.
+ *
+ * M10 exists because of a distinction only method scope can see. `erc-eusdt` and
+ * `erc-token` DO contain an active transaction-receipt check, in
+ * `replayBlockInit`, and DO NOT contain one in the scheduled `replayBlock` that
+ * actually credits deposits. A file-scope rule reads those two modules as
+ * "receipt check present" and returns the safe answer to the dangerous question.
+ *
+ * Anonymous classes and lambdas open braces at deeper levels and are therefore
+ * part of the enclosing method's body, which is what both rules want: the eth
+ * deposit credit lives inside a `forEach` lambda.
+ */
+function methodSpans(source, struct = blankStringContents(source)) {
+  const spans = [];
+  let depth = 0;
+  for (let i = 0; i < struct.length; i++) {
+    const c = struct[i];
+    if (c === '}') {
+      depth--;
+      continue;
+    }
+    if (c !== '{') continue;
+    if (depth === 1) {
+      // From i-1: `lastIndexOf` includes its own start index, and struct[i] is
+      // the brace we are standing on, so searching from `i` returns `i` and the
+      // signature comes back empty.
+      const boundary = Math.max(struct.lastIndexOf(';', i - 1), struct.lastIndexOf('}', i - 1), struct.lastIndexOf('{', i - 1));
+      const head = source.slice(boundary + 1, i);
+      // The parameter list is the LAST balanced `(...)` in the signature, not the
+      // first. `@GetMapping("address/{account}") public MessageResult
+      // getNewAddress(…)` would otherwise be named after its annotation, and its
+      // "parameters" would be the annotation's argument. One level of nesting is
+      // permitted inside, which is exactly what `@Value("${coin.rpc}") String uri`
+      // needs M9 to be able to read.
+      const m = /([A-Za-z_$][\w$]*)\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:throws[\s\w,.]*)?\s*$/.exec(head);
+      // `if`/`for`/`while`/`switch`/`catch`/`synchronized` also match `name(...)`,
+      // but none of them can appear at class-body depth. `new X() {` can, in a
+      // field initialiser — excluded by name.
+      if (m !== null && m[1] !== 'new') {
+        spans.push({ name: m[1], params: m[2], start: i, end: matchBrace(struct, i) });
+      }
+    }
+    depth++;
+  }
+  return spans;
+}
+
+/** An identifier whose own name says it holds a credential. */
+const CREDENTIAL_IDENT = /(secret|password|passwd|passphrase|privatekey|private_key|privkey|credential|mnemonic)/i;
+
+/**
+ * Property leaves whose VALUE carries a credential. `rpc` is here because this
+ * tree's own `bitcoin/src/main/resources/application.properties` documents it as
+ * the endpoint "including its rpcuser:rpcpassword", and `act`'s own JsonrpcClient
+ * rebuilds the URI without the userinfo before putting it on the wire.
+ */
+const CREDENTIAL_PROPERTY_LEAF = /^(rpc|password|passwd|passphrase|secret|private-?key|withdraw-wallet)$/i;
+
+/** stdout, stderr and every logger spelling in this tree. */
+const LOG_SINK =
+  /\b(?:System\s*\.\s*(?:out|err)\s*\.\s*print(?:ln|f)?|(?:logger|log|LOGGER|LOG)\s*\.\s*(?:info|warn|error|debug|trace))\s*\(/g;
+
+/** Split a parameter list on top-level commas — annotations carry parens of their own. */
+function splitTopLevel(text) {
+  const parts = [];
+  let depth = 0;
+  let current = '';
+  for (const c of text) {
+    if (c === '(' || c === '[' || c === '<') depth++;
+    else if (c === ')' || c === ']' || c === '>') depth--;
+    if (c === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += c;
+  }
+  if (current.trim() !== '') parts.push(current);
+  return parts;
+}
+
+/** Does this expression mention any identifier in `tainted`, or a credential-named one? */
+function mentionsCredential(expr, tainted) {
+  for (const id of expr.matchAll(/\b[A-Za-z_$][\w$]*\b/g)) {
+    if (tainted.has(id[0])) return true;
+    if (CREDENTIAL_IDENT.test(id[0])) return true;
+  }
+  return false;
+}
+
+/**
+ * Assignment propagation, narrower than `mentionsCredential` on purpose: the
+ * credential must be passed INTO something, not merely asked FOR something.
+ *
+ *   `new JsonrpcClient(uri)`        → uri is an argument   → propagate
+ *   `client.getBlockCount()`        → client is a receiver → do not
+ *
+ * Without the distinction, `bitcoin/RpcClientConfig.java:26` — which logs a BLOCK
+ * HEIGHT read off a client that was built from the credential URL — comes out as
+ * a credential leak, and a rule that reports a block height as a leaked password
+ * is one nobody reads twice. Its neighbour at `usdt:26` logs the CLIENT itself
+ * and is a genuine finding; the two lines look almost identical, and this is what
+ * separates them.
+ *
+ * The cost is a false negative on `String s = secret.substring(0, 8)`. Accepted:
+ * the sink test does not use this function, so `log(secret.substring(0, 8))` is
+ * still caught — only laundering through an intermediate local escapes, and that
+ * shape does not exist in this tree.
+ */
+function passedInto(expr, tainted) {
+  for (const m of expr.matchAll(/\b([A-Za-z_$][\w$]*)\b\s*(.?)/g)) {
+    if (m[2] === '.') continue;
+    if (tainted.has(m[1]) || CREDENTIAL_IDENT.test(m[1])) return true;
+  }
+  return false;
+}
+
 // ── Rules over .properties ──────────────────────────────────────────────────
 
 /**
@@ -425,6 +650,28 @@ const CHAIN_ENDPOINT_KEYS = new Set(['rpc', 'blockapi', 'url', 'endpoint', 'node
 
 /** Go-ethereum keystore filename — an ISO timestamp and a 40-hex account. */
 const KEYSTORE_FILENAME = /^UTC--[0-9T:.\-]+Z?--[0-9a-fA-F]{38,40}(\.json)?$/;
+
+/**
+ * An EVM event-topic filter key: `contract.event-topic0`. Matched on a leaf
+ * ENDING in `topic<digits>` so `spring.kafka.template.default-topic` — which is
+ * in all 13 files and is a Kafka topic, not an event signature — is not swept up.
+ */
+const EVENT_TOPIC_KEY = /topic\d+$/i;
+
+/**
+ * A topic0 is the keccak hash of an event signature: exactly 32 bytes, 64 hex
+ * digits. Anything else cannot equal a real log topic, so the filter it gates
+ * never matches and the check it gates never runs.
+ */
+function classifyTopic(value) {
+  const hex = /^0x([0-9a-fA-F]*)$/.exec(value.trim());
+  if (hex === null) return 'not a 0x hex literal — this cannot be an event topic at all';
+  if (hex[1].length === 64) return 'a well-formed 32-byte event topic — this filter can match a real log';
+  return (
+    `${hex[1].length} hex digits, not 64. A topic0 is a 32-byte keccak hash; this value cannot equal any log topic, ` +
+    'so the filter never matches and the check it gates never runs. It fails CLOSED, which is not the same as working'
+  );
+}
 
 /** A value the environment supplies, so this file does not decide it. */
 const isPlaceholder = (value) => /^\$\{[^}]*\}$/.test(value.trim());
@@ -876,6 +1123,221 @@ const FROZEN = [
       'and that M8 has a live finding to prove it still sees — proof-of-life this rule would otherwise lack, since the ' +
       'one other 40-hex literal in the tree was the erc-eusdt Tether pin and that is now a placeholder.',
   },
+
+  // ── M4-topic: the event filter that works by accident ────────────────────
+  //
+  // READ THIS BEFORE "FIXING" EITHER OF THE TWO ENTRIES BELOW.
+  //
+  // The real ERC-20 Transfer topic0 is
+  // 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef — 64 hex
+  // digits. Both modules ship 63, each missing a different character, in the same
+  // digit-drop mangling the upstream applied to its addresses. Neither can ever
+  // equal a log topic, so `checkEventLog` returns false, `continue` fires, and no
+  // deposit is credited on either module.
+  //
+  // Correcting them to 64 digits is NOT a typo fix. It ACTIVATES a filter that
+  // has never fired, in the crediting path of a deposit watcher, on a host with
+  // no JDK, no Maven and no way to run the code — and the watcher underneath it
+  // has its transaction-receipt check commented out (M10 below) and never
+  // compares the function selector, so `approve()` decodes as `transfer()`. The
+  // correct constant is the right END state and it is a BEHAVIOUR CHANGE that
+  // needs a JDK build and a deposit-fixture test to land safely — the same
+  // judgement docs/SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md records for the
+  // chain-id fix. Deleting the line or setting it empty is worse:
+  // `StringUtils.isNotEmpty` then skips the check entirely and the commented-out
+  // receipt check is all that stands between this watcher and free money.
+  {
+    rule: 'M4-topic',
+    module: 'erc-eusdt',
+    file: 'application.properties',
+    text: 'event-topic0=0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a1128f55a4df523b3ef',
+    reason:
+      'THIS IS A BROKEN CONTROL, NOT A WORKING ONE, and fixing it is a behaviour change requiring a JDK build and a ' +
+      'deposit fixture test. 63 hex digits where a keccak topic0 has 64, so the Etherscan Transfer-log check the ' +
+      'upstream added "to prevent fake deposits" never matches anything and the module credits no deposits at all. ' +
+      'It fails closed today by accident. Frozen at exactly this string so that neither the one-character correction ' +
+      '(which turns the filter on) nor deletion (which turns the guard off) can happen without a human reading this ' +
+      'paragraph. Review: docs/security/WALLET-RPC-SECURITY-REVIEW-2026-08-05.md §F6, §F7.',
+  },
+  {
+    rule: 'M4-topic',
+    module: 'erc-token',
+    file: 'application.properties',
+    text: 'event-topic0=0xddf252ad1be2c89b69c2b068fc378daa952b7f163c4a11628f55a4df523b3ef',
+    reason:
+      'The same broken control, mangled at a different position — 63 digits again, dropped from a different place, ' +
+      'which is why the two strings are frozen separately rather than as one pattern. Same instruction: do not correct ' +
+      'it and do not delete it outside a change that can be built and tested. Review §F6.',
+  },
+
+  // ── M9: a credential-bearing value reaching a log or print sink ──────────
+  //
+  // The reason this repo cannot call the wallet tree safe. Three services write a
+  // live spending credential to stdout on an ordinary success path — not a
+  // setting, code — which makes the security boundary of the hot wallets the read
+  // permission on the log files. Frozen so the fourth one fails.
+  {
+    rule: 'M9',
+    module: 'ect',
+    file: 'EctApi.java',
+    text: 'sendFrom: System.out.println(request.toJSONString())',
+    reason:
+      'THE WORST OF THESE. Twelve lines up, `request.put("secret", privatekey)` puts the ECT WITHDRAWAL SIGNING SECRET ' +
+      'into this object; this line serialises the whole object to stdout, on the success path of EVERY withdrawal, ' +
+      'before the request is even sent. The secret is bound from coin.withdraw-wallet, which is item A1 of ' +
+      'docs/OWNER-ACTIONS-WALLET-RPC-SECRETS.md — the one the owner is told to rotate first. Rotation does not help: ' +
+      'this line prints the REPLACEMENT exactly as freely. Note the sink argument names no credential at all, which is ' +
+      'why M9 tracks the container rather than the sink text. Owner queue: delete the print. Review §F1.',
+  },
+  {
+    rule: 'M9',
+    module: 'bitcoin',
+    file: 'RpcClientConfig.java',
+    text: 'setClient: logger.info("uri={}",uri)',
+    reason:
+      'Logs ${coin.rpc} at INFO on startup. This module\'s own application.properties documents that value as "the ' +
+      'bitcoind RPC endpoint including its rpcuser:rpcpassword", so this is a node credential in the startup log of ' +
+      'every boot. A bitcoind RPC credential is spend authority over that wallet, and nothing in this tree ever locks ' +
+      'a node wallet (review §F12), so reachability equals unlimited spend. Owner queue: log scheme, host and port ' +
+      'only. Review §F2.',
+  },
+  {
+    rule: 'M9',
+    module: 'usdt',
+    file: 'RpcClientConfig.java',
+    text: 'setClient: logger.info("uri={}",uri)',
+    reason: 'Byte-identical to the bitcoin line above, against the omnicore node. Same reasoning, same queue. Review §F2.',
+  },
+  {
+    rule: 'M9',
+    module: 'usdt',
+    file: 'RpcClientConfig.java',
+    text: 'setClient: logger.info("client={}",client)',
+    reason:
+      'Logs the CLIENT built from that credential URL, which holds the derived `Authorization: Basic …` header. Whether ' +
+      'it actually prints is UNRESOLVED and stated as unresolved: JsonrpcClient neither overrides toString() nor ' +
+      'carries Lombok @Data, so it most likely resolves to Object.toString() and leaks nothing — but its superclass ' +
+      'lives in a committed jar that cannot be decompiled without a JDK. Frozen on the unresolved reading, because the ' +
+      'cost of being wrong is a hot-wallet credential and the cost of freezing it is one entry. Review §F2 second-order.',
+  },
+  {
+    rule: 'M9',
+    module: 'act',
+    file: 'JsonrpcConfig.java',
+    text: 'setActClient: System.out.println("coin.rpc="+url)',
+    reason:
+      "The same startup credential print, to stdout rather than a logger, and with the extra sting that act's own " +
+      'JsonrpcClient.java rebuilds the URI WITHOUT the userinfo before putting it on the wire — so somebody already ' +
+      'knew the credential was in there. This line prints the original, with it, first. Owner queue: delete. Review §F2.',
+  },
+  {
+    rule: 'M9',
+    module: 'eth-support',
+    file: 'PaymentHandler.java',
+    text: 'transferToken: logger.info("hexRawValue={}",hexValue)',
+    reason:
+      'Logs the COMPLETE SIGNED RAW TRANSACTION on the ERC-20 withdrawal path. Because that signature still carries no ' +
+      'chain id (M3 above, specified and deliberately unfixed), anyone with log-read access holds a transaction that is ' +
+      'valid and replayable on every EVM chain at once — and deleting the Etherscan relay did not change that, it only ' +
+      'removed the relay that did it for them. Not an inference: the value is signMessage output turned to hex two ' +
+      'lines earlier. Owner queue: log the txid only. Review §F3 ("definitely true, no inference needed").',
+  },
+  {
+    rule: 'M9',
+    module: 'eth-support',
+    file: 'PaymentHandler.java',
+    text:
+      'transferToken: logger.info("from={},value={},gasPrice={},gasLimit={},nonce={},address={}",payment.getCredentials().getAddress(), ' +
+      'value, gasPrice, maxGas, nonce,payment.getTo())',
+    reason:
+      'What this line logs today is the hot wallet ADDRESS, which is public, so on its own it is not a leak — stated ' +
+      'plainly rather than dressed up. It is frozen because the expression reaching the sink is ' +
+      '`payment.getCredentials()`, and deleting the twelve characters `.getAddress()` turns this into the object that ' +
+      'holds the private key going into a serialising logger. That is not hypothetical: it is precisely the shape of ' +
+      'the §F3 inference forty lines below, in the same class.',
+  },
+  {
+    rule: 'M9',
+    module: 'eth-support',
+    file: 'EthService.java',
+    text: 'transferFromWallet: logger.info("transfer address={},amount={},txid={}", account.getAddress(), realAmount, result.getData())',
+    reason:
+      'Also not a leak as written — the logged fields are an address, an amount and a txid. It is here because `result` ' +
+      'is the return of a transfer() call taking the KEYSTORE PASSWORD as an argument, so M9 treats it as ' +
+      'credential-derived, and because logging `result` whole instead of `result.getData()` is a one-word edit in a ' +
+      'method that has the keystore password in scope. Frozen with its limits written down rather than tuned away: a ' +
+      'rule narrow enough to drop this one also drops the hexRawValue line above, which is real.',
+  },
+
+  // ── M10: deposit credits, by whether the crediting method verifies success ─
+  //
+  // Frozen as SHAPE, not as text: the rule id encodes the verdict, so a path that
+  // loses its receipt check changes id, goes stale against `-verified` AND
+  // unfrozen against `-unverified`, and fails twice. A NEW crediting method fails
+  // once. That is the property worth ratcheting; the credit expression itself is
+  // identical in all six and would ratchet nothing.
+  {
+    rule: 'M10-credit-unverified',
+    module: 'eth',
+    file: 'EthWatcher.java',
+    text: 'replayBlock: new Deposit()',
+    reason:
+      'THE SCHEDULED WATCHER. The credit decision reads `to` and `value` straight out of the block body; the receipt, ' +
+      'which is where the success flag lives, is never fetched on this path. A transaction included in a block but ' +
+      'REVERTED still carries its `to` and its `value` while transferring nothing, so this credits ether that was ' +
+      'never received, at the cost of the gas for a reverting transaction. Owner queue: require the receipt status. ' +
+      'Review §F6.',
+  },
+  {
+    rule: 'M10-credit-unverified',
+    module: 'eth',
+    file: 'EthWatcher.java',
+    text: 'replayBlockInit: new Deposit()',
+    reason:
+      'The manual replay path, same defect, and worse in one respect: it calls depositEvent.onConfirmed() directly for ' +
+      'everything it finds, over an operator-supplied and completely unbounded block range (review §F17). Same queue.',
+  },
+  {
+    rule: 'M10-credit-unverified',
+    module: 'erc-token',
+    file: 'TokenWatcher.java',
+    text: 'replayBlock: new Deposit()',
+    reason:
+      'The scheduled token watcher, and the reason M10 is method-scoped rather than file-scoped. The receipt check IS ' +
+      'in this file — at :64-65, commented out, under a note reading "commented out for now, need to confirm later ' +
+      'whether it is strictly necessary". It is strictly necessary. A file-scope rule sees the live check in ' +
+      'replayBlockInit below and reports this module as verified, which is the safe answer to the dangerous question. ' +
+      'Review §F6.',
+  },
+  {
+    rule: 'M10-credit-unverified',
+    module: 'erc-eusdt',
+    file: 'TokenWatcher.java',
+    text: 'replayBlock: new Deposit()',
+    reason:
+      'Identical to erc-token. The only thing currently stopping a fake credit here is the 63-digit topic0 frozen ' +
+      "above — a broken constant, not a control — and that mattered more before this module's contract.address became " +
+      'a placeholder. It matters again the moment an operator supplies one. Review §F6.',
+  },
+  {
+    rule: 'M10-credit-verified',
+    module: 'erc-token',
+    file: 'TokenWatcher.java',
+    text: 'replayBlockInit: new Deposit()',
+    reason:
+      'The manual replay path DOES fetch the receipt and require status 0x1. Frozen as the positive case so that ' +
+      'removing that check flips the rule id, which fails as a stale `-verified` entry and again as an unfrozen ' +
+      '`-unverified` finding. A gate that only records what is broken cannot notice something working being switched ' +
+      'off.',
+  },
+  {
+    rule: 'M10-credit-verified',
+    module: 'erc-eusdt',
+    file: 'TokenWatcher.java',
+    text: 'replayBlockInit: new Deposit()',
+    reason:
+      'Same as erc-token: receipt fetched and status required on the replay path only. Same reasoning for freezing the ' + 'positive case.',
+  },
 ];
 
 // ── Collect findings ────────────────────────────────────────────────────────
@@ -1051,6 +1513,78 @@ function scanJavaSource(source) {
     add('M8', m[1], m.index, `${classifyAddress(m[1])} pinned in Java — no property can override a literal`);
   }
 
+  // ── M9 / M10, both method-scoped ─────────────────────────────────────────
+  //
+  // Taint is reasoned over the STRUCTURAL view, with string contents blanked, so
+  // that `logger.info("password check failed")` is a message ABOUT a credential
+  // rather than a credential. Findings are RECORDED from `code`, so the frozen
+  // text is the line a human would read.
+  const struct = blankStringContents(code);
+
+  for (const method of methodSpans(code, struct)) {
+    const body = struct.slice(method.start, method.end + 1);
+
+    // M9 — sources from the signature, then one forward pass over the body.
+    const tainted = new Set();
+    for (const param of splitTopLevel(method.params)) {
+      const name = /([A-Za-z_$][\w$]*)\s*$/.exec(param.trim())?.[1];
+      if (name === undefined) continue;
+      if (CREDENTIAL_IDENT.test(name)) tainted.add(name);
+      // The @Value binding needs the string CONTENTS, so it is read from `code`.
+      const bound = /@Value\s*\(\s*"\s*\$\{([^}:]+)/.exec(param)?.[1];
+      if (bound !== undefined && CREDENTIAL_PROPERTY_LEAF.test(bound.slice(bound.lastIndexOf('.') + 1).trim())) tainted.add(name);
+    }
+
+    // One pass in source order, so a value is tainted before the sink that
+    // prints it is reached. These files are one statement per line.
+    const bodyLines = body.split('\n');
+    let lineStart = method.start;
+    for (const stmt of bodyLines) {
+      const stmtStart = lineStart;
+      lineStart += stmt.length + 1;
+
+      const assign = /(?:^|[\s;(])(?:final\s+)?(?:[\w$<>[\],.]+\s+)?([A-Za-z_$][\w$]*)\s*=\s*([^=][^;]*)/.exec(stmt);
+      if (assign !== null && passedInto(assign[2], tainted)) tainted.add(assign[1]);
+
+      for (const mut of stmt.matchAll(/\b([A-Za-z_$][\w$]*)\s*\.\s*(?:put|add|append|set[A-Za-z_$]*)\s*\(([^;]*)/g)) {
+        if (mentionsCredential(mut[2], tainted)) tainted.add(mut[1]);
+      }
+
+      LOG_SINK.lastIndex = 0;
+      let sink;
+      while ((sink = LOG_SINK.exec(stmt)) !== null) {
+        const open = stmtStart + sink.index + sink[0].length - 1;
+        const close = findClose(struct, open);
+        if (!mentionsCredential(struct.slice(open + 1, close), tainted)) continue;
+        add(
+          'M9',
+          `${method.name}: ${code
+            .slice(stmtStart + sink.index, close + 1)
+            .replace(/\s+/g, ' ')
+            .trim()}`,
+          open,
+          'a credential-bearing value reaches a log/print sink — in a container deployment stdout IS the log pipeline',
+        );
+      }
+    }
+
+    // M10 — an EVM deposit credit, classified by whether the method that builds
+    // it ever fetches the receipt that says the transaction succeeded.
+    const credit = /\bnew\s+Deposit\s*\(\s*\)/.exec(body);
+    if (credit === null) continue;
+    if (!/\bweb3j\b|\bEthBlock\b|\bConvert\s*\.\s*fromWei\b/.test(body)) continue;
+    const verified = /\bethGetTransactionReceipt\b|\bisTransactionSuccess\b/.test(body);
+    add(
+      verified ? 'M10-credit-verified' : 'M10-credit-unverified',
+      `${method.name}: new Deposit()`,
+      method.start + credit.index,
+      verified
+        ? 'an EVM deposit credit whose method does fetch a transaction receipt'
+        : 'an EVM deposit credit built from block fields with no receipt fetch — a reverted transaction still carries ' +
+            'its `to` and its `value` in the block body while transferring nothing',
+    );
+  }
+
   return out;
 }
 
@@ -1104,6 +1638,10 @@ function scanPropertiesSource(content) {
 
     if (KEYSTORE_FILENAME.test(value)) {
       add('M4-keystore', 'go-ethereum keystore filename — it embeds the account whose key it holds');
+    }
+
+    if (EVENT_TOPIC_KEY.test(leaf)) {
+      add('M4-topic', classifyTopic(value));
     }
   }
 
@@ -1411,6 +1949,85 @@ const RULE_PROBES = [
     fires: false,
     source: 'contract.address=${EUSDT_CONTRACT_ADDRESS}',
     note: 'an unresolved placeholder is a decision the environment makes, not a pin in this tree',
+  },
+
+  // ── M4-topic: the event filter, working and broken ─────────────────────
+  {
+    rule: 'M4-topic',
+    kind: 'properties',
+    fires: true,
+    source: 'contract.event-topic0=0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+    note: 'the CORRECT 64-digit Transfer topic fires too — this rule freezes the filter either way, because turning a never-matching filter on is a behaviour change in a crediting path',
+  },
+  {
+    rule: 'M4-topic',
+    kind: 'properties',
+    fires: false,
+    source: 'spring.kafka.template.default-topic= test',
+    note: 'the Kafka topic in all 13 files is not an event signature — a gate that cries wolf on it gets switched off',
+  },
+
+  // ── M9: credential into a log sink, and the lines that only look like it ─
+  {
+    rule: 'M9',
+    kind: 'java',
+    fires: true,
+    source:
+      'class P { void f(String privatekey) { JSONObject r = new JSONObject(); r.put("secret", privatekey); System.out.println(r.toJSONString()); } }',
+    note: 'the EctApi shape — the sink argument names no credential at all, so only tracking the container catches it',
+  },
+  {
+    rule: 'M9',
+    kind: 'java',
+    fires: true,
+    source: 'class P { Client f(@Value("${coin.rpc}") String uri) { logger.info("uri={}", uri); return null; } }',
+    note: 'a @Value-bound credential-carrying property reaching a logger — the three startup prints',
+  },
+  {
+    rule: 'M9',
+    kind: 'java',
+    fires: false,
+    source: 'class P { void f() { logger.info("password check failed for this request"); } }',
+    note: 'a message ABOUT a credential is not a credential — taint is read with string contents blanked, precisely so this stays silent',
+  },
+  {
+    rule: 'M9',
+    kind: 'java',
+    fires: false,
+    source:
+      'class P { Client f(@Value("${coin.rpc}") String uri) { Client c = new Client(uri); int h = c.getBlockCount(); logger.info("blockHeight={}", h); return c; } }',
+    note: 'a block height read off a client built from the credential URL is not a credential — receiver-position taint would report it as one',
+  },
+
+  // ── M10: the deposit credit, verified and not ──────────────────────────
+  {
+    rule: 'M10-credit-unverified',
+    kind: 'java',
+    fires: true,
+    source: 'class P { void f() { EthBlock b = web3j.ethGetBlockByNumber(n, true).send(); Deposit d = new Deposit(); d.setAmount(v); } }',
+    note: 'a credit built from block fields with no receipt fetch — the EthWatcher shape',
+  },
+  {
+    rule: 'M10-credit-verified',
+    kind: 'java',
+    fires: true,
+    source:
+      'class P { void f() { EthBlock b = web3j.ethGetBlockByNumber(n, true).send(); web3j.ethGetTransactionReceipt(h).send(); Deposit d = new Deposit(); } }',
+    note: 'the same credit WITH the receipt fetch — the positive case has to be visible, or a check being switched off is invisible',
+  },
+  {
+    rule: 'M10-credit-unverified',
+    kind: 'java',
+    fires: false,
+    source: 'class P { void f() { web3j.ethGetTransactionReceipt(h).send(); Deposit d = new Deposit(); } }',
+    note: 'the verified shape must not ALSO report unverified, or the two ids stop meaning anything',
+  },
+  {
+    rule: 'M10-credit-unverified',
+    kind: 'java',
+    fires: false,
+    source: 'class P { void f() { Deposit d = new Deposit(); d.setTxid(t); } }',
+    note: 'a non-EVM watcher credit — bitcoin-family modules confirm by depth, not by receipt, and firing on all eleven of them is how this rule would get switched off',
   },
 ];
 
