@@ -13,6 +13,7 @@ import {
   listPathsWithContent,
   listEmptyCurriculumPaths,
   listKindsWithContent,
+  isPlaybookSlug,
 } from './catalog.js';
 
 /**
@@ -155,5 +156,10 @@ describe('curriculum catalog', () => {
     expect(isWorkbookSlug('not-a-real-slug')).toBe(false);
     const wb = listCurriculum({ kind: 'workbook' })[0];
     if (wb) expect(isWorkbookSlug(wb.slug)).toBe(true);
+  });
+  it('L3 isPlaybookSlug false for unknown', () => {
+    expect(isPlaybookSlug('not-real')).toBe(false);
+    const pb = listCurriculum({ kind: 'playbook' })[0];
+    if (pb) expect(isPlaybookSlug(pb.slug)).toBe(true);
   });
 });

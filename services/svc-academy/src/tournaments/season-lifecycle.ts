@@ -182,3 +182,8 @@ export function listLiveSeasonIds(seasons: readonly SeasonRecord[]): readonly st
 export function listLiveSeasons(seasons: readonly SeasonRecord[]): readonly SeasonRecord[] {
   return filterSeasonsByStatus(seasons, 'live');
 }
+
+/** L3 — sorted scheduled season ids. Empty → []. */
+export function listScheduledSeasonIds(seasons: readonly SeasonRecord[]): readonly string[] {
+  return listSeasonIds(filterSeasonsByStatus(seasons, 'scheduled'));
+}

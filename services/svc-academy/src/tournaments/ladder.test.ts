@@ -19,6 +19,7 @@ import {
   standingOfUser,
   topNStandings,
   type StandingRecord,
+  averageScore,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -128,5 +129,10 @@ describe('L3 standings board helpers', () => {
     const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z'), row('c', 20, '2026-08-01T11:00:00Z')];
     expect(maxScore(rows)).toBe(30);
     expect(minScore(rows)).toBe(10);
+  });
+  it('L3 averageScore null when empty', () => {
+    expect(averageScore([])).toBeNull();
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(averageScore(rows)).toBe(15);
   });
 });
