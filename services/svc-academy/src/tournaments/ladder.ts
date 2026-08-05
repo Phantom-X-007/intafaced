@@ -818,3 +818,23 @@ export function isValidStandingsPage(rows: readonly StandingRecord[], pageIndex:
   const i = Math.floor(pageIndex);
   return i >= 0 && i < pages;
 }
+
+/** L3 — export lines: rank,userId,score. Empty → []. */
+export function standingsExportLines(rows: readonly StandingRecord[]): readonly string[] {
+  return rankStandings(rows).map((r) => `${r.rank},${r.userId},${r.score}`);
+}
+
+/** L3 — standings export header. */
+export function standingsExportHeader(): string {
+  return 'rank,userId,score';
+}
+
+/** L3 — full standings export text. */
+export function standingsExportText(rows: readonly StandingRecord[]): string {
+  return [standingsExportHeader(), ...standingsExportLines(rows)].join('\n');
+}
+
+/** L3 — export line count including header. */
+export function standingsExportLineCount(rows: readonly StandingRecord[]): number {
+  return 1 + standingCount(rows);
+}

@@ -582,3 +582,23 @@ export function isValidPlanPage(plan: readonly DeliveryDecision[], pageIndex: nu
   const i = Math.floor(pageIndex);
   return i >= 0 && i < pages;
 }
+
+/** L3 — export lines: channel,action. Empty → []. */
+export function planExportLines(plan: readonly DeliveryDecision[]): readonly string[] {
+  return plan.map((d) => `${d.channel},${d.action}`);
+}
+
+/** L3 — plan export header. */
+export function planExportHeader(): string {
+  return 'channel,action';
+}
+
+/** L3 — full plan export text. */
+export function planExportText(plan: readonly DeliveryDecision[]): string {
+  return [planExportHeader(), ...planExportLines(plan)].join('\n');
+}
+
+/** L3 — export line count including header. */
+export function planExportLineCount(plan: readonly DeliveryDecision[]): number {
+  return 1 + plan.length;
+}

@@ -600,3 +600,23 @@ export function isValidFanoutPage(attempts: readonly ChannelDeliveryAttempt[], p
   const i = Math.floor(pageIndex);
   return i >= 0 && i < pages;
 }
+
+/** L3 — export lines: channel,outcome,code. Empty → []. */
+export function fanoutExportLines(attempts: readonly ChannelDeliveryAttempt[]): readonly string[] {
+  return attempts.map((a) => `${a.channel},${a.outcome},${a.code}`);
+}
+
+/** L3 — fanout export header. */
+export function fanoutExportHeader(): string {
+  return 'channel,outcome,code';
+}
+
+/** L3 — full fanout export text. */
+export function fanoutExportText(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return [fanoutExportHeader(), ...fanoutExportLines(attempts)].join('\n');
+}
+
+/** L3 — export line count including header. */
+export function fanoutExportLineCount(attempts: readonly ChannelDeliveryAttempt[]): number {
+  return 1 + attempts.length;
+}

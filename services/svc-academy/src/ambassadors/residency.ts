@@ -692,4 +692,24 @@ export class MemoryResidencyDesk {
     const i = Math.floor(pageIndex);
     return i >= 0 && i < pages;
   }
+
+  /** L3 — export lines: id,status,cohort (sorted by id). Empty → []. */
+  residencyExportLines(): readonly string[] {
+    return [...this.rows.values()].map((r) => `${r.id},${r.status},${r.cohortSlug}`).sort();
+  }
+
+  /** L3 — residency export header. */
+  residencyExportHeader(): string {
+    return 'id,status,cohortSlug';
+  }
+
+  /** L3 — full residency export text. */
+  residencyExportText(): string {
+    return [this.residencyExportHeader(), ...this.residencyExportLines()].join('\n');
+  }
+
+  /** L3 — export line count including header. */
+  residencyExportLineCount(): number {
+    return 1 + this.applicationCount();
+  }
 }

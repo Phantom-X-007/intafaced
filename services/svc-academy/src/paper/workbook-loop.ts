@@ -629,3 +629,23 @@ export function isValidRemainingStepsPage(run: DrillRun, pageIndex: number, page
   const i = Math.floor(pageIndex);
   return i >= 0 && i < pages;
 }
+
+/** L3 — export lines for remaining steps: stepId,state=remaining. Empty → []. */
+export function remainingStepsExportLines(run: DrillRun): readonly string[] {
+  return remainingStepIds(run).map((id) => `${id},remaining`);
+}
+
+/** L3 — export lines for completed steps. Empty → []. */
+export function completedStepsExportLines(run: DrillRun): readonly string[] {
+  return run.completedStepIds.map((id) => `${id},completed`);
+}
+
+/** L3 — drill steps export header. */
+export function drillStepsExportHeader(): string {
+  return 'stepId,state';
+}
+
+/** L3 — full drill steps export (completed then remaining). */
+export function drillStepsExportText(run: DrillRun): string {
+  return [drillStepsExportHeader(), ...completedStepsExportLines(run), ...remainingStepsExportLines(run)].join('\n');
+}
