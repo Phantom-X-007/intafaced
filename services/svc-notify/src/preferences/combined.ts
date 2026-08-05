@@ -150,3 +150,8 @@ export function planHasSkips(plan: readonly DeliveryDecision[]): boolean {
 export function countSendNow(plan: readonly DeliveryDecision[]): number {
   return plan.filter((d) => d.action === 'send_now').length;
 }
+
+/** L3 — alias of countSkippedMuted. */
+export function planSkipCount(plan: readonly DeliveryDecision[]): number {
+  return countSkippedMuted(plan);
+}

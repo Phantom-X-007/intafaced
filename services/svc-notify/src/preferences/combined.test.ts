@@ -17,6 +17,7 @@ import {
   planHasHolds,
   planHasSkips,
   countSendNow,
+  planSkipCount,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -134,5 +135,9 @@ describe('notify L3 combined mute + digest', () => {
     // if DeliveryDecision shape differs, adjust in test run
     expect(planHasSkips(plan as any)).toBe(true);
     expect(countSendNow(plan as any)).toBe(1);
+  });
+
+  it('L3 planSkipCount aliases countSkippedMuted', () => {
+    expect(planSkipCount([])).toBe(0);
   });
 });

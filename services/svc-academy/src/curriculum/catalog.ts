@@ -625,3 +625,13 @@ export function listLessonSlugs(): readonly string[] {
 export function playbookCount(): number {
   return countCurriculumByKind('playbook');
 }
+
+/** L3 — spine workbook count. */
+export function workbookCount(): number {
+  return inventoryCurriculum().byKind.workbook;
+}
+
+/** L3 — spine lesson count. */
+export function lessonCount(): number {
+  return inventoryCurriculum().byKind.lesson;
+}

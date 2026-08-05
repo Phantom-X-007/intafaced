@@ -223,4 +223,13 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.hasAnyProgrammeRow()).toBe(true);
     expect(desk.frozenRatio()).toBe('0.5000');
   });
+
+  it('L3 activeProgrammeIds sorted', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    expect(desk.activeProgrammeIds()).toEqual([]);
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    desk.appoint({ userId: u, appointedBy: op });
+    expect(desk.activeProgrammeIds()).toEqual([u]);
+  });
 });
