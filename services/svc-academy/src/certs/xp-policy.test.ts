@@ -10,6 +10,11 @@ import {
   hasAnyXpPolicy,
   xpPolicyCertIdsJoined,
   hasAtLeastXpPolicies,
+  xpPolicyBoardCard,
+  xpPolicyExportLines,
+  xpPolicyExportHeader,
+  xpPolicyExportText,
+  parseXpPolicyExportLine,
 } from './xp-policy.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
@@ -71,5 +76,15 @@ describe('academy.certs Stage-2 XP policy (no money)', () => {
     expect(typeof hasAnyXpPolicy()).toBe('boolean');
     expect(typeof xpPolicyCertIdsJoined()).toBe('string');
     expect(hasAtLeastXpPolicies(0)).toBe(true);
+  });
+
+  it('L3 wave43 xp policy board + export/parse', () => {
+    const card = xpPolicyBoardCard();
+    expect(card.count).toBe(xpPolicyCount());
+    expect(xpPolicyExportHeader()).toBe('certId,xpDelta');
+    expect(xpPolicyExportLines().length).toBe(card.count);
+    expect(parseXpPolicyExportLine('foundations-v1,100')).toEqual({ certId: 'foundations-v1', xpDelta: '100' });
+    expect(parseXpPolicyExportLine('certId,xpDelta')).toBeNull();
+    expect(xpPolicyExportText()).toContain('certId,xpDelta');
   });
 });

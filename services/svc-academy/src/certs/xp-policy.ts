@@ -90,3 +90,46 @@ export function hasAtLeastXpPolicies(n: number): boolean {
   if (!Number.isFinite(n) || n < 0) return false;
   return CERT_XP_V0.length >= Math.floor(n);
 }
+
+/** L3 — xp policy board card for catalog. */
+export function xpPolicyBoardCard(): {
+  readonly count: number;
+  readonly nonEmpty: boolean;
+  readonly certIds: readonly string[];
+  readonly idsJoined: string;
+} {
+  const certIds = listXpPolicyCertIds();
+  return {
+    count: xpPolicyCount(),
+    nonEmpty: hasAnyXpPolicy(),
+    certIds,
+    idsJoined: xpPolicyCertIdsJoined(),
+  };
+}
+
+/** L3 — export lines certId,xpDelta. Empty → []. */
+export function xpPolicyExportLines(): readonly string[] {
+  return CERT_XP_V0.map((p) => `${p.certId},${p.xpDelta}`).sort();
+}
+
+/** L3 — xp policy export header. */
+export function xpPolicyExportHeader(): string {
+  return 'certId,xpDelta';
+}
+
+/** L3 — full xp policy export text. */
+export function xpPolicyExportText(): string {
+  return [xpPolicyExportHeader(), ...xpPolicyExportLines()].join('\n');
+}
+
+/** L3 — parse xp policy export line. Invalid → null. */
+export function parseXpPolicyExportLine(line: string): { readonly certId: string; readonly xpDelta: string } | null {
+  const t = line.trim();
+  if (!t || t === xpPolicyExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 2) return null;
+  const certId = parts[0]!.trim();
+  const xpDelta = parts[1]!.trim();
+  if (!certId || !xpDelta) return null;
+  return { certId, xpDelta };
+}

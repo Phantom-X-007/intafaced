@@ -307,3 +307,45 @@ export function progressIsGrantable(report: ProgressReport): boolean {
 export function missingItemSlugsJoined(report: ProgressReport): string {
   return report.missingItemSlugs.join(',');
 }
+
+/** L3 — progress board card from report. */
+export function progressBoardCard(report: ProgressReport): {
+  readonly userId: string;
+  readonly certId: string;
+  readonly title: string;
+  readonly required: number;
+  readonly completed: number;
+  readonly missing: number;
+  readonly ratio: string;
+  readonly complete: boolean;
+  readonly granted: boolean;
+  readonly grantable: boolean;
+} {
+  return {
+    userId: report.userId,
+    certId: report.certId,
+    title: report.title,
+    required: report.requiredCount,
+    completed: report.completedCount,
+    missing: missingItemCount(report),
+    ratio: report.ratio,
+    complete: report.complete,
+    granted: report.granted,
+    grantable: isGrantReady(report),
+  };
+}
+
+/** L3 — progress export line. */
+export function progressExportLine(report: ProgressReport): string {
+  return `${report.userId},${report.certId},${report.ratio},${report.complete ? '1' : '0'},${report.granted ? '1' : '0'}`;
+}
+
+/** L3 — progress export header. */
+export function progressExportHeader(): string {
+  return 'userId,certId,ratio,complete,granted';
+}
+
+/** L3 — full progress export text for one report. */
+export function progressExportText(report: ProgressReport): string {
+  return [progressExportHeader(), progressExportLine(report)].join('\n');
+}
