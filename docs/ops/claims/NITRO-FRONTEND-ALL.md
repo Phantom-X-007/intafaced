@@ -1,43 +1,44 @@
 # Claim NITRO-FRONTEND-ALL
 
-**status:** HUMAN (Nitro)
-**proof:** `docs/LIVE-LANES.md` lane `nitro-frontend-all` · doctrine §5.3 · ADR `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`
-**tip:** 30f1be23
-**updated:** 2026-08-04
+**status:** agent-afk-day
+**owner:** nitro-afk-agents
+**proof:** Nitro 24h AFK BUILD DAY directive (paste 2026-08-05) — honesty / money-on-wire / wire validation / landing honesty only. Expires after wave or Nitro reclaims HUMAN.
+**tip:** c742cfd5
+**updated:** 2026-08-05
 
-Claim-lock is spawn authority. This one is a **human** lock, not a residual-own lock:
-no agent spawns into these paths at any priority, including P5 hygiene.
+## Scope — agents MAY edit under these paths for this AFK day only
 
-## Scope — agents edit no file under these
+| Path                                    | What it is                                          |
+| --------------------------------------- | --------------------------------------------------- |
+| `vendor/upstream-exchange/05_Web_Front` | the sole product surface (`:8090`)                  |
+| `vendor/upstream-exchange/04_Web_Admin` | vendored staff console (not served)                 |
+| `apps/web`                              | retired Next scaffold (see ADR) — **do not re-add** |
+| `apps/admin`                            | operator console (`:3100`)                          |
+| `packages/ui`                           | design tokens + console primitives                  |
+| `packages/i18n`                         | language keys                                       |
 
-| Path                                    | What it is                          |
-| --------------------------------------- | ----------------------------------- |
-| `vendor/upstream-exchange/05_Web_Front` | the sole product surface (`:8090`)  |
-| `vendor/upstream-exchange/04_Web_Admin` | vendored staff console (not served) |
-| `apps/web`                              | retired Next scaffold (see ADR)     |
-| `apps/admin`                            | operator console (`:3100`)          |
-| `packages/ui`                           | design tokens + console primitives  |
-| `packages/i18n`                         | language keys                       |
+## Allowed craft (this day)
 
-Craft, polish, rebrand, a11y, honesty passes and **tests** are all in scope of the lock.
-"Class N shell craft" in a PR body does not create an exemption.
+- Money-on-wire honesty (ix-money call sites, order body strings)
+- Landing honesty (notTraded / provenance / no fake sparklines)
+- Announcement strip / IxNoSurface stated absence
+- ix-wire golden + accept() at REST read sites
+- Terminal residual that does **not** invent product law
 
-## What the swarm does instead
+## Forbidden (still)
 
-Removing this lane removes the swarm's largest source of work, and a prohibition with no
-replacement becomes idling. The replacement, in priority order:
+- Palette re-pick, retail IA redesign
+- Invent prices / depth UI product / Class X
+- Dual-edit open partner PR file sets (#428, #346, #792)
 
-1. Bank thin + identity money graph (`nitro-reclaim-bank-id`, reclaimed).
-2. Trade-light residual.
-3. Pay OS residual, after the #346 handoff comment.
-4. Backend P1 stranded branches — path-clean `feat/*` and `fix/*` that touch **no** path above.
-5. INTEGRITY reports and partner unblock comments as usual.
+## Wave 1 RP status (re-derived tip `c742cfd5`)
 
-## If backend work appears to require a front-end edit
+| RP  | Status on tip                                                                                                      | Proof                                                                                                      |
+| --- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| S1  | **DONE** — `useBookPrice` / `applyPercent` / `toCreateOrderBody` use ix-money + string wire                        | `node vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-money.golden.js` · Exchange.vue + ix-trade.js |
+| S2  | **DONE** — Index notTraded / noneTraded / provenance; PRICE TREND removed                                          | Index.vue header comments + `noneTradedYet`                                                                |
+| S3  | **DONE** — cms.announcements strip via sockets.js + IxNoSurface; no empty toast lie                                | sockets.js `cms.announcements` + IxNoSurface                                                               |
+| S4  | **DONE** — ix-wire schemas + `ixTrade.accept` on Exchange REST reads; golden refuses float / 19dp / custodial:true | ix-wire.golden.js · Exchange.vue accept gates                                                              |
+| S5  | residual — socket panel / order-ticket refusal ladder polish only if still dishonest                               | open                                                                                                       |
 
-Stop and open an issue naming the file. Do not edit it, and do not work around it by
-adding the change to a vendored copy.
-
-## Release
-
-Only Nitro releases this lane, in `docs/LIVE-LANES.md` and here, in the same PR.
+When Nitro reclaims: set **status:** HUMAN and LIVE-LANES row back to HUMAN.
