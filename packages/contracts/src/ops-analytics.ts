@@ -474,3 +474,23 @@ export function firstNonMoneyMetricId(): string | null {
 export function moneyNonMoneyPair(): { readonly money: number; readonly nonMoney: number } {
   return { money: moneyMetricCount(), nonMoney: nonMoneyMetricCount() };
 }
+
+/** L3 — catalog size label. */
+export function catalogMetricCountLabel(): string {
+  return String(catalogMetricCount());
+}
+
+/** L3 — money metric count label. */
+export function moneyMetricCountLabel(): string {
+  return String(moneyMetricCount());
+}
+
+/** L3 — non-money metric count label. */
+export function nonMoneyMetricCountLabel(): string {
+  return String(nonMoneyMetricCount());
+}
+
+/** L3 — comma-joined money metric ids. Empty → "". */
+export function moneyMetricIdsJoined(): string {
+  return listMoneyMetricIds().join(',');
+}

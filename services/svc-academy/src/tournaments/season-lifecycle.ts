@@ -358,3 +358,23 @@ export function lastSeasonId(seasons: readonly SeasonRecord[]): string | null {
 export function hasMixedSeasonStatuses(seasons: readonly SeasonRecord[]): boolean {
   return distinctSeasonStatusCount(seasons) >= 2;
 }
+
+/** L3 — season count label. */
+export function seasonCountLabel(seasons: readonly SeasonRecord[]): string {
+  return String(seasons.length);
+}
+
+/** L3 — live count label. */
+export function liveSeasonCountLabel(seasons: readonly SeasonRecord[]): string {
+  return String(liveSeasonCount(seasons));
+}
+
+/** L3 — comma-joined season ids. Empty → "". */
+export function seasonIdsJoined(seasons: readonly SeasonRecord[]): string {
+  return listSeasonIds(seasons).join(',');
+}
+
+/** L3 — comma-joined live season ids. Empty → "". */
+export function liveSeasonIdsJoined(seasons: readonly SeasonRecord[]): string {
+  return listLiveSeasonIds(seasons).join(',');
+}

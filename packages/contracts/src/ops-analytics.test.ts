@@ -54,6 +54,10 @@ import {
   firstMoneyMetricId,
   firstNonMoneyMetricId,
   moneyNonMoneyPair,
+  catalogMetricCountLabel,
+  moneyMetricCountLabel,
+  nonMoneyMetricCountLabel,
+  moneyMetricIdsJoined,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -292,5 +296,14 @@ describe('L3 wave30 catalog at-least + first metrics + pair', () => {
     expect(firstNonMoneyMetricId()).not.toBeNull();
     const p = moneyNonMoneyPair();
     expect(p.money + p.nonMoney).toBe(analyticsMetricCatalogSize());
+  });
+});
+
+describe('L3 wave31 catalog labels + money ids join', () => {
+  it('labels and joined money ids', () => {
+    expect(catalogMetricCountLabel()).toBe(String(analyticsMetricCatalogSize()));
+    expect(moneyMetricCountLabel()).toBe(String(moneyMetricCount()));
+    expect(nonMoneyMetricCountLabel()).toBe(String(nonMoneyMetricCount()));
+    expect(moneyMetricIdsJoined().split(',').filter(Boolean).length).toBe(moneyMetricCount());
   });
 });

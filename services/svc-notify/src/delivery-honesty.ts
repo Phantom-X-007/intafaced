@@ -323,3 +323,23 @@ export function firstFailedChannel(attempts: readonly ChannelDeliveryAttempt[]):
   const ch = failedChannels(attempts);
   return ch[0] ?? null;
 }
+
+/** L3 — attempt count label. */
+export function fanoutAttemptCountLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return String(fanoutAttemptCount(attempts));
+}
+
+/** L3 — accepted count label. */
+export function fanoutAcceptedCountLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return String(countFanoutAccepted(attempts));
+}
+
+/** L3 — failed count label. */
+export function fanoutFailedCountLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return String(countFanoutFailures(attempts));
+}
+
+/** L3 — refused count label. */
+export function fanoutRefusedCountLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return String(countFanoutRefusals(attempts));
+}

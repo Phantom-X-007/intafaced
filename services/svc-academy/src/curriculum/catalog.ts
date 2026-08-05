@@ -771,3 +771,23 @@ export function listLessonTitles(): readonly string[] {
 export function listPlaybookTitles(): readonly string[] {
   return listCurriculumTitlesByKind('playbook');
 }
+
+/** L3 — spine size label. */
+export function spineSizeLabel(): string {
+  return String(curriculumSpineSize());
+}
+
+/** L3 — comma-joined lesson slugs. Empty → "". */
+export function lessonSlugsJoined(): string {
+  return listLessonSlugs().join(',');
+}
+
+/** L3 — comma-joined playbook slugs. Empty → "". */
+export function playbookSlugsJoined(): string {
+  return listPlaybookSlugs().join(',');
+}
+
+/** L3 — workbook titles sorted. None → []. */
+export function listWorkbookTitles(): readonly string[] {
+  return listCurriculumTitlesByKind('workbook');
+}

@@ -486,4 +486,28 @@ export class MemoryAmbassadorProgramme {
   hasBothStatuses(): boolean {
     return this.activeCount() > 0 && this.frozenCount() > 0;
   }
+
+  /** L3 — total count as operator label string. */
+  totalCountLabel(): string {
+    return String(this.totalCount());
+  }
+
+  /** L3 — true when active ratio is at least half (uses activeRatio). Empty → false. */
+  isMajorityActiveOrTie(): boolean {
+    const r = this.activeRatio();
+    if (r === null) return false;
+    return Number(r) >= 0.5;
+  }
+
+  /** L3 — true when frozen ratio is at least half. Empty → false. */
+  isMajorityFrozenOrTie(): boolean {
+    const r = this.frozenRatio();
+    if (r === null) return false;
+    return Number(r) >= 0.5;
+  }
+
+  /** L3 — comma-joined active ids for panel copy. Empty → "". */
+  activeUserIdsJoined(): string {
+    return this.listActiveUserIds().join(',');
+  }
 }

@@ -38,6 +38,10 @@ import {
   fanoutAcceptedMinusFailed,
   firstAcceptedChannel,
   firstFailedChannel,
+  fanoutAttemptCountLabel,
+  fanoutAcceptedCountLabel,
+  fanoutFailedCountLabel,
+  fanoutRefusedCountLabel,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -255,5 +259,21 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutAcceptedMinusFailed(attempts)).toBe(0);
     expect(firstAcceptedChannel(attempts)).toBe('email');
     expect(firstFailedChannel(attempts)).toBe('push');
+  });
+
+  it('L3 wave31 fanout count labels', () => {
+    expect(fanoutAttemptCountLabel([])).toBe('0');
+    expect(fanoutAcceptedCountLabel([])).toBe('0');
+    expect(fanoutFailedCountLabel([])).toBe('0');
+    expect(fanoutRefusedCountLabel([])).toBe('0');
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+      { channel: 'sms' as const, outcome: 'refused' as const, code: 'n' },
+    ];
+    expect(fanoutAttemptCountLabel(attempts)).toBe('3');
+    expect(fanoutAcceptedCountLabel(attempts)).toBe('1');
+    expect(fanoutFailedCountLabel(attempts)).toBe('1');
+    expect(fanoutRefusedCountLabel(attempts)).toBe('1');
   });
 });

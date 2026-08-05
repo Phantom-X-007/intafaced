@@ -48,6 +48,10 @@ import {
   firstSeasonId,
   lastSeasonId,
   hasMixedSeasonStatuses,
+  seasonCountLabel,
+  liveSeasonCountLabel,
+  seasonIdsJoined,
+  liveSeasonIdsJoined,
 } from './season-lifecycle.js';
 
 const base = {
@@ -407,5 +411,28 @@ describe('L3 wave30 season ends + mixed', () => {
     expect(firstSeasonId(rows)).toBe('a');
     expect(lastSeasonId(rows)).toBe('z');
     expect(hasMixedSeasonStatuses(rows)).toBe(true);
+  });
+});
+
+describe('L3 wave31 season labels + joins', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('labels and joined ids', () => {
+    expect(seasonCountLabel([])).toBe('0');
+    expect(liveSeasonCountLabel([])).toBe('0');
+    expect(seasonIdsJoined([])).toBe('');
+    expect(liveSeasonIdsJoined([])).toBe('');
+    const rows = [mk('b', 'live'), mk('a', 'ended')];
+    expect(seasonCountLabel(rows)).toBe('2');
+    expect(liveSeasonCountLabel(rows)).toBe('1');
+    expect(seasonIdsJoined(rows)).toBe('a,b');
+    expect(liveSeasonIdsJoined(rows)).toBe('b');
   });
 });

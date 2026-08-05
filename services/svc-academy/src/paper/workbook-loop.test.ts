@@ -34,6 +34,10 @@ import {
   isDrillFullyRatioed,
   drillCompletionPercent,
   remainingStepRatio,
+  totalStepCountLabel,
+  completedStepCountLabel,
+  remainingStepCountLabel,
+  fillRefCountLabel,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -276,5 +280,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(isDrillFullyRatioed(started.run)).toBe(false);
     expect(drillCompletionPercent(started.run)).toBe(0);
     expect(remainingStepRatio(started.run)).toBe('1.0000');
+  });
+
+  it('L3 wave31 step/fill count labels', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w31', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(totalStepCountLabel(started.run)).toBe(String(started.run.steps.length));
+    expect(completedStepCountLabel(started.run)).toBe('0');
+    expect(remainingStepCountLabel(started.run)).toBe(String(started.run.steps.length));
+    expect(fillRefCountLabel(started.run)).toBe('0');
   });
 });
