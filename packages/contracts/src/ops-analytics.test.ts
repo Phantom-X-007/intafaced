@@ -62,6 +62,10 @@ import {
   ledgerMetricIdsJoined,
   tradeMetricIdsJoined,
   identityMetricIdsJoined,
+  moneyMetricRatioLabel,
+  nonMoneyMetricRatioLabel,
+  multiSourceMetricRatioLabel,
+  singleSourceMetricRatioLabel,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -318,5 +322,14 @@ describe('L3 wave32 metric id joins by partition/source', () => {
     expect(typeof ledgerMetricIdsJoined()).toBe('string');
     expect(typeof tradeMetricIdsJoined()).toBe('string');
     expect(typeof identityMetricIdsJoined()).toBe('string');
+  });
+});
+
+describe('L3 wave33 analytics ratio labels', () => {
+  it('money/non-money/multi/single ratio labels', () => {
+    expect(moneyMetricRatioLabel()).toMatch(/^\d+\.\d{4}$/);
+    expect(nonMoneyMetricRatioLabel()).toMatch(/^\d+\.\d{4}$/);
+    expect(multiSourceMetricRatioLabel()).toMatch(/^\d+\.\d{4}$/);
+    expect(singleSourceMetricRatioLabel()).toMatch(/^\d+\.\d{4}$/);
   });
 });

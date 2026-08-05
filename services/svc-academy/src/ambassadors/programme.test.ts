@@ -388,4 +388,21 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.statusesPresentJoined()).toBe('active,frozen');
     expect(desk.isProgrammeEmptyLabel()).toBe(false);
   });
+
+  it('L3 wave33 ratio labels + inactive rows', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.activeRatioLabel()).toBe('');
+    expect(desk.frozenRatioLabel()).toBe('');
+    expect(desk.hasInactiveRows()).toBe(false);
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.appoint({ userId: u2, appointedBy: op });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    expect(desk.activeRatioLabel()).toBe('0.5000');
+    expect(desk.frozenRatioLabel()).toBe('0.5000');
+    expect(desk.programmeActiveRatioLabel()).toBe('0.5000');
+    expect(desk.hasInactiveRows()).toBe(true);
+  });
 });

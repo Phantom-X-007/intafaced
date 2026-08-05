@@ -476,4 +476,24 @@ export class MemoryResidencyDesk {
   knownCohortsJoined(): string {
     return this.knownCohortSlugsSorted().join(',');
   }
+
+  /** L3 — open ratio label or empty. */
+  openApplicationRatioLabel(): string {
+    return this.openApplicationRatio() ?? '';
+  }
+
+  /** L3 — accepted ratio label or empty. */
+  acceptedApplicationRatioLabel(): string {
+    return this.acceptedApplicationRatio() ?? '';
+  }
+
+  /** L3 — rejected ratio label or empty. */
+  rejectedApplicationRatioLabel(): string {
+    return this.rejectedApplicationRatio() ?? '';
+  }
+
+  /** L3 — withdrawn ratio label or empty. */
+  withdrawnApplicationRatioLabel(): string {
+    return this.withdrawnApplicationRatio() ?? '';
+  }
 }

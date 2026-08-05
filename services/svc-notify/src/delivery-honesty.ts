@@ -363,3 +363,23 @@ export function refusedChannelsJoined(attempts: readonly ChannelDeliveryAttempt[
 export function fanoutOutcomesPresentJoined(attempts: readonly ChannelDeliveryAttempt[]): string {
   return fanoutOutcomesPresent(attempts).join(',');
 }
+
+/** L3 — acceptance ratio label or empty. */
+export function fanoutAcceptanceRatioLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return fanoutAcceptanceRatio(attempts) ?? '';
+}
+
+/** L3 — failure ratio label or empty. */
+export function fanoutFailureRatioLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return fanoutFailureRatio(attempts) ?? '';
+}
+
+/** L3 — refusal ratio label or empty. */
+export function fanoutRefusalRatioLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return fanoutRefusalRatio(attempts) ?? '';
+}
+
+/** L3 — first accepted channel label or empty. */
+export function firstAcceptedChannelLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
+  return firstAcceptedChannel(attempts) ?? '';
+}

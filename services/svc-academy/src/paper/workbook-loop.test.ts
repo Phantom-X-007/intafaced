@@ -42,6 +42,10 @@ import {
   completedStepIdsJoined,
   drillStatusLabel,
   drillRatioLabel,
+  drillMarketIdLabel,
+  drillSymbolLabel,
+  drillWorkbookSlugLabel,
+  drillCompletionPercentLabel,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -310,5 +314,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(completedStepIdsJoined(started.run)).toBe('');
     expect(drillStatusLabel(started.run)).toBe('active');
     expect(drillRatioLabel(started.run)).toBe('0.0000');
+  });
+
+  it('L3 wave33 drill identity labels', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w33', paper: true, symbol: 'SOL/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(drillMarketIdLabel(started.run)).toBe('m-w33');
+    expect(drillSymbolLabel(started.run)).toBe('SOL/USDT');
+    expect(drillWorkbookSlugLabel(started.run)).toBe('foundations-paper-workbook');
+    expect(drillCompletionPercentLabel(started.run)).toBe('0');
   });
 });

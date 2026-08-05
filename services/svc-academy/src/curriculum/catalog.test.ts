@@ -57,6 +57,10 @@ import {
   curriculumSlugsJoined,
   pathsWithContentJoined,
   kindsWithContentJoined,
+  pathCountWithContentLabel,
+  kindCountWithContentLabel,
+  emptyPathCountLabel,
+  firstCurriculumSlugLabel,
 } from './catalog.js';
 
 /**
@@ -305,5 +309,12 @@ describe('curriculum catalog', () => {
     expect(curriculumSlugsJoined().split(',').filter(Boolean).length).toBe(curriculumSpineSize());
     expect(pathsWithContentJoined().length).toBeGreaterThan(0);
     expect(kindsWithContentJoined().length).toBeGreaterThan(0);
+  });
+
+  it('L3 wave33 catalog count/slug labels', () => {
+    expect(pathCountWithContentLabel()).toBe(String(pathCountWithContent()));
+    expect(kindCountWithContentLabel()).toBe(String(kindCountWithContent()));
+    expect(emptyPathCountLabel()).toBe(String(emptyPathCount()));
+    expect(firstCurriculumSlugLabel().length).toBeGreaterThan(0);
   });
 });

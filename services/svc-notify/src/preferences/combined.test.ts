@@ -52,6 +52,10 @@ import {
   planHoldChannelsJoined,
   planSkipChannelsJoined,
   planActionsPresentJoined,
+  planSendRatioLabel,
+  planHoldRatioLabel,
+  planSkipRatioLabel,
+  firstSendChannelLabel,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -278,5 +282,15 @@ describe('notify L3 combined mute + digest', () => {
     const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
     expect(planSendChannelsJoined(plan)).toContain('inapp');
     expect(planActionsPresentJoined(plan)).toBe('send_now');
+  });
+
+  it('L3 wave33 plan ratio/channel labels', () => {
+    expect(planSendRatioLabel([])).toBe('');
+    expect(planHoldRatioLabel([])).toBe('');
+    expect(planSkipRatioLabel([])).toBe('');
+    expect(firstSendChannelLabel([])).toBe('');
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planSendRatioLabel(plan)).toMatch(/^\d+\.\d{4}$/);
+    expect(firstSendChannelLabel(plan)).toBe('inapp');
   });
 });
